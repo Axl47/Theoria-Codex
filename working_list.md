@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:08
-updated_at: 2026-02-24T22:34
+updated_at: 2026-02-24T22:40
 ---
 # Working List
 
@@ -10,7 +10,7 @@ updated_at: 2026-02-24T22:34
 - [ ] Milestone 8: Validate end-to-end behaviors and update docs
 
 ## In Progress
-- [~] Milestone 5: Implement Search + Explore UI flows with Draft/Apply behavior (completed: functional baseline screens + coordinator + stub-backed execution; remaining: spec-fidelity UI details, autocomplete interactions, filter sheet polish, state restoration)
+- [~] Milestone 5: Implement Search + Explore UI flows with Draft/Apply behavior (completed: baseline screens, autocomplete include/exclude, filter bottom sheet staging, quick-query + trending handoff, unified status pills; remaining: viewer entry handoff, richer masonry visual fidelity, stricter state restoration)
 
 ## Done
 - [x] Read `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/TheoriaSpec.md` and synthesize a multi-agent implementation strategy
@@ -20,6 +20,6 @@ updated_at: 2026-02-24T22:34
 - [x] Complete Milestone 2 domain/query contracts and tests (`QueryHash`, state machine, capability gate)
 - [x] Complete Milestone 3 persistence/cache contract layer with in-memory + file-backed implementations and tests
 - [x] Complete Milestone 4 stub fixtures, scenario-aware adapters, and unified weighted orchestrator with tests
-- [x] Implement Milestone 5 baseline Search + Explore functional slice in app UI
+- [x] Implement Milestone 5 Search + Explore functional baseline and interaction upgrades
 - [x] Update `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/AGENTS.md` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/README.md` for new architecture/features
-- [x] Re-run validation after milestone work with `./gradlew :core-domain:test :core-stubs:test :core-data:test testDebugUnitTest assembleDebug`
+- [x] Re-run validation after milestone work with `./gradlew testDebugUnitTest assembleDebug :core-domain:test :core-stubs:test :core-data:test`

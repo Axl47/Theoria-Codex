@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:08
-updated_at: 2026-02-24T22:34
+updated_at: 2026-02-24T22:40
 ---
 # Build Theoria Codex Android MVP (Stub-first, Local-first)
 
@@ -26,8 +26,8 @@ The success path is observable: launch app, switch among Search/Explore/Codex/Se
 - [x] (2026-02-24 22:31Z) Completed Milestone 3: added persistence/cache repository contracts plus in-memory and file-backed implementations with tests (`:core-data:test`).
 - [x] (2026-02-24 22:31Z) Completed Milestone 4: added stub fixture corpus, scenario-aware source adapters, and unified weighted orchestration with tests (`:core-stubs:test`, `:core-domain:test`).
 - [x] (2026-02-24 22:31Z) Re-validated project with `./gradlew :core-domain:test :core-stubs:test :core-data:test assembleDebug`.
-- [~] (2026-02-24 22:34Z) Milestone 5 in progress: implemented functional Search + Explore baseline (shared coordinator, Draft/Apply flow, quick queries, trending tags, stub-backed results, status pills); remaining UI-spec fidelity and interaction polish.
-- [x] (2026-02-24 22:34Z) Re-validated project with `./gradlew :core-domain:test :core-stubs:test :core-data:test testDebugUnitTest assembleDebug`.
+- [~] (2026-02-24 22:40Z) Milestone 5 in progress: implemented Search/Explore interaction upgrades (autocomplete include/exclude actions, filter/sort bottom sheet staging, date presets/min score, quick-query handoff) with remaining spec-fidelity polish.
+- [x] (2026-02-24 22:40Z) Re-validated project with `./gradlew testDebugUnitTest assembleDebug :core-domain:test :core-stubs:test :core-data:test`.
 - [ ] Milestone 6: implement Viewer, Codex, and save/remove flows.
 - [ ] Milestone 7: implement Settings, restore behavior, and offline guarantees.
 - [ ] Milestone 8: full validation and docs finalization.
@@ -65,9 +65,13 @@ The success path is observable: launch app, switch among Search/Explore/Codex/Se
   Rationale: Fastest path to unblock milestone UI behavior while preserving a single query state authority.
   Date/Author: 2026-02-24 / Codex
 
+- Decision: Ship a staged filter bottom-sheet flow in Milestone 5 instead of waiting for Settings integration.
+  Rationale: Matches the Search UX contract now and keeps apply-only execution semantics visible to users.
+  Date/Author: 2026-02-24 / Codex
+
 ## Outcomes & Retrospective
 
-Milestones 1 through 4 are complete and validated. Milestone 5 now has a working baseline implementation: Search and Explore are no longer placeholders and execute against stub-backed data with shared Draft/Applied state. Remaining work in Milestone 5 is UX/spec fidelity and interaction depth.
+Milestones 1 through 4 are complete and validated. Milestone 5 has moved beyond baseline: Search and Explore now include staged filters and autocomplete interaction paths in addition to stub-backed execution. Remaining Milestone 5 work is mainly visual and behavioral parity details (viewer handoff and restoration fidelity).
 
 ## Context and Orientation
 
@@ -152,7 +156,7 @@ Validation excerpts:
     BUILD SUCCESSFUL in 2s
     :core-domain:test
 
-Plan revision note (2026-02-24 22:34Z): Updated plan after delivering Milestone 5 Search/Explore baseline UI and validating full module test/build commands.
+Plan revision note (2026-02-24 22:40Z): Updated plan after Milestone 5 interaction upgrades (autocomplete + filter sheet staging) and full validation pass.
 
 ## Interfaces and Dependencies
 

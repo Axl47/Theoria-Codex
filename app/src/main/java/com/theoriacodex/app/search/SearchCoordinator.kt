@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -47,15 +48,25 @@ class SearchCoordinator(
 
         if (trimmed.startsWith("-")) {
             val tag = trimmed.removePrefix("-").trim()
-            if (tag.isNotEmpty() && tag !in draftQuery.excludeTags) {
-                draftQuery = draftQuery.copy(excludeTags = draftQuery.excludeTags + tag)
-            }
+            addExcludeTag(tag)
             return
         }
 
-        if (trimmed !in draftQuery.includeTags) {
-            draftQuery = draftQuery.copy(includeTags = draftQuery.includeTags + trimmed)
-        }
+        addIncludeTag(trimmed)
+    }
+
+    fun addIncludeTag(tag: String) {
+        val normalized = tag.trim()
+        if (normalized.isBlank()) return
+        if (normalized in draftQuery.includeTags) return
+        draftQuery = draftQuery.copy(includeTags = draftQuery.includeTags + normalized)
+    }
+
+    fun addExcludeTag(tag: String) {
+        val normalized = tag.trim()
+        if (normalized.isBlank()) return
+        if (normalized in draftQuery.excludeTags) return
+        draftQuery = draftQuery.copy(excludeTags = draftQuery.excludeTags + normalized)
     }
 
     fun removeIncludeTag(tag: String) {
@@ -79,6 +90,9 @@ class SearchCoordinator(
     }
 
     fun applyQuickQuery(kind: QuickQueryKind) {
+        val now = System.currentTimeMillis()
+        val dayMs = 24L * 60L * 60L * 1000L
+
         val sort = when (kind) {
             QuickQueryKind.POPULAR_TODAY -> SortMode.POPULAR
             QuickQueryKind.TOP_7D -> SortMode.TOP
@@ -86,13 +100,41 @@ class SearchCoordinator(
             QuickQueryKind.NEWEST -> SortMode.NEWEST
             QuickQueryKind.RANDOM -> SortMode.RANDOM
         }
-        draftQuery = draftQuery.copy(sort = sort)
+        val dateRange = when (kind) {
+            QuickQueryKind.POPULAR_TODAY -> DateRange(fromEpochMs = now - dayMs, toEpochMs = now)
+            QuickQueryKind.TOP_7D -> DateRange(fromEpochMs = now - 7L * dayMs, toEpochMs = now)
+            QuickQueryKind.TOP_30D -> DateRange(fromEpochMs = now - 30L * dayMs, toEpochMs = now)
+            QuickQueryKind.NEWEST, QuickQueryKind.RANDOM -> null
+        }
+        draftQuery = draftQuery.copy(sort = sort, dateRange = dateRange)
     }
 
     fun addTrendingTag(tag: String) {
-        if (tag !in draftQuery.includeTags) {
-            draftQuery = draftQuery.copy(includeTags = draftQuery.includeTags + tag)
+        addIncludeTag(tag)
+    }
+
+    fun setDateRangePreset(preset: DateRangePreset) {
+        val now = System.currentTimeMillis()
+        val dayMs = 24L * 60L * 60L * 1000L
+        val dateRange = when (preset) {
+            DateRangePreset.NONE -> null
+            DateRangePreset.TODAY -> DateRange(fromEpochMs = now - dayMs, toEpochMs = now)
+            DateRangePreset.LAST_7_DAYS -> DateRange(fromEpochMs = now - 7L * dayMs, toEpochMs = now)
+            DateRangePreset.LAST_30_DAYS -> DateRange(fromEpochMs = now - 30L * dayMs, toEpochMs = now)
         }
+        draftQuery = draftQuery.copy(dateRange = dateRange)
+    }
+
+    fun setMinScore(minScore: Int?) {
+        draftQuery = draftQuery.copy(minScore = minScore)
+    }
+
+    fun resetFilters() {
+        draftQuery = draftQuery.copy(
+            sort = SortMode.NEWEST,
+            dateRange = null,
+            minScore = null,
+        )
     }
 
     suspend fun loadTrendingTags() {
@@ -173,4 +215,11 @@ class SearchCoordinator(
             )
         }
     }
+}
+
+enum class DateRangePreset {
+    NONE,
+    TODAY,
+    LAST_7_DAYS,
+    LAST_30_DAYS,
 }

@@ -21,6 +21,8 @@ Search and Explore are now partially functional (Milestone 5 in progress):
 
 - Shared Draft/Applied query coordinator
 - Apply-bar query execution model
+- Autocomplete suggestion panel with include/exclude actions
+- Filter/Sort bottom sheet with sort, date-range presets, and min-score staging
 - Stub-backed search results rendering in a 2-column grid
 - Unified status pill rendering for source success/failure/exclusion states
 - Explore quick queries and trending-tag handoff into Search draft state
