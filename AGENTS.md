@@ -1,3 +1,7 @@
+---
+created_at: 2026-02-24T17:48
+updated_at: 2026-02-24T17:59
+---
 # THEORIA CODEX AGENTS DOCUMENT
 
 ## ExecPlans

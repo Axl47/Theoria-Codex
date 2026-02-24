@@ -1,3 +1,7 @@
+---
+created_at: 2026-02-24T17:45
+updated_at: 2026-02-24T17:59
+---
 # Theoria Codex — UI Spec v1 (Android / Portrait-only MVP)
 
 ## 0) Purpose
