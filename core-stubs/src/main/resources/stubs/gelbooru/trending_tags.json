@@ -1,0 +1,6 @@
+{
+  "items": [
+    { "text": "anime", "type": "meta", "count": 10000 },
+    { "text": "character", "type": "character", "count": 7000 }
+  ]
+}

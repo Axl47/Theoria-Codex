@@ -1,0 +1,17 @@
+{
+  "nextPageToken": "page_2",
+  "items": [
+    {
+      "sourcePostId": "gb_2001",
+      "previewUrl": "https://example.com/gelbooru/thumb/2001.jpg",
+      "fullUrl": "https://example.com/gelbooru/full/2001.jpg",
+      "pageUrl": "https://example.com/gelbooru/post/2001",
+      "width": 1000,
+      "height": 1400,
+      "canonicalTags": ["anime"],
+      "rawTags": ["anime"],
+      "authorName": "gel_artist_1",
+      "createdAtEpochMs": 1700000003000
+    }
+  ]
+}

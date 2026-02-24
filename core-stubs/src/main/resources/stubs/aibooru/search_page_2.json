@@ -1,0 +1,17 @@
+{
+  "nextPageToken": null,
+  "items": [
+    {
+      "sourcePostId": "ai_3002",
+      "previewUrl": "https://example.com/aibooru/thumb/3002.jpg",
+      "fullUrl": "https://example.com/aibooru/full/3002.jpg",
+      "pageUrl": "https://example.com/aibooru/post/3002",
+      "width": 1440,
+      "height": 1080,
+      "canonicalTags": ["ai_landscape"],
+      "rawTags": ["ai_landscape"],
+      "authorName": "ai_artist_2",
+      "createdAtEpochMs": 1700000006000
+    }
+  ]
+}

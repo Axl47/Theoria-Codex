@@ -1,0 +1,6 @@
+{
+  "items": [
+    { "text": "landscape", "type": "meta", "count": 12000 },
+    { "text": "portrait", "type": "meta", "count": 8000 }
+  ]
+}

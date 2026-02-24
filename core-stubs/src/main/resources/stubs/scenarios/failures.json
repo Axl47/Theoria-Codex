@@ -1,0 +1,7 @@
+{
+  "sources": {
+    "PIXIV": { "failSearch": false, "failTrending": false, "delayMs": 0 },
+    "GELBOORU": { "failSearch": true, "failTrending": false, "delayMs": 200 },
+    "AIBOORU": { "failSearch": false, "failTrending": false, "delayMs": 0 }
+  }
+}

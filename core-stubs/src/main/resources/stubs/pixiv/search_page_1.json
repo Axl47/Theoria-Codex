@@ -1,0 +1,29 @@
+{
+  "nextPageToken": "page_2",
+  "items": [
+    {
+      "sourcePostId": "px_1001",
+      "previewUrl": "https://example.com/pixiv/thumb/1001.jpg",
+      "fullUrl": "https://example.com/pixiv/full/1001.jpg",
+      "pageUrl": "https://example.com/pixiv/post/1001",
+      "width": 1200,
+      "height": 1800,
+      "canonicalTags": ["landscape", "sunset"],
+      "rawTags": ["landscape", "sunset"],
+      "authorName": "pixiv_artist_1",
+      "createdAtEpochMs": 1700000000000
+    },
+    {
+      "sourcePostId": "px_1002",
+      "previewUrl": "https://example.com/pixiv/thumb/1002.jpg",
+      "fullUrl": "https://example.com/pixiv/full/1002.jpg",
+      "pageUrl": "https://example.com/pixiv/post/1002",
+      "width": 1024,
+      "height": 1536,
+      "canonicalTags": ["portrait"],
+      "rawTags": ["portrait"],
+      "authorName": "pixiv_artist_2",
+      "createdAtEpochMs": 1700000001000
+    }
+  ]
+}

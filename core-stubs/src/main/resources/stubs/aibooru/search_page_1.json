@@ -1,0 +1,17 @@
+{
+  "nextPageToken": "page_2",
+  "items": [
+    {
+      "sourcePostId": "ai_3001",
+      "previewUrl": "https://example.com/aibooru/thumb/3001.jpg",
+      "fullUrl": "https://example.com/aibooru/full/3001.jpg",
+      "pageUrl": "https://example.com/aibooru/post/3001",
+      "width": 1280,
+      "height": 1280,
+      "canonicalTags": ["ai_art"],
+      "rawTags": ["ai_art"],
+      "authorName": "ai_artist_1",
+      "createdAtEpochMs": 1700000005000
+    }
+  ]
+}

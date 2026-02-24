@@ -1,0 +1,17 @@
+{
+  "nextPageToken": null,
+  "items": [
+    {
+      "sourcePostId": "px_1003",
+      "previewUrl": "https://example.com/pixiv/thumb/1003.jpg",
+      "fullUrl": "https://example.com/pixiv/full/1003.jpg",
+      "pageUrl": "https://example.com/pixiv/post/1003",
+      "width": 900,
+      "height": 1200,
+      "canonicalTags": ["city"],
+      "rawTags": ["city"],
+      "authorName": "pixiv_artist_3",
+      "createdAtEpochMs": 1700000002000
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "nextPageToken": null,
+  "items": [
+    {
+      "sourcePostId": "gb_2002",
+      "previewUrl": "https://example.com/gelbooru/thumb/2002.jpg",
+      "fullUrl": "https://example.com/gelbooru/full/2002.jpg",
+      "pageUrl": "https://example.com/gelbooru/post/2002",
+      "width": 800,
+      "height": 1200,
+      "canonicalTags": ["character"],
+      "rawTags": ["character"],
+      "authorName": "gel_artist_2",
+      "createdAtEpochMs": 1700000004000
+    }
+  ]
+}
