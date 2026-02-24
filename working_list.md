@@ -1,16 +1,14 @@
 ---
 created_at: 2026-02-24T18:08
-updated_at: 2026-02-24T22:40
+updated_at: 2026-02-24T23:08
 ---
 # Working List
 
 ## Pending
-- [ ] Milestone 6: Implement Viewer + Codex + Save flows
-- [ ] Milestone 7: Implement Settings, scenario controls, and offline lifecycle behavior
-- [ ] Milestone 8: Validate end-to-end behaviors and update docs
+- [ ] Non-critical visual polish follow-ups (masonry visual fidelity and richer image rendering)
 
 ## In Progress
-- [~] Milestone 5: Implement Search + Explore UI flows with Draft/Apply behavior (completed: baseline screens, autocomplete include/exclude, filter bottom sheet staging, quick-query + trending handoff, unified status pills; remaining: viewer entry handoff, richer masonry visual fidelity, stricter state restoration)
+- [~] Manual on-device smoke validation by developer checklist
 
 ## Done
 - [x] Read `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/TheoriaSpec.md` and synthesize a multi-agent implementation strategy
@@ -23,3 +21,11 @@ updated_at: 2026-02-24T22:40
 - [x] Implement Milestone 5 Search + Explore functional baseline and interaction upgrades
 - [x] Update `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/AGENTS.md` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/README.md` for new architecture/features
 - [x] Re-run validation after milestone work with `./gradlew testDebugUnitTest assembleDebug :core-domain:test :core-stubs:test :core-data:test`
+- [x] Complete Milestone 5 spec-critical parity: viewer launch handoff with `ViewerLaunchContext`, reset behavior hardening, query-hash scroll restoration wiring
+- [x] Complete Milestone 6: implement Viewer + Codex list/detail + Save sheet and wire Search->Viewer->Save->Codex flow
+- [x] Complete Milestone 7: implement Settings runtime controls (source toggles/weights, cache controls, scenario preset) with immediate runtime reflection
+- [x] Complete Milestone 8: add unit tests for viewer state, search restoration semantics, codex sorting/dedup, settings normalization/scenario + run full validation gate
+- [x] Validation passed: `./gradlew :core-domain:test :core-stubs:test :core-data:test`
+- [x] Validation passed: `./gradlew testDebugUnitTest`
+- [x] Validation passed: `./gradlew assembleDebug`
+- [x] Validation passed: `./gradlew lintDebug`

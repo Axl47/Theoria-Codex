@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:08
-updated_at: 2026-02-24T22:40
+updated_at: 2026-02-24T23:08
 ---
 # Build Theoria Codex Android MVP (Stub-first, Local-first)
 
@@ -26,11 +26,15 @@ The success path is observable: launch app, switch among Search/Explore/Codex/Se
 - [x] (2026-02-24 22:31Z) Completed Milestone 3: added persistence/cache repository contracts plus in-memory and file-backed implementations with tests (`:core-data:test`).
 - [x] (2026-02-24 22:31Z) Completed Milestone 4: added stub fixture corpus, scenario-aware source adapters, and unified weighted orchestration with tests (`:core-stubs:test`, `:core-domain:test`).
 - [x] (2026-02-24 22:31Z) Re-validated project with `./gradlew :core-domain:test :core-stubs:test :core-data:test assembleDebug`.
-- [~] (2026-02-24 22:40Z) Milestone 5 in progress: implemented Search/Explore interaction upgrades (autocomplete include/exclude actions, filter/sort bottom sheet staging, date presets/min score, quick-query handoff) with remaining spec-fidelity polish.
-- [x] (2026-02-24 22:40Z) Re-validated project with `./gradlew testDebugUnitTest assembleDebug :core-domain:test :core-stubs:test :core-data:test`.
-- [ ] Milestone 6: implement Viewer, Codex, and save/remove flows.
-- [ ] Milestone 7: implement Settings, restore behavior, and offline guarantees.
-- [ ] Milestone 8: full validation and docs finalization.
+- [x] (2026-02-24 23:52Z) Completed Milestone 5 parity pass: added query-hash scroll restoration wiring, tightened reset/apply semantics, and added Search->Viewer launch handoff with `ViewerLaunchContext`.
+- [x] (2026-02-24 23:00Z) Completed Milestone 6: implemented fullscreen Viewer (swipe/pinch-pan/double-tap/chrome auto-hide/info sheet), Codex list/detail screens, Save-to-Codex sheet, and end-to-end save/remove flows.
+- [x] (2026-02-24 23:03Z) Completed Milestone 7: implemented Settings screen for enabled source toggles, normalized weights, cache controls, and stub scenario switching with immediate runtime effect.
+- [x] (2026-02-24 23:05Z) Completed Milestone 8: added new app/core unit tests for viewer state transitions, search restoration behavior, codex sorting/dedup + persistence, and settings normalization/scenario persistence.
+- [x] (2026-02-24 23:07Z) Final validation gate passed:
+  - `./gradlew :core-domain:test :core-stubs:test :core-data:test`
+  - `./gradlew testDebugUnitTest`
+  - `./gradlew assembleDebug`
+  - `./gradlew lintDebug`
 
 ## Surprises & Discoveries
 
@@ -69,9 +73,17 @@ The success path is observable: launch app, switch among Search/Explore/Codex/Se
   Rationale: Matches the Search UX contract now and keeps apply-only execution semantics visible to users.
   Date/Author: 2026-02-24 / Codex
 
+- Decision: Add explicit core-data contracts for codex detail hydration/sorting (`CodexSortMode` + `observeCodexPosts/getPost`) and app-level UI restore state (`UiRestoreRepository`).
+  Rationale: Enables one-pass implementation of Viewer/Codex flow and deterministic query-hash-based restoration without introducing Android-specific storage dependencies.
+  Date/Author: 2026-02-24 / Codex
+
+- Decision: Keep persistence file-backed for this pass (queries, codex metadata/posts, settings, UI restore, cache paths) and defer Room/DataStore migration.
+  Rationale: Delivers full MVP behavior now while preserving contract seams for later storage backend swap.
+  Date/Author: 2026-02-24 / Codex
+
 ## Outcomes & Retrospective
 
-Milestones 1 through 4 are complete and validated. Milestone 5 has moved beyond baseline: Search and Explore now include staged filters and autocomplete interaction paths in addition to stub-backed execution. Remaining Milestone 5 work is mainly visual and behavioral parity details (viewer handoff and restoration fidelity).
+Milestones 1 through 8 are complete and validated for functional/spec-critical behavior. The app now ships Search/Explore/Codex/Settings tabs, immersive Viewer interactions, file-backed restore/persistence behavior, scenario-aware runtime controls, and end-to-end save/caching flows. Remaining gaps are limited to non-critical visual polish (image rendering fidelity and masonry aesthetics).
 
 ## Context and Orientation
 
@@ -147,6 +159,14 @@ Key artifacts currently produced:
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/search/SearchCoordinator.kt`
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt`
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/explore/ExploreScreen.kt`
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt`
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/viewer/ViewerState.kt`
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/codex/CodexListScreen.kt`
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/codex/CodexDetailScreen.kt`
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/codex/SaveToCodexSheet.kt`
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/settings/SettingsScreen.kt`
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/test/java/com/theoriacodex/app/search/SearchCoordinatorTest.kt`
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/test/java/com/theoriacodex/app/viewer/ViewerStateTest.kt`
 
 Validation excerpts:
 
@@ -156,7 +176,7 @@ Validation excerpts:
     BUILD SUCCESSFUL in 2s
     :core-domain:test
 
-Plan revision note (2026-02-24 22:40Z): Updated plan after Milestone 5 interaction upgrades (autocomplete + filter sheet staging) and full validation pass.
+Plan revision note (2026-02-24 23:08Z): Completed one-pass Milestone 5-8 delivery with repository contract extensions (`CodexSortMode`, explicit settings setters, `UiRestoreRepository`), Viewer/Codex/Settings UI integration, and final validation gates.
 
 ## Interfaces and Dependencies
 
@@ -178,4 +198,29 @@ Current required interface (already created):
       suspend fun resolvePost(id: PostId): Post?
     }
 
-Next interface additions in Milestone 5 and 6 will formalize UI state contracts around viewer handoff, scroll restoration, and codex save/remove actions.
+Key interface additions delivered:
+
+    enum class CodexSortMode { NEWEST_SAVED, OLDEST_SAVED, BY_SOURCE }
+
+    interface CodexRepository {
+      fun observeCodex(codexId: String): Flow<Codex?>
+      fun observeCodexPosts(codexId: String, sort: CodexSortMode): Flow<List<Post>>
+      suspend fun getPost(postId: PostId): Post?
+    }
+
+    interface SettingsRepository {
+      suspend fun setEnabledSources(enabledSources: Set<SourceKey>)
+      suspend fun setSourceWeights(sourceWeights: Map<SourceKey, Double>)
+      suspend fun setCacheFullImageOnSave(enabled: Boolean)
+      suspend fun setScenarioPreset(preset: ScenarioPreset)
+      suspend fun setLastTab(route: String)
+    }
+
+    interface UiRestoreRepository {
+      suspend fun setLastTab(route: String)
+      suspend fun getLastTab(): String?
+      suspend fun setSearchScrollState(queryHash: String, state: SearchScrollState)
+      suspend fun getSearchScrollState(queryHash: String): SearchScrollState?
+      fun observeViewerLaunchContext(): Flow<ViewerLaunchContext?>
+      suspend fun setViewerLaunchContext(context: ViewerLaunchContext?)
+    }

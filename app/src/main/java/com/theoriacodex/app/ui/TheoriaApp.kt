@@ -1,5 +1,8 @@
 package com.theoriacodex.app.ui
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -8,6 +11,7 @@ import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -15,44 +19,215 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.theoriacodex.app.codex.CodexDetailScreen
+import com.theoriacodex.app.codex.CodexListScreen
+import com.theoriacodex.app.codex.SaveToCodexSheet
 import com.theoriacodex.app.explore.ExploreScreen
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.SearchScreen
+import com.theoriacodex.app.settings.SettingsScreen
+import com.theoriacodex.app.viewer.ViewerScreen
+import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.CacheSnapshot
+import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.data.repository.FileBackedCacheRepository
+import com.theoriacodex.data.repository.FileBackedCodexRepository
+import com.theoriacodex.data.repository.FileBackedQueryRepository
+import com.theoriacodex.data.repository.FileBackedSettingsRepository
+import com.theoriacodex.data.repository.FileBackedUiRestoreRepository
+import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.model.Codex
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.stubs.StubAdapterRegistry
+import java.io.File
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 enum class TopLevelDestination(val route: String, val label: String) {
     Search("search", "Search"),
     Explore("explore", "Explore"),
     Codex("codex", "Codex"),
-    Settings("settings", "Settings")
+    Settings("settings", "Settings"),
 }
+
+private object AppRoute {
+    const val Viewer = "viewer"
+    const val CodexDetail = "codex/detail/{codexId}"
+
+    fun codexDetail(codexId: String): String {
+        return "codex/detail/$codexId"
+    }
+}
+
+private data class ViewerSession(
+    val posts: List<Post>,
+    val context: ViewerLaunchContext,
+)
 
 @Composable
 fun TheoriaApp() {
     val navController = rememberNavController()
-    val searchCoordinator = remember { SearchCoordinator() }
+    val appContext = LocalContext.current.applicationContext
+    val scope = rememberCoroutineScope()
+
+    val storageDirectory = remember(appContext) { File(appContext.filesDir, "theoria_codex") }
+    val stubRegistry = remember { StubAdapterRegistry() }
+    val codexRepository = remember(storageDirectory) { FileBackedCodexRepository(storageDirectory) }
+    val queryRepository = remember(storageDirectory) { FileBackedQueryRepository(storageDirectory) }
+    val settingsRepository = remember(storageDirectory) { FileBackedSettingsRepository(storageDirectory) }
+    val cacheRepository = remember(storageDirectory) { FileBackedCacheRepository(storageDirectory) }
+    val uiRestoreRepository = remember(storageDirectory) { FileBackedUiRestoreRepository(storageDirectory) }
+    val searchCoordinator = remember {
+        SearchCoordinator(
+            registry = stubRegistry,
+            queryRepository = queryRepository,
+            settingsRepository = settingsRepository,
+            uiRestoreRepository = uiRestoreRepository,
+        )
+    }
+
+    val settings by settingsRepository.observeSettings().collectAsState(initial = AppSettings())
+    val cacheSnapshot by cacheRepository.observeSnapshot().collectAsState(
+        initial = CacheSnapshot(thumbnailCount = 0, fullImageCount = 0),
+    )
+    val codices by codexRepository.observeCodices().collectAsState(initial = emptyList())
+
+    var viewerSession by remember { mutableStateOf<ViewerSession?>(null) }
+    var showSaveSheet by remember { mutableStateOf(false) }
+    var pendingSavePost by remember { mutableStateOf<Post?>(null) }
+    var startDestination by rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
+    var navReady by remember { mutableStateOf(false) }
+    val codexItemCounts = remember { mutableStateMapOf<String, Int>() }
+
+    LaunchedEffect(Unit) {
+        searchCoordinator.initialize()
+        startDestination = uiRestoreRepository.getLastTab()
+            ?: settingsRepository.observeSettings().first().lastSelectedTabRoute
+        navReady = true
+    }
+
+    LaunchedEffect(settings) {
+        val shouldRefresh = searchCoordinator.onSettingsChanged(settings)
+        if (shouldRefresh) {
+            searchCoordinator.retry()
+        }
+    }
+
+    LaunchedEffect(codices.map { it.codexId }) {
+        val activeIds = codices.map { it.codexId }.toSet()
+        codexItemCounts.keys
+            .filterNot { it in activeIds }
+            .toList()
+            .forEach { codexItemCounts.remove(it) }
+
+        coroutineScope {
+            codices.forEach { codex ->
+                launch {
+                    codexRepository.observeCodexItems(codex.codexId).collect { items ->
+                        codexItemCounts[codex.codexId] = items.size
+                    }
+                }
+            }
+        }
+    }
+
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
+    val currentRoute = currentDestination?.route
+    val showBottomBar = currentRoute in TopLevelDestination.entries.map { it.route }.toSet()
+
+    LaunchedEffect(currentRoute) {
+        if (currentRoute in TopLevelDestination.entries.map { it.route }) {
+            val route = requireNotNull(currentRoute)
+            settingsRepository.setLastTab(route)
+            uiRestoreRepository.setLastTab(route)
+        }
+    }
 
     MaterialTheme {
-        Scaffold(
-            bottomBar = {
-                NavigationBar {
-                    TopLevelDestination.entries.forEach { destination ->
-                        val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = {
-                                navController.navigate(destination.route) {
+        if (!navReady) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
+            }
+        } else {
+            Scaffold(
+                bottomBar = {
+                    if (showBottomBar) {
+                        NavigationBar {
+                            TopLevelDestination.entries.forEach { destination ->
+                                val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
+                                NavigationBarItem(
+                                    selected = selected,
+                                    onClick = {
+                                        navController.navigate(destination.route) {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    },
+                                    icon = {
+                                        val icon = when (destination) {
+                                            TopLevelDestination.Search -> Icons.Default.Search
+                                            TopLevelDestination.Explore -> Icons.Default.Explore
+                                            TopLevelDestination.Codex -> Icons.Default.Collections
+                                            TopLevelDestination.Settings -> Icons.Default.Settings
+                                        }
+                                        Icon(imageVector = icon, contentDescription = destination.label)
+                                    },
+                                    label = { Text(destination.label) },
+                                )
+                            }
+                        }
+                    }
+                },
+            ) { innerPadding ->
+                NavHost(
+                    navController = navController,
+                    startDestination = startDestination,
+                    modifier = Modifier.padding(innerPadding),
+                ) {
+                    composable(TopLevelDestination.Search.route) {
+                        SearchScreen(
+                            coordinator = searchCoordinator,
+                            onOpenViewer = { posts, context ->
+                                viewerSession = ViewerSession(posts = posts, context = context)
+                                scope.launch { searchCoordinator.setViewerLaunchContext(context) }
+                                navController.navigate(AppRoute.Viewer)
+                            },
+                        )
+                    }
+                    composable(TopLevelDestination.Explore.route) {
+                        ExploreScreen(
+                            coordinator = searchCoordinator,
+                            onNavigateToSearch = {
+                                navController.navigate(TopLevelDestination.Search.route) {
                                     popUpTo(navController.graph.findStartDestination().id) {
                                         saveState = true
                                     }
@@ -60,53 +235,175 @@ fun TheoriaApp() {
                                     restoreState = true
                                 }
                             },
-                            icon = {
-                                val icon = when (destination) {
-                                    TopLevelDestination.Search -> Icons.Default.Search
-                                    TopLevelDestination.Explore -> Icons.Default.Explore
-                                    TopLevelDestination.Codex -> Icons.Default.Collections
-                                    TopLevelDestination.Settings -> Icons.Default.Settings
-                                }
-                                Icon(imageVector = icon, contentDescription = destination.label)
-                            },
-                            label = { Text(destination.label) }
                         )
+                    }
+                    composable(TopLevelDestination.Codex.route) {
+                        CodexListScreen(
+                            codices = codices,
+                            itemCounts = codexItemCounts,
+                            onOpenCodex = { codexId ->
+                                navController.navigate(AppRoute.codexDetail(codexId))
+                            },
+                            onCreateCodex = { name ->
+                                scope.launch { codexRepository.createCodex(name) }
+                            },
+                            onRenameCodex = { codexId, name ->
+                                scope.launch { codexRepository.renameCodex(codexId, name) }
+                            },
+                            onDeleteCodex = { codexId ->
+                                scope.launch { codexRepository.deleteCodex(codexId) }
+                            },
+                        )
+                    }
+                    composable(
+                        route = AppRoute.CodexDetail,
+                        arguments = listOf(navArgument("codexId") { type = NavType.StringType }),
+                    ) { entry ->
+                        val codexId = requireNotNull(entry.arguments?.getString("codexId"))
+                        var sortMode by rememberSaveable(codexId) { mutableStateOf(CodexSortMode.NEWEST_SAVED) }
+                        val codex by codexRepository.observeCodex(codexId).collectAsState(initial = null)
+                        val posts by codexRepository.observeCodexPosts(codexId, sortMode).collectAsState(initial = emptyList())
+
+                        CodexDetailScreen(
+                            codexName = codex?.name,
+                            posts = posts,
+                            sortMode = sortMode,
+                            onSortChange = { sortMode = it },
+                            onOpenViewer = { index ->
+                                val context = ViewerLaunchContext(
+                                    queryHash = "codex:$codexId",
+                                    startIndex = index,
+                                    streamSource = ViewerStreamSource.CODEX,
+                                    scrollOffsetHint = 0,
+                                )
+                                viewerSession = ViewerSession(posts = posts, context = context)
+                                scope.launch { uiRestoreRepository.setViewerLaunchContext(context) }
+                                navController.navigate(AppRoute.Viewer)
+                            },
+                            onRemovePost = { post ->
+                                scope.launch {
+                                    codexRepository.removeItem(
+                                        codexId = codexId,
+                                        sourceKey = post.id.source,
+                                        sourcePostId = post.id.sourcePostId,
+                                    )
+                                }
+                            },
+                            onBack = {
+                                navController.popBackStack()
+                            },
+                            onDeleteCodex = {
+                                scope.launch {
+                                    codexRepository.deleteCodex(codexId)
+                                    navController.popBackStack(TopLevelDestination.Codex.route, inclusive = false)
+                                }
+                            },
+                        )
+                    }
+                    composable(TopLevelDestination.Settings.route) {
+                        SettingsScreen(
+                            settings = settings,
+                            cacheSnapshot = cacheSnapshot,
+                            onSetEnabledSources = { enabled ->
+                                scope.launch { settingsRepository.setEnabledSources(enabled) }
+                            },
+                            onSetSourceWeights = { weights ->
+                                scope.launch { settingsRepository.setSourceWeights(weights) }
+                            },
+                            onSetCacheFullImageOnSave = { enabled ->
+                                scope.launch { settingsRepository.setCacheFullImageOnSave(enabled) }
+                            },
+                            onSetScenarioPreset = { preset ->
+                                scope.launch { settingsRepository.setScenarioPreset(preset) }
+                            },
+                            onClearThumbnailCache = {
+                                scope.launch { cacheRepository.clearThumbnailCache() }
+                            },
+                            onClearFullImageCache = {
+                                scope.launch { cacheRepository.clearFullImageCache() }
+                            },
+                        )
+                    }
+                    composable(AppRoute.Viewer) {
+                        val session = viewerSession
+                        if (session == null) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text("No viewer session")
+                            }
+                        } else {
+                            ViewerScreen(
+                                posts = session.posts,
+                                launchContext = session.context,
+                                onDismiss = {
+                                    scope.launch { searchCoordinator.setViewerLaunchContext(null) }
+                                    navController.popBackStack()
+                                },
+                                onSave = { post ->
+                                    pendingSavePost = post
+                                    showSaveSheet = true
+                                },
+                                onOpenInBrowser = { post ->
+                                    post.pageUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                                        openInBrowser(appContext, url)
+                                    }
+                                },
+                                onAddIncludeTag = { tag ->
+                                    searchCoordinator.addIncludeTag(tag)
+                                },
+                                onAddExcludeTag = { tag ->
+                                    searchCoordinator.addExcludeTag(tag)
+                                },
+                                onGoToSearch = {
+                                    navController.navigate(TopLevelDestination.Search.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
             }
-        ) { innerPadding ->
-            NavHost(
-                navController = navController,
-                startDestination = TopLevelDestination.Search.route,
-                modifier = Modifier.padding(innerPadding)
-            ) {
-                composable(TopLevelDestination.Search.route) {
-                    SearchScreen(coordinator = searchCoordinator)
-                }
-                composable(TopLevelDestination.Explore.route) {
-                    ExploreScreen(
-                        coordinator = searchCoordinator,
-                        onNavigateToSearch = {
-                            navController.navigate(TopLevelDestination.Search.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                    )
-                }
-                composable(TopLevelDestination.Codex.route) { PlaceholderScreen("Codex") }
-                composable(TopLevelDestination.Settings.route) { PlaceholderScreen("Settings") }
-            }
+        }
+
+        if (showSaveSheet && pendingSavePost != null) {
+            val post = requireNotNull(pendingSavePost)
+            SaveToCodexSheet(
+                codices = codices,
+                onCreateCodex = { name ->
+                    scope.launch { codexRepository.createCodex(name) }
+                },
+                onSelectCodex = { codexId ->
+                    scope.launch {
+                        codexRepository.addItem(codexId, post)
+                        cacheRepository.cacheThumbnail(post)
+                        if (settings.cache.cacheFullImageOnSave) {
+                            cacheRepository.cacheFull(post)
+                        }
+                    }
+                    showSaveSheet = false
+                    pendingSavePost = null
+                },
+                onDismiss = {
+                    showSaveSheet = false
+                    pendingSavePost = null
+                },
+            )
         }
     }
 }
 
-@Composable
-private fun PlaceholderScreen(title: String) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text = "$title screen scaffold", style = MaterialTheme.typography.titleLarge)
+private fun openInBrowser(context: Context, url: String) {
+    runCatching {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
     }
 }

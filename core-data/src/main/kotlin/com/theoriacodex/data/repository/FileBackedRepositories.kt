@@ -5,6 +5,7 @@ import com.google.gson.GsonBuilder
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.DateRange
+import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -17,6 +18,7 @@ import java.nio.file.StandardCopyOption
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -30,16 +32,25 @@ class FileBackedCodexRepository(
     private val storageFile = baseDirectory.resolve("codex_store.json")
     private val codicesFlow = MutableStateFlow<List<Codex>>(emptyList())
     private val itemsFlow = MutableStateFlow<Map<String, List<CodexItem>>>(emptyMap())
+    private val postsFlow = MutableStateFlow<Map<PostId, Post>>(emptyMap())
 
     init {
         storageFile.parentFile?.mkdirs()
         val stored = readJson(storageFile, CodexStoreFile())
         codicesFlow.value = stored.codices.map { it.toDomain() }
         itemsFlow.value = stored.items.mapValues { entry -> entry.value.map { it.toDomain() } }
+        postsFlow.value = stored.posts.associate { record ->
+            val post = record.toDomain()
+            post.id to post
+        }
     }
 
     override fun observeCodices(): Flow<List<Codex>> {
         return codicesFlow
+    }
+
+    override fun observeCodex(codexId: String): Flow<Codex?> {
+        return codicesFlow.map { codices -> codices.firstOrNull { it.codexId == codexId } }
     }
 
     override suspend fun createCodex(name: String): Codex {
@@ -76,8 +87,23 @@ class FileBackedCodexRepository(
         return itemsFlow.map { map -> map[codexId].orEmpty() }
     }
 
+    override fun observeCodexPosts(codexId: String, sort: CodexSortMode): Flow<List<Post>> {
+        return combine(itemsFlow, postsFlow) { itemsByCodex, postsById ->
+            val pairs = itemsByCodex[codexId].orEmpty().mapNotNull { item ->
+                postsById[item.postId]?.let { post -> item to post }
+            }
+            sortCodexPairs(pairs, sort).map { it.second }
+        }
+    }
+
+    override suspend fun getPost(postId: PostId): Post? {
+        return postsFlow.value[postId]
+    }
+
     override suspend fun addItem(codexId: String, post: Post) {
         mutex.withLock {
+            if (codicesFlow.value.none { it.codexId == codexId }) return@withLock
+            postsFlow.value = postsFlow.value + (post.id to post)
             val existing = itemsFlow.value[codexId].orEmpty()
             val alreadyExists = existing.any { it.postId == post.id }
             if (!alreadyExists) {
@@ -105,6 +131,7 @@ class FileBackedCodexRepository(
         val toPersist = CodexStoreFile(
             codices = codicesFlow.value.map { CodexRecord.fromDomain(it) },
             items = itemsFlow.value.mapValues { entry -> entry.value.map { CodexItemRecord.fromDomain(it) } },
+            posts = postsFlow.value.values.map { PostRecord.fromDomain(it) },
         )
         writeJson(storageFile, toPersist)
     }
@@ -175,9 +202,49 @@ class FileBackedSettingsRepository(
 
     override suspend fun updateSettings(transform: (AppSettings) -> AppSettings) {
         mutex.withLock {
-            settingsFlow.value = transform(settingsFlow.value)
-            writeJson(storageFile, SettingsStoreFile.fromDomain(settingsFlow.value))
+            settingsFlow.value = normalizeSettings(transform(settingsFlow.value))
+            persist()
         }
+    }
+
+    override suspend fun setEnabledSources(enabledSources: Set<SourceKey>) {
+        updateSettings {
+            it.copy(
+                runtime = it.runtime.copy(enabledSources = enabledSources),
+            )
+        }
+    }
+
+    override suspend fun setSourceWeights(sourceWeights: Map<SourceKey, Double>) {
+        updateSettings {
+            it.copy(
+                runtime = it.runtime.copy(sourceWeights = sourceWeights),
+            )
+        }
+    }
+
+    override suspend fun setCacheFullImageOnSave(enabled: Boolean) {
+        updateSettings {
+            it.copy(
+                cache = it.cache.copy(cacheFullImageOnSave = enabled),
+            )
+        }
+    }
+
+    override suspend fun setScenarioPreset(preset: ScenarioPreset) {
+        updateSettings {
+            it.copy(scenarioPreset = preset)
+        }
+    }
+
+    override suspend fun setLastTab(route: String) {
+        updateSettings {
+            it.copy(lastSelectedTabRoute = route)
+        }
+    }
+
+    private fun persist() {
+        writeJson(storageFile, SettingsStoreFile.fromDomain(settingsFlow.value))
     }
 }
 
@@ -272,9 +339,84 @@ class FileBackedCacheRepository(
     }
 }
 
+class FileBackedUiRestoreRepository(
+    baseDirectory: File,
+) : UiRestoreRepository {
+    private val mutex = Mutex()
+    private val storageFile = baseDirectory.resolve("ui_restore_store.json")
+    private val viewerContextFlow = MutableStateFlow<ViewerLaunchContext?>(null)
+    private val scrollStates = mutableMapOf<String, SearchScrollState>()
+    private var lastTab: String? = null
+
+    init {
+        storageFile.parentFile?.mkdirs()
+        val stored = readJson(storageFile, UiRestoreStoreFile())
+        lastTab = stored.lastTab
+        scrollStates.putAll(
+            stored.searchScrollStates.mapValues { (_, record) ->
+                SearchScrollState(
+                    firstVisibleItemIndex = record.firstVisibleItemIndex,
+                    firstVisibleItemOffsetPx = record.firstVisibleItemOffsetPx,
+                )
+            }
+        )
+        viewerContextFlow.value = stored.viewerLaunchContext?.toDomain()
+    }
+
+    override suspend fun setLastTab(route: String) {
+        mutex.withLock {
+            lastTab = route
+            persist()
+        }
+    }
+
+    override suspend fun getLastTab(): String? {
+        return lastTab
+    }
+
+    override suspend fun setSearchScrollState(queryHash: String, state: SearchScrollState) {
+        mutex.withLock {
+            scrollStates[queryHash] = state
+            persist()
+        }
+    }
+
+    override suspend fun getSearchScrollState(queryHash: String): SearchScrollState? {
+        return scrollStates[queryHash]
+    }
+
+    override fun observeViewerLaunchContext(): Flow<ViewerLaunchContext?> {
+        return viewerContextFlow
+    }
+
+    override suspend fun setViewerLaunchContext(context: ViewerLaunchContext?) {
+        mutex.withLock {
+            viewerContextFlow.value = context
+            persist()
+        }
+    }
+
+    private fun persist() {
+        writeJson(
+            storageFile,
+            UiRestoreStoreFile(
+                lastTab = lastTab,
+                searchScrollStates = scrollStates.mapValues { (_, state) ->
+                    SearchScrollStateRecord(
+                        firstVisibleItemIndex = state.firstVisibleItemIndex,
+                        firstVisibleItemOffsetPx = state.firstVisibleItemOffsetPx,
+                    )
+                },
+                viewerLaunchContext = viewerContextFlow.value?.let(ViewerLaunchContextRecord::fromDomain),
+            ),
+        )
+    }
+}
+
 private data class CodexStoreFile(
     val codices: List<CodexRecord> = emptyList(),
     val items: Map<String, List<CodexItemRecord>> = emptyMap(),
+    val posts: List<PostRecord> = emptyList(),
 )
 
 private data class CodexRecord(
@@ -314,6 +456,76 @@ private data class CodexItemRecord(
                 source = item.postId.source.name,
                 sourcePostId = item.postId.sourcePostId,
                 savedAtEpochMs = item.savedAtEpochMs,
+            )
+        }
+    }
+}
+
+private data class PostRecord(
+    val source: String,
+    val sourcePostId: String,
+    val previewUrl: String?,
+    val previewLocalPath: String?,
+    val previewMime: String?,
+    val fullUrl: String?,
+    val fullLocalPath: String?,
+    val fullMime: String?,
+    val pageUrl: String?,
+    val width: Int?,
+    val height: Int?,
+    val canonicalTags: List<String>,
+    val rawTags: List<String>,
+    val authorName: String?,
+    val createdAtEpochMs: Long?,
+) {
+    fun toDomain(): Post {
+        return Post(
+            id = PostId(
+                source = SourceKey.valueOf(source),
+                sourcePostId = sourcePostId,
+            ),
+            preview = ImageRef(
+                url = previewUrl,
+                localPath = previewLocalPath,
+                mime = previewMime,
+            ),
+            full = if (fullUrl == null && fullLocalPath == null && fullMime == null) {
+                null
+            } else {
+                ImageRef(
+                    url = fullUrl,
+                    localPath = fullLocalPath,
+                    mime = fullMime,
+                )
+            },
+            pageUrl = pageUrl,
+            width = width,
+            height = height,
+            canonicalTags = canonicalTags,
+            rawTags = rawTags,
+            authorName = authorName,
+            createdAtEpochMs = createdAtEpochMs,
+        )
+    }
+
+    companion object {
+        fun fromDomain(post: Post): PostRecord {
+            return PostRecord(
+                source = post.id.source.name,
+                sourcePostId = post.id.sourcePostId,
+                previewUrl = post.preview.url,
+                previewLocalPath = post.preview.localPath,
+                previewMime = post.preview.mime,
+                fullUrl = post.full?.url,
+                fullLocalPath = post.full?.localPath,
+                fullMime = post.full?.mime,
+                pageUrl = post.pageUrl,
+                width = post.width,
+                height = post.height,
+                canonicalTags = post.canonicalTags,
+                rawTags = post.rawTags,
+                authorName = post.authorName,
+                createdAtEpochMs = post.createdAtEpochMs,
             )
         }
     }
@@ -379,20 +591,26 @@ private data class QueryRecord(
 }
 
 private data class SettingsStoreFile(
-    val enabledSources: List<String>,
-    val sourceWeights: Map<String, Double>,
-    val cacheFullImageOnSave: Boolean,
-    val lastSelectedTabRoute: String,
+    val enabledSources: List<String> = SourceKey.entries.map { it.name },
+    val sourceWeights: Map<String, Double> = SourceRuntimeSettings().sourceWeights.mapKeys { it.key.name },
+    val cacheFullImageOnSave: Boolean = false,
+    val scenarioPreset: String = ScenarioPreset.NORMAL.name,
+    val lastSelectedTabRoute: String = "search",
 ) {
     fun toDomain(): AppSettings {
         val runtime = SourceRuntimeSettings(
-            enabledSources = enabledSources.map(SourceKey::valueOf).toSet(),
-            sourceWeights = sourceWeights.mapKeys { SourceKey.valueOf(it.key) },
+            enabledSources = enabledSources.mapNotNull { runCatching { SourceKey.valueOf(it) }.getOrNull() }.toSet(),
+            sourceWeights = sourceWeights.mapNotNull { (key, value) ->
+                runCatching { SourceKey.valueOf(key) }.getOrNull()?.let { source -> source to value }
+            }.toMap(),
         )
-        return AppSettings(
-            runtime = runtime,
-            cache = CacheSettings(cacheFullImageOnSave = cacheFullImageOnSave),
-            lastSelectedTabRoute = lastSelectedTabRoute,
+        return normalizeSettings(
+            AppSettings(
+                runtime = runtime,
+                cache = CacheSettings(cacheFullImageOnSave = cacheFullImageOnSave),
+                scenarioPreset = runCatching { ScenarioPreset.valueOf(scenarioPreset) }.getOrDefault(ScenarioPreset.NORMAL),
+                lastSelectedTabRoute = lastSelectedTabRoute,
+            )
         )
     }
 
@@ -402,9 +620,86 @@ private data class SettingsStoreFile(
                 enabledSources = settings.runtime.enabledSources.map { it.name },
                 sourceWeights = settings.runtime.sourceWeights.mapKeys { it.key.name },
                 cacheFullImageOnSave = settings.cache.cacheFullImageOnSave,
+                scenarioPreset = settings.scenarioPreset.name,
                 lastSelectedTabRoute = settings.lastSelectedTabRoute,
             )
         }
+    }
+}
+
+private data class UiRestoreStoreFile(
+    val lastTab: String? = null,
+    val searchScrollStates: Map<String, SearchScrollStateRecord> = emptyMap(),
+    val viewerLaunchContext: ViewerLaunchContextRecord? = null,
+)
+
+private data class SearchScrollStateRecord(
+    val firstVisibleItemIndex: Int,
+    val firstVisibleItemOffsetPx: Int,
+)
+
+private data class ViewerLaunchContextRecord(
+    val queryHash: String,
+    val startIndex: Int,
+    val streamSource: String,
+    val scrollOffsetHint: Int,
+) {
+    fun toDomain(): ViewerLaunchContext {
+        return ViewerLaunchContext(
+            queryHash = queryHash,
+            startIndex = startIndex,
+            streamSource = runCatching { ViewerStreamSource.valueOf(streamSource) }.getOrDefault(ViewerStreamSource.SEARCH),
+            scrollOffsetHint = scrollOffsetHint,
+        )
+    }
+
+    companion object {
+        fun fromDomain(context: ViewerLaunchContext): ViewerLaunchContextRecord {
+            return ViewerLaunchContextRecord(
+                queryHash = context.queryHash,
+                startIndex = context.startIndex,
+                streamSource = context.streamSource.name,
+                scrollOffsetHint = context.scrollOffsetHint,
+            )
+        }
+    }
+}
+
+private fun normalizeSettings(settings: AppSettings): AppSettings {
+    val normalizedWeights = normalizeWeights(
+        enabledSources = settings.runtime.enabledSources,
+        rawWeights = settings.runtime.sourceWeights,
+    )
+    return settings.copy(
+        runtime = settings.runtime.copy(sourceWeights = normalizedWeights),
+    )
+}
+
+private fun normalizeWeights(
+    enabledSources: Set<SourceKey>,
+    rawWeights: Map<SourceKey, Double>,
+): Map<SourceKey, Double> {
+    if (enabledSources.isEmpty()) return emptyMap()
+    val defaults = SourceRuntimeSettings().sourceWeights
+    val positiveWeights = enabledSources.associateWith { source ->
+        (rawWeights[source] ?: defaults[source] ?: 1.0).coerceAtLeast(0.0)
+    }
+    val total = positiveWeights.values.sum().takeIf { it > 0.0 } ?: enabledSources.size.toDouble()
+    return positiveWeights.mapValues { (_, weight) -> weight / total }
+}
+
+private fun sortCodexPairs(
+    pairs: List<Pair<CodexItem, Post>>,
+    sort: CodexSortMode,
+): List<Pair<CodexItem, Post>> {
+    return when (sort) {
+        CodexSortMode.NEWEST_SAVED -> pairs.sortedByDescending { it.first.savedAtEpochMs }
+        CodexSortMode.OLDEST_SAVED -> pairs.sortedBy { it.first.savedAtEpochMs }
+        CodexSortMode.BY_SOURCE -> pairs.sortedWith(
+            compareBy<Pair<CodexItem, Post>> { it.second.id.source.name }
+                .thenByDescending { it.first.savedAtEpochMs }
+                .thenBy { it.second.id.sourcePostId }
+        )
     }
 }
 

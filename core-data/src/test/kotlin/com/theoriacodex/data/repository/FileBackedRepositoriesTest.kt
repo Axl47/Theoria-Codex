@@ -22,12 +22,16 @@ class FileBackedRepositoriesTest {
         val dir = Files.createTempDirectory("codex-store-").toFile()
         val first = FileBackedCodexRepository(dir)
         val created = first.createCodex("Saved")
-        first.addItem(created.codexId, samplePost("1", localPath = null))
+        first.addItem(created.codexId, samplePost("1", localPath = null, source = SourceKey.PIXIV))
+        first.addItem(created.codexId, samplePost("2", localPath = null, source = SourceKey.AIBOORU))
 
         val second = FileBackedCodexRepository(dir)
+        val bySource = second.observeCodexPosts(created.codexId, CodexSortMode.BY_SOURCE).first()
 
         assertEquals(1, second.observeCodices().first().size)
-        assertEquals(1, second.observeCodexItems(created.codexId).first().size)
+        assertEquals(2, second.observeCodexItems(created.codexId).first().size)
+        assertEquals(SourceKey.AIBOORU, bySource.first().id.source)
+        assertNotNull(second.getPost(PostId(SourceKey.PIXIV, "1")))
     }
 
     @Test
@@ -55,18 +59,20 @@ class FileBackedRepositoriesTest {
     fun `settings repository persists updates`() = runTest {
         val dir = Files.createTempDirectory("settings-store-").toFile()
         val first = FileBackedSettingsRepository(dir)
-        first.updateSettings {
-            it.copy(
-                cache = it.cache.copy(cacheFullImageOnSave = true),
-                lastSelectedTabRoute = "codex",
-            )
-        }
+        first.setEnabledSources(setOf(SourceKey.PIXIV, SourceKey.GELBOORU))
+        first.setSourceWeights(mapOf(SourceKey.PIXIV to 4.0, SourceKey.GELBOORU to 1.0))
+        first.setCacheFullImageOnSave(true)
+        first.setScenarioPreset(ScenarioPreset.EMPTY_RESULTS)
+        first.setLastTab("codex")
 
         val second = FileBackedSettingsRepository(dir)
         val loaded = second.observeSettings().first()
 
         assertTrue(loaded.cache.cacheFullImageOnSave)
+        assertEquals(ScenarioPreset.EMPTY_RESULTS, loaded.scenarioPreset)
         assertEquals("codex", loaded.lastSelectedTabRoute)
+        val total = loaded.runtime.sourceWeights.values.sum()
+        assertEquals(1.0, total, 0.0001)
     }
 
     @Test
@@ -85,9 +91,31 @@ class FileBackedRepositoriesTest {
         assertEquals(0, snapshot.fullImageCount)
     }
 
-    private fun samplePost(id: String, localPath: String?): Post {
+    @Test
+    fun `ui restore repository persists tab scroll and viewer context`() = runTest {
+        val dir = Files.createTempDirectory("ui-restore-store-").toFile()
+        val first = FileBackedUiRestoreRepository(dir)
+        val context = ViewerLaunchContext(
+            queryHash = "qhash",
+            startIndex = 4,
+            streamSource = ViewerStreamSource.CODEX,
+            scrollOffsetHint = 90,
+        )
+
+        first.setLastTab("settings")
+        first.setSearchScrollState("qhash", SearchScrollState(firstVisibleItemIndex = 3, firstVisibleItemOffsetPx = 28))
+        first.setViewerLaunchContext(context)
+
+        val second = FileBackedUiRestoreRepository(dir)
+
+        assertEquals("settings", second.getLastTab())
+        assertEquals(3, second.getSearchScrollState("qhash")?.firstVisibleItemIndex)
+        assertEquals(context, second.observeViewerLaunchContext().first())
+    }
+
+    private fun samplePost(id: String, localPath: String?, source: SourceKey = SourceKey.PIXIV): Post {
         return Post(
-            id = PostId(SourceKey.PIXIV, id),
+            id = PostId(source, id),
             preview = ImageRef(url = "https://example.com/$id.jpg", localPath = localPath, mime = "image/jpeg"),
             full = ImageRef(url = "https://example.com/full/$id.jpg", localPath = null, mime = "image/jpeg"),
             pageUrl = "https://example.com/post/$id",

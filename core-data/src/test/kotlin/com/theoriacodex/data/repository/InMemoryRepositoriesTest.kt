@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class InMemoryRepositoriesTest {
@@ -26,6 +27,25 @@ class InMemoryRepositoriesTest {
         assertEquals(1, codices.size)
         assertEquals("Favorites", codices.first().name)
         assertEquals(1, items.size)
+    }
+
+    @Test
+    fun `codex repository deduplicates and sorts post hydration`() = runTest {
+        val repo = InMemoryCodexRepository()
+        val codex = repo.createCodex("Favorites")
+        val pixiv = samplePost(id = "1", source = SourceKey.PIXIV)
+        val gelbooru = samplePost(id = "2", source = SourceKey.GELBOORU)
+
+        repo.addItem(codex.codexId, pixiv)
+        repo.addItem(codex.codexId, gelbooru)
+        repo.addItem(codex.codexId, pixiv)
+
+        val items = repo.observeCodexItems(codex.codexId).first()
+        val bySource = repo.observeCodexPosts(codex.codexId, CodexSortMode.BY_SOURCE).first()
+
+        assertEquals(2, items.size)
+        assertEquals(SourceKey.GELBOORU, bySource.first().id.source)
+        assertNotNull(repo.getPost(pixiv.id))
     }
 
     @Test
@@ -60,9 +80,45 @@ class InMemoryRepositoriesTest {
         assertEquals(1, snapshot.fullImageCount)
     }
 
-    private fun samplePost(id: String): Post {
+    @Test
+    fun `settings repository normalizes source weights and scenario preset`() = runTest {
+        val repo = InMemorySettingsRepository()
+
+        repo.setEnabledSources(setOf(SourceKey.PIXIV, SourceKey.GELBOORU))
+        repo.setSourceWeights(mapOf(SourceKey.PIXIV to 3.0, SourceKey.GELBOORU to 1.0))
+        repo.setScenarioPreset(ScenarioPreset.PARTIAL_FAILURE)
+
+        val settings = repo.observeSettings().first()
+        val pixivWeight = settings.runtime.sourceWeights.getValue(SourceKey.PIXIV)
+        val gelbooruWeight = settings.runtime.sourceWeights.getValue(SourceKey.GELBOORU)
+
+        assertEquals(1.0, pixivWeight + gelbooruWeight, 0.0001)
+        assertTrue(pixivWeight > gelbooruWeight)
+        assertEquals(ScenarioPreset.PARTIAL_FAILURE, settings.scenarioPreset)
+    }
+
+    @Test
+    fun `ui restore repository stores tab scroll and viewer context`() = runTest {
+        val repo = InMemoryUiRestoreRepository()
+        val context = ViewerLaunchContext(
+            queryHash = "hash-1",
+            startIndex = 3,
+            streamSource = ViewerStreamSource.SEARCH,
+            scrollOffsetHint = 180,
+        )
+
+        repo.setLastTab("codex")
+        repo.setSearchScrollState("hash-1", SearchScrollState(firstVisibleItemIndex = 2, firstVisibleItemOffsetPx = 120))
+        repo.setViewerLaunchContext(context)
+
+        assertEquals("codex", repo.getLastTab())
+        assertEquals(2, repo.getSearchScrollState("hash-1")?.firstVisibleItemIndex)
+        assertEquals(context, repo.observeViewerLaunchContext().first())
+    }
+
+    private fun samplePost(id: String, source: SourceKey = SourceKey.PIXIV): Post {
         return Post(
-            id = PostId(source = SourceKey.PIXIV, sourcePostId = id),
+            id = PostId(source = source, sourcePostId = id),
             preview = ImageRef(url = "https://example.com/$id.jpg", localPath = null, mime = "image/jpeg"),
             full = ImageRef(url = "https://example.com/full/$id.jpg", localPath = null, mime = "image/jpeg"),
             pageUrl = "https://example.com/post/$id",

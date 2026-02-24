@@ -13,8 +13,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material3.AssistChip
@@ -40,16 +41,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -57,14 +62,36 @@ import kotlin.math.abs
 @Composable
 fun SearchScreen(
     coordinator: SearchCoordinator,
+    onOpenViewer: (List<Post>, ViewerLaunchContext) -> Unit,
 ) {
     var input by rememberSaveable { mutableStateOf("") }
     var showFilterSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
+    val gridState = rememberLazyGridState()
+    val queryHash = coordinator.appliedQueryHash
 
     LaunchedEffect(coordinator.draftQuery.mode) {
         coordinator.loadTrendingTags()
+    }
+
+    LaunchedEffect(queryHash, coordinator.results.size) {
+        val restored = coordinator.restoreSearchScrollState() ?: return@LaunchedEffect
+        if (coordinator.results.isNotEmpty()) {
+            val lastIndex = coordinator.results.lastIndex.coerceAtLeast(0)
+            gridState.scrollToItem(
+                index = restored.firstVisibleItemIndex.coerceIn(0, lastIndex),
+                scrollOffset = restored.firstVisibleItemOffsetPx.coerceAtLeast(0),
+            )
+        }
+    }
+
+    LaunchedEffect(queryHash, coordinator.results.size) {
+        if (coordinator.results.isEmpty()) return@LaunchedEffect
+        snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
+            .collectLatest { (index, offset) ->
+                coordinator.persistSearchScrollState(index = index, offsetPx = offset)
+            }
     }
 
     val autocompleteSuggestions = remember(input, coordinator.trendingTags) {
@@ -125,6 +152,12 @@ fun SearchScreen(
                 mode = coordinator.draftQuery.mode,
                 onModeSelected = coordinator::setMode,
             )
+            if (coordinator.draftQuery.mode == QueryMode.Unified) {
+                Text(
+                    text = "(${coordinator.enabledSourceCount} sources enabled)",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
 
             TagRow(
                 includeTags = coordinator.draftQuery.includeTags,
@@ -133,7 +166,10 @@ fun SearchScreen(
                 onRemoveExclude = coordinator::removeExcludeTag,
             )
 
-            if (coordinator.statuses.isNotEmpty() && coordinator.appliedQuery.mode == QueryMode.Unified) {
+            if (
+                coordinator.appliedQuery.mode == QueryMode.Unified &&
+                coordinator.statuses.any { it.state != SourceRunState.SUCCESS }
+            ) {
                 StatusRow(coordinator = coordinator)
             }
 
@@ -164,12 +200,24 @@ fun SearchScreen(
                 else -> {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
+                        state = gridState,
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        items(coordinator.results) { post ->
-                            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                        itemsIndexed(coordinator.results) { index, post ->
+                            ElevatedCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        val context = coordinator.buildViewerLaunchContext(
+                                            startIndex = index,
+                                            scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
+                                        )
+                                        scope.launch { coordinator.setViewerLaunchContext(context) }
+                                        onOpenViewer(coordinator.results, context)
+                                    }
+                            ) {
                                 Column(
                                     modifier = Modifier.padding(12.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -198,7 +246,11 @@ fun SearchScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    TextButton(onClick = { coordinator.resetDraft() }) {
+                    TextButton(onClick = {
+                        coordinator.resetDraft()
+                        input = ""
+                        showFilterSheet = false
+                    }) {
                         Text("Reset")
                     }
                     TextButton(onClick = { scope.launch { coordinator.applyDraft() } }) {
@@ -414,13 +466,14 @@ private fun TagRow(
 
 @Composable
 private fun StatusRow(coordinator: SearchCoordinator) {
+    val filtered = coordinator.statuses.filter { it.state != SourceRunState.SUCCESS }
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(coordinator.statuses.size) { index ->
-            val status = coordinator.statuses[index]
+        items(filtered.size) { index ->
+            val status = filtered[index]
             val text = when (status.state) {
-                SourceRunState.SUCCESS -> "${status.source.name} OK"
                 SourceRunState.EXCLUDED -> "${status.source.name} excluded"
                 SourceRunState.FAILED -> "${status.source.name} failed"
+                SourceRunState.SUCCESS -> "${status.source.name} OK"
             }
             AssistChip(onClick = {}, label = { Text(text) })
         }

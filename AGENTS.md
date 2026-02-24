@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T17:48
-updated_at: 2026-02-24T22:40
+updated_at: 2026-02-24T23:08
 ---
 # THEORIA CODEX AGENTS DOCUMENT
 
@@ -23,6 +23,11 @@ Whenever new updates are made, this file (`AGENTS.md`) should be updated with an
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-domain/src/main/kotlin/com/theoriacodex/domain/orchestration/UnifiedSearchOrchestrator.kt`: capability-aware unified multi-source search orchestration and weighted interleave.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/search/SearchCoordinator.kt`: shared Search/Explore query coordinator implementing Draft/Applied behavior against stub orchestration.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/explore/ExploreScreen.kt`: functional Search + Explore slice including autocomplete, filter sheet staging, quick-query handoff, and status states.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-data/src/main/kotlin/com/theoriacodex/data/repository/Repositories.kt`: expanded contract surface adding `CodexSortMode`, explicit settings setters, `ViewerLaunchContext`, and `UiRestoreRepository`.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/viewer/ViewerState.kt`: fullscreen viewer interaction/state implementation with gesture logic and info/actions sheet.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/codex/CodexListScreen.kt`, `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/codex/CodexDetailScreen.kt`, `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/codex/SaveToCodexSheet.kt`: complete Codex management/save flows.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/settings/SettingsScreen.kt`: runtime settings controls wired to source toggles/weights/cache/scenario behavior.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/test/java/com/theoriacodex/app/search/SearchCoordinatorTest.kt` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/test/java/com/theoriacodex/app/viewer/ViewerStateTest.kt`: new app-level tests for search restoration semantics and viewer state transitions.
 
 ## Final Output
 

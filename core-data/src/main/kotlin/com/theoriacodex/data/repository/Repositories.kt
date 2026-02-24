@@ -10,12 +10,21 @@ import kotlinx.coroutines.flow.Flow
 
 interface CodexRepository {
     fun observeCodices(): Flow<List<Codex>>
+    fun observeCodex(codexId: String): Flow<Codex?>
     suspend fun createCodex(name: String): Codex
     suspend fun renameCodex(codexId: String, name: String)
     suspend fun deleteCodex(codexId: String)
     fun observeCodexItems(codexId: String): Flow<List<CodexItem>>
+    fun observeCodexPosts(codexId: String, sort: CodexSortMode): Flow<List<Post>>
+    suspend fun getPost(postId: com.theoriacodex.domain.model.PostId): Post?
     suspend fun addItem(codexId: String, post: Post)
     suspend fun removeItem(codexId: String, sourceKey: SourceKey, sourcePostId: String)
+}
+
+enum class CodexSortMode {
+    NEWEST_SAVED,
+    OLDEST_SAVED,
+    BY_SOURCE,
 }
 
 interface QueryRepository {
@@ -45,12 +54,25 @@ data class CacheSettings(
 data class AppSettings(
     val runtime: SourceRuntimeSettings = SourceRuntimeSettings(),
     val cache: CacheSettings = CacheSettings(),
+    val scenarioPreset: ScenarioPreset = ScenarioPreset.NORMAL,
     val lastSelectedTabRoute: String = "search",
 )
+
+enum class ScenarioPreset {
+    NORMAL,
+    PARTIAL_FAILURE,
+    EMPTY_RESULTS,
+    SLOW_NETWORK,
+}
 
 interface SettingsRepository {
     fun observeSettings(): Flow<AppSettings>
     suspend fun updateSettings(transform: (AppSettings) -> AppSettings)
+    suspend fun setEnabledSources(enabledSources: Set<SourceKey>)
+    suspend fun setSourceWeights(sourceWeights: Map<SourceKey, Double>)
+    suspend fun setCacheFullImageOnSave(enabled: Boolean)
+    suspend fun setScenarioPreset(preset: ScenarioPreset)
+    suspend fun setLastTab(route: String)
 }
 
 data class CacheSnapshot(
@@ -64,4 +86,30 @@ interface CacheRepository {
     suspend fun cacheFull(post: Post)
     suspend fun clearThumbnailCache()
     suspend fun clearFullImageCache()
+}
+
+enum class ViewerStreamSource {
+    SEARCH,
+    CODEX,
+}
+
+data class ViewerLaunchContext(
+    val queryHash: String,
+    val startIndex: Int,
+    val streamSource: ViewerStreamSource,
+    val scrollOffsetHint: Int,
+)
+
+data class SearchScrollState(
+    val firstVisibleItemIndex: Int,
+    val firstVisibleItemOffsetPx: Int,
+)
+
+interface UiRestoreRepository {
+    suspend fun setLastTab(route: String)
+    suspend fun getLastTab(): String?
+    suspend fun setSearchScrollState(queryHash: String, state: SearchScrollState)
+    suspend fun getSearchScrollState(queryHash: String): SearchScrollState?
+    fun observeViewerLaunchContext(): Flow<ViewerLaunchContext?>
+    suspend fun setViewerLaunchContext(context: ViewerLaunchContext?)
 }
