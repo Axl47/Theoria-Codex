@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T17:48
-updated_at: 2026-02-24T22:31
+updated_at: 2026-02-24T22:34
 ---
 # THEORIA CODEX AGENTS DOCUMENT
 
@@ -21,6 +21,8 @@ Whenever new updates are made, this file (`AGENTS.md`) should be updated with an
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-data/src/main/kotlin/com/theoriacodex/data/repository/FileBackedRepositories.kt`: JSON file-backed repository implementations for Codex/query/settings/cache state persistence.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-stubs/src/main/resources/stubs/`: fixture corpus for source paging, trending tags, and scenario simulation.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-domain/src/main/kotlin/com/theoriacodex/domain/orchestration/UnifiedSearchOrchestrator.kt`: capability-aware unified multi-source search orchestration and weighted interleave.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/search/SearchCoordinator.kt`: shared Search/Explore query coordinator implementing Draft/Applied behavior against stub orchestration.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/explore/ExploreScreen.kt`: first functional Search + Explore UI slice replacing placeholders.
 
 ## Final Output
 

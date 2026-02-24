@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:08
-updated_at: 2026-02-24T22:31
+updated_at: 2026-02-24T22:34
 ---
 # Build Theoria Codex Android MVP (Stub-first, Local-first)
 
@@ -26,7 +26,8 @@ The success path is observable: launch app, switch among Search/Explore/Codex/Se
 - [x] (2026-02-24 22:31Z) Completed Milestone 3: added persistence/cache repository contracts plus in-memory and file-backed implementations with tests (`:core-data:test`).
 - [x] (2026-02-24 22:31Z) Completed Milestone 4: added stub fixture corpus, scenario-aware source adapters, and unified weighted orchestration with tests (`:core-stubs:test`, `:core-domain:test`).
 - [x] (2026-02-24 22:31Z) Re-validated project with `./gradlew :core-domain:test :core-stubs:test :core-data:test assembleDebug`.
-- [~] (2026-02-24 22:31Z) Milestone 5 started: Search and Explore UI implementation.
+- [~] (2026-02-24 22:34Z) Milestone 5 in progress: implemented functional Search + Explore baseline (shared coordinator, Draft/Apply flow, quick queries, trending tags, stub-backed results, status pills); remaining UI-spec fidelity and interaction polish.
+- [x] (2026-02-24 22:34Z) Re-validated project with `./gradlew :core-domain:test :core-stubs:test :core-data:test testDebugUnitTest assembleDebug`.
 - [ ] Milestone 6: implement Viewer, Codex, and save/remove flows.
 - [ ] Milestone 7: implement Settings, restore behavior, and offline guarantees.
 - [ ] Milestone 8: full validation and docs finalization.
@@ -60,9 +61,13 @@ The success path is observable: launch app, switch among Search/Explore/Codex/Se
   Rationale: Provides deterministic local persistence in this phase without blocking on Android-specific infrastructure; preserves repository boundaries for later swap.
   Date/Author: 2026-02-24 / Codex
 
+- Decision: Introduce a shared `SearchCoordinator` in the app module to keep Draft/Applied behavior consistent between Search and Explore before ViewModel/store extraction.
+  Rationale: Fastest path to unblock milestone UI behavior while preserving a single query state authority.
+  Date/Author: 2026-02-24 / Codex
+
 ## Outcomes & Retrospective
 
-Milestones 1 through 4 are complete and validated. The codebase now has a runnable app shell, verified domain/query primitives, tested local persistence/cache layers (including file-backed implementations), and fixture-driven stub source adapters with unified weighted orchestration. Active implementation has moved to Milestone 5 (Search + Explore UI behavior).
+Milestones 1 through 4 are complete and validated. Milestone 5 now has a working baseline implementation: Search and Explore are no longer placeholders and execute against stub-backed data with shared Draft/Applied state. Remaining work in Milestone 5 is UX/spec fidelity and interaction depth.
 
 ## Context and Orientation
 
@@ -135,6 +140,9 @@ Key artifacts currently produced:
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-stubs/src/main/kotlin/com/theoriacodex/stubs/JsonStubSourceAdapter.kt`
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-stubs/src/main/resources/stubs/`
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-domain/src/main/kotlin/com/theoriacodex/domain/orchestration/UnifiedSearchOrchestrator.kt`
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/search/SearchCoordinator.kt`
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt`
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/explore/ExploreScreen.kt`
 
 Validation excerpts:
 
@@ -144,7 +152,7 @@ Validation excerpts:
     BUILD SUCCESSFUL in 2s
     :core-domain:test
 
-Plan revision note (2026-02-24 22:31Z): Updated plan after completing Milestone 3 (file-backed persistence/cache) and Milestone 4 (fixtures + stub adapters + unified orchestration) with passing validation.
+Plan revision note (2026-02-24 22:34Z): Updated plan after delivering Milestone 5 Search/Explore baseline UI and validating full module test/build commands.
 
 ## Interfaces and Dependencies
 
@@ -166,4 +174,4 @@ Current required interface (already created):
       suspend fun resolvePost(id: PostId): Post?
     }
 
-Next interface additions in Milestone 5 will expose Search/Explore UI state containers that consume these repository/orchestration contracts.
+Next interface additions in Milestone 5 and 6 will formalize UI state contracts around viewer handoff, scroll restoration, and codex save/remove actions.

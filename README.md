@@ -17,6 +17,14 @@ The project now includes a runnable Android scaffold with a portrait-locked app 
 - Codex
 - Settings
 
+Search and Explore are now partially functional (Milestone 5 in progress):
+
+- Shared Draft/Applied query coordinator
+- Apply-bar query execution model
+- Stub-backed search results rendering in a 2-column grid
+- Unified status pill rendering for source success/failure/exclusion states
+- Explore quick queries and trending-tag handoff into Search draft state
+
 Core domain contracts from the spec are in place, including:
 
 - Post and query models
