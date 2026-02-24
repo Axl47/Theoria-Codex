@@ -17,6 +17,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -36,6 +40,8 @@ fun SettingsScreen(
     onClearThumbnailCache: () -> Unit,
     onClearFullImageCache: () -> Unit,
 ) {
+    var showClearCacheOptions by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -123,15 +129,33 @@ fun SettingsScreen(
                 }
                 Text("Thumbnails: ${cacheSnapshot.thumbnailCount}")
                 Text("Full images: ${cacheSnapshot.fullImageCount}")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onClearThumbnailCache) {
-                        Text("Clear thumbnail cache")
-                    }
-                    TextButton(
-                        onClick = onClearFullImageCache,
-                        enabled = cacheSnapshot.fullImageCount > 0,
+                Button(onClick = { showClearCacheOptions = !showClearCacheOptions }) {
+                    Text(if (showClearCacheOptions) "Clear cache ▲" else "Clear cache ▼")
+                }
+                if (showClearCacheOptions) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Text("Clear full-image cache")
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                onClearThumbnailCache()
+                                showClearCacheOptions = false
+                            },
+                        ) {
+                            Text("Clear thumbnail cache")
+                        }
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                onClearFullImageCache()
+                                showClearCacheOptions = false
+                            },
+                            enabled = cacheSnapshot.fullImageCount > 0,
+                        ) {
+                            Text("Clear full image cache")
+                        }
                     }
                 }
             }

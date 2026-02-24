@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -48,7 +49,7 @@ import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.delay
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ViewerScreen(
     posts: List<Post>,
@@ -110,11 +111,13 @@ fun ViewerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .pointerInput(Unit) {
+            .pointerInput(viewerState.zoom) {
+                if (viewerState.zoom > ViewerState.FIT_SCALE + 0.01f) {
+                    return@pointerInput
+                }
                 detectVerticalDragGestures(
-                    onVerticalDrag = { change, dragAmount ->
+                    onVerticalDrag = { _, dragAmount ->
                         dismissDrag += dragAmount
-                        change.consume()
                         if (dismissDrag > 180f) {
                             onDismiss()
                         }
@@ -126,6 +129,7 @@ fun ViewerScreen(
     ) {
         HorizontalPager(
             state = pagerState,
+            userScrollEnabled = viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f,
             modifier = Modifier.fillMaxSize(),
         ) { page ->
             val post = posts[page]
@@ -147,7 +151,10 @@ fun ViewerScreen(
                         translationX = viewerState.panX
                         translationY = viewerState.panY
                     }
-                    .transformable(state = transformState)
+                    .transformable(
+                        state = transformState,
+                        canPan = { viewerState.zoom > ViewerState.FIT_SCALE + 0.01f },
+                    )
                     .pointerInput(page) {
                         detectTapGestures(
                             onDoubleTap = {

@@ -106,7 +106,10 @@ fun SearchScreen(
 
     Scaffold(
         floatingActionButton = {
-            FloatingActionButton(onClick = { showFilterSheet = true }) {
+            FloatingActionButton(
+                modifier = Modifier.padding(bottom = 72.dp),
+                onClick = { showFilterSheet = true },
+            ) {
                 Icon(Icons.Default.FilterList, contentDescription = "Filter and sort")
             }
         }
@@ -241,21 +244,22 @@ fun SearchScreen(
                 }
             }
 
-            if (coordinator.hasPendingChanges) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    TextButton(onClick = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                TextButton(
+                    onClick = {
                         coordinator.resetDraft()
                         input = ""
                         showFilterSheet = false
-                    }) {
-                        Text("Reset")
-                    }
-                    TextButton(onClick = { scope.launch { coordinator.applyDraft() } }) {
-                        Text("Apply")
-                    }
+                    },
+                    enabled = coordinator.hasPendingChanges,
+                ) {
+                    Text("Reset")
+                }
+                TextButton(onClick = { scope.launch { coordinator.applyDraft() } }) {
+                    Text("Apply")
                 }
             }
         }
