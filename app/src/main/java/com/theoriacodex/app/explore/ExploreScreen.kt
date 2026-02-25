@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AssistChip
@@ -17,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.domain.adapter.QuickQueryKind
@@ -62,13 +64,21 @@ fun ExploreScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 rowItems.forEach { kind ->
-                    Card(modifier = Modifier.weight(1f)) {
-                        TextButton(onClick = {
-                            coordinator.applyQuickQuery(kind)
-                            onApplyDraftAndNavigateToSearch()
-                        }) {
-                            Text(kind.name)
-                        }
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                coordinator.applyQuickQuery(kind)
+                                onApplyDraftAndNavigateToSearch()
+                            },
+                    ) {
+                        Text(
+                            text = kind.name,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
+                            textAlign = TextAlign.Center,
+                        )
                     }
                 }
             }
