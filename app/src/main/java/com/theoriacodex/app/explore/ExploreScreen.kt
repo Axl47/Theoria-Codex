@@ -9,7 +9,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -98,30 +102,37 @@ fun ExploreScreen(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Trending tags", style = MaterialTheme.typography.titleMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { scope.launch { coordinator.loadTrendingTags() } }) {
-                    Text("Refresh")
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text("Trending tags", style = MaterialTheme.typography.titleMedium)
+                IconButton(onClick = { scope.launch { coordinator.loadTrendingTags() } }) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh trending tags",
+                    )
                 }
-                TextButton(
-                    enabled = tagSelections.isNotEmpty(),
-                    onClick = {
-                        val includeTags = tagSelections
-                            .filterValues { it == ExploreTagSelection.INCLUDE }
-                            .keys
-                            .toList()
-                        val excludeTags = tagSelections
-                            .filterValues { it == ExploreTagSelection.EXCLUDE }
-                            .keys
-                            .toList()
-                        if (coordinator.prepareExploreTagSearch(includeTags, excludeTags)) {
-                            onApplyDraftAndNavigateToSearch()
-                        }
-                    },
-                ) {
-                    Text("Apply")
-                }
+            }
+            TextButton(
+                enabled = tagSelections.isNotEmpty(),
+                onClick = {
+                    val includeTags = tagSelections
+                        .filterValues { it == ExploreTagSelection.INCLUDE }
+                        .keys
+                        .toList()
+                    val excludeTags = tagSelections
+                        .filterValues { it == ExploreTagSelection.EXCLUDE }
+                        .keys
+                        .toList()
+                    if (coordinator.prepareExploreTagSearch(includeTags, excludeTags)) {
+                        onApplyDraftAndNavigateToSearch()
+                    }
+                },
+            ) {
+                Text("Apply")
             }
         }
 
