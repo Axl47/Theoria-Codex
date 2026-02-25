@@ -93,6 +93,8 @@ import com.theoriacodex.data.repository.FileBackedSettingsRepository
 import com.theoriacodex.data.repository.FileBackedUiRestoreRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
@@ -106,6 +108,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 
@@ -152,10 +155,11 @@ fun TheoriaApp(
         )
     }
     val sourceHttpClient = remember { DefaultSourceHttpClient() }
+    val pixivAuthApi = remember(sourceHttpClient) { PixivAuthApi(sourceHttpClient) }
     val credentialsStore = remember(appContext) { AndroidSecureSourceCredentialsStore(appContext) }
-    val pixivAuthController = remember(credentialsStore, sourceHttpClient) {
+    val pixivAuthController = remember(credentialsStore, pixivAuthApi) {
         PixivPkceController(
-            authApi = PixivAuthApi(sourceHttpClient),
+            authApi = pixivAuthApi,
             credentialsProvider = credentialsStore,
         )
     }
@@ -254,7 +258,32 @@ fun TheoriaApp(
         val pixivTokens = credentialsStore.getPixivTokens()
         pixivStatusLabel = when {
             pixivTokens == null -> "Not connected"
-            pixivTokens.expiresAtEpochMs <= System.currentTimeMillis() -> "Connected (token expired, refresh on demand)"
+            pixivTokens.expiresAtEpochMs <= System.currentTimeMillis() -> {
+                pixivStatusLabel = "Connected (refreshing token...)"
+                val refreshResult = withTimeoutOrNull(PIXIV_TOKEN_REFRESH_TIMEOUT_MS) {
+                    runCatching { pixivAuthApi.refresh(pixivTokens.refreshToken) }
+                }
+                when {
+                    refreshResult == null -> "Connected (refresh timed out, retry on next request)"
+                    refreshResult.isSuccess -> {
+                        credentialsStore.savePixivTokens(requireNotNull(refreshResult.getOrNull()))
+                        "Connected"
+                    }
+                    else -> {
+                        val failure = refreshResult.exceptionOrNull()
+                        if (
+                            failure is SourceAdapterException &&
+                            (failure.reason == SourceFailureReason.AUTH_EXPIRED ||
+                                failure.reason == SourceFailureReason.AUTH_REQUIRED)
+                        ) {
+                            credentialsStore.clearPixivTokens()
+                            "Not connected (session expired)"
+                        } else {
+                            "Connected (refresh failed, retry on next request)"
+                        }
+                    }
+                }
+            }
             else -> "Connected"
         }
 
@@ -988,3 +1017,5 @@ private fun loadSeedTagSuggestions(context: Context): Map<SourceKey, List<TagSug
         source to tags
     }.toMap()
 }
+
+private const val PIXIV_TOKEN_REFRESH_TIMEOUT_MS = 6_000L

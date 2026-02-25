@@ -324,7 +324,7 @@ fun SearchScreen(
                         TextButton(
                             onClick = {
                                 focusManager.clearFocus()
-                                coordinator.resetDraft()
+                                coordinator.clearDraft()
                                 input = ""
                                 showFilterSheet = false
                             },

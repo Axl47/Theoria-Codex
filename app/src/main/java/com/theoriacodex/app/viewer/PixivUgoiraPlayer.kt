@@ -91,39 +91,14 @@ class PixivUgoiraClient(
 
     private suspend fun loadOrThrow(postId: String): UgoiraPlayback = withContext(Dispatchers.IO) {
         val currentTokens = activeTokens()
-        val metadataResponse = fetchMetadata(postId, currentTokens.accessToken)
-        val metadata = when {
-            metadataResponse.statusCode in 200..299 -> parseMetadata(metadataResponse.body)
-            metadataResponse.statusCode == 401 || metadataResponse.statusCode == 403 -> {
-                val refreshed = refreshTokens(currentTokens.refreshToken)
-                val retry = fetchMetadata(postId, refreshed.accessToken)
-                if (retry.statusCode !in 200..299) {
-                    throw IOException("Pixiv ugoira metadata request failed (${retry.statusCode})")
-                }
-                parseMetadata(retry.body)
-            }
-            else -> throw IOException("Pixiv ugoira metadata request failed (${metadataResponse.statusCode})")
-        }
-
-        val zipResponse = downloadZip(
-            url = metadata.zipUrl,
-            accessToken = currentTokens.accessToken,
+        val (metadata, tokensAfterMetadata) = fetchMetadataWithRetry(
+            postId = postId,
+            initialTokens = currentTokens,
         )
-        val zipBytes = when {
-            zipResponse.statusCode in 200..299 -> zipResponse.body
-            zipResponse.statusCode == 401 || zipResponse.statusCode == 403 -> {
-                val refreshed = refreshTokens(currentTokens.refreshToken)
-                val retry = downloadZip(
-                    url = metadata.zipUrl,
-                    accessToken = refreshed.accessToken,
-                )
-                if (retry.statusCode !in 200..299) {
-                    throw IOException("Pixiv ugoira zip request failed (${retry.statusCode})")
-                }
-                retry.body
-            }
-            else -> throw IOException("Pixiv ugoira zip request failed (${zipResponse.statusCode})")
-        }
+        val zipBytes = downloadZipWithRetry(
+            url = metadata.zipUrl,
+            initialTokens = tokensAfterMetadata,
+        )
 
         val playback = UgoiraPlayback(
             frames = decodeFrames(
@@ -132,6 +107,72 @@ class PixivUgoiraClient(
             )
         )
         playback
+    }
+
+    private suspend fun fetchMetadataWithRetry(
+        postId: String,
+        initialTokens: PixivAuthTokens,
+    ): Pair<ParsedMetadata, PixivAuthTokens> {
+        var tokens = initialTokens
+        var didRefreshAfterAuthFailure = false
+
+        repeat(UGOIRA_NETWORK_MAX_ATTEMPTS) { attempt ->
+            val metadataResponse = fetchMetadata(postId, tokens.accessToken)
+            when {
+                metadataResponse.statusCode in 200..299 -> {
+                    return parseMetadata(metadataResponse.body) to tokens
+                }
+
+                metadataResponse.statusCode == 401 || metadataResponse.statusCode == 403 -> {
+                    if (didRefreshAfterAuthFailure) {
+                        throw IOException("Pixiv ugoira metadata request failed (${metadataResponse.statusCode})")
+                    }
+                    tokens = refreshTokens(tokens.refreshToken)
+                    didRefreshAfterAuthFailure = true
+                }
+
+                isRetryableUgoiraStatus(metadataResponse.statusCode) && attempt < UGOIRA_NETWORK_MAX_ATTEMPTS - 1 -> {
+                    delay(ugoiraRetryDelayMs(attempt))
+                }
+
+                else -> {
+                    throw IOException("Pixiv ugoira metadata request failed (${metadataResponse.statusCode})")
+                }
+            }
+        }
+
+        throw IOException("Pixiv ugoira metadata request failed (retry limit reached)")
+    }
+
+    private suspend fun downloadZipWithRetry(
+        url: String,
+        initialTokens: PixivAuthTokens,
+    ): ByteArray {
+        var tokens = initialTokens
+        var didRefreshAfterAuthFailure = false
+
+        repeat(UGOIRA_NETWORK_MAX_ATTEMPTS) { attempt ->
+            val zipResponse = downloadZip(url = url, accessToken = tokens.accessToken)
+            when {
+                zipResponse.statusCode in 200..299 -> return zipResponse.body
+
+                zipResponse.statusCode == 401 || zipResponse.statusCode == 403 -> {
+                    if (didRefreshAfterAuthFailure) {
+                        throw IOException("Pixiv ugoira zip request failed (${zipResponse.statusCode})")
+                    }
+                    tokens = refreshTokens(tokens.refreshToken)
+                    didRefreshAfterAuthFailure = true
+                }
+
+                isRetryableUgoiraStatus(zipResponse.statusCode) && attempt < UGOIRA_NETWORK_MAX_ATTEMPTS - 1 -> {
+                    delay(ugoiraRetryDelayMs(attempt))
+                }
+
+                else -> throw IOException("Pixiv ugoira zip request failed (${zipResponse.statusCode})")
+            }
+        }
+
+        throw IOException("Pixiv ugoira zip request failed (retry limit reached)")
     }
 
     private suspend fun exportToMp4OrThrow(
@@ -578,6 +619,15 @@ class PixivUgoiraClient(
             }
         }
     }
+
+    private fun isRetryableUgoiraStatus(statusCode: Int): Boolean {
+        return statusCode == 429 || statusCode in 500..599
+    }
+
+    private fun ugoiraRetryDelayMs(attempt: Int): Long {
+        val cappedAttempt = attempt.coerceAtLeast(0).coerceAtMost(6)
+        return UGOIRA_RETRY_BASE_DELAY_MS * (1L shl cappedAttempt)
+    }
 }
 
 @Composable
@@ -711,3 +761,5 @@ private const val UGOIRA_BITRATE_PER_PIXEL = 6
 private const val UGOIRA_MIN_BITRATE = 900_000
 private const val UGOIRA_MAX_BITRATE = 12_000_000
 private const val UGOIRA_PLAYBACK_CACHE_SIZE = 8
+private const val UGOIRA_NETWORK_MAX_ATTEMPTS = 6
+private const val UGOIRA_RETRY_BASE_DELAY_MS = 350L

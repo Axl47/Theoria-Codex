@@ -14,7 +14,9 @@ import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
+import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.QuickQueryKind
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
@@ -167,6 +169,11 @@ class SearchCoordinator(
         draftQuery = appliedQuery
     }
 
+    fun clearDraft() {
+        val mode = draftQuery.mode.takeIf(::isModeAvailable) ?: QueryMode.Unified
+        draftQuery = defaultQuery(mode)
+    }
+
     fun applyQuickQuery(kind: QuickQueryKind) {
         val now = System.currentTimeMillis()
         val dayMs = 24L * 60L * 60L * 1000L
@@ -317,6 +324,7 @@ class SearchCoordinator(
                         putAll(result.nextPageTokens)
                     }
                     canLoadMore = unifiedNextPageTokens.values.any { !it.isNullOrBlank() }
+                    maybeHandlePixivUnknownFailure()
                 }
 
                 is QueryMode.Source -> {
@@ -338,7 +346,11 @@ class SearchCoordinator(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
-            errorMessage = error.message ?: "Could not load more results"
+            errorMessage = if (isPixivUnknownError(error)) {
+                PIXIV_UNKNOWN_RETRY_MESSAGE
+            } else {
+                error.message ?: "Could not load more results"
+            }
             canLoadMore = false
         } finally {
             loadingMore = false
@@ -423,6 +435,7 @@ class SearchCoordinator(
                         .sortedBy { it.source.name }
                     unifiedNextPageTokens = result.nextPageTokens
                     canLoadMore = unifiedNextPageTokens.values.any { !it.isNullOrBlank() }
+                    maybeHandlePixivUnknownFailure()
                 }
 
                 is QueryMode.Source -> {
@@ -461,14 +474,54 @@ class SearchCoordinator(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
-            results = previousResults
-            statuses = previousStatuses
-            errorMessage = error.message ?: "Unknown error"
-            canLoadMore = false
+            if (isPixivUnknownError(error)) {
+                clearSearchResultsForRetry()
+                errorMessage = PIXIV_UNKNOWN_RETRY_MESSAGE
+            } else {
+                results = previousResults
+                statuses = previousStatuses
+                errorMessage = error.message ?: "Unknown error"
+                canLoadMore = false
+            }
         } finally {
             hasExecutedSearch = true
             loading = false
         }
+    }
+
+    private fun maybeHandlePixivUnknownFailure() {
+        if (results.isNotEmpty()) return
+        val hasPixivUnknownFailure = statuses.any { status ->
+            status.source == SourceKey.PIXIV &&
+                status.state == SourceRunState.FAILED &&
+                (
+                    status.failureReason == SourceFailureReason.UNKNOWN ||
+                        status.errorMessage?.contains("PIXIV_UNKNOWN", ignoreCase = true) == true
+                    )
+        }
+        if (hasPixivUnknownFailure) {
+            clearSearchResultsForRetry()
+            errorMessage = PIXIV_UNKNOWN_RETRY_MESSAGE
+        }
+    }
+
+    private fun clearSearchResultsForRetry() {
+        results = emptyList()
+        canLoadMore = false
+        unifiedNextPageTokens = emptyMap()
+        sourceNextPageToken = null
+    }
+
+    private fun isPixivUnknownError(error: Throwable): Boolean {
+        if (error is SourceAdapterException && error.reason == SourceFailureReason.UNKNOWN) {
+            return when (val mode = appliedQuery.mode) {
+                QueryMode.Unified -> true
+                is QueryMode.Source -> mode.source == SourceKey.PIXIV
+            }
+        }
+        return error.message
+            .orEmpty()
+            .contains("PIXIV_UNKNOWN", ignoreCase = true)
     }
 
     private fun mergeResults(
@@ -535,3 +588,6 @@ enum class DateRangePreset {
     LAST_7_DAYS,
     LAST_30_DAYS,
 }
+
+private const val PIXIV_UNKNOWN_RETRY_MESSAGE =
+    "Pixiv returned a temporary unknown error. Search was reset. Please retry."

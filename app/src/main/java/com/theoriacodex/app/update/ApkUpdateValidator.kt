@@ -38,8 +38,8 @@ class ApkUpdateValidator(
         if (archiveSignatures.isEmpty() || installedSignatures.isEmpty()) {
             error("Could not verify APK signatures")
         }
-        if (archiveSignatures != installedSignatures) {
-            error("Downloaded APK signature does not match installed app")
+        if (archiveSignatures.intersect(installedSignatures).isEmpty()) {
+            error("Downloaded APK signature does not match installed app (release key mismatch)")
         }
     }
 

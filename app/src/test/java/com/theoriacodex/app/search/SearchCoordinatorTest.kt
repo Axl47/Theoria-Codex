@@ -4,8 +4,17 @@ import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
+import com.theoriacodex.domain.adapter.Page
+import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceCapabilities
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
+import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
@@ -98,6 +107,88 @@ class SearchCoordinatorTest {
 
         coordinator.setMode(QueryMode.Source(SourceKey.GELBOORU))
         assertEquals(QueryMode.Unified, coordinator.draftQuery.mode)
+    }
+
+    @Test
+    fun `clear draft resets to default query for current mode`() = runTest {
+        val coordinator = coordinator()
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
+        coordinator.addIncludeTag("first")
+        coordinator.applyDraft()
+        coordinator.addIncludeTag("second")
+
+        coordinator.clearDraft()
+
+        assertTrue(coordinator.draftQuery.includeTags.isEmpty())
+        assertTrue(coordinator.draftQuery.excludeTags.isEmpty())
+        assertEquals(QueryMode.Source(SourceKey.PIXIV), coordinator.draftQuery.mode)
+    }
+
+    @Test
+    fun `pixiv unknown failure resets search and prompts retry message`() = runTest {
+        val registry = object : SourceAdapterRegistry {
+            private val pixivAdapter = object : SourceAdapter {
+                override val sourceKey: SourceKey = SourceKey.PIXIV
+                override val capabilities: SourceCapabilities = SourceCapabilities(
+                    supportsSortNewest = true,
+                    supportsSortPopular = true,
+                    supportsSortTop = true,
+                    supportsSortRandom = true,
+                    supportsExcludeTagsServerSide = false,
+                    supportsDateRangeServerSide = false,
+                    supportsMinScoreServerSide = false,
+                    requiresCredentials = true,
+                )
+
+                override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+                    throw SourceAdapterException(
+                        reason = SourceFailureReason.UNKNOWN,
+                        message = "PIXIV_UNKNOWN",
+                    )
+                }
+
+                override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
+
+                override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = emptyList()
+
+                override suspend fun quickQuery(kind: QuickQueryKind): Query = query
+
+                override suspend fun resolvePost(id: PostId): Post? = null
+
+                private val query = Query(
+                    mode = QueryMode.Source(SourceKey.PIXIV),
+                    includeTags = emptyList(),
+                    excludeTags = emptyList(),
+                    sort = com.theoriacodex.domain.model.SortMode.NEWEST,
+                    dateRange = null,
+                    minScore = null,
+                )
+            }
+
+            override fun availableSources(): Set<SourceKey> = setOf(SourceKey.PIXIV)
+
+            override fun adapterFor(sourceKey: SourceKey): SourceAdapter? = pixivAdapter.takeIf {
+                sourceKey == SourceKey.PIXIV
+            }
+
+            override fun unifiedOrchestrator(): UnifiedSearchOrchestrator {
+                return UnifiedSearchOrchestrator(mapOf(SourceKey.PIXIV to pixivAdapter))
+            }
+        }
+        val coordinator = SearchCoordinator(
+            registry = registry,
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
+
+        coordinator.applyDraft()
+
+        assertTrue(coordinator.results.isEmpty())
+        assertTrue(coordinator.errorMessage?.contains("Search was reset", ignoreCase = true) == true)
     }
 
     private fun coordinator(): SearchCoordinator {

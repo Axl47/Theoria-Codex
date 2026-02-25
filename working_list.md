@@ -5,10 +5,10 @@ updated_at: 2026-02-25T01:42
 # Working List
 
 ## Pending
-- [ ] Non-critical visual polish follow-ups (masonry visual fidelity and richer image rendering)
+- [ ] Manual on-device smoke validation by developer checklist
 
 ## In Progress
-- [~] Manual on-device smoke validation by developer checklist
+- [~] Summarizing stabilization changes and validation notes
 
 ## Done
 - [x] Read `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/TheoriaSpec.md` and synthesize a multi-agent implementation strategy
@@ -39,3 +39,10 @@ updated_at: 2026-02-25T01:42
   - `./gradlew testDebugUnitTest`
   - `./gradlew assembleDebug`
   - `./gradlew lintDebug`
+- [x] Add proactive Pixiv token refresh with clear Settings status messaging
+- [x] Surface `PIXIV_UNKNOWN` as a top-level search error and reset active results state for retry
+- [x] Improve ugoira 429 resilience with retry/backoff in client and player
+- [x] Fix search Reset base-case behavior so it clears draft query instead of restoring stale applied tags
+- [x] Improve Pixiv tag normalization (include translated tags in canonical tag set)
+- [x] Validation passed for stabilization pass:
+  - `./gradlew :app:testDebugUnitTest :core-sources:test :app:assembleDebug`

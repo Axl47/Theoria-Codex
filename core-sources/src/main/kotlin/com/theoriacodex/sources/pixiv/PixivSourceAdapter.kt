@@ -278,8 +278,23 @@ class PixivSourceAdapter(
             else -> emptyList()
         }
 
-        val tags = raw.optionalJsonArray("tags").orEmpty().mapNotNull { tagElement ->
-            tagElement.asJsonObject.get("name")?.asString
+        val rawTags = mutableListOf<String>()
+        val canonicalTags = linkedSetOf<String>()
+        raw.optionalJsonArray("tags").orEmpty().forEach { tagElement ->
+            val tagObject = tagElement.asJsonObject
+            val name = tagObject.get("name")?.asString?.trim().orEmpty()
+            if (name.isNotBlank()) {
+                rawTags += name
+                canonicalTags += name
+            }
+            val translatedName = tagObject.get("translated_name")
+                ?.takeUnless { it.isJsonNull }
+                ?.asString
+                ?.trim()
+                .orEmpty()
+            if (translatedName.isNotBlank()) {
+                canonicalTags += translatedName
+            }
         }
         val createdAt = parseIsoInstant(raw.get("create_date")?.asString)
         val userName = raw.optionalJsonObject("user")?.get("name")?.asString
@@ -293,8 +308,8 @@ class PixivSourceAdapter(
             pageUrl = "https://www.pixiv.net/en/artworks/$id",
             width = raw.get("width")?.asInt,
             height = raw.get("height")?.asInt,
-            canonicalTags = tags,
-            rawTags = tags,
+            canonicalTags = canonicalTags.toList(),
+            rawTags = rawTags.distinct(),
             authorName = userName,
             createdAtEpochMs = createdAt,
             title = title,
