@@ -30,7 +30,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -401,6 +403,7 @@ fun ViewerScreen(
         }
         ModalBottomSheet(
             onDismissRequest = { showInfoSheet = false },
+            dragHandle = null,
         ) {
             Column(
                 modifier = Modifier
@@ -409,20 +412,32 @@ fun ViewerScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("Info & Actions", style = MaterialTheme.typography.titleMedium)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Button(onClick = {
-                        onSave(post)
-                        showInfoSheet = false
-                    }) {
-                        Text("Save to Codex")
-                    }
-                    if (!post.pageUrl.isNullOrBlank()) {
-                        TextButton(onClick = { onOpenInBrowser(post) }) {
-                            Text("Open in browser")
+                    Text("Info", style = MaterialTheme.typography.titleMedium)
+                    Row {
+                        IconButton(onClick = {
+                            onSave(post)
+                            showInfoSheet = false
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.BookmarkAdd,
+                                contentDescription = "Save to Codex",
+                            )
+                        }
+                        if (!post.pageUrl.isNullOrBlank()) {
+                            IconButton(onClick = {
+                                onOpenInBrowser(post)
+                                showInfoSheet = false
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.OpenInBrowser,
+                                    contentDescription = "Open in browser",
+                                )
+                            }
                         }
                     }
                 }
