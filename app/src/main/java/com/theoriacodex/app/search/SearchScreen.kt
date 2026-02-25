@@ -231,7 +231,7 @@ fun SearchScreen(
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
             FloatingActionButton(
-                modifier = Modifier.padding(bottom = 20.dp),
+                modifier = Modifier.padding(bottom = 8.dp),
                 onClick = {
                     focusManager.clearFocus()
                     showFilterSheet = true
