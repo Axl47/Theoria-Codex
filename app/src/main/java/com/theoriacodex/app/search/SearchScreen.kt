@@ -77,6 +77,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.WindowInsets
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.theoriacodex.app.R
@@ -227,6 +228,7 @@ fun SearchScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
             FloatingActionButton(
                 modifier = Modifier.padding(bottom = 20.dp),
@@ -243,7 +245,7 @@ fun SearchScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             OutlinedTextField(
