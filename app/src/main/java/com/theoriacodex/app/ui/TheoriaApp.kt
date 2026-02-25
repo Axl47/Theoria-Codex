@@ -514,7 +514,11 @@ fun TheoriaApp(
         val uri = pendingPixivDeepLinkUri ?: return@LaunchedEffect
         pendingPixivDeepLinkUri = null
 
-        val postId = parsePixivPostIdFromUri(uri) ?: return@LaunchedEffect
+        val postId = parsePixivPostIdFromUri(uri)
+        if (postId == null) {
+            Toast.makeText(appContext, "Unsupported Pixiv URL format", Toast.LENGTH_SHORT).show()
+            return@LaunchedEffect
+        }
         val adapter = realRegistry.adapterFor(SourceKey.PIXIV)
         if (adapter == null) {
             Toast.makeText(appContext, "Pixiv source is unavailable", Toast.LENGTH_SHORT).show()
@@ -1454,20 +1458,15 @@ private fun openInBrowser(context: Context, url: String) {
 private fun parsePixivPostIdFromUri(uri: Uri): String? {
     val scheme = uri.scheme?.lowercase().orEmpty()
     val host = uri.host?.lowercase().orEmpty()
-    if (scheme != "https") return null
-    if (host != "www.pixiv.com") return null
-    val pathSegments = uri.pathSegments
-    if (pathSegments.size != 3) return null
-    if (!pathSegments[0].isTwoLetterLocale() || pathSegments[1] != "artworks") return null
-    return pathSegments[2].takeIf(String::isDigitsOnly)
+    if (scheme != "https" && scheme != "http") return null
+    if (host != "www.pixiv.com" && host != "pixiv.com" && host != "www.pixiv.net" && host != "pixiv.net") return null
+    val path = uri.encodedPath.orEmpty()
+    val match = Regex("^/([A-Za-z]{2})/artworks/(\\d+)(?:/)?$").matchEntire(path) ?: return null
+    return match.groupValues.getOrNull(2)?.takeIf(String::isDigitsOnly)
 }
 
 private fun String.isDigitsOnly(): Boolean {
     return isNotBlank() && all { it.isDigit() }
-}
-
-private fun String.isTwoLetterLocale(): Boolean {
-    return length == 2 && all { it.isLetter() }
 }
 
 @Composable
