@@ -37,6 +37,8 @@ android {
 
     buildTypes {
         debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
             buildConfigField("boolean", "UPDATER_ENABLED", "false")
         }
         release {

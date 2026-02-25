@@ -11,15 +11,15 @@ import androidx.compose.runtime.setValue
 import com.theoriacodex.app.ui.TheoriaApp
 
 class MainActivity : ComponentActivity() {
-    private var authCallbackUri by mutableStateOf<Uri?>(null)
+    private var incomingUri by mutableStateOf<Uri?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        authCallbackUri = intent?.data
+        incomingUri = intent?.data
         setContent {
             TheoriaApp(
-                authCallbackUri = authCallbackUri,
-                onAuthCallbackConsumed = { authCallbackUri = null },
+                incomingUri = incomingUri,
+                onIncomingUriConsumed = { incomingUri = null },
             )
         }
     }
@@ -27,6 +27,6 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        authCallbackUri = intent.data
+        incomingUri = intent.data
     }
 }

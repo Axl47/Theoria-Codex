@@ -122,6 +122,7 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.RealAdapterRegistry
 import com.theoriacodex.sources.credentials.GelbooruCredentials
@@ -174,8 +175,8 @@ private data class ReleaseChangelogEntry(
 
 @Composable
 fun TheoriaApp(
-    authCallbackUri: Uri? = null,
-    onAuthCallbackConsumed: () -> Unit = {},
+    incomingUri: Uri? = null,
+    onIncomingUriConsumed: () -> Unit = {},
 ) {
     val navController = rememberNavController()
     val appContext = LocalContext.current.applicationContext
@@ -291,6 +292,7 @@ fun TheoriaApp(
     var pendingInstallRemote by remember { mutableStateOf<RemoteUpdate?>(null) }
     var awaitingUnknownSources by remember { mutableStateOf(false) }
     var awaitingInstallerReturn by remember { mutableStateOf(false) }
+    var pendingPixivDeepLinkUri by remember { mutableStateOf<Uri?>(null) }
     val codexItemCounts = remember { mutableStateMapOf<String, Int>() }
 
     var pixivStatusLabel by remember { mutableStateOf("Not connected") }
@@ -490,18 +492,60 @@ fun TheoriaApp(
         beginStartupUpdateFlow()
     }
 
-    LaunchedEffect(authCallbackUri) {
-        val callback = authCallbackUri ?: return@LaunchedEffect
-        if (pixivAuthController.isAuthorizationCallback(callback)) {
-            val result = pixivAuthController.handleAuthorizationCallback(callback)
+    LaunchedEffect(incomingUri) {
+        val uri = incomingUri ?: return@LaunchedEffect
+        if (pixivAuthController.isAuthorizationCallback(uri)) {
+            val result = pixivAuthController.handleAuthorizationCallback(uri)
             if (result.isSuccess) {
                 pixivStatusLabel = "Connected"
                 refreshSourceAccountState()
             } else {
                 pixivStatusLabel = "Connection failed: ${result.exceptionOrNull()?.message ?: "Unknown error"}"
             }
+        } else {
+            pendingPixivDeepLinkUri = uri
         }
-        onAuthCallbackConsumed()
+        onIncomingUriConsumed()
+    }
+
+    LaunchedEffect(navReady, pendingPixivDeepLinkUri) {
+        if (!navReady) return@LaunchedEffect
+        val uri = pendingPixivDeepLinkUri ?: return@LaunchedEffect
+        pendingPixivDeepLinkUri = null
+
+        val postId = parsePixivPostIdFromUri(uri) ?: return@LaunchedEffect
+        val adapter = realRegistry.adapterFor(SourceKey.PIXIV)
+        if (adapter == null) {
+            Toast.makeText(appContext, "Pixiv source is unavailable", Toast.LENGTH_SHORT).show()
+            return@LaunchedEffect
+        }
+
+        val resolved = runCatching {
+            adapter.resolvePost(PostId(source = SourceKey.PIXIV, sourcePostId = postId))
+        }.getOrElse { error ->
+            val message = error.message ?: "Could not open Pixiv URL"
+            Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
+            null
+        } ?: run {
+            Toast.makeText(appContext, "Pixiv post was not found", Toast.LENGTH_SHORT).show()
+            return@LaunchedEffect
+        }
+
+        val context = ViewerLaunchContext(
+            queryHash = "pixiv-deeplink:$postId",
+            startIndex = 0,
+            streamSource = ViewerStreamSource.SEARCH,
+            scrollOffsetHint = 0,
+        )
+        viewerSession = ViewerSession(
+            posts = listOf(resolved),
+            context = context,
+            liveSearchBinding = false,
+        )
+        uiRestoreRepository.setViewerLaunchContext(context)
+        navController.navigate(AppRoute.Viewer) {
+            launchSingleTop = true
+        }
     }
 
     LaunchedEffect(settings) {
@@ -1394,6 +1438,33 @@ private fun openInBrowser(context: Context, url: String) {
         }
         context.startActivity(intent)
     }
+}
+
+private fun parsePixivPostIdFromUri(uri: Uri): String? {
+    val scheme = uri.scheme?.lowercase().orEmpty()
+    val host = uri.host?.lowercase().orEmpty()
+
+    if (scheme == "pixiv") {
+        uri.getQueryParameter("illust_id")?.takeIf(String::isDigitsOnly)?.let { return it }
+        uri.pathSegments.firstOrNull(String::isDigitsOnly)?.let { return it }
+        return null
+    }
+
+    if (scheme != "https" && scheme != "http") return null
+    if (host != "pixiv.net" && host != "www.pixiv.net" && !host.endsWith(".pixiv.net")) return null
+
+    val pathSegments = uri.pathSegments
+    val artworksIndex = pathSegments.indexOf("artworks")
+    if (artworksIndex >= 0) {
+        pathSegments.getOrNull(artworksIndex + 1)?.takeIf(String::isDigitsOnly)?.let { return it }
+    }
+
+    uri.getQueryParameter("illust_id")?.takeIf(String::isDigitsOnly)?.let { return it }
+    return null
+}
+
+private fun String.isDigitsOnly(): Boolean {
+    return isNotBlank() && all { it.isDigit() }
 }
 
 @Composable
