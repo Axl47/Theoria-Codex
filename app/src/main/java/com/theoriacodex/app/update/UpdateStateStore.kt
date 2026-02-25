@@ -2,6 +2,7 @@ package com.theoriacodex.app.update
 
 data class PendingPostInstallChangelog(
     val releaseId: Long,
+    val fromVersionCode: Int? = null,
     val versionCode: Int,
     val tagName: String,
     val commitShaShort: String,

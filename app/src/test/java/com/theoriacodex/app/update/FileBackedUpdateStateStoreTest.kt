@@ -57,6 +57,7 @@ class FileBackedUpdateStateStoreTest {
             store.setLastInstalledChangelog(
                 PendingPostInstallChangelog(
                     releaseId = 99L,
+                    fromVersionCode = 100,
                     versionCode = 101,
                     tagName = "main-vc101-abc1234",
                     commitShaShort = "abc1234",
@@ -75,6 +76,7 @@ class FileBackedUpdateStateStoreTest {
             val changelog = snapshot.lastInstalledChangelog
             assertNotNull(changelog)
             assertEquals(99L, changelog?.releaseId)
+            assertEquals(100, changelog?.fromVersionCode)
             assertEquals(101, changelog?.versionCode)
             assertEquals("abc1234", changelog?.commitShaShort)
         } finally {

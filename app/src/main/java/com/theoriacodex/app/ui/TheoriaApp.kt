@@ -280,6 +280,7 @@ fun TheoriaApp(
     var startupStatusMessage by remember { mutableStateOf("Checking for updates...") }
     var updateChoiceRemote by remember { mutableStateOf<RemoteUpdate?>(null) }
     var postInstallChangelog by remember { mutableStateOf<PendingPostInstallChangelog?>(null) }
+    var postInstallReleaseHistory by remember { mutableStateOf<List<ReleaseChangelogEntry>>(emptyList()) }
     var latestInstalledChangelog by remember { mutableStateOf<PendingPostInstallChangelog?>(null) }
     var releaseHistoryEntries by remember { mutableStateOf<List<ReleaseChangelogEntry>?>(null) }
     var releaseHistoryLoading by remember { mutableStateOf(false) }
@@ -376,6 +377,22 @@ fun TheoriaApp(
             if (pendingChangelog.versionCode <= installedVersionCode) {
                 postInstallChangelog = pendingChangelog
                 latestInstalledChangelog = pendingChangelog
+                val merged = mergeReleaseHistory(
+                    remoteHistory = updateFeedClient.mainPrereleaseHistory(limit = 100)
+                        .getOrElse { emptyList() },
+                    localCurrent = pendingChangelog,
+                )
+                val fromVersionCode = pendingChangelog.fromVersionCode ?: (pendingChangelog.versionCode - 1)
+                val updatesSincePreviousInstall = merged
+                    .filter { entry ->
+                        entry.versionCode > fromVersionCode && entry.versionCode <= installedVersionCode
+                    }
+                    .sortedBy { it.versionCode }
+                postInstallReleaseHistory = if (updatesSincePreviousInstall.isNotEmpty()) {
+                    updatesSincePreviousInstall
+                } else {
+                    listOf(pendingChangelog.toReleaseHistoryEntry())
+                }
             }
         }
     }
@@ -1074,9 +1091,15 @@ fun TheoriaApp(
 
         postInstallChangelog?.let { changelog ->
             PostInstallChangelogDialog(
-                changelog = changelog,
+                releases = if (postInstallReleaseHistory.isNotEmpty()) {
+                    postInstallReleaseHistory
+                } else {
+                    listOf(changelog.toReleaseHistoryEntry())
+                },
+                installedVersionCode = installedVersionCode,
                 onDismiss = {
                     postInstallChangelog = null
+                    postInstallReleaseHistory = emptyList()
                     scope.launch {
                         updateStateStore.setPendingPostInstallChangelog(null)
                     }
@@ -1189,16 +1212,10 @@ private fun StartupUpdatePromptCard(
 
 @Composable
 private fun PostInstallChangelogDialog(
-    changelog: PendingPostInstallChangelog,
+    releases: List<ReleaseChangelogEntry>,
+    installedVersionCode: Int,
     onDismiss: () -> Unit,
 ) {
-    val sections = changelog.changelogSections.filter { it.bullets.isNotEmpty() }
-    val subtitleParts = buildList {
-        add(releaseDisplayTitle(changelog.releaseName, changelog.versionCode))
-        add("vc${changelog.versionCode}")
-        add(changelog.commitShaShort)
-    }
-
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
@@ -1215,36 +1232,46 @@ private fun PostInstallChangelogDialog(
                     .fillMaxWidth()
                     .heightIn(max = 320.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Text(
-                    text = subtitleParts.joinToString(" • "),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                if (sections.isNotEmpty()) {
-                    sections.forEach { section ->
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = section.title,
-                                style = MaterialTheme.typography.titleSmall,
-                            )
-                            section.bullets.forEach { bullet ->
-                                Text(
-                                    text = "• $bullet",
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                        }
+                releases.forEach { release ->
+                    val titleBase = releaseDisplayTitle(release.releaseName, release.versionCode)
+                    val title = if (release.versionCode == installedVersionCode) {
+                        "$titleBase (Current)"
+                    } else {
+                        titleBase
                     }
-                } else {
-                    val fallback = changelog.changelogMarkdown
-                        .lineSequence()
-                        .map { it.trim() }
-                        .firstOrNull { it.isNotBlank() && !it.startsWith("#") }
                     Text(
-                        text = fallback ?: "No changelog details were published for this build.",
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = "vc${release.versionCode} • ${release.commitShaShort}",
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    val sections = release.changelogSections.filter { it.bullets.isNotEmpty() }
+                    if (sections.isNotEmpty()) {
+                        sections.forEach { section ->
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = section.title,
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                section.bullets.forEach { bullet ->
+                                    Text(
+                                        text = "• $bullet",
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = firstChangelogLine(release.changelogMarkdown)
+                                ?: "No changelog details were published for this build.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                 }
             }
         },
@@ -1397,6 +1424,18 @@ private fun mergeReleaseHistory(
     return entries.sortedWith(
         compareByDescending<ReleaseChangelogEntry> { it.publishedAtEpochMs ?: Long.MIN_VALUE }
             .thenByDescending { it.versionCode }
+    )
+}
+
+private fun PendingPostInstallChangelog.toReleaseHistoryEntry(): ReleaseChangelogEntry {
+    return ReleaseChangelogEntry(
+        releaseId = releaseId,
+        versionCode = versionCode,
+        commitShaShort = commitShaShort,
+        releaseName = releaseName,
+        publishedAtEpochMs = null,
+        changelogMarkdown = changelogMarkdown,
+        changelogSections = changelogSections,
     )
 }
 

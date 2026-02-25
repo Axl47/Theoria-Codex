@@ -178,6 +178,7 @@ class StartupUpdater(
         return if (result.isSuccess) {
             val changelog = PendingPostInstallChangelog(
                 releaseId = remote.releaseId,
+                fromVersionCode = readInstalledVersionCode(context),
                 versionCode = remote.versionCode,
                 tagName = remote.tagName,
                 commitShaShort = remote.commitShaShort,
