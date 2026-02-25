@@ -293,6 +293,7 @@ fun TheoriaApp(
     val codexItemCounts = remember { mutableStateMapOf<String, Int>() }
 
     var pixivStatusLabel by remember { mutableStateOf("Not connected") }
+    var pixivConnected by remember { mutableStateOf(false) }
     var gelbooruStatusLabel by remember { mutableStateOf("Not configured") }
     var gelbooruUserIdInput by rememberSaveable { mutableStateOf("") }
     var gelbooruApiKeyInput by rememberSaveable { mutableStateOf("") }
@@ -300,16 +301,23 @@ fun TheoriaApp(
     suspend fun refreshSourceAccountState() {
         val pixivTokens = credentialsStore.getPixivTokens()
         pixivStatusLabel = when {
-            pixivTokens == null -> "Not connected"
+            pixivTokens == null -> {
+                pixivConnected = false
+                "Not connected"
+            }
             pixivTokens.expiresAtEpochMs <= System.currentTimeMillis() -> {
                 pixivStatusLabel = "Connected (refreshing token...)"
                 val refreshResult = withTimeoutOrNull(PIXIV_TOKEN_REFRESH_TIMEOUT_MS) {
                     runCatching { pixivAuthApi.refresh(pixivTokens.refreshToken) }
                 }
                 when {
-                    refreshResult == null -> "Connected (refresh timed out, retry on next request)"
+                    refreshResult == null -> {
+                        pixivConnected = false
+                        "Connected (refresh timed out, retry on next request)"
+                    }
                     refreshResult.isSuccess -> {
                         credentialsStore.savePixivTokens(requireNotNull(refreshResult.getOrNull()))
+                        pixivConnected = true
                         "Connected"
                     }
                     else -> {
@@ -320,14 +328,19 @@ fun TheoriaApp(
                                 failure.reason == SourceFailureReason.AUTH_REQUIRED)
                         ) {
                             credentialsStore.clearPixivTokens()
+                            pixivConnected = false
                             "Not connected (session expired)"
                         } else {
+                            pixivConnected = false
                             "Connected (refresh failed, retry on next request)"
                         }
                     }
                 }
             }
-            else -> "Connected"
+            else -> {
+                pixivConnected = true
+                "Connected"
+            }
         }
 
         val gelbooruCredentials = credentialsStore.getGelbooruCredentials()
@@ -954,9 +967,12 @@ fun TheoriaApp(
                             cacheSnapshot = cacheSnapshot,
                             showDeveloperScenarios = false,
                             pixivStatusLabel = pixivStatusLabel,
+                            pixivConnectEnabled = !pixivConnected &&
+                                !pixivStatusLabel.startsWith("Awaiting authorization callback"),
                             onPixivConnect = {
                                 val authUrl = pixivAuthController.startAuthorizationUri().toString()
                                 pixivStatusLabel = "Awaiting authorization callback..."
+                                pixivConnected = false
                                 openInBrowser(appContext, authUrl)
                             },
                             onPixivDisconnect = {

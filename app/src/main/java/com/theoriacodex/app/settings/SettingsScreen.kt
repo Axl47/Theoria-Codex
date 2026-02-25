@@ -38,6 +38,7 @@ fun SettingsScreen(
     cacheSnapshot: CacheSnapshot,
     showDeveloperScenarios: Boolean,
     pixivStatusLabel: String,
+    pixivConnectEnabled: Boolean,
     onPixivConnect: () -> Unit,
     onPixivDisconnect: () -> Unit,
     gelbooruUserId: String,
@@ -125,7 +126,10 @@ fun SettingsScreen(
                 Text("Pixiv", style = MaterialTheme.typography.titleSmall)
                 Text(pixivStatusLabel, style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onPixivConnect) {
+                    Button(
+                        onClick = onPixivConnect,
+                        enabled = pixivConnectEnabled,
+                    ) {
                         Text("Connect")
                     }
                     TextButton(onClick = onPixivDisconnect) {
