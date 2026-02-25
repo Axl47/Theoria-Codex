@@ -18,6 +18,7 @@ data class UpdateStateSnapshot(
     val remindLaterReleaseId: Long? = null,
     val remindLaterUntilEpochMs: Long? = null,
     val pendingPostInstallChangelog: PendingPostInstallChangelog? = null,
+    val lastInstalledChangelog: PendingPostInstallChangelog? = null,
 )
 
 interface UpdateStateStore {
@@ -29,4 +30,5 @@ interface UpdateStateStore {
     fun setRemindLater(releaseId: Long?, untilEpochMs: Long?)
     fun clearPromptDeferrals()
     fun setPendingPostInstallChangelog(changelog: PendingPostInstallChangelog?)
+    fun setLastInstalledChangelog(changelog: PendingPostInstallChangelog?)
 }

@@ -18,40 +18,56 @@ class GitHubReleaseFeedClient(
 ) : UpdateFeedClient {
     override suspend fun latestMainPrerelease(): Result<RemoteUpdate?> = withContext(Dispatchers.IO) {
         runCatching {
-            val endpoint = "https://api.github.com/repos/$owner/$repo/releases?per_page=20"
-            val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 8_000
-                readTimeout = 8_000
-                setRequestProperty("Accept", "application/vnd.github+json")
-                setRequestProperty("User-Agent", "TheoriaCodexUpdater")
-            }
+            val body = fetchReleasesJson()
+            parseMainPrereleaseHistory(
+                jsonBody = body,
+                channel = channel,
+                assetName = assetName,
+            ).firstOrNull()
+        }
+    }
 
-            try {
-                val status = connection.responseCode
-                val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-                val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                if (status !in 200..299) {
-                    throw IOException("GitHub update check failed ($status)")
-                }
-                parseLatestMainPrerelease(
-                    jsonBody = body,
-                    channel = channel,
-                    assetName = assetName,
-                )
-            } finally {
-                connection.disconnect()
+    override suspend fun mainPrereleaseHistory(limit: Int): Result<List<RemoteUpdate>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = fetchReleasesJson()
+            parseMainPrereleaseHistory(
+                jsonBody = body,
+                channel = channel,
+                assetName = assetName,
+            ).take(limit.coerceAtLeast(1))
+        }
+    }
+
+    private fun fetchReleasesJson(): String {
+        val endpoint = "https://api.github.com/repos/$owner/$repo/releases?per_page=50"
+        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 8_000
+            readTimeout = 8_000
+            setRequestProperty("Accept", "application/vnd.github+json")
+            setRequestProperty("User-Agent", "TheoriaCodexUpdater")
+        }
+
+        return try {
+            val status = connection.responseCode
+            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+            val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            if (status !in 200..299) {
+                throw IOException("GitHub update check failed ($status)")
             }
+            body
+        } finally {
+            connection.disconnect()
         }
     }
 
     companion object {
-        internal fun parseLatestMainPrerelease(
+        internal fun parseMainPrereleaseHistory(
             jsonBody: String,
             channel: String,
             assetName: String,
-        ): RemoteUpdate? {
-            val root = runCatching { JsonParser.parseString(jsonBody) }.getOrNull() ?: return null
+        ): List<RemoteUpdate> {
+            val root = runCatching { JsonParser.parseString(jsonBody) }.getOrNull() ?: return emptyList()
             val releases = root.takeIf { it.isJsonArray }?.asJsonArray ?: JsonArray()
 
             return releases.mapNotNull { element ->
@@ -94,10 +110,23 @@ class GitHubReleaseFeedClient(
                     publishedAtEpochMs = publishedEpoch.takeIf { it > 0L },
                     changelogMarkdown = changelogMarkdown,
                     changelogSections = changelogSections,
-                ) to publishedEpoch
-            }.maxByOrNull { (_, publishedEpoch) ->
-                publishedEpoch
-            }?.first
+                )
+            }.sortedWith(
+                compareByDescending<RemoteUpdate> { it.publishedAtEpochMs ?: 0L }
+                    .thenByDescending { it.versionCode }
+            )
+        }
+
+        internal fun parseLatestMainPrerelease(
+            jsonBody: String,
+            channel: String,
+            assetName: String,
+        ): RemoteUpdate? {
+            return parseMainPrereleaseHistory(
+                jsonBody = jsonBody,
+                channel = channel,
+                assetName = assetName,
+            ).firstOrNull()
         }
 
         private fun JsonArray.firstAssetByName(assetName: String): JsonObject? {

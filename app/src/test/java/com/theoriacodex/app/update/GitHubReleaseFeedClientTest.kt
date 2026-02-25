@@ -100,6 +100,74 @@ class GitHubReleaseFeedClientTest {
     }
 
     @Test
+    fun `release history parser returns sorted prerelease history`() {
+        val json =
+            """
+            [
+              {
+                "id": 10,
+                "name": "Main Build vc100...8",
+                "tag_name": "main-vc1008-aaaaaaa",
+                "draft": false,
+                "prerelease": true,
+                "published_at": "2026-02-20T20:00:00Z",
+                "body": "## Fixes\n- Older fix",
+                "assets": [
+                  {
+                    "name": "theoria-codex-main.apk",
+                    "browser_download_url": "https://example.com/10.apk",
+                    "size": 100
+                  }
+                ]
+              },
+              {
+                "id": 11,
+                "name": "Main Build vc100...9",
+                "tag_name": "main-vc1009-bbbbbbb",
+                "draft": false,
+                "prerelease": true,
+                "published_at": "2026-02-21T20:00:00Z",
+                "body": "## New\n- Added X",
+                "assets": [
+                  {
+                    "name": "theoria-codex-main.apk",
+                    "browser_download_url": "https://example.com/11.apk",
+                    "size": 101
+                  }
+                ]
+              },
+              {
+                "id": 12,
+                "name": "Main Build vc101...0",
+                "tag_name": "main-vc1010-ccccccc",
+                "draft": true,
+                "prerelease": true,
+                "published_at": "2026-02-22T20:00:00Z",
+                "assets": [
+                  {
+                    "name": "theoria-codex-main.apk",
+                    "browser_download_url": "https://example.com/12.apk",
+                    "size": 102
+                  }
+                ]
+              }
+            ]
+            """.trimIndent()
+
+        val history = GitHubReleaseFeedClient.parseMainPrereleaseHistory(
+            jsonBody = json,
+            channel = "main",
+            assetName = "theoria-codex-main.apk",
+        )
+
+        assertEquals(2, history.size)
+        assertEquals(11L, history[0].releaseId)
+        assertEquals(1009, history[0].versionCode)
+        assertEquals(10L, history[1].releaseId)
+        assertEquals(1008, history[1].versionCode)
+    }
+
+    @Test
     fun `release parser returns null when fixed asset missing`() {
         val json =
             """

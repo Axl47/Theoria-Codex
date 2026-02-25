@@ -53,6 +53,8 @@ fun SettingsScreen(
     onSetScenarioPreset: (ScenarioPreset) -> Unit,
     onClearThumbnailCache: () -> Unit,
     onClearFullImageCache: () -> Unit,
+    changelogLoading: Boolean,
+    onOpenChangelog: () -> Unit,
 ) {
     var showClearCacheOptions by remember { mutableStateOf(false) }
 
@@ -208,6 +210,31 @@ fun SettingsScreen(
                             Text("Clear full image cache")
                         }
                     }
+                }
+            }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("Updates", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (changelogLoading) {
+                        "Loading release history..."
+                    } else {
+                        "View changelog history for available pre-releases."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Button(
+                    onClick = onOpenChangelog,
+                    enabled = !changelogLoading,
+                ) {
+                    Text("Open changelog")
                 }
             }
         }

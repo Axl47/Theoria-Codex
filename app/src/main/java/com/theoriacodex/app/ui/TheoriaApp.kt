@@ -93,6 +93,7 @@ import com.theoriacodex.app.ui.theme.TheoriaNightTheme
 import com.theoriacodex.app.update.AndroidApkInstaller
 import com.theoriacodex.app.update.ApkDownloadManager
 import com.theoriacodex.app.update.ApkUpdateValidator
+import com.theoriacodex.app.update.ChangelogSection
 import com.theoriacodex.app.update.FileBackedUpdateStateStore
 import com.theoriacodex.app.update.GitHubReleaseFeedClient
 import com.theoriacodex.app.update.RemoteUpdate
@@ -156,6 +157,16 @@ private data class ViewerSession(
     val context: ViewerLaunchContext,
     val liveSearchBinding: Boolean = false,
     val searchAnimatedOnly: Boolean = false,
+)
+
+private data class ReleaseChangelogEntry(
+    val releaseId: Long?,
+    val versionCode: Int,
+    val commitShaShort: String,
+    val releaseName: String?,
+    val publishedAtEpochMs: Long?,
+    val changelogMarkdown: String,
+    val changelogSections: List<ChangelogSection>,
 )
 
 @Composable
@@ -269,6 +280,9 @@ fun TheoriaApp(
     var startupStatusMessage by remember { mutableStateOf("Checking for updates...") }
     var updateChoiceRemote by remember { mutableStateOf<RemoteUpdate?>(null) }
     var postInstallChangelog by remember { mutableStateOf<PendingPostInstallChangelog?>(null) }
+    var latestInstalledChangelog by remember { mutableStateOf<PendingPostInstallChangelog?>(null) }
+    var releaseHistoryEntries by remember { mutableStateOf<List<ReleaseChangelogEntry>?>(null) }
+    var releaseHistoryLoading by remember { mutableStateOf(false) }
     var startupActionLocked by remember { mutableStateOf(false) }
     var pendingInstallRemote by remember { mutableStateOf<RemoteUpdate?>(null) }
     var awaitingUnknownSources by remember { mutableStateOf(false) }
@@ -354,11 +368,14 @@ fun TheoriaApp(
         startDestination = uiRestoreRepository.getLastTab()
             ?: settingsRepository.observeSettings().first().lastSelectedTabRoute
         navReady = true
-        val pendingChangelog = startupUpdater.pendingSnapshot().pendingPostInstallChangelog
+        val updateSnapshot = startupUpdater.pendingSnapshot()
+        latestInstalledChangelog = updateSnapshot.lastInstalledChangelog
+        val pendingChangelog = updateSnapshot.pendingPostInstallChangelog
         if (pendingChangelog != null) {
             val installedVersionCode = installedAppVersionCode(appContext)
             if (pendingChangelog.versionCode <= installedVersionCode) {
                 postInstallChangelog = pendingChangelog
+                latestInstalledChangelog = pendingChangelog
             }
         }
     }
@@ -487,6 +504,7 @@ fun TheoriaApp(
     val currentContext = LocalContext.current
     val density = LocalDensity.current
     val configuration = LocalConfiguration.current
+    val installedVersionCode = remember(appContext) { installedAppVersionCode(appContext) }
     val hostActivity = remember(currentContext) { currentContext.findActivity() }
     val lifecycleOwner = LocalLifecycleOwner.current
     val bottomBarHeightDp = remember(configuration.screenHeightDp) {
@@ -945,6 +963,29 @@ fun TheoriaApp(
                             onClearFullImageCache = {
                                 scope.launch { cacheRepository.clearFullImageCache() }
                             },
+                            changelogLoading = releaseHistoryLoading,
+                            onOpenChangelog = {
+                                if (releaseHistoryLoading) return@SettingsScreen
+                                scope.launch {
+                                    releaseHistoryLoading = true
+                                    val remoteHistory = updateFeedClient.mainPrereleaseHistory(limit = 50)
+                                        .getOrElse { emptyList() }
+                                    val merged = mergeReleaseHistory(
+                                        remoteHistory = remoteHistory,
+                                        localCurrent = latestInstalledChangelog,
+                                    )
+                                    if (merged.isEmpty()) {
+                                        Toast.makeText(
+                                            appContext,
+                                            "No changelog available yet",
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    } else {
+                                        releaseHistoryEntries = merged
+                                    }
+                                    releaseHistoryLoading = false
+                                }
+                            },
                         )
                     }
                     composable(AppRoute.Viewer) {
@@ -1042,6 +1083,14 @@ fun TheoriaApp(
                 },
             )
         }
+
+        releaseHistoryEntries?.let { entries ->
+            ReleaseHistoryDialog(
+                releases = entries,
+                installedVersionCode = installedVersionCode,
+                onDismiss = { releaseHistoryEntries = null },
+            )
+        }
     }
 }
 
@@ -1055,7 +1104,7 @@ private fun StartupUpdatePromptCard(
 ) {
     val sections = remote.changelogSections.filter { section -> section.bullets.isNotEmpty() }
     val subtitleParts = buildList {
-        remote.releaseName?.takeIf { it.isNotBlank() }?.let(::add)
+        add(releaseDisplayTitle(remote.releaseName, remote.versionCode))
         add("vc${remote.versionCode}")
         add(remote.commitShaShort)
     }
@@ -1145,7 +1194,7 @@ private fun PostInstallChangelogDialog(
 ) {
     val sections = changelog.changelogSections.filter { it.bullets.isNotEmpty() }
     val subtitleParts = buildList {
-        changelog.releaseName?.takeIf { it.isNotBlank() }?.let(::add)
+        add(releaseDisplayTitle(changelog.releaseName, changelog.versionCode))
         add("vc${changelog.versionCode}")
         add(changelog.commitShaShort)
     }
@@ -1202,6 +1251,74 @@ private fun PostInstallChangelogDialog(
     )
 }
 
+@Composable
+private fun ReleaseHistoryDialog(
+    releases: List<ReleaseChangelogEntry>,
+    installedVersionCode: Int,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        },
+        title = {
+            Text("Release changelog")
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                releases.forEach { release ->
+                    val titleBase = releaseDisplayTitle(release.releaseName, release.versionCode)
+                    val title = if (release.versionCode == installedVersionCode) {
+                        "$titleBase (Current)"
+                    } else {
+                        titleBase
+                    }
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = "vc${release.versionCode} • ${release.commitShaShort}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    val sections = release.changelogSections.filter { it.bullets.isNotEmpty() }
+                    if (sections.isNotEmpty()) {
+                        sections.forEach { section ->
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = section.title,
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                section.bullets.forEach { bullet ->
+                                    Text(
+                                        text = "• $bullet",
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = firstChangelogLine(release.changelogMarkdown)
+                                ?: "No changelog details were published for this build.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        },
+    )
+}
+
 private fun openInBrowser(context: Context, url: String) {
     runCatching {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
@@ -1241,6 +1358,59 @@ private fun installedAppVersionCode(context: Context): Int {
         context.packageManager.getPackageInfo(context.packageName, 0)
     }
     return PackageInfoCompat.getLongVersionCode(packageInfo).toInt()
+}
+
+private fun mergeReleaseHistory(
+    remoteHistory: List<RemoteUpdate>,
+    localCurrent: PendingPostInstallChangelog?,
+): List<ReleaseChangelogEntry> {
+    val entries = remoteHistory.map { remote ->
+        ReleaseChangelogEntry(
+            releaseId = remote.releaseId,
+            versionCode = remote.versionCode,
+            commitShaShort = remote.commitShaShort,
+            releaseName = remote.releaseName,
+            publishedAtEpochMs = remote.publishedAtEpochMs,
+            changelogMarkdown = remote.changelogMarkdown,
+            changelogSections = remote.changelogSections,
+        )
+    }.toMutableList()
+
+    localCurrent?.let { local ->
+        val alreadyPresent = entries.any { entry ->
+            entry.releaseId == local.releaseId ||
+                (entry.versionCode == local.versionCode && entry.commitShaShort == local.commitShaShort)
+        }
+        if (!alreadyPresent) {
+            entries += ReleaseChangelogEntry(
+                releaseId = local.releaseId,
+                versionCode = local.versionCode,
+                commitShaShort = local.commitShaShort,
+                releaseName = local.releaseName,
+                publishedAtEpochMs = null,
+                changelogMarkdown = local.changelogMarkdown,
+                changelogSections = local.changelogSections,
+            )
+        }
+    }
+
+    return entries.sortedWith(
+        compareByDescending<ReleaseChangelogEntry> { it.publishedAtEpochMs ?: Long.MIN_VALUE }
+            .thenByDescending { it.versionCode }
+    )
+}
+
+private fun releaseDisplayTitle(releaseName: String?, versionCode: Int): String {
+    val normalized = releaseName?.trim().orEmpty()
+    if (normalized.isNotBlank()) return normalized
+    return "vc$versionCode"
+}
+
+private fun firstChangelogLine(markdown: String): String? {
+    return markdown
+        .lineSequence()
+        .map { it.trim() }
+        .firstOrNull { it.isNotBlank() && !it.startsWith("#") }
 }
 
 private fun isPixivUgoiraPost(post: Post): Boolean {

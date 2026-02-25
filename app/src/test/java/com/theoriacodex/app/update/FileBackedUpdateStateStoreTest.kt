@@ -3,6 +3,7 @@ package com.theoriacodex.app.update
 import java.io.File
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -42,6 +43,40 @@ class FileBackedUpdateStateStoreTest {
             assertNull(snapshot.ignoredReleaseId)
             assertNull(snapshot.remindLaterReleaseId)
             assertNull(snapshot.remindLaterUntilEpochMs)
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `persists last installed changelog`() {
+        val tempDir = Files.createTempDirectory("update-store-test-").toFile()
+        try {
+            val file = File(tempDir, "update_state.json")
+            val store = FileBackedUpdateStateStore(file)
+            store.setLastInstalledChangelog(
+                PendingPostInstallChangelog(
+                    releaseId = 99L,
+                    versionCode = 101,
+                    tagName = "main-vc101-abc1234",
+                    commitShaShort = "abc1234",
+                    changelogMarkdown = "## Fixes\n- Improved startup",
+                    changelogSections = listOf(
+                        ChangelogSection(
+                            title = "Fixes",
+                            bullets = listOf("Improved startup"),
+                        )
+                    ),
+                )
+            )
+
+            val reopened = FileBackedUpdateStateStore(file)
+            val snapshot = reopened.snapshot()
+            val changelog = snapshot.lastInstalledChangelog
+            assertNotNull(changelog)
+            assertEquals(99L, changelog?.releaseId)
+            assertEquals(101, changelog?.versionCode)
+            assertEquals("abc1234", changelog?.commitShaShort)
         } finally {
             tempDir.deleteRecursively()
         }

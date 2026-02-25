@@ -139,9 +139,14 @@ class StartupUpdaterTest {
 
     private class FakeFeedClient : UpdateFeedClient {
         var result: Result<RemoteUpdate?> = Result.success(null)
+        var historyResult: Result<List<RemoteUpdate>> = Result.success(emptyList())
 
         override suspend fun latestMainPrerelease(): Result<RemoteUpdate?> {
             return result
+        }
+
+        override suspend fun mainPrereleaseHistory(limit: Int): Result<List<RemoteUpdate>> {
+            return historyResult
         }
     }
 
@@ -189,6 +194,10 @@ class StartupUpdaterTest {
 
         override fun setPendingPostInstallChangelog(changelog: PendingPostInstallChangelog?) {
             snapshot = snapshot.copy(pendingPostInstallChangelog = changelog)
+        }
+
+        override fun setLastInstalledChangelog(changelog: PendingPostInstallChangelog?) {
+            snapshot = snapshot.copy(lastInstalledChangelog = changelog)
         }
     }
 }

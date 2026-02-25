@@ -31,7 +31,7 @@ jobs:
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
           VERSION_CODE=$((1000000000 + GITHUB_RUN_NUMBER))
-          VERSION_NAME="0.1.0"
+          VERSION_NAME="0.1.9"
           RELEASE_TAG="main-vc${VERSION_CODE}-${SHORT_SHA}"
 
           echo "SHORT_SHA=${SHORT_SHA}" >> "$GITHUB_ENV"
@@ -83,7 +83,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          name: Main build vc${{ env.VERSION_CODE }} (${{ env.SHORT_SHA }})
+          name: v${{ env.VERSION_NAME }}
           prerelease: true
           draft: false
           files: theoria-codex-main.apk

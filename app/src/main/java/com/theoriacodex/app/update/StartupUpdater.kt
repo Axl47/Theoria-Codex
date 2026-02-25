@@ -176,18 +176,18 @@ class StartupUpdater(
     ): StartupUpdateOutcome {
         val result = installer.launchInstaller(apkFile)
         return if (result.isSuccess) {
-            stateStore.setLastSeenReleaseId(remote.releaseId)
-            stateStore.setPendingPostInstallChangelog(
-                PendingPostInstallChangelog(
-                    releaseId = remote.releaseId,
-                    versionCode = remote.versionCode,
-                    tagName = remote.tagName,
-                    commitShaShort = remote.commitShaShort,
-                    releaseName = remote.releaseName,
-                    changelogMarkdown = remote.changelogMarkdown,
-                    changelogSections = remote.changelogSections,
-                )
+            val changelog = PendingPostInstallChangelog(
+                releaseId = remote.releaseId,
+                versionCode = remote.versionCode,
+                tagName = remote.tagName,
+                commitShaShort = remote.commitShaShort,
+                releaseName = remote.releaseName,
+                changelogMarkdown = remote.changelogMarkdown,
+                changelogSections = remote.changelogSections,
             )
+            stateStore.setLastSeenReleaseId(remote.releaseId)
+            stateStore.setPendingPostInstallChangelog(changelog)
+            stateStore.setLastInstalledChangelog(changelog)
             StartupUpdateOutcome.InstallerLaunched(remote = remote, apkFile = apkFile)
         } else {
             val error = result.exceptionOrNull()
