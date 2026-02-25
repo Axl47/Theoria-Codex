@@ -31,6 +31,7 @@ Previously completed MVP slices remain in place:
 - Search controls include an `Animated only` filter for showing just animated media in current results
 - Search auto-paginates: near the end of loaded results (about 80%), the next source page is fetched automatically
 - Bottom navigation is compact icon-only for higher content density
+- Outside Viewer, horizontal swipes now switch between top-level tabs (Search/Explore/Codex/Settings)
 - Local tag suggestion store now seeds from `app/src/main/assets/tag_store.json` and is persisted to `files/theoria_codex/tag_suggestions.json` to reduce network tag fetches
 - Draft/Applied search flow with explicit Apply semantics
 - Search/Viewer now support GIF rendering (global Coil animated decoder + MIME-aware source mapping); Search and Viewer both support Pixiv ugoira playback by loading Pixiv metadata + zip frames and animating in-place

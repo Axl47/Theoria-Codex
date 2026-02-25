@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Explore
@@ -45,8 +46,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -112,6 +115,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import kotlin.math.abs
 import kotlin.math.min
 
 enum class TopLevelDestination(val route: String, val label: String) {
@@ -422,8 +426,10 @@ fun TheoriaApp(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val currentRoute = currentDestination?.route
-    val showBottomBar = currentRoute in TopLevelDestination.entries.map { it.route }.toSet()
+    val topLevelRoutes = remember { TopLevelDestination.entries.map { it.route }.toSet() }
+    val showBottomBar = currentRoute in topLevelRoutes
     val currentContext = LocalContext.current
+    val density = LocalDensity.current
     val configuration = LocalConfiguration.current
     val hostActivity = remember(currentContext) { currentContext.findActivity() }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -432,6 +438,7 @@ fun TheoriaApp(
     }
     val bottomBarHeight = if (shortEdgeDp >= LARGE_DEVICE_SHORT_EDGE_DP) 64.dp else 58.dp
     val bottomBarIconSize = if (shortEdgeDp >= LARGE_DEVICE_SHORT_EDGE_DP) 24.dp else 20.dp
+    val tabSwipeThresholdPx = with(density) { TAB_SWIPE_THRESHOLD_DP.dp.toPx() }
 
     LaunchedEffect(currentRoute) {
         if (currentRoute in TopLevelDestination.entries.map { it.route }) {
@@ -597,7 +604,40 @@ fun TheoriaApp(
                 NavHost(
                     navController = navController,
                     startDestination = startDestination,
-                    modifier = Modifier.padding(innerPadding),
+                    modifier = Modifier
+                        .padding(innerPadding)
+                        .pointerInput(currentRoute, showBottomBar, tabSwipeThresholdPx) {
+                            if (!showBottomBar) return@pointerInput
+                            var totalHorizontalDrag = 0f
+                            detectHorizontalDragGestures(
+                                onHorizontalDrag = { _, dragAmount ->
+                                    totalHorizontalDrag += dragAmount
+                                },
+                                onDragEnd = {
+                                    if (abs(totalHorizontalDrag) < tabSwipeThresholdPx) return@detectHorizontalDragGestures
+                                    val activeRoute = currentRoute ?: return@detectHorizontalDragGestures
+                                    val currentTabIndex = TopLevelDestination.entries.indexOfFirst { tab ->
+                                        tab.route == activeRoute
+                                    }
+                                    if (currentTabIndex == -1) return@detectHorizontalDragGestures
+
+                                    val targetTabIndex = if (totalHorizontalDrag < 0f) {
+                                        currentTabIndex + 1
+                                    } else {
+                                        currentTabIndex - 1
+                                    }
+                                    val destination = TopLevelDestination.entries.getOrNull(targetTabIndex)
+                                        ?: return@detectHorizontalDragGestures
+                                    navController.navigate(destination.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                },
+                            )
+                        },
                 ) {
                     composable(TopLevelDestination.Search.route) {
                         SearchScreen(
@@ -1028,3 +1068,4 @@ private fun loadSeedTagSuggestions(context: Context): Map<SourceKey, List<TagSug
 
 private const val PIXIV_TOKEN_REFRESH_TIMEOUT_MS = 6_000L
 private const val LARGE_DEVICE_SHORT_EDGE_DP = 420
+private const val TAB_SWIPE_THRESHOLD_DP = 72
