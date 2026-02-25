@@ -7,19 +7,35 @@ android {
     namespace = "com.theoriacodex.app"
     compileSdk = 35
 
+    val versionCodeOverride = providers.gradleProperty("theoria.versionCode")
+        .orNull
+        ?.toIntOrNull()
+    val versionNameOverride = providers.gradleProperty("theoria.versionName").orNull
+
     defaultConfig {
         applicationId = "com.theoriacodex"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = versionCodeOverride ?: 1
+        versionName = versionNameOverride ?: "0.1.0"
+
+        buildConfigField("String", "UPDATE_REPO_OWNER", "\"Axl47\"")
+        buildConfigField("String", "UPDATE_REPO_NAME", "\"Theoria-Codex\"")
+        buildConfigField("String", "UPDATE_CHANNEL", "\"main\"")
+        buildConfigField("String", "UPDATE_ASSET_NAME", "\"theoria-codex-main.apk\"")
+        buildConfigField("long", "UPDATE_CHECK_TIMEOUT_MS", "3000L")
+        buildConfigField("boolean", "UPDATER_ENABLED", "false")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
+        debug {
+            buildConfigField("boolean", "UPDATER_ENABLED", "false")
+        }
         release {
             isMinifyEnabled = false
+            buildConfigField("boolean", "UPDATER_ENABLED", "true")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -38,6 +54,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {

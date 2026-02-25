@@ -44,6 +44,8 @@ The success path is observable: launch app, switch among Search/Explore/Codex/Se
   - `./gradlew testDebugUnitTest`
   - `./gradlew assembleDebug`
   - `./gradlew lintDebug`
+- [x] (2026-02-25 04:31Z) Added startup updater implementation for `main` prerelease channel: GitHub Releases feed parser, APK download/validation/installer flow, persisted update state, splash-gated startup orchestration, and Android installer/FileProvider manifest plumbing.
+- [x] (2026-02-25 04:36Z) Added `.github/workflows/main-prerelease.yml` to publish `main-vc<versionCode>-<sha>` prereleases with fixed update asset `theoria-codex-main.apk`; added update parser tests and re-ran app build/unit-test gates.
 
 ## Surprises & Discoveries
 
@@ -58,6 +60,8 @@ The success path is observable: launch app, switch among Search/Explore/Codex/Se
 
 - Observation: Public constructor signatures in `:core-sources` surfaced `Gson` to app compile classpath.
   Evidence: `:app:compileDebugKotlin` failed until `gson` was added to app dependencies or signatures were hidden behind internal API.
+- Observation: Clearing pending installer state immediately after launching Android installer caused avoidable re-downloads when users canceled install and reopened app.
+  Evidence: Startup updater would not reuse previously downloaded APK unless `pendingInstallReleaseId` remained set for the same release.
 
 ## Decision Log
 
@@ -100,10 +104,16 @@ The success path is observable: launch app, switch among Search/Explore/Codex/Se
 - Decision: Keep runtime in real-only cutover mode and expose only Pixiv in Phase A; keep stubs test/dev-only.
   Rationale: Avoids soft-fail UX for unfinished providers while preserving deterministic stub coverage in tests.
   Date/Author: 2026-02-25 / Codex
+- Decision: Use GitHub prereleases as the mobile-resolvable “latest main build” contract with fixed asset name and strict tag parsing (`main-vc<versionCode>-<sha>`).
+  Rationale: Mobile clients cannot reliably resolve raw latest commit artifacts; release metadata gives deterministic versioning, channeling, and asset lookup.
+  Date/Author: 2026-02-25 / Codex
+- Decision: Preserve pending update metadata after installer launch so startup can reuse an already downloaded APK if install is canceled/aborted.
+  Rationale: Reduces redundant network usage and improves startup update UX while still validating APK before each install attempt.
+  Date/Author: 2026-02-25 / Codex
 
 ## Outcomes & Retrospective
 
-Milestones 1 through 8 are complete and validated for functional/spec-critical behavior. Second-pass source cutover is also complete for architecture-critical scope: runtime registry abstraction, real-source module introduction, secure source credential storage, settings account controls, and Pixiv-first source exposure. Remaining gaps are now mostly rollout/theming polish and broader source exposure in later phases.
+Milestones 1 through 8 are complete and validated for functional/spec-critical behavior. Second-pass source cutover is also complete for architecture-critical scope: runtime registry abstraction, real-source module introduction, secure source credential storage, settings account controls, and Pixiv-first source exposure. Startup now includes updater orchestration for `main` prerelease APK delivery with safe fallback to current install. Remaining gaps are now mostly rollout/theming polish and broader source exposure in later phases.
 
 ## Context and Orientation
 
@@ -206,6 +216,8 @@ Validation excerpts:
 Plan revision note (2026-02-24 23:08Z): Completed one-pass Milestone 5-8 delivery with repository contract extensions (`CodexSortMode`, explicit settings setters, `UiRestoreRepository`), Viewer/Codex/Settings UI integration, and final validation gates.
 
 Plan revision note (2026-02-25 01:42Z): Completed second-pass source cutover with real adapter module introduction (`:core-sources`), registry-driven runtime source visibility, secure source credential storage, and settings account controls while retaining `:core-stubs` for tests/dev.
+
+Plan revision note (2026-02-25 04:36Z): Added startup auto-update delivery path (GitHub prerelease feed + APK validation/installer startup gate + release workflow contract) and retained fallback-to-current-app behavior for all update failures.
 
 ## Interfaces and Dependencies
 

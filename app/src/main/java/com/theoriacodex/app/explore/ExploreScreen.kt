@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.domain.adapter.QuickQueryKind
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
 @Composable
@@ -55,6 +56,9 @@ fun ExploreScreen(
                     Card(modifier = Modifier.weight(1f)) {
                         TextButton(onClick = {
                             coordinator.applyQuickQuery(kind)
+                            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                coordinator.applyDraft()
+                            }
                             onNavigateToSearch()
                         }) {
                             Text(kind.name)
@@ -79,6 +83,9 @@ fun ExploreScreen(
                 AssistChip(
                     onClick = {
                         coordinator.addTrendingTag(tag.text)
+                        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                            coordinator.applyDraft()
+                        }
                         onNavigateToSearch()
                     },
                     label = { Text(tag.text) }

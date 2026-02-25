@@ -46,6 +46,7 @@ Previously completed MVP slices remain in place:
 - Viewer now prefetches up to three media items on both sides of the current position and can trigger `load next page` while still inside Viewer for live Search sessions (including animated-only Viewer sessions)
 - Orientation is now route-aware: app surfaces are portrait-only, while Viewer supports landscape rotation
 - In landscape Viewer, media now renders edge-to-edge (no card/page inset margins), and ugoira progress is drawn inside the media at the bottom edge
+- Startup now includes a GitHub Releases updater path for `main` prereleases: checks on launch, downloads fixed asset `theoria-codex-main.apk` when newer `main-vc<versionCode>-<sha>` builds exist, validates package/signature/version, and opens Android installer (with unknown-sources handoff + fallback to current app on failure)
 - File-backed persistence for query/settings/cache/codex/UI restore state
 
 ## Project Structure

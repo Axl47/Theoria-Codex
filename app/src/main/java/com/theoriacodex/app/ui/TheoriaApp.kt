@@ -8,6 +8,7 @@ import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.os.Environment
+import android.os.Build
 import android.webkit.URLUtil
 import android.widget.Toast
 import com.google.gson.Gson
@@ -45,9 +46,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.R
+import com.theoriacodex.app.BuildConfig
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -67,6 +70,17 @@ import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.sourceauth.AndroidSecureSourceCredentialsStore
 import com.theoriacodex.app.sourceauth.PixivPkceController
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
+import com.theoriacodex.app.update.AndroidApkInstaller
+import com.theoriacodex.app.update.ApkDownloadManager
+import com.theoriacodex.app.update.ApkUpdateValidator
+import com.theoriacodex.app.update.FileBackedUpdateStateStore
+import com.theoriacodex.app.update.GitHubReleaseFeedClient
+import com.theoriacodex.app.update.RemoteUpdate
+import com.theoriacodex.app.update.StartupUpdateOutcome
+import com.theoriacodex.app.update.StartupUpdateState
+import com.theoriacodex.app.update.StartupUpdater
+import com.theoriacodex.app.update.UnknownSourcesPermissionRequiredException
+import com.theoriacodex.app.update.messageText
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.ViewerScreen
 import com.theoriacodex.data.repository.AppSettings
@@ -88,9 +102,12 @@ import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import com.theoriacodex.sources.pixiv.PixivAuthApi
 import com.theoriacodex.sources.pixiv.PIXIV_UGOIRA_MIME
 import java.io.File
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 
 enum class TopLevelDestination(val route: String, val label: String) {
     Search("search", "Search"),
@@ -155,6 +172,45 @@ fun TheoriaApp(
             exposedSources = setOf(SourceKey.PIXIV),
         )
     }
+    val updateStateStore = remember(storageDirectory) {
+        FileBackedUpdateStateStore(
+            file = File(storageDirectory, "update_state.json"),
+        )
+    }
+    val updateFeedClient = remember {
+        GitHubReleaseFeedClient(
+            owner = BuildConfig.UPDATE_REPO_OWNER,
+            repo = BuildConfig.UPDATE_REPO_NAME,
+            channel = BuildConfig.UPDATE_CHANNEL,
+            assetName = BuildConfig.UPDATE_ASSET_NAME,
+        )
+    }
+    val apkDownloadManager = remember(appContext) {
+        ApkDownloadManager(
+            context = appContext,
+            outputFileName = BuildConfig.UPDATE_ASSET_NAME,
+        )
+    }
+    val apkUpdateValidator = remember(appContext) { ApkUpdateValidator(appContext) }
+    val apkInstaller = remember(appContext) { AndroidApkInstaller(appContext) }
+    val startupUpdater = remember(
+        appContext,
+        updateFeedClient,
+        apkDownloadManager,
+        apkUpdateValidator,
+        apkInstaller,
+        updateStateStore,
+    ) {
+        StartupUpdater(
+            context = appContext,
+            feedClient = updateFeedClient,
+            downloadManager = apkDownloadManager,
+            validator = apkUpdateValidator,
+            installer = apkInstaller,
+            stateStore = updateStateStore,
+            updateCheckTimeoutMs = BuildConfig.UPDATE_CHECK_TIMEOUT_MS,
+        )
+    }
 
     val codexRepository = remember(storageDirectory) { FileBackedCodexRepository(storageDirectory) }
     val queryRepository = remember(storageDirectory) { FileBackedQueryRepository(storageDirectory) }
@@ -182,6 +238,11 @@ fun TheoriaApp(
     var pendingSavePost by remember { mutableStateOf<Post?>(null) }
     var startDestination by rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
     var navReady by remember { mutableStateOf(false) }
+    var startupUpdateState by remember { mutableStateOf<StartupUpdateState>(StartupUpdateState.Checking) }
+    var startupStatusMessage by remember { mutableStateOf("Checking for updates...") }
+    var pendingInstallRemote by remember { mutableStateOf<RemoteUpdate?>(null) }
+    var awaitingUnknownSources by remember { mutableStateOf(false) }
+    var awaitingInstallerReturn by remember { mutableStateOf(false) }
     val codexItemCounts = remember { mutableStateMapOf<String, Int>() }
 
     var pixivStatusLabel by remember { mutableStateOf("Not connected") }
@@ -231,12 +292,61 @@ fun TheoriaApp(
         }
     }
 
-    LaunchedEffect(Unit) {
+    suspend fun completeAppStartup() {
+        if (navReady) return
         searchCoordinator.initialize()
         refreshSourceAccountState()
         startDestination = uiRestoreRepository.getLastTab()
             ?: settingsRepository.observeSettings().first().lastSelectedTabRoute
         navReady = true
+    }
+
+    suspend fun continueAfterUpdateFailure(message: String) {
+        startupUpdateState = StartupUpdateState.Failed(message)
+        startupStatusMessage = message
+        delay(1_200)
+        completeAppStartup()
+    }
+
+    suspend fun beginStartupUpdateFlow() {
+        if (!BuildConfig.UPDATER_ENABLED) {
+            startupUpdateState = StartupUpdateState.NoUpdate
+            startupStatusMessage = "Loading app..."
+            completeAppStartup()
+            return
+        }
+
+        val updateOutcome = startupUpdater.run { state ->
+            startupUpdateState = state
+            startupStatusMessage = state.messageText()
+        }
+
+        when (updateOutcome) {
+            StartupUpdateOutcome.ContinueToApp -> {
+                completeAppStartup()
+            }
+
+            is StartupUpdateOutcome.ContinueToAppWithError -> {
+                continueAfterUpdateFailure(updateOutcome.message)
+            }
+
+            is StartupUpdateOutcome.AwaitingUnknownSources -> {
+                pendingInstallRemote = updateOutcome.remote
+                awaitingUnknownSources = true
+                startupStatusMessage = "Grant install permission to continue update..."
+                openUnknownSourcesSettings(appContext)
+            }
+
+            is StartupUpdateOutcome.InstallerLaunched -> {
+                pendingInstallRemote = updateOutcome.remote
+                awaitingInstallerReturn = true
+                startupStatusMessage = "Installer opened. Complete update to reload app."
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        beginStartupUpdateFlow()
     }
 
     LaunchedEffect(authCallbackUri) {
@@ -284,6 +394,7 @@ fun TheoriaApp(
     val showBottomBar = currentRoute in TopLevelDestination.entries.map { it.route }.toSet()
     val currentContext = LocalContext.current
     val hostActivity = remember(currentContext) { currentContext.findActivity() }
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     LaunchedEffect(currentRoute) {
         if (currentRoute in TopLevelDestination.entries.map { it.route }) {
@@ -301,6 +412,67 @@ fun TheoriaApp(
         }
         onDispose {
             hostActivity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+    }
+
+    DisposableEffect(
+        lifecycleOwner,
+        awaitingUnknownSources,
+        awaitingInstallerReturn,
+        pendingInstallRemote,
+        navReady,
+    ) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event != Lifecycle.Event.ON_RESUME || navReady) return@LifecycleEventObserver
+
+            val remote = pendingInstallRemote
+            if (awaitingUnknownSources && remote != null) {
+                scope.launch {
+                    val outcome = startupUpdater.retryPendingInstall(remote) { state ->
+                        startupUpdateState = state
+                        startupStatusMessage = state.messageText()
+                    }
+                    when (outcome) {
+                        StartupUpdateOutcome.ContinueToApp -> {
+                            awaitingUnknownSources = false
+                            pendingInstallRemote = null
+                            completeAppStartup()
+                        }
+
+                        is StartupUpdateOutcome.ContinueToAppWithError -> {
+                            awaitingUnknownSources = false
+                            pendingInstallRemote = null
+                            continueAfterUpdateFailure(outcome.message)
+                        }
+
+                        is StartupUpdateOutcome.AwaitingUnknownSources -> {
+                            awaitingUnknownSources = false
+                            pendingInstallRemote = null
+                            continueAfterUpdateFailure(
+                                "Install permission was not granted. Continuing with current app.",
+                            )
+                        }
+
+                        is StartupUpdateOutcome.InstallerLaunched -> {
+                            awaitingUnknownSources = false
+                            awaitingInstallerReturn = true
+                            pendingInstallRemote = outcome.remote
+                            startupStatusMessage = "Installer opened. Complete update to reload app."
+                        }
+                    }
+                }
+            } else if (awaitingInstallerReturn) {
+                scope.launch {
+                    awaitingInstallerReturn = false
+                    pendingInstallRemote = null
+                    continueAfterUpdateFailure("Update was not completed. Continuing with current app.")
+                }
+            }
+        }
+
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -339,7 +511,10 @@ fun TheoriaApp(
                     contentDescription = "Theoria splash",
                     modifier = Modifier.size(180.dp),
                 )
-                CircularProgressIndicator()
+                if (startupUpdateState !is StartupUpdateState.Failed) {
+                    CircularProgressIndicator()
+                }
+                Text(startupStatusMessage)
             }
         } else {
             Scaffold(
@@ -646,6 +821,19 @@ fun TheoriaApp(
 private fun openInBrowser(context: Context, url: String) {
     runCatching {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    }
+}
+
+private fun openUnknownSourcesSettings(context: Context) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    runCatching {
+        val intent = Intent(
+            android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+            Uri.parse("package:${context.packageName}"),
+        ).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
