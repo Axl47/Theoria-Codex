@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T17:48
-updated_at: 2026-02-25T02:34
+updated_at: 2026-02-25T01:37
 ---
 # THEORIA CODEX AGENTS DOCUMENT
 
@@ -33,6 +33,8 @@ Whenever new updates are made, this file (`AGENTS.md`) should be updated with an
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceAdapterRegistry.kt` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceFailure.kt`: registry abstraction and typed source failure contract used by orchestrator/status UI.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/sourceauth/`: secure source credential store (Android Keystore-backed encrypted preferences) plus Pixiv PKCE authorization controller.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/AndroidManifest.xml`: includes network permission, Pixiv auth callback intent-filters for both `theoriacodex://pixiv-auth/callback` and `pixiv://account/login`, and `singleTask` launch behavior on `MainActivity` to preserve PKCE in-progress callbacks.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/search/TagSuggestionStore.kt`: local file-backed tag suggestion cache used to avoid repeated source trending-tag calls while still allowing runtime merges.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/assets/tag_store.json` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/scripts/update_tag_store.py`: seeded tag data + maintenance script for periodic offline suggestion-store refreshes.
 
 ## Final Output
 

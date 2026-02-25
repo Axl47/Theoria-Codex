@@ -3,9 +3,13 @@ package com.theoriacodex.app.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import com.google.gson.Gson
+import com.google.gson.JsonObject
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Explore
@@ -30,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -44,6 +49,7 @@ import com.theoriacodex.app.codex.SaveToCodexSheet
 import com.theoriacodex.app.explore.ExploreScreen
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.SearchScreen
+import com.theoriacodex.app.search.FileBackedTagSuggestionStore
 import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.sourceauth.AndroidSecureSourceCredentialsStore
 import com.theoriacodex.app.sourceauth.PixivPkceController
@@ -59,6 +65,7 @@ import com.theoriacodex.data.repository.FileBackedSettingsRepository
 import com.theoriacodex.data.repository.FileBackedUiRestoreRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.RealAdapterRegistry
@@ -101,6 +108,15 @@ fun TheoriaApp(
     val scope = rememberCoroutineScope()
 
     val storageDirectory = remember(appContext) { File(appContext.filesDir, "theoria_codex") }
+    val seedTagSuggestions = remember(appContext) {
+        loadSeedTagSuggestions(appContext)
+    }
+    val tagSuggestionStore = remember(storageDirectory, seedTagSuggestions) {
+        FileBackedTagSuggestionStore(
+            storeFile = File(storageDirectory, "tag_suggestions.json"),
+            seedData = seedTagSuggestions,
+        )
+    }
     val sourceHttpClient = remember { DefaultSourceHttpClient() }
     val credentialsStore = remember(appContext) { AndroidSecureSourceCredentialsStore(appContext) }
     val pixivAuthController = remember(credentialsStore, sourceHttpClient) {
@@ -128,6 +144,7 @@ fun TheoriaApp(
             queryRepository = queryRepository,
             settingsRepository = settingsRepository,
             uiRestoreRepository = uiRestoreRepository,
+            tagSuggestionStore = tagSuggestionStore,
         )
     }
 
@@ -241,7 +258,9 @@ fun TheoriaApp(
             Scaffold(
                 bottomBar = {
                     if (showBottomBar) {
-                        NavigationBar {
+                        NavigationBar(
+                            modifier = Modifier.height(58.dp),
+                        ) {
                             TopLevelDestination.entries.forEach { destination ->
                                 val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
                                 NavigationBarItem(
@@ -262,9 +281,14 @@ fun TheoriaApp(
                                             TopLevelDestination.Codex -> Icons.Default.Collections
                                             TopLevelDestination.Settings -> Icons.Default.Settings
                                         }
-                                        Icon(imageVector = icon, contentDescription = destination.label)
+                                        Icon(
+                                            imageVector = icon,
+                                            contentDescription = destination.label,
+                                            modifier = Modifier.size(20.dp),
+                                        )
                                     },
-                                    label = { Text(destination.label) },
+                                    label = null,
+                                    alwaysShowLabel = false,
                                 )
                             }
                         }
@@ -514,4 +538,29 @@ private fun openInBrowser(context: Context, url: String) {
         }
         context.startActivity(intent)
     }
+}
+
+private fun loadSeedTagSuggestions(context: Context): Map<SourceKey, List<TagSuggestion>> {
+    val body = runCatching {
+        context.assets.open("tag_store.json").bufferedReader().use { it.readText() }
+    }.getOrNull() ?: return emptyMap()
+    val root = runCatching { Gson().fromJson(body, JsonObject::class.java) }.getOrNull()
+        ?: return emptyMap()
+    val sources = root.getAsJsonObject("sources") ?: return emptyMap()
+    return sources.entrySet().mapNotNull outer@{ (sourceName, value) ->
+        val source = runCatching { SourceKey.valueOf(sourceName) }.getOrNull() ?: return@outer null
+        val tags = value.takeIf { it.isJsonArray }?.asJsonArray
+            ?.mapNotNull inner@{ element ->
+                val obj = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@inner null
+                val text = obj.get("text")?.asString?.trim().orEmpty()
+                if (text.isBlank()) return@inner null
+                TagSuggestion(
+                    text = text,
+                    type = obj.get("type")?.asString,
+                    count = obj.get("count")?.asInt,
+                )
+            }
+            .orEmpty()
+        source to tags
+    }.toMap()
 }

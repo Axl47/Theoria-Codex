@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-02-25T01:42
+updated_at: 2026-02-25T01:37
 ---
 # Theoria Codex
 
@@ -26,8 +26,12 @@ The app is now in second-pass source cutover state:
 Previously completed MVP slices remain in place:
 
 - Search / Explore / Codex / Settings tabs
+- Search results now render real source thumbnails in a variable-height staggered grid and show post titles (when available) instead of raw source IDs
+- Search input UX now supports Enter-to-add-tag and contextual controls that animate in while actively editing
+- Bottom navigation is compact icon-only for higher content density
+- Local tag suggestion store now seeds from `app/src/main/assets/tag_store.json` and is persisted to `files/theoria_codex/tag_suggestions.json` to reduce network tag fetches
 - Draft/Applied search flow with explicit Apply semantics
-- Viewer interactions and Codex save/remove flow
+- Viewer now renders full-size source images (with Pixiv-safe headers) and keeps gesture-driven zoom/pan + Codex save/remove flow
 - File-backed persistence for query/settings/cache/codex/UI restore state
 
 ## Project Structure
@@ -52,6 +56,10 @@ Build before running on device/emulator:
 
     ./gradlew assembleDebug
     ./gradlew installDebug
+
+Tag store update helper:
+
+    python3 scripts/update_tag_store.py --source PIXIV --input /path/to/tags.txt
 
 ## Implementation Plan Tracking
 

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import android.content.Context
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -43,10 +44,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -133,6 +139,7 @@ fun ViewerScreen(
             modifier = Modifier.fillMaxSize(),
         ) { page ->
             val post = posts[page]
+            val context = LocalContext.current
             val transformState = rememberTransformableState { zoomChange, panChange, _ ->
                 viewerState = viewerState.transform(
                     zoomChange = zoomChange,
@@ -168,30 +175,43 @@ fun ViewerScreen(
                         )
                     }
             ) {
+                val imageUrl = post.full?.url ?: post.preview.url
+                val imageModel = remember(context, imageUrl, post.id.source) {
+                    imageUrl?.let { buildViewerImageRequest(context, it, post.id.source) }
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(32.dp),
+                        .padding(16.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            text = post.id.source.name,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            style = MaterialTheme.typography.titleLarge,
+                    if (imageModel != null) {
+                        AsyncImage(
+                            model = imageModel,
+                            contentDescription = post.title ?: post.id.sourcePostId,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Fit,
                         )
-                        Text(
-                            text = post.id.sourcePostId,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            style = MaterialTheme.typography.bodyLarge,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        post.canonicalTags.firstOrNull()?.let { tag ->
-                            AssistChip(onClick = {}, label = { Text("#$tag") })
+                    } else {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = post.id.source.name,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                style = MaterialTheme.typography.titleLarge,
+                            )
+                            Text(
+                                text = post.id.sourcePostId,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                style = MaterialTheme.typography.bodyLarge,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            post.canonicalTags.firstOrNull()?.let { tag ->
+                                AssistChip(onClick = {}, label = { Text("#$tag") })
+                            }
                         }
                     }
                 }
@@ -270,6 +290,20 @@ fun ViewerScreen(
             }
         }
     }
+}
+
+private fun buildViewerImageRequest(
+    context: Context,
+    url: String,
+    sourceKey: SourceKey,
+): ImageRequest {
+    val builder = ImageRequest.Builder(context).data(url).crossfade(true)
+    if (sourceKey == SourceKey.PIXIV) {
+        builder
+            .addHeader("Referer", "https://www.pixiv.net/")
+            .addHeader("User-Agent", "Mozilla/5.0")
+    }
+    return builder.build()
 }
 
 @Composable

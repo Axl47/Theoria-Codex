@@ -32,6 +32,7 @@ class SearchCoordinator(
     private val queryRepository: QueryRepository = InMemoryQueryRepository(),
     private val settingsRepository: SettingsRepository = InMemorySettingsRepository(),
     private val uiRestoreRepository: UiRestoreRepository = InMemoryUiRestoreRepository(),
+    private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
 ) {
     private var runtimeSettings: AppSettings = AppSettings()
     private var hasExecutedSearch = false
@@ -208,17 +209,41 @@ class SearchCoordinator(
 
         trendingTags = when (mode) {
             QueryMode.Unified -> {
-                effectiveEnabledSources()
-                    .flatMap { source ->
-                        runCatching { registry.adapterFor(source)?.trendingTags(limit = 5).orEmpty() }
-                            .getOrDefault(emptyList())
-                    }
+                val enabled = effectiveEnabledSources()
+                val cached = enabled
+                    .flatMap { source -> tagSuggestionStore.get(source, limit = 10) }
                     .distinctBy { it.text }
                     .take(20)
+                if (cached.isNotEmpty()) {
+                    cached
+                } else {
+                    enabled
+                        .flatMap { source ->
+                            val fetched = runCatching {
+                                registry.adapterFor(source)?.trendingTags(limit = 10).orEmpty()
+                            }.getOrDefault(emptyList())
+                            if (fetched.isNotEmpty()) {
+                                tagSuggestionStore.put(source, fetched)
+                            }
+                            fetched
+                        }
+                        .distinctBy { it.text }
+                        .take(20)
+                }
             }
             is QueryMode.Source -> {
-                runCatching { registry.adapterFor(mode.source)?.trendingTags(limit = 20).orEmpty() }
-                    .getOrDefault(emptyList())
+                val cached = tagSuggestionStore.get(mode.source, limit = 20)
+                if (cached.isNotEmpty()) {
+                    cached
+                } else {
+                    val fetched = runCatching {
+                        registry.adapterFor(mode.source)?.trendingTags(limit = 20).orEmpty()
+                    }.getOrDefault(emptyList())
+                    if (fetched.isNotEmpty()) {
+                        tagSuggestionStore.put(mode.source, fetched)
+                    }
+                    fetched
+                }
             }
         }
     }

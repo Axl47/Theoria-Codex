@@ -260,6 +260,7 @@ class PixivSourceAdapter(
         }
         val createdAt = parseIsoInstant(raw.get("create_date")?.asString)
         val userName = raw.optionalJsonObject("user")?.get("name")?.asString
+        val title = raw.get("title")?.asString
 
         return Post(
             id = PostId(SourceKey.PIXIV, id),
@@ -272,6 +273,7 @@ class PixivSourceAdapter(
             rawTags = tags,
             authorName = userName,
             createdAtEpochMs = createdAt,
+            title = title,
         )
     }
 

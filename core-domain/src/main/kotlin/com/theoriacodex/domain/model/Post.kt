@@ -28,4 +28,5 @@ data class Post(
     val rawTags: List<String>,
     val authorName: String?,
     val createdAtEpochMs: Long?,
+    val title: String? = null,
 )

@@ -1,7 +1,16 @@
 package com.theoriacodex.app.search
 
+import android.content.Context
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,10 +21,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material3.AssistChip
@@ -45,13 +54,23 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
+import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -64,10 +83,11 @@ fun SearchScreen(
     onOpenViewer: (List<Post>, ViewerLaunchContext) -> Unit,
 ) {
     var input by rememberSaveable { mutableStateOf("") }
+    var searchFieldFocused by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
-    val gridState = rememberLazyGridState()
+    val gridState = rememberLazyStaggeredGridState()
     val queryHash = coordinator.appliedQueryHash
 
     LaunchedEffect(coordinator.draftQuery.mode) {
@@ -102,6 +122,15 @@ fun SearchScreen(
                 .take(10)
         }
     }
+    val showSearchControls = searchFieldFocused ||
+        input.isNotBlank() ||
+        autocompleteSuggestions.isNotEmpty() ||
+        coordinator.hasPendingChanges
+
+    fun commitTagInput() {
+        coordinator.addTagInput(input)
+        input = ""
+    }
 
     Scaffold(
         floatingActionButton = {
@@ -121,59 +150,95 @@ fun SearchScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { state ->
+                        searchFieldFocused = state.isFocused
+                    },
                 value = input,
                 onValueChange = { input = it },
                 label = { Text("Search tags") },
                 supportingText = { Text("Use '-tag' to add exclusion") },
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Done,
+                    keyboardType = KeyboardType.Text,
+                    capitalization = KeyboardCapitalization.None,
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = { commitTagInput() },
+                ),
                 trailingIcon = {
-                    TextButton(onClick = {
-                        coordinator.addTagInput(input)
-                        input = ""
-                    }) {
+                    TextButton(onClick = { commitTagInput() }) {
                         Text("Add")
                     }
                 }
             )
 
-            if (autocompleteSuggestions.isNotEmpty()) {
-                AutocompletePanel(
-                    suggestions = autocompleteSuggestions,
-                    onInclude = { tag ->
-                        coordinator.addIncludeTag(tag)
-                        input = ""
-                    },
-                    onExclude = { tag ->
-                        coordinator.addExcludeTag(tag)
-                        input = ""
-                    },
-                )
-            }
-
-            ModeRow(
-                mode = coordinator.draftQuery.mode,
-                options = coordinator.modeOptions,
-                onModeSelected = coordinator::setMode,
-            )
-            if (coordinator.draftQuery.mode == QueryMode.Unified) {
-                Text(
-                    text = "(${coordinator.enabledSourceCount} sources enabled)",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-
-            TagRow(
-                includeTags = coordinator.draftQuery.includeTags,
-                excludeTags = coordinator.draftQuery.excludeTags,
-                onRemoveInclude = coordinator::removeIncludeTag,
-                onRemoveExclude = coordinator::removeExcludeTag,
-            )
-
-            if (
-                coordinator.appliedQuery.mode == QueryMode.Unified &&
-                coordinator.statuses.any { it.state != SourceRunState.SUCCESS }
+            AnimatedVisibility(
+                visible = showSearchControls,
+                enter = slideInVertically(initialOffsetY = { fullHeight -> fullHeight / 4 }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { fullHeight -> fullHeight / 5 }) + fadeOut(),
             ) {
-                StatusRow(coordinator = coordinator)
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (autocompleteSuggestions.isNotEmpty()) {
+                        AutocompletePanel(
+                            suggestions = autocompleteSuggestions,
+                            onInclude = { tag ->
+                                coordinator.addIncludeTag(tag)
+                                input = ""
+                            },
+                            onExclude = { tag ->
+                                coordinator.addExcludeTag(tag)
+                                input = ""
+                            },
+                        )
+                    }
+
+                    ModeRow(
+                        mode = coordinator.draftQuery.mode,
+                        options = coordinator.modeOptions,
+                        onModeSelected = coordinator::setMode,
+                    )
+                    if (coordinator.draftQuery.mode == QueryMode.Unified) {
+                        Text(
+                            text = "(${coordinator.enabledSourceCount} sources enabled)",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+
+                    TagRow(
+                        includeTags = coordinator.draftQuery.includeTags,
+                        excludeTags = coordinator.draftQuery.excludeTags,
+                        onRemoveInclude = coordinator::removeIncludeTag,
+                        onRemoveExclude = coordinator::removeExcludeTag,
+                    )
+
+                    if (
+                        coordinator.appliedQuery.mode == QueryMode.Unified &&
+                        coordinator.statuses.any { it.state != SourceRunState.SUCCESS }
+                    ) {
+                        StatusRow(coordinator = coordinator)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        TextButton(
+                            onClick = {
+                                coordinator.resetDraft()
+                                input = ""
+                                showFilterSheet = false
+                            },
+                            enabled = coordinator.hasPendingChanges,
+                        ) {
+                            Text("Reset")
+                        }
+                        TextButton(onClick = { scope.launch { coordinator.applyDraft() } }) {
+                            Text("Apply")
+                        }
+                    }
+                }
             }
 
             when {
@@ -201,65 +266,27 @@ fun SearchScreen(
                     }
                 }
                 else -> {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
+                    LazyVerticalStaggeredGrid(
+                        columns = StaggeredGridCells.Fixed(2),
                         state = gridState,
                         modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalItemSpacing = 6.dp,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         itemsIndexed(coordinator.results) { index, post ->
-                            ElevatedCard(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        val context = coordinator.buildViewerLaunchContext(
-                                            startIndex = index,
-                                            scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
-                                        )
-                                        scope.launch { coordinator.setViewerLaunchContext(context) }
-                                        onOpenViewer(coordinator.results, context)
-                                    }
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    AssistChip(
-                                        onClick = {},
-                                        label = { Text(post.id.source.name) },
+                            SearchResultCard(
+                                post = post,
+                                onClick = {
+                                    val context = coordinator.buildViewerLaunchContext(
+                                        startIndex = index,
+                                        scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
                                     )
-                                    Text(
-                                        text = post.id.sourcePostId,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 2,
-                                    )
-                                    post.canonicalTags.firstOrNull()?.let { firstTag ->
-                                        Text(text = "#$firstTag", style = MaterialTheme.typography.bodySmall)
-                                    }
-                                }
-                            }
+                                    scope.launch { coordinator.setViewerLaunchContext(context) }
+                                    onOpenViewer(coordinator.results, context)
+                                },
+                            )
                         }
                     }
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                TextButton(
-                    onClick = {
-                        coordinator.resetDraft()
-                        input = ""
-                        showFilterSheet = false
-                    },
-                    enabled = coordinator.hasPendingChanges,
-                ) {
-                    Text("Reset")
-                }
-                TextButton(onClick = { scope.launch { coordinator.applyDraft() } }) {
-                    Text("Apply")
                 }
             }
         }
@@ -276,6 +303,66 @@ fun SearchScreen(
             },
             sheetState = sheetState,
         )
+    }
+}
+
+@Composable
+private fun SearchResultCard(
+    post: Post,
+    onClick: () -> Unit,
+) {
+    val context = LocalContext.current
+
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+    ) {
+        val title = post.title?.takeIf { it.isNotBlank() } ?: "Untitled"
+        val previewUrl = post.preview.url ?: post.full?.url
+        val ratio = previewAspectRatio(post)
+        val imageModel = remember(context, previewUrl, post.id.source) {
+            previewUrl?.let { buildImageRequest(context, it, post.id.source) }
+        }
+
+        if (imageModel != null) {
+            AsyncImage(
+                model = imageModel,
+                contentDescription = title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(ratio),
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(ratio),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "No preview",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            AssistChip(onClick = {}, label = { Text(post.id.source.name) })
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            post.canonicalTags.firstOrNull()?.let { firstTag ->
+                Text(text = "#$firstTag", style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }
 
@@ -532,4 +619,25 @@ private fun inferPreset(fromEpochMs: Long?, toEpochMs: Long?): DateRangePreset {
         spanMs <= 30L * dayMs + (2L * 60L * 60L * 1000L) -> DateRangePreset.LAST_30_DAYS
         else -> DateRangePreset.NONE
     }
+}
+
+private fun previewAspectRatio(post: Post): Float {
+    val width = post.width ?: return 1f
+    val height = post.height ?: return 1f
+    if (width <= 0 || height <= 0) return 1f
+    return width.toFloat() / height.toFloat()
+}
+
+private fun buildImageRequest(
+    context: Context,
+    url: String,
+    sourceKey: SourceKey,
+): ImageRequest {
+    val builder = ImageRequest.Builder(context).data(url).crossfade(true)
+    if (sourceKey == SourceKey.PIXIV) {
+        builder
+            .addHeader("Referer", "https://www.pixiv.net/")
+            .addHeader("User-Agent", "Mozilla/5.0")
+    }
+    return builder.build()
 }
