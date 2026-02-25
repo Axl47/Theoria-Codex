@@ -37,8 +37,15 @@ fun ExploreScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("Explore", style = MaterialTheme.typography.titleLarge)
+        }
+
         Text("Quick Queries", style = MaterialTheme.typography.titleMedium)
 
         val quickQueries = listOf(
