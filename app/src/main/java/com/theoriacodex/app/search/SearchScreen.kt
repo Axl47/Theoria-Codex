@@ -11,6 +11,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -306,14 +307,9 @@ fun SearchScreen(
                     ModeRow(
                         mode = coordinator.draftQuery.mode,
                         options = coordinator.modeOptions,
+                        unifiedSourceCount = coordinator.enabledSourceCount,
                         onModeSelected = coordinator::setMode,
                     )
-                    if (coordinator.draftQuery.mode == QueryMode.Unified) {
-                        Text(
-                            text = "(${coordinator.enabledSourceCount} sources enabled)",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
 
                     TagRow(
                         includeTags = coordinator.draftQuery.includeTags,
@@ -997,6 +993,7 @@ private fun AutocompletePanel(
 private fun ModeRow(
     mode: QueryMode,
     options: List<QueryMode>,
+    unifiedSourceCount: Int,
     onModeSelected: (QueryMode) -> Unit,
 ) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1010,7 +1007,30 @@ private fun ModeRow(
                         QueryMode.Unified -> "Unified"
                         is QueryMode.Source -> option.source.name
                     }
-                    Text(label)
+                    if (option == QueryMode.Unified) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(label)
+                            Box(
+                                modifier = Modifier
+                                    .background(
+                                        color = MaterialTheme.colorScheme.primary,
+                                        shape = CircleShape,
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                            ) {
+                                Text(
+                                    text = unifiedSourceCount.toString(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                )
+                            }
+                        }
+                    } else {
+                        Text(label)
+                    }
                 }
             )
         }
