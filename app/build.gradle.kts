@@ -18,6 +18,12 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "0.1.1"
+        if (versionCodeOverride != null) {
+            versionCode = versionCodeOverride
+        }
+        if (!versionNameOverride.isNullOrBlank()) {
+            versionName = versionNameOverride
+        }
 
         buildConfigField("String", "UPDATE_REPO_OWNER", "\"Axl47\"")
         buildConfigField("String", "UPDATE_REPO_NAME", "\"Theoria-Codex\"")
