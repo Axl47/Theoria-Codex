@@ -43,6 +43,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -1267,7 +1268,7 @@ private fun PostInstallChangelogDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                releases.forEach { release ->
+                releases.forEachIndexed { index, release ->
                     val titleBase = releaseDisplayTitle(release.releaseName, release.versionCode)
                     val title = if (release.versionCode == installedVersionCode) {
                         "$titleBase (Current)"
@@ -1277,10 +1278,6 @@ private fun PostInstallChangelogDialog(
                     Text(
                         text = title,
                         style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        text = "vc${release.versionCode} • ${release.commitShaShort}",
-                        style = MaterialTheme.typography.bodySmall,
                     )
                     val sections = release.changelogSections.filter { it.bullets.isNotEmpty() }
                     if (sections.isNotEmpty()) {
@@ -1304,6 +1301,9 @@ private fun PostInstallChangelogDialog(
                                 ?: "No changelog details were published for this build.",
                             style = MaterialTheme.typography.bodySmall,
                         )
+                    }
+                    if (index != releases.lastIndex) {
+                        HorizontalDivider()
                     }
                 }
             }
@@ -1335,7 +1335,7 @@ private fun ReleaseHistoryDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                releases.forEach { release ->
+                releases.forEachIndexed { index, release ->
                     val titleBase = releaseDisplayTitle(release.releaseName, release.versionCode)
                     val title = if (release.versionCode == installedVersionCode) {
                         "$titleBase (Current)"
@@ -1345,10 +1345,6 @@ private fun ReleaseHistoryDialog(
                     Text(
                         text = title,
                         style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        text = "vc${release.versionCode} • ${release.commitShaShort}",
-                        style = MaterialTheme.typography.bodySmall,
                     )
                     val sections = release.changelogSections.filter { it.bullets.isNotEmpty() }
                     if (sections.isNotEmpty()) {
@@ -1372,6 +1368,9 @@ private fun ReleaseHistoryDialog(
                                 ?: "No changelog details were published for this build.",
                             style = MaterialTheme.typography.bodySmall,
                         )
+                    }
+                    if (index != releases.lastIndex) {
+                        HorizontalDivider()
                     }
                 }
             }
