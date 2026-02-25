@@ -33,6 +33,7 @@ CONVENTIONAL_BODY_RE = re.compile(
 NEW_RE = re.compile(r"^(feat|feature|new|add)(\b|:)", re.IGNORECASE)
 FIX_RE = re.compile(r"^(fix|bug|hotfix)(\b|:)", re.IGNORECASE)
 IMPROVEMENT_RE = re.compile(r"^(refactor|perf|optimi[sz]e|improve|ui|ux|chore|docs|test|build|ci)(\b|:)", re.IGNORECASE)
+SUBJECT_FRAGMENT_SPLIT_RE = re.compile(r"\s+-\s+|\s+\|\s+|\s*;\s*")
 
 
 def run_git(*args: str) -> str:
@@ -45,8 +46,12 @@ def run_git(*args: str) -> str:
     return result.stdout.strip()
 
 
+def strip_list_prefix(text: str) -> str:
+    return re.sub(r"^\s*[-*]\s*", "", text).strip()
+
+
 def normalize_subject(subject: str) -> str:
-    cleaned = PREFIX_CLEANUP_RE.sub("", subject.strip())
+    cleaned = PREFIX_CLEANUP_RE.sub("", strip_list_prefix(subject))
     return normalize_text(cleaned or subject)
 
 
@@ -55,7 +60,7 @@ def normalize_text(text: str) -> str:
 
 
 def classify_subject(subject: str) -> str:
-    lowered = subject.strip().lower()
+    lowered = strip_list_prefix(subject).lower()
     if NEW_RE.match(lowered):
         return "New"
     if FIX_RE.match(lowered):
@@ -111,6 +116,20 @@ def parse_body_entries(body: str) -> list[tuple[str, str, str]]:
     return entries
 
 
+def parse_conventional_subject_fragments(subject: str) -> list[tuple[str, str, str]]:
+    fragments = SUBJECT_FRAGMENT_SPLIT_RE.split(subject.strip())
+    parsed_entries: list[tuple[str, str, str]] = []
+    for fragment in fragments:
+        candidate = strip_list_prefix(fragment)
+        if not candidate:
+            continue
+        parsed = parse_conventional_line(candidate, CONVENTIONAL_SUBJECT_RE)
+        if not parsed:
+            return []
+        parsed_entries.append(parsed)
+    return parsed_entries
+
+
 def dedupe(entries: Iterable[tuple[str, str, str]]) -> list[tuple[str, str, str]]:
     seen: set[tuple[str, str, str]] = set()
     result: list[tuple[str, str, str]] = []
@@ -143,9 +162,9 @@ def collect_commit_entries(previous_tag: str | None, head: str) -> list[tuple[st
             entries.extend(body_entries)
             continue
         if subject:
-            parsed_subject = parse_conventional_line(subject, CONVENTIONAL_SUBJECT_RE)
-            if parsed_subject:
-                entries.append(parsed_subject)
+            parsed_subjects = parse_conventional_subject_fragments(subject)
+            if parsed_subjects:
+                entries.extend(parsed_subjects)
             else:
                 section = classify_subject(subject)
                 entries.append((section, "General", normalize_subject(subject)))

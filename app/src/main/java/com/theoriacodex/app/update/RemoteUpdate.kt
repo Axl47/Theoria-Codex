@@ -36,7 +36,7 @@ internal object MainReleaseTagParser {
 
 internal object ReleaseChangelogParser {
     private val sectionHeadingRegex = Regex("""(?im)^##\s+(.+?)\s*$""")
-    private val bulletRegex = Regex("""^\s*[-*]\s+(.+?)\s*$""")
+    private val bulletRegex = Regex("""^(\s*)[-*]\s+(.+?)\s*$""")
     private val fallbackLineRegex = Regex("""^\s*[-*]?\s*(.+?)\s*$""")
     private val ignoredBulletRegex = Regex(
         pattern = """^(tbd|none|n/?a|none reported(?: in this build)?\.?)$""",
@@ -69,8 +69,15 @@ internal object ReleaseChangelogParser {
             val end = matches.getOrNull(index + 1)?.range?.first ?: markdown.length
             val body = markdown.substring(start, end)
             val bullets = body.lineSequence()
-                .mapNotNull { line -> bulletRegex.matchEntire(line)?.groupValues?.getOrNull(1)?.trim() }
-                .filter { bullet -> bullet.isNotBlank() && !ignoredBulletRegex.matches(bullet) }
+                .mapNotNull { line ->
+                    val lineMatch = bulletRegex.matchEntire(line) ?: return@mapNotNull null
+                    val leadingSpaces = lineMatch.groupValues.getOrNull(1)?.length ?: 0
+                    val text = lineMatch.groupValues.getOrNull(2)?.trim().orEmpty()
+                    if (text.isBlank()) return@mapNotNull null
+                    val normalizedIndent = " ".repeat((leadingSpaces / 2) * 2)
+                    "$normalizedIndent$text"
+                }
+                .filter { bullet -> bullet.isNotBlank() && !ignoredBulletRegex.matches(bullet.trim()) }
                 .toList()
             if (bullets.isEmpty()) return@forEachIndexed
             val key = rawTitle.lowercase()

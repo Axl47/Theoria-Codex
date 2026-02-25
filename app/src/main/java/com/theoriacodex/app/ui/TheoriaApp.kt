@@ -1215,10 +1215,7 @@ private fun StartupUpdatePromptCard(
                                 style = MaterialTheme.typography.titleSmall,
                             )
                             section.bullets.forEach { bullet ->
-                                Text(
-                                    text = "• $bullet",
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
+                                ChangelogBulletText(bullet = bullet)
                             }
                         }
                     }
@@ -1304,10 +1301,7 @@ private fun PostInstallChangelogDialog(
                                     style = MaterialTheme.typography.titleSmall,
                                 )
                                 section.bullets.forEach { bullet ->
-                                    Text(
-                                        text = "• $bullet",
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
+                                    ChangelogBulletText(bullet = bullet)
                                 }
                             }
                         }
@@ -1371,10 +1365,7 @@ private fun ReleaseHistoryDialog(
                                     style = MaterialTheme.typography.titleSmall,
                                 )
                                 section.bullets.forEach { bullet ->
-                                    Text(
-                                        text = "• $bullet",
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
+                                    ChangelogBulletText(bullet = bullet)
                                 }
                             }
                         }
@@ -1401,6 +1392,18 @@ private fun openInBrowser(context: Context, url: String) {
         }
         context.startActivity(intent)
     }
+}
+
+@Composable
+private fun ChangelogBulletText(bullet: String) {
+    val leadingSpaces = bullet.takeWhile { it == ' ' }.length
+    val indentLevel = (leadingSpaces / 2).coerceAtLeast(0)
+    val normalized = bullet.trimStart()
+    Text(
+        text = "• $normalized",
+        style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.padding(start = (indentLevel * 14).dp),
+    )
 }
 
 private fun openUnknownSourcesSettings(context: Context) {
