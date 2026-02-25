@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-02-25T03:10
+updated_at: 2026-02-25T04:31
 ---
 # Theoria Codex
 
@@ -28,10 +28,13 @@ Previously completed MVP slices remain in place:
 - Search / Explore / Codex / Settings tabs
 - Search results now render real source thumbnails in a variable-height staggered grid and show post titles (when available) instead of raw source IDs
 - Search input UX now supports Enter-to-add-tag and contextual controls that animate in while actively editing
+- Search controls include an `Animated only` filter for showing just animated media in current results
+- Search auto-paginates: near the end of loaded results (about 80%), the next source page is fetched automatically
 - Bottom navigation is compact icon-only for higher content density
 - Local tag suggestion store now seeds from `app/src/main/assets/tag_store.json` and is persisted to `files/theoria_codex/tag_suggestions.json` to reduce network tag fetches
 - Draft/Applied search flow with explicit Apply semantics
-- Search/Viewer now support GIF rendering (global Coil animated decoder + MIME-aware source mapping); Viewer also supports Pixiv ugoira playback by loading Pixiv metadata + zip frames and animating in-place
+- Search/Viewer now support GIF rendering (global Coil animated decoder + MIME-aware source mapping); Search and Viewer both support Pixiv ugoira playback by loading Pixiv metadata + zip frames and animating in-place
+- Viewer long-press download now exports Pixiv ugoira content directly to MP4 and saves it to device video storage (with app-storage fallback when MediaStore is unavailable)
 - Viewer now uses horizontal post paging + vertical in-post image paging (per-post `X / Y`), supports long-press image download, and search cards show compact source/image-count overlays
 - File-backed persistence for query/settings/cache/codex/UI restore state
 

@@ -71,13 +71,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.theoriacodex.app.viewer.PixivUgoiraClient
+import com.theoriacodex.app.viewer.PixivUgoiraPlayer
 import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
+import com.theoriacodex.sources.pixiv.PIXIV_UGOIRA_MIME
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -86,9 +91,11 @@ import kotlin.math.abs
 @Composable
 fun SearchScreen(
     coordinator: SearchCoordinator,
+    pixivUgoiraClient: PixivUgoiraClient? = null,
     onOpenViewer: (List<Post>, ViewerLaunchContext) -> Unit,
 ) {
     var input by rememberSaveable { mutableStateOf("") }
+    var animatedOnly by rememberSaveable { mutableStateOf(false) }
     var searchFieldFocused by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
@@ -96,15 +103,24 @@ fun SearchScreen(
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
     val queryHash = coordinator.appliedQueryHash
+    var lastPrefetchTriggerResultSize by rememberSaveable(queryHash, animatedOnly) { mutableStateOf(-1) }
+    val visibleResults = remember(coordinator.results, animatedOnly) {
+        if (animatedOnly) {
+            coordinator.results.filter(::isAnimatedPost)
+        } else {
+            coordinator.results
+        }
+    }
 
     LaunchedEffect(coordinator.draftQuery.mode) {
         coordinator.loadTrendingTags()
     }
 
-    LaunchedEffect(queryHash, coordinator.results.size) {
+    LaunchedEffect(queryHash, visibleResults.size, animatedOnly) {
+        if (animatedOnly) return@LaunchedEffect
         val restored = coordinator.restoreSearchScrollState() ?: return@LaunchedEffect
-        if (coordinator.results.isNotEmpty()) {
-            val lastIndex = coordinator.results.lastIndex.coerceAtLeast(0)
+        if (visibleResults.isNotEmpty()) {
+            val lastIndex = visibleResults.lastIndex.coerceAtLeast(0)
             gridState.scrollToItem(
                 index = restored.firstVisibleItemIndex.coerceIn(0, lastIndex),
                 scrollOffset = restored.firstVisibleItemOffsetPx.coerceAtLeast(0),
@@ -112,11 +128,50 @@ fun SearchScreen(
         }
     }
 
-    LaunchedEffect(queryHash, coordinator.results.size) {
-        if (coordinator.results.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(queryHash, visibleResults.size, animatedOnly) {
+        if (animatedOnly || visibleResults.isEmpty()) return@LaunchedEffect
         snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
             .collectLatest { (index, offset) ->
                 coordinator.persistSearchScrollState(index = index, offsetPx = offset)
+            }
+    }
+
+    LaunchedEffect(
+        queryHash,
+        visibleResults.size,
+        coordinator.results.size,
+        coordinator.canLoadMore,
+        coordinator.loading,
+        coordinator.loadingMore,
+        animatedOnly,
+    ) {
+        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
+            .collect { lastVisibleIndex ->
+                if (coordinator.loading || coordinator.loadingMore || !coordinator.canLoadMore) return@collect
+
+                val totalVisible = visibleResults.size
+                val rawResultSize = coordinator.results.size
+
+                val shouldTriggerByThreshold = if (totalVisible > 0 && lastVisibleIndex >= 0) {
+                    val triggerIndex = ((totalVisible - 1) * PAGINATION_PREFETCH_RATIO)
+                        .toInt()
+                        .coerceAtLeast(0)
+                    lastVisibleIndex >= triggerIndex
+                } else {
+                    false
+                }
+
+                // If animated-only yields no visible rows yet, keep paging while source tokens remain.
+                val shouldTriggerForEmptyAnimatedResults =
+                    animatedOnly && totalVisible == 0 && rawResultSize > 0
+
+                if (
+                    (shouldTriggerByThreshold || shouldTriggerForEmptyAnimatedResults) &&
+                    lastPrefetchTriggerResultSize != rawResultSize
+                ) {
+                    lastPrefetchTriggerResultSize = rawResultSize
+                    coordinator.loadNextPage()
+                }
             }
     }
 
@@ -128,6 +183,9 @@ fun SearchScreen(
                 .filter { suggestion -> suggestion.text.contains(input.trim(), ignoreCase = true) }
                 .take(10)
         }
+    }
+    val sourceAuthErrorMessage = remember(coordinator.statuses) {
+        buildSourceAuthErrorMessage(coordinator.statuses)
     }
     val showSearchControls = searchFieldFocused ||
         input.isNotBlank() ||
@@ -230,6 +288,11 @@ fun SearchScreen(
                     ) {
                         StatusRow(coordinator = coordinator)
                     }
+                    FilterChip(
+                        selected = animatedOnly,
+                        onClick = { animatedOnly = !animatedOnly },
+                        label = { Text("Animated only") },
+                    )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -275,31 +338,76 @@ fun SearchScreen(
                         )
                     }
                 }
-                coordinator.results.isEmpty() -> {
+                visibleResults.isEmpty() -> {
                     Box(modifier = Modifier.weight(1f)) {
-                        EmptyBlock(hasPendingChanges = coordinator.hasPendingChanges)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            sourceAuthErrorMessage?.let { authMessage ->
+                                ErrorBlock(
+                                    title = "Source account required",
+                                    message = authMessage,
+                                )
+                            }
+                            EmptyBlock(
+                                hasPendingChanges = coordinator.hasPendingChanges,
+                                messageOverride = if (animatedOnly && coordinator.results.isNotEmpty()) {
+                                    "No animated media found for the current results."
+                                } else {
+                                    null
+                                },
+                            )
+                        }
                     }
                 }
                 else -> {
-                    LazyVerticalStaggeredGrid(
-                        columns = StaggeredGridCells.Fixed(2),
-                        state = gridState,
+                    Column(
                         modifier = Modifier.weight(1f),
-                        verticalItemSpacing = 6.dp,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        itemsIndexed(coordinator.results) { index, post ->
-                            SearchResultCard(
-                                post = post,
-                                onClick = {
-                                    val context = coordinator.buildViewerLaunchContext(
-                                        startIndex = index,
-                                        scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
-                                    )
-                                    scope.launch { coordinator.setViewerLaunchContext(context) }
-                                    onOpenViewer(coordinator.results, context)
-                                },
+                        sourceAuthErrorMessage?.let { authMessage ->
+                            ErrorBlock(
+                                title = "Source account required",
+                                message = authMessage,
                             )
+                        }
+                        LazyVerticalStaggeredGrid(
+                            columns = StaggeredGridCells.Fixed(2),
+                            state = gridState,
+                            modifier = Modifier.weight(1f),
+                            verticalItemSpacing = 6.dp,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            itemsIndexed(visibleResults) { index, post ->
+                                SearchResultCard(
+                                    post = post,
+                                    pixivUgoiraClient = pixivUgoiraClient,
+                                    onClick = {
+                                        val context = coordinator.buildViewerLaunchContext(
+                                            startIndex = index,
+                                            scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
+                                        )
+                                        scope.launch { coordinator.setViewerLaunchContext(context) }
+                                        onOpenViewer(visibleResults, context)
+                                    },
+                                )
+                            }
+                            if (coordinator.loadingMore) {
+                                item {
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp),
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 12.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            CircularProgressIndicator()
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -324,6 +432,7 @@ fun SearchScreen(
 @Composable
 private fun SearchResultCard(
     post: Post,
+    pixivUgoiraClient: PixivUgoiraClient?,
     onClick: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -351,7 +460,16 @@ private fun SearchResultCard(
                 .fillMaxWidth()
                 .aspectRatio(ratio),
         ) {
-            if (imageModel != null) {
+            val showUgoira = isPixivUgoira(post) && pixivUgoiraClient != null
+            if (showUgoira) {
+                PixivUgoiraPlayer(
+                    postId = post.id.sourcePostId,
+                    client = requireNotNull(pixivUgoiraClient),
+                    modifier = Modifier.fillMaxSize(),
+                    contentDescription = title,
+                    contentScale = ContentScale.Crop,
+                )
+            } else if (imageModel != null) {
                 AsyncImage(
                     model = imageModel,
                     contentDescription = title,
@@ -432,6 +550,47 @@ private fun postMediaCount(post: Post): Int {
         explicitCount > 0 -> explicitCount
         post.full != null -> 1
         else -> 1
+    }
+}
+
+private fun isPixivUgoira(post: Post): Boolean {
+    if (post.id.source != SourceKey.PIXIV) return false
+    if (post.full?.mime == PIXIV_UGOIRA_MIME) return true
+    return post.media.any { it.mime == PIXIV_UGOIRA_MIME }
+}
+
+private fun isAnimatedPost(post: Post): Boolean {
+    if (isPixivUgoira(post)) return true
+
+    fun isAnimatedRef(mime: String?, location: String?): Boolean {
+        val normalizedMime = mime?.lowercase()
+        if (
+            normalizedMime == "image/gif" ||
+            normalizedMime == "video/mp4" ||
+            normalizedMime == "video/webm"
+        ) {
+            return true
+        }
+
+        val normalizedLocation = location
+            ?.substringBefore('?')
+            ?.lowercase()
+            .orEmpty()
+        return normalizedLocation.endsWith(".gif") ||
+            normalizedLocation.endsWith(".mp4") ||
+            normalizedLocation.endsWith(".webm")
+    }
+
+    val refs = buildList {
+        add(post.preview)
+        post.full?.let { add(it) }
+        addAll(post.media)
+    }
+    return refs.any { ref ->
+        isAnimatedRef(
+            mime = ref.mime,
+            location = ref.url ?: ref.localPath,
+        )
     }
 }
 
@@ -638,11 +797,30 @@ private fun StatusRow(coordinator: SearchCoordinator) {
     }
 }
 
+private fun buildSourceAuthErrorMessage(statuses: List<com.theoriacodex.domain.orchestration.SourceRunStatus>): String? {
+    val authSources = statuses
+        .filter { status ->
+            status.state == SourceRunState.FAILED &&
+                (status.failureReason == SourceFailureReason.AUTH_REQUIRED ||
+                    status.failureReason == SourceFailureReason.AUTH_EXPIRED)
+        }
+        .map { it.source.name }
+        .distinct()
+    if (authSources.isEmpty()) return null
+
+    val names = authSources.joinToString(", ")
+    val verb = if (authSources.size == 1) "requires" else "require"
+    return "$names $verb authentication. Connect the account in Settings > Source Accounts."
+}
+
 @Composable
-private fun EmptyBlock(hasPendingChanges: Boolean) {
+private fun EmptyBlock(
+    hasPendingChanges: Boolean,
+    messageOverride: String? = null,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = if (hasPendingChanges) {
+            text = messageOverride ?: if (hasPendingChanges) {
                 "Draft updated. Press Apply to refresh results."
             } else {
                 "No results yet. Add tags or use Explore quick queries."
@@ -658,20 +836,24 @@ private fun EmptyBlock(hasPendingChanges: Boolean) {
 @Composable
 private fun ErrorBlock(
     message: String,
-    onRetry: () -> Unit,
+    onRetry: (() -> Unit)? = null,
+    title: String = "Could not load results",
+    actionLabel: String = "Retry",
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Could not load results", style = MaterialTheme.typography.titleMedium)
+            Text(title, style = MaterialTheme.typography.titleMedium)
             Text(message, style = MaterialTheme.typography.bodySmall)
-            Text(
-                text = "Retry",
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.clickable(onClick = onRetry),
-            )
+            if (onRetry != null) {
+                Text(
+                    text = actionLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.clickable(onClick = onRetry),
+                )
+            }
         }
     }
 }
@@ -713,3 +895,5 @@ private fun buildImageRequest(
     }
     return builder.build()
 }
+
+private const val PAGINATION_PREFETCH_RATIO = 0.8f

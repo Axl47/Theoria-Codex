@@ -45,6 +45,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +64,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.pixiv.PIXIV_UGOIRA_MIME
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -90,6 +92,7 @@ fun ViewerScreen(
     }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val initialIndex = launchContext.startIndex.coerceIn(0, posts.lastIndex)
     val postPagerState = rememberPagerState(
         initialPage = initialIndex,
@@ -339,27 +342,47 @@ fun ViewerScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text("Image actions", style = MaterialTheme.typography.titleMedium)
+                val isCurrentUgoira = currentMedia?.let { media ->
+                    isPixivUgoira(selectedPost, media)
+                } == true
                 TextButton(
                     onClick = {
-                        val didQueueDownload = currentMedia?.let { media ->
-                            enqueueViewerDownload(
-                                context = context,
-                                post = selectedPost,
-                                media = media,
-                                pageIndex = selectedMediaIndex,
-                                totalPages = selectedPostMedia.size,
-                            )
-                        } ?: false
-                        Toast.makeText(
-                            context,
-                            if (didQueueDownload) "Download started" else "Image unavailable",
-                            Toast.LENGTH_SHORT,
-                        ).show()
                         showMediaActionsSheet = false
+                        if (isCurrentUgoira && pixivUgoiraClient != null) {
+                            scope.launch {
+                                val result = pixivUgoiraClient.exportToMp4(
+                                    context = context,
+                                    postId = selectedPost.id.sourcePostId,
+                                    title = selectedPost.title,
+                                )
+                                val message = result.fold(
+                                    onSuccess = { "Saved MP4 to device" },
+                                    onFailure = { error ->
+                                        "Could not export MP4: ${error.message ?: "unknown error"}"
+                                    },
+                                )
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            val didQueueDownload = currentMedia?.let { media ->
+                                enqueueViewerDownload(
+                                    context = context,
+                                    post = selectedPost,
+                                    media = media,
+                                    pageIndex = selectedMediaIndex,
+                                    totalPages = selectedPostMedia.size,
+                                )
+                            } ?: false
+                            Toast.makeText(
+                                context,
+                                if (didQueueDownload) "Download started" else "Image unavailable",
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
                     },
-                    enabled = currentMedia?.url != null,
+                    enabled = (isCurrentUgoira && pixivUgoiraClient != null) || currentMedia?.url != null,
                 ) {
-                    Text("Download image")
+                    Text(if (isCurrentUgoira) "Download MP4" else "Download image")
                 }
             }
         }

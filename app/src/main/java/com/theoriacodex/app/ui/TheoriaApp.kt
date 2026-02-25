@@ -310,6 +310,7 @@ fun TheoriaApp(
                     composable(TopLevelDestination.Search.route) {
                         SearchScreen(
                             coordinator = searchCoordinator,
+                            pixivUgoiraClient = pixivUgoiraClient,
                             onOpenViewer = { posts, context ->
                                 viewerSession = ViewerSession(posts = posts, context = context)
                                 scope.launch { searchCoordinator.setViewerLaunchContext(context) }

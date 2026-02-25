@@ -25,6 +25,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.query.QueryHash
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
 class SearchCoordinator(
@@ -37,6 +38,8 @@ class SearchCoordinator(
     private var runtimeSettings: AppSettings = AppSettings()
     private var hasExecutedSearch = false
     private val appliedByMode = mutableMapOf<String, Query>()
+    private var unifiedNextPageTokens: Map<SourceKey, String?> = emptyMap()
+    private var sourceNextPageToken: String? = null
 
     var draftQuery by mutableStateOf(defaultQuery())
         private set
@@ -54,6 +57,12 @@ class SearchCoordinator(
         private set
 
     var loading by mutableStateOf(false)
+        private set
+
+    var loadingMore by mutableStateOf(false)
+        private set
+
+    var canLoadMore by mutableStateOf(false)
         private set
 
     var errorMessage by mutableStateOf<String?>(null)
@@ -259,6 +268,80 @@ class SearchCoordinator(
         executeSearch()
     }
 
+    suspend fun loadNextPage() {
+        if (loading || loadingMore || !canLoadMore) return
+
+        loadingMore = true
+        errorMessage = null
+        try {
+            val enabledSources = effectiveEnabledSources()
+            when (val mode = appliedQuery.mode) {
+                QueryMode.Unified -> {
+                    val disabledStatuses = availableSources
+                        .filterNot { it in enabledSources }
+                        .map { source ->
+                            SourceRunStatus(
+                                source = source,
+                                state = SourceRunState.EXCLUDED,
+                                errorMessage = "Disabled in settings",
+                            )
+                        }
+                    if (enabledSources.isEmpty()) {
+                        canLoadMore = false
+                        statuses = disabledStatuses
+                        return
+                    }
+
+                    val pageableSources = enabledSources.filterTo(mutableSetOf()) { source ->
+                        !unifiedNextPageTokens[source].isNullOrBlank()
+                    }
+                    if (pageableSources.isEmpty()) {
+                        canLoadMore = false
+                        return
+                    }
+
+                    val result = registry.unifiedOrchestrator().search(
+                        query = appliedQuery,
+                        enabledSources = pageableSources,
+                        pageTokens = unifiedNextPageTokens.filterKeys { it in pageableSources },
+                        weights = effectiveWeights(pageableSources),
+                    )
+                    results = mergeResults(results, result.items)
+                    statuses = (result.statuses + disabledStatuses)
+                        .distinctBy { it.source }
+                        .sortedBy { it.source.name }
+                    unifiedNextPageTokens = unifiedNextPageTokens.toMutableMap().apply {
+                        putAll(result.nextPageTokens)
+                    }
+                    canLoadMore = unifiedNextPageTokens.values.any { !it.isNullOrBlank() }
+                }
+
+                is QueryMode.Source -> {
+                    val token = sourceNextPageToken
+                    if (token.isNullOrBlank()) {
+                        canLoadMore = false
+                        return
+                    }
+                    val adapter = requireNotNull(registry.adapterFor(mode.source)) {
+                        "No adapter for ${mode.source}"
+                    }
+                    val page = adapter.search(appliedQuery, pageToken = token)
+                    results = mergeResults(results, page.items)
+                    statuses = listOf(SourceRunStatus(mode.source, state = SourceRunState.SUCCESS))
+                    sourceNextPageToken = page.nextPageToken
+                    canLoadMore = !sourceNextPageToken.isNullOrBlank()
+                }
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            errorMessage = error.message ?: "Could not load more results"
+            canLoadMore = false
+        } finally {
+            loadingMore = false
+        }
+    }
+
     suspend fun persistSearchScrollState(index: Int, offsetPx: Int) {
         val hash = appliedQueryHash
         uiRestoreRepository.setSearchScrollState(
@@ -296,7 +379,13 @@ class SearchCoordinator(
     }
 
     private suspend fun executeSearch() {
+        val previousResults = results
+        val previousStatuses = statuses
         loading = true
+        loadingMore = false
+        canLoadMore = false
+        unifiedNextPageTokens = emptyMap()
+        sourceNextPageToken = null
         errorMessage = null
         statuses = emptyList()
 
@@ -329,6 +418,8 @@ class SearchCoordinator(
                     statuses = (result.statuses + disabledStatuses)
                         .distinctBy { it.source }
                         .sortedBy { it.source.name }
+                    unifiedNextPageTokens = result.nextPageTokens
+                    canLoadMore = unifiedNextPageTokens.values.any { !it.isNullOrBlank() }
                 }
 
                 is QueryMode.Source -> {
@@ -360,15 +451,40 @@ class SearchCoordinator(
                     val page = adapter.search(appliedQuery, pageToken = null)
                     results = page.items
                     statuses = listOf(SourceRunStatus(mode.source, state = SourceRunState.SUCCESS))
+                    sourceNextPageToken = page.nextPageToken
+                    canLoadMore = !sourceNextPageToken.isNullOrBlank()
                 }
             }
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Throwable) {
-            results = emptyList()
+            results = previousResults
+            statuses = previousStatuses
             errorMessage = error.message ?: "Unknown error"
+            canLoadMore = false
         } finally {
             hasExecutedSearch = true
             loading = false
         }
+    }
+
+    private fun mergeResults(
+        current: List<Post>,
+        next: List<Post>,
+    ): List<Post> {
+        if (next.isEmpty()) return current
+        if (current.isEmpty()) return next
+
+        val seen = current
+            .mapTo(mutableSetOf()) { "${it.id.source.name}:${it.id.sourcePostId}" }
+        val merged = current.toMutableList()
+        next.forEach { post ->
+            val key = "${post.id.source.name}:${post.id.sourcePostId}"
+            if (seen.add(key)) {
+                merged += post
+            }
+        }
+        return merged
     }
 
     private fun modeKey(mode: QueryMode): String {
