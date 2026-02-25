@@ -36,6 +36,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Image
@@ -513,16 +514,29 @@ fun SearchScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    IconButton(
-                        onClick = {
-                            selectedActionPost = null
-                            onSaveToDevice(post)
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = "Save to device",
-                        )
+                    Row {
+                        IconButton(
+                            onClick = {
+                                selectedActionPost = null
+                                onSaveToDevice(post)
+                            },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = "Save to device",
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                selectedActionPost = null
+                                onRequestSaveToCodex(post)
+                            },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.BookmarkAdd,
+                                contentDescription = "Save to Codex",
+                            )
+                        }
                     }
                     Row {
                         IconButton(
@@ -566,15 +580,6 @@ fun SearchScreen(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                TextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = {
-                        selectedActionPost = null
-                        onRequestSaveToCodex(post)
-                    },
-                ) {
-                    Text("Save to Codex")
-                }
                 TextButton(
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { selectedActionPost = null },
