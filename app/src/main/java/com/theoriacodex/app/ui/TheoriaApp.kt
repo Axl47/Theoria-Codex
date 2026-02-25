@@ -46,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -111,6 +112,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import kotlin.math.min
 
 enum class TopLevelDestination(val route: String, val label: String) {
     Search("search", "Search"),
@@ -422,8 +424,14 @@ fun TheoriaApp(
     val currentRoute = currentDestination?.route
     val showBottomBar = currentRoute in TopLevelDestination.entries.map { it.route }.toSet()
     val currentContext = LocalContext.current
+    val configuration = LocalConfiguration.current
     val hostActivity = remember(currentContext) { currentContext.findActivity() }
     val lifecycleOwner = LocalLifecycleOwner.current
+    val shortEdgeDp = remember(configuration.screenWidthDp, configuration.screenHeightDp) {
+        min(configuration.screenWidthDp, configuration.screenHeightDp)
+    }
+    val bottomBarHeight = if (shortEdgeDp >= LARGE_DEVICE_SHORT_EDGE_DP) 64.dp else 58.dp
+    val bottomBarIconSize = if (shortEdgeDp >= LARGE_DEVICE_SHORT_EDGE_DP) 24.dp else 20.dp
 
     LaunchedEffect(currentRoute) {
         if (currentRoute in TopLevelDestination.entries.map { it.route }) {
@@ -550,7 +558,7 @@ fun TheoriaApp(
                 bottomBar = {
                     if (showBottomBar) {
                         NavigationBar(
-                            modifier = Modifier.height(58.dp),
+                            modifier = Modifier.height(bottomBarHeight),
                         ) {
                             TopLevelDestination.entries.forEach { destination ->
                                 val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
@@ -575,7 +583,7 @@ fun TheoriaApp(
                                         Icon(
                                             imageVector = icon,
                                             contentDescription = destination.label,
-                                            modifier = Modifier.size(20.dp),
+                                            modifier = Modifier.size(bottomBarIconSize),
                                         )
                                     },
                                     label = null,
@@ -1019,3 +1027,4 @@ private fun loadSeedTagSuggestions(context: Context): Map<SourceKey, List<TagSug
 }
 
 private const val PIXIV_TOKEN_REFRESH_TIMEOUT_MS = 6_000L
+private const val LARGE_DEVICE_SHORT_EDGE_DP = 420
