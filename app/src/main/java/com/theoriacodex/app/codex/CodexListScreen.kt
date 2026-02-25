@@ -51,7 +51,6 @@ fun CodexListScreen(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Codex", style = MaterialTheme.typography.titleLarge)
             TextButton(onClick = { showCreateDialog = true }) {
