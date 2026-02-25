@@ -120,6 +120,7 @@ fun ViewerScreen(
     var showMediaActionsSheet by remember { mutableStateOf(false) }
     var interactionSerial by remember { mutableIntStateOf(0) }
     var lastViewerPaginationRequestSize by remember(posts.size) { mutableIntStateOf(-1) }
+    val loadedMediaUrls = remember { mutableStateMapOf<String, Boolean>() }
     val currentPostIndex = postPagerState.currentPage.coerceIn(0, posts.lastIndex)
     val selectedPost = posts[currentPostIndex]
     val selectedPostMedia = remember(selectedPost) { viewerMediaItems(selectedPost) }
@@ -280,10 +281,6 @@ fun ViewerScreen(
                     val imageModel = remember(context, activeImageUrl, post.id.source) {
                         activeImageUrl?.let { buildViewerImageRequest(context, it, post.id.source) }
                     }
-                    LaunchedEffect(activeImageUrl) {
-                        imageLoading = activeImageUrl != null
-                        imageLoadFailed = false
-                    }
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -312,11 +309,12 @@ fun ViewerScreen(
                                 onSuccess = {
                                     imageLoading = false
                                     imageLoadFailed = false
+                                    activeImageUrl?.let { loadedMediaUrls[it] = true }
                                 },
                                 onError = {
                                     if (imageCandidateIndex < imageCandidates.lastIndex) {
                                         imageCandidateIndex += 1
-                                        imageLoading = true
+                                        imageLoading = false
                                         imageLoadFailed = false
                                     } else {
                                         imageLoading = false
@@ -324,7 +322,8 @@ fun ViewerScreen(
                                     }
                                 },
                             )
-                            if (imageLoading) {
+                            val alreadyLoaded = activeImageUrl?.let { loadedMediaUrls[it] == true } == true
+                            if (imageLoading && !alreadyLoaded) {
                                 CircularProgressIndicator()
                             }
                             if (imageLoadFailed) {
