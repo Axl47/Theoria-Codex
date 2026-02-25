@@ -607,12 +607,19 @@ fun TheoriaApp(
                         }
                     }
                 }
-            } else if (awaitingInstallerReturn) {
+            } else if (awaitingInstallerReturn && remote != null) {
                 scope.launch {
-                    awaitingInstallerReturn = false
-                    pendingInstallRemote = null
-                    startupActionLocked = false
-                    continueAfterUpdateFailure("Update was not completed. Continuing with current app.")
+                    val installedNow = installedAppVersionCode(appContext)
+                    if (installedNow >= remote.versionCode) {
+                        awaitingInstallerReturn = false
+                        pendingInstallRemote = null
+                        startupActionLocked = false
+                        startupUpdateState = StartupUpdateState.NoUpdate
+                        startupStatusMessage = "Update installed. Loading app..."
+                        completeAppStartup()
+                    } else {
+                        startupStatusMessage = "Installer opened. Complete update to continue, or continue without updating."
+                    }
                 }
             }
         }
@@ -699,6 +706,22 @@ fun TheoriaApp(
                         CircularProgressIndicator()
                     }
                     Text(startupStatusMessage)
+                    if (awaitingInstallerReturn) {
+                        TextButton(
+                            onClick = {
+                                scope.launch {
+                                    awaitingInstallerReturn = false
+                                    pendingInstallRemote = null
+                                    startupActionLocked = false
+                                    continueAfterUpdateFailure(
+                                        "Update was not completed. Continuing with current app.",
+                                    )
+                                }
+                            },
+                        ) {
+                            Text("Continue current version")
+                        }
+                    }
                 }
             }
         } else {

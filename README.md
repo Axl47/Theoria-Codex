@@ -51,6 +51,7 @@ Previously completed MVP slices remain in place:
 - Startup updater now prompts user choice when a new build is detected (`Yes`, `No`, `Remind Later`): `No` skips that release until a newer one, `Remind Later` snoozes that release for 24h, and `Yes` runs the existing startup-blocking install flow; prompt includes sectioned changelog data parsed from GitHub release notes (`Highlights`, `New`, `Improvements`, `Fixes`, `Known Issues`) with scope-grouped bullets when conventional commit scopes are present
 - After completing an update install, first launch now shows a one-time “What’s new” dialog that includes every release newer than the previously installed version (oldest to newest), with the current installed version shown last and labeled `(Current)`, then clears after dismissal
 - Settings now includes an `Updates` section with an `Open changelog` action that loads prerelease history and shows all available release notes; release titles use the published release name (for example `v0.1.9`) and the installed build is marked as `(Current)`
+- During installer handoff, startup no longer auto-falls back immediately on transient resumes; it waits for confirmed install completion, and offers an explicit `Continue current version` action if the user decides not to finish installing
 - File-backed persistence for query/settings/cache/codex/UI restore state
 The project now includes a runnable portrait-locked Android MVP with four top-level tabs:
 
