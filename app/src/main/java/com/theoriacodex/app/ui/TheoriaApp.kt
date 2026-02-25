@@ -133,6 +133,7 @@ import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -520,13 +521,17 @@ fun TheoriaApp(
             return@LaunchedEffect
         }
 
-        val resolved = runCatching {
+        val resolved = try {
             adapter.resolvePost(PostId(source = SourceKey.PIXIV, sourcePostId = postId))
-        }.getOrElse { error ->
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
             val message = error.message ?: "Could not open Pixiv URL"
             Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
-            null
-        } ?: run {
+            return@LaunchedEffect
+        }
+
+        if (resolved == null) {
             Toast.makeText(appContext, "Pixiv post was not found", Toast.LENGTH_SHORT).show()
             return@LaunchedEffect
         }
@@ -1449,28 +1454,20 @@ private fun openInBrowser(context: Context, url: String) {
 private fun parsePixivPostIdFromUri(uri: Uri): String? {
     val scheme = uri.scheme?.lowercase().orEmpty()
     val host = uri.host?.lowercase().orEmpty()
-
-    if (scheme == "pixiv") {
-        uri.getQueryParameter("illust_id")?.takeIf(String::isDigitsOnly)?.let { return it }
-        uri.pathSegments.firstOrNull(String::isDigitsOnly)?.let { return it }
-        return null
-    }
-
-    if (scheme != "https" && scheme != "http") return null
-    if (host != "pixiv.net" && host != "www.pixiv.net" && !host.endsWith(".pixiv.net")) return null
-
+    if (scheme != "https") return null
+    if (host != "www.pixiv.com") return null
     val pathSegments = uri.pathSegments
-    val artworksIndex = pathSegments.indexOf("artworks")
-    if (artworksIndex >= 0) {
-        pathSegments.getOrNull(artworksIndex + 1)?.takeIf(String::isDigitsOnly)?.let { return it }
-    }
-
-    uri.getQueryParameter("illust_id")?.takeIf(String::isDigitsOnly)?.let { return it }
-    return null
+    if (pathSegments.size != 3) return null
+    if (!pathSegments[0].isTwoLetterLocale() || pathSegments[1] != "artworks") return null
+    return pathSegments[2].takeIf(String::isDigitsOnly)
 }
 
 private fun String.isDigitsOnly(): Boolean {
     return isNotBlank() && all { it.isDigit() }
+}
+
+private fun String.isTwoLetterLocale(): Boolean {
+    return length == 2 && all { it.isLetter() }
 }
 
 @Composable

@@ -45,7 +45,7 @@ Previously completed MVP slices remain in place:
 - App branding now uses custom launcher icon resources and a shared splash mark shown during startup loading and Search pre-query empty state
 - Tag seeder script now supports direct Pixiv tag-page ingestion via `--pixiv-tags-url` (with HTML fallback via `--pixiv-tags-html`)
 - Viewer now prefetches up to three media items on both sides of the current position and can trigger `load next page` while still inside Viewer for live Search sessions (including animated-only Viewer sessions)
-- The app now accepts external Pixiv post URLs (`pixiv.net/artworks/...`, `member_illust.php?illust_id=...`, and `pixiv://illusts/...`) and opens them directly into Viewer after resolving the post in-app
+- The app now accepts external Pixiv post URLs in `https://www.pixiv.com/<locale>/artworks/<id>` format (two-letter locale, for example `en`, `ja`) and opens them directly into Viewer after resolving the post in-app
 - Orientation is now route-aware: app surfaces are portrait-only, while Viewer supports landscape rotation
 - In landscape Viewer, media now renders edge-to-edge (no card/page inset margins), and ugoira progress is drawn inside the media at the bottom edge
 - Startup now includes a GitHub Releases updater path for `main` prereleases: checks on launch, downloads fixed asset `theoria-codex-main.apk` when newer `main-vc<versionCode>-<sha>` builds exist, validates package/signature/version, and opens Android installer (with unknown-sources handoff + fallback to current app on failure)
