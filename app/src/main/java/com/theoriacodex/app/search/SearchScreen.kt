@@ -102,6 +102,8 @@ fun SearchScreen(
     coordinator: SearchCoordinator,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     onOpenViewer: (List<Post>, ViewerLaunchContext, Boolean) -> Unit,
+    onApplySearch: () -> Unit,
+    onRetrySearch: () -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
 ) {
@@ -205,6 +207,9 @@ fun SearchScreen(
     }
     val sourceAuthErrorMessage = remember(coordinator.statuses) {
         buildSourceAuthErrorMessage(coordinator.statuses)
+    }
+    val sourceFailureMessage = remember(coordinator.statuses) {
+        buildSourceFailureMessage(coordinator.statuses)
     }
     val clearFocusInteraction = remember { MutableInteractionSource() }
     val showSearchControls = searchFieldFocused ||
@@ -334,7 +339,7 @@ fun SearchScreen(
                         }
                         TextButton(onClick = {
                             focusManager.clearFocus()
-                            scope.launch { coordinator.applyDraft() }
+                            onApplySearch()
                         }) {
                             Text("Apply")
                         }
@@ -370,7 +375,7 @@ fun SearchScreen(
                             message = coordinator.errorMessage.orEmpty(),
                             onRetry = {
                                 focusManager.clearFocus()
-                                scope.launch { coordinator.retry() }
+                                onRetrySearch()
                             },
                         )
                     }
@@ -389,6 +394,15 @@ fun SearchScreen(
                                 ErrorBlock(
                                     title = "Source account required",
                                     message = authMessage,
+                                )
+                            }
+                            sourceFailureMessage?.let { failureMessage ->
+                                ErrorBlock(
+                                    message = failureMessage,
+                                    onRetry = {
+                                        focusManager.clearFocus()
+                                        onRetrySearch()
+                                    },
                                 )
                             }
                             if (!coordinator.hasAnySearchRun && !animatedOnly) {
@@ -1013,6 +1027,31 @@ private fun buildSourceAuthErrorMessage(statuses: List<com.theoriacodex.domain.o
     val names = authSources.joinToString(", ")
     val verb = if (authSources.size == 1) "requires" else "require"
     return "$names $verb authentication. Connect the account in Settings > Source Accounts."
+}
+
+private fun buildSourceFailureMessage(statuses: List<com.theoriacodex.domain.orchestration.SourceRunStatus>): String? {
+    val failures = statuses.filter { status ->
+        status.state == SourceRunState.FAILED &&
+            status.failureReason != SourceFailureReason.AUTH_REQUIRED &&
+            status.failureReason != SourceFailureReason.AUTH_EXPIRED
+    }
+    if (failures.isEmpty()) return null
+
+    val details = failures.take(3).map { status ->
+        val reason = status.failureReason
+            ?.name
+            ?.replace('_', ' ')
+            ?.lowercase()
+            ?.replaceFirstChar { it.uppercase() }
+        val rawMessage = status.errorMessage?.trim().orEmpty()
+        when {
+            rawMessage.isNotBlank() -> "${status.source.name}: $rawMessage"
+            reason != null -> "${status.source.name}: $reason"
+            else -> "${status.source.name}: Request failed"
+        }
+    }
+    val suffix = if (failures.size > 3) "\n+${failures.size - 3} more source errors" else ""
+    return details.joinToString(separator = "\n") + suffix
 }
 
 @Composable

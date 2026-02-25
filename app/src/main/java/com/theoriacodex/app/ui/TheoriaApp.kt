@@ -770,6 +770,16 @@ fun TheoriaApp(
                             onSaveToDevice = { post ->
                                 requestSaveToDevice(post)
                             },
+                            onApplySearch = {
+                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                    searchCoordinator.applyDraft()
+                                }
+                            },
+                            onRetrySearch = {
+                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                    searchCoordinator.retry()
+                                }
+                            },
                         )
                     }
                     composable(TopLevelDestination.Explore.route) {
