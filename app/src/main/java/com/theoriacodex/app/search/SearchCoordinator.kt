@@ -77,6 +77,9 @@ class SearchCoordinator(
     val hasPendingChanges: Boolean
         get() = draftQuery != appliedQuery
 
+    val hasAnySearchRun: Boolean
+        get() = hasExecutedSearch
+
     val enabledSourceCount: Int
         get() = effectiveEnabledSources().size
 

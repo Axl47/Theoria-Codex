@@ -1,6 +1,7 @@
 package com.theoriacodex.app.viewer
 
 import android.app.DownloadManager
+import android.content.res.Configuration
 import android.content.Context
 import android.net.Uri
 import android.os.Environment
@@ -53,6 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -73,6 +75,9 @@ fun ViewerScreen(
     posts: List<Post>,
     launchContext: ViewerLaunchContext,
     pixivUgoiraClient: PixivUgoiraClient? = null,
+    canLoadMoreFromSource: Boolean = false,
+    loadingMoreFromSource: Boolean = false,
+    onLoadMoreFromSource: (() -> Unit)? = null,
     onDismiss: () -> Unit,
     onSave: (Post) -> Unit,
     onOpenInBrowser: (Post) -> Unit,
@@ -93,6 +98,8 @@ fun ViewerScreen(
     }
 
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val scope = rememberCoroutineScope()
     val initialIndex = launchContext.startIndex.coerceIn(0, posts.lastIndex)
     val postPagerState = rememberPagerState(
@@ -106,18 +113,30 @@ fun ViewerScreen(
     var showInfoSheet by remember { mutableStateOf(false) }
     var showMediaActionsSheet by remember { mutableStateOf(false) }
     var interactionSerial by remember { mutableIntStateOf(0) }
+    var lastViewerPaginationRequestSize by remember(posts.size) { mutableIntStateOf(-1) }
     val currentPostIndex = postPagerState.currentPage.coerceIn(0, posts.lastIndex)
     val selectedPost = posts[currentPostIndex]
     val selectedPostMedia = remember(selectedPost) { viewerMediaItems(selectedPost) }
     val selectedMediaIndex = (mediaIndexByPost[currentPostIndex] ?: 0).coerceIn(0, selectedPostMedia.lastIndex)
 
     LaunchedEffect(posts, currentPostIndex, selectedMediaIndex) {
-        val queue = buildPrefetchQueue(
+        val forwardQueue = buildPrefetchQueue(
             posts = posts,
             currentPostIndex = currentPostIndex,
             currentMediaIndex = selectedMediaIndex,
-            limit = VIEWER_PREFETCH_COUNT,
+            limit = VIEWER_PREFETCH_RIGHT_COUNT,
+            direction = 1,
         )
+        val backwardQueue = buildPrefetchQueue(
+            posts = posts,
+            currentPostIndex = currentPostIndex,
+            currentMediaIndex = selectedMediaIndex,
+            limit = VIEWER_PREFETCH_LEFT_COUNT,
+            direction = -1,
+        )
+        val queue = (forwardQueue + backwardQueue).distinctBy { candidate ->
+            "${candidate.post.id.source.name}:${candidate.post.id.sourcePostId}:${candidate.media.url ?: candidate.media.localPath}"
+        }
         val imageLoader = context.imageLoader
         queue.forEach { candidate ->
             val data = candidate.media.localPath
@@ -133,6 +152,18 @@ fun ViewerScreen(
                 sourceKey = candidate.post.id.source,
             )
             imageLoader.enqueue(request)
+        }
+    }
+
+    LaunchedEffect(posts.size, currentPostIndex, canLoadMoreFromSource, loadingMoreFromSource, onLoadMoreFromSource) {
+        if (onLoadMoreFromSource == null) return@LaunchedEffect
+        if (loadingMoreFromSource || !canLoadMoreFromSource) return@LaunchedEffect
+        val triggerIndex = ((posts.lastIndex.coerceAtLeast(0)) * VIEWER_PAGINATION_PREFETCH_RATIO)
+            .toInt()
+            .coerceAtLeast(0)
+        if (currentPostIndex >= triggerIndex && lastViewerPaginationRequestSize != posts.size) {
+            lastViewerPaginationRequestSize = posts.size
+            onLoadMoreFromSource.invoke()
         }
     }
 
@@ -188,8 +219,12 @@ fun ViewerScreen(
                 state = mediaPagerState,
                 userScrollEnabled = viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(vertical = 40.dp),
-                pageSpacing = 8.dp,
+                contentPadding = if (isLandscape) {
+                    PaddingValues(0.dp)
+                } else {
+                    PaddingValues(vertical = 40.dp)
+                },
+                pageSpacing = if (isLandscape) 0.dp else 8.dp,
             ) { mediaPage ->
                 val media = postMedia[mediaPage]
                 val transformState = rememberTransformableState { zoomChange, panChange, _ ->
@@ -238,7 +273,7 @@ fun ViewerScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(16.dp),
+                            .padding(if (isLandscape) 0.dp else 16.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         val showUgoira = isPixivUgoira(post, media) && pixivUgoiraClient != null
@@ -443,25 +478,39 @@ private fun buildPrefetchQueue(
     currentPostIndex: Int,
     currentMediaIndex: Int,
     limit: Int,
+    direction: Int,
 ): List<PrefetchCandidate> {
-    if (posts.isEmpty() || limit <= 0) return emptyList()
+    if (posts.isEmpty() || limit <= 0 || direction == 0) return emptyList()
 
     val queue = mutableListOf<PrefetchCandidate>()
     var postIndex = currentPostIndex
-    var mediaIndex = currentMediaIndex + 1
+    var mediaIndex = if (direction > 0) currentMediaIndex + 1 else currentMediaIndex - 1
 
-    while (postIndex <= posts.lastIndex && queue.size < limit) {
+    while (postIndex in posts.indices && queue.size < limit) {
         val post = posts[postIndex]
         val mediaItems = viewerMediaItems(post)
-        while (mediaIndex <= mediaItems.lastIndex && queue.size < limit) {
-            val media = mediaItems[mediaIndex]
-            if (!isPixivUgoira(post, media)) {
-                queue += PrefetchCandidate(post = post, media = media)
+        if (direction > 0) {
+            while (mediaIndex <= mediaItems.lastIndex && queue.size < limit) {
+                val media = mediaItems[mediaIndex]
+                if (!isPixivUgoira(post, media)) {
+                    queue += PrefetchCandidate(post = post, media = media)
+                }
+                mediaIndex += 1
             }
-            mediaIndex += 1
+            postIndex += 1
+            mediaIndex = 0
+        } else {
+            while (mediaIndex >= 0 && queue.size < limit) {
+                val media = mediaItems[mediaIndex]
+                if (!isPixivUgoira(post, media)) {
+                    queue += PrefetchCandidate(post = post, media = media)
+                }
+                mediaIndex -= 1
+            }
+            postIndex -= 1
+            if (postIndex !in posts.indices) break
+            mediaIndex = viewerMediaItems(posts[postIndex]).lastIndex
         }
-        postIndex += 1
-        mediaIndex = 0
     }
 
     return queue
@@ -550,7 +599,9 @@ private fun String.sanitizeFileName(): String {
     return cleaned.ifBlank { "image" }
 }
 
-private const val VIEWER_PREFETCH_COUNT = 3
+private const val VIEWER_PREFETCH_LEFT_COUNT = 3
+private const val VIEWER_PREFETCH_RIGHT_COUNT = 3
+private const val VIEWER_PAGINATION_PREFETCH_RATIO = 0.8f
 
 @Composable
 private fun ViewerChrome(

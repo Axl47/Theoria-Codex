@@ -1,11 +1,21 @@
 package com.theoriacodex.app.ui
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.app.DownloadManager
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
 import android.net.Uri
+import android.os.Environment
+import android.webkit.URLUtil
+import android.widget.Toast
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -22,6 +32,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -34,7 +45,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.R
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -73,6 +86,7 @@ import com.theoriacodex.sources.RealAdapterRegistry
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import com.theoriacodex.sources.pixiv.PixivAuthApi
+import com.theoriacodex.sources.pixiv.PIXIV_UGOIRA_MIME
 import java.io.File
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
@@ -97,6 +111,8 @@ private object AppRoute {
 private data class ViewerSession(
     val posts: List<Post>,
     val context: ViewerLaunchContext,
+    val liveSearchBinding: Boolean = false,
+    val searchAnimatedOnly: Boolean = false,
 )
 
 @Composable
@@ -193,6 +209,28 @@ fun TheoriaApp(
         }
     }
 
+    fun requestSaveToDevice(post: Post) {
+        scope.launch {
+            val resultLabel = if (isPixivUgoiraPost(post)) {
+                pixivUgoiraClient.exportToMp4(
+                    context = appContext,
+                    postId = post.id.sourcePostId,
+                    title = post.title,
+                ).fold(
+                    onSuccess = { "Saved video to device" },
+                    onFailure = { "Could not save video" },
+                )
+            } else {
+                if (enqueuePostDownload(appContext, post)) {
+                    "Download queued"
+                } else {
+                    "Could not queue download"
+                }
+            }
+            Toast.makeText(appContext, resultLabel, Toast.LENGTH_SHORT).show()
+        }
+    }
+
     LaunchedEffect(Unit) {
         searchCoordinator.initialize()
         refreshSourceAccountState()
@@ -244,6 +282,8 @@ fun TheoriaApp(
     val currentDestination = backStackEntry?.destination
     val currentRoute = currentDestination?.route
     val showBottomBar = currentRoute in TopLevelDestination.entries.map { it.route }.toSet()
+    val currentContext = LocalContext.current
+    val hostActivity = remember(currentContext) { currentContext.findActivity() }
 
     LaunchedEffect(currentRoute) {
         if (currentRoute in TopLevelDestination.entries.map { it.route }) {
@@ -253,12 +293,52 @@ fun TheoriaApp(
         }
     }
 
+    DisposableEffect(hostActivity, currentRoute) {
+        hostActivity?.requestedOrientation = if (currentRoute == AppRoute.Viewer) {
+            ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+        onDispose {
+            hostActivity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+    }
+
+    LaunchedEffect(
+        searchCoordinator.results,
+        searchCoordinator.appliedQueryHash,
+        viewerSession?.context?.streamSource,
+        viewerSession?.liveSearchBinding,
+        viewerSession?.searchAnimatedOnly,
+    ) {
+        val session = viewerSession ?: return@LaunchedEffect
+        if (!session.liveSearchBinding) return@LaunchedEffect
+        if (session.context.streamSource != ViewerStreamSource.SEARCH) return@LaunchedEffect
+        if (session.context.queryHash != searchCoordinator.appliedQueryHash) return@LaunchedEffect
+
+        val incomingForViewer = if (session.searchAnimatedOnly) {
+            searchCoordinator.results.filter(::isAnimatedSearchPost)
+        } else {
+            searchCoordinator.results
+        }
+        val merged = mergeViewerPosts(session.posts, incomingForViewer)
+        if (merged.size != session.posts.size) {
+            viewerSession = session.copy(posts = merged)
+        }
+    }
+
     TheoriaNightTheme {
         if (!navReady) {
-            Box(
+            Column(
                 modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                Image(
+                    painter = painterResource(id = R.drawable.theoria_splash_mark),
+                    contentDescription = "Theoria splash",
+                    modifier = Modifier.size(180.dp),
+                )
                 CircularProgressIndicator()
             }
         } else {
@@ -311,10 +391,22 @@ fun TheoriaApp(
                         SearchScreen(
                             coordinator = searchCoordinator,
                             pixivUgoiraClient = pixivUgoiraClient,
-                            onOpenViewer = { posts, context ->
-                                viewerSession = ViewerSession(posts = posts, context = context)
+                            onOpenViewer = { posts, context, animatedOnly ->
+                                viewerSession = ViewerSession(
+                                    posts = posts,
+                                    context = context,
+                                    liveSearchBinding = true,
+                                    searchAnimatedOnly = animatedOnly,
+                                )
                                 scope.launch { searchCoordinator.setViewerLaunchContext(context) }
                                 navController.navigate(AppRoute.Viewer)
+                            },
+                            onRequestSaveToCodex = { post ->
+                                pendingSavePost = post
+                                showSaveSheet = true
+                            },
+                            onSaveToDevice = { post ->
+                                requestSaveToDevice(post)
                             },
                         )
                     }
@@ -372,7 +464,7 @@ fun TheoriaApp(
                                     streamSource = ViewerStreamSource.CODEX,
                                     scrollOffsetHint = 0,
                                 )
-                                viewerSession = ViewerSession(posts = posts, context = context)
+                                viewerSession = ViewerSession(posts = posts, context = context, liveSearchBinding = false)
                                 scope.launch { uiRestoreRepository.setViewerLaunchContext(context) }
                                 navController.navigate(AppRoute.Viewer)
                             },
@@ -384,6 +476,9 @@ fun TheoriaApp(
                                         sourcePostId = post.id.sourcePostId,
                                     )
                                 }
+                            },
+                            onSavePostToDevice = { post ->
+                                requestSaveToDevice(post)
                             },
                             onBack = {
                                 navController.popBackStack()
@@ -479,6 +574,13 @@ fun TheoriaApp(
                                 posts = session.posts,
                                 launchContext = session.context,
                                 pixivUgoiraClient = pixivUgoiraClient,
+                                canLoadMoreFromSource = session.liveSearchBinding && searchCoordinator.canLoadMore,
+                                loadingMoreFromSource = searchCoordinator.loadingMore,
+                                onLoadMoreFromSource = if (session.liveSearchBinding) {
+                                    { scope.launch { searchCoordinator.loadNextPage() } }
+                                } else {
+                                    null
+                                },
                                 onDismiss = {
                                     scope.launch { searchCoordinator.setViewerLaunchContext(null) }
                                     navController.popBackStack()
@@ -548,6 +650,119 @@ private fun openInBrowser(context: Context, url: String) {
         }
         context.startActivity(intent)
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
+private fun isPixivUgoiraPost(post: Post): Boolean {
+    if (post.id.source != SourceKey.PIXIV) return false
+    if (post.full?.mime == PIXIV_UGOIRA_MIME) return true
+    return post.media.any { media -> media.mime == PIXIV_UGOIRA_MIME }
+}
+
+private fun isAnimatedSearchPost(post: Post): Boolean {
+    if (isPixivUgoiraPost(post)) return true
+
+    fun isAnimatedRef(mime: String?, location: String?): Boolean {
+        val normalizedMime = mime?.lowercase()
+        if (
+            normalizedMime == "image/gif" ||
+            normalizedMime == "video/mp4" ||
+            normalizedMime == "video/webm"
+        ) {
+            return true
+        }
+        val normalizedLocation = location
+            ?.substringBefore('?')
+            ?.lowercase()
+            .orEmpty()
+        return normalizedLocation.endsWith(".gif") ||
+            normalizedLocation.endsWith(".mp4") ||
+            normalizedLocation.endsWith(".webm")
+    }
+
+    val refs = buildList {
+        add(post.preview)
+        post.full?.let { add(it) }
+        addAll(post.media)
+    }
+    return refs.any { ref ->
+        isAnimatedRef(
+            mime = ref.mime,
+            location = ref.url ?: ref.localPath,
+        )
+    }
+}
+
+private fun enqueuePostDownload(context: Context, post: Post): Boolean {
+    val media = buildList {
+        addAll(post.media)
+        post.full?.let { add(it) }
+        add(post.preview)
+    }.firstOrNull { ref ->
+        !ref.url.isNullOrBlank()
+    } ?: return false
+
+    val url = media.url ?: return false
+    val request = DownloadManager.Request(Uri.parse(url))
+        .setAllowedOverMetered(true)
+        .setAllowedOverRoaming(true)
+        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        .setMimeType(media.mime)
+    if (post.id.source == SourceKey.PIXIV) {
+        request
+            .addRequestHeader("Referer", "https://www.pixiv.net/")
+            .addRequestHeader("User-Agent", "Mozilla/5.0")
+    }
+
+    val guessedName = URLUtil.guessFileName(url, null, media.mime)
+    val extension = guessedName.substringAfterLast('.', "")
+    val base = post.title
+        ?.trim()
+        ?.replace(Regex("[^A-Za-z0-9._-]+"), "_")
+        ?.trim('_')
+        ?.takeIf { it.isNotBlank() }
+        ?: "${post.id.source.name.lowercase()}_${post.id.sourcePostId}"
+    val fileName = if (extension.isNotBlank()) "$base.$extension" else base
+    request.setTitle(fileName)
+    request.setDescription(post.pageUrl ?: "Saved from Theoria Codex")
+    runCatching {
+        request.setDestinationInExternalPublicDir(
+            Environment.DIRECTORY_DOWNLOADS,
+            "TheoriaCodex/$fileName",
+        )
+    }.onFailure {
+        request.setDestinationInExternalFilesDir(
+            context,
+            Environment.DIRECTORY_DOWNLOADS,
+            fileName,
+        )
+    }
+
+    val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager ?: return false
+    return runCatching {
+        manager.enqueue(request)
+        true
+    }.getOrElse { false }
+}
+
+private fun mergeViewerPosts(current: List<Post>, incoming: List<Post>): List<Post> {
+    if (incoming.isEmpty()) return current
+    if (current.isEmpty()) return incoming
+    val seen = current
+        .mapTo(mutableSetOf()) { post -> "${post.id.source.name}:${post.id.sourcePostId}" }
+    val merged = current.toMutableList()
+    incoming.forEach { post ->
+        val key = "${post.id.source.name}:${post.id.sourcePostId}"
+        if (seen.add(key)) {
+            merged += post
+        }
+    }
+    return merged
 }
 
 private fun loadSeedTagSuggestions(context: Context): Map<SourceKey, List<TagSuggestion>> {

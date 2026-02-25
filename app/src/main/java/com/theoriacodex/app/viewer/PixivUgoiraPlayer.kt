@@ -16,7 +16,7 @@ import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.CircularProgressIndicator
@@ -654,18 +654,18 @@ fun PixivUgoiraPlayer(
     }
 
     val progress = (elapsedInLoopMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)
-    Column(modifier = modifier) {
+    Box(modifier = modifier) {
         Image(
             bitmap = frame.bitmap.asImageBitmap(),
             contentDescription = contentDescription,
             modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxSize(),
             contentScale = contentScale,
         )
         LinearProgressIndicator(
             progress = { progress },
             modifier = Modifier
+                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .height(3.dp),
             trackColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.18f),

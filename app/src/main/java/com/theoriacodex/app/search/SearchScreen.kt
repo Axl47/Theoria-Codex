@@ -1,12 +1,17 @@
 package com.theoriacodex.app.search
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -66,11 +71,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.theoriacodex.app.R
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -92,12 +99,15 @@ import kotlin.math.abs
 fun SearchScreen(
     coordinator: SearchCoordinator,
     pixivUgoiraClient: PixivUgoiraClient? = null,
-    onOpenViewer: (List<Post>, ViewerLaunchContext) -> Unit,
+    onOpenViewer: (List<Post>, ViewerLaunchContext, Boolean) -> Unit,
+    onRequestSaveToCodex: (Post) -> Unit,
+    onSaveToDevice: (Post) -> Unit,
 ) {
     var input by rememberSaveable { mutableStateOf("") }
     var animatedOnly by rememberSaveable { mutableStateOf(false) }
     var searchFieldFocused by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
+    var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     val focusManager = LocalFocusManager.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
@@ -344,14 +354,20 @@ fun SearchScreen(
                                     message = authMessage,
                                 )
                             }
-                            EmptyBlock(
-                                hasPendingChanges = coordinator.hasPendingChanges,
-                                messageOverride = if (animatedOnly && coordinator.results.isNotEmpty()) {
-                                    "No animated media found for the current results."
-                                } else {
-                                    null
-                                },
-                            )
+                            if (!coordinator.hasAnySearchRun && !animatedOnly) {
+                                SearchStartSplash(
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            } else {
+                                EmptyBlock(
+                                    hasPendingChanges = coordinator.hasPendingChanges,
+                                    messageOverride = if (animatedOnly && coordinator.results.isNotEmpty()) {
+                                        "No animated media found for the current results."
+                                    } else {
+                                        null
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -383,7 +399,10 @@ fun SearchScreen(
                                             scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
                                         )
                                         scope.launch { coordinator.setViewerLaunchContext(context) }
-                                        onOpenViewer(visibleResults, context)
+                                        onOpenViewer(visibleResults, context, animatedOnly)
+                                    },
+                                    onLongPress = {
+                                        selectedActionPost = post
                                     },
                                 )
                             }
@@ -412,6 +431,64 @@ fun SearchScreen(
         }
     }
 
+    if (selectedActionPost != null) {
+        val post = requireNotNull(selectedActionPost)
+        val context = LocalContext.current
+        ModalBottomSheet(
+            onDismissRequest = { selectedActionPost = null },
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = post.title?.takeIf { it.isNotBlank() } ?: post.id.sourcePostId,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        selectedActionPost = null
+                        onRequestSaveToCodex(post)
+                    },
+                ) {
+                    Text("Save to Codex")
+                }
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        selectedActionPost = null
+                        onSaveToDevice(post)
+                    },
+                ) {
+                    Text("Save to device")
+                }
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                        val formatted = formatPostTagsForClipboard(post)
+                        clipboard?.setPrimaryClip(ClipData.newPlainText("tags", formatted))
+                        Toast.makeText(context, "Tags copied", Toast.LENGTH_SHORT).show()
+                        selectedActionPost = null
+                    },
+                ) {
+                    Text("Copy tags")
+                }
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { selectedActionPost = null },
+                ) {
+                    Text("Cancel")
+                }
+            }
+        }
+    }
+
     if (showFilterSheet) {
         FilterSheet(
             coordinator = coordinator,
@@ -427,17 +504,49 @@ fun SearchScreen(
 }
 
 @Composable
+private fun SearchStartSplash(
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier = modifier) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.theoria_splash_mark),
+                contentDescription = "Theoria splash",
+                modifier = Modifier.size(180.dp),
+            )
+            Text(
+                text = "Add tags and press Apply to start searching.",
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 24.dp),
+            )
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
 fun SearchResultCard(
     post: Post,
     pixivUgoiraClient: PixivUgoiraClient?,
     onClick: () -> Unit,
+    onLongPress: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
 
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongPress,
+            ),
     ) {
         val title = post.title?.takeIf { it.isNotBlank() } ?: "Untitled"
         val fullRef = post.full
@@ -589,6 +698,31 @@ private fun isAnimatedPost(post: Post): Boolean {
             location = ref.url ?: ref.localPath,
         )
     }
+}
+
+private fun formatPostTagsForClipboard(post: Post): String {
+    val canonicalPositives = post.canonicalTags.filterNot { it.startsWith("-") }
+    val canonicalNegatives = post.canonicalTags
+        .filter { it.startsWith("-") }
+        .map { it.removePrefix("-") }
+
+    val rawPositives = post.rawTags.filterNot { it.startsWith("-") }
+    val rawNegatives = post.rawTags
+        .filter { it.startsWith("-") }
+        .map { it.removePrefix("-") }
+
+    val positives = (canonicalPositives + rawPositives)
+        .map { it.trim() }
+        .filter { it.isNotBlank() && !it.startsWith("-") }
+        .distinct()
+    val negatives = (canonicalNegatives + rawNegatives)
+        .map { it.trim().removePrefix("-") }
+        .filter { it.isNotBlank() }
+        .distinct()
+
+    val positiveLine = positives.joinToString(", ")
+    val negativeLine = negatives.joinToString(", ") { "-$it" }
+    return "$positiveLine\n\n$negativeLine"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

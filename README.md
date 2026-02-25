@@ -40,6 +40,12 @@ Previously completed MVP slices remain in place:
 - Pixiv ugoira playback now uses an in-memory LRU cache so returning between Search and Viewer reuses decoded animations instead of reloading from network
 - Viewer shows a thin playback progress bar under Pixiv ugoira media so loop position is visible while watching animations
 - Codex detail now reuses the same Search result card renderer (thumbnails, animated previews, title/tags, overlays) for consistent browsing UI
+- Search cards now support long-press actions for `Save to Codex`, `Save to device`, and `Copy tags`; Codex cards support long-press actions for `Remove from Codex`, `Save to device`, and `Copy tags`
+- App branding now uses custom launcher icon resources and a shared splash mark shown during startup loading and Search pre-query empty state
+- Tag seeder script now supports direct Pixiv tag-page ingestion via `--pixiv-tags-url` (with HTML fallback via `--pixiv-tags-html`)
+- Viewer now prefetches up to three media items on both sides of the current position and can trigger `load next page` while still inside Viewer for live Search sessions (including animated-only Viewer sessions)
+- Orientation is now route-aware: app surfaces are portrait-only, while Viewer supports landscape rotation
+- In landscape Viewer, media now renders edge-to-edge (no card/page inset margins), and ugoira progress is drawn inside the media at the bottom edge
 - File-backed persistence for query/settings/cache/codex/UI restore state
 
 ## Project Structure
