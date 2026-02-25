@@ -512,16 +512,22 @@ fun TheoriaApp(
     LaunchedEffect(navReady, pendingPixivDeepLinkUri) {
         if (!navReady) return@LaunchedEffect
         val uri = pendingPixivDeepLinkUri ?: return@LaunchedEffect
-        pendingPixivDeepLinkUri = null
+        fun consumePendingUriIfCurrent() {
+            if (pendingPixivDeepLinkUri == uri) {
+                pendingPixivDeepLinkUri = null
+            }
+        }
 
         val postId = parsePixivPostIdFromUri(uri)
         if (postId == null) {
             Toast.makeText(appContext, "Unsupported Pixiv URL format", Toast.LENGTH_SHORT).show()
+            consumePendingUriIfCurrent()
             return@LaunchedEffect
         }
         val adapter = realRegistry.adapterFor(SourceKey.PIXIV)
         if (adapter == null) {
             Toast.makeText(appContext, "Pixiv source is unavailable", Toast.LENGTH_SHORT).show()
+            consumePendingUriIfCurrent()
             return@LaunchedEffect
         }
 
@@ -532,11 +538,13 @@ fun TheoriaApp(
         } catch (error: Throwable) {
             val message = error.message ?: "Could not open Pixiv URL"
             Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
+            consumePendingUriIfCurrent()
             return@LaunchedEffect
         }
 
         if (resolved == null) {
             Toast.makeText(appContext, "Pixiv post was not found", Toast.LENGTH_SHORT).show()
+            consumePendingUriIfCurrent()
             return@LaunchedEffect
         }
 
@@ -555,6 +563,7 @@ fun TheoriaApp(
         navController.navigate(AppRoute.Viewer) {
             launchSingleTop = true
         }
+        consumePendingUriIfCurrent()
     }
 
     LaunchedEffect(settings) {
