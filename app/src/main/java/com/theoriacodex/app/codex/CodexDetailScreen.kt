@@ -1,6 +1,9 @@
 package com.theoriacodex.app.codex
 
-import androidx.compose.foundation.clickable
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,28 +14,43 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.search.SearchResultCard
+import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.model.Post
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CodexDetailScreen(
     codexName: String?,
     posts: List<Post>,
     sortMode: CodexSortMode,
+    pixivUgoiraClient: PixivUgoiraClient? = null,
     onSortChange: (CodexSortMode) -> Unit,
     onOpenViewer: (Int) -> Unit,
     onRemovePost: (Post) -> Unit,
+    onSavePostToDevice: (Post) -> Unit,
     onBack: () -> Unit,
     onDeleteCodex: () -> Unit,
 ) {
+    var selectedActionPost by remember { mutableStateOf<Post?>(null) }
+
     if (codexName == null) {
         Column(
             modifier = Modifier
@@ -110,24 +128,97 @@ fun CodexDetailScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 itemsIndexed(posts) { index, post ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onOpenViewer(index) },
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Text(post.id.source.name, style = MaterialTheme.typography.labelSmall)
-                            Text(post.id.sourcePostId, style = MaterialTheme.typography.bodySmall)
-                            TextButton(onClick = { onRemovePost(post) }) {
-                                Text("Remove")
-                            }
-                        }
-                    }
+                    SearchResultCard(
+                        post = post,
+                        pixivUgoiraClient = pixivUgoiraClient,
+                        onClick = { onOpenViewer(index) },
+                        onLongPress = { selectedActionPost = post },
+                    )
                 }
             }
         }
     }
+
+    if (selectedActionPost != null) {
+        val post = requireNotNull(selectedActionPost)
+        val context = LocalContext.current
+        ModalBottomSheet(
+            onDismissRequest = { selectedActionPost = null },
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = post.title?.takeIf { it.isNotBlank() } ?: post.id.sourcePostId,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        selectedActionPost = null
+                        onRemovePost(post)
+                    },
+                ) {
+                    Text("Remove from Codex")
+                }
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        selectedActionPost = null
+                        onSavePostToDevice(post)
+                    },
+                ) {
+                    Text("Save to device")
+                }
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                        val formatted = formatPostTagsForClipboard(post)
+                        clipboard?.setPrimaryClip(ClipData.newPlainText("tags", formatted))
+                        Toast.makeText(context, "Tags copied", Toast.LENGTH_SHORT).show()
+                        selectedActionPost = null
+                    },
+                ) {
+                    Text("Copy tags")
+                }
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { selectedActionPost = null },
+                ) {
+                    Text("Cancel")
+                }
+            }
+        }
+    }
+}
+
+private fun formatPostTagsForClipboard(post: Post): String {
+    val canonicalPositives = post.canonicalTags.filterNot { it.startsWith("-") }
+    val canonicalNegatives = post.canonicalTags
+        .filter { it.startsWith("-") }
+        .map { it.removePrefix("-") }
+
+    val rawPositives = post.rawTags.filterNot { it.startsWith("-") }
+    val rawNegatives = post.rawTags
+        .filter { it.startsWith("-") }
+        .map { it.removePrefix("-") }
+
+    val positives = (canonicalPositives + rawPositives)
+        .map { it.trim() }
+        .filter { it.isNotBlank() && !it.startsWith("-") }
+        .distinct()
+    val negatives = (canonicalNegatives + rawNegatives)
+        .map { it.trim().removePrefix("-") }
+        .filter { it.isNotBlank() }
+        .distinct()
+
+    val positiveLine = positives.joinToString(", ")
+    val negativeLine = negatives.joinToString(", ") { "-$it" }
+    return "$positiveLine\n\n$negativeLine"
 }

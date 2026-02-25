@@ -2,6 +2,8 @@ package com.theoriacodex.domain.orchestration
 
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.SourceAdapter
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
@@ -20,6 +22,7 @@ data class SourceRunStatus(
     val source: SourceKey,
     val state: SourceRunState,
     val exclusionReasons: Set<com.theoriacodex.domain.query.CapabilityExclusionReason> = emptySet(),
+    val failureReason: SourceFailureReason? = null,
     val errorMessage: String? = null,
 )
 
@@ -77,6 +80,7 @@ class UnifiedSearchOrchestrator(
                     statuses += SourceRunStatus(
                         source = source,
                         state = SourceRunState.FAILED,
+                        failureReason = mapFailureReason(error),
                         errorMessage = error.message,
                     )
                 }
@@ -141,5 +145,12 @@ class UnifiedSearchOrchestrator(
         }
         val total = raw.values.sum().takeIf { it > 0.0 } ?: sources.size.toDouble()
         return raw.mapValues { (_, weight) -> weight / total }
+    }
+
+    private fun mapFailureReason(error: Throwable): SourceFailureReason {
+        return when (error) {
+            is SourceAdapterException -> error.reason
+            else -> SourceFailureReason.UNKNOWN
+        }
     }
 }

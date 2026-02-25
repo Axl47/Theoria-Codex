@@ -8,12 +8,12 @@ import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.data.repository.QueryRepository
-import com.theoriacodex.data.repository.ScenarioPreset
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.DateRange
@@ -25,19 +25,21 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.query.QueryHash
-import com.theoriacodex.stubs.StubAdapterRegistry
-import com.theoriacodex.stubs.StubScenarioPreset
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
 class SearchCoordinator(
-    private val registry: StubAdapterRegistry = StubAdapterRegistry(),
+    private val registry: SourceAdapterRegistry,
     private val queryRepository: QueryRepository = InMemoryQueryRepository(),
     private val settingsRepository: SettingsRepository = InMemorySettingsRepository(),
     private val uiRestoreRepository: UiRestoreRepository = InMemoryUiRestoreRepository(),
+    private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
 ) {
     private var runtimeSettings: AppSettings = AppSettings()
     private var hasExecutedSearch = false
     private val appliedByMode = mutableMapOf<String, Query>()
+    private var unifiedNextPageTokens: Map<SourceKey, String?> = emptyMap()
+    private var sourceNextPageToken: String? = null
 
     var draftQuery by mutableStateOf(defaultQuery())
         private set
@@ -57,26 +59,39 @@ class SearchCoordinator(
     var loading by mutableStateOf(false)
         private set
 
+    var loadingMore by mutableStateOf(false)
+        private set
+
+    var canLoadMore by mutableStateOf(false)
+        private set
+
     var errorMessage by mutableStateOf<String?>(null)
         private set
+
+    val availableSources: List<SourceKey>
+        get() = registry.availableSources().toList().sortedBy { it.name }
+
+    val modeOptions: List<QueryMode>
+        get() = listOf(QueryMode.Unified) + availableSources.map(QueryMode::Source)
 
     val hasPendingChanges: Boolean
         get() = draftQuery != appliedQuery
 
+    val hasAnySearchRun: Boolean
+        get() = hasExecutedSearch
+
     val enabledSourceCount: Int
-        get() = runtimeSettings.runtime.enabledSources.size
+        get() = effectiveEnabledSources().size
 
     val appliedQueryHash: String
         get() = QueryHash.from(appliedQuery)
 
     suspend fun initialize() {
         runtimeSettings = settingsRepository.observeSettings().first()
-        registry.runtime.preset = runtimeSettings.scenarioPreset.toStubPreset()
 
-        val modes = listOf(QueryMode.Unified) + SourceKey.entries.map(QueryMode::Source)
-        modes.forEach { mode ->
+        modeOptions.forEach { mode ->
             val stored = queryRepository.observeAppliedQuery(modeKey(mode)).first()
-            if (stored != null) {
+            if (stored != null && isModeAvailable(stored.mode)) {
                 appliedByMode[modeKey(mode)] = stored
             }
         }
@@ -87,10 +102,17 @@ class SearchCoordinator(
     }
 
     fun onSettingsChanged(settings: AppSettings): Boolean {
-        val oldScenario = runtimeSettings.scenarioPreset
+        val previousRuntime = runtimeSettings.runtime
         runtimeSettings = settings
-        registry.runtime.preset = settings.scenarioPreset.toStubPreset()
-        return hasExecutedSearch && oldScenario != settings.scenarioPreset
+
+        if (!isModeAvailable(draftQuery.mode)) {
+            draftQuery = defaultQuery(QueryMode.Unified)
+        }
+        if (!isModeAvailable(appliedQuery.mode)) {
+            appliedQuery = defaultQuery(QueryMode.Unified)
+        }
+
+        return hasExecutedSearch && previousRuntime != settings.runtime
     }
 
     fun addTagInput(input: String) {
@@ -129,8 +151,12 @@ class SearchCoordinator(
     }
 
     fun setMode(mode: QueryMode) {
-        val restored = appliedByMode[modeKey(mode)] ?: defaultQuery(mode)
-        draftQuery = restored.copy(mode = mode)
+        val resolvedMode = when {
+            isModeAvailable(mode) -> mode
+            else -> QueryMode.Unified
+        }
+        val restored = appliedByMode[modeKey(resolvedMode)] ?: defaultQuery(resolvedMode)
+        draftQuery = restored.copy(mode = resolvedMode)
     }
 
     fun setSort(sort: SortMode) {
@@ -195,17 +221,41 @@ class SearchCoordinator(
 
         trendingTags = when (mode) {
             QueryMode.Unified -> {
-                runtimeSettings.runtime.enabledSources
-                    .flatMap { source ->
-                        runCatching { registry.adapterFor(source).trendingTags(limit = 5) }
-                            .getOrDefault(emptyList())
-                    }
+                val enabled = effectiveEnabledSources()
+                val cached = enabled
+                    .flatMap { source -> tagSuggestionStore.get(source, limit = 10) }
                     .distinctBy { it.text }
                     .take(20)
+                if (cached.isNotEmpty()) {
+                    cached
+                } else {
+                    enabled
+                        .flatMap { source ->
+                            val fetched = runCatching {
+                                registry.adapterFor(source)?.trendingTags(limit = 10).orEmpty()
+                            }.getOrDefault(emptyList())
+                            if (fetched.isNotEmpty()) {
+                                tagSuggestionStore.put(source, fetched)
+                            }
+                            fetched
+                        }
+                        .distinctBy { it.text }
+                        .take(20)
+                }
             }
             is QueryMode.Source -> {
-                runCatching { registry.adapterFor(mode.source).trendingTags(limit = 20) }
-                    .getOrDefault(emptyList())
+                val cached = tagSuggestionStore.get(mode.source, limit = 20)
+                if (cached.isNotEmpty()) {
+                    cached
+                } else {
+                    val fetched = runCatching {
+                        registry.adapterFor(mode.source)?.trendingTags(limit = 20).orEmpty()
+                    }.getOrDefault(emptyList())
+                    if (fetched.isNotEmpty()) {
+                        tagSuggestionStore.put(mode.source, fetched)
+                    }
+                    fetched
+                }
             }
         }
     }
@@ -219,6 +269,80 @@ class SearchCoordinator(
 
     suspend fun retry() {
         executeSearch()
+    }
+
+    suspend fun loadNextPage() {
+        if (loading || loadingMore || !canLoadMore) return
+
+        loadingMore = true
+        errorMessage = null
+        try {
+            val enabledSources = effectiveEnabledSources()
+            when (val mode = appliedQuery.mode) {
+                QueryMode.Unified -> {
+                    val disabledStatuses = availableSources
+                        .filterNot { it in enabledSources }
+                        .map { source ->
+                            SourceRunStatus(
+                                source = source,
+                                state = SourceRunState.EXCLUDED,
+                                errorMessage = "Disabled in settings",
+                            )
+                        }
+                    if (enabledSources.isEmpty()) {
+                        canLoadMore = false
+                        statuses = disabledStatuses
+                        return
+                    }
+
+                    val pageableSources = enabledSources.filterTo(mutableSetOf()) { source ->
+                        !unifiedNextPageTokens[source].isNullOrBlank()
+                    }
+                    if (pageableSources.isEmpty()) {
+                        canLoadMore = false
+                        return
+                    }
+
+                    val result = registry.unifiedOrchestrator().search(
+                        query = appliedQuery,
+                        enabledSources = pageableSources,
+                        pageTokens = unifiedNextPageTokens.filterKeys { it in pageableSources },
+                        weights = effectiveWeights(pageableSources),
+                    )
+                    results = mergeResults(results, result.items)
+                    statuses = (result.statuses + disabledStatuses)
+                        .distinctBy { it.source }
+                        .sortedBy { it.source.name }
+                    unifiedNextPageTokens = unifiedNextPageTokens.toMutableMap().apply {
+                        putAll(result.nextPageTokens)
+                    }
+                    canLoadMore = unifiedNextPageTokens.values.any { !it.isNullOrBlank() }
+                }
+
+                is QueryMode.Source -> {
+                    val token = sourceNextPageToken
+                    if (token.isNullOrBlank()) {
+                        canLoadMore = false
+                        return
+                    }
+                    val adapter = requireNotNull(registry.adapterFor(mode.source)) {
+                        "No adapter for ${mode.source}"
+                    }
+                    val page = adapter.search(appliedQuery, pageToken = token)
+                    results = mergeResults(results, page.items)
+                    statuses = listOf(SourceRunStatus(mode.source, state = SourceRunState.SUCCESS))
+                    sourceNextPageToken = page.nextPageToken
+                    canLoadMore = !sourceNextPageToken.isNullOrBlank()
+                }
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            errorMessage = error.message ?: "Could not load more results"
+            canLoadMore = false
+        } finally {
+            loadingMore = false
+        }
     }
 
     suspend fun persistSearchScrollState(index: Int, offsetPx: Int) {
@@ -258,15 +382,21 @@ class SearchCoordinator(
     }
 
     private suspend fun executeSearch() {
+        val previousResults = results
+        val previousStatuses = statuses
         loading = true
+        loadingMore = false
+        canLoadMore = false
+        unifiedNextPageTokens = emptyMap()
+        sourceNextPageToken = null
         errorMessage = null
         statuses = emptyList()
 
         try {
-            val enabledSources = runtimeSettings.runtime.enabledSources
+            val enabledSources = effectiveEnabledSources()
             when (val mode = appliedQuery.mode) {
                 QueryMode.Unified -> {
-                    val disabledStatuses = SourceKey.entries
+                    val disabledStatuses = availableSources
                         .filterNot { it in enabledSources }
                         .map { source ->
                             SourceRunStatus(
@@ -285,14 +415,28 @@ class SearchCoordinator(
                         query = appliedQuery,
                         enabledSources = enabledSources,
                         pageTokens = emptyMap(),
-                        weights = runtimeSettings.runtime.sourceWeights,
+                        weights = effectiveWeights(enabledSources),
                     )
                     results = result.items
                     statuses = (result.statuses + disabledStatuses)
                         .distinctBy { it.source }
                         .sortedBy { it.source.name }
+                    unifiedNextPageTokens = result.nextPageTokens
+                    canLoadMore = unifiedNextPageTokens.values.any { !it.isNullOrBlank() }
                 }
+
                 is QueryMode.Source -> {
+                    if (!isModeAvailable(mode)) {
+                        results = emptyList()
+                        statuses = listOf(
+                            SourceRunStatus(
+                                source = mode.source,
+                                state = SourceRunState.EXCLUDED,
+                                errorMessage = "Source not available in this build",
+                            )
+                        )
+                        return
+                    }
                     if (mode.source !in enabledSources) {
                         results = emptyList()
                         statuses = listOf(
@@ -304,19 +448,46 @@ class SearchCoordinator(
                         )
                         return
                     }
-                    val adapter = registry.adapterFor(mode.source)
+                    val adapter = requireNotNull(registry.adapterFor(mode.source)) {
+                        "No adapter for ${mode.source}"
+                    }
                     val page = adapter.search(appliedQuery, pageToken = null)
                     results = page.items
                     statuses = listOf(SourceRunStatus(mode.source, state = SourceRunState.SUCCESS))
+                    sourceNextPageToken = page.nextPageToken
+                    canLoadMore = !sourceNextPageToken.isNullOrBlank()
                 }
             }
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Throwable) {
-            results = emptyList()
+            results = previousResults
+            statuses = previousStatuses
             errorMessage = error.message ?: "Unknown error"
+            canLoadMore = false
         } finally {
             hasExecutedSearch = true
             loading = false
         }
+    }
+
+    private fun mergeResults(
+        current: List<Post>,
+        next: List<Post>,
+    ): List<Post> {
+        if (next.isEmpty()) return current
+        if (current.isEmpty()) return next
+
+        val seen = current
+            .mapTo(mutableSetOf()) { "${it.id.source.name}:${it.id.sourcePostId}" }
+        val merged = current.toMutableList()
+        next.forEach { post ->
+            val key = "${post.id.source.name}:${post.id.sourcePostId}"
+            if (seen.add(key)) {
+                merged += post
+            }
+        }
+        return merged
     }
 
     private fun modeKey(mode: QueryMode): String {
@@ -324,6 +495,26 @@ class SearchCoordinator(
             QueryMode.Unified -> "unified"
             is QueryMode.Source -> "source:${mode.source.name}"
         }
+    }
+
+    private fun isModeAvailable(mode: QueryMode): Boolean {
+        return when (mode) {
+            QueryMode.Unified -> true
+            is QueryMode.Source -> mode.source in registry.availableSources()
+        }
+    }
+
+    private fun effectiveEnabledSources(): Set<SourceKey> {
+        return runtimeSettings.runtime.enabledSources.intersect(registry.availableSources())
+    }
+
+    private fun effectiveWeights(enabledSources: Set<SourceKey>): Map<SourceKey, Double> {
+        if (enabledSources.isEmpty()) return emptyMap()
+        val raw = enabledSources.associateWith { source ->
+            runtimeSettings.runtime.sourceWeights[source] ?: 1.0
+        }
+        val total = raw.values.sum().takeIf { it > 0.0 } ?: enabledSources.size.toDouble()
+        return raw.mapValues { (_, weight) -> weight / total }
     }
 
     private fun defaultQuery(mode: QueryMode = QueryMode.Unified): Query {
@@ -335,15 +526,6 @@ class SearchCoordinator(
             dateRange = null,
             minScore = null,
         )
-    }
-}
-
-private fun ScenarioPreset.toStubPreset(): StubScenarioPreset {
-    return when (this) {
-        ScenarioPreset.NORMAL -> StubScenarioPreset.NORMAL
-        ScenarioPreset.PARTIAL_FAILURE -> StubScenarioPreset.PARTIAL_FAILURE
-        ScenarioPreset.EMPTY_RESULTS -> StubScenarioPreset.EMPTY_RESULTS
-        ScenarioPreset.SLOW_NETWORK -> StubScenarioPreset.SLOW_NETWORK
     }
 }
 

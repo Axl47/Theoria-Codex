@@ -12,6 +12,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -23,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CacheSnapshot
@@ -32,7 +34,19 @@ import com.theoriacodex.domain.model.SourceKey
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
+    availableSources: List<SourceKey>,
     cacheSnapshot: CacheSnapshot,
+    showDeveloperScenarios: Boolean,
+    pixivStatusLabel: String,
+    onPixivConnect: () -> Unit,
+    onPixivDisconnect: () -> Unit,
+    gelbooruUserId: String,
+    gelbooruApiKey: String,
+    gelbooruStatusLabel: String,
+    onGelbooruUserIdChange: (String) -> Unit,
+    onGelbooruApiKeyChange: (String) -> Unit,
+    onSaveGelbooruCredentials: () -> Unit,
+    onClearGelbooruCredentials: () -> Unit,
     onSetEnabledSources: (Set<SourceKey>) -> Unit,
     onSetSourceWeights: (Map<SourceKey, Double>) -> Unit,
     onSetCacheFullImageOnSave: (Boolean) -> Unit,
@@ -72,7 +86,7 @@ fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text("Unified mode", style = MaterialTheme.typography.titleMedium)
-                SourceKey.entries.forEach { source ->
+                availableSources.forEach { source ->
                     val isEnabled = source in settings.runtime.enabledSources
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -83,7 +97,9 @@ fun SettingsScreen(
                         Switch(
                             checked = isEnabled,
                             onCheckedChange = { checked ->
-                                val updated = settings.runtime.enabledSources.toMutableSet()
+                                val updated = settings.runtime.enabledSources
+                                    .intersect(availableSources.toSet())
+                                    .toMutableSet()
                                 if (checked) {
                                     updated += source
                                 } else {
@@ -104,6 +120,54 @@ fun SettingsScreen(
                         valueRange = 0f..1f,
                     )
                     Text("Weight: %.2f".format(weight), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("Source Accounts", style = MaterialTheme.typography.titleMedium)
+
+                Text("Pixiv", style = MaterialTheme.typography.titleSmall)
+                Text(pixivStatusLabel, style = MaterialTheme.typography.bodySmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onPixivConnect) {
+                        Text("Connect")
+                    }
+                    TextButton(onClick = onPixivDisconnect) {
+                        Text("Disconnect")
+                    }
+                }
+
+                Text("Gelbooru", style = MaterialTheme.typography.titleSmall)
+                Text(gelbooruStatusLabel, style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = gelbooruUserId,
+                    onValueChange = onGelbooruUserIdChange,
+                    label = { Text("User ID") },
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = gelbooruApiKey,
+                    onValueChange = onGelbooruApiKeyChange,
+                    label = { Text("API Key") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onSaveGelbooruCredentials) {
+                        Text("Save")
+                    }
+                    TextButton(onClick = onClearGelbooruCredentials) {
+                        Text("Clear")
+                    }
                 }
             }
         }
@@ -161,27 +225,29 @@ fun SettingsScreen(
             }
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text("Developer scenarios", style = MaterialTheme.typography.titleMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ScenarioPreset.entries.forEach { scenario ->
-                        val label = when (scenario) {
-                            ScenarioPreset.NORMAL -> "Normal"
-                            ScenarioPreset.PARTIAL_FAILURE -> "Partial Failure"
-                            ScenarioPreset.EMPTY_RESULTS -> "Empty"
-                            ScenarioPreset.SLOW_NETWORK -> "Slow"
+        if (showDeveloperScenarios) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("Developer scenarios", style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ScenarioPreset.entries.forEach { scenario ->
+                            val label = when (scenario) {
+                                ScenarioPreset.NORMAL -> "Normal"
+                                ScenarioPreset.PARTIAL_FAILURE -> "Partial Failure"
+                                ScenarioPreset.EMPTY_RESULTS -> "Empty"
+                                ScenarioPreset.SLOW_NETWORK -> "Slow"
+                            }
+                            FilterChip(
+                                selected = settings.scenarioPreset == scenario,
+                                onClick = { onSetScenarioPreset(scenario) },
+                                label = { Text(label) },
+                            )
                         }
-                        FilterChip(
-                            selected = settings.scenarioPreset == scenario,
-                            onClick = { onSetScenarioPreset(scenario) },
-                            label = { Text(label) },
-                        )
                     }
                 }
             }

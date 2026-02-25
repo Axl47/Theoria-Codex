@@ -4,6 +4,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.orchestration.SourceRunState
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -49,6 +50,7 @@ class StubAdapterRegistryTest {
 
         val failed = result.statuses.first { it.source == SourceKey.GELBOORU }
         assertEquals(SourceRunState.FAILED, failed.state)
+        assertEquals(SourceFailureReason.NETWORK, failed.failureReason)
     }
 
     private fun sampleQuery(): Query {

@@ -1,7 +1,22 @@
 package com.theoriacodex.app.search
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,15 +24,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -45,15 +63,33 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.theoriacodex.app.R
+import com.theoriacodex.app.viewer.PixivUgoiraClient
+import com.theoriacodex.app.viewer.PixivUgoiraPlayer
 import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
+import com.theoriacodex.sources.pixiv.PIXIV_UGOIRA_MIME
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -62,23 +98,38 @@ import kotlin.math.abs
 @Composable
 fun SearchScreen(
     coordinator: SearchCoordinator,
-    onOpenViewer: (List<Post>, ViewerLaunchContext) -> Unit,
+    pixivUgoiraClient: PixivUgoiraClient? = null,
+    onOpenViewer: (List<Post>, ViewerLaunchContext, Boolean) -> Unit,
+    onRequestSaveToCodex: (Post) -> Unit,
+    onSaveToDevice: (Post) -> Unit,
 ) {
     var input by rememberSaveable { mutableStateOf("") }
+    var animatedOnly by rememberSaveable { mutableStateOf(false) }
+    var searchFieldFocused by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
+    var selectedActionPost by remember { mutableStateOf<Post?>(null) }
+    val focusManager = LocalFocusManager.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
-    val gridState = rememberLazyGridState()
+    val gridState = rememberLazyStaggeredGridState()
     val queryHash = coordinator.appliedQueryHash
+    val visibleResults = remember(coordinator.results, animatedOnly) {
+        if (animatedOnly) {
+            coordinator.results.filter(::isAnimatedPost)
+        } else {
+            coordinator.results
+        }
+    }
 
     LaunchedEffect(coordinator.draftQuery.mode) {
         coordinator.loadTrendingTags()
     }
 
-    LaunchedEffect(queryHash, coordinator.results.size) {
+    LaunchedEffect(queryHash, visibleResults.size, animatedOnly) {
+        if (animatedOnly) return@LaunchedEffect
         val restored = coordinator.restoreSearchScrollState() ?: return@LaunchedEffect
-        if (coordinator.results.isNotEmpty()) {
-            val lastIndex = coordinator.results.lastIndex.coerceAtLeast(0)
+        if (visibleResults.isNotEmpty()) {
+            val lastIndex = visibleResults.lastIndex.coerceAtLeast(0)
             gridState.scrollToItem(
                 index = restored.firstVisibleItemIndex.coerceIn(0, lastIndex),
                 scrollOffset = restored.firstVisibleItemOffsetPx.coerceAtLeast(0),
@@ -86,12 +137,49 @@ fun SearchScreen(
         }
     }
 
-    LaunchedEffect(queryHash, coordinator.results.size) {
-        if (coordinator.results.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(queryHash, visibleResults.size, animatedOnly) {
+        if (animatedOnly || visibleResults.isEmpty()) return@LaunchedEffect
         snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
             .collectLatest { (index, offset) ->
                 coordinator.persistSearchScrollState(index = index, offsetPx = offset)
             }
+    }
+
+    LaunchedEffect(
+        queryHash,
+        visibleResults.size,
+        coordinator.results.size,
+        coordinator.canLoadMore,
+        coordinator.loading,
+        coordinator.loadingMore,
+        animatedOnly,
+    ) {
+        snapshotFlow {
+            (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to coordinator.loadingMore
+        }.collect { (lastVisibleIndex, loadingMoreState) ->
+            if (loadingMoreState) return@collect
+            if (coordinator.loading || coordinator.loadingMore || !coordinator.canLoadMore) return@collect
+
+            val totalVisible = visibleResults.size
+            val rawResultSize = coordinator.results.size
+
+            val shouldTriggerByThreshold = if (totalVisible > 0 && lastVisibleIndex >= 0) {
+                val triggerIndex = ((totalVisible - 1) * PAGINATION_PREFETCH_RATIO)
+                    .toInt()
+                    .coerceAtLeast(0)
+                lastVisibleIndex >= triggerIndex
+            } else {
+                false
+            }
+
+            // If animated-only yields no visible rows yet, keep paging while source tokens remain.
+            val shouldTriggerForEmptyAnimatedResults =
+                animatedOnly && totalVisible == 0 && rawResultSize > 0
+
+            if (shouldTriggerByThreshold || shouldTriggerForEmptyAnimatedResults) {
+                coordinator.loadNextPage()
+            }
+        }
     }
 
     val autocompleteSuggestions = remember(input, coordinator.trendingTags) {
@@ -101,6 +189,22 @@ fun SearchScreen(
             coordinator.trendingTags
                 .filter { suggestion -> suggestion.text.contains(input.trim(), ignoreCase = true) }
                 .take(10)
+        }
+    }
+    val sourceAuthErrorMessage = remember(coordinator.statuses) {
+        buildSourceAuthErrorMessage(coordinator.statuses)
+    }
+    val showSearchControls = searchFieldFocused ||
+        input.isNotBlank() ||
+        autocompleteSuggestions.isNotEmpty() ||
+        coordinator.hasPendingChanges
+
+    fun commitTagInput() {
+        val hadInput = input.isNotBlank()
+        coordinator.addTagInput(input)
+        input = ""
+        if (hadInput) {
+            focusManager.clearFocus()
         }
     }
 
@@ -122,58 +226,104 @@ fun SearchScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             OutlinedTextField(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { state ->
+                        searchFieldFocused = state.isFocused
+                    },
                 value = input,
                 onValueChange = { input = it },
                 label = { Text("Search tags") },
                 supportingText = { Text("Use '-tag' to add exclusion") },
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Done,
+                    keyboardType = KeyboardType.Text,
+                    capitalization = KeyboardCapitalization.None,
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = { commitTagInput() },
+                ),
                 trailingIcon = {
-                    TextButton(onClick = {
-                        coordinator.addTagInput(input)
-                        input = ""
-                    }) {
+                    TextButton(onClick = { commitTagInput() }) {
                         Text("Add")
                     }
                 }
             )
 
-            if (autocompleteSuggestions.isNotEmpty()) {
-                AutocompletePanel(
-                    suggestions = autocompleteSuggestions,
-                    onInclude = { tag ->
-                        coordinator.addIncludeTag(tag)
-                        input = ""
-                    },
-                    onExclude = { tag ->
-                        coordinator.addExcludeTag(tag)
-                        input = ""
-                    },
-                )
-            }
-
-            ModeRow(
-                mode = coordinator.draftQuery.mode,
-                onModeSelected = coordinator::setMode,
-            )
-            if (coordinator.draftQuery.mode == QueryMode.Unified) {
-                Text(
-                    text = "(${coordinator.enabledSourceCount} sources enabled)",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-
-            TagRow(
-                includeTags = coordinator.draftQuery.includeTags,
-                excludeTags = coordinator.draftQuery.excludeTags,
-                onRemoveInclude = coordinator::removeIncludeTag,
-                onRemoveExclude = coordinator::removeExcludeTag,
-            )
-
-            if (
-                coordinator.appliedQuery.mode == QueryMode.Unified &&
-                coordinator.statuses.any { it.state != SourceRunState.SUCCESS }
+            AnimatedVisibility(
+                visible = showSearchControls,
+                enter = slideInVertically(initialOffsetY = { fullHeight -> fullHeight / 4 }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { fullHeight -> fullHeight / 5 }) + fadeOut(),
             ) {
-                StatusRow(coordinator = coordinator)
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (autocompleteSuggestions.isNotEmpty()) {
+                        AutocompletePanel(
+                            suggestions = autocompleteSuggestions,
+                            onInclude = { tag ->
+                                coordinator.addIncludeTag(tag)
+                                input = ""
+                            },
+                            onExclude = { tag ->
+                                coordinator.addExcludeTag(tag)
+                                input = ""
+                            },
+                        )
+                    }
+
+                    ModeRow(
+                        mode = coordinator.draftQuery.mode,
+                        options = coordinator.modeOptions,
+                        onModeSelected = coordinator::setMode,
+                    )
+                    if (coordinator.draftQuery.mode == QueryMode.Unified) {
+                        Text(
+                            text = "(${coordinator.enabledSourceCount} sources enabled)",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+
+                    TagRow(
+                        includeTags = coordinator.draftQuery.includeTags,
+                        excludeTags = coordinator.draftQuery.excludeTags,
+                        onRemoveInclude = coordinator::removeIncludeTag,
+                        onRemoveExclude = coordinator::removeExcludeTag,
+                    )
+
+                    if (
+                        coordinator.appliedQuery.mode == QueryMode.Unified &&
+                        coordinator.statuses.any { it.state != SourceRunState.SUCCESS }
+                    ) {
+                        StatusRow(coordinator = coordinator)
+                    }
+                    FilterChip(
+                        selected = animatedOnly,
+                        onClick = { animatedOnly = !animatedOnly },
+                        label = { Text("Animated only") },
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        TextButton(
+                            onClick = {
+                                focusManager.clearFocus()
+                                coordinator.resetDraft()
+                                input = ""
+                                showFilterSheet = false
+                            },
+                            enabled = coordinator.hasPendingChanges,
+                        ) {
+                            Text("Reset")
+                        }
+                        TextButton(onClick = {
+                            focusManager.clearFocus()
+                            scope.launch { coordinator.applyDraft() }
+                        }) {
+                            Text("Apply")
+                        }
+                    }
+                }
             }
 
             when {
@@ -195,47 +345,82 @@ fun SearchScreen(
                         )
                     }
                 }
-                coordinator.results.isEmpty() -> {
+                visibleResults.isEmpty() -> {
                     Box(modifier = Modifier.weight(1f)) {
-                        EmptyBlock(hasPendingChanges = coordinator.hasPendingChanges)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            sourceAuthErrorMessage?.let { authMessage ->
+                                ErrorBlock(
+                                    title = "Source account required",
+                                    message = authMessage,
+                                )
+                            }
+                            if (!coordinator.hasAnySearchRun && !animatedOnly) {
+                                SearchStartSplash(
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            } else {
+                                EmptyBlock(
+                                    hasPendingChanges = coordinator.hasPendingChanges,
+                                    messageOverride = if (animatedOnly && coordinator.results.isNotEmpty()) {
+                                        "No animated media found for the current results."
+                                    } else {
+                                        null
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
                 else -> {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        state = gridState,
+                    Column(
                         modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        itemsIndexed(coordinator.results) { index, post ->
-                            ElevatedCard(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
+                        sourceAuthErrorMessage?.let { authMessage ->
+                            ErrorBlock(
+                                title = "Source account required",
+                                message = authMessage,
+                            )
+                        }
+                        LazyVerticalStaggeredGrid(
+                            columns = StaggeredGridCells.Fixed(2),
+                            state = gridState,
+                            modifier = Modifier.weight(1f),
+                            verticalItemSpacing = 6.dp,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            itemsIndexed(visibleResults) { index, post ->
+                                SearchResultCard(
+                                    post = post,
+                                    pixivUgoiraClient = pixivUgoiraClient,
+                                    onClick = {
                                         val context = coordinator.buildViewerLaunchContext(
                                             startIndex = index,
                                             scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
                                         )
                                         scope.launch { coordinator.setViewerLaunchContext(context) }
-                                        onOpenViewer(coordinator.results, context)
-                                    }
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    AssistChip(
-                                        onClick = {},
-                                        label = { Text(post.id.source.name) },
-                                    )
-                                    Text(
-                                        text = post.id.sourcePostId,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 2,
-                                    )
-                                    post.canonicalTags.firstOrNull()?.let { firstTag ->
-                                        Text(text = "#$firstTag", style = MaterialTheme.typography.bodySmall)
+                                        onOpenViewer(visibleResults, context, animatedOnly)
+                                    },
+                                    onLongPress = {
+                                        selectedActionPost = post
+                                    },
+                                )
+                            }
+                            if (coordinator.loadingMore) {
+                                item {
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp),
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 12.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            CircularProgressIndicator()
+                                        }
                                     }
                                 }
                             }
@@ -243,23 +428,62 @@ fun SearchScreen(
                     }
                 }
             }
+        }
+    }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+    if (selectedActionPost != null) {
+        val post = requireNotNull(selectedActionPost)
+        val context = LocalContext.current
+        ModalBottomSheet(
+            onDismissRequest = { selectedActionPost = null },
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                Text(
+                    text = post.title?.takeIf { it.isNotBlank() } ?: post.id.sourcePostId,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 TextButton(
+                    modifier = Modifier.fillMaxWidth(),
                     onClick = {
-                        coordinator.resetDraft()
-                        input = ""
-                        showFilterSheet = false
+                        selectedActionPost = null
+                        onRequestSaveToCodex(post)
                     },
-                    enabled = coordinator.hasPendingChanges,
                 ) {
-                    Text("Reset")
+                    Text("Save to Codex")
                 }
-                TextButton(onClick = { scope.launch { coordinator.applyDraft() } }) {
-                    Text("Apply")
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        selectedActionPost = null
+                        onSaveToDevice(post)
+                    },
+                ) {
+                    Text("Save to device")
+                }
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                        val formatted = formatPostTagsForClipboard(post)
+                        clipboard?.setPrimaryClip(ClipData.newPlainText("tags", formatted))
+                        Toast.makeText(context, "Tags copied", Toast.LENGTH_SHORT).show()
+                        selectedActionPost = null
+                    },
+                ) {
+                    Text("Copy tags")
+                }
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { selectedActionPost = null },
+                ) {
+                    Text("Cancel")
                 }
             }
         }
@@ -277,6 +501,228 @@ fun SearchScreen(
             sheetState = sheetState,
         )
     }
+}
+
+@Composable
+private fun SearchStartSplash(
+    modifier: Modifier = Modifier,
+) {
+    Card(modifier = modifier) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.theoria_splash_mark),
+                contentDescription = "Theoria splash",
+                modifier = Modifier.size(180.dp),
+            )
+            Text(
+                text = "Add tags and press Apply to start searching.",
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 24.dp),
+            )
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
+fun SearchResultCard(
+    post: Post,
+    pixivUgoiraClient: PixivUgoiraClient?,
+    onClick: () -> Unit,
+    onLongPress: (() -> Unit)? = null,
+) {
+    val context = LocalContext.current
+
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongPress,
+            ),
+    ) {
+        val title = post.title?.takeIf { it.isNotBlank() } ?: "Untitled"
+        val fullRef = post.full
+        val previewUrl = if (fullRef?.mime == "image/gif") {
+            fullRef.url
+        } else {
+            post.preview.url ?: fullRef?.url
+        }
+        val ratio = previewAspectRatio(post)
+        val imageModel = remember(context, previewUrl, post.id.source) {
+            previewUrl?.let { buildImageRequest(context, it, post.id.source) }
+        }
+        val mediaCount = postMediaCount(post)
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(ratio),
+        ) {
+            val showUgoira = isPixivUgoira(post) && pixivUgoiraClient != null
+            if (showUgoira) {
+                PixivUgoiraPlayer(
+                    postId = post.id.sourcePostId,
+                    client = requireNotNull(pixivUgoiraClient),
+                    modifier = Modifier.fillMaxSize(),
+                    contentDescription = title,
+                    contentScale = ContentScale.Crop,
+                )
+            } else if (imageModel != null) {
+                AsyncImage(
+                    model = imageModel,
+                    contentDescription = title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "No preview",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            if (mediaCount > 1) {
+                ImageCountBadge(
+                    count = mediaCount,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp),
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            post.canonicalTags.firstOrNull()?.let { firstTag ->
+                Text(text = "#$firstTag", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImageCountBadge(
+    count: Int,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        color = Color.Gray.copy(alpha = 0.65f),
+        shape = CircleShape,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Default.Image,
+                contentDescription = "Image count",
+                tint = Color.White,
+                modifier = Modifier.size(14.dp),
+            )
+            Text(
+                text = count.toString(),
+                color = Color.White,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+    }
+}
+
+private fun postMediaCount(post: Post): Int {
+    val explicitCount = post.media.count { !it.url.isNullOrBlank() || !it.localPath.isNullOrBlank() }
+    return when {
+        explicitCount > 0 -> explicitCount
+        post.full != null -> 1
+        else -> 1
+    }
+}
+
+private fun isPixivUgoira(post: Post): Boolean {
+    if (post.id.source != SourceKey.PIXIV) return false
+    if (post.full?.mime == PIXIV_UGOIRA_MIME) return true
+    return post.media.any { it.mime == PIXIV_UGOIRA_MIME }
+}
+
+private fun isAnimatedPost(post: Post): Boolean {
+    if (isPixivUgoira(post)) return true
+
+    fun isAnimatedRef(mime: String?, location: String?): Boolean {
+        val normalizedMime = mime?.lowercase()
+        if (
+            normalizedMime == "image/gif" ||
+            normalizedMime == "video/mp4" ||
+            normalizedMime == "video/webm"
+        ) {
+            return true
+        }
+
+        val normalizedLocation = location
+            ?.substringBefore('?')
+            ?.lowercase()
+            .orEmpty()
+        return normalizedLocation.endsWith(".gif") ||
+            normalizedLocation.endsWith(".mp4") ||
+            normalizedLocation.endsWith(".webm")
+    }
+
+    val refs = buildList {
+        add(post.preview)
+        post.full?.let { add(it) }
+        addAll(post.media)
+    }
+    return refs.any { ref ->
+        isAnimatedRef(
+            mime = ref.mime,
+            location = ref.url ?: ref.localPath,
+        )
+    }
+}
+
+private fun formatPostTagsForClipboard(post: Post): String {
+    val canonicalPositives = post.canonicalTags.filterNot { it.startsWith("-") }
+    val canonicalNegatives = post.canonicalTags
+        .filter { it.startsWith("-") }
+        .map { it.removePrefix("-") }
+
+    val rawPositives = post.rawTags.filterNot { it.startsWith("-") }
+    val rawNegatives = post.rawTags
+        .filter { it.startsWith("-") }
+        .map { it.removePrefix("-") }
+
+    val positives = (canonicalPositives + rawPositives)
+        .map { it.trim() }
+        .filter { it.isNotBlank() && !it.startsWith("-") }
+        .distinct()
+    val negatives = (canonicalNegatives + rawNegatives)
+        .map { it.trim().removePrefix("-") }
+        .filter { it.isNotBlank() }
+        .distinct()
+
+    val positiveLine = positives.joinToString(", ")
+    val negativeLine = negatives.joinToString(", ") { "-$it" }
+    return "$positiveLine\n\n$negativeLine"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -417,14 +863,9 @@ private fun AutocompletePanel(
 @Composable
 private fun ModeRow(
     mode: QueryMode,
+    options: List<QueryMode>,
     onModeSelected: (QueryMode) -> Unit,
 ) {
-    val options = listOf(
-        QueryMode.Unified,
-        QueryMode.Source(SourceKey.PIXIV),
-        QueryMode.Source(SourceKey.GELBOORU),
-        QueryMode.Source(SourceKey.AIBOORU),
-    )
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(options.size) { index ->
             val option = options[index]
@@ -476,7 +917,10 @@ private fun StatusRow(coordinator: SearchCoordinator) {
             val status = filtered[index]
             val text = when (status.state) {
                 SourceRunState.EXCLUDED -> "${status.source.name} excluded"
-                SourceRunState.FAILED -> "${status.source.name} failed"
+                SourceRunState.FAILED -> {
+                    val reason = status.failureReason?.name ?: "UNKNOWN"
+                    "${status.source.name} failed ($reason)"
+                }
                 SourceRunState.SUCCESS -> "${status.source.name} OK"
             }
             AssistChip(onClick = {}, label = { Text(text) })
@@ -484,11 +928,30 @@ private fun StatusRow(coordinator: SearchCoordinator) {
     }
 }
 
+private fun buildSourceAuthErrorMessage(statuses: List<com.theoriacodex.domain.orchestration.SourceRunStatus>): String? {
+    val authSources = statuses
+        .filter { status ->
+            status.state == SourceRunState.FAILED &&
+                (status.failureReason == SourceFailureReason.AUTH_REQUIRED ||
+                    status.failureReason == SourceFailureReason.AUTH_EXPIRED)
+        }
+        .map { it.source.name }
+        .distinct()
+    if (authSources.isEmpty()) return null
+
+    val names = authSources.joinToString(", ")
+    val verb = if (authSources.size == 1) "requires" else "require"
+    return "$names $verb authentication. Connect the account in Settings > Source Accounts."
+}
+
 @Composable
-private fun EmptyBlock(hasPendingChanges: Boolean) {
+private fun EmptyBlock(
+    hasPendingChanges: Boolean,
+    messageOverride: String? = null,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = if (hasPendingChanges) {
+            text = messageOverride ?: if (hasPendingChanges) {
                 "Draft updated. Press Apply to refresh results."
             } else {
                 "No results yet. Add tags or use Explore quick queries."
@@ -504,20 +967,24 @@ private fun EmptyBlock(hasPendingChanges: Boolean) {
 @Composable
 private fun ErrorBlock(
     message: String,
-    onRetry: () -> Unit,
+    onRetry: (() -> Unit)? = null,
+    title: String = "Could not load results",
+    actionLabel: String = "Retry",
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Could not load results", style = MaterialTheme.typography.titleMedium)
+            Text(title, style = MaterialTheme.typography.titleMedium)
             Text(message, style = MaterialTheme.typography.bodySmall)
-            Text(
-                text = "Retry",
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.clickable(onClick = onRetry),
-            )
+            if (onRetry != null) {
+                Text(
+                    text = actionLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.clickable(onClick = onRetry),
+                )
+            }
         }
     }
 }
@@ -535,3 +1002,29 @@ private fun inferPreset(fromEpochMs: Long?, toEpochMs: Long?): DateRangePreset {
         else -> DateRangePreset.NONE
     }
 }
+
+private fun previewAspectRatio(post: Post): Float {
+    val width = post.width ?: return 1f
+    val height = post.height ?: return 1f
+    if (width <= 0 || height <= 0) return 1f
+    return width.toFloat() / height.toFloat()
+}
+
+private fun buildImageRequest(
+    context: Context,
+    url: String,
+    sourceKey: SourceKey,
+): ImageRequest {
+    val builder = ImageRequest.Builder(context)
+        .data(url)
+        .crossfade(true)
+        .allowHardware(false)
+    if (sourceKey == SourceKey.PIXIV) {
+        builder
+            .addHeader("Referer", "https://www.pixiv.net/")
+            .addHeader("User-Agent", "Mozilla/5.0")
+    }
+    return builder.build()
+}
+
+private const val PAGINATION_PREFETCH_RATIO = 0.8f

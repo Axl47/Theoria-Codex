@@ -59,6 +59,7 @@ data class SearchPageFixture(
 
 data class SearchPostFixture(
     val sourcePostId: String,
+    val title: String? = null,
     val previewUrl: String?,
     val fullUrl: String?,
     val pageUrl: String?,
@@ -81,6 +82,7 @@ data class SearchPostFixture(
             rawTags = rawTags,
             authorName = authorName,
             createdAtEpochMs = createdAtEpochMs,
+            title = title,
         )
     }
 }

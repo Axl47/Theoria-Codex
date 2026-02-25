@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:08
-updated_at: 2026-02-24T23:08
+updated_at: 2026-02-25T01:42
 ---
 # Build Theoria Codex Android MVP (Stub-first, Local-first)
 
@@ -35,6 +35,17 @@ The success path is observable: launch app, switch among Search/Explore/Codex/Se
   - `./gradlew testDebugUnitTest`
   - `./gradlew assembleDebug`
   - `./gradlew lintDebug`
+- [x] (2026-02-25 01:28Z) Completed second-pass contract refactor: `SourceAdapter` autocomplete support, `requiresCredentials` capability, typed `SourceFailureReason`, and `SourceAdapterRegistry` abstraction.
+- [x] (2026-02-25 01:33Z) Added new `:core-sources` module with real Pixiv/AIBooru/Gelbooru adapters and `RealAdapterRegistry` (Phase A runtime exposure: Pixiv only).
+- [x] (2026-02-25 01:37Z) Rewired app runtime from stubs to real registry in `SearchCoordinator` and `TheoriaApp`; source lists are now registry-driven and unfinished sources are hidden.
+- [x] (2026-02-25 01:39Z) Added secure source credential storage (`AndroidSecureSourceCredentialsStore`) and Pixiv PKCE callback plumbing (`MainActivity` deep-link callback + Settings account controls).
+- [x] (2026-02-25 01:41Z) Second-pass validation gate passed:
+  - `./gradlew :core-domain:test :core-data:test :core-stubs:test :core-sources:test`
+  - `./gradlew testDebugUnitTest`
+  - `./gradlew assembleDebug`
+  - `./gradlew lintDebug`
+- [x] (2026-02-25 04:31Z) Added startup updater implementation for `main` prerelease channel: GitHub Releases feed parser, APK download/validation/installer flow, persisted update state, splash-gated startup orchestration, and Android installer/FileProvider manifest plumbing.
+- [x] (2026-02-25 04:36Z) Added `.github/workflows/main-prerelease.yml` to publish `main-vc<versionCode>-<sha>` prereleases with fixed update asset `theoria-codex-main.apk`; added update parser tests and re-ran app build/unit-test gates.
 
 ## Surprises & Discoveries
 
@@ -46,6 +57,11 @@ The success path is observable: launch app, switch among Search/Explore/Codex/Se
 
 - Observation: AGP 8.5.2 warns for compileSdk 35 compatibility.
   Evidence: Build output emitted unsupported compileSdk warning; mitigated by setting `android.suppressUnsupportedCompileSdk=35` in `gradle.properties`.
+
+- Observation: Public constructor signatures in `:core-sources` surfaced `Gson` to app compile classpath.
+  Evidence: `:app:compileDebugKotlin` failed until `gson` was added to app dependencies or signatures were hidden behind internal API.
+- Observation: Clearing pending installer state immediately after launching Android installer caused avoidable re-downloads when users canceled install and reopened app.
+  Evidence: Startup updater would not reuse previously downloaded APK unless `pendingInstallReleaseId` remained set for the same release.
 
 ## Decision Log
 
@@ -81,9 +97,23 @@ The success path is observable: launch app, switch among Search/Explore/Codex/Se
   Rationale: Delivers full MVP behavior now while preserving contract seams for later storage backend swap.
   Date/Author: 2026-02-24 / Codex
 
+- Decision: Use hybrid storage for source auth credentials only (Android Keystore-backed encrypted preferences) while keeping all non-sensitive app state in existing file-backed repositories.
+  Rationale: Meets beta security requirements without blocking current persistence architecture.
+  Date/Author: 2026-02-25 / Codex
+
+- Decision: Keep runtime in real-only cutover mode and expose only Pixiv in Phase A; keep stubs test/dev-only.
+  Rationale: Avoids soft-fail UX for unfinished providers while preserving deterministic stub coverage in tests.
+  Date/Author: 2026-02-25 / Codex
+- Decision: Use GitHub prereleases as the mobile-resolvable “latest main build” contract with fixed asset name and strict tag parsing (`main-vc<versionCode>-<sha>`).
+  Rationale: Mobile clients cannot reliably resolve raw latest commit artifacts; release metadata gives deterministic versioning, channeling, and asset lookup.
+  Date/Author: 2026-02-25 / Codex
+- Decision: Preserve pending update metadata after installer launch so startup can reuse an already downloaded APK if install is canceled/aborted.
+  Rationale: Reduces redundant network usage and improves startup update UX while still validating APK before each install attempt.
+  Date/Author: 2026-02-25 / Codex
+
 ## Outcomes & Retrospective
 
-Milestones 1 through 8 are complete and validated for functional/spec-critical behavior. The app now ships Search/Explore/Codex/Settings tabs, immersive Viewer interactions, file-backed restore/persistence behavior, scenario-aware runtime controls, and end-to-end save/caching flows. Remaining gaps are limited to non-critical visual polish (image rendering fidelity and masonry aesthetics).
+Milestones 1 through 8 are complete and validated for functional/spec-critical behavior. Second-pass source cutover is also complete for architecture-critical scope: runtime registry abstraction, real-source module introduction, secure source credential storage, settings account controls, and Pixiv-first source exposure. Startup now includes updater orchestration for `main` prerelease APK delivery with safe fallback to current install. Remaining gaps are now mostly rollout/theming polish and broader source exposure in later phases.
 
 ## Context and Orientation
 
@@ -93,6 +123,7 @@ Current structure now includes:
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-domain`
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-data`
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-stubs`
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-sources`
 
 The spec source of truth remains `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/TheoriaSpec.md`.
 
@@ -121,6 +152,7 @@ From `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex`:
     ./gradlew tasks --all
     ./gradlew assembleDebug
     ./gradlew :core-domain:test
+    ./gradlew :core-sources:test
     ./gradlew testDebugUnitTest
     ./gradlew connectedDebugAndroidTest
     ./gradlew lintDebug
@@ -167,6 +199,11 @@ Key artifacts currently produced:
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/settings/SettingsScreen.kt`
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/test/java/com/theoriacodex/app/search/SearchCoordinatorTest.kt`
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/test/java/com/theoriacodex/app/viewer/ViewerStateTest.kt`
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceAdapterRegistry.kt`
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceFailure.kt`
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-sources/src/main/kotlin/com/theoriacodex/sources/RealAdapterRegistry.kt`
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/sourceauth/SourceCredentialsStores.kt`
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/sourceauth/PixivPkceController.kt`
 
 Validation excerpts:
 
@@ -177,6 +214,10 @@ Validation excerpts:
     :core-domain:test
 
 Plan revision note (2026-02-24 23:08Z): Completed one-pass Milestone 5-8 delivery with repository contract extensions (`CodexSortMode`, explicit settings setters, `UiRestoreRepository`), Viewer/Codex/Settings UI integration, and final validation gates.
+
+Plan revision note (2026-02-25 01:42Z): Completed second-pass source cutover with real adapter module introduction (`:core-sources`), registry-driven runtime source visibility, secure source credential storage, and settings account controls while retaining `:core-stubs` for tests/dev.
+
+Plan revision note (2026-02-25 04:36Z): Added startup auto-update delivery path (GitHub prerelease feed + APK validation/installer startup gate + release workflow contract) and retained fallback-to-current-app behavior for all update failures.
 
 ## Interfaces and Dependencies
 
@@ -194,8 +235,35 @@ Current required interface (already created):
       val capabilities: SourceCapabilities
       suspend fun search(query: Query, pageToken: String?): Page<Post>
       suspend fun trendingTags(limit: Int): List<TagSuggestion>
+      suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion>
       suspend fun quickQuery(kind: QuickQueryKind): Query
       suspend fun resolvePost(id: PostId): Post?
+    }
+
+    data class SourceCapabilities(
+      val supportsSortNewest: Boolean,
+      val supportsSortPopular: Boolean,
+      val supportsSortTop: Boolean,
+      val supportsSortRandom: Boolean,
+      val supportsExcludeTagsServerSide: Boolean,
+      val supportsDateRangeServerSide: Boolean,
+      val supportsMinScoreServerSide: Boolean,
+      val requiresCredentials: Boolean
+    )
+
+    enum class SourceFailureReason {
+      AUTH_REQUIRED,
+      AUTH_EXPIRED,
+      RATE_LIMITED,
+      NETWORK,
+      PARSE,
+      UNKNOWN
+    }
+
+    interface SourceAdapterRegistry {
+      fun availableSources(): Set<SourceKey>
+      fun adapterFor(sourceKey: SourceKey): SourceAdapter?
+      fun unifiedOrchestrator(): UnifiedSearchOrchestrator
     }
 
 Key interface additions delivered:

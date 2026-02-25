@@ -1,0 +1,73 @@
+name: Main Prerelease
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Compute release metadata
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          VERSION_CODE=$((1000000000 + GITHUB_RUN_NUMBER))
+          VERSION_NAME="0.1.0"
+          RELEASE_TAG="main-vc${VERSION_CODE}-${SHORT_SHA}"
+
+          echo "SHORT_SHA=${SHORT_SHA}" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> "$GITHUB_ENV"
+
+      - name: Assemble release APK
+        run: |
+          ./gradlew :app:assembleRelease \
+            -Ptheoria.versionCode=${VERSION_CODE} \
+            -Ptheoria.versionName=${VERSION_NAME}
+
+      - name: Sign release APK
+        id: sign_app
+        uses: r0adkll/sign-android-release@v1
+        with:
+          releaseDirectory: app/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.THEORIA_UPLOAD_KEYSTORE_BASE64 }}
+          alias: ${{ secrets.THEORIA_UPLOAD_KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.THEORIA_UPLOAD_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.THEORIA_UPLOAD_KEY_PASSWORD }}
+
+      - name: Normalize update asset name
+        run: |
+          cp "${{ steps.sign_app.outputs.signedReleaseFile }}" theoria-codex-main.apk
+
+      - name: Publish prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Main build ${{ env.VERSION_NAME }}
+          prerelease: true
+          draft: false
+          files: theoria-codex-main.apk
+          fail_on_unmatched_files: true
+          body: |
+            Channel: main
+            Asset: theoria-codex-main.apk
+            VersionCode: ${{ env.VERSION_CODE }}
+            Commit: ${{ env.SHORT_SHA }}
