@@ -130,4 +130,6 @@ private fun encodeForm(values: Map<String, String>): String {
 
 private fun String.urlEncode(): String {
     return URLEncoder.encode(this, Charsets.UTF_8.name())
+        // Query-component spaces should be encoded as %20 for broader API compatibility.
+        .replace("+", "%20")
 }
