@@ -58,10 +58,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -533,6 +534,7 @@ fun TheoriaApp(
     val currentRoute = currentDestination?.route
     val topLevelRoutes = remember { TopLevelDestination.entries.map { it.route }.toSet() }
     val showBottomBar = currentRoute in topLevelRoutes
+    val latestCurrentRoute = rememberUpdatedState(currentRoute)
     val currentContext = LocalContext.current
     val density = LocalDensity.current
     val configuration = LocalConfiguration.current
@@ -794,7 +796,7 @@ fun TheoriaApp(
                     startDestination = startDestination,
                     modifier = Modifier
                         .padding(innerPadding)
-                        .pointerInput(currentRoute, showBottomBar, tabSwipeThresholdPx) {
+                        .pointerInput(showBottomBar, tabSwipeThresholdPx) {
                             if (!showBottomBar) return@pointerInput
                             awaitEachGesture {
                                 val firstDown = awaitFirstDown(
@@ -810,7 +812,7 @@ fun TheoriaApp(
                                     val change = event.changes.firstOrNull { it.id == pointerId }
                                         ?: event.changes.firstOrNull()
                                         ?: break
-                                    val delta = change.positionChange()
+                                    val delta = change.positionChangeIgnoreConsumed()
                                     totalHorizontalDrag += delta.x
                                     totalVerticalDrag += delta.y
                                     if (!change.pressed) break
@@ -820,7 +822,7 @@ fun TheoriaApp(
                                 if (abs(totalHorizontalDrag) <= abs(totalVerticalDrag) * TAB_SWIPE_HORIZONTAL_BIAS) {
                                     return@awaitEachGesture
                                 }
-                                val activeRoute = currentRoute ?: return@awaitEachGesture
+                                val activeRoute = latestCurrentRoute.value ?: return@awaitEachGesture
                                 val currentTabIndex = TopLevelDestination.entries.indexOfFirst { tab ->
                                     tab.route == activeRoute
                                 }
