@@ -62,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -705,9 +706,15 @@ fun TheoriaApp(
                     if (startupUpdateState !is StartupUpdateState.Failed) {
                         CircularProgressIndicator()
                     }
-                    Text(startupStatusMessage)
+                    Text(
+                        text = startupStatusMessage,
+                        color = Color.White,
+                    )
                     if (awaitingInstallerReturn) {
                         TextButton(
+                            colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                                contentColor = Color.White,
+                            ),
                             onClick = {
                                 scope.launch {
                                     awaitingInstallerReturn = false
@@ -719,7 +726,10 @@ fun TheoriaApp(
                                 }
                             },
                         ) {
-                            Text("Continue current version")
+                            Text(
+                                text = "Continue current version",
+                                color = Color.White,
+                            )
                         }
                     }
                 }
