@@ -80,6 +80,17 @@ class FileBackedUpdateStateStore(
         }
     }
 
+    override fun setPendingPostInstallChangelog(changelog: PendingPostInstallChangelog?) {
+        synchronized(lock) {
+            val current = readLocked()
+            writeLocked(
+                current.copy(
+                    pendingPostInstallChangelog = changelog,
+                )
+            )
+        }
+    }
+
     private fun readLocked(): UpdateStateSnapshot {
         if (!file.exists()) return UpdateStateSnapshot()
         val body = runCatching { file.readText() }.getOrDefault("")

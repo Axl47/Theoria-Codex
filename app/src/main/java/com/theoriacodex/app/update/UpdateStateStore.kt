@@ -1,5 +1,15 @@
 package com.theoriacodex.app.update
 
+data class PendingPostInstallChangelog(
+    val releaseId: Long,
+    val versionCode: Int,
+    val tagName: String,
+    val commitShaShort: String,
+    val releaseName: String? = null,
+    val changelogMarkdown: String = "",
+    val changelogSections: List<ChangelogSection> = emptyList(),
+)
+
 data class UpdateStateSnapshot(
     val lastSeenReleaseId: Long? = null,
     val pendingInstallReleaseId: Long? = null,
@@ -7,6 +17,7 @@ data class UpdateStateSnapshot(
     val ignoredReleaseId: Long? = null,
     val remindLaterReleaseId: Long? = null,
     val remindLaterUntilEpochMs: Long? = null,
+    val pendingPostInstallChangelog: PendingPostInstallChangelog? = null,
 )
 
 interface UpdateStateStore {
@@ -17,4 +28,5 @@ interface UpdateStateStore {
     fun setIgnoredRelease(releaseId: Long?)
     fun setRemindLater(releaseId: Long?, untilEpochMs: Long?)
     fun clearPromptDeferrals()
+    fun setPendingPostInstallChangelog(changelog: PendingPostInstallChangelog?)
 }

@@ -6,6 +6,7 @@ import android.content.Intent
 import android.app.DownloadManager
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Environment
 import android.os.Build
@@ -39,6 +40,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -76,6 +78,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.core.content.pm.PackageInfoCompat
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.SaveToCodexSheet
@@ -93,6 +96,7 @@ import com.theoriacodex.app.update.ApkUpdateValidator
 import com.theoriacodex.app.update.FileBackedUpdateStateStore
 import com.theoriacodex.app.update.GitHubReleaseFeedClient
 import com.theoriacodex.app.update.RemoteUpdate
+import com.theoriacodex.app.update.PendingPostInstallChangelog
 import com.theoriacodex.app.update.StartupUpdateOutcome
 import com.theoriacodex.app.update.StartupUpdateState
 import com.theoriacodex.app.update.StartupUpdater
@@ -264,6 +268,7 @@ fun TheoriaApp(
     var startupUpdateState by remember { mutableStateOf<StartupUpdateState>(StartupUpdateState.Checking) }
     var startupStatusMessage by remember { mutableStateOf("Checking for updates...") }
     var updateChoiceRemote by remember { mutableStateOf<RemoteUpdate?>(null) }
+    var postInstallChangelog by remember { mutableStateOf<PendingPostInstallChangelog?>(null) }
     var startupActionLocked by remember { mutableStateOf(false) }
     var pendingInstallRemote by remember { mutableStateOf<RemoteUpdate?>(null) }
     var awaitingUnknownSources by remember { mutableStateOf(false) }
@@ -349,6 +354,13 @@ fun TheoriaApp(
         startDestination = uiRestoreRepository.getLastTab()
             ?: settingsRepository.observeSettings().first().lastSelectedTabRoute
         navReady = true
+        val pendingChangelog = startupUpdater.pendingSnapshot().pendingPostInstallChangelog
+        if (pendingChangelog != null) {
+            val installedVersionCode = installedAppVersionCode(appContext)
+            if (pendingChangelog.versionCode <= installedVersionCode) {
+                postInstallChangelog = pendingChangelog
+            }
+        }
     }
 
     suspend fun continueAfterUpdateFailure(message: String) {
@@ -1018,6 +1030,18 @@ fun TheoriaApp(
                 },
             )
         }
+
+        postInstallChangelog?.let { changelog ->
+            PostInstallChangelogDialog(
+                changelog = changelog,
+                onDismiss = {
+                    postInstallChangelog = null
+                    scope.launch {
+                        updateStateStore.setPendingPostInstallChangelog(null)
+                    }
+                },
+            )
+        }
     }
 }
 
@@ -1114,6 +1138,70 @@ private fun StartupUpdatePromptCard(
     }
 }
 
+@Composable
+private fun PostInstallChangelogDialog(
+    changelog: PendingPostInstallChangelog,
+    onDismiss: () -> Unit,
+) {
+    val sections = changelog.changelogSections.filter { it.bullets.isNotEmpty() }
+    val subtitleParts = buildList {
+        changelog.releaseName?.takeIf { it.isNotBlank() }?.let(::add)
+        add("vc${changelog.versionCode}")
+        add(changelog.commitShaShort)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Got it")
+            }
+        },
+        title = {
+            Text("What's new")
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 320.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = subtitleParts.joinToString(" • "),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (sections.isNotEmpty()) {
+                    sections.forEach { section ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = section.title,
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            section.bullets.forEach { bullet ->
+                                Text(
+                                    text = "• $bullet",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    val fallback = changelog.changelogMarkdown
+                        .lineSequence()
+                        .map { it.trim() }
+                        .firstOrNull { it.isNotBlank() && !it.startsWith("#") }
+                    Text(
+                        text = fallback ?: "No changelog details were published for this build.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        },
+    )
+}
+
 private fun openInBrowser(context: Context, url: String) {
     runCatching {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
@@ -1140,6 +1228,19 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
+}
+
+private fun installedAppVersionCode(context: Context): Int {
+    val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        context.packageManager.getPackageInfo(
+            context.packageName,
+            PackageManager.PackageInfoFlags.of(0),
+        )
+    } else {
+        @Suppress("DEPRECATION")
+        context.packageManager.getPackageInfo(context.packageName, 0)
+    }
+    return PackageInfoCompat.getLongVersionCode(packageInfo).toInt()
 }
 
 private fun isPixivUgoiraPost(post: Post): Boolean {

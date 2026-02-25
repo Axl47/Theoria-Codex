@@ -186,5 +186,9 @@ class StartupUpdaterTest {
                 remindLaterUntilEpochMs = null,
             )
         }
+
+        override fun setPendingPostInstallChangelog(changelog: PendingPostInstallChangelog?) {
+            snapshot = snapshot.copy(pendingPostInstallChangelog = changelog)
+        }
     }
 }
