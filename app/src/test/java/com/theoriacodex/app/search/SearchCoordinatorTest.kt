@@ -151,6 +151,23 @@ class SearchCoordinatorTest {
     }
 
     @Test
+    fun `quick query resets prior include and exclude tags`() = runTest {
+        val coordinator = coordinator()
+        coordinator.initialize()
+        coordinator.addIncludeTag("from-trending")
+        coordinator.addExcludeTag("old-exclude")
+        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
+
+        coordinator.applyQuickQuery(QuickQueryKind.TOP_7D)
+
+        assertEquals(QueryMode.Unified, coordinator.draftQuery.mode)
+        assertTrue(coordinator.draftQuery.includeTags.isEmpty())
+        assertTrue(coordinator.draftQuery.excludeTags.isEmpty())
+        assertEquals(SortMode.TOP, coordinator.draftQuery.sort)
+        assertTrue(coordinator.draftQuery.dateRange != null)
+    }
+
+    @Test
     fun `pixiv unknown failure resets search and prompts retry message`() = runTest {
         val registry = object : SourceAdapterRegistry {
             private val pixivAdapter = object : SourceAdapter {

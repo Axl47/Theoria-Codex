@@ -191,7 +191,10 @@ class SearchCoordinator(
             QuickQueryKind.TOP_30D -> DateRange(fromEpochMs = now - 30L * dayMs, toEpochMs = now)
             QuickQueryKind.NEWEST, QuickQueryKind.RANDOM -> null
         }
-        draftQuery = draftQuery.copy(sort = sort, dateRange = dateRange)
+        draftQuery = defaultQuery(QueryMode.Unified).copy(
+            sort = sort,
+            dateRange = dateRange,
+        )
     }
 
     fun addTrendingTag(tag: String) {
