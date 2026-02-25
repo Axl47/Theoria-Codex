@@ -1141,6 +1141,12 @@ fun TheoriaApp(
                                 onAddExcludeTag = { tag ->
                                     searchCoordinator.addExcludeTag(tag)
                                 },
+                                onRemoveIncludeTag = { tag ->
+                                    searchCoordinator.removeIncludeTag(tag)
+                                },
+                                onRemoveExcludeTag = { tag ->
+                                    searchCoordinator.removeExcludeTag(tag)
+                                },
                                 onGoToSearch = {
                                     viewerSession = null
                                     scope.launch { searchCoordinator.setViewerLaunchContext(null) }

@@ -87,6 +87,8 @@ fun ViewerScreen(
     onOpenInBrowser: (Post) -> Unit,
     onAddIncludeTag: (String) -> Unit,
     onAddExcludeTag: (String) -> Unit,
+    onRemoveIncludeTag: (String) -> Unit,
+    onRemoveExcludeTag: (String) -> Unit,
     onGoToSearch: () -> Unit,
 ) {
     if (posts.isEmpty()) {
@@ -409,7 +411,10 @@ fun ViewerScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text("Info & Actions", style = MaterialTheme.typography.titleMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                ) {
                     Button(onClick = {
                         onSave(post)
                         showInfoSheet = false
@@ -428,19 +433,48 @@ fun ViewerScreen(
                     tags = post.canonicalTags.distinct(),
                     selections = tagSelections,
                     onIncludeTag = { tag ->
-                        onAddIncludeTag(tag)
-                        tagSelections = tagSelections + (tag to ViewerTagSelection.INCLUDE)
+                        when (tagSelections[tag]) {
+                            ViewerTagSelection.INCLUDE -> {
+                                onRemoveIncludeTag(tag)
+                                tagSelections = tagSelections - tag
+                            }
+                            ViewerTagSelection.EXCLUDE -> {
+                                onRemoveExcludeTag(tag)
+                                onAddIncludeTag(tag)
+                                tagSelections = tagSelections + (tag to ViewerTagSelection.INCLUDE)
+                            }
+                            null -> {
+                                onAddIncludeTag(tag)
+                                tagSelections = tagSelections + (tag to ViewerTagSelection.INCLUDE)
+                            }
+                        }
                     },
                     onExcludeTag = { tag ->
-                        onAddExcludeTag(tag)
-                        tagSelections = tagSelections + (tag to ViewerTagSelection.EXCLUDE)
+                        when (tagSelections[tag]) {
+                            ViewerTagSelection.EXCLUDE -> {
+                                onRemoveExcludeTag(tag)
+                                tagSelections = tagSelections - tag
+                            }
+                            ViewerTagSelection.INCLUDE -> {
+                                onRemoveIncludeTag(tag)
+                                onAddExcludeTag(tag)
+                                tagSelections = tagSelections + (tag to ViewerTagSelection.EXCLUDE)
+                            }
+                            null -> {
+                                onAddExcludeTag(tag)
+                                tagSelections = tagSelections + (tag to ViewerTagSelection.EXCLUDE)
+                            }
+                        }
                     },
                 )
 
-                TextButton(onClick = {
-                    onGoToSearch()
-                    showInfoSheet = false
-                }) {
+                TextButton(
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    onClick = {
+                        onGoToSearch()
+                        showInfoSheet = false
+                    },
+                ) {
                     Text("Go to Search")
                 }
             }
