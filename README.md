@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-02-25T06:02
+updated_at: 2026-02-25T12:20
 ---
 # Theoria Codex
 
@@ -48,6 +48,7 @@ Previously completed MVP slices remain in place:
 - Orientation is now route-aware: app surfaces are portrait-only, while Viewer supports landscape rotation
 - In landscape Viewer, media now renders edge-to-edge (no card/page inset margins), and ugoira progress is drawn inside the media at the bottom edge
 - Startup now includes a GitHub Releases updater path for `main` prereleases: checks on launch, downloads fixed asset `theoria-codex-main.apk` when newer `main-vc<versionCode>-<sha>` builds exist, validates package/signature/version, and opens Android installer (with unknown-sources handoff + fallback to current app on failure)
+- Startup updater now prompts user choice when a new build is detected (`Yes`, `No`, `Remind Later`): `No` skips that release until a newer one, `Remind Later` snoozes that release for 24h, and `Yes` runs the existing startup-blocking install flow; prompt includes sectioned changelog data parsed from GitHub release notes (`Highlights`, `New`, `Improvements`, `Fixes`, `Known Issues`)
 - File-backed persistence for query/settings/cache/codex/UI restore state
 The project now includes a runnable portrait-locked Android MVP with four top-level tabs:
 

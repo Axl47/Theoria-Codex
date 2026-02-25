@@ -44,6 +44,42 @@ class FileBackedUpdateStateStore(
         }
     }
 
+    override fun setIgnoredRelease(releaseId: Long?) {
+        synchronized(lock) {
+            val current = readLocked()
+            writeLocked(
+                current.copy(
+                    ignoredReleaseId = releaseId,
+                )
+            )
+        }
+    }
+
+    override fun setRemindLater(releaseId: Long?, untilEpochMs: Long?) {
+        synchronized(lock) {
+            val current = readLocked()
+            writeLocked(
+                current.copy(
+                    remindLaterReleaseId = releaseId,
+                    remindLaterUntilEpochMs = untilEpochMs,
+                )
+            )
+        }
+    }
+
+    override fun clearPromptDeferrals() {
+        synchronized(lock) {
+            val current = readLocked()
+            writeLocked(
+                current.copy(
+                    ignoredReleaseId = null,
+                    remindLaterReleaseId = null,
+                    remindLaterUntilEpochMs = null,
+                )
+            )
+        }
+    }
+
     private fun readLocked(): UpdateStateSnapshot {
         if (!file.exists()) return UpdateStateSnapshot()
         val body = runCatching { file.readText() }.getOrDefault("")

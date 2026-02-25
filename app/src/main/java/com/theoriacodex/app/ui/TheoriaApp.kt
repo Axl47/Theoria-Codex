@@ -14,25 +14,36 @@ import android.widget.Toast
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -46,6 +57,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
@@ -110,13 +123,13 @@ import com.theoriacodex.sources.pixiv.PIXIV_UGOIRA_MIME
 import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import kotlin.math.abs
-import kotlin.math.min
 
 enum class TopLevelDestination(val route: String, val label: String) {
     Search("search", "Search"),
@@ -250,6 +263,8 @@ fun TheoriaApp(
     var navReady by remember { mutableStateOf(false) }
     var startupUpdateState by remember { mutableStateOf<StartupUpdateState>(StartupUpdateState.Checking) }
     var startupStatusMessage by remember { mutableStateOf("Checking for updates...") }
+    var updateChoiceRemote by remember { mutableStateOf<RemoteUpdate?>(null) }
+    var startupActionLocked by remember { mutableStateOf(false) }
     var pendingInstallRemote by remember { mutableStateOf<RemoteUpdate?>(null) }
     var awaitingUnknownSources by remember { mutableStateOf(false) }
     var awaitingInstallerReturn by remember { mutableStateOf(false) }
@@ -337,10 +352,49 @@ fun TheoriaApp(
     }
 
     suspend fun continueAfterUpdateFailure(message: String) {
+        updateChoiceRemote = null
+        startupActionLocked = false
         startupUpdateState = StartupUpdateState.Failed(message)
         startupStatusMessage = message
         delay(1_200)
         completeAppStartup()
+    }
+
+    suspend fun performStartupInstall(remote: RemoteUpdate) {
+        startupActionLocked = true
+        startupUpdater.onUserChoseYes(remote)
+        val updateOutcome = startupUpdater.installUpdate(remote) { state ->
+            startupUpdateState = state
+            startupStatusMessage = state.messageText()
+        }
+
+        when (updateOutcome) {
+            StartupUpdateOutcome.ContinueToApp -> {
+                updateChoiceRemote = null
+                startupActionLocked = false
+                completeAppStartup()
+            }
+
+            is StartupUpdateOutcome.ContinueToAppWithError -> {
+                startupActionLocked = false
+                continueAfterUpdateFailure(updateOutcome.message)
+            }
+
+            is StartupUpdateOutcome.AwaitingUnknownSources -> {
+                updateChoiceRemote = null
+                pendingInstallRemote = updateOutcome.remote
+                awaitingUnknownSources = true
+                startupStatusMessage = "Grant install permission to continue update..."
+                openUnknownSourcesSettings(appContext)
+            }
+
+            is StartupUpdateOutcome.InstallerLaunched -> {
+                updateChoiceRemote = null
+                pendingInstallRemote = updateOutcome.remote
+                awaitingInstallerReturn = true
+                startupStatusMessage = "Installer opened. Complete update to reload app."
+            }
+        }
     }
 
     suspend fun beginStartupUpdateFlow() {
@@ -351,33 +405,23 @@ fun TheoriaApp(
             return
         }
 
-        val updateOutcome = startupUpdater.run { state ->
+        val remoteResult = startupUpdater.checkForEligibleUpdate { state ->
             startupUpdateState = state
             startupStatusMessage = state.messageText()
         }
-
-        when (updateOutcome) {
-            StartupUpdateOutcome.ContinueToApp -> {
-                completeAppStartup()
-            }
-
-            is StartupUpdateOutcome.ContinueToAppWithError -> {
-                continueAfterUpdateFailure(updateOutcome.message)
-            }
-
-            is StartupUpdateOutcome.AwaitingUnknownSources -> {
-                pendingInstallRemote = updateOutcome.remote
-                awaitingUnknownSources = true
-                startupStatusMessage = "Grant install permission to continue update..."
-                openUnknownSourcesSettings(appContext)
-            }
-
-            is StartupUpdateOutcome.InstallerLaunched -> {
-                pendingInstallRemote = updateOutcome.remote
-                awaitingInstallerReturn = true
-                startupStatusMessage = "Installer opened. Complete update to reload app."
-            }
+        val eligibleRemote = remoteResult.getOrElse { error ->
+            continueAfterUpdateFailure(error.message ?: "Could not check for updates")
+            return
         }
+
+        if (eligibleRemote == null) {
+            completeAppStartup()
+            return
+        }
+
+        updateChoiceRemote = eligibleRemote
+        startupUpdateState = StartupUpdateState.AwaitingUserChoice(eligibleRemote)
+        startupStatusMessage = startupUpdateState.messageText()
     }
 
     LaunchedEffect(Unit) {
@@ -433,11 +477,18 @@ fun TheoriaApp(
     val configuration = LocalConfiguration.current
     val hostActivity = remember(currentContext) { currentContext.findActivity() }
     val lifecycleOwner = LocalLifecycleOwner.current
-    val shortEdgeDp = remember(configuration.screenWidthDp, configuration.screenHeightDp) {
-        min(configuration.screenWidthDp, configuration.screenHeightDp)
+    val bottomBarHeightDp = remember(configuration.screenHeightDp) {
+        (configuration.screenHeightDp * BOTTOM_BAR_HEIGHT_RATIO)
+            .toInt()
+            .coerceIn(MIN_BOTTOM_BAR_HEIGHT_DP, MAX_BOTTOM_BAR_HEIGHT_DP)
     }
-    val bottomBarHeight = if (shortEdgeDp >= LARGE_DEVICE_SHORT_EDGE_DP) 64.dp else 58.dp
-    val bottomBarIconSize = if (shortEdgeDp >= LARGE_DEVICE_SHORT_EDGE_DP) 24.dp else 20.dp
+    val bottomBarIconSizeDp = remember(bottomBarHeightDp) {
+        (bottomBarHeightDp * BOTTOM_BAR_ICON_RATIO)
+            .toInt()
+            .coerceIn(MIN_BOTTOM_BAR_ICON_DP, MAX_BOTTOM_BAR_ICON_DP)
+    }
+    val bottomBarHeight = bottomBarHeightDp.dp
+    val bottomBarIconSize = bottomBarIconSizeDp.dp
     val tabSwipeThresholdPx = with(density) { TAB_SWIPE_THRESHOLD_DP.dp.toPx() }
 
     LaunchedEffect(currentRoute) {
@@ -480,18 +531,21 @@ fun TheoriaApp(
                         StartupUpdateOutcome.ContinueToApp -> {
                             awaitingUnknownSources = false
                             pendingInstallRemote = null
+                            startupActionLocked = false
                             completeAppStartup()
                         }
 
                         is StartupUpdateOutcome.ContinueToAppWithError -> {
                             awaitingUnknownSources = false
                             pendingInstallRemote = null
+                            startupActionLocked = false
                             continueAfterUpdateFailure(outcome.message)
                         }
 
                         is StartupUpdateOutcome.AwaitingUnknownSources -> {
                             awaitingUnknownSources = false
                             pendingInstallRemote = null
+                            startupActionLocked = false
                             continueAfterUpdateFailure(
                                 "Install permission was not granted. Continuing with current app.",
                             )
@@ -501,6 +555,7 @@ fun TheoriaApp(
                             awaitingUnknownSources = false
                             awaitingInstallerReturn = true
                             pendingInstallRemote = outcome.remote
+                            startupActionLocked = true
                             startupStatusMessage = "Installer opened. Complete update to reload app."
                         }
                     }
@@ -509,6 +564,7 @@ fun TheoriaApp(
                 scope.launch {
                     awaitingInstallerReturn = false
                     pendingInstallRemote = null
+                    startupActionLocked = false
                     continueAfterUpdateFailure("Update was not completed. Continuing with current app.")
                 }
             }
@@ -545,6 +601,7 @@ fun TheoriaApp(
 
     TheoriaNightTheme {
         if (!navReady) {
+            val promptRemote = updateChoiceRemote
             Column(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -555,10 +612,47 @@ fun TheoriaApp(
                     contentDescription = "Theoria splash",
                     modifier = Modifier.size(180.dp),
                 )
-                if (startupUpdateState !is StartupUpdateState.Failed) {
-                    CircularProgressIndicator()
+                if (startupUpdateState is StartupUpdateState.AwaitingUserChoice && promptRemote != null) {
+                    StartupUpdatePromptCard(
+                        remote = promptRemote,
+                        actionEnabled = !startupActionLocked,
+                        onYes = {
+                            if (startupActionLocked) return@StartupUpdatePromptCard
+                            scope.launch {
+                                performStartupInstall(promptRemote)
+                            }
+                        },
+                        onNo = {
+                            if (startupActionLocked) return@StartupUpdatePromptCard
+                            scope.launch {
+                                startupActionLocked = true
+                                startupUpdater.onUserChoseNo(promptRemote)
+                                updateChoiceRemote = null
+                                startupUpdateState = StartupUpdateState.NoUpdate
+                                startupStatusMessage = "Update skipped. Loading app..."
+                                startupActionLocked = false
+                                completeAppStartup()
+                            }
+                        },
+                        onRemindLater = {
+                            if (startupActionLocked) return@StartupUpdatePromptCard
+                            scope.launch {
+                                startupActionLocked = true
+                                startupUpdater.onUserChoseRemindLater(promptRemote)
+                                updateChoiceRemote = null
+                                startupUpdateState = StartupUpdateState.NoUpdate
+                                startupStatusMessage = "Update postponed for 24 hours. Loading app..."
+                                startupActionLocked = false
+                                completeAppStartup()
+                            }
+                        },
+                    )
+                } else {
+                    if (startupUpdateState !is StartupUpdateState.Failed) {
+                        CircularProgressIndicator()
+                    }
+                    Text(startupStatusMessage)
                 }
-                Text(startupStatusMessage)
             }
         } else {
             Scaffold(
@@ -608,35 +702,51 @@ fun TheoriaApp(
                         .padding(innerPadding)
                         .pointerInput(currentRoute, showBottomBar, tabSwipeThresholdPx) {
                             if (!showBottomBar) return@pointerInput
-                            var totalHorizontalDrag = 0f
-                            detectHorizontalDragGestures(
-                                onHorizontalDrag = { _, dragAmount ->
-                                    totalHorizontalDrag += dragAmount
-                                },
-                                onDragEnd = {
-                                    if (abs(totalHorizontalDrag) < tabSwipeThresholdPx) return@detectHorizontalDragGestures
-                                    val activeRoute = currentRoute ?: return@detectHorizontalDragGestures
-                                    val currentTabIndex = TopLevelDestination.entries.indexOfFirst { tab ->
-                                        tab.route == activeRoute
-                                    }
-                                    if (currentTabIndex == -1) return@detectHorizontalDragGestures
+                            awaitEachGesture {
+                                val firstDown = awaitFirstDown(
+                                    requireUnconsumed = false,
+                                    pass = PointerEventPass.Initial,
+                                )
+                                val pointerId = firstDown.id
+                                var totalHorizontalDrag = 0f
+                                var totalVerticalDrag = 0f
 
-                                    val targetTabIndex = if (totalHorizontalDrag < 0f) {
-                                        currentTabIndex + 1
-                                    } else {
-                                        currentTabIndex - 1
+                                while (true) {
+                                    val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                                    val change = event.changes.firstOrNull { it.id == pointerId }
+                                        ?: event.changes.firstOrNull()
+                                        ?: break
+                                    val delta = change.positionChange()
+                                    totalHorizontalDrag += delta.x
+                                    totalVerticalDrag += delta.y
+                                    if (!change.pressed) break
+                                }
+
+                                if (abs(totalHorizontalDrag) < tabSwipeThresholdPx) return@awaitEachGesture
+                                if (abs(totalHorizontalDrag) <= abs(totalVerticalDrag) * TAB_SWIPE_HORIZONTAL_BIAS) {
+                                    return@awaitEachGesture
+                                }
+                                val activeRoute = currentRoute ?: return@awaitEachGesture
+                                val currentTabIndex = TopLevelDestination.entries.indexOfFirst { tab ->
+                                    tab.route == activeRoute
+                                }
+                                if (currentTabIndex == -1) return@awaitEachGesture
+
+                                val targetTabIndex = if (totalHorizontalDrag < 0f) {
+                                    currentTabIndex + 1
+                                } else {
+                                    currentTabIndex - 1
+                                }
+                                val destination = TopLevelDestination.entries.getOrNull(targetTabIndex)
+                                    ?: return@awaitEachGesture
+                                navController.navigate(destination.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
                                     }
-                                    val destination = TopLevelDestination.entries.getOrNull(targetTabIndex)
-                                        ?: return@detectHorizontalDragGestures
-                                    navController.navigate(destination.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                },
-                            )
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
                         },
                 ) {
                     composable(TopLevelDestination.Search.route) {
@@ -665,7 +775,10 @@ fun TheoriaApp(
                     composable(TopLevelDestination.Explore.route) {
                         ExploreScreen(
                             coordinator = searchCoordinator,
-                            onNavigateToSearch = {
+                            onApplyDraftAndNavigateToSearch = {
+                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                    searchCoordinator.applyDraft()
+                                }
                                 navController.navigate(TopLevelDestination.Search.route) {
                                     popUpTo(navController.graph.findStartDestination().id) {
                                         saveState = true
@@ -898,6 +1011,99 @@ fun TheoriaApp(
     }
 }
 
+@Composable
+private fun StartupUpdatePromptCard(
+    remote: RemoteUpdate,
+    actionEnabled: Boolean,
+    onYes: () -> Unit,
+    onNo: () -> Unit,
+    onRemindLater: () -> Unit,
+) {
+    val sections = remote.changelogSections.filter { section -> section.bullets.isNotEmpty() }
+    val subtitleParts = buildList {
+        remote.releaseName?.takeIf { it.isNotBlank() }?.let(::add)
+        add("vc${remote.versionCode}")
+        add(remote.commitShaShort)
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .widthIn(max = 560.dp)
+            .padding(horizontal = 16.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "Update available",
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                text = subtitleParts.joinToString(separator = " • "),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (sections.isNotEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 240.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    sections.forEach { section ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = section.title,
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            section.bullets.forEach { bullet ->
+                                Text(
+                                    text = "• $bullet",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                Text(
+                    text = "No changelog details provided for this build.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(
+                    onClick = onYes,
+                    enabled = actionEnabled,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Yes")
+                }
+                TextButton(
+                    onClick = onNo,
+                    enabled = actionEnabled,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("No")
+                }
+            }
+            TextButton(
+                onClick = onRemindLater,
+                enabled = actionEnabled,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Remind Later")
+            }
+        }
+    }
+}
+
 private fun openInBrowser(context: Context, url: String) {
     runCatching {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
@@ -1067,5 +1273,11 @@ private fun loadSeedTagSuggestions(context: Context): Map<SourceKey, List<TagSug
 }
 
 private const val PIXIV_TOKEN_REFRESH_TIMEOUT_MS = 6_000L
-private const val LARGE_DEVICE_SHORT_EDGE_DP = 420
+private const val BOTTOM_BAR_HEIGHT_RATIO = 0.085f
+private const val BOTTOM_BAR_ICON_RATIO = 0.38f
+private const val MIN_BOTTOM_BAR_HEIGHT_DP = 68
+private const val MAX_BOTTOM_BAR_HEIGHT_DP = 88
+private const val MIN_BOTTOM_BAR_ICON_DP = 24
+private const val MAX_BOTTOM_BAR_ICON_DP = 30
 private const val TAB_SWIPE_THRESHOLD_DP = 72
+private const val TAB_SWIPE_HORIZONTAL_BIAS = 1.2f

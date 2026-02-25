@@ -73,6 +73,16 @@ class GitHubReleaseFeedClient(
                 if (downloadUrl.isBlank()) return@mapNotNull null
 
                 val releaseId = release.get("id")?.asLong ?: return@mapNotNull null
+                val releaseName = release.get("name")
+                    ?.takeUnless { it.isJsonNull }
+                    ?.asString
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                val changelogMarkdown = release.get("body")
+                    ?.takeUnless { it.isJsonNull }
+                    ?.asString
+                    .orEmpty()
+                val changelogSections = ReleaseChangelogParser.parse(changelogMarkdown)
                 RemoteUpdate(
                     releaseId = releaseId,
                     tagName = tagName,
@@ -80,6 +90,10 @@ class GitHubReleaseFeedClient(
                     commitShaShort = parsedTag.commitShaShort,
                     assetDownloadUrl = downloadUrl,
                     assetSizeBytes = asset.get("size")?.asLong,
+                    releaseName = releaseName,
+                    publishedAtEpochMs = publishedEpoch.takeIf { it > 0L },
+                    changelogMarkdown = changelogMarkdown,
+                    changelogSections = changelogSections,
                 ) to publishedEpoch
             }.maxByOrNull { (_, publishedEpoch) ->
                 publishedEpoch

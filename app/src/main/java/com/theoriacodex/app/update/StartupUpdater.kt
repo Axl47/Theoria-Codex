@@ -5,7 +5,10 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.pm.PackageInfoCompat
 import java.io.File
+import java.io.IOException
 import kotlinx.coroutines.withTimeoutOrNull
+
+internal const val REMIND_LATER_WINDOW_MS: Long = 24L * 60L * 60L * 1000L
 
 sealed interface StartupUpdateOutcome {
     data object ContinueToApp : StartupUpdateOutcome
@@ -29,34 +32,64 @@ class StartupUpdater(
     private val installer: ApkInstaller,
     private val stateStore: UpdateStateStore,
     private val updateCheckTimeoutMs: Long,
+    private val installedVersionCodeProvider: (() -> Int)? = null,
+    private val nowProvider: () -> Long = System::currentTimeMillis,
 ) {
-    suspend fun run(
+    suspend fun checkForEligibleUpdate(
         onState: (StartupUpdateState) -> Unit,
-    ): StartupUpdateOutcome {
+    ): Result<RemoteUpdate?> {
         onState(StartupUpdateState.Checking)
         val remoteResult = withTimeoutOrNull(updateCheckTimeoutMs) {
             feedClient.latestMainPrerelease()
-        } ?: return StartupUpdateOutcome.ContinueToAppWithError("Update check timed out")
+        } ?: return Result.failure(IOException("Update check timed out"))
 
         val remote = remoteResult.getOrElse { error ->
-            return StartupUpdateOutcome.ContinueToAppWithError(
-                error.message ?: "Could not check for updates",
-            )
+            return Result.failure(error)
         }
         if (remote == null) {
             onState(StartupUpdateState.NoUpdate)
-            return StartupUpdateOutcome.ContinueToApp
+            return Result.success(null)
         }
 
-        val installedVersionCode = installedVersionCode()
+        val installedVersionCode = installedVersionCodeProvider?.invoke() ?: readInstalledVersionCode(context)
         if (remote.versionCode <= installedVersionCode) {
             onState(StartupUpdateState.NoUpdate)
             stateStore.setLastSeenReleaseId(remote.releaseId)
             stateStore.clearPendingInstall()
-            return StartupUpdateOutcome.ContinueToApp
+            return Result.success(null)
         }
 
-        onState(StartupUpdateState.UpdateFound(remote))
+        val snapshot = stateStore.snapshot()
+        if (snapshot.ignoredReleaseId == remote.releaseId) {
+            onState(StartupUpdateState.NoUpdate)
+            return Result.success(null)
+        }
+
+        val remindLaterReleaseId = snapshot.remindLaterReleaseId
+        val remindUntil = snapshot.remindLaterUntilEpochMs
+        if (remindLaterReleaseId == remote.releaseId && remindUntil != null) {
+            if (nowProvider() < remindUntil) {
+                onState(StartupUpdateState.NoUpdate)
+                return Result.success(null)
+            }
+            stateStore.setRemindLater(releaseId = null, untilEpochMs = null)
+        }
+
+        if (
+            (snapshot.ignoredReleaseId != null && snapshot.ignoredReleaseId != remote.releaseId) ||
+            (remindLaterReleaseId != null && remindLaterReleaseId != remote.releaseId)
+        ) {
+            stateStore.clearPromptDeferrals()
+        }
+
+        onState(StartupUpdateState.AwaitingUserChoice(remote))
+        return Result.success(remote)
+    }
+
+    suspend fun installUpdate(
+        remote: RemoteUpdate,
+        onState: (StartupUpdateState) -> Unit,
+    ): StartupUpdateOutcome {
         val updateFile = resolveUpdateFile(remote, onState)
             ?: return StartupUpdateOutcome.ContinueToAppWithError("Could not download update APK")
 
@@ -75,6 +108,31 @@ class StartupUpdater(
         stateStore.setPendingInstall(remote.releaseId, remote.versionCode)
         onState(StartupUpdateState.Installing)
         return launchInstaller(remote = remote, apkFile = updateFile)
+    }
+
+    fun onUserChoseNo(remote: RemoteUpdate) {
+        stateStore.setIgnoredRelease(remote.releaseId)
+        stateStore.setRemindLater(releaseId = null, untilEpochMs = null)
+        stateStore.clearPendingInstall()
+    }
+
+    fun onUserChoseRemindLater(remote: RemoteUpdate, nowEpochMs: Long = nowProvider()) {
+        stateStore.setIgnoredRelease(null)
+        stateStore.setRemindLater(
+            releaseId = remote.releaseId,
+            untilEpochMs = nowEpochMs + REMIND_LATER_WINDOW_MS,
+        )
+        stateStore.clearPendingInstall()
+    }
+
+    fun onUserChoseYes(remote: RemoteUpdate) {
+        val snapshot = stateStore.snapshot()
+        if (snapshot.ignoredReleaseId == remote.releaseId) {
+            stateStore.setIgnoredRelease(null)
+        }
+        if (snapshot.remindLaterReleaseId == remote.releaseId) {
+            stateStore.setRemindLater(releaseId = null, untilEpochMs = null)
+        }
     }
 
     fun retryPendingInstall(
@@ -133,7 +191,7 @@ class StartupUpdater(
         }
     }
 
-    private fun installedVersionCode(): Int {
+    private fun readInstalledVersionCode(context: Context): Int {
         val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             context.packageManager.getPackageInfo(
                 context.packageName,

@@ -1,7 +1,9 @@
 package com.theoriacodex.app.update
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GitHubReleaseFeedClientTest {
@@ -45,10 +47,12 @@ class GitHubReleaseFeedClientTest {
               },
               {
                 "id": 2,
+                "name": "Main build vc12031 (bbbbbbb)",
                 "tag_name": "main-vc12031-bbbbbbb",
                 "draft": false,
                 "prerelease": true,
                 "published_at": "2026-02-25T20:00:00Z",
+                "body": "## Highlights\n- Improved startup updater prompt\n\n## Fixes\n- Fixed 404 release URL edge case",
                 "assets": [
                   {
                     "name": "theoria-codex-main.apk",
@@ -86,6 +90,13 @@ class GitHubReleaseFeedClientTest {
         assertEquals("bbbbbbb", remote.commitShaShort)
         assertEquals("https://example.com/b.apk", remote.assetDownloadUrl)
         assertEquals(456L, remote.assetSizeBytes)
+        assertEquals("Main build vc12031 (bbbbbbb)", remote.releaseName)
+        assertNotNull(remote.publishedAtEpochMs)
+        assertEquals(2, remote.changelogSections.size)
+        assertEquals("Highlights", remote.changelogSections[0].title)
+        assertEquals("Improved startup updater prompt", remote.changelogSections[0].bullets.first())
+        assertEquals("Fixes", remote.changelogSections[1].title)
+        assertEquals("Fixed 404 release URL edge case", remote.changelogSections[1].bullets.first())
     }
 
     @Test
@@ -116,5 +127,19 @@ class GitHubReleaseFeedClientTest {
         )
 
         assertNull(remote)
+    }
+
+    @Test
+    fun `changelog parser falls back to generic section when headings missing`() {
+        val sections = ReleaseChangelogParser.parse(
+            """
+            Startup update prompt now asks for confirmation.
+            Added remind-later behavior.
+            """.trimIndent()
+        )
+
+        assertEquals(1, sections.size)
+        assertEquals("Changelog", sections.first().title)
+        assertTrue(sections.first().bullets.isNotEmpty())
     }
 }
