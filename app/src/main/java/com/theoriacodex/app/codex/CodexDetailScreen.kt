@@ -178,6 +178,21 @@ fun CodexDetailScreen(
                 TextButton(
                     modifier = Modifier.fillMaxWidth(),
                     onClick = {
+                        val copied = copyPostUrlToClipboard(context, post)
+                        val message = if (copied) {
+                            "Post URL copied"
+                        } else {
+                            "No post URL available"
+                        }
+                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                        selectedActionPost = null
+                    },
+                ) {
+                    Text("Share")
+                }
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                         val formatted = formatPostTagsForClipboard(post)
                         clipboard?.setPrimaryClip(ClipData.newPlainText("tags", formatted))
@@ -221,4 +236,11 @@ private fun formatPostTagsForClipboard(post: Post): String {
     val positiveLine = positives.joinToString(", ")
     val negativeLine = negatives.joinToString(", ") { "-$it" }
     return "$positiveLine\n\n$negativeLine"
+}
+
+private fun copyPostUrlToClipboard(context: Context, post: Post): Boolean {
+    val pageUrl = post.pageUrl?.trim().takeIf { !it.isNullOrBlank() } ?: return false
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+    clipboard?.setPrimaryClip(ClipData.newPlainText("post_url", pageUrl))
+    return true
 }
