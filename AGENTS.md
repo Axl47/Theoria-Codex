@@ -1,7 +1,3 @@
----
-created_at: 2026-02-24T17:48
-updated_at: 2026-02-25T02:20
----
 # THEORIA CODEX AGENTS DOCUMENT
 
 ## ExecPlans
@@ -35,7 +31,9 @@ Whenever new updates are made, this file (`AGENTS.md`) should be updated with an
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/AndroidManifest.xml`: includes network permission, Pixiv auth callback intent-filters for both `theoriacodex://pixiv-auth/callback` and `pixiv://account/login`, and `singleTask` launch behavior on `MainActivity` to preserve PKCE in-progress callbacks.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/search/TagSuggestionStore.kt`: local file-backed tag suggestion cache used to avoid repeated source trending-tag calls while still allowing runtime merges.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/assets/tag_store.json` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/scripts/update_tag_store.py`: seeded tag data + maintenance script for periodic offline suggestion-store refreshes.
-- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-sources/src/main/kotlin/com/theoriacodex/sources/pixiv/PixivSourceAdapter.kt`: per-post media paging now uses Pixiv `meta_pages`, and viewer long-press actions route image downloads through `DownloadManager` with Pixiv-safe headers.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-sources/src/main/kotlin/com/theoriacodex/sources/pixiv/PixivSourceAdapter.kt`: per-post media paging now uses Pixiv `meta_pages`, with horizontal swipe for posts and vertical swipe for in-post images; long-press actions route image downloads through `DownloadManager` with Pixiv-safe headers.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/TheoriaApplication.kt`: app-level Coil `ImageLoaderFactory` that explicitly registers animated decoders (`ImageDecoderDecoder`/`GifDecoder`) so GIFs animate in Search and Viewer.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/viewer/PixivUgoiraPlayer.kt`: Pixiv ugoira runtime that calls `/v1/ugoira/metadata`, downloads zip frames with authenticated requests, decodes frame sequences, and renders animated playback in Compose Viewer.
 
 ## Final Output
 

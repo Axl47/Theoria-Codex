@@ -175,7 +175,7 @@ class AibooruSourceAdapter(
             .orEmpty()
         val preview = raw.get("preview_file_url")?.asString
         val fullUrl = raw.get("file_url")?.asString ?: raw.get("large_file_url")?.asString
-        val fullMime = inferMimeFromUrl(fullUrl)
+        val fullMime = inferMimeFromUrl(fullUrl) ?: mimeFromFileExt(raw.get("file_ext")?.asString)
         val previewMime = inferMimeFromUrl(preview) ?: fullMime
         val created = raw.get("created_at")?.asString?.toLongOrNull()
             ?: raw.get("created_at")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asLong
@@ -204,6 +204,16 @@ class AibooruSourceAdapter(
             type = type,
             count = count,
         )
+    }
+}
+
+private fun mimeFromFileExt(ext: String?): String? {
+    return when (ext?.trim()?.lowercase()) {
+        "gif" -> "image/gif"
+        "png" -> "image/png"
+        "webp" -> "image/webp"
+        "jpg", "jpeg" -> "image/jpeg"
+        else -> null
     }
 }
 

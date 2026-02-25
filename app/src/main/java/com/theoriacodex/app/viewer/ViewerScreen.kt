@@ -14,11 +14,13 @@ import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -40,6 +42,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -58,6 +61,7 @@ import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.pixiv.PIXIV_UGOIRA_MIME
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -65,6 +69,7 @@ import kotlinx.coroutines.delay
 fun ViewerScreen(
     posts: List<Post>,
     launchContext: ViewerLaunchContext,
+    pixivUgoiraClient: PixivUgoiraClient? = null,
     onDismiss: () -> Unit,
     onSave: (Post) -> Unit,
     onOpenInBrowser: (Post) -> Unit,
@@ -86,18 +91,21 @@ fun ViewerScreen(
 
     val context = LocalContext.current
     val initialIndex = launchContext.startIndex.coerceIn(0, posts.lastIndex)
-    val selectedPost = posts[initialIndex]
-    val mediaItems = remember(selectedPost) { viewerMediaItems(selectedPost) }
-    val pagerState = rememberPagerState(
-        initialPage = 0,
-        pageCount = { mediaItems.size },
+    val postPagerState = rememberPagerState(
+        initialPage = initialIndex,
+        pageCount = { posts.size },
     )
-    var viewerState by remember(mediaItems) {
-        mutableStateOf(ViewerState(streamSize = mediaItems.size, currentIndex = 0))
+    var viewerState by remember(posts) {
+        mutableStateOf(ViewerState(streamSize = posts.size, currentIndex = initialIndex))
     }
+    val mediaIndexByPost = remember { mutableStateMapOf<Int, Int>() }
     var showInfoSheet by remember { mutableStateOf(false) }
     var showMediaActionsSheet by remember { mutableStateOf(false) }
     var interactionSerial by remember { mutableIntStateOf(0) }
+    val currentPostIndex = postPagerState.currentPage.coerceIn(0, posts.lastIndex)
+    val selectedPost = posts[currentPostIndex]
+    val selectedPostMedia = remember(selectedPost) { viewerMediaItems(selectedPost) }
+    val selectedMediaIndex = (mediaIndexByPost[currentPostIndex] ?: 0).coerceIn(0, selectedPostMedia.lastIndex)
 
     fun markInteraction() {
         interactionSerial += 1
@@ -106,8 +114,8 @@ fun ViewerScreen(
         }
     }
 
-    LaunchedEffect(pagerState.currentPage) {
-        viewerState = viewerState.withIndex(pagerState.currentPage)
+    LaunchedEffect(postPagerState.currentPage) {
+        viewerState = viewerState.withIndex(postPagerState.currentPage)
         markInteraction()
     }
 
@@ -127,86 +135,118 @@ fun ViewerScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         HorizontalPager(
-            state = pagerState,
+            state = postPagerState,
             userScrollEnabled = viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f,
             modifier = Modifier.fillMaxSize(),
-        ) { page ->
-            val media = mediaItems[page]
-            val transformState = rememberTransformableState { zoomChange, panChange, _ ->
-                viewerState = viewerState.transform(
-                    zoomChange = zoomChange,
-                    panChangeX = panChange.x,
-                    panChangeY = panChange.y,
-                )
-                markInteraction()
+        ) { postPage ->
+            val post = posts[postPage]
+            val postMedia = remember(post) { viewerMediaItems(post) }
+            val initialMediaPage = (mediaIndexByPost[postPage] ?: 0).coerceIn(0, postMedia.lastIndex)
+            val mediaPagerState = rememberPagerState(
+                initialPage = initialMediaPage,
+                pageCount = { postMedia.size },
+            )
+
+            LaunchedEffect(mediaPagerState.currentPage) {
+                mediaIndexByPost[postPage] = mediaPagerState.currentPage
+                if (postPage == postPagerState.currentPage) {
+                    viewerState = viewerState.withIndex(postPagerState.currentPage)
+                    markInteraction()
+                }
             }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = viewerState.zoom
-                        scaleY = viewerState.zoom
-                        translationX = viewerState.panX
-                        translationY = viewerState.panY
-                    }
-                    .transformable(
-                        state = transformState,
-                        canPan = { viewerState.zoom > ViewerState.FIT_SCALE + 0.01f },
+            VerticalPager(
+                state = mediaPagerState,
+                userScrollEnabled = viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(vertical = 40.dp),
+                pageSpacing = 8.dp,
+            ) { mediaPage ->
+                val media = postMedia[mediaPage]
+                val transformState = rememberTransformableState { zoomChange, panChange, _ ->
+                    viewerState = viewerState.transform(
+                        zoomChange = zoomChange,
+                        panChangeX = panChange.x,
+                        panChangeY = panChange.y,
                     )
-                    .pointerInput(page) {
-                        detectTapGestures(
-                            onDoubleTap = {
-                                viewerState = viewerState.doubleTap()
-                                markInteraction()
-                            },
-                            onTap = {
-                                viewerState = viewerState.toggleChrome()
-                                interactionSerial += 1
-                            },
-                            onLongPress = {
-                                showMediaActionsSheet = true
-                                markInteraction()
-                            },
-                        )
-                    }
-            ) {
-                val imageUrl = media.url ?: selectedPost.full?.url ?: selectedPost.preview.url
-                val imageModel = remember(context, imageUrl, selectedPost.id.source) {
-                    imageUrl?.let { buildViewerImageRequest(context, it, selectedPost.id.source) }
+                    markInteraction()
                 }
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (imageModel != null) {
-                        AsyncImage(
-                            model = imageModel,
-                            contentDescription = selectedPost.title ?: selectedPost.id.sourcePostId,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Fit,
+                        .graphicsLayer {
+                            scaleX = viewerState.zoom
+                            scaleY = viewerState.zoom
+                            translationX = viewerState.panX
+                            translationY = viewerState.panY
+                        }
+                        .transformable(
+                            state = transformState,
+                            canPan = { viewerState.zoom > ViewerState.FIT_SCALE + 0.01f },
                         )
-                    } else {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(
-                                text = selectedPost.id.source.name,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                style = MaterialTheme.typography.titleLarge,
+                        .pointerInput(postPage, mediaPage) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    viewerState = viewerState.doubleTap()
+                                    markInteraction()
+                                },
+                                onTap = {
+                                    viewerState = viewerState.toggleChrome()
+                                    interactionSerial += 1
+                                },
+                                onLongPress = {
+                                    showMediaActionsSheet = true
+                                    markInteraction()
+                                },
                             )
-                            Text(
-                                text = selectedPost.id.sourcePostId,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                style = MaterialTheme.typography.bodyLarge,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
+                        }
+                ) {
+                    val imageUrl = media.url ?: post.full?.url ?: post.preview.url
+                    val imageModel = remember(context, imageUrl, post.id.source) {
+                        imageUrl?.let { buildViewerImageRequest(context, it, post.id.source) }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        val showUgoira = isPixivUgoira(post, media) && pixivUgoiraClient != null
+                        if (showUgoira) {
+                            PixivUgoiraPlayer(
+                                postId = post.id.sourcePostId,
+                                client = requireNotNull(pixivUgoiraClient),
+                                contentDescription = post.title ?: post.id.sourcePostId,
+                                modifier = Modifier.fillMaxSize(),
                             )
-                            selectedPost.canonicalTags.firstOrNull()?.let { tag ->
-                                AssistChip(onClick = {}, label = { Text("#$tag") })
+                        } else if (imageModel != null) {
+                            AsyncImage(
+                                model = imageModel,
+                                contentDescription = post.title ?: post.id.sourcePostId,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Fit,
+                            )
+                        } else {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    text = post.id.source.name,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    style = MaterialTheme.typography.titleLarge,
+                                )
+                                Text(
+                                    text = post.id.sourcePostId,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                post.canonicalTags.firstOrNull()?.let { tag ->
+                                    AssistChip(onClick = {}, label = { Text("#$tag") })
+                                }
                             }
                         }
                     }
@@ -218,7 +258,7 @@ fun ViewerScreen(
             ViewerChrome(
                 modifier = Modifier.align(Alignment.TopCenter),
                 source = selectedPost.id.source.name,
-                indexLabel = "${viewerState.currentIndex + 1} / ${mediaItems.size}",
+                indexLabel = "${selectedMediaIndex + 1} / ${selectedPostMedia.size}",
                 onBack = onDismiss,
             )
             ViewerActionsBar(
@@ -288,7 +328,7 @@ fun ViewerScreen(
     }
 
     if (showMediaActionsSheet) {
-        val currentMedia = mediaItems.getOrNull(viewerState.currentIndex)
+        val currentMedia = selectedPostMedia.getOrNull(selectedMediaIndex)
         ModalBottomSheet(
             onDismissRequest = { showMediaActionsSheet = false },
         ) {
@@ -306,8 +346,8 @@ fun ViewerScreen(
                                 context = context,
                                 post = selectedPost,
                                 media = media,
-                                pageIndex = viewerState.currentIndex,
-                                totalPages = mediaItems.size,
+                                pageIndex = selectedMediaIndex,
+                                totalPages = selectedPostMedia.size,
                             )
                         } ?: false
                         Toast.makeText(
@@ -331,7 +371,10 @@ private fun buildViewerImageRequest(
     url: String,
     sourceKey: SourceKey,
 ): ImageRequest {
-    val builder = ImageRequest.Builder(context).data(url).crossfade(true)
+    val builder = ImageRequest.Builder(context)
+        .data(url)
+        .crossfade(true)
+        .allowHardware(false)
     if (sourceKey == SourceKey.PIXIV) {
         builder
             .addHeader("Referer", "https://www.pixiv.net/")
@@ -348,6 +391,11 @@ private fun viewerMediaItems(post: Post): List<ImageRef> {
         return explicitMedia
     }
     return listOfNotNull(post.full).ifEmpty { listOf(post.preview) }
+}
+
+private fun isPixivUgoira(post: Post, media: ImageRef): Boolean {
+    if (post.id.source != SourceKey.PIXIV) return false
+    return media.mime == PIXIV_UGOIRA_MIME || post.full?.mime == PIXIV_UGOIRA_MIME
 }
 
 private fun enqueueViewerDownload(

@@ -28,11 +28,8 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Brush
-import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -63,7 +60,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
@@ -373,13 +369,6 @@ private fun SearchResultCard(
                     )
                 }
             }
-
-            SourceIconBadge(
-                sourceKey = post.id.source,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(8.dp),
-            )
             if (mediaCount > 1) {
                 ImageCountBadge(
                     count = mediaCount,
@@ -404,27 +393,6 @@ private fun SearchResultCard(
                 Text(text = "#$firstTag", style = MaterialTheme.typography.bodySmall)
             }
         }
-    }
-}
-
-@Composable
-private fun SourceIconBadge(
-    sourceKey: SourceKey,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier,
-        shape = CircleShape,
-        color = Color.Black.copy(alpha = 0.45f),
-    ) {
-        Icon(
-            imageVector = sourceIconFor(sourceKey),
-            contentDescription = sourceKey.name,
-            tint = Color.White,
-            modifier = Modifier
-                .size(24.dp)
-                .padding(5.dp),
-        )
     }
 }
 
@@ -455,14 +423,6 @@ private fun ImageCountBadge(
                 style = MaterialTheme.typography.labelSmall,
             )
         }
-    }
-}
-
-private fun sourceIconFor(sourceKey: SourceKey): ImageVector {
-    return when (sourceKey) {
-        SourceKey.PIXIV -> Icons.Default.Brush
-        SourceKey.GELBOORU -> Icons.Default.Collections
-        SourceKey.AIBOORU -> Icons.Default.SmartToy
     }
 }
 
@@ -742,7 +702,10 @@ private fun buildImageRequest(
     url: String,
     sourceKey: SourceKey,
 ): ImageRequest {
-    val builder = ImageRequest.Builder(context).data(url).crossfade(true)
+    val builder = ImageRequest.Builder(context)
+        .data(url)
+        .crossfade(true)
+        .allowHardware(false)
     if (sourceKey == SourceKey.PIXIV) {
         builder
             .addHeader("Referer", "https://www.pixiv.net/")

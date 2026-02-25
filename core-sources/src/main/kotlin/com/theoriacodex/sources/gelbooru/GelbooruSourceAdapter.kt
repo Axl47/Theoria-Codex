@@ -218,7 +218,7 @@ class GelbooruSourceAdapter(
             .orEmpty()
         val fullUrl = raw.get("file_url")?.asString
         val previewUrl = raw.get("preview_url")?.asString ?: raw.get("sample_url")?.asString ?: fullUrl
-        val fullMime = inferMimeFromUrl(fullUrl)
+        val fullMime = inferMimeFromUrl(fullUrl) ?: mimeFromFileExt(raw.get("file_ext")?.asString)
         val previewMime = inferMimeFromUrl(previewUrl) ?: fullMime
         val createdAt = raw.get("created_at")?.asString?.toLongOrNull()?.times(1000L)
             ?: raw.get("change")?.asString?.toLongOrNull()?.times(1000L)
@@ -246,6 +246,16 @@ class GelbooruSourceAdapter(
             type = type,
             count = count,
         )
+    }
+}
+
+private fun mimeFromFileExt(ext: String?): String? {
+    return when (ext?.trim()?.lowercase()) {
+        "gif" -> "image/gif"
+        "png" -> "image/png"
+        "webp" -> "image/webp"
+        "jpg", "jpeg" -> "image/jpeg"
+        else -> null
     }
 }
 

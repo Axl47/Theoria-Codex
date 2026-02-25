@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-02-25T02:20
+updated_at: 2026-02-25T03:10
 ---
 # Theoria Codex
 
@@ -31,8 +31,8 @@ Previously completed MVP slices remain in place:
 - Bottom navigation is compact icon-only for higher content density
 - Local tag suggestion store now seeds from `app/src/main/assets/tag_store.json` and is persisted to `files/theoria_codex/tag_suggestions.json` to reduce network tag fetches
 - Draft/Applied search flow with explicit Apply semantics
-- Search/Viewer now support GIF rendering (Coil GIF decoder + MIME-aware source mapping) and Viewer renders full-size source images with Pixiv-safe headers while keeping gesture-driven zoom/pan + Codex save/remove flow
-- Viewer now pages through multi-image posts (per-post `X / Y`), supports long-press image download, and search cards show compact source/image-count overlays
+- Search/Viewer now support GIF rendering (global Coil animated decoder + MIME-aware source mapping); Viewer also supports Pixiv ugoira playback by loading Pixiv metadata + zip frames and animating in-place
+- Viewer now uses horizontal post paging + vertical in-post image paging (per-post `X / Y`), supports long-press image download, and search cards show compact source/image-count overlays
 - File-backed persistence for query/settings/cache/codex/UI restore state
 
 ## Project Structure

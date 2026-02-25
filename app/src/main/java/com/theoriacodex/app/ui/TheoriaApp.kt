@@ -54,6 +54,7 @@ import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.sourceauth.AndroidSecureSourceCredentialsStore
 import com.theoriacodex.app.sourceauth.PixivPkceController
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
+import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.ViewerScreen
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CacheSnapshot
@@ -123,6 +124,12 @@ fun TheoriaApp(
         PixivPkceController(
             authApi = PixivAuthApi(sourceHttpClient),
             credentialsProvider = credentialsStore,
+        )
+    }
+    val pixivUgoiraClient = remember(credentialsStore, sourceHttpClient) {
+        PixivUgoiraClient(
+            credentialsProvider = credentialsStore,
+            httpClient = sourceHttpClient,
         )
     }
     val realRegistry = remember(credentialsStore, sourceHttpClient) {
@@ -469,6 +476,7 @@ fun TheoriaApp(
                             ViewerScreen(
                                 posts = session.posts,
                                 launchContext = session.context,
+                                pixivUgoiraClient = pixivUgoiraClient,
                                 onDismiss = {
                                     scope.launch { searchCoordinator.setViewerLaunchContext(null) }
                                     navController.popBackStack()

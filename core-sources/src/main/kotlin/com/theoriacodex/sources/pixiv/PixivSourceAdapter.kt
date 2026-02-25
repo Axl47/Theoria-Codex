@@ -248,13 +248,14 @@ class PixivSourceAdapter(
 
     private fun parseIllust(raw: JsonObject): Post? {
         val id = raw.get("id")?.asLong?.toString() ?: return null
+        val isUgoira = raw.get("type")?.asString == "ugoira"
         val imageUrls = raw.optionalJsonObject("image_urls")
         val previewUrl = imageUrls?.get("square_medium")?.asString ?: imageUrls?.get("medium")?.asString
         val fullUrl = raw.optionalJsonObject("meta_single_page")
             ?.get("original_image_url")
             ?.asString
             ?: imageUrls?.get("large")?.asString
-        val fullMime = inferMimeFromUrl(fullUrl)
+        val fullMime = if (isUgoira) PIXIV_UGOIRA_MIME else inferMimeFromUrl(fullUrl)
         val previewMime = inferMimeFromUrl(previewUrl) ?: fullMime
         val previewRef = ImageRef(url = previewUrl, localPath = null, mime = previewMime)
         val multiPageRefs = raw.optionalJsonArray("meta_pages").orEmpty().mapNotNull { page ->
@@ -367,3 +368,4 @@ private fun JsonArray?.orEmpty(): List<com.google.gson.JsonElement> {
 }
 
 private const val PIXIV_API_BASE: String = "https://app-api.pixiv.net"
+const val PIXIV_UGOIRA_MIME: String = "image/ugoira"
