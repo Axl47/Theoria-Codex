@@ -9,6 +9,7 @@ import android.webkit.URLUtil
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -24,6 +26,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -392,6 +395,9 @@ fun ViewerScreen(
 
     if (showInfoSheet) {
         val post = selectedPost
+        var tagSelections by remember(post.id.source, post.id.sourcePostId) {
+            mutableStateOf<Map<String, ViewerTagSelection>>(emptyMap())
+        }
         ModalBottomSheet(
             onDismissRequest = { showInfoSheet = false },
         ) {
@@ -418,19 +424,18 @@ fun ViewerScreen(
                 }
 
                 Text("Tags", style = MaterialTheme.typography.titleSmall)
-                post.canonicalTags.forEach { tag ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(tag, modifier = Modifier.weight(1f))
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            TextButton(onClick = { onAddIncludeTag(tag) }) { Text("+") }
-                            TextButton(onClick = { onAddExcludeTag(tag) }) { Text("-") }
-                        }
-                    }
-                }
+                ViewerTagSelectionGrid(
+                    tags = post.canonicalTags.distinct(),
+                    selections = tagSelections,
+                    onIncludeTag = { tag ->
+                        onAddIncludeTag(tag)
+                        tagSelections = tagSelections + (tag to ViewerTagSelection.INCLUDE)
+                    },
+                    onExcludeTag = { tag ->
+                        onAddExcludeTag(tag)
+                        tagSelections = tagSelections + (tag to ViewerTagSelection.EXCLUDE)
+                    },
+                )
 
                 TextButton(onClick = {
                     onGoToSearch()
@@ -497,6 +502,132 @@ fun ViewerScreen(
                     Text(if (isCurrentUgoira) "Download MP4" else "Download image")
                 }
             }
+        }
+    }
+}
+
+private enum class ViewerTagSelection {
+    INCLUDE,
+    EXCLUDE,
+}
+
+@Composable
+private fun ViewerTagSelectionGrid(
+    tags: List<String>,
+    selections: Map<String, ViewerTagSelection>,
+    onIncludeTag: (String) -> Unit,
+    onExcludeTag: (String) -> Unit,
+) {
+    if (tags.isEmpty()) {
+        Text(
+            text = "No tags",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+
+    tags.chunked(3).forEach { rowTags ->
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            rowTags.forEach { tag ->
+                ViewerTagActionCell(
+                    tag = tag,
+                    selection = selections[tag],
+                    onInclude = { onIncludeTag(tag) },
+                    onExclude = { onExcludeTag(tag) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            repeat(3 - rowTags.size) {
+                Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ViewerTagActionCell(
+    tag: String,
+    selection: ViewerTagSelection?,
+    onInclude: () -> Unit,
+    onExclude: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(999.dp),
+            color = if (selection == null) {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+            } else {
+                accent.copy(alpha = 0.16f)
+            },
+        ) {
+            Text(
+                text = tag,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            ViewerTagActionPill(
+                label = "+",
+                selected = selection == ViewerTagSelection.INCLUDE,
+                onClick = onInclude,
+                modifier = Modifier.weight(1f),
+            )
+            ViewerTagActionPill(
+                label = "-",
+                selected = selection == ViewerTagSelection.EXCLUDE,
+                onClick = onExclude,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ViewerTagActionPill(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(999.dp),
+        color = if (selected) {
+            accent.copy(alpha = 0.24f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+        },
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
