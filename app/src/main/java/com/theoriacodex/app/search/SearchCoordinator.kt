@@ -201,14 +201,32 @@ class SearchCoordinator(
         addIncludeTag(tag)
     }
 
-    fun prepareExploreTagSearch(tag: String): Boolean {
-        val normalized = tag.trim()
-        if (normalized.isBlank()) return false
-        draftQuery = defaultQuery(QueryMode.Unified).copy(includeTags = listOf(normalized))
+    fun prepareExploreTagSearch(
+        includeTags: List<String>,
+        excludeTags: List<String> = emptyList(),
+    ): Boolean {
+        val normalizedInclude = includeTags
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .distinct()
+        val normalizedExclude = excludeTags
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .filterNot { it in normalizedInclude }
+            .distinct()
+        if (normalizedInclude.isEmpty() && normalizedExclude.isEmpty()) return false
+        draftQuery = defaultQuery(QueryMode.Unified).copy(
+            includeTags = normalizedInclude,
+            excludeTags = normalizedExclude,
+        )
         clearSearchResultsForRetry()
         statuses = emptyList()
         errorMessage = null
         return true
+    }
+
+    fun prepareExploreTagSearch(tag: String): Boolean {
+        return prepareExploreTagSearch(includeTags = listOf(tag))
     }
 
     fun setDateRangePreset(preset: DateRangePreset) {

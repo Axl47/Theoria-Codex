@@ -136,18 +136,34 @@ class SearchCoordinatorTest {
         coordinator.addExcludeTag("old-exclude")
         coordinator.setSort(SortMode.TOP)
 
-        val prepared = coordinator.prepareExploreTagSearch("fresh-tag")
+        val prepared = coordinator.prepareExploreTagSearch(
+            includeTags = listOf("fresh-tag", "fresh-tag"),
+            excludeTags = listOf("blocked", "fresh-tag"),
+        )
 
         assertTrue(prepared)
         assertEquals(QueryMode.Unified, coordinator.draftQuery.mode)
         assertEquals(listOf("fresh-tag"), coordinator.draftQuery.includeTags)
-        assertTrue(coordinator.draftQuery.excludeTags.isEmpty())
+        assertEquals(listOf("blocked"), coordinator.draftQuery.excludeTags)
         assertEquals(SortMode.NEWEST, coordinator.draftQuery.sort)
         assertEquals(null, coordinator.draftQuery.dateRange)
         assertEquals(null, coordinator.draftQuery.minScore)
         assertTrue(coordinator.results.isEmpty())
         assertTrue(coordinator.statuses.isEmpty())
         assertEquals(null, coordinator.errorMessage)
+    }
+
+    @Test
+    fun `prepare explore tag search rejects empty selections`() = runTest {
+        val coordinator = coordinator()
+        coordinator.initialize()
+
+        val prepared = coordinator.prepareExploreTagSearch(
+            includeTags = emptyList(),
+            excludeTags = emptyList(),
+        )
+
+        assertFalse(prepared)
     }
 
     @Test
