@@ -32,7 +32,7 @@ Whenever new updates are made, this file (`AGENTS.md`) should be updated with an
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-sources/`: real source integration module containing Pixiv/AIBooru/Gelbooru adapters, HTTP transport, and `RealAdapterRegistry` runtime wiring.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceAdapterRegistry.kt` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceFailure.kt`: registry abstraction and typed source failure contract used by orchestrator/status UI.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/sourceauth/`: secure source credential store (Android Keystore-backed encrypted preferences) plus Pixiv PKCE authorization controller.
-- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/AndroidManifest.xml`: includes network permission and Pixiv auth callback intent-filters for both `theoriacodex://pixiv-auth/callback` and `pixiv://account/login`.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/AndroidManifest.xml`: includes network permission, Pixiv auth callback intent-filters for both `theoriacodex://pixiv-auth/callback` and `pixiv://account/login`, and `singleTask` launch behavior on `MainActivity` to preserve PKCE in-progress callbacks.
 
 ## Final Output
 

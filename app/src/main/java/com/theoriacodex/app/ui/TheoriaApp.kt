@@ -181,12 +181,12 @@ fun TheoriaApp(
         val callback = authCallbackUri ?: return@LaunchedEffect
         if (pixivAuthController.isAuthorizationCallback(callback)) {
             val result = pixivAuthController.handleAuthorizationCallback(callback)
-            pixivStatusLabel = if (result.isSuccess) {
-                "Connected"
+            if (result.isSuccess) {
+                pixivStatusLabel = "Connected"
+                refreshSourceAccountState()
             } else {
-                "Connection failed: ${result.exceptionOrNull()?.message ?: "Unknown error"}"
+                pixivStatusLabel = "Connection failed: ${result.exceptionOrNull()?.message ?: "Unknown error"}"
             }
-            refreshSourceAccountState()
         }
         onAuthCallbackConsumed()
     }
