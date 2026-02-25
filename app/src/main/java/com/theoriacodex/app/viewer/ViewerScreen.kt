@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -266,9 +267,17 @@ fun ViewerScreen(
                             )
                         }
                 ) {
-                    val imageUrl = media.url ?: post.full?.url ?: post.preview.url
-                    val imageModel = remember(context, imageUrl, post.id.source) {
-                        imageUrl?.let { buildViewerImageRequest(context, it, post.id.source) }
+                    val imageCandidates = remember(post, media) { viewerImageCandidates(post, media) }
+                    var imageCandidateIndex by remember(postPage, mediaPage) { mutableIntStateOf(0) }
+                    var imageLoading by remember(postPage, mediaPage) { mutableStateOf(false) }
+                    var imageLoadFailed by remember(postPage, mediaPage) { mutableStateOf(false) }
+                    val activeImageUrl = imageCandidates.getOrNull(imageCandidateIndex)
+                    val imageModel = remember(context, activeImageUrl, post.id.source) {
+                        activeImageUrl?.let { buildViewerImageRequest(context, it, post.id.source) }
+                    }
+                    LaunchedEffect(activeImageUrl) {
+                        imageLoading = activeImageUrl != null
+                        imageLoadFailed = false
                     }
                     Box(
                         modifier = Modifier
@@ -291,7 +300,48 @@ fun ViewerScreen(
                                 contentDescription = post.title ?: post.id.sourcePostId,
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Fit,
+                                onLoading = {
+                                    imageLoading = true
+                                    imageLoadFailed = false
+                                },
+                                onSuccess = {
+                                    imageLoading = false
+                                    imageLoadFailed = false
+                                },
+                                onError = {
+                                    if (imageCandidateIndex < imageCandidates.lastIndex) {
+                                        imageCandidateIndex += 1
+                                        imageLoading = true
+                                        imageLoadFailed = false
+                                    } else {
+                                        imageLoading = false
+                                        imageLoadFailed = true
+                                    }
+                                },
                             )
+                            if (imageLoading) {
+                                CircularProgressIndicator()
+                            }
+                            if (imageLoadFailed) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Text(
+                                        text = "Could not load image",
+                                        color = MaterialTheme.colorScheme.onBackground,
+                                    )
+                                    TextButton(
+                                        onClick = {
+                                            imageCandidateIndex = 0
+                                            imageLoading = imageCandidates.isNotEmpty()
+                                            imageLoadFailed = false
+                                        },
+                                    ) {
+                                        Text("Retry")
+                                    }
+                                }
+                            }
                         } else {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -524,6 +574,51 @@ private fun viewerMediaItems(post: Post): List<ImageRef> {
         return explicitMedia
     }
     return listOfNotNull(post.full).ifEmpty { listOf(post.preview) }
+}
+
+private fun viewerImageCandidates(post: Post, media: ImageRef): List<String> {
+    val refs = buildList {
+        add(media)
+        post.full?.let { add(it) }
+        add(post.preview)
+    }
+    val preferred = refs
+        .mapNotNull { ref ->
+            val location = ref.localPath ?: ref.url
+            if (location.isNullOrBlank()) {
+                null
+            } else if (isLikelyImageLocation(ref.mime, location)) {
+                location
+            } else {
+                null
+            }
+        }
+        .distinct()
+    if (preferred.isNotEmpty()) return preferred
+    return refs
+        .mapNotNull { ref -> ref.localPath ?: ref.url }
+        .filter { it.isNotBlank() }
+        .distinct()
+}
+
+private fun isLikelyImageLocation(mime: String?, location: String): Boolean {
+    val normalizedMime = mime?.trim()?.lowercase()
+    if (normalizedMime != null) {
+        if (normalizedMime.startsWith("image/")) return true
+        if (normalizedMime.startsWith("video/")) return false
+    }
+    val normalizedLocation = location
+        .substringBefore('?')
+        .lowercase()
+    return normalizedLocation.endsWith(".jpg") ||
+        normalizedLocation.endsWith(".jpeg") ||
+        normalizedLocation.endsWith(".png") ||
+        normalizedLocation.endsWith(".webp") ||
+        normalizedLocation.endsWith(".gif") ||
+        normalizedLocation.endsWith(".bmp") ||
+        normalizedLocation.endsWith(".heic") ||
+        normalizedLocation.endsWith(".heif") ||
+        normalizedLocation.endsWith(".avif")
 }
 
 private fun isPixivUgoira(post: Post, media: ImageRef): Boolean {
