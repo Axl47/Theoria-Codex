@@ -30,7 +30,7 @@ jobs:
       - name: Compute release metadata
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
-          VERSION_NAME="0.1.12"
+          VERSION_NAME="0.1.13"
           if ! [[ "$VERSION_NAME" =~ ^[0-9]{1,4}\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
             echo "VERSION_NAME must follow vX.Y.Z-compatible format (without leading v)"
             exit 1
@@ -42,7 +42,7 @@ jobs:
           VERSION_CODE_BASE=1500000000
           VERSION_CODE=$((VERSION_CODE_BASE + VERSION_MAJOR * 10000 + VERSION_MINOR * 100 + VERSION_PATCH))
           RELEASE_TITLE="v${VERSION_NAME}"
-          RELEASE_TAG="${RELEASE_TITLE}"
+          RELEASE_TAG="main-vc${VERSION_CODE}-${SHORT_SHA}"
 
           echo "SHORT_SHA=${SHORT_SHA}" >> "$GITHUB_ENV"
           echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
