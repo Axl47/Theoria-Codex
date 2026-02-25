@@ -198,6 +198,16 @@ class SearchCoordinator(
         addIncludeTag(tag)
     }
 
+    fun prepareExploreTagSearch(tag: String): Boolean {
+        val normalized = tag.trim()
+        if (normalized.isBlank()) return false
+        draftQuery = defaultQuery(QueryMode.Unified).copy(includeTags = listOf(normalized))
+        clearSearchResultsForRetry()
+        statuses = emptyList()
+        errorMessage = null
+        return true
+    }
+
     fun setDateRangePreset(preset: DateRangePreset) {
         val now = System.currentTimeMillis()
         val dayMs = 24L * 60L * 60L * 1000L

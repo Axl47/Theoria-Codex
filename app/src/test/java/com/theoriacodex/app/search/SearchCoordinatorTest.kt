@@ -16,6 +16,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import com.theoriacodex.stubs.StubAdapterRegistry
@@ -123,6 +124,30 @@ class SearchCoordinatorTest {
         assertTrue(coordinator.draftQuery.includeTags.isEmpty())
         assertTrue(coordinator.draftQuery.excludeTags.isEmpty())
         assertEquals(QueryMode.Source(SourceKey.PIXIV), coordinator.draftQuery.mode)
+    }
+
+    @Test
+    fun `prepare explore tag search resets draft and clears prior runtime state`() = runTest {
+        val coordinator = coordinator()
+        coordinator.initialize()
+        coordinator.addIncludeTag("before")
+        coordinator.applyDraft()
+        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
+        coordinator.addExcludeTag("old-exclude")
+        coordinator.setSort(SortMode.TOP)
+
+        val prepared = coordinator.prepareExploreTagSearch("fresh-tag")
+
+        assertTrue(prepared)
+        assertEquals(QueryMode.Unified, coordinator.draftQuery.mode)
+        assertEquals(listOf("fresh-tag"), coordinator.draftQuery.includeTags)
+        assertTrue(coordinator.draftQuery.excludeTags.isEmpty())
+        assertEquals(SortMode.NEWEST, coordinator.draftQuery.sort)
+        assertEquals(null, coordinator.draftQuery.dateRange)
+        assertEquals(null, coordinator.draftQuery.minScore)
+        assertTrue(coordinator.results.isEmpty())
+        assertTrue(coordinator.statuses.isEmpty())
+        assertEquals(null, coordinator.errorMessage)
     }
 
     @Test

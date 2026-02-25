@@ -81,8 +81,9 @@ fun ExploreScreen(
             items(coordinator.trendingTags) { tag ->
                 AssistChip(
                     onClick = {
-                        coordinator.addTrendingTag(tag.text)
-                        onApplyDraftAndNavigateToSearch()
+                        if (coordinator.prepareExploreTagSearch(tag.text)) {
+                            onApplyDraftAndNavigateToSearch()
+                        }
                     },
                     label = { Text(tag.text) }
                 )
