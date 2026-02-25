@@ -30,13 +30,24 @@ jobs:
       - name: Compute release metadata
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
-          VERSION_CODE=$((1000000000 + GITHUB_RUN_NUMBER))
-          VERSION_NAME="0.1.9"
-          RELEASE_TAG="main-vc${VERSION_CODE}-${SHORT_SHA}"
+          VERSION_NAME="0.1.11"
+          if ! [[ "$VERSION_NAME" =~ ^[0-9]{1,4}\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
+            echo "VERSION_NAME must follow vX.Y.Z-compatible format (without leading v)"
+            exit 1
+          fi
+          IFS='.' read -r VERSION_MAJOR VERSION_MINOR VERSION_PATCH <<< "$VERSION_NAME"
+          VERSION_MAJOR=$((10#$VERSION_MAJOR))
+          VERSION_MINOR=$((10#$VERSION_MINOR))
+          VERSION_PATCH=$((10#$VERSION_PATCH))
+          VERSION_CODE_BASE=1500000000
+          VERSION_CODE=$((VERSION_CODE_BASE + VERSION_MAJOR * 10000 + VERSION_MINOR * 100 + VERSION_PATCH))
+          RELEASE_TITLE="v${VERSION_NAME}"
+          RELEASE_TAG="${RELEASE_TITLE}"
 
           echo "SHORT_SHA=${SHORT_SHA}" >> "$GITHUB_ENV"
           echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
           echo "VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
+          echo "RELEASE_TITLE=${RELEASE_TITLE}" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=${RELEASE_TAG}" >> "$GITHUB_ENV"
 
       - name: Assemble release APK
@@ -63,7 +74,7 @@ jobs:
 
       - name: Generate sectioned release notes
         run: |
-          PREV_TAG=$(git tag --list 'main-vc*' --sort=-creatordate | head -n 1)
+          PREV_TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-creatordate | head -n 1)
           if [ -n "$PREV_TAG" ]; then
             python3 .github/scripts/generate_main_release_notes.py \
               --output main-release-notes.md \
@@ -83,7 +94,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
-          name: v${{ env.VERSION_NAME }}
+          name: ${{ env.RELEASE_TITLE }}
           prerelease: true
           draft: false
           files: theoria-codex-main.apk

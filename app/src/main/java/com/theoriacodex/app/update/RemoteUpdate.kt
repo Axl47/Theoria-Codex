@@ -24,13 +24,48 @@ data class ParsedMainReleaseTag(
 )
 
 internal object MainReleaseTagParser {
-    fun parse(channel: String, tagName: String): ParsedMainReleaseTag? {
-        val pattern = Regex("^${Regex.escape(channel)}-vc(\\d+)-([0-9a-fA-F]{7,40})$")
-        val match = pattern.matchEntire(tagName) ?: return null
-        val versionCode = match.groupValues[1].toIntOrNull() ?: return null
-        if (versionCode <= 0) return null
-        val commitShaShort = match.groupValues[2].lowercase()
+    private const val SEMVER_VERSION_CODE_BASE = 1_500_000_000
+    private const val SEMVER_MAJOR_MULTIPLIER = 10_000
+    private const val SEMVER_MINOR_MULTIPLIER = 100
+
+    private val semverPattern = Regex("^v(\\d{1,4})\\.(\\d{1,2})\\.(\\d{1,2})$")
+    private val commitishPattern = Regex("^[0-9a-fA-F]{7,40}$")
+
+    fun parse(
+        channel: String,
+        tagName: String,
+        fallbackCommitSha: String? = null,
+    ): ParsedMainReleaseTag? {
+        val channelPattern = Regex("^${Regex.escape(channel)}-vc(\\d+)-([0-9a-fA-F]{7,40})$")
+        val legacyMatch = channelPattern.matchEntire(tagName)
+        if (legacyMatch != null) {
+            val versionCode = legacyMatch.groupValues[1].toIntOrNull() ?: return null
+            if (versionCode <= 0) return null
+            val commitShaShort = legacyMatch.groupValues[2].lowercase()
+            return ParsedMainReleaseTag(versionCode = versionCode, commitShaShort = commitShaShort)
+        }
+
+        val semverMatch = semverPattern.matchEntire(tagName) ?: return null
+        val major = semverMatch.groupValues[1].toIntOrNull() ?: return null
+        val minor = semverMatch.groupValues[2].toIntOrNull() ?: return null
+        val patch = semverMatch.groupValues[3].toIntOrNull() ?: return null
+        val versionCode = semverToVersionCode(major = major, minor = minor, patch = patch) ?: return null
+        val commitShaShort = normalizeCommitish(fallbackCommitSha) ?: "unknown"
         return ParsedMainReleaseTag(versionCode = versionCode, commitShaShort = commitShaShort)
+    }
+
+    private fun semverToVersionCode(major: Int, minor: Int, patch: Int): Int? {
+        if (major !in 0..9_999) return null
+        if (minor !in 0..99) return null
+        if (patch !in 0..99) return null
+        val encoded = (major * SEMVER_MAJOR_MULTIPLIER) + (minor * SEMVER_MINOR_MULTIPLIER) + patch
+        return SEMVER_VERSION_CODE_BASE + encoded
+    }
+
+    private fun normalizeCommitish(fallbackCommitSha: String?): String? {
+        val candidate = fallbackCommitSha?.trim().orEmpty()
+        if (!commitishPattern.matches(candidate)) return null
+        return candidate.lowercase().take(7)
     }
 }
 

@@ -77,7 +77,12 @@ class GitHubReleaseFeedClient(
                 if (draft || !prerelease) return@mapNotNull null
 
                 val tagName = release.get("tag_name")?.asString?.trim().orEmpty()
-                val parsedTag = MainReleaseTagParser.parse(channel = channel, tagName = tagName)
+                val targetCommitish = release.get("target_commitish")?.asString?.trim().orEmpty()
+                val parsedTag = MainReleaseTagParser.parse(
+                    channel = channel,
+                    tagName = tagName,
+                    fallbackCommitSha = targetCommitish,
+                )
                     ?: return@mapNotNull null
 
                 val publishedAt = release.get("published_at")?.asString?.trim().orEmpty()

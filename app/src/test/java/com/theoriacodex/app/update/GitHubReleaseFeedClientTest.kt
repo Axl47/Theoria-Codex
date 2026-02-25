@@ -8,7 +8,7 @@ import org.junit.Test
 
 class GitHubReleaseFeedClientTest {
     @Test
-    fun `tag parser extracts version code and sha`() {
+    fun `tag parser extracts version code and sha from legacy main tag`() {
         val parsed = MainReleaseTagParser.parse(
             channel = "main",
             tagName = "main-vc12034-a1b2c3d",
@@ -20,10 +20,25 @@ class GitHubReleaseFeedClientTest {
     }
 
     @Test
+    fun `tag parser extracts version code from semver tag`() {
+        val parsed = MainReleaseTagParser.parse(
+            channel = "main",
+            tagName = "v0.1.11",
+            fallbackCommitSha = "1234567890abcdef1234567890abcdef12345678",
+        )
+
+        checkNotNull(parsed)
+        assertEquals(1_500_000_111, parsed.versionCode)
+        assertEquals("1234567", parsed.commitShaShort)
+    }
+
+    @Test
     fun `tag parser rejects malformed tags`() {
         assertNull(MainReleaseTagParser.parse("main", "main-v12034-a1b2c3d"))
         assertNull(MainReleaseTagParser.parse("main", "stable-vc12034-a1b2c3d"))
         assertNull(MainReleaseTagParser.parse("main", "main-vc0-a1b2c3d"))
+        assertNull(MainReleaseTagParser.parse("main", "v1.2"))
+        assertNull(MainReleaseTagParser.parse("main", "v1.100.2"))
     }
 
     @Test
@@ -195,6 +210,42 @@ class GitHubReleaseFeedClientTest {
         )
 
         assertNull(remote)
+    }
+
+    @Test
+    fun `release parser accepts semver tag naming`() {
+        val json =
+            """
+            [
+              {
+                "id": 88,
+                "tag_name": "v0.1.11",
+                "target_commitish": "89abcdef0123456789abcdef0123456789abcdef",
+                "draft": false,
+                "prerelease": true,
+                "published_at": "2026-02-25T20:00:00Z",
+                "assets": [
+                  {
+                    "name": "theoria-codex-main.apk",
+                    "browser_download_url": "https://example.com/main.apk",
+                    "size": 777
+                  }
+                ]
+              }
+            ]
+            """.trimIndent()
+
+        val remote = GitHubReleaseFeedClient.parseLatestMainPrerelease(
+            jsonBody = json,
+            channel = "main",
+            assetName = "theoria-codex-main.apk",
+        )
+
+        checkNotNull(remote)
+        assertEquals(88L, remote.releaseId)
+        assertEquals(1_500_000_111, remote.versionCode)
+        assertEquals("89abcde", remote.commitShaShort)
+        assertEquals("https://example.com/main.apk", remote.assetDownloadUrl)
     }
 
     @Test
