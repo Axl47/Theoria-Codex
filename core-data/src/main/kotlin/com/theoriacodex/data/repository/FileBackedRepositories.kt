@@ -477,6 +477,8 @@ private data class PostRecord(
     val rawTags: List<String>,
     val authorName: String?,
     val createdAtEpochMs: Long?,
+    val media: List<ImageRefRecord>? = null,
+    val title: String? = null,
 ) {
     fun toDomain(): Post {
         return Post(
@@ -505,6 +507,8 @@ private data class PostRecord(
             rawTags = rawTags,
             authorName = authorName,
             createdAtEpochMs = createdAtEpochMs,
+            media = media.orEmpty().map { it.toDomain() },
+            title = title,
         )
     }
 
@@ -526,6 +530,32 @@ private data class PostRecord(
                 rawTags = post.rawTags,
                 authorName = post.authorName,
                 createdAtEpochMs = post.createdAtEpochMs,
+                media = post.media.map(ImageRefRecord::fromDomain),
+                title = post.title,
+            )
+        }
+    }
+}
+
+private data class ImageRefRecord(
+    val url: String?,
+    val localPath: String?,
+    val mime: String?,
+) {
+    fun toDomain(): ImageRef {
+        return ImageRef(
+            url = url,
+            localPath = localPath,
+            mime = mime,
+        )
+    }
+
+    companion object {
+        fun fromDomain(ref: ImageRef): ImageRefRecord {
+            return ImageRefRecord(
+                url = ref.url,
+                localPath = ref.localPath,
+                mime = ref.mime,
             )
         }
     }

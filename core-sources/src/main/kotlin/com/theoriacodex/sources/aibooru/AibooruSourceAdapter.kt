@@ -175,13 +175,15 @@ class AibooruSourceAdapter(
             .orEmpty()
         val preview = raw.get("preview_file_url")?.asString
         val fullUrl = raw.get("file_url")?.asString ?: raw.get("large_file_url")?.asString
+        val fullMime = inferMimeFromUrl(fullUrl)
+        val previewMime = inferMimeFromUrl(preview) ?: fullMime
         val created = raw.get("created_at")?.asString?.toLongOrNull()
             ?: raw.get("created_at")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asLong
 
         return Post(
             id = PostId(SourceKey.AIBOORU, id),
-            preview = ImageRef(url = preview, localPath = null, mime = "image/jpeg"),
-            full = fullUrl?.let { ImageRef(url = it, localPath = null, mime = "image/jpeg") },
+            preview = ImageRef(url = preview, localPath = null, mime = previewMime),
+            full = fullUrl?.let { ImageRef(url = it, localPath = null, mime = fullMime) },
             pageUrl = "$AIBOORU_BASE_URL/posts/$id",
             width = raw.get("image_width")?.asInt,
             height = raw.get("image_height")?.asInt,
@@ -202,6 +204,17 @@ class AibooruSourceAdapter(
             type = type,
             count = count,
         )
+    }
+}
+
+private fun inferMimeFromUrl(url: String?): String? {
+    val normalized = url?.substringBefore('?')?.lowercase() ?: return null
+    return when {
+        normalized.endsWith(".gif") -> "image/gif"
+        normalized.endsWith(".png") -> "image/png"
+        normalized.endsWith(".webp") -> "image/webp"
+        normalized.endsWith(".jpg") || normalized.endsWith(".jpeg") -> "image/jpeg"
+        else -> null
     }
 }
 

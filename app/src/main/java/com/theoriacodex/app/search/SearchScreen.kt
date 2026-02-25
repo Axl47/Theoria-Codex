@@ -8,6 +8,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.aspectRatio
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -26,7 +28,11 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -40,6 +46,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -55,7 +62,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -85,6 +95,7 @@ fun SearchScreen(
     var input by rememberSaveable { mutableStateOf("") }
     var searchFieldFocused by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
@@ -128,8 +139,12 @@ fun SearchScreen(
         coordinator.hasPendingChanges
 
     fun commitTagInput() {
+        val hadInput = input.isNotBlank()
         coordinator.addTagInput(input)
         input = ""
+        if (hadInput) {
+            focusManager.clearFocus()
+        }
     }
 
     Scaffold(
@@ -226,6 +241,7 @@ fun SearchScreen(
                     ) {
                         TextButton(
                             onClick = {
+                                focusManager.clearFocus()
                                 coordinator.resetDraft()
                                 input = ""
                                 showFilterSheet = false
@@ -234,7 +250,10 @@ fun SearchScreen(
                         ) {
                             Text("Reset")
                         }
-                        TextButton(onClick = { scope.launch { coordinator.applyDraft() } }) {
+                        TextButton(onClick = {
+                            focusManager.clearFocus()
+                            scope.launch { coordinator.applyDraft() }
+                        }) {
                             Text("Apply")
                         }
                     }
@@ -319,31 +338,54 @@ private fun SearchResultCard(
             .clickable(onClick = onClick),
     ) {
         val title = post.title?.takeIf { it.isNotBlank() } ?: "Untitled"
-        val previewUrl = post.preview.url ?: post.full?.url
+        val fullRef = post.full
+        val previewUrl = if (fullRef?.mime == "image/gif") {
+            fullRef.url
+        } else {
+            post.preview.url ?: fullRef?.url
+        }
         val ratio = previewAspectRatio(post)
         val imageModel = remember(context, previewUrl, post.id.source) {
             previewUrl?.let { buildImageRequest(context, it, post.id.source) }
         }
+        val mediaCount = postMediaCount(post)
 
-        if (imageModel != null) {
-            AsyncImage(
-                model = imageModel,
-                contentDescription = title,
-                contentScale = ContentScale.Crop,
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(ratio),
+        ) {
+            if (imageModel != null) {
+                AsyncImage(
+                    model = imageModel,
+                    contentDescription = title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "No preview",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+
+            SourceIconBadge(
+                sourceKey = post.id.source,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(ratio),
+                    .align(Alignment.TopStart)
+                    .padding(8.dp),
             )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(ratio),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "No preview",
-                    style = MaterialTheme.typography.bodySmall,
+            if (mediaCount > 1) {
+                ImageCountBadge(
+                    count = mediaCount,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp),
                 )
             }
         }
@@ -352,7 +394,6 @@ private fun SearchResultCard(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            AssistChip(onClick = {}, label = { Text(post.id.source.name) })
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyMedium,
@@ -363,6 +404,74 @@ private fun SearchResultCard(
                 Text(text = "#$firstTag", style = MaterialTheme.typography.bodySmall)
             }
         }
+    }
+}
+
+@Composable
+private fun SourceIconBadge(
+    sourceKey: SourceKey,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = CircleShape,
+        color = Color.Black.copy(alpha = 0.45f),
+    ) {
+        Icon(
+            imageVector = sourceIconFor(sourceKey),
+            contentDescription = sourceKey.name,
+            tint = Color.White,
+            modifier = Modifier
+                .size(24.dp)
+                .padding(5.dp),
+        )
+    }
+}
+
+@Composable
+private fun ImageCountBadge(
+    count: Int,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        color = Color.Gray.copy(alpha = 0.65f),
+        shape = CircleShape,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Default.Image,
+                contentDescription = "Image count",
+                tint = Color.White,
+                modifier = Modifier.size(14.dp),
+            )
+            Text(
+                text = count.toString(),
+                color = Color.White,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+    }
+}
+
+private fun sourceIconFor(sourceKey: SourceKey): ImageVector {
+    return when (sourceKey) {
+        SourceKey.PIXIV -> Icons.Default.Brush
+        SourceKey.GELBOORU -> Icons.Default.Collections
+        SourceKey.AIBOORU -> Icons.Default.SmartToy
+    }
+}
+
+private fun postMediaCount(post: Post): Int {
+    val explicitCount = post.media.count { !it.url.isNullOrBlank() || !it.localPath.isNullOrBlank() }
+    return when {
+        explicitCount > 0 -> explicitCount
+        post.full != null -> 1
+        else -> 1
     }
 }
 

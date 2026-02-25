@@ -254,6 +254,28 @@ class PixivSourceAdapter(
             ?.get("original_image_url")
             ?.asString
             ?: imageUrls?.get("large")?.asString
+        val fullMime = inferMimeFromUrl(fullUrl)
+        val previewMime = inferMimeFromUrl(previewUrl) ?: fullMime
+        val previewRef = ImageRef(url = previewUrl, localPath = null, mime = previewMime)
+        val multiPageRefs = raw.optionalJsonArray("meta_pages").orEmpty().mapNotNull { page ->
+            val pageUrls = page.asJsonObject.optionalJsonObject("image_urls") ?: return@mapNotNull null
+            val pageUrl = pageUrls.get("original")?.asString
+                ?: pageUrls.get("large")?.asString
+                ?: pageUrls.get("medium")?.asString
+                ?: return@mapNotNull null
+            ImageRef(
+                url = pageUrl,
+                localPath = null,
+                mime = inferMimeFromUrl(pageUrl),
+            )
+        }
+        val fallbackFullRef = fullUrl?.let { ImageRef(url = it, localPath = null, mime = fullMime) }
+        val mediaRefs = when {
+            multiPageRefs.isNotEmpty() -> multiPageRefs
+            fallbackFullRef != null -> listOf(fallbackFullRef)
+            !previewUrl.isNullOrBlank() -> listOf(previewRef)
+            else -> emptyList()
+        }
 
         val tags = raw.optionalJsonArray("tags").orEmpty().mapNotNull { tagElement ->
             tagElement.asJsonObject.get("name")?.asString
@@ -264,8 +286,9 @@ class PixivSourceAdapter(
 
         return Post(
             id = PostId(SourceKey.PIXIV, id),
-            preview = ImageRef(url = previewUrl, localPath = null, mime = "image/jpeg"),
-            full = fullUrl?.let { ImageRef(url = it, localPath = null, mime = "image/jpeg") },
+            preview = previewRef,
+            full = fallbackFullRef ?: mediaRefs.firstOrNull(),
+            media = mediaRefs,
             pageUrl = "https://www.pixiv.net/en/artworks/$id",
             width = raw.get("width")?.asInt,
             height = raw.get("height")?.asInt,
@@ -284,6 +307,17 @@ class PixivSourceAdapter(
             SortMode.TOP -> "popular_desc"
             SortMode.RANDOM -> "date_desc"
         }
+    }
+}
+
+private fun inferMimeFromUrl(url: String?): String? {
+    val normalized = url?.substringBefore('?')?.lowercase() ?: return null
+    return when {
+        normalized.endsWith(".gif") -> "image/gif"
+        normalized.endsWith(".png") -> "image/png"
+        normalized.endsWith(".webp") -> "image/webp"
+        normalized.endsWith(".jpg") || normalized.endsWith(".jpeg") -> "image/jpeg"
+        else -> null
     }
 }
 

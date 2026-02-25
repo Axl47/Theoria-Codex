@@ -218,13 +218,15 @@ class GelbooruSourceAdapter(
             .orEmpty()
         val fullUrl = raw.get("file_url")?.asString
         val previewUrl = raw.get("preview_url")?.asString ?: raw.get("sample_url")?.asString ?: fullUrl
+        val fullMime = inferMimeFromUrl(fullUrl)
+        val previewMime = inferMimeFromUrl(previewUrl) ?: fullMime
         val createdAt = raw.get("created_at")?.asString?.toLongOrNull()?.times(1000L)
             ?: raw.get("change")?.asString?.toLongOrNull()?.times(1000L)
 
         return Post(
             id = PostId(SourceKey.GELBOORU, id),
-            preview = ImageRef(url = previewUrl, localPath = null, mime = "image/jpeg"),
-            full = fullUrl?.let { ImageRef(url = it, localPath = null, mime = "image/jpeg") },
+            preview = ImageRef(url = previewUrl, localPath = null, mime = previewMime),
+            full = fullUrl?.let { ImageRef(url = it, localPath = null, mime = fullMime) },
             pageUrl = "https://gelbooru.com/index.php?page=post&s=view&id=$id",
             width = raw.get("width")?.asInt,
             height = raw.get("height")?.asInt,
@@ -244,6 +246,17 @@ class GelbooruSourceAdapter(
             type = type,
             count = count,
         )
+    }
+}
+
+private fun inferMimeFromUrl(url: String?): String? {
+    val normalized = url?.substringBefore('?')?.lowercase() ?: return null
+    return when {
+        normalized.endsWith(".gif") -> "image/gif"
+        normalized.endsWith(".png") -> "image/png"
+        normalized.endsWith(".webp") -> "image/webp"
+        normalized.endsWith(".jpg") || normalized.endsWith(".jpeg") -> "image/jpeg"
+        else -> null
     }
 }
 

@@ -21,6 +21,7 @@ data class Post(
     val id: PostId,
     val preview: ImageRef,
     val full: ImageRef?,
+    val media: List<ImageRef> = emptyList(),
     val pageUrl: String?,
     val width: Int?,
     val height: Int?,

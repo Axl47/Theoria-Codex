@@ -1,10 +1,14 @@
 package com.theoriacodex.app.viewer
 
+import android.app.DownloadManager
 import android.content.Context
+import android.net.Uri
+import android.os.Environment
+import android.webkit.URLUtil
+import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
@@ -51,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.delay
@@ -79,17 +84,20 @@ fun ViewerScreen(
         return
     }
 
+    val context = LocalContext.current
     val initialIndex = launchContext.startIndex.coerceIn(0, posts.lastIndex)
+    val selectedPost = posts[initialIndex]
+    val mediaItems = remember(selectedPost) { viewerMediaItems(selectedPost) }
     val pagerState = rememberPagerState(
-        initialPage = initialIndex,
-        pageCount = { posts.size },
+        initialPage = 0,
+        pageCount = { mediaItems.size },
     )
-    var viewerState by remember(posts, initialIndex) {
-        mutableStateOf(ViewerState(streamSize = posts.size, currentIndex = initialIndex))
+    var viewerState by remember(mediaItems) {
+        mutableStateOf(ViewerState(streamSize = mediaItems.size, currentIndex = 0))
     }
     var showInfoSheet by remember { mutableStateOf(false) }
+    var showMediaActionsSheet by remember { mutableStateOf(false) }
     var interactionSerial by remember { mutableIntStateOf(0) }
-    var dismissDrag by remember { mutableStateOf(0f) }
 
     fun markInteraction() {
         interactionSerial += 1
@@ -117,29 +125,13 @@ fun ViewerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .pointerInput(viewerState.zoom) {
-                if (viewerState.zoom > ViewerState.FIT_SCALE + 0.01f) {
-                    return@pointerInput
-                }
-                detectVerticalDragGestures(
-                    onVerticalDrag = { _, dragAmount ->
-                        dismissDrag += dragAmount
-                        if (dismissDrag > 180f) {
-                            onDismiss()
-                        }
-                    },
-                    onDragEnd = { dismissDrag = 0f },
-                    onDragCancel = { dismissDrag = 0f },
-                )
-            }
     ) {
         HorizontalPager(
             state = pagerState,
             userScrollEnabled = viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f,
             modifier = Modifier.fillMaxSize(),
         ) { page ->
-            val post = posts[page]
-            val context = LocalContext.current
+            val media = mediaItems[page]
             val transformState = rememberTransformableState { zoomChange, panChange, _ ->
                 viewerState = viewerState.transform(
                     zoomChange = zoomChange,
@@ -172,12 +164,16 @@ fun ViewerScreen(
                                 viewerState = viewerState.toggleChrome()
                                 interactionSerial += 1
                             },
+                            onLongPress = {
+                                showMediaActionsSheet = true
+                                markInteraction()
+                            },
                         )
                     }
             ) {
-                val imageUrl = post.full?.url ?: post.preview.url
-                val imageModel = remember(context, imageUrl, post.id.source) {
-                    imageUrl?.let { buildViewerImageRequest(context, it, post.id.source) }
+                val imageUrl = media.url ?: selectedPost.full?.url ?: selectedPost.preview.url
+                val imageModel = remember(context, imageUrl, selectedPost.id.source) {
+                    imageUrl?.let { buildViewerImageRequest(context, it, selectedPost.id.source) }
                 }
                 Box(
                     modifier = Modifier
@@ -188,7 +184,7 @@ fun ViewerScreen(
                     if (imageModel != null) {
                         AsyncImage(
                             model = imageModel,
-                            contentDescription = post.title ?: post.id.sourcePostId,
+                            contentDescription = selectedPost.title ?: selectedPost.id.sourcePostId,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Fit,
                         )
@@ -198,18 +194,18 @@ fun ViewerScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Text(
-                                text = post.id.source.name,
+                                text = selectedPost.id.source.name,
                                 color = MaterialTheme.colorScheme.onBackground,
                                 style = MaterialTheme.typography.titleLarge,
                             )
                             Text(
-                                text = post.id.sourcePostId,
+                                text = selectedPost.id.sourcePostId,
                                 color = MaterialTheme.colorScheme.onBackground,
                                 style = MaterialTheme.typography.bodyLarge,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            post.canonicalTags.firstOrNull()?.let { tag ->
+                            selectedPost.canonicalTags.firstOrNull()?.let { tag ->
                                 AssistChip(onClick = {}, label = { Text("#$tag") })
                             }
                         }
@@ -221,14 +217,14 @@ fun ViewerScreen(
         if (viewerState.chromeVisible) {
             ViewerChrome(
                 modifier = Modifier.align(Alignment.TopCenter),
-                source = posts[viewerState.currentIndex].id.source.name,
-                indexLabel = "${viewerState.currentIndex + 1} / ${posts.size}",
+                source = selectedPost.id.source.name,
+                indexLabel = "${viewerState.currentIndex + 1} / ${mediaItems.size}",
                 onBack = onDismiss,
             )
             ViewerActionsBar(
                 modifier = Modifier.align(Alignment.BottomCenter),
                 onSave = {
-                    onSave(posts[viewerState.currentIndex])
+                    onSave(selectedPost)
                     markInteraction()
                 },
                 onInfo = {
@@ -240,7 +236,7 @@ fun ViewerScreen(
     }
 
     if (showInfoSheet) {
-        val post = posts[viewerState.currentIndex]
+        val post = selectedPost
         ModalBottomSheet(
             onDismissRequest = { showInfoSheet = false },
         ) {
@@ -290,6 +286,44 @@ fun ViewerScreen(
             }
         }
     }
+
+    if (showMediaActionsSheet) {
+        val currentMedia = mediaItems.getOrNull(viewerState.currentIndex)
+        ModalBottomSheet(
+            onDismissRequest = { showMediaActionsSheet = false },
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("Image actions", style = MaterialTheme.typography.titleMedium)
+                TextButton(
+                    onClick = {
+                        val didQueueDownload = currentMedia?.let { media ->
+                            enqueueViewerDownload(
+                                context = context,
+                                post = selectedPost,
+                                media = media,
+                                pageIndex = viewerState.currentIndex,
+                                totalPages = mediaItems.size,
+                            )
+                        } ?: false
+                        Toast.makeText(
+                            context,
+                            if (didQueueDownload) "Download started" else "Image unavailable",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                        showMediaActionsSheet = false
+                    },
+                    enabled = currentMedia?.url != null,
+                ) {
+                    Text("Download image")
+                }
+            }
+        }
+    }
 }
 
 private fun buildViewerImageRequest(
@@ -304,6 +338,84 @@ private fun buildViewerImageRequest(
             .addHeader("User-Agent", "Mozilla/5.0")
     }
     return builder.build()
+}
+
+private fun viewerMediaItems(post: Post): List<ImageRef> {
+    val explicitMedia = post.media.filter { ref ->
+        !ref.url.isNullOrBlank() || !ref.localPath.isNullOrBlank()
+    }
+    if (explicitMedia.isNotEmpty()) {
+        return explicitMedia
+    }
+    return listOfNotNull(post.full).ifEmpty { listOf(post.preview) }
+}
+
+private fun enqueueViewerDownload(
+    context: Context,
+    post: Post,
+    media: ImageRef,
+    pageIndex: Int,
+    totalPages: Int,
+): Boolean {
+    val url = media.url ?: return false
+    val request = DownloadManager.Request(Uri.parse(url))
+        .setAllowedOverMetered(true)
+        .setAllowedOverRoaming(true)
+        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+        .setMimeType(media.mime)
+    if (post.id.source == SourceKey.PIXIV) {
+        request
+            .addRequestHeader("Referer", "https://www.pixiv.net/")
+            .addRequestHeader("User-Agent", "Mozilla/5.0")
+    }
+
+    val fileName = buildDownloadFileName(post, media, pageIndex, totalPages, url)
+    request.setTitle(fileName)
+    request.setDescription(post.pageUrl ?: "Saved from Theoria Codex")
+    runCatching {
+        request.setDestinationInExternalPublicDir(
+            Environment.DIRECTORY_DOWNLOADS,
+            "TheoriaCodex/$fileName",
+        )
+    }.onFailure {
+        request.setDestinationInExternalFilesDir(
+            context,
+            Environment.DIRECTORY_DOWNLOADS,
+            fileName,
+        )
+    }
+
+    val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager ?: return false
+    return runCatching {
+        manager.enqueue(request)
+        true
+    }.getOrElse { false }
+}
+
+private fun buildDownloadFileName(
+    post: Post,
+    media: ImageRef,
+    pageIndex: Int,
+    totalPages: Int,
+    fallbackUrl: String,
+): String {
+    val guessedName = URLUtil.guessFileName(fallbackUrl, null, media.mime)
+    val extension = guessedName.substringAfterLast('.', "")
+    val base = post.title
+        ?.sanitizeFileName()
+        ?.takeIf { it.isNotBlank() }
+        ?: "${post.id.source.name.lowercase()}_${post.id.sourcePostId}"
+    val pageSuffix = if (totalPages > 1) "_p${pageIndex + 1}" else ""
+    return if (extension.isNotBlank()) {
+        "${base}$pageSuffix.$extension"
+    } else {
+        "$base$pageSuffix"
+    }
+}
+
+private fun String.sanitizeFileName(): String {
+    val cleaned = trim().replace(Regex("[^A-Za-z0-9._-]+"), "_").trim('_')
+    return cleaned.ifBlank { "image" }
 }
 
 @Composable
