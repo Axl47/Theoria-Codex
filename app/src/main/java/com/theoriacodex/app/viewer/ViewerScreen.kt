@@ -65,10 +65,10 @@ fun ViewerScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black),
+                .background(MaterialTheme.colorScheme.background),
             contentAlignment = Alignment.Center,
         ) {
-            Text("No posts to view", color = Color.White)
+            Text("No posts to view", color = MaterialTheme.colorScheme.onBackground)
         }
         return
     }
@@ -110,7 +110,7 @@ fun ViewerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(MaterialTheme.colorScheme.background)
             .pointerInput(viewerState.zoom) {
                 if (viewerState.zoom > ViewerState.FIT_SCALE + 0.01f) {
                     return@pointerInput
@@ -180,12 +180,12 @@ fun ViewerScreen(
                     ) {
                         Text(
                             text = post.id.source.name,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onBackground,
                             style = MaterialTheme.typography.titleLarge,
                         )
                         Text(
                             text = post.id.sourcePostId,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onBackground,
                             style = MaterialTheme.typography.bodyLarge,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
@@ -281,7 +281,7 @@ private fun ViewerChrome(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = Color.Black.copy(alpha = 0.45f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
     ) {
         Row(
             modifier = Modifier
@@ -291,9 +291,9 @@ private fun ViewerChrome(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
-            Text("$source • $indexLabel", color = Color.White, style = MaterialTheme.typography.bodyLarge)
+            Text("$source • $indexLabel", style = MaterialTheme.typography.bodyLarge)
             IconButton(onClick = {}) {
                 Icon(Icons.Default.Info, contentDescription = null, tint = Color.Transparent)
             }
@@ -309,7 +309,7 @@ private fun ViewerActionsBar(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = Color.Black.copy(alpha = 0.45f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
     ) {
         Row(
             modifier = Modifier

@@ -30,6 +30,7 @@ class SourceCapabilityGateTest {
                 supportsExcludeTagsServerSide = false,
                 supportsDateRangeServerSide = false,
                 supportsMinScoreServerSide = false,
+                requiresCredentials = false,
             ),
             SourceKey.GELBOORU to SourceCapabilities(
                 supportsSortNewest = true,
@@ -39,6 +40,7 @@ class SourceCapabilityGateTest {
                 supportsExcludeTagsServerSide = true,
                 supportsDateRangeServerSide = true,
                 supportsMinScoreServerSide = true,
+                requiresCredentials = false,
             ),
         )
 

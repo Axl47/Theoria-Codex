@@ -13,13 +13,13 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -27,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -46,6 +45,9 @@ import com.theoriacodex.app.explore.ExploreScreen
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.SearchScreen
 import com.theoriacodex.app.settings.SettingsScreen
+import com.theoriacodex.app.sourceauth.AndroidSecureSourceCredentialsStore
+import com.theoriacodex.app.sourceauth.PixivPkceController
+import com.theoriacodex.app.ui.theme.TheoriaNightTheme
 import com.theoriacodex.app.viewer.ViewerScreen
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CacheSnapshot
@@ -57,9 +59,12 @@ import com.theoriacodex.data.repository.FileBackedSettingsRepository
 import com.theoriacodex.data.repository.FileBackedUiRestoreRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
-import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.Post
-import com.theoriacodex.stubs.StubAdapterRegistry
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.RealAdapterRegistry
+import com.theoriacodex.sources.credentials.GelbooruCredentials
+import com.theoriacodex.sources.http.DefaultSourceHttpClient
+import com.theoriacodex.sources.pixiv.PixivAuthApi
 import java.io.File
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
@@ -87,13 +92,31 @@ private data class ViewerSession(
 )
 
 @Composable
-fun TheoriaApp() {
+fun TheoriaApp(
+    authCallbackUri: Uri? = null,
+    onAuthCallbackConsumed: () -> Unit = {},
+) {
     val navController = rememberNavController()
     val appContext = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
 
     val storageDirectory = remember(appContext) { File(appContext.filesDir, "theoria_codex") }
-    val stubRegistry = remember { StubAdapterRegistry() }
+    val sourceHttpClient = remember { DefaultSourceHttpClient() }
+    val credentialsStore = remember(appContext) { AndroidSecureSourceCredentialsStore(appContext) }
+    val pixivAuthController = remember(credentialsStore, sourceHttpClient) {
+        PixivPkceController(
+            authApi = PixivAuthApi(sourceHttpClient),
+            credentialsProvider = credentialsStore,
+        )
+    }
+    val realRegistry = remember(credentialsStore, sourceHttpClient) {
+        RealAdapterRegistry(
+            credentialsProvider = credentialsStore,
+            httpClient = sourceHttpClient,
+            exposedSources = setOf(SourceKey.PIXIV),
+        )
+    }
+
     val codexRepository = remember(storageDirectory) { FileBackedCodexRepository(storageDirectory) }
     val queryRepository = remember(storageDirectory) { FileBackedQueryRepository(storageDirectory) }
     val settingsRepository = remember(storageDirectory) { FileBackedSettingsRepository(storageDirectory) }
@@ -101,7 +124,7 @@ fun TheoriaApp() {
     val uiRestoreRepository = remember(storageDirectory) { FileBackedUiRestoreRepository(storageDirectory) }
     val searchCoordinator = remember {
         SearchCoordinator(
-            registry = stubRegistry,
+            registry = realRegistry,
             queryRepository = queryRepository,
             settingsRepository = settingsRepository,
             uiRestoreRepository = uiRestoreRepository,
@@ -121,11 +144,51 @@ fun TheoriaApp() {
     var navReady by remember { mutableStateOf(false) }
     val codexItemCounts = remember { mutableStateMapOf<String, Int>() }
 
+    var pixivStatusLabel by remember { mutableStateOf("Not connected") }
+    var gelbooruStatusLabel by remember { mutableStateOf("Not configured") }
+    var gelbooruUserIdInput by rememberSaveable { mutableStateOf("") }
+    var gelbooruApiKeyInput by rememberSaveable { mutableStateOf("") }
+
+    suspend fun refreshSourceAccountState() {
+        val pixivTokens = credentialsStore.getPixivTokens()
+        pixivStatusLabel = when {
+            pixivTokens == null -> "Not connected"
+            pixivTokens.expiresAtEpochMs <= System.currentTimeMillis() -> "Connected (token expired, refresh on demand)"
+            else -> "Connected"
+        }
+
+        val gelbooruCredentials = credentialsStore.getGelbooruCredentials()
+        if (gelbooruCredentials == null) {
+            gelbooruStatusLabel = "Not configured"
+            gelbooruUserIdInput = ""
+            gelbooruApiKeyInput = ""
+        } else {
+            gelbooruStatusLabel = "Configured"
+            gelbooruUserIdInput = gelbooruCredentials.userId
+            gelbooruApiKeyInput = gelbooruCredentials.apiKey
+        }
+    }
+
     LaunchedEffect(Unit) {
         searchCoordinator.initialize()
+        refreshSourceAccountState()
         startDestination = uiRestoreRepository.getLastTab()
             ?: settingsRepository.observeSettings().first().lastSelectedTabRoute
         navReady = true
+    }
+
+    LaunchedEffect(authCallbackUri) {
+        val callback = authCallbackUri ?: return@LaunchedEffect
+        if (pixivAuthController.isAuthorizationCallback(callback)) {
+            val result = pixivAuthController.handleAuthorizationCallback(callback)
+            pixivStatusLabel = if (result.isSuccess) {
+                "Connected"
+            } else {
+                "Connection failed: ${result.exceptionOrNull()?.message ?: "Unknown error"}"
+            }
+            refreshSourceAccountState()
+        }
+        onAuthCallbackConsumed()
     }
 
     LaunchedEffect(settings) {
@@ -166,7 +229,7 @@ fun TheoriaApp() {
         }
     }
 
-    MaterialTheme {
+    TheoriaNightTheme {
         if (!navReady) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -303,9 +366,54 @@ fun TheoriaApp() {
                     composable(TopLevelDestination.Settings.route) {
                         SettingsScreen(
                             settings = settings,
+                            availableSources = searchCoordinator.availableSources,
                             cacheSnapshot = cacheSnapshot,
+                            showDeveloperScenarios = false,
+                            pixivStatusLabel = pixivStatusLabel,
+                            onPixivConnect = {
+                                val authUrl = pixivAuthController.startAuthorizationUri().toString()
+                                pixivStatusLabel = "Awaiting authorization callback..."
+                                openInBrowser(appContext, authUrl)
+                            },
+                            onPixivDisconnect = {
+                                scope.launch {
+                                    credentialsStore.clearPixivTokens()
+                                    refreshSourceAccountState()
+                                }
+                            },
+                            gelbooruUserId = gelbooruUserIdInput,
+                            gelbooruApiKey = gelbooruApiKeyInput,
+                            gelbooruStatusLabel = gelbooruStatusLabel,
+                            onGelbooruUserIdChange = { gelbooruUserIdInput = it.trim() },
+                            onGelbooruApiKeyChange = { gelbooruApiKeyInput = it.trim() },
+                            onSaveGelbooruCredentials = {
+                                scope.launch {
+                                    if (gelbooruUserIdInput.isBlank() || gelbooruApiKeyInput.isBlank()) {
+                                        gelbooruStatusLabel = "Missing user ID or API key"
+                                    } else {
+                                        credentialsStore.saveGelbooruCredentials(
+                                            GelbooruCredentials(
+                                                userId = gelbooruUserIdInput,
+                                                apiKey = gelbooruApiKeyInput,
+                                            )
+                                        )
+                                        refreshSourceAccountState()
+                                        gelbooruStatusLabel = "Configured"
+                                    }
+                                }
+                            },
+                            onClearGelbooruCredentials = {
+                                scope.launch {
+                                    credentialsStore.clearGelbooruCredentials()
+                                    refreshSourceAccountState()
+                                }
+                            },
                             onSetEnabledSources = { enabled ->
-                                scope.launch { settingsRepository.setEnabledSources(enabled) }
+                                scope.launch {
+                                    settingsRepository.setEnabledSources(
+                                        enabled.intersect(searchCoordinator.availableSources.toSet())
+                                    )
+                                }
                             },
                             onSetSourceWeights = { weights ->
                                 scope.launch { settingsRepository.setSourceWeights(weights) }

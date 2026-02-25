@@ -3,7 +3,9 @@ package com.theoriacodex.stubs
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
+import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -44,6 +46,18 @@ class JsonStubSourceAdapter(
             .loadTrending(sourceKey)
             .items
             .map { it.toDomain() }
+            .take(limit)
+    }
+
+    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
+        applyScenarioDelayAndFailure(failOnSearch = false)
+        if (prefix.isBlank()) return emptyList()
+
+        return fixtureLoader
+            .loadTrending(sourceKey)
+            .items
+            .map { it.toDomain() }
+            .filter { it.text.contains(prefix, ignoreCase = true) }
             .take(limit)
     }
 
@@ -92,10 +106,16 @@ class JsonStubSourceAdapter(
                 delay(config.delayMs)
             }
             if (failOnSearch && config.failSearch) {
-                error("Stub search failure for $sourceKey")
+                throw SourceAdapterException(
+                    reason = SourceFailureReason.NETWORK,
+                    message = "Stub search failure for $sourceKey",
+                )
             }
             if (!failOnSearch && config.failTrending) {
-                error("Stub trending failure for $sourceKey")
+                throw SourceAdapterException(
+                    reason = SourceFailureReason.NETWORK,
+                    message = "Stub trending failure for $sourceKey",
+                )
             }
         }
     }
@@ -110,6 +130,7 @@ class JsonStubSourceAdapter(
                 supportsExcludeTagsServerSide = true,
                 supportsDateRangeServerSide = true,
                 supportsMinScoreServerSide = true,
+                requiresCredentials = false,
             )
         }
     }

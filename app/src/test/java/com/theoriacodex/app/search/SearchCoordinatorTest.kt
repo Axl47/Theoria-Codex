@@ -4,9 +4,11 @@ import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
-import com.theoriacodex.data.repository.ScenarioPreset
+import com.theoriacodex.domain.adapter.SourceAdapter
+import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import com.theoriacodex.stubs.StubAdapterRegistry
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -55,16 +57,47 @@ class SearchCoordinatorTest {
     }
 
     @Test
-    fun `scenario change requests refresh only after at least one execution`() = runTest {
+    fun `runtime source settings change requests refresh only after at least one execution`() = runTest {
         val coordinator = coordinator()
         coordinator.initialize()
-        val firstChange = coordinator.onSettingsChanged(AppSettings(scenarioPreset = ScenarioPreset.EMPTY_RESULTS))
+        val firstChange = coordinator.onSettingsChanged(
+            AppSettings(
+                runtime = AppSettings().runtime.copy(
+                    enabledSources = setOf(SourceKey.PIXIV),
+                )
+            )
+        )
         assertFalse(firstChange)
 
         coordinator.applyDraft()
-        val secondChange = coordinator.onSettingsChanged(AppSettings(scenarioPreset = ScenarioPreset.NORMAL))
+        val secondChange = coordinator.onSettingsChanged(
+            AppSettings(
+                runtime = AppSettings().runtime.copy(
+                    enabledSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
+                )
+            )
+        )
         assertTrue(secondChange)
         assertNotNull(coordinator.statuses)
+    }
+
+    @Test
+    fun `mode options and source mode availability follow registry`() = runTest {
+        val coordinator = SearchCoordinator(
+            registry = LimitedStubRegistry(setOf(SourceKey.PIXIV)),
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+
+        assertEquals(
+            listOf(QueryMode.Unified, QueryMode.Source(SourceKey.PIXIV)),
+            coordinator.modeOptions,
+        )
+
+        coordinator.setMode(QueryMode.Source(SourceKey.GELBOORU))
+        assertEquals(QueryMode.Unified, coordinator.draftQuery.mode)
     }
 
     private fun coordinator(): SearchCoordinator {
@@ -74,5 +107,24 @@ class SearchCoordinatorTest {
             settingsRepository = InMemorySettingsRepository(),
             uiRestoreRepository = InMemoryUiRestoreRepository(),
         )
+    }
+}
+
+private class LimitedStubRegistry(
+    private val available: Set<SourceKey>,
+) : SourceAdapterRegistry {
+    private val delegate = StubAdapterRegistry()
+    private val adaptersBySource: Map<SourceKey, SourceAdapter> = available.associateWith { source ->
+        requireNotNull(delegate.adapterFor(source))
+    }
+
+    override fun availableSources(): Set<SourceKey> = available
+
+    override fun adapterFor(sourceKey: SourceKey): SourceAdapter? {
+        return adaptersBySource[sourceKey]
+    }
+
+    override fun unifiedOrchestrator(): UnifiedSearchOrchestrator {
+        return UnifiedSearchOrchestrator(adaptersBySource)
     }
 }

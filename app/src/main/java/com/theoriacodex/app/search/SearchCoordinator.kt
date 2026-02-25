@@ -8,12 +8,12 @@ import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.data.repository.QueryRepository
-import com.theoriacodex.data.repository.ScenarioPreset
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.DateRange
@@ -25,12 +25,10 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.query.QueryHash
-import com.theoriacodex.stubs.StubAdapterRegistry
-import com.theoriacodex.stubs.StubScenarioPreset
 import kotlinx.coroutines.flow.first
 
 class SearchCoordinator(
-    private val registry: StubAdapterRegistry = StubAdapterRegistry(),
+    private val registry: SourceAdapterRegistry,
     private val queryRepository: QueryRepository = InMemoryQueryRepository(),
     private val settingsRepository: SettingsRepository = InMemorySettingsRepository(),
     private val uiRestoreRepository: UiRestoreRepository = InMemoryUiRestoreRepository(),
@@ -60,23 +58,27 @@ class SearchCoordinator(
     var errorMessage by mutableStateOf<String?>(null)
         private set
 
+    val availableSources: List<SourceKey>
+        get() = registry.availableSources().toList().sortedBy { it.name }
+
+    val modeOptions: List<QueryMode>
+        get() = listOf(QueryMode.Unified) + availableSources.map(QueryMode::Source)
+
     val hasPendingChanges: Boolean
         get() = draftQuery != appliedQuery
 
     val enabledSourceCount: Int
-        get() = runtimeSettings.runtime.enabledSources.size
+        get() = effectiveEnabledSources().size
 
     val appliedQueryHash: String
         get() = QueryHash.from(appliedQuery)
 
     suspend fun initialize() {
         runtimeSettings = settingsRepository.observeSettings().first()
-        registry.runtime.preset = runtimeSettings.scenarioPreset.toStubPreset()
 
-        val modes = listOf(QueryMode.Unified) + SourceKey.entries.map(QueryMode::Source)
-        modes.forEach { mode ->
+        modeOptions.forEach { mode ->
             val stored = queryRepository.observeAppliedQuery(modeKey(mode)).first()
-            if (stored != null) {
+            if (stored != null && isModeAvailable(stored.mode)) {
                 appliedByMode[modeKey(mode)] = stored
             }
         }
@@ -87,10 +89,17 @@ class SearchCoordinator(
     }
 
     fun onSettingsChanged(settings: AppSettings): Boolean {
-        val oldScenario = runtimeSettings.scenarioPreset
+        val previousRuntime = runtimeSettings.runtime
         runtimeSettings = settings
-        registry.runtime.preset = settings.scenarioPreset.toStubPreset()
-        return hasExecutedSearch && oldScenario != settings.scenarioPreset
+
+        if (!isModeAvailable(draftQuery.mode)) {
+            draftQuery = defaultQuery(QueryMode.Unified)
+        }
+        if (!isModeAvailable(appliedQuery.mode)) {
+            appliedQuery = defaultQuery(QueryMode.Unified)
+        }
+
+        return hasExecutedSearch && previousRuntime != settings.runtime
     }
 
     fun addTagInput(input: String) {
@@ -129,8 +138,12 @@ class SearchCoordinator(
     }
 
     fun setMode(mode: QueryMode) {
-        val restored = appliedByMode[modeKey(mode)] ?: defaultQuery(mode)
-        draftQuery = restored.copy(mode = mode)
+        val resolvedMode = when {
+            isModeAvailable(mode) -> mode
+            else -> QueryMode.Unified
+        }
+        val restored = appliedByMode[modeKey(resolvedMode)] ?: defaultQuery(resolvedMode)
+        draftQuery = restored.copy(mode = resolvedMode)
     }
 
     fun setSort(sort: SortMode) {
@@ -195,16 +208,16 @@ class SearchCoordinator(
 
         trendingTags = when (mode) {
             QueryMode.Unified -> {
-                runtimeSettings.runtime.enabledSources
+                effectiveEnabledSources()
                     .flatMap { source ->
-                        runCatching { registry.adapterFor(source).trendingTags(limit = 5) }
+                        runCatching { registry.adapterFor(source)?.trendingTags(limit = 5).orEmpty() }
                             .getOrDefault(emptyList())
                     }
                     .distinctBy { it.text }
                     .take(20)
             }
             is QueryMode.Source -> {
-                runCatching { registry.adapterFor(mode.source).trendingTags(limit = 20) }
+                runCatching { registry.adapterFor(mode.source)?.trendingTags(limit = 20).orEmpty() }
                     .getOrDefault(emptyList())
             }
         }
@@ -263,10 +276,10 @@ class SearchCoordinator(
         statuses = emptyList()
 
         try {
-            val enabledSources = runtimeSettings.runtime.enabledSources
+            val enabledSources = effectiveEnabledSources()
             when (val mode = appliedQuery.mode) {
                 QueryMode.Unified -> {
-                    val disabledStatuses = SourceKey.entries
+                    val disabledStatuses = availableSources
                         .filterNot { it in enabledSources }
                         .map { source ->
                             SourceRunStatus(
@@ -285,14 +298,26 @@ class SearchCoordinator(
                         query = appliedQuery,
                         enabledSources = enabledSources,
                         pageTokens = emptyMap(),
-                        weights = runtimeSettings.runtime.sourceWeights,
+                        weights = effectiveWeights(enabledSources),
                     )
                     results = result.items
                     statuses = (result.statuses + disabledStatuses)
                         .distinctBy { it.source }
                         .sortedBy { it.source.name }
                 }
+
                 is QueryMode.Source -> {
+                    if (!isModeAvailable(mode)) {
+                        results = emptyList()
+                        statuses = listOf(
+                            SourceRunStatus(
+                                source = mode.source,
+                                state = SourceRunState.EXCLUDED,
+                                errorMessage = "Source not available in this build",
+                            )
+                        )
+                        return
+                    }
                     if (mode.source !in enabledSources) {
                         results = emptyList()
                         statuses = listOf(
@@ -304,7 +329,9 @@ class SearchCoordinator(
                         )
                         return
                     }
-                    val adapter = registry.adapterFor(mode.source)
+                    val adapter = requireNotNull(registry.adapterFor(mode.source)) {
+                        "No adapter for ${mode.source}"
+                    }
                     val page = adapter.search(appliedQuery, pageToken = null)
                     results = page.items
                     statuses = listOf(SourceRunStatus(mode.source, state = SourceRunState.SUCCESS))
@@ -326,6 +353,26 @@ class SearchCoordinator(
         }
     }
 
+    private fun isModeAvailable(mode: QueryMode): Boolean {
+        return when (mode) {
+            QueryMode.Unified -> true
+            is QueryMode.Source -> mode.source in registry.availableSources()
+        }
+    }
+
+    private fun effectiveEnabledSources(): Set<SourceKey> {
+        return runtimeSettings.runtime.enabledSources.intersect(registry.availableSources())
+    }
+
+    private fun effectiveWeights(enabledSources: Set<SourceKey>): Map<SourceKey, Double> {
+        if (enabledSources.isEmpty()) return emptyMap()
+        val raw = enabledSources.associateWith { source ->
+            runtimeSettings.runtime.sourceWeights[source] ?: 1.0
+        }
+        val total = raw.values.sum().takeIf { it > 0.0 } ?: enabledSources.size.toDouble()
+        return raw.mapValues { (_, weight) -> weight / total }
+    }
+
     private fun defaultQuery(mode: QueryMode = QueryMode.Unified): Query {
         return Query(
             mode = mode,
@@ -335,15 +382,6 @@ class SearchCoordinator(
             dateRange = null,
             minScore = null,
         )
-    }
-}
-
-private fun ScenarioPreset.toStubPreset(): StubScenarioPreset {
-    return when (this) {
-        ScenarioPreset.NORMAL -> StubScenarioPreset.NORMAL
-        ScenarioPreset.PARTIAL_FAILURE -> StubScenarioPreset.PARTIAL_FAILURE
-        ScenarioPreset.EMPTY_RESULTS -> StubScenarioPreset.EMPTY_RESULTS
-        ScenarioPreset.SLOW_NETWORK -> StubScenarioPreset.SLOW_NETWORK
     }
 }
 

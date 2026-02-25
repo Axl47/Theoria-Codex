@@ -3,7 +3,9 @@ package com.theoriacodex.domain.orchestration
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
+import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
+import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -41,6 +43,7 @@ class UnifiedSearchOrchestratorTest {
                         supportsExcludeTagsServerSide = true,
                         supportsDateRangeServerSide = true,
                         supportsMinScoreServerSide = true,
+                        requiresCredentials = false,
                     ),
                     posts = listOf(post(SourceKey.PIXIV, "1")),
                 ),
@@ -54,6 +57,7 @@ class UnifiedSearchOrchestratorTest {
                         supportsExcludeTagsServerSide = true,
                         supportsDateRangeServerSide = true,
                         supportsMinScoreServerSide = true,
+                        requiresCredentials = false,
                     ),
                     posts = listOf(post(SourceKey.GELBOORU, "2")),
                 ),
@@ -102,6 +106,34 @@ class UnifiedSearchOrchestratorTest {
         assertEquals(2, result.statuses.count { it.state == SourceRunState.SUCCESS })
     }
 
+    @Test
+    fun `propagates typed source failure reason`() = runBlocking {
+        val orchestrator = UnifiedSearchOrchestrator(
+            adaptersBySource = mapOf(
+                SourceKey.PIXIV to FakeAdapter(
+                    sourceKey = SourceKey.PIXIV,
+                    capabilities = supportedCapabilities(),
+                    posts = emptyList(),
+                    error = SourceAdapterException(
+                        reason = SourceFailureReason.AUTH_REQUIRED,
+                        message = "missing credentials",
+                    ),
+                )
+            )
+        )
+
+        val result = orchestrator.search(
+            query = sampleQuery(),
+            enabledSources = setOf(SourceKey.PIXIV),
+            pageTokens = emptyMap(),
+            weights = mapOf(SourceKey.PIXIV to 1.0),
+        )
+
+        val status = result.statuses.single()
+        assertEquals(SourceRunState.FAILED, status.state)
+        assertEquals(SourceFailureReason.AUTH_REQUIRED, status.failureReason)
+    }
+
     private fun sampleQuery(): Query {
         return Query(
             mode = QueryMode.Unified,
@@ -137,6 +169,7 @@ class UnifiedSearchOrchestratorTest {
             supportsExcludeTagsServerSide = true,
             supportsDateRangeServerSide = true,
             supportsMinScoreServerSide = true,
+            requiresCredentials = false,
         )
     }
 
@@ -144,12 +177,18 @@ class UnifiedSearchOrchestratorTest {
         override val sourceKey: SourceKey,
         override val capabilities: SourceCapabilities,
         private val posts: List<Post>,
+        private val error: Throwable? = null,
     ) : SourceAdapter {
         override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+            if (error != null) throw error
             return Page(items = posts, nextPageToken = null)
         }
 
         override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
+            return emptyList()
+        }
+
+        override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
             return emptyList()
         }
 

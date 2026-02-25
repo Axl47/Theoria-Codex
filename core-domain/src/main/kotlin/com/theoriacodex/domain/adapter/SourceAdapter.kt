@@ -11,6 +11,7 @@ interface SourceAdapter {
 
     suspend fun search(query: Query, pageToken: String?): Page<Post>
     suspend fun trendingTags(limit: Int): List<TagSuggestion>
+    suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion>
     suspend fun quickQuery(kind: QuickQueryKind): Query
     suspend fun resolvePost(id: PostId): Post?
 }
@@ -34,6 +35,7 @@ data class SourceCapabilities(
     val supportsExcludeTagsServerSide: Boolean,
     val supportsDateRangeServerSide: Boolean,
     val supportsMinScoreServerSide: Boolean,
+    val requiresCredentials: Boolean,
 )
 
 enum class QuickQueryKind {

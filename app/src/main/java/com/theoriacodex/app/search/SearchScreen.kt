@@ -52,7 +52,6 @@ import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
-import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -153,6 +152,7 @@ fun SearchScreen(
 
             ModeRow(
                 mode = coordinator.draftQuery.mode,
+                options = coordinator.modeOptions,
                 onModeSelected = coordinator::setMode,
             )
             if (coordinator.draftQuery.mode == QueryMode.Unified) {
@@ -417,14 +417,9 @@ private fun AutocompletePanel(
 @Composable
 private fun ModeRow(
     mode: QueryMode,
+    options: List<QueryMode>,
     onModeSelected: (QueryMode) -> Unit,
 ) {
-    val options = listOf(
-        QueryMode.Unified,
-        QueryMode.Source(SourceKey.PIXIV),
-        QueryMode.Source(SourceKey.GELBOORU),
-        QueryMode.Source(SourceKey.AIBOORU),
-    )
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(options.size) { index ->
             val option = options[index]
@@ -476,7 +471,10 @@ private fun StatusRow(coordinator: SearchCoordinator) {
             val status = filtered[index]
             val text = when (status.state) {
                 SourceRunState.EXCLUDED -> "${status.source.name} excluded"
-                SourceRunState.FAILED -> "${status.source.name} failed"
+                SourceRunState.FAILED -> {
+                    val reason = status.failureReason?.name ?: "UNKNOWN"
+                    "${status.source.name} failed ($reason)"
+                }
                 SourceRunState.SUCCESS -> "${status.source.name} OK"
             }
             AssistChip(onClick = {}, label = { Text(text) })

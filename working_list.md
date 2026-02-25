@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:08
-updated_at: 2026-02-24T23:08
+updated_at: 2026-02-25T01:42
 ---
 # Working List
 
@@ -29,3 +29,13 @@ updated_at: 2026-02-24T23:08
 - [x] Validation passed: `./gradlew testDebugUnitTest`
 - [x] Validation passed: `./gradlew assembleDebug`
 - [x] Validation passed: `./gradlew lintDebug`
+- [x] Execute second-pass source cutover: add `SourceAdapterRegistry`, typed `SourceFailureReason`, and extend `SourceAdapter` contract with autocomplete + credential capability.
+- [x] Add new runtime module `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-sources` with Pixiv/AIBooru/Gelbooru adapters and `RealAdapterRegistry` (Phase A exposure: Pixiv only).
+- [x] Replace app runtime stub wiring with real registry in `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/search/SearchCoordinator.kt`.
+- [x] Implement secure source credential storage and auth orchestration in `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/sourceauth/` (encrypted store + Pixiv PKCE callback flow).
+- [x] Add minimal Settings “Source Accounts” controls (Pixiv connect/disconnect, Gelbooru credential save/clear) and dynamic available-source lists for Search/Settings.
+- [x] Validation passed after cutover:
+  - `./gradlew :core-domain:test :core-data:test :core-stubs:test :core-sources:test`
+  - `./gradlew testDebugUnitTest`
+  - `./gradlew assembleDebug`
+  - `./gradlew lintDebug`
