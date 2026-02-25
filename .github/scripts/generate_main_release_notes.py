@@ -13,6 +13,14 @@ from typing import Iterable
 SECTION_ORDER = ["Highlights", "New", "Improvements", "Fixes", "Known Issues"]
 
 PREFIX_CLEANUP_RE = re.compile(r"^[a-z]+(?:\([^)]+\))?!?:\s*", re.IGNORECASE)
+CONVENTIONAL_SUBJECT_RE = re.compile(
+    r"^\s*"
+    r"(?P<type>feat|feature|fix|bug|hotfix|refactor|perf|optimi[sz]e|improve|ui|ux|chore|docs|test|build|ci)"
+    r"(?P<scope>\([^)]+\))?"
+    r"(?:!)?:\s*"
+    r"(?P<text>.+?)\s*$",
+    re.IGNORECASE,
+)
 CONVENTIONAL_BODY_RE = re.compile(
     r"^\s*(?:[-*]\s*)?"
     r"(?P<type>feat|feature|fix|bug|hotfix|refactor|perf|optimi[sz]e|improve|ui|ux|chore|docs|test|build|ci)"
@@ -66,26 +74,46 @@ def classify_type(type_name: str) -> str:
     return "Improvements"
 
 
-def parse_body_entries(body: str) -> list[tuple[str, str]]:
-    entries: list[tuple[str, str]] = []
+def normalize_scope(scope: str | None) -> str:
+    if not scope:
+        return "General"
+    raw = scope.strip()
+    if raw.startswith("(") and raw.endswith(")"):
+        raw = raw[1:-1]
+    raw = raw.replace("-", " ").replace("_", " ").strip()
+    if not raw:
+        return "General"
+    return " ".join(part.capitalize() for part in raw.split())
+
+
+def parse_conventional_line(
+    line: str,
+    regex: re.Pattern[str],
+) -> tuple[str, str, str] | None:
+    match = regex.match(line)
+    if not match:
+        return None
+    section = classify_type(match.group("type"))
+    scope = normalize_scope(match.group("scope"))
+    text = normalize_text(match.group("text") or "")
+    if not text:
+        return None
+    return section, scope, text
+
+
+def parse_body_entries(body: str) -> list[tuple[str, str, str]]:
+    entries: list[tuple[str, str, str]] = []
     for raw_line in body.splitlines():
-        match = CONVENTIONAL_BODY_RE.match(raw_line)
-        if not match:
+        parsed = parse_conventional_line(raw_line, CONVENTIONAL_BODY_RE)
+        if not parsed:
             continue
-        section = classify_type(match.group("type"))
-        scope = (match.group("scope") or "").strip()
-        text = normalize_text(match.group("text") or "")
-        if not text:
-            continue
-        if scope:
-            text = f"{scope[1:-1]}: {text}"
-        entries.append((section, text))
+        entries.append(parsed)
     return entries
 
 
-def dedupe(entries: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
-    seen: set[tuple[str, str]] = set()
-    result: list[tuple[str, str]] = []
+def dedupe(entries: Iterable[tuple[str, str, str]]) -> list[tuple[str, str, str]]:
+    seen: set[tuple[str, str, str]] = set()
+    result: list[tuple[str, str, str]] = []
     for entry in entries:
         if entry in seen:
             continue
@@ -94,13 +122,13 @@ def dedupe(entries: Iterable[tuple[str, str]]) -> list[tuple[str, str]]:
     return result
 
 
-def collect_commit_entries(previous_tag: str | None, head: str) -> list[tuple[str, str]]:
+def collect_commit_entries(previous_tag: str | None, head: str) -> list[tuple[str, str, str]]:
     if previous_tag:
         raw = run_git("log", "--pretty=format:%s%x1f%b%x1e", f"{previous_tag}..{head}")
     else:
         raw = run_git("log", "--pretty=format:%s%x1f%b%x1e", "-n", "40", head)
 
-    entries: list[tuple[str, str]] = []
+    entries: list[tuple[str, str, str]] = []
     for record in raw.split("\x1e"):
         payload = record.strip()
         if not payload:
@@ -115,28 +143,39 @@ def collect_commit_entries(previous_tag: str | None, head: str) -> list[tuple[st
             entries.extend(body_entries)
             continue
         if subject:
-            section = classify_subject(subject)
-            entries.append((section, normalize_subject(subject)))
+            parsed_subject = parse_conventional_line(subject, CONVENTIONAL_SUBJECT_RE)
+            if parsed_subject:
+                entries.append(parsed_subject)
+            else:
+                section = classify_subject(subject)
+                entries.append((section, "General", normalize_subject(subject)))
     return dedupe(entries)
 
 
-def build_sections(entries: list[tuple[str, str]]) -> OrderedDict[str, list[str]]:
-    sections: OrderedDict[str, list[str]] = OrderedDict((name, []) for name in SECTION_ORDER)
+def build_sections(
+    entries: list[tuple[str, str, str]],
+) -> OrderedDict[str, OrderedDict[str, list[str]]]:
+    sections: OrderedDict[str, OrderedDict[str, list[str]]] = OrderedDict(
+        (name, OrderedDict()) for name in SECTION_ORDER
+    )
 
-    for section, text in entries:
-        sections[section].append(text)
+    for section, scope, text in entries:
+        section_groups = sections[section]
+        section_groups.setdefault(scope, []).append(text)
 
     if not entries:
-        sections["Highlights"].append("No commit metadata available for this build.")
+        sections["Highlights"].setdefault("General", []).append(
+            "No commit metadata available for this build."
+        )
 
     if not sections["Known Issues"]:
-        sections["Known Issues"].append("None reported in this build.")
+        sections["Known Issues"].setdefault("General", []).append("None reported in this build.")
 
     return sections
 
 
 def render_markdown(
-    sections: OrderedDict[str, list[str]],
+    sections: OrderedDict[str, OrderedDict[str, list[str]]],
     channel: str,
     short_sha: str,
     previous_tag: str | None,
@@ -151,10 +190,16 @@ def render_markdown(
 
     for section_name in SECTION_ORDER:
         lines.append(f"## {section_name}")
-        bullets = sections[section_name]
-        if bullets:
-            for bullet in bullets:
-                lines.append(f"- {bullet}")
+        scope_groups = sections[section_name]
+        if scope_groups:
+            for scope, bullets in scope_groups.items():
+                if scope == "General":
+                    for bullet in bullets:
+                        lines.append(f"- {bullet}")
+                    continue
+                lines.append(f"- {scope}:")
+                for bullet in bullets:
+                    lines.append(f"  - {bullet}")
         else:
             lines.append("- None in this build.")
         lines.append("")
