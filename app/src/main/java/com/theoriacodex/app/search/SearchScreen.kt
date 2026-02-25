@@ -103,7 +103,6 @@ fun SearchScreen(
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
     val queryHash = coordinator.appliedQueryHash
-    var lastPrefetchTriggerResultSize by rememberSaveable(queryHash, animatedOnly) { mutableStateOf(-1) }
     val visibleResults = remember(coordinator.results, animatedOnly) {
         if (animatedOnly) {
             coordinator.results.filter(::isAnimatedPost)
@@ -145,34 +144,32 @@ fun SearchScreen(
         coordinator.loadingMore,
         animatedOnly,
     ) {
-        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
-            .collect { lastVisibleIndex ->
-                if (coordinator.loading || coordinator.loadingMore || !coordinator.canLoadMore) return@collect
+        snapshotFlow {
+            (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to coordinator.loadingMore
+        }.collect { (lastVisibleIndex, loadingMoreState) ->
+            if (loadingMoreState) return@collect
+            if (coordinator.loading || coordinator.loadingMore || !coordinator.canLoadMore) return@collect
 
-                val totalVisible = visibleResults.size
-                val rawResultSize = coordinator.results.size
+            val totalVisible = visibleResults.size
+            val rawResultSize = coordinator.results.size
 
-                val shouldTriggerByThreshold = if (totalVisible > 0 && lastVisibleIndex >= 0) {
-                    val triggerIndex = ((totalVisible - 1) * PAGINATION_PREFETCH_RATIO)
-                        .toInt()
-                        .coerceAtLeast(0)
-                    lastVisibleIndex >= triggerIndex
-                } else {
-                    false
-                }
-
-                // If animated-only yields no visible rows yet, keep paging while source tokens remain.
-                val shouldTriggerForEmptyAnimatedResults =
-                    animatedOnly && totalVisible == 0 && rawResultSize > 0
-
-                if (
-                    (shouldTriggerByThreshold || shouldTriggerForEmptyAnimatedResults) &&
-                    lastPrefetchTriggerResultSize != rawResultSize
-                ) {
-                    lastPrefetchTriggerResultSize = rawResultSize
-                    coordinator.loadNextPage()
-                }
+            val shouldTriggerByThreshold = if (totalVisible > 0 && lastVisibleIndex >= 0) {
+                val triggerIndex = ((totalVisible - 1) * PAGINATION_PREFETCH_RATIO)
+                    .toInt()
+                    .coerceAtLeast(0)
+                lastVisibleIndex >= triggerIndex
+            } else {
+                false
             }
+
+            // If animated-only yields no visible rows yet, keep paging while source tokens remain.
+            val shouldTriggerForEmptyAnimatedResults =
+                animatedOnly && totalVisible == 0 && rawResultSize > 0
+
+            if (shouldTriggerByThreshold || shouldTriggerForEmptyAnimatedResults) {
+                coordinator.loadNextPage()
+            }
+        }
     }
 
     val autocompleteSuggestions = remember(input, coordinator.trendingTags) {
@@ -430,7 +427,7 @@ fun SearchScreen(
 }
 
 @Composable
-private fun SearchResultCard(
+fun SearchResultCard(
     post: Post,
     pixivUgoiraClient: PixivUgoiraClient?,
     onClick: () -> Unit,

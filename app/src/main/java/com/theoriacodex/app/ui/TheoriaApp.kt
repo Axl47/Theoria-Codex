@@ -363,6 +363,7 @@ fun TheoriaApp(
                             codexName = codex?.name,
                             posts = posts,
                             sortMode = sortMode,
+                            pixivUgoiraClient = pixivUgoiraClient,
                             onSortChange = { sortMode = it },
                             onOpenViewer = { index ->
                                 val context = ViewerLaunchContext(
@@ -561,12 +562,20 @@ private fun loadSeedTagSuggestions(context: Context): Map<SourceKey, List<TagSug
         val tags = value.takeIf { it.isJsonArray }?.asJsonArray
             ?.mapNotNull inner@{ element ->
                 val obj = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@inner null
-                val text = obj.get("text")?.asString?.trim().orEmpty()
+                val text = obj.get("text")
+                    ?.takeUnless { it.isJsonNull }
+                    ?.asString
+                    ?.trim()
+                    .orEmpty()
                 if (text.isBlank()) return@inner null
                 TagSuggestion(
                     text = text,
-                    type = obj.get("type")?.asString,
-                    count = obj.get("count")?.asInt,
+                    type = obj.get("type")
+                        ?.takeUnless { it.isJsonNull }
+                        ?.asString,
+                    count = obj.get("count")
+                        ?.takeUnless { it.isJsonNull }
+                        ?.asInt,
                 )
             }
             .orEmpty()

@@ -1,6 +1,5 @@
 package com.theoriacodex.app.codex
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +18,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.search.SearchResultCard
+import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.model.Post
 
@@ -27,6 +28,7 @@ fun CodexDetailScreen(
     codexName: String?,
     posts: List<Post>,
     sortMode: CodexSortMode,
+    pixivUgoiraClient: PixivUgoiraClient? = null,
     onSortChange: (CodexSortMode) -> Unit,
     onOpenViewer: (Int) -> Unit,
     onRemovePost: (Post) -> Unit,
@@ -110,21 +112,19 @@ fun CodexDetailScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 itemsIndexed(posts) { index, post ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onOpenViewer(index) },
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Column(
-                            modifier = Modifier.padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Text(post.id.source.name, style = MaterialTheme.typography.labelSmall)
-                            Text(post.id.sourcePostId, style = MaterialTheme.typography.bodySmall)
-                            TextButton(onClick = { onRemovePost(post) }) {
-                                Text("Remove")
-                            }
-                        }
+                        SearchResultCard(
+                            post = post,
+                            pixivUgoiraClient = pixivUgoiraClient,
+                            onClick = { onOpenViewer(index) },
+                        )
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { onRemovePost(post) },
+                        ) { Text("Remove") }
                     }
                 }
             }

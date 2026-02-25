@@ -57,6 +57,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.imageLoader
 import coil.request.ImageRequest
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.model.ImageRef
@@ -109,6 +110,31 @@ fun ViewerScreen(
     val selectedPost = posts[currentPostIndex]
     val selectedPostMedia = remember(selectedPost) { viewerMediaItems(selectedPost) }
     val selectedMediaIndex = (mediaIndexByPost[currentPostIndex] ?: 0).coerceIn(0, selectedPostMedia.lastIndex)
+
+    LaunchedEffect(posts, currentPostIndex, selectedMediaIndex) {
+        val queue = buildPrefetchQueue(
+            posts = posts,
+            currentPostIndex = currentPostIndex,
+            currentMediaIndex = selectedMediaIndex,
+            limit = VIEWER_PREFETCH_COUNT,
+        )
+        val imageLoader = context.imageLoader
+        queue.forEach { candidate ->
+            val data = candidate.media.localPath
+                ?: candidate.media.url
+                ?: candidate.post.full?.localPath
+                ?: candidate.post.full?.url
+                ?: candidate.post.preview.localPath
+                ?: candidate.post.preview.url
+                ?: return@forEach
+            val request = buildViewerImageRequest(
+                context = context,
+                url = data,
+                sourceKey = candidate.post.id.source,
+            )
+            imageLoader.enqueue(request)
+        }
+    }
 
     fun markInteraction() {
         interactionSerial += 1
@@ -222,6 +248,7 @@ fun ViewerScreen(
                                 client = requireNotNull(pixivUgoiraClient),
                                 contentDescription = post.title ?: post.id.sourcePostId,
                                 modifier = Modifier.fillMaxSize(),
+                                showProgressBar = true,
                             )
                         } else if (imageModel != null) {
                             AsyncImage(
@@ -406,6 +433,40 @@ private fun buildViewerImageRequest(
     return builder.build()
 }
 
+private data class PrefetchCandidate(
+    val post: Post,
+    val media: ImageRef,
+)
+
+private fun buildPrefetchQueue(
+    posts: List<Post>,
+    currentPostIndex: Int,
+    currentMediaIndex: Int,
+    limit: Int,
+): List<PrefetchCandidate> {
+    if (posts.isEmpty() || limit <= 0) return emptyList()
+
+    val queue = mutableListOf<PrefetchCandidate>()
+    var postIndex = currentPostIndex
+    var mediaIndex = currentMediaIndex + 1
+
+    while (postIndex <= posts.lastIndex && queue.size < limit) {
+        val post = posts[postIndex]
+        val mediaItems = viewerMediaItems(post)
+        while (mediaIndex <= mediaItems.lastIndex && queue.size < limit) {
+            val media = mediaItems[mediaIndex]
+            if (!isPixivUgoira(post, media)) {
+                queue += PrefetchCandidate(post = post, media = media)
+            }
+            mediaIndex += 1
+        }
+        postIndex += 1
+        mediaIndex = 0
+    }
+
+    return queue
+}
+
 private fun viewerMediaItems(post: Post): List<ImageRef> {
     val explicitMedia = post.media.filter { ref ->
         !ref.url.isNullOrBlank() || !ref.localPath.isNullOrBlank()
@@ -488,6 +549,8 @@ private fun String.sanitizeFileName(): String {
     val cleaned = trim().replace(Regex("[^A-Za-z0-9._-]+"), "_").trim('_')
     return cleaned.ifBlank { "image" }
 }
+
+private const val VIEWER_PREFETCH_COUNT = 3
 
 @Composable
 private fun ViewerChrome(

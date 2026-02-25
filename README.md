@@ -36,6 +36,10 @@ Previously completed MVP slices remain in place:
 - Search/Viewer now support GIF rendering (global Coil animated decoder + MIME-aware source mapping); Search and Viewer both support Pixiv ugoira playback by loading Pixiv metadata + zip frames and animating in-place
 - Viewer long-press download now exports Pixiv ugoira content directly to MP4 and saves it to device video storage (with app-storage fallback when MediaStore is unavailable)
 - Viewer now uses horizontal post paging + vertical in-post image paging (per-post `X / Y`), supports long-press image download, and search cards show compact source/image-count overlays
+- Viewer now prefetches the next three upcoming media items while browsing to reduce perceived load time when swiping forward
+- Pixiv ugoira playback now uses an in-memory LRU cache so returning between Search and Viewer reuses decoded animations instead of reloading from network
+- Viewer shows a thin playback progress bar under Pixiv ugoira media so loop position is visible while watching animations
+- Codex detail now reuses the same Search result card renderer (thumbnails, animated previews, title/tags, overlays) for consistent browsing UI
 - File-backed persistence for query/settings/cache/codex/UI restore state
 
 ## Project Structure
@@ -64,6 +68,8 @@ Build before running on device/emulator:
 Tag store update helper:
 
     python3 scripts/update_tag_store.py --source PIXIV --input /path/to/tags.txt
+    python3 scripts/update_tag_store.py --source PIXIV --pixiv-tags-url
+    python3 scripts/update_tag_store.py --source PIXIV --pixiv-tags-html /path/to/pixiv-tags-page.html
 
 ## Implementation Plan Tracking
 

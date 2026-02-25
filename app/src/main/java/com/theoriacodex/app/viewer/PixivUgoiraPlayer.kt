@@ -16,13 +16,18 @@ import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -30,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.dp
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.theoriacodex.sources.credentials.PixivAuthTokens
@@ -55,8 +61,24 @@ class PixivUgoiraClient(
     private val gson: Gson = Gson(),
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) {
+    private val cacheLock = Any()
+    private val playbackCache = LinkedHashMap<String, UgoiraPlayback>(
+        UGOIRA_PLAYBACK_CACHE_SIZE,
+        0.75f,
+        true,
+    )
+
+    fun cached(postId: String): UgoiraPlayback? = synchronized(cacheLock) {
+        playbackCache[postId]
+    }
+
     suspend fun load(postId: String): Result<UgoiraPlayback> {
-        return runCatching { loadOrThrow(postId) }
+        cached(postId)?.let { return Result.success(it) }
+        return runCatching {
+            loadOrThrow(postId).also { playback ->
+                cachePlayback(postId, playback)
+            }
+        }
     }
 
     suspend fun exportToMp4(
@@ -117,7 +139,10 @@ class PixivUgoiraClient(
         postId: String,
         title: String?,
     ): Uri = withContext(Dispatchers.IO) {
-        val playback = loadOrThrow(postId)
+        val playback = cached(postId)
+            ?: loadOrThrow(postId).also { loaded ->
+                cachePlayback(postId, loaded)
+            }
         val fileName = buildMp4FileName(postId = postId, title = title)
 
         val mediaStoreResult = runCatching {
@@ -543,6 +568,16 @@ class PixivUgoiraClient(
         }
         return frames
     }
+
+    private fun cachePlayback(postId: String, playback: UgoiraPlayback) {
+        synchronized(cacheLock) {
+            playbackCache[postId] = playback
+            while (playbackCache.size > UGOIRA_PLAYBACK_CACHE_SIZE) {
+                val eldestKey = playbackCache.entries.firstOrNull()?.key ?: break
+                playbackCache.remove(eldestKey)
+            }
+        }
+    }
 }
 
 @Composable
@@ -552,15 +587,19 @@ fun PixivUgoiraPlayer(
     modifier: Modifier = Modifier,
     contentDescription: String?,
     contentScale: ContentScale = ContentScale.Fit,
+    showProgressBar: Boolean = false,
 ) {
-    var playback by remember(postId) { mutableStateOf<UgoiraPlayback?>(null) }
+    var playback by remember(postId, client) { mutableStateOf(client.cached(postId)) }
     var errorMessage by remember(postId) { mutableStateOf<String?>(null) }
     var frameIndex by remember(postId) { mutableIntStateOf(0) }
+    var elapsedInLoopMs by remember(postId) { mutableLongStateOf(0L) }
 
     LaunchedEffect(postId, client) {
         frameIndex = 0
-        playback = null
+        elapsedInLoopMs = 0L
         errorMessage = null
+        playback = client.cached(postId)
+        if (playback != null) return@LaunchedEffect
         val result = client.load(postId)
         result.onSuccess { loaded ->
             playback = loaded
@@ -588,19 +627,50 @@ fun PixivUgoiraPlayer(
         return
     }
 
+    val totalDurationMs = remember(activePlayback) {
+        activePlayback.frames.sumOf { it.delayMs.coerceAtLeast(16) }.coerceAtLeast(1)
+    }
     LaunchedEffect(activePlayback, frameIndex) {
         val delayMs = activePlayback.frames[frameIndex].delayMs.toLong().coerceAtLeast(16L)
         delay(delayMs)
-        frameIndex = (frameIndex + 1) % activePlayback.frames.size
+        val nextIndex = (frameIndex + 1) % activePlayback.frames.size
+        frameIndex = nextIndex
+        elapsedInLoopMs = if (nextIndex == 0) {
+            0L
+        } else {
+            (elapsedInLoopMs + delayMs).coerceAtMost(totalDurationMs.toLong())
+        }
     }
 
     val frame = activePlayback.frames[frameIndex]
-    Image(
-        bitmap = frame.bitmap.asImageBitmap(),
-        contentDescription = contentDescription,
-        modifier = modifier,
-        contentScale = contentScale,
-    )
+    if (!showProgressBar) {
+        Image(
+            bitmap = frame.bitmap.asImageBitmap(),
+            contentDescription = contentDescription,
+            modifier = modifier,
+            contentScale = contentScale,
+        )
+        return
+    }
+
+    val progress = (elapsedInLoopMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)
+    Column(modifier = modifier) {
+        Image(
+            bitmap = frame.bitmap.asImageBitmap(),
+            contentDescription = contentDescription,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentScale = contentScale,
+        )
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp),
+            trackColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.18f),
+        )
+    }
 }
 
 data class UgoiraPlayback(
@@ -640,3 +710,4 @@ private const val UGOIRA_MIN_DELAY_MS = 16
 private const val UGOIRA_BITRATE_PER_PIXEL = 6
 private const val UGOIRA_MIN_BITRATE = 900_000
 private const val UGOIRA_MAX_BITRATE = 12_000_000
+private const val UGOIRA_PLAYBACK_CACHE_SIZE = 8
