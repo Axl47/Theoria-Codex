@@ -13,7 +13,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.aspectRatio
@@ -161,8 +163,6 @@ fun SearchScreen(
             if (coordinator.loading || coordinator.loadingMore || !coordinator.canLoadMore) return@collect
 
             val totalVisible = visibleResults.size
-            val rawResultSize = coordinator.results.size
-
             val shouldTriggerByThreshold = if (totalVisible > 0 && lastVisibleIndex >= 0) {
                 val triggerIndex = ((totalVisible - 1) * PAGINATION_PREFETCH_RATIO)
                     .toInt()
@@ -172,14 +172,26 @@ fun SearchScreen(
                 false
             }
 
-            // If animated-only yields no visible rows yet, keep paging while source tokens remain.
-            val shouldTriggerForEmptyAnimatedResults =
-                animatedOnly && totalVisible == 0 && rawResultSize > 0
+            // Keep filling animated feed when the filtered set is still too small.
+            val shouldTriggerForAnimatedBuffer =
+                animatedOnly &&
+                    totalVisible < ANIMATED_PREFETCH_MIN_VISIBLE &&
+                    coordinator.results.isNotEmpty()
 
-            if (shouldTriggerByThreshold || shouldTriggerForEmptyAnimatedResults) {
+            if (shouldTriggerByThreshold || shouldTriggerForAnimatedBuffer) {
                 coordinator.loadNextPage()
             }
         }
+    }
+
+    LaunchedEffect(searchFieldFocused) {
+        if (!searchFieldFocused) return@LaunchedEffect
+        snapshotFlow { gridState.isScrollInProgress }
+            .collectLatest { scrolling ->
+                if (scrolling) {
+                    focusManager.clearFocus()
+                }
+            }
     }
 
     val autocompleteSuggestions = remember(input, coordinator.trendingTags) {
@@ -194,6 +206,7 @@ fun SearchScreen(
     val sourceAuthErrorMessage = remember(coordinator.statuses) {
         buildSourceAuthErrorMessage(coordinator.statuses)
     }
+    val clearFocusInteraction = remember { MutableInteractionSource() }
     val showSearchControls = searchFieldFocused ||
         input.isNotBlank() ||
         autocompleteSuggestions.isNotEmpty() ||
@@ -211,8 +224,11 @@ fun SearchScreen(
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(
-                modifier = Modifier.padding(bottom = 72.dp),
-                onClick = { showFilterSheet = true },
+                modifier = Modifier.padding(bottom = 20.dp),
+                onClick = {
+                    focusManager.clearFocus()
+                    showFilterSheet = true
+                },
             ) {
                 Icon(Icons.Default.FilterList, contentDescription = "Filter and sort")
             }
@@ -222,7 +238,7 @@ fun SearchScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             OutlinedTextField(
@@ -233,8 +249,13 @@ fun SearchScreen(
                     },
                 value = input,
                 onValueChange = { input = it },
-                label = { Text("Search tags") },
-                supportingText = { Text("Use '-tag' to add exclusion") },
+                shape = RoundedCornerShape(28.dp),
+                singleLine = true,
+                placeholder = if (!searchFieldFocused) {
+                    { Text("tag or -tag") }
+                } else {
+                    null
+                },
                 keyboardOptions = KeyboardOptions(
                     imeAction = ImeAction.Done,
                     keyboardType = KeyboardType.Text,
@@ -295,11 +316,6 @@ fun SearchScreen(
                     ) {
                         StatusRow(coordinator = coordinator)
                     }
-                    FilterChip(
-                        selected = animatedOnly,
-                        onClick = { animatedOnly = !animatedOnly },
-                        label = { Text("Animated only") },
-                    )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -331,22 +347,43 @@ fun SearchScreen(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxWidth(),
+                            .fillMaxWidth()
+                            .clickable(
+                                interactionSource = clearFocusInteraction,
+                                indication = null,
+                            ) { focusManager.clearFocus() },
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator()
                     }
                 }
                 coordinator.errorMessage != null -> {
-                    Box(modifier = Modifier.weight(1f)) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(
+                                interactionSource = clearFocusInteraction,
+                                indication = null,
+                            ) { focusManager.clearFocus() }
+                    ) {
                         ErrorBlock(
                             message = coordinator.errorMessage.orEmpty(),
-                            onRetry = { scope.launch { coordinator.retry() } },
+                            onRetry = {
+                                focusManager.clearFocus()
+                                scope.launch { coordinator.retry() }
+                            },
                         )
                     }
                 }
                 visibleResults.isEmpty() -> {
-                    Box(modifier = Modifier.weight(1f)) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(
+                                interactionSource = clearFocusInteraction,
+                                indication = null,
+                            ) { focusManager.clearFocus() }
+                    ) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             sourceAuthErrorMessage?.let { authMessage ->
                                 ErrorBlock(
@@ -373,7 +410,12 @@ fun SearchScreen(
                 }
                 else -> {
                     Column(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(
+                                interactionSource = clearFocusInteraction,
+                                indication = null,
+                            ) { focusManager.clearFocus() },
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         sourceAuthErrorMessage?.let { authMessage ->
@@ -394,6 +436,7 @@ fun SearchScreen(
                                     post = post,
                                     pixivUgoiraClient = pixivUgoiraClient,
                                     onClick = {
+                                        focusManager.clearFocus()
                                         val context = coordinator.buildViewerLaunchContext(
                                             startIndex = index,
                                             scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
@@ -402,6 +445,7 @@ fun SearchScreen(
                                         onOpenViewer(visibleResults, context, animatedOnly)
                                     },
                                     onLongPress = {
+                                        focusManager.clearFocus()
                                         selectedActionPost = post
                                     },
                                 )
@@ -446,6 +490,8 @@ fun SearchScreen(
                 Text(
                     text = post.title?.takeIf { it.isNotBlank() } ?: post.id.sourcePostId,
                     style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -492,6 +538,8 @@ fun SearchScreen(
     if (showFilterSheet) {
         FilterSheet(
             coordinator = coordinator,
+            animatedOnly = animatedOnly,
+            onAnimatedOnlyChange = { animatedOnly = it },
             onDismiss = {
                 scope.launch {
                     sheetState.hide()
@@ -729,6 +777,8 @@ private fun formatPostTagsForClipboard(post: Post): String {
 @Composable
 private fun FilterSheet(
     coordinator: SearchCoordinator,
+    animatedOnly: Boolean,
+    onAnimatedOnlyChange: (Boolean) -> Unit,
     onDismiss: () -> Unit,
     sheetState: androidx.compose.material3.SheetState,
 ) {
@@ -738,6 +788,7 @@ private fun FilterSheet(
     var selectedPreset by remember(coordinator.draftQuery.dateRange) {
         mutableStateOf(inferPreset(coordinator.draftQuery.dateRange?.fromEpochMs, coordinator.draftQuery.dateRange?.toEpochMs))
     }
+    val focusManager = LocalFocusManager.current
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -749,6 +800,18 @@ private fun FilterSheet(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            Text("Media Types", style = MaterialTheme.typography.titleMedium)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    FilterChip(
+                        selected = animatedOnly,
+                        onClick = { onAnimatedOnlyChange(!animatedOnly) },
+                        label = { Text("Animated only") },
+                    )
+                }
+            }
+
+            HorizontalDivider()
             Text("Sort", style = MaterialTheme.typography.titleMedium)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(SortMode.entries.size) { index ->
@@ -793,6 +856,14 @@ private fun FilterSheet(
                     coordinator.setMinScore(minScoreInput.toIntOrNull())
                 },
                 label = { Text("Optional") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = { focusManager.clearFocus() }
+                ),
             )
 
             Row(
@@ -1028,3 +1099,4 @@ private fun buildImageRequest(
 }
 
 private const val PAGINATION_PREFETCH_RATIO = 0.8f
+private const val ANIMATED_PREFETCH_MIN_VISIBLE = 12
