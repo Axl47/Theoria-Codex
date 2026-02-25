@@ -13,9 +13,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -151,6 +157,53 @@ fun CodexDetailScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    IconButton(
+                        onClick = {
+                            selectedActionPost = null
+                            onSavePostToDevice(post)
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Download,
+                            contentDescription = "Save to device",
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            val formatted = formatPostTagsForClipboard(post)
+                            clipboard?.setPrimaryClip(ClipData.newPlainText("tags", formatted))
+                            Toast.makeText(context, "Tags copied", Toast.LENGTH_SHORT).show()
+                            selectedActionPost = null
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy tags",
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            val copied = copyPostUrlToClipboard(context, post)
+                            val message = if (copied) {
+                                "Post URL copied"
+                            } else {
+                                "No post URL available"
+                            }
+                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            selectedActionPost = null
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share",
+                        )
+                    }
+                }
                 Text(
                     text = post.title?.takeIf { it.isNotBlank() } ?: post.id.sourcePostId,
                     style = MaterialTheme.typography.titleMedium,
@@ -165,42 +218,6 @@ fun CodexDetailScreen(
                     },
                 ) {
                     Text("Remove from Codex")
-                }
-                TextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = {
-                        selectedActionPost = null
-                        onSavePostToDevice(post)
-                    },
-                ) {
-                    Text("Save to device")
-                }
-                TextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = {
-                        val copied = copyPostUrlToClipboard(context, post)
-                        val message = if (copied) {
-                            "Post URL copied"
-                        } else {
-                            "No post URL available"
-                        }
-                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                        selectedActionPost = null
-                    },
-                ) {
-                    Text("Share")
-                }
-                TextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                        val formatted = formatPostTagsForClipboard(post)
-                        clipboard?.setPrimaryClip(ClipData.newPlainText("tags", formatted))
-                        Toast.makeText(context, "Tags copied", Toast.LENGTH_SHORT).show()
-                        selectedActionPost = null
-                    },
-                ) {
-                    Text("Copy tags")
                 }
                 TextButton(
                     modifier = Modifier.fillMaxWidth(),
