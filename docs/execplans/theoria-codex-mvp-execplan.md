@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:08
-updated_at: 2026-02-25T01:42
+updated_at: 2026-02-25T06:02
 ---
 # Build Theoria Codex Android MVP (Stub-first, Local-first)
 
@@ -35,6 +35,7 @@ The success path is observable: launch app, switch among Search/Explore/Codex/Se
   - `./gradlew testDebugUnitTest`
   - `./gradlew assembleDebug`
   - `./gradlew lintDebug`
+- [x] (2026-02-25 06:02Z) Completed post-MVP UX/behavior pass: rounded single-line Search bar with inline hint, Enter-to-add-tag behavior, focus-clearing interactions, in-sheet animated-only staging, source pagination (`load more`) with near-end auto-fetch, animated-only empty-page fallback paging, Viewer `Go to Search` close-and-navigate fix, and incremental version bump to `0.1.1`.
 - [x] (2026-02-25 01:28Z) Completed second-pass contract refactor: `SourceAdapter` autocomplete support, `requiresCredentials` capability, typed `SourceFailureReason`, and `SourceAdapterRegistry` abstraction.
 - [x] (2026-02-25 01:33Z) Added new `:core-sources` module with real Pixiv/AIBooru/Gelbooru adapters and `RealAdapterRegistry` (Phase A runtime exposure: Pixiv only).
 - [x] (2026-02-25 01:37Z) Rewired app runtime from stubs to real registry in `SearchCoordinator` and `TheoriaApp`; source lists are now registry-driven and unfinished sources are hidden.

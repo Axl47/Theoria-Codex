@@ -776,6 +776,9 @@ fun TheoriaApp(
                                     searchCoordinator.addExcludeTag(tag)
                                 },
                                 onGoToSearch = {
+                                    viewerSession = null
+                                    scope.launch { searchCoordinator.setViewerLaunchContext(null) }
+                                    navController.popBackStack(AppRoute.Viewer, inclusive = true)
                                     navController.navigate(TopLevelDestination.Search.route) {
                                         popUpTo(navController.graph.findStartDestination().id) {
                                             saveState = true

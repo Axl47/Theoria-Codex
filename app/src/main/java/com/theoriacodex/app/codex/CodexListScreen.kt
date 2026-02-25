@@ -22,6 +22,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.domain.model.Codex
@@ -149,6 +153,12 @@ private fun CodexNameDialog(
     onSave: (String) -> Unit,
 ) {
     var value by remember(initialName) { mutableStateOf(initialName) }
+    fun saveIfValid() {
+        val trimmed = value.trim()
+        if (trimmed.isNotBlank()) {
+            onSave(trimmed)
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -157,8 +167,16 @@ private fun CodexNameDialog(
             OutlinedTextField(
                 modifier = Modifier.fillMaxWidth(),
                 value = value,
-                onValueChange = { value = it },
+                onValueChange = { value = it.replace("\n", " ") },
                 label = { Text("Name") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Text,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = { saveIfValid() },
+                ),
             )
         },
         dismissButton = {
@@ -167,12 +185,7 @@ private fun CodexNameDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                val trimmed = value.trim()
-                if (trimmed.isNotBlank()) {
-                    onSave(trimmed)
-                }
-            }) {
+            TextButton(onClick = { saveIfValid() }) {
                 Text("Save")
             }
         },

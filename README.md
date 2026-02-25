@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-02-25T04:31
+updated_at: 2026-02-25T06:02
 ---
 # Theoria Codex
 
@@ -48,6 +48,73 @@ Previously completed MVP slices remain in place:
 - In landscape Viewer, media now renders edge-to-edge (no card/page inset margins), and ugoira progress is drawn inside the media at the bottom edge
 - Startup now includes a GitHub Releases updater path for `main` prereleases: checks on launch, downloads fixed asset `theoria-codex-main.apk` when newer `main-vc<versionCode>-<sha>` builds exist, validates package/signature/version, and opens Android installer (with unknown-sources handoff + fallback to current app on failure)
 - File-backed persistence for query/settings/cache/codex/UI restore state
+The project now includes a runnable portrait-locked Android MVP with four top-level tabs:
+
+- Search
+- Explore
+- Codex
+- Settings
+
+Milestone 5 (Search/Explore) is complete for spec-critical behavior:
+
+- Shared Draft/Applied query coordinator backed by file-backed repositories
+- Apply-bar query execution model
+- Autocomplete suggestion panel with include/exclude actions
+- Filter/Sort bottom sheet with sort, date-range presets, and min-score staging
+- Filter sheet now includes `Media Types -> Animated only` staging in the same sort/filter workflow
+- Query-hash keyed search scroll restoration
+- Stub-backed search results rendering in a 2-column grid with viewer entry handoff
+- Search now supports progressive paging (`load more`) and near-end auto-fetch
+- Animated-only searches now keep fetching next pages when early pages have no animated matches
+- Unified status pill rendering for source failure/exclusion states
+- Explore quick queries and trending-tag handoff into Search draft state
+- Rounded single-line search bar with inline faded hint (`tag or -tag`) and Enter-to-add-tag behavior
+- Search focus now clears when interacting outside search input/suggestions
+
+Milestone 6 (Viewer/Codex) is complete:
+
+- Fullscreen Viewer route with:
+  - Horizontal swipe between items
+  - Pinch/pan zoom behavior and double-tap fit/2x toggle
+  - Single-tap chrome toggle with 1.5s auto-hide
+  - Swipe-down dismiss
+  - Info/actions sheet (save, browser open, tag include/exclude)
+  - `Go to Search` now reliably closes Viewer route/session before navigating
+- Codex list/detail flows:
+  - Create/rename/delete codex
+  - Save/remove post actions
+  - Detail sort modes: newest/oldest/by-source
+  - Empty-state and back navigation flows
+
+Milestone 7 (Settings/Runtime controls) is complete:
+
+- Enabled-source toggles
+- Merge weight sliders with automatic normalization (sum=1.0)
+- Cache full image on save toggle
+- Clear thumbnail/full-image cache actions
+- Stub scenario selector (`Normal`, `Partial Failure`, `Empty`, `Slow`) applied live
+
+Core domain contracts from the spec are in place, including:
+
+- Post and query models
+- Codex models
+- Source adapter interfaces and capability model
+- Deterministic `QueryHash` utility (with initial unit tests)
+- Draft/Applied query state primitives and source capability exclusion helpers
+
+Core data layer now includes:
+
+- Repository interfaces for Codex, query state, settings, cache, and UI restore behavior
+- In-memory and file-backed implementations for persisted local state
+- Codex detail hydration contracts (`observeCodexPosts`, `getPost`) and `CodexSortMode`
+- Explicit settings mutation APIs (`setEnabledSources`, `setSourceWeights`, `setScenarioPreset`, etc.)
+- Unit tests for in-memory repository behavior
+
+Stub-source execution now includes:
+
+- JSON fixture datasets for Pixiv, Gelbooru, and AIBooru with paging/trending/scenarios
+- Scenario-aware stub source adapters (`Normal`, `Partial Failure`, `Empty Results`, `Slow Network`)
+- Unified capability-aware weighted search orchestrator with tests
 
 ## Project Structure
 

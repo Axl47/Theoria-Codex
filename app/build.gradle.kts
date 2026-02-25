@@ -16,8 +16,8 @@ android {
         applicationId = "com.theoriacodex"
         minSdk = 26
         targetSdk = 35
-        versionCode = versionCodeOverride ?: 1
-        versionName = versionNameOverride ?: "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
 
         buildConfigField("String", "UPDATE_REPO_OWNER", "\"Axl47\"")
         buildConfigField("String", "UPDATE_REPO_NAME", "\"Theoria-Codex\"")
