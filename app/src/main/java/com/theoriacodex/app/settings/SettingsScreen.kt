@@ -70,19 +70,6 @@ fun SettingsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text("General", style = MaterialTheme.typography.titleMedium)
-                Text("Apply button required", style = MaterialTheme.typography.bodyMedium)
-                Text("Portrait-only mode in MVP", style = MaterialTheme.typography.bodySmall)
-            }
-        }
-
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text("Unified mode", style = MaterialTheme.typography.titleMedium)
