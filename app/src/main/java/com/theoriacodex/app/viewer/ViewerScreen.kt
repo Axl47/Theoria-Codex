@@ -364,6 +364,7 @@ fun ViewerScreen(
                 val isVideoMedia = isVideoMediaRef(media)
                 val isGifMedia = isGifMediaRef(media)
                 val showUgoira = isPixivUgoira(post, media) && pixivUgoiraClient != null
+                val hasBottomTimeline = viewerState.chromeVisible && (isVideoMedia || isGifMedia || showUgoira)
                 val mediaContainerPadding = when {
                     isLandscape -> 0.dp
                     isVideoMedia || isGifMedia || showUgoira -> 0.dp
@@ -402,8 +403,6 @@ fun ViewerScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .then(transformInputModifier)
-                        .then(mediaGestureModifier)
                 ) {
                     val imageCandidates = remember(post, media, isVideoMedia) {
                         if (isVideoMedia) emptyList() else viewerImageCandidates(post, media)
@@ -527,6 +526,13 @@ fun ViewerScreen(
                             }
                         }
                     }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(bottom = if (hasBottomTimeline) 96.dp else 0.dp)
+                            .then(transformInputModifier)
+                            .then(mediaGestureModifier),
+                    )
                 }
             }
         }
