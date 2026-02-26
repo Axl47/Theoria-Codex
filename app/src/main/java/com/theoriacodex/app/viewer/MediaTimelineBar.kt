@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
@@ -93,19 +94,37 @@ fun MediaTimelineBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 6.dp),
+            .padding(horizontal = 4.dp, vertical = 6.dp)
+            .pointerInput(safeDuration) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(
+                        requireUnconsumed = false,
+                        pass = PointerEventPass.Initial,
+                    )
+                    onInteractionActiveChanged(true)
+                    try {
+                        down.consume()
+                        while (true) {
+                            val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                            event.changes.forEach { it.consume() }
+                            if (event.changes.none { it.pressed }) break
+                        }
+                    } finally {
+                        onInteractionActiveChanged(false)
+                    }
+                }
+            },
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
                 .weight(1f)
-                .defaultMinSize(minHeight = 28.dp)
+                .defaultMinSize(minHeight = 40.dp)
                 .onSizeChanged { sliderWidthPx = it.width.toFloat().coerceAtLeast(1f) }
-                .pointerInput(safeDuration, sliderWidthPx) {
+                .pointerInput(safeDuration) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        onInteractionActiveChanged(true)
                         var startedScrubbing = false
                         try {
                             if (!isScrubbing) {
@@ -128,7 +147,6 @@ fun MediaTimelineBar(
                                 onSeekFinished(target)
                             }
                             isScrubbing = false
-                            onInteractionActiveChanged(false)
                         }
                     }
                 },

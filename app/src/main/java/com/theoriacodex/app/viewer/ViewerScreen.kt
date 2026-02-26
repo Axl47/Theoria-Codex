@@ -342,8 +342,7 @@ fun ViewerScreen(
     ) {
         HorizontalPager(
             state = postPagerState,
-            userScrollEnabled =
-                viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f && !timelineInteractionActive,
+            userScrollEnabled = viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f,
             modifier = Modifier.fillMaxSize(),
         ) { postPage ->
             val post = posts[postPage]
@@ -364,8 +363,7 @@ fun ViewerScreen(
 
             VerticalPager(
                 state = mediaPagerState,
-                userScrollEnabled =
-                    viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f && !timelineInteractionActive,
+                userScrollEnabled = viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = if (isLandscape) {
                     PaddingValues(0.dp)
