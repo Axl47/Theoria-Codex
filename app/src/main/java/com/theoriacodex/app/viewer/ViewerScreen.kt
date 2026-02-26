@@ -8,6 +8,7 @@ import android.content.Context
 import android.graphics.Movie
 import android.net.Uri
 import android.os.Environment
+import android.os.SystemClock
 import android.webkit.URLUtil
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -104,6 +105,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -957,6 +959,8 @@ private fun ViewerVideoPlayer(
     var positionMs by remember(location) { mutableLongStateOf(0L) }
     var isScrubbing by remember(location) { mutableStateOf(false) }
     var playbackPaused by remember(location) { mutableStateOf(false) }
+    var lastSeekDispatchAtMs by remember(location) { mutableLongStateOf(0L) }
+    var lastSeekDispatchTargetMs by remember(location) { mutableLongStateOf(0L) }
 
     DisposableEffect(location, sourceKey) {
         loading = true
@@ -965,6 +969,8 @@ private fun ViewerVideoPlayer(
         positionMs = 0L
         isScrubbing = false
         playbackPaused = false
+        lastSeekDispatchAtMs = 0L
+        lastSeekDispatchTargetMs = 0L
         val player = createLoopingExoPlayer(
             context = context,
             location = location,
@@ -973,10 +979,12 @@ private fun ViewerVideoPlayer(
         )
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                loading = playbackState == Player.STATE_IDLE || playbackState == Player.STATE_BUFFERING
-                val duration = player.duration.takeIf { it > 0L }
-                if (duration != null) {
-                    durationMs = duration
+                runCatching {
+                    loading = playbackState == Player.STATE_IDLE || playbackState == Player.STATE_BUFFERING
+                    val duration = player.duration.takeIf { it > 0L }
+                    if (duration != null) {
+                        durationMs = duration
+                    }
                 }
             }
 
@@ -988,15 +996,21 @@ private fun ViewerVideoPlayer(
         player.addListener(listener)
         playerRef = player
         if (isActive && !playbackPaused) {
-            player.playWhenReady = true
-            player.play()
+            runCatching {
+                player.playWhenReady = true
+                player.play()
+            }
         }
         onDispose {
             player.removeListener(listener)
-            player.playWhenReady = false
-            player.pause()
+            runCatching {
+                player.playWhenReady = false
+                player.pause()
+            }
             playerViewRef?.player = null
-            player.release()
+            runCatching {
+                player.release()
+            }
             if (playerRef === player) {
                 playerRef = null
             }
@@ -1006,12 +1020,14 @@ private fun ViewerVideoPlayer(
 
     LaunchedEffect(isActive, playerRef, loadFailed, playbackPaused) {
         val player = playerRef ?: return@LaunchedEffect
-        if (!isActive || loadFailed || playbackPaused) {
-            player.playWhenReady = false
-            player.pause()
-        } else {
-            player.playWhenReady = true
-            player.play()
+        runCatching {
+            if (!isActive || loadFailed || playbackPaused) {
+                player.playWhenReady = false
+                player.pause()
+            } else {
+                player.playWhenReady = true
+                player.play()
+            }
         }
     }
 
@@ -1019,15 +1035,17 @@ private fun ViewerVideoPlayer(
         if (seekJumpSerial <= 0 || seekJumpDeltaMs == 0L) return@LaunchedEffect
         if (!isActive || loadFailed || isScrubbing) return@LaunchedEffect
         val player = playerRef ?: return@LaunchedEffect
-        val current = player.currentPosition.coerceAtLeast(0L)
-        val knownDuration = player.duration.takeIf { it > 0L } ?: durationMs.takeIf { it > 0L }
-        val target = if (knownDuration != null) {
-            (current + seekJumpDeltaMs).coerceIn(0L, knownDuration)
-        } else {
-            (current + seekJumpDeltaMs).coerceAtLeast(0L)
+        runCatching {
+            val current = player.currentPosition.coerceAtLeast(0L)
+            val knownDuration = player.duration.takeIf { it > 0L } ?: durationMs.takeIf { it > 0L }
+            val target = if (knownDuration != null) {
+                (current + seekJumpDeltaMs).coerceIn(0L, knownDuration)
+            } else {
+                (current + seekJumpDeltaMs).coerceAtLeast(0L)
+            }
+            player.seekTo(target)
+            positionMs = target
         }
-        player.seekTo(target)
-        positionMs = target
     }
 
     DisposableEffect(lifecycleOwner, playerRef, isActive, loadFailed, playbackPaused) {
@@ -1064,12 +1082,15 @@ private fun ViewerVideoPlayer(
         while (true) {
             delay(120L)
             val player = playerRef ?: continue
-            val duration = player.duration.takeIf { it > 0L }
+            val duration = runCatching { player.duration.takeIf { it > 0L } }
+                .getOrNull()
             if (duration != null) {
                 durationMs = duration
             }
             if (!isScrubbing) {
-                val nextPosition = player.currentPosition.coerceAtLeast(0L)
+                val nextPosition = runCatching { player.currentPosition.coerceAtLeast(0L) }
+                    .getOrNull()
+                    ?: continue
                 val maxPosition = durationMs.coerceAtLeast(0L)
                 positionMs = if (maxPosition > 0L) {
                     nextPosition.coerceIn(0L, maxPosition)
@@ -1123,11 +1144,15 @@ private fun ViewerVideoPlayer(
                             playbackPaused = !playbackPaused
                             val player = playerRef
                             if (playbackPaused) {
-                                player?.playWhenReady = false
-                                player?.pause()
+                                runCatching {
+                                    player?.playWhenReady = false
+                                    player?.pause()
+                                }
                             } else if (isActive && !loadFailed) {
-                                player?.playWhenReady = true
-                                player?.play()
+                                runCatching {
+                                    player?.playWhenReady = true
+                                    player?.play()
+                                }
                             }
                             onTimelineInteractionActiveChanged(true)
                             onTimelineInteractionActiveChanged(false)
@@ -1141,11 +1166,25 @@ private fun ViewerVideoPlayer(
                         },
                         onSeekChanged = { target ->
                             positionMs = target
-                            playerRef?.seekTo(target)
+                            val now = SystemClock.elapsedRealtime()
+                            val shouldDispatch =
+                                (now - lastSeekDispatchAtMs) >= 90L ||
+                                    abs(target - lastSeekDispatchTargetMs) >= 750L
+                            if (shouldDispatch) {
+                                runCatching {
+                                    playerRef?.seekTo(target)
+                                }
+                                lastSeekDispatchAtMs = now
+                                lastSeekDispatchTargetMs = target
+                            }
                         },
                         onSeekFinished = { target ->
-                            playerRef?.seekTo(target)
+                            runCatching {
+                                playerRef?.seekTo(target)
+                            }
                             positionMs = target
+                            lastSeekDispatchAtMs = SystemClock.elapsedRealtime()
+                            lastSeekDispatchTargetMs = target
                             isScrubbing = false
                         },
                         onInteractionActiveChanged = onTimelineInteractionActiveChanged,
