@@ -73,10 +73,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
@@ -820,6 +823,7 @@ private fun ViewerVideoPlayer(
     isActive: Boolean = true,
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val location = resolveViewerVideoLocation(context, media)
     if (location.isNullOrBlank()) {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
@@ -896,6 +900,35 @@ private fun ViewerVideoPlayer(
         } else {
             player.playWhenReady = true
             player.play()
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, playerRef, isActive, loadFailed) {
+        val player = playerRef ?: return@DisposableEffect onDispose { }
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME -> {
+                    if (isActive && !loadFailed) {
+                        runCatching {
+                            player.playWhenReady = true
+                            player.play()
+                        }
+                    }
+                }
+
+                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
+                    runCatching {
+                        player.playWhenReady = false
+                        player.pause()
+                    }
+                }
+
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
