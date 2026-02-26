@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -87,6 +88,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.viewinterop.AndroidView
@@ -489,6 +491,7 @@ fun SearchScreen(
                                 SearchResultCard(
                                     post = post,
                                     pixivUgoiraClient = pixivUgoiraClient,
+                                    showSourceBadge = coordinator.appliedQuery.mode == QueryMode.Unified,
                                     onClick = {
                                         focusManager.clearFocus()
                                         val context = coordinator.buildViewerLaunchContext(
@@ -671,6 +674,7 @@ private fun SearchStartSplash(
 fun SearchResultCard(
     post: Post,
     pixivUgoiraClient: PixivUgoiraClient?,
+    showSourceBadge: Boolean = false,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
 ) {
@@ -757,8 +761,29 @@ fun SearchResultCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            post.canonicalTags.firstOrNull()?.let { firstTag ->
-                Text(text = "#$firstTag", style = MaterialTheme.typography.bodySmall)
+            val firstTag = post.canonicalTags.firstOrNull()
+            if (firstTag != null || showSourceBadge) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (firstTag != null) {
+                        Text(
+                            text = "#$firstTag",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                    if (showSourceBadge) {
+                        SourceBadge(
+                            source = post.id.source,
+                        )
+                    }
+                }
             }
         }
     }
@@ -1149,12 +1174,24 @@ private fun ModeRow(
 
 @Composable
 private fun SourceChipLogo(source: SourceKey) {
+    SourceChipLogo(
+        source = source,
+        size = 18.dp,
+    )
+}
+
+@Composable
+private fun SourceChipLogo(
+    source: SourceKey,
+    size: Dp,
+    modifier: Modifier = Modifier,
+) {
     when (source) {
         SourceKey.PIXIV -> {
             Image(
                 painter = painterResource(id = R.drawable.pixiv_logo),
                 contentDescription = "Pixiv",
-                modifier = Modifier.height(18.dp),
+                modifier = modifier.height(size),
                 contentScale = ContentScale.Fit,
             )
         }
@@ -1170,12 +1207,34 @@ private fun SourceChipLogo(source: SourceKey) {
             AsyncImage(
                 model = model,
                 contentDescription = "Gelbooru",
-                modifier = Modifier.size(18.dp),
+                modifier = modifier.size(size),
                 contentScale = ContentScale.Fit,
             )
         }
 
         else -> Text(source.name)
+    }
+}
+
+@Composable
+private fun SourceBadge(
+    source: SourceKey,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        color = Color.Black.copy(alpha = 0.55f),
+        shape = RoundedCornerShape(6.dp),
+    ) {
+        Box(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            SourceChipLogo(
+                source = source,
+                size = 12.dp,
+            )
+        }
     }
 }
 
