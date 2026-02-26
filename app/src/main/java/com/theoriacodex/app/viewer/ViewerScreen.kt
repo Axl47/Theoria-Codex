@@ -88,6 +88,7 @@ import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -198,14 +199,15 @@ fun ViewerScreen(
                 ?: candidate.post.preview.url
                 ?: return@forEach
             if (isVideoMediaRef(candidate.media)) {
-                val videoUrl = candidate.media.url ?: candidate.media.localPath ?: return@forEach
-                if (prefetchedVideoUrls[videoUrl] == true) return@forEach
+                val videoLocation = candidate.media.localPath ?: candidate.media.url ?: return@forEach
+                if (prefetchedVideoUrls[videoLocation] == true) return@forEach
                 val didPrefetch = prefetchVideoMedia(
-                    location = videoUrl,
+                    context = context,
+                    media = candidate.media,
                     headers = viewerRequestHeaders(candidate.post.id.source),
                 )
                 if (didPrefetch) {
-                    prefetchedVideoUrls[videoUrl] = true
+                    prefetchedVideoUrls[videoLocation] = true
                 }
             } else {
                 val request = buildViewerImageRequest(
@@ -215,6 +217,21 @@ fun ViewerScreen(
                 )
                 imageLoader.enqueue(request)
             }
+        }
+    }
+
+    LaunchedEffect(selectedPost.id.source, selectedPost.id.sourcePostId, selectedMediaIndex) {
+        val currentMedia = selectedPostMedia.getOrNull(selectedMediaIndex) ?: return@LaunchedEffect
+        if (!isVideoMediaRef(currentMedia)) return@LaunchedEffect
+        val location = currentMedia.localPath ?: currentMedia.url ?: return@LaunchedEffect
+        if (prefetchedVideoUrls[location] == true) return@LaunchedEffect
+        val didCache = prefetchVideoMedia(
+            context = context,
+            media = currentMedia,
+            headers = viewerRequestHeaders(selectedPost.id.source),
+        )
+        if (didCache) {
+            prefetchedVideoUrls[location] = true
         }
     }
 
@@ -817,7 +834,7 @@ private fun ViewerVideoPlayer(
     isActive: Boolean = true,
 ) {
     val context = LocalContext.current
-    val location = media.localPath ?: media.url
+    val location = resolveViewerVideoLocation(context, media)
     if (location.isNullOrBlank()) {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
             Text(
@@ -1108,40 +1125,87 @@ private suspend fun loadGifMovie(
 }
 
 private suspend fun prefetchVideoMedia(
-    location: String,
+    context: Context,
+    media: ImageRef,
     headers: Map<String, String>,
 ): Boolean = withContext(Dispatchers.IO) {
+    val location = media.localPath ?: media.url ?: return@withContext false
     when {
         location.startsWith("http://", ignoreCase = true) || location.startsWith("https://", ignoreCase = true) -> {
+            val output = viewerVideoCacheFile(context, location, media.mime)
+            if (output.exists() && output.length() > 0L) {
+                return@withContext true
+            }
             val connection = URL(location).openConnection() as? HttpURLConnection ?: return@withContext false
+            val temp = File(output.absolutePath + ".part")
             try {
                 connection.instanceFollowRedirects = true
-                connection.connectTimeout = 8_000
-                connection.readTimeout = 8_000
-                connection.setRequestProperty("Range", "bytes=0-$VIDEO_PREFETCH_BYTE_COUNT")
+                connection.connectTimeout = 12_000
+                connection.readTimeout = 24_000
                 headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
                 val statusCode = connection.responseCode
-                if (statusCode !in 200..299 && statusCode != 206) {
+                if (statusCode !in 200..299) {
                     false
                 } else {
                     connection.inputStream.use { input ->
-                        val buffer = ByteArray(16_384)
-                        var remaining = VIDEO_PREFETCH_BYTE_COUNT
-                        while (remaining > 0) {
-                            val read = input.read(buffer, 0, minOf(buffer.size, remaining))
-                            if (read <= 0) break
-                            remaining -= read
+                        output.parentFile?.mkdirs()
+                        temp.outputStream().use { out ->
+                            input.copyTo(out)
                         }
                     }
-                    true
+                    if (temp.length() <= 0L) {
+                        temp.delete()
+                        false
+                    } else {
+                        if (output.exists()) {
+                            output.delete()
+                        }
+                        temp.renameTo(output)
+                    }
                 }
             } finally {
                 connection.disconnect()
+                if (temp.exists() && (!output.exists() || output.length() == 0L)) {
+                    temp.delete()
+                }
             }
         }
 
         location.startsWith("content://", ignoreCase = true) -> true
         else -> File(location).exists()
+    }
+}
+
+private fun resolveViewerVideoLocation(context: Context, media: ImageRef): String? {
+    val local = media.localPath?.takeIf { it.isNotBlank() }
+    if (local != null) return local
+
+    val remoteUrl = media.url?.takeIf { it.isNotBlank() } ?: return null
+    if (!remoteUrl.startsWith("http://", ignoreCase = true) &&
+        !remoteUrl.startsWith("https://", ignoreCase = true)
+    ) {
+        return remoteUrl
+    }
+
+    val cached = viewerVideoCacheFile(context, remoteUrl, media.mime)
+    return if (cached.exists() && cached.length() > 0L) cached.absolutePath else remoteUrl
+}
+
+private fun viewerVideoCacheFile(context: Context, remoteUrl: String, mime: String?): File {
+    val guessedName = URLUtil.guessFileName(remoteUrl, null, mime)
+    val extension = guessedName.substringAfterLast('.', "").ifBlank { "bin" }
+    val key = sha256(remoteUrl)
+    val directory = File(context.cacheDir, "theoria_codex/viewer/videos")
+    return File(directory, "$key.$extension")
+}
+
+private fun sha256(value: String): String {
+    val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
+    return buildString(digest.size * 2) {
+        digest.forEach { byte ->
+            append(((byte.toInt() ushr 4) and 0xF).toString(16))
+            append((byte.toInt() and 0xF).toString(16))
+        }
     }
 }
 
@@ -1384,7 +1448,6 @@ private const val VIEWER_PREFETCH_LEFT_COUNT = 3
 private const val VIEWER_PREFETCH_RIGHT_COUNT = 3
 private const val VIEWER_PAGINATION_PREFETCH_RATIO = 0.8f
 private const val GIF_FALLBACK_DURATION_MS = 1000L
-private const val VIDEO_PREFETCH_BYTE_COUNT = 384 * 1024
 private const val VIEWER_DISMISS_DELAY_MS = 24L
 
 @Composable

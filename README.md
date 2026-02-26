@@ -44,7 +44,7 @@ Previously completed MVP slices remain in place:
 - Viewer long-press download now exports Pixiv ugoira content directly to MP4 and saves it to device video storage (with app-storage fallback when MediaStore is unavailable)
 - Viewer now uses horizontal post paging + vertical in-post image paging (per-post `X / Y`), supports long-press image download, and search cards show compact source/image-count overlays
 - Viewer now prefetches the next three upcoming media items while browsing to reduce perceived load time when swiping forward
-- Viewer now also prefetches upcoming video media (range warmup) and force-stops active video playback before dismiss to avoid sluggish exit feel
+- Viewer now also prefetches upcoming video media into local cache files (for faster replay/re-entry) and force-stops active video playback before dismiss to avoid sluggish exit feel
 - Pixiv ugoira playback now uses an in-memory LRU cache so returning between Search and Viewer reuses decoded animations instead of reloading from network
 - Viewer shows a thin playback progress bar under Pixiv ugoira media so loop position is visible while watching animations
 - Viewer animated media now uses an interactive timeline scrubber (drag-to-seek + current time/duration) shared across Pixiv ugoira, GIF, and video playback
