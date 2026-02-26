@@ -33,9 +33,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.OpenInBrowser
-import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
@@ -142,7 +142,6 @@ fun ViewerScreen(
     }
     val mediaIndexByPost = remember { mutableStateMapOf<Int, Int>() }
     var showInfoSheet by remember { mutableStateOf(false) }
-    var showMediaActionsSheet by remember { mutableStateOf(false) }
     var interactionSerial by remember { mutableIntStateOf(0) }
     var lastViewerPaginationRequestSize by remember(posts.size) { mutableIntStateOf(-1) }
     val loadedMediaUrls = remember { mutableStateMapOf<String, Boolean>() }
@@ -153,6 +152,10 @@ fun ViewerScreen(
     val selectedPost = posts[currentPostIndex]
     val selectedPostMedia = remember(selectedPost) { viewerMediaItems(selectedPost) }
     val selectedMediaIndex = (mediaIndexByPost[currentPostIndex] ?: 0).coerceIn(0, selectedPostMedia.lastIndex)
+    val selectedCurrentMedia = selectedPostMedia.getOrNull(selectedMediaIndex)
+    val canDownloadCurrentMedia = selectedCurrentMedia?.let { media ->
+        (isPixivUgoira(selectedPost, media) && pixivUgoiraClient != null) || !media.url.isNullOrBlank()
+    } == true
 
     LaunchedEffect(posts, launchContext.queryHash, launchContext.startIndex) {
         pendingDismiss = false
@@ -169,7 +172,6 @@ fun ViewerScreen(
         if (pendingDismiss) return
         mediaPlaybackEnabled = false
         showInfoSheet = false
-        showMediaActionsSheet = false
         pendingDismiss = true
     }
 
@@ -256,6 +258,45 @@ fun ViewerScreen(
         }
     }
 
+    fun downloadCurrentMedia() {
+        val media = selectedCurrentMedia
+        val isCurrentUgoira = media?.let { isPixivUgoira(selectedPost, it) } == true
+        if (isCurrentUgoira && pixivUgoiraClient != null) {
+            scope.launch {
+                val result = pixivUgoiraClient.exportToMp4(
+                    context = context,
+                    postId = selectedPost.id.sourcePostId,
+                    title = selectedPost.title,
+                )
+                val message = result.fold(
+                    onSuccess = { "Saved MP4 to device" },
+                    onFailure = { error ->
+                        "Could not export MP4: ${error.message ?: "unknown error"}"
+                    },
+                )
+                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            }
+            markInteraction()
+            return
+        }
+
+        val didQueueDownload = media?.let {
+            enqueueViewerDownload(
+                context = context,
+                post = selectedPost,
+                media = it,
+                pageIndex = selectedMediaIndex,
+                totalPages = selectedPostMedia.size,
+            )
+        } ?: false
+        Toast.makeText(
+            context,
+            if (didQueueDownload) "Download started" else "Media unavailable",
+            Toast.LENGTH_SHORT,
+        ).show()
+        markInteraction()
+    }
+
     LaunchedEffect(postPagerState.currentPage) {
         viewerState = viewerState.withIndex(postPagerState.currentPage)
         markInteraction()
@@ -331,7 +372,7 @@ fun ViewerScreen(
                             interactionSerial += 1
                         },
                         onLongPress = {
-                            showMediaActionsSheet = true
+                            showInfoSheet = true
                             markInteraction()
                         },
                     )
@@ -488,10 +529,8 @@ fun ViewerScreen(
                 source = selectedPost.id.source.name,
                 indexLabel = "${selectedMediaIndex + 1} / ${selectedPostMedia.size}",
                 onBack = ::requestDismissViewer,
-                onSave = {
-                    onSave(selectedPost)
-                    markInteraction()
-                },
+                onDownload = ::downloadCurrentMedia,
+                downloadEnabled = canDownloadCurrentMedia,
                 onInfo = {
                     showInfoSheet = true
                     markInteraction()
@@ -628,70 +667,6 @@ fun ViewerScreen(
         }
     }
 
-    if (showMediaActionsSheet) {
-        val currentMedia = selectedPostMedia.getOrNull(selectedMediaIndex)
-        ModalBottomSheet(
-            onDismissRequest = { showMediaActionsSheet = false },
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text("Media actions", style = MaterialTheme.typography.titleMedium)
-                val isCurrentUgoira = currentMedia?.let { media ->
-                    isPixivUgoira(selectedPost, media)
-                } == true
-                val isCurrentVideo = currentMedia?.let(::isVideoMediaRef) == true
-                TextButton(
-                    onClick = {
-                        showMediaActionsSheet = false
-                        if (isCurrentUgoira && pixivUgoiraClient != null) {
-                            scope.launch {
-                                val result = pixivUgoiraClient.exportToMp4(
-                                    context = context,
-                                    postId = selectedPost.id.sourcePostId,
-                                    title = selectedPost.title,
-                                )
-                                val message = result.fold(
-                                    onSuccess = { "Saved MP4 to device" },
-                                    onFailure = { error ->
-                                        "Could not export MP4: ${error.message ?: "unknown error"}"
-                                    },
-                                )
-                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                            }
-                        } else {
-                            val didQueueDownload = currentMedia?.let { media ->
-                                enqueueViewerDownload(
-                                    context = context,
-                                    post = selectedPost,
-                                    media = media,
-                                    pageIndex = selectedMediaIndex,
-                                    totalPages = selectedPostMedia.size,
-                                )
-                            } ?: false
-                            Toast.makeText(
-                                context,
-                                if (didQueueDownload) "Download started" else "Media unavailable",
-                                Toast.LENGTH_SHORT,
-                            ).show()
-                        }
-                    },
-                    enabled = (isCurrentUgoira && pixivUgoiraClient != null) || currentMedia?.url != null,
-                ) {
-                    Text(
-                        when {
-                            isCurrentUgoira -> "Download MP4"
-                            isCurrentVideo -> "Download video"
-                            else -> "Download image"
-                        }
-                    )
-                }
-            }
-        }
-    }
 }
 
 private enum class ViewerTagSelection {
@@ -1478,7 +1453,8 @@ private fun ViewerChrome(
     source: String,
     indexLabel: String,
     onBack: () -> Unit,
-    onSave: () -> Unit,
+    onDownload: () -> Unit,
+    downloadEnabled: Boolean,
     onInfo: () -> Unit,
 ) {
     Surface(
@@ -1505,8 +1481,11 @@ private fun ViewerChrome(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                IconButton(onClick = onSave) {
-                    Icon(Icons.Default.Save, contentDescription = "Save")
+                IconButton(
+                    onClick = onDownload,
+                    enabled = downloadEnabled,
+                ) {
+                    Icon(Icons.Default.Download, contentDescription = "Download")
                 }
                 IconButton(onClick = onInfo) {
                     Icon(Icons.Default.Info, contentDescription = "Info")
