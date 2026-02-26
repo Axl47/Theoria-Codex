@@ -1186,6 +1186,7 @@ fun TheoriaApp(
                                     null
                                 },
                                 onDismiss = {
+                                    viewerSession = null
                                     scope.launch { searchCoordinator.setViewerLaunchContext(null) }
                                     navController.popBackStack()
                                 },

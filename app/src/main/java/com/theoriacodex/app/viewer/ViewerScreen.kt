@@ -61,6 +61,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -159,7 +160,8 @@ fun ViewerScreen(
 
     LaunchedEffect(pendingDismiss) {
         if (!pendingDismiss) return@LaunchedEffect
-        delay(VIEWER_DISMISS_DELAY_MS)
+        withFrameNanos { }
+        withFrameNanos { }
         onDismiss()
     }
 
@@ -1475,7 +1477,6 @@ private const val VIEWER_PREFETCH_LEFT_COUNT = 3
 private const val VIEWER_PREFETCH_RIGHT_COUNT = 3
 private const val VIEWER_PAGINATION_PREFETCH_RATIO = 0.8f
 private const val GIF_FALLBACK_DURATION_MS = 1000L
-private const val VIEWER_DISMISS_DELAY_MS = 24L
 
 @Composable
 private fun ViewerChrome(
