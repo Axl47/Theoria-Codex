@@ -82,6 +82,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.core.content.pm.PackageInfoCompat
+import com.theoriacodex.app.media.isAnimatedPost
+import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.SaveToCodexSheet
@@ -129,7 +131,6 @@ import com.theoriacodex.sources.RealAdapterRegistry
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import com.theoriacodex.sources.pixiv.PixivAuthApi
-import com.theoriacodex.sources.pixiv.PIXIV_UGOIRA_MIME
 import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.coroutineScope
@@ -744,7 +745,7 @@ fun TheoriaApp(
         if (session.context.queryHash != searchCoordinator.appliedQueryHash) return@LaunchedEffect
 
         val incomingForViewer = if (session.searchAnimatedOnly) {
-            searchCoordinator.results.filter(::isAnimatedSearchPost)
+            searchCoordinator.results.filter(::isAnimatedPost)
         } else {
             searchCoordinator.results
         }
@@ -1665,46 +1666,6 @@ private fun firstChangelogLine(markdown: String): String? {
         .firstOrNull { it.isNotBlank() && !it.startsWith("#") }
 }
 
-private fun isPixivUgoiraPost(post: Post): Boolean {
-    if (post.id.source != SourceKey.PIXIV) return false
-    if (post.full?.mime == PIXIV_UGOIRA_MIME) return true
-    return post.media.any { media -> media.mime == PIXIV_UGOIRA_MIME }
-}
-
-private fun isAnimatedSearchPost(post: Post): Boolean {
-    if (isPixivUgoiraPost(post)) return true
-
-    fun isAnimatedRef(mime: String?, location: String?): Boolean {
-        val normalizedMime = mime?.lowercase()
-        if (
-            normalizedMime == "image/gif" ||
-            normalizedMime == "video/mp4" ||
-            normalizedMime == "video/webm"
-        ) {
-            return true
-        }
-        val normalizedLocation = location
-            ?.substringBefore('?')
-            ?.lowercase()
-            .orEmpty()
-        return normalizedLocation.endsWith(".gif") ||
-            normalizedLocation.endsWith(".mp4") ||
-            normalizedLocation.endsWith(".webm")
-    }
-
-    val refs = buildList {
-        add(post.preview)
-        post.full?.let { add(it) }
-        addAll(post.media)
-    }
-    return refs.any { ref ->
-        isAnimatedRef(
-            mime = ref.mime,
-            location = ref.url ?: ref.localPath,
-        )
-    }
-}
-
 private fun enqueuePostDownload(context: Context, post: Post): Boolean {
     val media = buildList {
         addAll(post.media)
@@ -1720,10 +1681,24 @@ private fun enqueuePostDownload(context: Context, post: Post): Boolean {
         .setAllowedOverRoaming(true)
         .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
         .setMimeType(media.mime)
-    if (post.id.source == SourceKey.PIXIV) {
-        request
-            .addRequestHeader("Referer", "https://www.pixiv.net/")
-            .addRequestHeader("User-Agent", "Mozilla/5.0")
+    when (post.id.source) {
+        SourceKey.PIXIV -> {
+            request
+                .addRequestHeader("Referer", "https://www.pixiv.net/")
+                .addRequestHeader("User-Agent", "Mozilla/5.0")
+        }
+
+        SourceKey.GELBOORU -> {
+            request
+                .addRequestHeader("Referer", "https://gelbooru.com/")
+                .addRequestHeader("User-Agent", "Mozilla/5.0")
+        }
+
+        SourceKey.AIBOORU -> {
+            request
+                .addRequestHeader("Referer", "https://aibooru.online/")
+                .addRequestHeader("User-Agent", "Mozilla/5.0")
+        }
     }
 
     val guessedName = URLUtil.guessFileName(url, null, media.mime)

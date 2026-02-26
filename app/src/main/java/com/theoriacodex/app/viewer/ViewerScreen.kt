@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Environment
 import android.webkit.URLUtil
 import android.widget.Toast
+import android.widget.VideoView
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -46,6 +47,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -64,14 +66,16 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
+import com.theoriacodex.app.media.isPixivUgoiraMedia
+import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.sources.pixiv.PIXIV_UGOIRA_MIME
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -244,10 +248,29 @@ fun ViewerScreen(
                     )
                     markInteraction()
                 }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
+                val isVideoMedia = isVideoMediaRef(media)
+                val mediaGestureModifier = Modifier.pointerInput(postPage, mediaPage) {
+                    detectTapGestures(
+                        onDoubleTap = {
+                            if (!isVideoMedia) {
+                                viewerState = viewerState.doubleTap()
+                            }
+                            markInteraction()
+                        },
+                        onTap = {
+                            viewerState = viewerState.toggleChrome()
+                            interactionSerial += 1
+                        },
+                        onLongPress = {
+                            showMediaActionsSheet = true
+                            markInteraction()
+                        },
+                    )
+                }
+                val transformModifier = if (isVideoMedia) {
+                    Modifier
+                } else {
+                    Modifier
                         .graphicsLayer {
                             scaleX = viewerState.zoom
                             scaleY = viewerState.zoom
@@ -258,24 +281,17 @@ fun ViewerScreen(
                             state = transformState,
                             canPan = { viewerState.zoom > ViewerState.FIT_SCALE + 0.01f },
                         )
-                        .pointerInput(postPage, mediaPage) {
-                            detectTapGestures(
-                                onDoubleTap = {
-                                    viewerState = viewerState.doubleTap()
-                                    markInteraction()
-                                },
-                                onTap = {
-                                    viewerState = viewerState.toggleChrome()
-                                    interactionSerial += 1
-                                },
-                                onLongPress = {
-                                    showMediaActionsSheet = true
-                                    markInteraction()
-                                },
-                            )
-                        }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(transformModifier)
+                        .then(mediaGestureModifier)
                 ) {
-                    val imageCandidates = remember(post, media) { viewerImageCandidates(post, media) }
+                    val imageCandidates = remember(post, media, isVideoMedia) {
+                        if (isVideoMedia) emptyList() else viewerImageCandidates(post, media)
+                    }
                     var imageCandidateIndex by remember(postPage, mediaPage) { mutableIntStateOf(0) }
                     var imageLoading by remember(postPage, mediaPage) { mutableStateOf(false) }
                     var imageLoadFailed by remember(postPage, mediaPage) { mutableStateOf(false) }
@@ -297,6 +313,12 @@ fun ViewerScreen(
                                 contentDescription = post.title ?: post.id.sourcePostId,
                                 modifier = Modifier.fillMaxSize(),
                                 showProgressBar = true,
+                            )
+                        } else if (isVideoMedia) {
+                            ViewerVideoPlayer(
+                                media = media,
+                                sourceKey = post.id.source,
+                                modifier = Modifier.fillMaxSize(),
                             )
                         } else if (imageModel != null) {
                             AsyncImage(
@@ -506,10 +528,11 @@ fun ViewerScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("Image actions", style = MaterialTheme.typography.titleMedium)
+                Text("Media actions", style = MaterialTheme.typography.titleMedium)
                 val isCurrentUgoira = currentMedia?.let { media ->
                     isPixivUgoira(selectedPost, media)
                 } == true
+                val isCurrentVideo = currentMedia?.let(::isVideoMediaRef) == true
                 TextButton(
                     onClick = {
                         showMediaActionsSheet = false
@@ -540,14 +563,20 @@ fun ViewerScreen(
                             } ?: false
                             Toast.makeText(
                                 context,
-                                if (didQueueDownload) "Download started" else "Image unavailable",
+                                if (didQueueDownload) "Download started" else "Media unavailable",
                                 Toast.LENGTH_SHORT,
                             ).show()
                         }
                     },
                     enabled = (isCurrentUgoira && pixivUgoiraClient != null) || currentMedia?.url != null,
                 ) {
-                    Text(if (isCurrentUgoira) "Download MP4" else "Download image")
+                    Text(
+                        when {
+                            isCurrentUgoira -> "Download MP4"
+                            isCurrentVideo -> "Download video"
+                            else -> "Download image"
+                        }
+                    )
                 }
             }
         }
@@ -680,6 +709,86 @@ private fun ViewerTagActionPill(
     }
 }
 
+@Composable
+private fun ViewerVideoPlayer(
+    media: ImageRef,
+    sourceKey: SourceKey,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val location = media.localPath ?: media.url
+    if (location.isNullOrBlank()) {
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            Text(
+                text = "Video unavailable",
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+        }
+        return
+    }
+
+    var loading by remember(location) { mutableStateOf(true) }
+    var loadFailed by remember(location) { mutableStateOf(false) }
+    var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
+
+    DisposableEffect(location) {
+        onDispose {
+            videoViewRef?.stopPlayback()
+            videoViewRef = null
+        }
+    }
+
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { _ ->
+                VideoView(context).apply {
+                    videoViewRef = this
+                    setOnPreparedListener { player ->
+                        loading = false
+                        loadFailed = false
+                        player.isLooping = true
+                        start()
+                    }
+                    setOnErrorListener { _, _, _ ->
+                        loading = false
+                        loadFailed = true
+                        true
+                    }
+                }
+            },
+            update = { videoView ->
+                videoViewRef = videoView
+                val currentTag = videoView.tag as? String
+                if (currentTag != location) {
+                    loading = true
+                    loadFailed = false
+                    videoView.tag = location
+                    val headers = viewerRequestHeaders(sourceKey)
+                    val uri = Uri.parse(location)
+                    if (headers.isEmpty()) {
+                        videoView.setVideoURI(uri)
+                    } else {
+                        videoView.setVideoURI(uri, headers)
+                    }
+                    videoView.requestFocus()
+                    videoView.start()
+                }
+            },
+        )
+
+        if (loading && !loadFailed) {
+            CircularProgressIndicator()
+        }
+        if (loadFailed) {
+            Text(
+                text = "Could not play video",
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+        }
+    }
+}
+
 private fun buildViewerImageRequest(
     context: Context,
     url: String,
@@ -689,12 +798,29 @@ private fun buildViewerImageRequest(
         .data(url)
         .crossfade(true)
         .allowHardware(false)
-    if (sourceKey == SourceKey.PIXIV) {
-        builder
-            .addHeader("Referer", "https://www.pixiv.net/")
-            .addHeader("User-Agent", "Mozilla/5.0")
+    viewerRequestHeaders(sourceKey).forEach { (name, value) ->
+        builder.addHeader(name, value)
     }
     return builder.build()
+}
+
+private fun viewerRequestHeaders(sourceKey: SourceKey): Map<String, String> {
+    return when (sourceKey) {
+        SourceKey.PIXIV -> mapOf(
+            "Referer" to "https://www.pixiv.net/",
+            "User-Agent" to "Mozilla/5.0",
+        )
+
+        SourceKey.GELBOORU -> mapOf(
+            "Referer" to "https://gelbooru.com/",
+            "User-Agent" to "Mozilla/5.0",
+        )
+
+        SourceKey.AIBOORU -> mapOf(
+            "Referer" to "https://aibooru.online/",
+            "User-Agent" to "Mozilla/5.0",
+        )
+    }
 }
 
 private data class PrefetchCandidate(
@@ -721,7 +847,7 @@ private fun buildPrefetchQueue(
         if (direction > 0) {
             while (mediaIndex <= mediaItems.lastIndex && queue.size < limit) {
                 val media = mediaItems[mediaIndex]
-                if (!isPixivUgoira(post, media)) {
+                if (!isPixivUgoira(post, media) && !isVideoMediaRef(media)) {
                     queue += PrefetchCandidate(post = post, media = media)
                 }
                 mediaIndex += 1
@@ -731,7 +857,7 @@ private fun buildPrefetchQueue(
         } else {
             while (mediaIndex >= 0 && queue.size < limit) {
                 val media = mediaItems[mediaIndex]
-                if (!isPixivUgoira(post, media)) {
+                if (!isPixivUgoira(post, media) && !isVideoMediaRef(media)) {
                     queue += PrefetchCandidate(post = post, media = media)
                 }
                 mediaIndex -= 1
@@ -801,8 +927,7 @@ private fun isLikelyImageLocation(mime: String?, location: String): Boolean {
 }
 
 private fun isPixivUgoira(post: Post, media: ImageRef): Boolean {
-    if (post.id.source != SourceKey.PIXIV) return false
-    return media.mime == PIXIV_UGOIRA_MIME || post.full?.mime == PIXIV_UGOIRA_MIME
+    return isPixivUgoiraMedia(post, media)
 }
 
 private fun enqueueViewerDownload(
@@ -818,10 +943,8 @@ private fun enqueueViewerDownload(
         .setAllowedOverRoaming(true)
         .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
         .setMimeType(media.mime)
-    if (post.id.source == SourceKey.PIXIV) {
-        request
-            .addRequestHeader("Referer", "https://www.pixiv.net/")
-            .addRequestHeader("User-Agent", "Mozilla/5.0")
+    viewerRequestHeaders(post.id.source).forEach { (name, value) ->
+        request.addRequestHeader(name, value)
     }
 
     val fileName = buildDownloadFileName(post, media, pageIndex, totalPages, url)

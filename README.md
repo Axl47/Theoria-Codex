@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-02-26T00:00
+updated_at: 2026-02-26T00:40
 ---
 # Theoria Codex
 
@@ -24,6 +24,7 @@ The app is now in second-pass source cutover state:
 - Search autocomplete now uses source adapter autocomplete APIs as you type (with local suggestion-store fallback).
 - In Gelbooru source mode, typed include/exclude tags can only be added when they match suggested tags.
 - In Unified mode, Gelbooru queries now apply compatibility mapping by resolving each include/exclude tag to the first Gelbooru autocomplete match (fallback: original tag).
+- Gelbooru video posts now map to proper video MIME types (`video/mp4`, `video/webm`, etc.), and Viewer now plays source videos directly (while keeping Pixiv ugoira playback/export behavior).
 - Stub adapters remain available for tests/dev in `:core-stubs`.
 
 Previously completed MVP slices remain in place:
@@ -32,6 +33,7 @@ Previously completed MVP slices remain in place:
 - Search results now render real source thumbnails in a variable-height staggered grid and show post titles (when available) instead of raw source IDs
 - Search input UX now supports Enter-to-add-tag and contextual controls that animate in while actively editing
 - Search controls include an `Animated only` filter for showing just animated media in current results
+- Animated media detection is now shared across Search/Viewer app layers (GIF/video/ugoira), reducing source-specific edge-case mismatches
 - Search auto-paginates: near the end of loaded results (about 80%), the next source page is fetched automatically
 - Bottom navigation is compact icon-only for higher content density
 - Outside Viewer, horizontal swipes now switch between top-level tabs (Search/Explore/Codex/Settings)

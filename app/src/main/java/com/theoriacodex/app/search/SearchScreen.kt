@@ -86,6 +86,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.theoriacodex.app.media.isAnimatedPost
+import com.theoriacodex.app.media.isGifMediaRef
+import com.theoriacodex.app.media.isPixivUgoiraPost
+import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.R
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
@@ -97,7 +101,6 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
-import com.theoriacodex.sources.pixiv.PIXIV_UGOIRA_MIME
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
@@ -662,12 +665,7 @@ fun SearchResultCard(
             ),
     ) {
         val title = post.title?.takeIf { it.isNotBlank() } ?: "Untitled"
-        val fullRef = post.full
-        val previewUrl = if (fullRef?.mime == "image/gif") {
-            fullRef.url
-        } else {
-            post.preview.url ?: fullRef?.url
-        }
+        val previewUrl = resolveCardPreviewUrl(post)
         val ratio = previewAspectRatio(post)
         val imageModel = remember(context, previewUrl, post.id.source) {
             previewUrl?.let { buildImageRequest(context, it, post.id.source) }
@@ -679,7 +677,7 @@ fun SearchResultCard(
                 .fillMaxWidth()
                 .aspectRatio(ratio),
         ) {
-            val showUgoira = isPixivUgoira(post) && pixivUgoiraClient != null
+            val showUgoira = isPixivUgoiraPost(post) && pixivUgoiraClient != null
             if (showUgoira) {
                 PixivUgoiraPlayer(
                     postId = post.id.sourcePostId,
@@ -772,45 +770,19 @@ private fun postMediaCount(post: Post): Int {
     }
 }
 
-private fun isPixivUgoira(post: Post): Boolean {
-    if (post.id.source != SourceKey.PIXIV) return false
-    if (post.full?.mime == PIXIV_UGOIRA_MIME) return true
-    return post.media.any { it.mime == PIXIV_UGOIRA_MIME }
-}
-
-private fun isAnimatedPost(post: Post): Boolean {
-    if (isPixivUgoira(post)) return true
-
-    fun isAnimatedRef(mime: String?, location: String?): Boolean {
-        val normalizedMime = mime?.lowercase()
-        if (
-            normalizedMime == "image/gif" ||
-            normalizedMime == "video/mp4" ||
-            normalizedMime == "video/webm"
-        ) {
-            return true
-        }
-
-        val normalizedLocation = location
-            ?.substringBefore('?')
-            ?.lowercase()
-            .orEmpty()
-        return normalizedLocation.endsWith(".gif") ||
-            normalizedLocation.endsWith(".mp4") ||
-            normalizedLocation.endsWith(".webm")
+private fun resolveCardPreviewUrl(post: Post): String? {
+    val full = post.full
+    if (full != null && isGifMediaRef(full) && !full.url.isNullOrBlank()) {
+        return full.url
     }
-
     val refs = buildList {
         add(post.preview)
         post.full?.let { add(it) }
         addAll(post.media)
     }
-    return refs.any { ref ->
-        isAnimatedRef(
-            mime = ref.mime,
-            location = ref.url ?: ref.localPath,
-        )
-    }
+    return refs.firstOrNull { ref ->
+        !ref.url.isNullOrBlank() && !isVideoMediaRef(ref)
+    }?.url
 }
 
 private fun formatPostTagsForClipboard(post: Post): String {

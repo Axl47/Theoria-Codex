@@ -21,6 +21,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
+import com.theoriacodex.sources.media.inferMimeFromUrl
 import java.io.IOException
 import java.time.Instant
 import java.time.ZoneOffset
@@ -323,17 +324,6 @@ class PixivSourceAdapter(
             SortMode.TOP -> "popular_desc"
             SortMode.RANDOM -> "date_desc"
         }
-    }
-}
-
-private fun inferMimeFromUrl(url: String?): String? {
-    val normalized = url?.substringBefore('?')?.lowercase() ?: return null
-    return when {
-        normalized.endsWith(".gif") -> "image/gif"
-        normalized.endsWith(".png") -> "image/png"
-        normalized.endsWith(".webp") -> "image/webp"
-        normalized.endsWith(".jpg") || normalized.endsWith(".jpeg") -> "image/jpeg"
-        else -> null
     }
 }
 

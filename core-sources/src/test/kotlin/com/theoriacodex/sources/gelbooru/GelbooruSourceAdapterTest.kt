@@ -79,6 +79,27 @@ class GelbooruSourceAdapterTest {
         )
     }
 
+    @Test
+    fun `search maps video mime for gelbooru posts`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {"post":[{"id":"777","preview_url":"https://gelbooru.com/p.jpg","file_url":"https://gelbooru.com/f.mp4","file_ext":"mp4","tags":"a b"}]}
+                """.trimIndent(),
+            )
+        }
+        val adapter = GelbooruSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = FakeCredentialsProvider(),
+        )
+
+        val post = adapter.search(sampleQuery(), pageToken = null).items.first()
+
+        assertEquals("image/jpeg", post.preview.mime)
+        assertEquals("video/mp4", post.full?.mime)
+    }
+
     private fun sampleQuery(): Query {
         return Query(
             mode = QueryMode.Source(SourceKey.GELBOORU),

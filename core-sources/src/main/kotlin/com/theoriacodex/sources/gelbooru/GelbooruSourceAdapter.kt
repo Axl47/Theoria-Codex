@@ -20,6 +20,8 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
+import com.theoriacodex.sources.media.inferMimeFromUrl
+import com.theoriacodex.sources.media.mimeFromFileExt
 import java.io.IOException
 
 class GelbooruSourceAdapter(
@@ -246,27 +248,6 @@ class GelbooruSourceAdapter(
             type = type,
             count = count,
         )
-    }
-}
-
-private fun mimeFromFileExt(ext: String?): String? {
-    return when (ext?.trim()?.lowercase()) {
-        "gif" -> "image/gif"
-        "png" -> "image/png"
-        "webp" -> "image/webp"
-        "jpg", "jpeg" -> "image/jpeg"
-        else -> null
-    }
-}
-
-private fun inferMimeFromUrl(url: String?): String? {
-    val normalized = url?.substringBefore('?')?.lowercase() ?: return null
-    return when {
-        normalized.endsWith(".gif") -> "image/gif"
-        normalized.endsWith(".png") -> "image/png"
-        normalized.endsWith(".webp") -> "image/webp"
-        normalized.endsWith(".jpg") || normalized.endsWith(".jpeg") -> "image/jpeg"
-        else -> null
     }
 }
 
