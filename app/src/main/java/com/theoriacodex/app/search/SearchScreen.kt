@@ -4,9 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
-import android.view.View
 import android.widget.Toast
-import android.widget.VideoView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -93,6 +91,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.theoriacodex.app.media.isAnimatedPost
@@ -102,6 +104,8 @@ import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.R
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
+import com.theoriacodex.app.viewer.createLoopingExoPlayer
+import com.theoriacodex.app.viewer.createTexturePlayerView
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -805,79 +809,90 @@ private fun SearchVideoPreview(
         return
     }
 
-    var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
+    var playerRef by remember(location, sourceKey) { mutableStateOf<ExoPlayer?>(null) }
+    var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
+    var didNotifyError by remember(location, sourceKey) { mutableStateOf(false) }
 
-    DisposableEffect(location, lifecycleOwner) {
+    DisposableEffect(location, sourceKey, lifecycleOwner) {
+        didNotifyError = false
+        val player = createLoopingExoPlayer(
+            context = context,
+            location = location,
+            headers = searchRequestHeaders(sourceKey),
+            muted = true,
+        )
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (
+                    playbackState == Player.STATE_READY &&
+                    lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+                ) {
+                    player.playWhenReady = true
+                    player.play()
+                }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                if (didNotifyError) return
+                didNotifyError = true
+                onPlaybackError()
+            }
+        }
+        player.addListener(listener)
+        playerRef = player
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME -> {
                     runCatching {
-                        videoViewRef?.resume()
-                        videoViewRef?.start()
+                        player.playWhenReady = true
+                        player.play()
                     }
                 }
                 Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
                     runCatching {
-                        videoViewRef?.pause()
-                        videoViewRef?.`suspend`()
+                        player.playWhenReady = false
+                        player.pause()
                     }
                 }
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            player.playWhenReady = true
+            player.play()
+        }
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            runCatching { videoViewRef?.visibility = View.INVISIBLE }
-            runCatching { videoViewRef?.alpha = 0f }
-            runCatching { videoViewRef?.setOnPreparedListener(null) }
-            runCatching { videoViewRef?.setOnErrorListener(null) }
-            runCatching { videoViewRef?.pause() }
-            runCatching { videoViewRef?.`suspend`() }
-            videoViewRef = null
+            player.removeListener(listener)
+            player.playWhenReady = false
+            player.pause()
+            playerViewRef?.player = null
+            player.release()
+            if (playerRef === player) {
+                playerRef = null
+            }
+            playerViewRef = null
         }
     }
 
     AndroidView(
         modifier = modifier,
-        factory = { _ ->
-            VideoView(context).apply {
-                videoViewRef = this
-                visibility = View.VISIBLE
-                alpha = 1f
+        factory = { factoryContext ->
+            createTexturePlayerView(factoryContext).apply {
+                player = playerRef
+                useController = false
+                playerViewRef = this
                 isClickable = false
                 isFocusable = false
-                setOnPreparedListener { player ->
-                    player.isLooping = true
-                    player.setVolume(0f, 0f)
-                    if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-                        start()
-                    }
-                }
-                setOnErrorListener { _, _, _ ->
-                    onPlaybackError()
-                    true
-                }
             }
         },
-        update = { videoView ->
-            videoViewRef = videoView
-            videoView.visibility = View.VISIBLE
-            videoView.alpha = 1f
-            val currentTag = videoView.tag as? String
-            if (currentTag != location) {
-                videoView.tag = location
-                val headers = searchRequestHeaders(sourceKey)
-                val uri = Uri.parse(location)
-                if (headers.isEmpty()) {
-                    videoView.setVideoURI(uri)
-                } else {
-                    videoView.setVideoURI(uri, headers)
-                }
-                if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-                    videoView.start()
-                }
-            }
+        update = { playerView ->
+            playerViewRef = playerView
+            playerView.useController = false
+            playerView.player = playerRef
+            playerView.isClickable = false
+            playerView.isFocusable = false
         },
     )
 }

@@ -4,14 +4,10 @@ import android.app.DownloadManager
 import android.content.res.Configuration
 import android.content.Context
 import android.graphics.Movie
-import android.media.MediaPlayer
 import android.net.Uri
-import android.os.Build
 import android.os.Environment
-import android.view.View
 import android.webkit.URLUtil
 import android.widget.Toast
-import android.widget.VideoView
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -63,6 +59,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -323,9 +323,7 @@ fun ViewerScreen(
                 val mediaGestureModifier = Modifier.pointerInput(postPage, mediaPage) {
                     detectTapGestures(
                         onDoubleTap = {
-                            if (!isVideoMedia) {
-                                viewerState = viewerState.doubleTap()
-                            }
+                            viewerState = viewerState.doubleTap()
                             markInteraction()
                         },
                         onTap = {
@@ -338,21 +336,17 @@ fun ViewerScreen(
                         },
                     )
                 }
-                val transformModifier = if (isVideoMedia) {
-                    Modifier
-                } else {
-                    Modifier
-                        .graphicsLayer {
-                            scaleX = viewerState.zoom
-                            scaleY = viewerState.zoom
-                            translationX = viewerState.panX
-                            translationY = viewerState.panY
-                        }
-                        .transformable(
-                            state = transformState,
-                            canPan = { viewerState.zoom > ViewerState.FIT_SCALE + 0.01f },
-                        )
-                }
+                val transformModifier = Modifier
+                    .graphicsLayer {
+                        scaleX = viewerState.zoom
+                        scaleY = viewerState.zoom
+                        translationX = viewerState.panX
+                        translationY = viewerState.panY
+                    }
+                    .transformable(
+                        state = transformState,
+                        canPan = { viewerState.zoom > ViewerState.FIT_SCALE + 0.01f },
+                    )
 
                 Box(
                     modifier = Modifier
@@ -851,46 +845,79 @@ private fun ViewerVideoPlayer(
 
     var loading by remember(location) { mutableStateOf(true) }
     var loadFailed by remember(location) { mutableStateOf(false) }
-    var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
-    var mediaPlayerRef by remember { mutableStateOf<MediaPlayer?>(null) }
+    var playerRef by remember(location, sourceKey) { mutableStateOf<ExoPlayer?>(null) }
+    var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
     var durationMs by remember(location) { mutableLongStateOf(0L) }
     var positionMs by remember(location) { mutableLongStateOf(0L) }
     var isScrubbing by remember(location) { mutableStateOf(false) }
 
-    DisposableEffect(location) {
+    DisposableEffect(location, sourceKey) {
+        loading = true
+        loadFailed = false
+        durationMs = 0L
+        positionMs = 0L
+        isScrubbing = false
+        val player = createLoopingExoPlayer(
+            context = context,
+            location = location,
+            headers = viewerRequestHeaders(sourceKey),
+            muted = false,
+        )
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                loading = playbackState == Player.STATE_IDLE || playbackState == Player.STATE_BUFFERING
+                val duration = player.duration.takeIf { it > 0L }
+                if (duration != null) {
+                    durationMs = duration
+                }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                loading = false
+                loadFailed = true
+            }
+        }
+        player.addListener(listener)
+        playerRef = player
+        if (isActive) {
+            player.playWhenReady = true
+            player.play()
+        }
         onDispose {
-            runCatching { videoViewRef?.visibility = View.INVISIBLE }
-            runCatching { videoViewRef?.alpha = 0f }
-            runCatching { videoViewRef?.setOnPreparedListener(null) }
-            runCatching { videoViewRef?.setOnErrorListener(null) }
-            runCatching { videoViewRef?.pause() }
-            runCatching { videoViewRef?.`suspend`() }
-            videoViewRef = null
-            mediaPlayerRef = null
+            player.removeListener(listener)
+            player.playWhenReady = false
+            player.pause()
+            playerViewRef?.player = null
+            player.release()
+            if (playerRef === player) {
+                playerRef = null
+            }
+            playerViewRef = null
         }
     }
 
-    LaunchedEffect(isActive, videoViewRef) {
-        val videoView = videoViewRef ?: return@LaunchedEffect
-        if (!isActive) {
-            runCatching { videoView.pause() }
-            runCatching { videoView.`suspend`() }
-        } else if (!loading && !loadFailed) {
-            runCatching { videoView.start() }
+    LaunchedEffect(isActive, playerRef, loadFailed) {
+        val player = playerRef ?: return@LaunchedEffect
+        if (!isActive || loadFailed) {
+            player.playWhenReady = false
+            player.pause()
+        } else {
+            player.playWhenReady = true
+            player.play()
         }
     }
 
-    LaunchedEffect(location, videoViewRef, loadFailed, isScrubbing) {
+    LaunchedEffect(location, playerRef, loadFailed, isScrubbing) {
         if (loadFailed) return@LaunchedEffect
         while (true) {
             delay(120L)
-            val videoView = videoViewRef ?: continue
-            val duration = videoView.duration.takeIf { it > 0 }?.toLong()
+            val player = playerRef ?: continue
+            val duration = player.duration.takeIf { it > 0L }
             if (duration != null) {
                 durationMs = duration
             }
             if (!isScrubbing) {
-                val nextPosition = videoView.currentPosition.takeIf { it >= 0 }?.toLong() ?: 0L
+                val nextPosition = player.currentPosition.coerceAtLeast(0L)
                 val maxPosition = durationMs.coerceAtLeast(0L)
                 positionMs = if (maxPosition > 0L) {
                     nextPosition.coerceIn(0L, maxPosition)
@@ -904,53 +931,17 @@ private fun ViewerVideoPlayer(
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
-            factory = { _ ->
-                VideoView(context).apply {
-                    videoViewRef = this
-                    visibility = View.VISIBLE
-                    alpha = 1f
-                    setOnPreparedListener { player ->
-                        mediaPlayerRef = player
-                        loading = false
-                        loadFailed = false
-                        player.isLooping = true
-                        durationMs = player.duration.takeIf { it > 0 }?.toLong() ?: 0L
-                        positionMs = 0L
-                        start()
-                    }
-                    setOnErrorListener { _, _, _ ->
-                        loading = false
-                        loadFailed = true
-                        mediaPlayerRef = null
-                        true
-                    }
+            factory = { factoryContext ->
+                createTexturePlayerView(factoryContext).apply {
+                    useController = false
+                    player = playerRef
+                    playerViewRef = this
                 }
             },
-            update = { videoView ->
-                videoViewRef = videoView
-                videoView.visibility = if (isActive) View.VISIBLE else View.INVISIBLE
-                videoView.alpha = if (isActive) 1f else 0f
-                val currentTag = videoView.tag as? String
-                if (currentTag != location) {
-                    loading = true
-                    loadFailed = false
-                    durationMs = 0L
-                    positionMs = 0L
-                    isScrubbing = false
-                    mediaPlayerRef = null
-                    videoView.tag = location
-                    val headers = viewerRequestHeaders(sourceKey)
-                    val uri = Uri.parse(location)
-                    if (headers.isEmpty()) {
-                        videoView.setVideoURI(uri)
-                    } else {
-                        videoView.setVideoURI(uri, headers)
-                    }
-                    videoView.requestFocus()
-                    if (isActive) {
-                        videoView.start()
-                    }
-                }
+            update = { playerView ->
+                playerViewRef = playerView
+                playerView.useController = false
+                playerView.player = playerRef
             },
         )
 
@@ -963,7 +954,7 @@ private fun ViewerVideoPlayer(
                 color = MaterialTheme.colorScheme.onBackground,
             )
         }
-        if (isActive && showTimeline && !loading && !loadFailed && durationMs > 0L) {
+        if (isActive && showTimeline && !loading && !loadFailed && durationMs > 0L && playerRef != null) {
             ViewerPlaybackFooter(
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
@@ -975,18 +966,10 @@ private fun ViewerVideoPlayer(
                     },
                     onSeekChanged = { target ->
                         positionMs = target
-                        seekVideoToTimelinePosition(
-                            videoView = videoViewRef,
-                            mediaPlayer = mediaPlayerRef,
-                            targetMs = target,
-                        )
+                        playerRef?.seekTo(target)
                     },
                     onSeekFinished = { target ->
-                        seekVideoToTimelinePosition(
-                            videoView = videoViewRef,
-                            mediaPlayer = mediaPlayerRef,
-                            targetMs = target,
-                        )
+                        playerRef?.seekTo(target)
                         positionMs = target
                         isScrubbing = false
                     },
@@ -1437,23 +1420,6 @@ private fun enqueueViewerDownload(
         manager.enqueue(request)
         true
     }.getOrElse { false }
-}
-
-private fun seekVideoToTimelinePosition(
-    videoView: VideoView?,
-    mediaPlayer: MediaPlayer?,
-    targetMs: Long,
-) {
-    val clamped = targetMs.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && mediaPlayer != null) {
-        runCatching {
-            mediaPlayer.seekTo(clamped.toLong(), MediaPlayer.SEEK_CLOSEST)
-        }.onFailure {
-            videoView?.seekTo(clamped)
-        }
-    } else {
-        videoView?.seekTo(clamped)
-    }
 }
 
 private fun buildDownloadFileName(
