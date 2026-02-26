@@ -634,6 +634,8 @@ fun PixivUgoiraPlayer(
     contentDescription: String?,
     contentScale: ContentScale = ContentScale.Fit,
     showProgressBar: Boolean = false,
+    seekJumpSerial: Int = 0,
+    seekJumpDeltaMs: Long = 0L,
 ) {
     var playback by remember(postId, client) { mutableStateOf(client.cached(postId)) }
     var errorMessage by remember(postId) { mutableStateOf<String?>(null) }
@@ -698,6 +700,11 @@ fun PixivUgoiraPlayer(
             accumulated = next
         }
         frameIndex = resolvedIndex
+    }
+
+    LaunchedEffect(seekJumpSerial, seekJumpDeltaMs, maxSeekablePositionMs, isScrubbing) {
+        if (seekJumpSerial <= 0 || seekJumpDeltaMs == 0L || isScrubbing) return@LaunchedEffect
+        seekToPosition(elapsedInLoopMs + seekJumpDeltaMs)
     }
 
     LaunchedEffect(activePlayback, frameIndex, isScrubbing) {

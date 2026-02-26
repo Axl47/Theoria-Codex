@@ -364,7 +364,10 @@ fun ViewerScreen(
                 val isVideoMedia = isVideoMediaRef(media)
                 val isGifMedia = isGifMediaRef(media)
                 val showUgoira = isPixivUgoira(post, media) && pixivUgoiraClient != null
+                val isSeekableMedia = isVideoMedia || isGifMedia || showUgoira
                 val hasBottomTimeline = viewerState.chromeVisible && (isVideoMedia || isGifMedia || showUgoira)
+                var seekJumpSerial by remember(postPage, mediaPage) { mutableIntStateOf(0) }
+                var seekJumpDeltaMs by remember(postPage, mediaPage) { mutableLongStateOf(0L) }
                 val mediaContainerPadding = when {
                     isLandscape -> 0.dp
                     isVideoMedia || isGifMedia || showUgoira -> 0.dp
@@ -373,9 +376,26 @@ fun ViewerScreen(
                 val gifLocation = remember(post, media) { viewerGifLocation(post, media) }
                 val mediaGestureModifier = Modifier.pointerInput(postPage, mediaPage) {
                     detectTapGestures(
-                        onDoubleTap = {
-                            viewerState = viewerState.doubleTap()
-                            markInteraction()
+                        onDoubleTap = { offset ->
+                            val tapRatio = if (size.width > 0) {
+                                offset.x / size.width.toFloat()
+                            } else {
+                                0.5f
+                            }
+                            val seekDeltaMs = when {
+                                !isSeekableMedia -> 0L
+                                tapRatio <= 0.35f -> -10_000L
+                                tapRatio >= 0.65f -> 10_000L
+                                else -> 0L
+                            }
+                            if (seekDeltaMs != 0L) {
+                                seekJumpDeltaMs = seekDeltaMs
+                                seekJumpSerial += 1
+                                markInteraction()
+                            } else {
+                                viewerState = viewerState.doubleTap()
+                                markInteraction()
+                            }
                         },
                         onTap = {
                             viewerState = viewerState.toggleChrome()
@@ -432,6 +452,8 @@ fun ViewerScreen(
                                     contentDescription = post.title ?: post.id.sourcePostId,
                                     modifier = Modifier.fillMaxSize(),
                                     showProgressBar = viewerState.chromeVisible,
+                                    seekJumpSerial = seekJumpSerial,
+                                    seekJumpDeltaMs = seekJumpDeltaMs,
                                 )
                             }
                         } else if (isVideoMedia) {
@@ -442,6 +464,8 @@ fun ViewerScreen(
                                 mediaModifier = mediaTransformModifier,
                                 showTimeline = viewerState.chromeVisible,
                                 isActive = mediaPlaybackEnabled,
+                                seekJumpSerial = seekJumpSerial,
+                                seekJumpDeltaMs = seekJumpDeltaMs,
                             )
                         } else if (isGifMedia && !gifLocation.isNullOrBlank()) {
                             ViewerGifPlayer(
@@ -450,6 +474,8 @@ fun ViewerScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 mediaModifier = mediaTransformModifier,
                                 showTimeline = viewerState.chromeVisible,
+                                seekJumpSerial = seekJumpSerial,
+                                seekJumpDeltaMs = seekJumpDeltaMs,
                             )
                         } else if (imageModel != null) {
                             AsyncImage(
@@ -827,6 +853,8 @@ private fun ViewerVideoPlayer(
     mediaModifier: Modifier = Modifier,
     showTimeline: Boolean = false,
     isActive: Boolean = true,
+    seekJumpSerial: Int = 0,
+    seekJumpDeltaMs: Long = 0L,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -907,6 +935,21 @@ private fun ViewerVideoPlayer(
             player.playWhenReady = true
             player.play()
         }
+    }
+
+    LaunchedEffect(seekJumpSerial, seekJumpDeltaMs, playerRef, isActive, loadFailed, isScrubbing, durationMs) {
+        if (seekJumpSerial <= 0 || seekJumpDeltaMs == 0L) return@LaunchedEffect
+        if (!isActive || loadFailed || isScrubbing) return@LaunchedEffect
+        val player = playerRef ?: return@LaunchedEffect
+        val current = player.currentPosition.coerceAtLeast(0L)
+        val knownDuration = player.duration.takeIf { it > 0L } ?: durationMs.takeIf { it > 0L }
+        val target = if (knownDuration != null) {
+            (current + seekJumpDeltaMs).coerceIn(0L, knownDuration)
+        } else {
+            (current + seekJumpDeltaMs).coerceAtLeast(0L)
+        }
+        player.seekTo(target)
+        positionMs = target
     }
 
     DisposableEffect(lifecycleOwner, playerRef, isActive, loadFailed) {
@@ -1020,6 +1063,8 @@ private fun ViewerGifPlayer(
     modifier: Modifier = Modifier,
     mediaModifier: Modifier = Modifier,
     showTimeline: Boolean = true,
+    seekJumpSerial: Int = 0,
+    seekJumpDeltaMs: Long = 0L,
 ) {
     val context = LocalContext.current
     var movie by remember(location) { mutableStateOf<Movie?>(null) }
@@ -1060,6 +1105,12 @@ private fun ViewerGifPlayer(
 
     val durationMs = remember(activeMovie) {
         activeMovie.duration().takeIf { it > 0 }?.toLong() ?: GIF_FALLBACK_DURATION_MS
+    }
+
+    LaunchedEffect(seekJumpSerial, seekJumpDeltaMs, durationMs, isScrubbing) {
+        if (seekJumpSerial <= 0 || seekJumpDeltaMs == 0L || isScrubbing) return@LaunchedEffect
+        val target = (positionMs + seekJumpDeltaMs).coerceIn(0L, durationMs)
+        positionMs = target
     }
 
     LaunchedEffect(activeMovie, durationMs, isScrubbing) {
