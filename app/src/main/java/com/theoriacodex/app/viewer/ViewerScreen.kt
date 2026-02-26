@@ -345,7 +345,7 @@ fun ViewerScreen(
                 contentPadding = if (isLandscape) {
                     PaddingValues(0.dp)
                 } else {
-                    PaddingValues(vertical = 40.dp)
+                    PaddingValues(top = 40.dp)
                 },
                 pageSpacing = if (isLandscape) 0.dp else 8.dp,
             ) { mediaPage ->
@@ -360,6 +360,12 @@ fun ViewerScreen(
                 }
                 val isVideoMedia = isVideoMediaRef(media)
                 val isGifMedia = isGifMediaRef(media)
+                val showUgoira = isPixivUgoira(post, media) && pixivUgoiraClient != null
+                val mediaContainerPadding = when {
+                    isLandscape -> 0.dp
+                    isVideoMedia || isGifMedia || showUgoira -> 0.dp
+                    else -> 16.dp
+                }
                 val gifLocation = remember(post, media) { viewerGifLocation(post, media) }
                 val mediaGestureModifier = Modifier.pointerInput(postPage, mediaPage) {
                     detectTapGestures(
@@ -409,10 +415,9 @@ fun ViewerScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(if (isLandscape) 0.dp else 16.dp),
+                            .padding(mediaContainerPadding),
                         contentAlignment = Alignment.Center,
                     ) {
-                        val showUgoira = isPixivUgoira(post, media) && pixivUgoiraClient != null
                         if (showUgoira) {
                             Box(
                                 modifier = Modifier
@@ -1092,7 +1097,7 @@ private fun ViewerPlaybackFooter(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 8.dp, vertical = 6.dp),
             contentAlignment = Alignment.Center,
         ) {
             content()
