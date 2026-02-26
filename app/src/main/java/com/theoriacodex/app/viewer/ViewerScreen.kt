@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -156,6 +157,12 @@ fun ViewerScreen(
     val selectedPostMedia = remember(selectedPost) { viewerMediaItems(selectedPost) }
     val selectedMediaIndex = (mediaIndexByPost[currentPostIndex] ?: 0).coerceIn(0, selectedPostMedia.lastIndex)
     val selectedCurrentMedia = selectedPostMedia.getOrNull(selectedMediaIndex)
+    val currentIsSeekableMedia = selectedCurrentMedia?.let { media ->
+        isVideoMediaRef(media) ||
+            isGifMediaRef(media) ||
+            (isPixivUgoira(selectedPost, media) && pixivUgoiraClient != null)
+    } == true
+    val shouldBlockPagerGesturesForTimeline = viewerState.chromeVisible && currentIsSeekableMedia
     val canDownloadCurrentMedia = selectedCurrentMedia?.let { media ->
         (isPixivUgoira(selectedPost, media) && pixivUgoiraClient != null) || !media.url.isNullOrBlank()
     } == true
@@ -322,7 +329,8 @@ fun ViewerScreen(
     ) {
         HorizontalPager(
             state = postPagerState,
-            userScrollEnabled = viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f,
+            userScrollEnabled =
+                viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f && !shouldBlockPagerGesturesForTimeline,
             modifier = Modifier.fillMaxSize(),
         ) { postPage ->
             val post = posts[postPage]
@@ -343,7 +351,8 @@ fun ViewerScreen(
 
             VerticalPager(
                 state = mediaPagerState,
-                userScrollEnabled = viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f,
+                userScrollEnabled =
+                    viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f && !shouldBlockPagerGesturesForTimeline,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = if (isLandscape) {
                     PaddingValues(0.dp)
@@ -555,10 +564,24 @@ fun ViewerScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(bottom = if (hasBottomTimeline) 96.dp else 0.dp)
-                            .then(transformInputModifier)
-                            .then(mediaGestureModifier),
-                    )
+                    ) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .then(transformInputModifier)
+                                    .then(mediaGestureModifier),
+                            )
+                            if (hasBottomTimeline) {
+                                Spacer(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(96.dp),
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1042,7 +1065,6 @@ private fun ViewerVideoPlayer(
                     },
                     onSeekChanged = { target ->
                         positionMs = target
-                        playerRef?.seekTo(target)
                     },
                     onSeekFinished = { target ->
                         playerRef?.seekTo(target)

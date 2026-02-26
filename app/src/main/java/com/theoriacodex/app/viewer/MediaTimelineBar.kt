@@ -1,6 +1,8 @@
 package com.theoriacodex.app.viewer
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -18,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,7 +28,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToLong
@@ -44,6 +49,7 @@ fun MediaTimelineBar(
     val clampedPosition = positionMs.coerceIn(0L, safeDuration)
     var isScrubbing by remember { mutableStateOf(false) }
     var scrubPositionMs by remember(safeDuration) { mutableLongStateOf(clampedPosition) }
+    var sliderWidthPx by remember { mutableFloatStateOf(1f) }
 
     LaunchedEffect(clampedPosition, safeDuration, isScrubbing) {
         if (!isScrubbing) {
@@ -61,7 +67,20 @@ fun MediaTimelineBar(
         inactiveTrackColor = Color(0xFF787878),
         activeTickColor = Color.Transparent,
         inactiveTickColor = Color.Transparent,
+        disabledThumbColor = Color.White,
+        disabledActiveTrackColor = Color.White,
+        disabledInactiveTrackColor = Color(0xFF787878),
     )
+
+    fun updateScrubTarget(rawOffsetX: Float) {
+        val width = sliderWidthPx.coerceAtLeast(1f)
+        val normalized = (rawOffsetX / width).coerceIn(0f, 1f).toDouble()
+        val target = (normalized * safeDuration.toDouble())
+            .roundToLong()
+            .coerceIn(0L, safeDuration)
+        scrubPositionMs = target
+        onSeekChanged(target)
+    }
 
     Row(
         modifier = modifier
@@ -70,48 +89,57 @@ fun MediaTimelineBar(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Slider(
-            value = normalizedValue,
-            onValueChange = { next ->
-                if (!isScrubbing) {
-                    isScrubbing = true
-                    onSeekStarted()
-                }
-                val normalized = next.coerceIn(0f, 1f).toDouble()
-                val target = (normalized * safeDuration.toDouble())
-                    .roundToLong()
-                    .coerceIn(0L, safeDuration)
-                scrubPositionMs = target
-                onSeekChanged(target)
-            },
-            onValueChangeFinished = {
-                val target = scrubPositionMs.coerceIn(0L, safeDuration)
-                onSeekFinished(target)
-                isScrubbing = false
-            },
-            valueRange = 0f..1f,
-            colors = sliderColors,
-            thumb = {
-                Box(
-                    modifier = Modifier
-                        .size(20.dp)
-                        .background(color = Color.White, shape = CircleShape),
-                )
-            },
-            track = { sliderState ->
-                SliderDefaults.Track(
-                    sliderState = sliderState,
-                    modifier = Modifier.height(8.dp),
-                    colors = sliderColors,
-                    drawStopIndicator = null,
-                    thumbTrackGapSize = 0.dp,
-                    trackInsideCornerSize = 0.dp,
-                )
-            },
+        Box(
             modifier = Modifier
                 .weight(1f)
-                .defaultMinSize(minHeight = 28.dp),
-        )
+                .defaultMinSize(minHeight = 28.dp)
+                .onSizeChanged { sliderWidthPx = it.width.toFloat().coerceAtLeast(1f) }
+                .pointerInput(safeDuration, sliderWidthPx) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        if (!isScrubbing) {
+                            isScrubbing = true
+                            onSeekStarted()
+                        }
+                        updateScrubTarget(down.position.x)
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!change.pressed) break
+                            updateScrubTarget(change.position.x)
+                        }
+                        val target = scrubPositionMs.coerceIn(0L, safeDuration)
+                        onSeekFinished(target)
+                        isScrubbing = false
+                    }
+                },
+        ) {
+            Slider(
+                value = normalizedValue,
+                onValueChange = {},
+                enabled = false,
+                valueRange = 0f..1f,
+                colors = sliderColors,
+                thumb = {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .background(color = Color.White, shape = CircleShape),
+                    )
+                },
+                track = { sliderState ->
+                    SliderDefaults.Track(
+                        sliderState = sliderState,
+                        modifier = Modifier.height(8.dp),
+                        colors = sliderColors,
+                        drawStopIndicator = null,
+                        thumbTrackGapSize = 0.dp,
+                        trackInsideCornerSize = 0.dp,
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         Text(
             text = "${formatTimelineTime(displayPosition)} / ${formatTimelineTime(safeDuration)}",
             style = MaterialTheme.typography.titleMedium.copy(
