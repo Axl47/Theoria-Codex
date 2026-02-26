@@ -104,6 +104,8 @@ fun MediaTimelineBar(
                     modifier = Modifier.height(8.dp),
                     colors = sliderColors,
                     drawStopIndicator = null,
+                    thumbTrackGapSize = 0.dp,
+                    trackInsideCornerSize = 0.dp,
                 )
             },
             modifier = Modifier
