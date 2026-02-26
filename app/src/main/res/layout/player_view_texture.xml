@@ -5,7 +5,9 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:keepScreenOn="true"
+    app:keep_content_on_player_reset="true"
     app:resize_mode="fit"
+    app:shutter_background_color="@android:color/transparent"
     app:show_buffering="never"
     app:surface_type="texture_view"
     app:use_controller="false" />

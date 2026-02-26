@@ -725,6 +725,7 @@ fun SearchResultCard(
                 SearchVideoPreview(
                     media = videoRef,
                     sourceKey = post.id.source,
+                    previewModel = imageModel,
                     modifier = Modifier.fillMaxSize(),
                     onPlaybackError = { videoPlaybackFailed = true },
                 )
@@ -798,6 +799,7 @@ fun SearchResultCard(
 private fun SearchVideoPreview(
     media: ImageRef,
     sourceKey: SourceKey,
+    previewModel: Any? = null,
     modifier: Modifier = Modifier,
     onPlaybackError: () -> Unit = {},
 ) {
@@ -812,6 +814,7 @@ private fun SearchVideoPreview(
     var playerRef by remember(location, sourceKey) { mutableStateOf<ExoPlayer?>(null) }
     var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
     var didNotifyError by remember(location, sourceKey) { mutableStateOf(false) }
+    var hasRenderedFirstFrame by remember(location, sourceKey) { mutableStateOf(false) }
 
     DisposableEffect(location, sourceKey, lifecycleOwner) {
         didNotifyError = false
@@ -830,6 +833,10 @@ private fun SearchVideoPreview(
                     player.playWhenReady = true
                     player.play()
                 }
+            }
+
+            override fun onRenderedFirstFrame() {
+                hasRenderedFirstFrame = true
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -876,25 +883,35 @@ private fun SearchVideoPreview(
         }
     }
 
-    AndroidView(
-        modifier = modifier,
-        factory = { factoryContext ->
-            createTexturePlayerView(factoryContext).apply {
-                player = playerRef
-                useController = false
-                playerViewRef = this
-                isClickable = false
-                isFocusable = false
-            }
-        },
-        update = { playerView ->
-            playerViewRef = playerView
-            playerView.useController = false
-            playerView.player = playerRef
-            playerView.isClickable = false
-            playerView.isFocusable = false
-        },
-    )
+    Box(modifier = modifier) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { factoryContext ->
+                createTexturePlayerView(factoryContext).apply {
+                    player = playerRef
+                    useController = false
+                    playerViewRef = this
+                    isClickable = false
+                    isFocusable = false
+                }
+            },
+            update = { playerView ->
+                playerViewRef = playerView
+                playerView.useController = false
+                playerView.player = playerRef
+                playerView.isClickable = false
+                playerView.isFocusable = false
+            },
+        )
+        if (!hasRenderedFirstFrame && previewModel != null) {
+            AsyncImage(
+                model = previewModel,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
 }
 
 @Composable
