@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
+import android.view.View
 import android.widget.Toast
 import android.widget.VideoView
 import androidx.compose.animation.AnimatedVisibility
@@ -827,7 +828,12 @@ private fun SearchVideoPreview(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            videoViewRef?.stopPlayback()
+            runCatching { videoViewRef?.visibility = View.INVISIBLE }
+            runCatching { videoViewRef?.alpha = 0f }
+            runCatching { videoViewRef?.setOnPreparedListener(null) }
+            runCatching { videoViewRef?.setOnErrorListener(null) }
+            runCatching { videoViewRef?.pause() }
+            runCatching { videoViewRef?.`suspend`() }
             videoViewRef = null
         }
     }
@@ -837,6 +843,8 @@ private fun SearchVideoPreview(
         factory = { _ ->
             VideoView(context).apply {
                 videoViewRef = this
+                visibility = View.VISIBLE
+                alpha = 1f
                 isClickable = false
                 isFocusable = false
                 setOnPreparedListener { player ->
@@ -854,6 +862,8 @@ private fun SearchVideoPreview(
         },
         update = { videoView ->
             videoViewRef = videoView
+            videoView.visibility = View.VISIBLE
+            videoView.alpha = 1f
             val currentTag = videoView.tag as? String
             if (currentTag != location) {
                 videoView.tag = location

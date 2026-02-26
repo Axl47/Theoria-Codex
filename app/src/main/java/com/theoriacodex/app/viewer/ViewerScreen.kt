@@ -8,6 +8,7 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.view.View
 import android.webkit.URLUtil
 import android.widget.Toast
 import android.widget.VideoView
@@ -160,7 +161,6 @@ fun ViewerScreen(
 
     LaunchedEffect(pendingDismiss) {
         if (!pendingDismiss) return@LaunchedEffect
-        withFrameNanos { }
         withFrameNanos { }
         onDismiss()
     }
@@ -859,7 +859,12 @@ private fun ViewerVideoPlayer(
 
     DisposableEffect(location) {
         onDispose {
-            videoViewRef?.stopPlayback()
+            runCatching { videoViewRef?.visibility = View.INVISIBLE }
+            runCatching { videoViewRef?.alpha = 0f }
+            runCatching { videoViewRef?.setOnPreparedListener(null) }
+            runCatching { videoViewRef?.setOnErrorListener(null) }
+            runCatching { videoViewRef?.pause() }
+            runCatching { videoViewRef?.`suspend`() }
             videoViewRef = null
             mediaPlayerRef = null
         }
@@ -869,7 +874,7 @@ private fun ViewerVideoPlayer(
         val videoView = videoViewRef ?: return@LaunchedEffect
         if (!isActive) {
             runCatching { videoView.pause() }
-            runCatching { videoView.stopPlayback() }
+            runCatching { videoView.`suspend`() }
         } else if (!loading && !loadFailed) {
             runCatching { videoView.start() }
         }
@@ -902,6 +907,8 @@ private fun ViewerVideoPlayer(
             factory = { _ ->
                 VideoView(context).apply {
                     videoViewRef = this
+                    visibility = View.VISIBLE
+                    alpha = 1f
                     setOnPreparedListener { player ->
                         mediaPlayerRef = player
                         loading = false
@@ -921,6 +928,8 @@ private fun ViewerVideoPlayer(
             },
             update = { videoView ->
                 videoViewRef = videoView
+                videoView.visibility = if (isActive) View.VISIBLE else View.INVISIBLE
+                videoView.alpha = if (isActive) 1f else 0f
                 val currentTag = videoView.tag as? String
                 if (currentTag != location) {
                     loading = true
