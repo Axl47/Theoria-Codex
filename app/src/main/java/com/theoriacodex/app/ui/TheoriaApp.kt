@@ -296,7 +296,7 @@ fun TheoriaApp(
     var pendingInstallRemote by remember { mutableStateOf<RemoteUpdate?>(null) }
     var awaitingUnknownSources by remember { mutableStateOf(false) }
     var awaitingInstallerReturn by remember { mutableStateOf(false) }
-    var pendingPixivDeepLinkUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingPostDeepLinkUri by remember { mutableStateOf<Uri?>(null) }
     val codexItemCounts = remember { mutableStateMapOf<String, Int>() }
 
     var pixivStatusLabel by remember { mutableStateOf("Not connected") }
@@ -527,52 +527,52 @@ fun TheoriaApp(
                 pixivStatusLabel = "Connection failed: ${result.exceptionOrNull()?.message ?: "Unknown error"}"
             }
         } else {
-            pendingPixivDeepLinkUri = uri
+            pendingPostDeepLinkUri = uri
         }
         onIncomingUriConsumed()
     }
 
-    LaunchedEffect(navReady, pendingPixivDeepLinkUri) {
+    LaunchedEffect(navReady, pendingPostDeepLinkUri) {
         if (!navReady) return@LaunchedEffect
-        val uri = pendingPixivDeepLinkUri ?: return@LaunchedEffect
+        val uri = pendingPostDeepLinkUri ?: return@LaunchedEffect
         fun consumePendingUriIfCurrent() {
-            if (pendingPixivDeepLinkUri == uri) {
-                pendingPixivDeepLinkUri = null
+            if (pendingPostDeepLinkUri == uri) {
+                pendingPostDeepLinkUri = null
             }
         }
 
-        val postId = parsePixivPostIdFromUri(uri)
-        if (postId == null) {
-            Toast.makeText(appContext, "Unsupported Pixiv URL format", Toast.LENGTH_SHORT).show()
+        val deepLink = parseExternalPostDeepLink(uri)
+        if (deepLink == null) {
+            Toast.makeText(appContext, "Unsupported post URL format", Toast.LENGTH_SHORT).show()
             consumePendingUriIfCurrent()
             return@LaunchedEffect
         }
-        val adapter = realRegistry.adapterFor(SourceKey.PIXIV)
+        val adapter = realRegistry.adapterFor(deepLink.source)
         if (adapter == null) {
-            Toast.makeText(appContext, "Pixiv source is unavailable", Toast.LENGTH_SHORT).show()
+            Toast.makeText(appContext, "${deepLink.sourceLabel} source is unavailable", Toast.LENGTH_SHORT).show()
             consumePendingUriIfCurrent()
             return@LaunchedEffect
         }
 
         val resolved = try {
-            adapter.resolvePost(PostId(source = SourceKey.PIXIV, sourcePostId = postId))
+            adapter.resolvePost(PostId(source = deepLink.source, sourcePostId = deepLink.postId))
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
-            val message = error.message ?: "Could not open Pixiv URL"
+            val message = error.message ?: "Could not open ${deepLink.sourceLabel} URL"
             Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
             consumePendingUriIfCurrent()
             return@LaunchedEffect
         }
 
         if (resolved == null) {
-            Toast.makeText(appContext, "Pixiv post was not found", Toast.LENGTH_SHORT).show()
+            Toast.makeText(appContext, "${deepLink.sourceLabel} post was not found", Toast.LENGTH_SHORT).show()
             consumePendingUriIfCurrent()
             return@LaunchedEffect
         }
 
         val context = ViewerLaunchContext(
-            queryHash = "pixiv-deeplink:$postId",
+            queryHash = "${deepLink.source.name.lowercase()}-deeplink:${deepLink.postId}",
             startIndex = 0,
             streamSource = ViewerStreamSource.SEARCH,
             scrollOffsetHint = 0,
@@ -1544,6 +1544,46 @@ private fun parsePixivPostIdFromUri(uri: Uri): String? {
     val match = Regex("^/([A-Za-z]{2})/artworks/(\\d+)(?:/)?$").matchEntire(path) ?: return null
     return match.groupValues.getOrNull(2)?.takeIf(String::isDigitsOnly)
 }
+
+private fun parseGelbooruPostIdFromUri(uri: Uri): String? {
+    val scheme = uri.scheme?.lowercase().orEmpty()
+    val host = uri.host?.lowercase().orEmpty()
+    if (scheme != "https" && scheme != "http") return null
+    if (host != "www.gelbooru.com" && host != "gelbooru.com") return null
+
+    val path = uri.encodedPath.orEmpty().lowercase()
+    if (path.isNotBlank() && path != "/" && path != "/index.php") return null
+
+    val page = uri.getQueryParameter("page")?.lowercase()
+    val section = uri.getQueryParameter("s")?.lowercase()
+    val postId = uri.getQueryParameter("id")
+    if (page != "post" || section != "view") return null
+    return postId?.takeIf(String::isDigitsOnly)
+}
+
+private fun parseExternalPostDeepLink(uri: Uri): ExternalPostDeepLink? {
+    parsePixivPostIdFromUri(uri)?.let { postId ->
+        return ExternalPostDeepLink(
+            source = SourceKey.PIXIV,
+            sourceLabel = "Pixiv",
+            postId = postId,
+        )
+    }
+    parseGelbooruPostIdFromUri(uri)?.let { postId ->
+        return ExternalPostDeepLink(
+            source = SourceKey.GELBOORU,
+            sourceLabel = "Gelbooru",
+            postId = postId,
+        )
+    }
+    return null
+}
+
+private data class ExternalPostDeepLink(
+    val source: SourceKey,
+    val sourceLabel: String,
+    val postId: String,
+)
 
 private fun String.isDigitsOnly(): Boolean {
     return isNotBlank() && all { it.isDigit() }

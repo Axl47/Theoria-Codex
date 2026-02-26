@@ -4,7 +4,9 @@ import android.app.DownloadManager
 import android.content.res.Configuration
 import android.content.Context
 import android.graphics.Movie
+import android.media.MediaPlayer
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.webkit.URLUtil
 import android.widget.Toast
@@ -829,6 +831,7 @@ private fun ViewerVideoPlayer(
     var loading by remember(location) { mutableStateOf(true) }
     var loadFailed by remember(location) { mutableStateOf(false) }
     var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
+    var mediaPlayerRef by remember { mutableStateOf<MediaPlayer?>(null) }
     var durationMs by remember(location) { mutableLongStateOf(0L) }
     var positionMs by remember(location) { mutableLongStateOf(0L) }
     var isScrubbing by remember(location) { mutableStateOf(false) }
@@ -837,6 +840,7 @@ private fun ViewerVideoPlayer(
         onDispose {
             videoViewRef?.stopPlayback()
             videoViewRef = null
+            mediaPlayerRef = null
         }
     }
 
@@ -878,6 +882,7 @@ private fun ViewerVideoPlayer(
                 VideoView(context).apply {
                     videoViewRef = this
                     setOnPreparedListener { player ->
+                        mediaPlayerRef = player
                         loading = false
                         loadFailed = false
                         player.isLooping = true
@@ -888,6 +893,7 @@ private fun ViewerVideoPlayer(
                     setOnErrorListener { _, _, _ ->
                         loading = false
                         loadFailed = true
+                        mediaPlayerRef = null
                         true
                     }
                 }
@@ -901,6 +907,7 @@ private fun ViewerVideoPlayer(
                     durationMs = 0L
                     positionMs = 0L
                     isScrubbing = false
+                    mediaPlayerRef = null
                     videoView.tag = location
                     val headers = viewerRequestHeaders(sourceKey)
                     val uri = Uri.parse(location)
@@ -935,10 +942,18 @@ private fun ViewerVideoPlayer(
                 },
                 onSeekChanged = { target ->
                     positionMs = target
-                    videoViewRef?.seekTo(target.toInt())
+                    seekVideoToTimelinePosition(
+                        videoView = videoViewRef,
+                        mediaPlayer = mediaPlayerRef,
+                        targetMs = target,
+                    )
                 },
                 onSeekFinished = { target ->
-                    videoViewRef?.seekTo(target.toInt())
+                    seekVideoToTimelinePosition(
+                        videoView = videoViewRef,
+                        mediaPlayer = mediaPlayerRef,
+                        targetMs = target,
+                    )
                     positionMs = target
                     isScrubbing = false
                 },
@@ -1320,6 +1335,23 @@ private fun enqueueViewerDownload(
         manager.enqueue(request)
         true
     }.getOrElse { false }
+}
+
+private fun seekVideoToTimelinePosition(
+    videoView: VideoView?,
+    mediaPlayer: MediaPlayer?,
+    targetMs: Long,
+) {
+    val clamped = targetMs.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && mediaPlayer != null) {
+        runCatching {
+            mediaPlayer.seekTo(clamped.toLong(), MediaPlayer.SEEK_CLOSEST)
+        }.onFailure {
+            videoView?.seekTo(clamped)
+        }
+    } else {
+        videoView?.seekTo(clamped)
+    }
 }
 
 private fun buildDownloadFileName(

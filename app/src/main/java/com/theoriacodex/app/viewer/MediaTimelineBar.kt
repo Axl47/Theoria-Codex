@@ -41,6 +41,9 @@ fun MediaTimelineBar(
     }
 
     val displayPosition = if (isScrubbing) scrubPositionMs else clampedPosition
+    val normalizedValue = (displayPosition.toDouble() / safeDuration.toDouble())
+        .coerceIn(0.0, 1.0)
+        .toFloat()
 
     Surface(
         modifier = modifier,
@@ -66,13 +69,16 @@ fun MediaTimelineBar(
                 )
             }
             Slider(
-                value = displayPosition.toFloat(),
+                value = normalizedValue,
                 onValueChange = { next ->
                     if (!isScrubbing) {
                         isScrubbing = true
                         onSeekStarted()
                     }
-                    val target = next.roundToLong().coerceIn(0L, safeDuration)
+                    val normalized = next.coerceIn(0f, 1f).toDouble()
+                    val target = (normalized * safeDuration.toDouble())
+                        .roundToLong()
+                        .coerceIn(0L, safeDuration)
                     scrubPositionMs = target
                     onSeekChanged(target)
                 },
@@ -81,7 +87,7 @@ fun MediaTimelineBar(
                     onSeekFinished(target)
                     isScrubbing = false
                 },
-                valueRange = 0f..safeDuration.toFloat(),
+                valueRange = 0f..1f,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
