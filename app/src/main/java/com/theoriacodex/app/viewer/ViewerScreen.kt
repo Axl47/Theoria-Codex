@@ -336,13 +336,14 @@ fun ViewerScreen(
                         },
                     )
                 }
-                val transformModifier = Modifier
+                val mediaTransformModifier = Modifier
                     .graphicsLayer {
                         scaleX = viewerState.zoom
                         scaleY = viewerState.zoom
                         translationX = viewerState.panX
                         translationY = viewerState.panY
                     }
+                val transformInputModifier = Modifier
                     .transformable(
                         state = transformState,
                         canPan = { viewerState.zoom > ViewerState.FIT_SCALE + 0.01f },
@@ -351,7 +352,7 @@ fun ViewerScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .then(transformModifier)
+                        .then(transformInputModifier)
                         .then(mediaGestureModifier)
                 ) {
                     val imageCandidates = remember(post, media, isVideoMedia) {
@@ -372,18 +373,25 @@ fun ViewerScreen(
                     ) {
                         val showUgoira = isPixivUgoira(post, media) && pixivUgoiraClient != null
                         if (showUgoira) {
-                            PixivUgoiraPlayer(
-                                postId = post.id.sourcePostId,
-                                client = requireNotNull(pixivUgoiraClient),
-                                contentDescription = post.title ?: post.id.sourcePostId,
-                                modifier = Modifier.fillMaxSize(),
-                                showProgressBar = viewerState.chromeVisible,
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .then(mediaTransformModifier),
+                            ) {
+                                PixivUgoiraPlayer(
+                                    postId = post.id.sourcePostId,
+                                    client = requireNotNull(pixivUgoiraClient),
+                                    contentDescription = post.title ?: post.id.sourcePostId,
+                                    modifier = Modifier.fillMaxSize(),
+                                    showProgressBar = viewerState.chromeVisible,
+                                )
+                            }
                         } else if (isVideoMedia) {
                             ViewerVideoPlayer(
                                 media = media,
                                 sourceKey = post.id.source,
                                 modifier = Modifier.fillMaxSize(),
+                                mediaModifier = mediaTransformModifier,
                                 showTimeline = viewerState.chromeVisible,
                                 isActive = mediaPlaybackEnabled,
                             )
@@ -392,13 +400,16 @@ fun ViewerScreen(
                                 sourceKey = post.id.source,
                                 location = gifLocation,
                                 modifier = Modifier.fillMaxSize(),
+                                mediaModifier = mediaTransformModifier,
                                 showTimeline = viewerState.chromeVisible,
                             )
                         } else if (imageModel != null) {
                             AsyncImage(
                                 model = imageModel,
                                 contentDescription = post.title ?: post.id.sourcePostId,
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .then(mediaTransformModifier),
                                 contentScale = ContentScale.Fit,
                                 onLoading = {
                                     imageLoading = true
@@ -824,6 +835,7 @@ private fun ViewerVideoPlayer(
     media: ImageRef,
     sourceKey: SourceKey,
     modifier: Modifier = Modifier,
+    mediaModifier: Modifier = Modifier,
     showTimeline: Boolean = false,
     isActive: Boolean = true,
 ) {
@@ -930,7 +942,9 @@ private fun ViewerVideoPlayer(
 
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         AndroidView(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .then(mediaModifier),
             factory = { factoryContext ->
                 createTexturePlayerView(factoryContext).apply {
                     useController = false
@@ -985,6 +999,7 @@ private fun ViewerGifPlayer(
     sourceKey: SourceKey,
     location: String,
     modifier: Modifier = Modifier,
+    mediaModifier: Modifier = Modifier,
     showTimeline: Boolean = true,
 ) {
     val context = LocalContext.current
@@ -1042,7 +1057,11 @@ private fun ViewerGifPlayer(
     }
 
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(mediaModifier),
+        ) {
             val movieWidth = activeMovie.width().toFloat().coerceAtLeast(1f)
             val movieHeight = activeMovie.height().toFloat().coerceAtLeast(1f)
             val scale = minOf(size.width / movieWidth, size.height / movieHeight)
