@@ -402,6 +402,9 @@ fun ViewerScreen(
                 val isVideoMedia = isVideoMediaRef(media)
                 val isGifMedia = isGifMediaRef(media)
                 val showUgoira = isPixivUgoira(post, media) && pixivUgoiraClient != null
+                val isCurrentMediaPage =
+                    postPage == postPagerState.currentPage &&
+                        mediaPage == mediaPagerState.currentPage
                 val isSeekableMedia = isVideoMedia || isGifMedia || showUgoira
                 val hasBottomTimeline = viewerState.chromeVisible && (isVideoMedia || isGifMedia || showUgoira)
                 var seekJumpSerial by remember(postPage, mediaPage) { mutableIntStateOf(0) }
@@ -489,7 +492,8 @@ fun ViewerScreen(
                                     client = requireNotNull(pixivUgoiraClient),
                                     contentDescription = post.title ?: post.id.sourcePostId,
                                     modifier = Modifier.fillMaxSize(),
-                                    showProgressBar = viewerState.chromeVisible,
+                                    showProgressBar = viewerState.chromeVisible && isCurrentMediaPage,
+                                    isActive = mediaPlaybackEnabled && isCurrentMediaPage,
                                     seekJumpSerial = seekJumpSerial,
                                     seekJumpDeltaMs = seekJumpDeltaMs,
                                     onTimelineInteractionActiveChanged = ::onTimelineInteractionChanged,
@@ -501,8 +505,8 @@ fun ViewerScreen(
                                 sourceKey = post.id.source,
                                 modifier = Modifier.fillMaxSize(),
                                 mediaModifier = mediaTransformModifier,
-                                showTimeline = viewerState.chromeVisible,
-                                isActive = mediaPlaybackEnabled,
+                                showTimeline = viewerState.chromeVisible && isCurrentMediaPage,
+                                isActive = mediaPlaybackEnabled && isCurrentMediaPage,
                                 seekJumpSerial = seekJumpSerial,
                                 seekJumpDeltaMs = seekJumpDeltaMs,
                                 onTimelineInteractionActiveChanged = ::onTimelineInteractionChanged,
@@ -513,7 +517,8 @@ fun ViewerScreen(
                                 location = gifLocation,
                                 modifier = Modifier.fillMaxSize(),
                                 mediaModifier = mediaTransformModifier,
-                                showTimeline = viewerState.chromeVisible,
+                                showTimeline = viewerState.chromeVisible && isCurrentMediaPage,
+                                isActive = mediaPlaybackEnabled && isCurrentMediaPage,
                                 seekJumpSerial = seekJumpSerial,
                                 seekJumpDeltaMs = seekJumpDeltaMs,
                                 onTimelineInteractionActiveChanged = ::onTimelineInteractionChanged,
@@ -1203,6 +1208,7 @@ private fun ViewerGifPlayer(
     modifier: Modifier = Modifier,
     mediaModifier: Modifier = Modifier,
     showTimeline: Boolean = true,
+    isActive: Boolean = true,
     seekJumpSerial: Int = 0,
     seekJumpDeltaMs: Long = 0L,
     onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
@@ -1250,14 +1256,16 @@ private fun ViewerGifPlayer(
         activeMovie.duration().takeIf { it > 0 }?.toLong() ?: GIF_FALLBACK_DURATION_MS
     }
 
-    LaunchedEffect(seekJumpSerial, seekJumpDeltaMs, durationMs, isScrubbing) {
-        if (seekJumpSerial <= 0 || seekJumpDeltaMs == 0L || isScrubbing) return@LaunchedEffect
+    LaunchedEffect(seekJumpSerial, seekJumpDeltaMs, durationMs, isScrubbing, isActive) {
+        if (seekJumpSerial <= 0 || seekJumpDeltaMs == 0L || isScrubbing || !isActive) {
+            return@LaunchedEffect
+        }
         val target = (positionMs + seekJumpDeltaMs).coerceIn(0L, durationMs)
         positionMs = target
     }
 
-    LaunchedEffect(activeMovie, durationMs, isScrubbing, playbackPaused) {
-        if (isScrubbing || playbackPaused) return@LaunchedEffect
+    LaunchedEffect(activeMovie, durationMs, isScrubbing, playbackPaused, isActive) {
+        if (isScrubbing || playbackPaused || !isActive) return@LaunchedEffect
         while (true) {
             delay(16L)
             positionMs = if (durationMs <= 0L) {

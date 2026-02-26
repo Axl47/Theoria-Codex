@@ -638,6 +638,7 @@ fun PixivUgoiraPlayer(
     contentDescription: String?,
     contentScale: ContentScale = ContentScale.Fit,
     showProgressBar: Boolean = false,
+    isActive: Boolean = true,
     seekJumpSerial: Int = 0,
     seekJumpDeltaMs: Long = 0L,
     onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
@@ -709,13 +710,15 @@ fun PixivUgoiraPlayer(
         frameIndex = resolvedIndex
     }
 
-    LaunchedEffect(seekJumpSerial, seekJumpDeltaMs, maxSeekablePositionMs, isScrubbing) {
-        if (seekJumpSerial <= 0 || seekJumpDeltaMs == 0L || isScrubbing) return@LaunchedEffect
+    LaunchedEffect(seekJumpSerial, seekJumpDeltaMs, maxSeekablePositionMs, isScrubbing, isActive) {
+        if (seekJumpSerial <= 0 || seekJumpDeltaMs == 0L || isScrubbing || !isActive) {
+            return@LaunchedEffect
+        }
         seekToPosition(elapsedInLoopMs + seekJumpDeltaMs)
     }
 
-    LaunchedEffect(activePlayback, frameIndex, isScrubbing, playbackPaused) {
-        if (isScrubbing || playbackPaused) return@LaunchedEffect
+    LaunchedEffect(activePlayback, frameIndex, isScrubbing, playbackPaused, isActive) {
+        if (isScrubbing || playbackPaused || !isActive) return@LaunchedEffect
         val delayMs = activePlayback.frames[frameIndex].delayMs.toLong().coerceAtLeast(16L)
         delay(delayMs)
         val nextIndex = (frameIndex + 1) % activePlayback.frames.size
