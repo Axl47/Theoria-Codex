@@ -107,6 +107,39 @@ class UnifiedSearchOrchestratorTest {
     }
 
     @Test
+    fun `uses query override only for targeted source`() = runBlocking {
+        val pixivAdapter = FakeAdapter(
+            sourceKey = SourceKey.PIXIV,
+            capabilities = supportedCapabilities(),
+            posts = listOf(post(SourceKey.PIXIV, "p1")),
+        )
+        val gelbooruAdapter = FakeAdapter(
+            sourceKey = SourceKey.GELBOORU,
+            capabilities = supportedCapabilities(),
+            posts = listOf(post(SourceKey.GELBOORU, "g1")),
+        )
+        val orchestrator = UnifiedSearchOrchestrator(
+            adaptersBySource = mapOf(
+                SourceKey.PIXIV to pixivAdapter,
+                SourceKey.GELBOORU to gelbooruAdapter,
+            )
+        )
+        val query = sampleQuery()
+        val override = query.copy(includeTags = listOf("gelbooru_tag"))
+
+        orchestrator.search(
+            query = query,
+            enabledSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
+            pageTokens = emptyMap(),
+            weights = mapOf(SourceKey.PIXIV to 0.5, SourceKey.GELBOORU to 0.5),
+            queryOverridesBySource = mapOf(SourceKey.GELBOORU to override),
+        )
+
+        assertEquals(listOf("landscape"), pixivAdapter.lastSearchQuery?.includeTags)
+        assertEquals(listOf("gelbooru_tag"), gelbooruAdapter.lastSearchQuery?.includeTags)
+    }
+
+    @Test
     fun `applies exclude tags client side when source excludes are unsupported`() = runBlocking {
         val pixivAdapter = FakeAdapter(
             sourceKey = SourceKey.PIXIV,

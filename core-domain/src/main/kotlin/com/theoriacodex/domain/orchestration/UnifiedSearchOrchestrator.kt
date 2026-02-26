@@ -41,6 +41,7 @@ class UnifiedSearchOrchestrator(
         enabledSources: Set<SourceKey>,
         pageTokens: Map<SourceKey, String?>,
         weights: Map<SourceKey, Double>,
+        queryOverridesBySource: Map<SourceKey, Query> = emptyMap(),
     ): UnifiedSearchResult = coroutineScope {
         val candidateAdapters = enabledSources.mapNotNull { source ->
             adaptersBySource[source]?.let { source to it }
@@ -65,10 +66,11 @@ class UnifiedSearchOrchestrator(
             .filterKeys { source -> source !in hardExcluded }
             .map { (source, adapter) ->
                 async {
+                    val sourceBaseQuery = queryOverridesBySource[source] ?: query
                     val sourceQuery = if (source in clientSideExcludeSources) {
-                        query.copy(excludeTags = emptyList())
+                        sourceBaseQuery.copy(excludeTags = emptyList())
                     } else {
-                        query
+                        sourceBaseQuery
                     }
                     source to runCatching {
                         adapter.search(sourceQuery, pageTokens[source]).let { page ->
@@ -76,7 +78,7 @@ class UnifiedSearchOrchestrator(
                                 page.copy(
                                     items = applyClientSideExcludeFilter(
                                         posts = page.items,
-                                        excludeTags = query.excludeTags,
+                                        excludeTags = sourceBaseQuery.excludeTags,
                                     )
                                 )
                             } else {

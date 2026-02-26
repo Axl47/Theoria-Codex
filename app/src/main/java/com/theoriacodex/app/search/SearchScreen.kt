@@ -98,6 +98,7 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.sources.pixiv.PIXIV_UGOIRA_MIME
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -134,6 +135,16 @@ fun SearchScreen(
 
     LaunchedEffect(coordinator.draftQuery.mode) {
         coordinator.loadTrendingTags()
+    }
+
+    LaunchedEffect(coordinator.draftQuery.mode, input) {
+        val trimmed = input.trim()
+        if (trimmed.isBlank()) {
+            coordinator.clearAutocompleteSuggestions()
+            return@LaunchedEffect
+        }
+        delay(300)
+        coordinator.refreshAutocompleteSuggestions(trimmed)
     }
 
     LaunchedEffect(queryHash, visibleResults.size, animatedOnly) {
@@ -203,15 +214,7 @@ fun SearchScreen(
             }
     }
 
-    val autocompleteSuggestions = remember(input, coordinator.trendingTags) {
-        if (input.trim().isBlank()) {
-            emptyList()
-        } else {
-            coordinator.trendingTags
-                .filter { suggestion -> suggestion.text.contains(input.trim(), ignoreCase = true) }
-                .take(10)
-        }
-    }
+    val autocompleteSuggestions = coordinator.autocompleteSuggestions
     val sourceAuthErrorMessage = remember(coordinator.statuses) {
         buildSourceAuthErrorMessage(coordinator.statuses)
     }
@@ -225,10 +228,9 @@ fun SearchScreen(
         coordinator.hasPendingChanges
 
     fun commitTagInput() {
-        val hadInput = input.isNotBlank()
-        coordinator.addTagInput(input)
-        input = ""
-        if (hadInput) {
+        val committed = coordinator.commitTagInput(input)
+        if (committed) {
+            input = ""
             focusManager.clearFocus()
         }
     }
@@ -261,9 +263,16 @@ fun SearchScreen(
                         searchFieldFocused = state.isFocused
                     },
                 value = input,
-                onValueChange = { input = it },
+                onValueChange = {
+                    input = it
+                    coordinator.clearTagInputValidationMessage()
+                },
                 shape = RoundedCornerShape(28.dp),
                 singleLine = true,
+                isError = coordinator.tagInputValidationMessage != null,
+                supportingText = coordinator.tagInputValidationMessage?.let { message ->
+                    { Text(message) }
+                },
                 placeholder = if (!searchFieldFocused) {
                     { Text("tag or -tag") }
                 } else {
@@ -278,7 +287,10 @@ fun SearchScreen(
                     onDone = { commitTagInput() },
                 ),
                 trailingIcon = {
-                    TextButton(onClick = { commitTagInput() }) {
+                    TextButton(
+                        onClick = { commitTagInput() },
+                        enabled = coordinator.canCommitTagInput(input),
+                    ) {
                         Text("Add")
                     }
                 }
@@ -295,10 +307,12 @@ fun SearchScreen(
                             suggestions = autocompleteSuggestions,
                             onInclude = { tag ->
                                 coordinator.addIncludeTag(tag)
+                                coordinator.clearTagInputValidationMessage()
                                 input = ""
                             },
                             onExclude = { tag ->
                                 coordinator.addExcludeTag(tag)
+                                coordinator.clearTagInputValidationMessage()
                                 input = ""
                             },
                         )

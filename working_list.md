@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:08
-updated_at: 2026-02-25T01:42
+updated_at: 2026-02-26T00:30
 ---
 # Working List
 
@@ -8,7 +8,7 @@ updated_at: 2026-02-25T01:42
 - [ ] Manual on-device smoke validation by developer checklist
 
 ## In Progress
-- [~] Summarizing stabilization changes and validation notes
+- [~] Awaiting developer on-device smoke validation checklist results
 
 ## Done
 - [x] Read `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/TheoriaSpec.md` and synthesize a multi-agent implementation strategy
@@ -46,3 +46,14 @@ updated_at: 2026-02-25T01:42
 - [x] Improve Pixiv tag normalization (include translated tags in canonical tag set)
 - [x] Validation passed for stabilization pass:
   - `./gradlew :app:testDebugUnitTest :core-sources:test :app:assembleDebug`
+- [x] Received decision-complete scope for Gelbooru Search Phase 1 (source mode + unified compatibility + credentials paste parsing)
+- [x] Create and maintain `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/execplans/gelbooru-search-phase1-execplan.md` for Gelbooru Search Phase 1 execution
+- [x] Implement runtime source exposure updates (Pixiv + Gelbooru)
+- [x] Implement source-driven autocomplete with Gelbooru suggestion-only typed entry
+- [x] Implement unified per-source Gelbooru compatibility tag overrides
+- [x] Implement Gelbooru credential paste parser and wire Settings input
+- [x] Add/adjust unit tests for orchestrator overrides, coordinator behavior, parser, and canonical Gelbooru URL
+- [x] Update README feature status and validation notes
+- [x] Validation passed for Gelbooru Search Phase 1:
+  - `./gradlew :core-domain:test :core-sources:test :app:testDebugUnitTest`
+  - `./gradlew assembleDebug`

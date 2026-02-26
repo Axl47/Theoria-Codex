@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-02-25T13:10
+updated_at: 2026-02-26T00:00
 ---
 # Theoria Codex
 
@@ -19,8 +19,11 @@ The app is now in second-pass source cutover state:
   - typed source failure reasons in unified orchestration statuses
 - Settings includes minimal source account controls:
   - Pixiv connect/disconnect (PKCE callback flow)
-  - Gelbooru user ID/API key save/clear
-- Runtime source visibility is registry-driven (Phase A exposure is Pixiv only).
+  - Gelbooru user ID/API key save/clear, plus API-field paste parsing for `&api_key=<key>&user_id=<id>`
+- Runtime source visibility is registry-driven (Phase A exposure is Pixiv + Gelbooru).
+- Search autocomplete now uses source adapter autocomplete APIs as you type (with local suggestion-store fallback).
+- In Gelbooru source mode, typed include/exclude tags can only be added when they match suggested tags.
+- In Unified mode, Gelbooru queries now apply compatibility mapping by resolving each include/exclude tag to the first Gelbooru autocomplete match (fallback: original tag).
 - Stub adapters remain available for tests/dev in `:core-stubs`.
 
 Previously completed MVP slices remain in place:

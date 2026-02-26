@@ -24,6 +24,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -184,6 +185,107 @@ class SearchCoordinatorTest {
     }
 
     @Test
+    fun `gelbooru source mode only commits typed tags from suggestions`() = runTest {
+        val registry = CompatibilityRegistry(
+            adapters = mapOf(
+                SourceKey.GELBOORU to RecordingAdapter(
+                    sourceKey = SourceKey.GELBOORU,
+                    autocompleteByPrefix = mapOf(
+                        "land" to listOf("landscape"),
+                        "safe" to listOf("safe"),
+                    ),
+                ),
+            ),
+        )
+        val coordinator = SearchCoordinator(
+            registry = registry,
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.GELBOORU))
+
+        coordinator.refreshAutocompleteSuggestions("portrait")
+        assertFalse(coordinator.commitTagInput("portrait"))
+        assertTrue(coordinator.tagInputValidationMessage?.contains("Gelbooru", ignoreCase = true) == true)
+
+        coordinator.refreshAutocompleteSuggestions("land")
+        assertTrue(coordinator.commitTagInput("landscape"))
+        assertTrue("landscape" in coordinator.draftQuery.includeTags)
+
+        coordinator.refreshAutocompleteSuggestions("safe")
+        assertTrue(coordinator.commitTagInput("-safe"))
+        assertTrue("safe" in coordinator.draftQuery.excludeTags)
+        assertNull(coordinator.tagInputValidationMessage)
+    }
+
+    @Test
+    fun `unified search maps gelbooru compatibility tags and falls back to raw tag`() = runTest {
+        val pixivAdapter = RecordingAdapter(sourceKey = SourceKey.PIXIV)
+        val gelbooruAdapter = RecordingAdapter(
+            sourceKey = SourceKey.GELBOORU,
+            autocompleteByPrefix = mapOf(
+                "cat" to listOf("cat_(animal)"),
+                "dog" to emptyList(),
+            ),
+        )
+        val registry = CompatibilityRegistry(
+            adapters = mapOf(
+                SourceKey.PIXIV to pixivAdapter,
+                SourceKey.GELBOORU to gelbooruAdapter,
+            ),
+        )
+        val coordinator = SearchCoordinator(
+            registry = registry,
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+        coordinator.addIncludeTag("cat")
+        coordinator.addIncludeTag("dog")
+
+        coordinator.applyDraft()
+
+        assertEquals(listOf("cat", "dog"), pixivAdapter.lastSearchQuery?.includeTags)
+        assertEquals(listOf("cat_(animal)", "dog"), gelbooruAdapter.lastSearchQuery?.includeTags)
+    }
+
+    @Test
+    fun `autocomplete suggestions are sorted by post count descending`() = runTest {
+        val registry = CompatibilityRegistry(
+            adapters = mapOf(
+                SourceKey.GELBOORU to RecordingAdapter(
+                    sourceKey = SourceKey.GELBOORU,
+                    autocompleteTagsByPrefix = mapOf(
+                        "land" to listOf(
+                            TagSuggestion(text = "landscape_low", type = "tag", count = 10),
+                            TagSuggestion(text = "landscape_high", type = "tag", count = 500),
+                            TagSuggestion(text = "landscape_mid", type = "tag", count = 120),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val coordinator = SearchCoordinator(
+            registry = registry,
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.GELBOORU))
+
+        coordinator.refreshAutocompleteSuggestions("land")
+
+        assertEquals(
+            listOf("landscape_high", "landscape_mid", "landscape_low"),
+            coordinator.autocompleteSuggestions.map { it.text },
+        )
+    }
+
+    @Test
     fun `pixiv unknown failure resets search and prompts retry message`() = runTest {
         val registry = object : SourceAdapterRegistry {
             private val pixivAdapter = object : SourceAdapter {
@@ -276,4 +378,75 @@ private class LimitedStubRegistry(
     override fun unifiedOrchestrator(): UnifiedSearchOrchestrator {
         return UnifiedSearchOrchestrator(adaptersBySource)
     }
+}
+
+private class CompatibilityRegistry(
+    private val adapters: Map<SourceKey, SourceAdapter>,
+) : SourceAdapterRegistry {
+    private val orchestrator = UnifiedSearchOrchestrator(adapters)
+
+    override fun availableSources(): Set<SourceKey> = adapters.keys
+
+    override fun adapterFor(sourceKey: SourceKey): SourceAdapter? = adapters[sourceKey]
+
+    override fun unifiedOrchestrator(): UnifiedSearchOrchestrator = orchestrator
+}
+
+private class RecordingAdapter(
+    override val sourceKey: SourceKey,
+    private val autocompleteByPrefix: Map<String, List<String>> = emptyMap(),
+    private val autocompleteTagsByPrefix: Map<String, List<TagSuggestion>> = emptyMap(),
+) : SourceAdapter {
+    var lastSearchQuery: Query? = null
+
+    override val capabilities: SourceCapabilities = SourceCapabilities(
+        supportsSortNewest = true,
+        supportsSortPopular = true,
+        supportsSortTop = true,
+        supportsSortRandom = true,
+        supportsExcludeTagsServerSide = true,
+        supportsDateRangeServerSide = true,
+        supportsMinScoreServerSide = true,
+        requiresCredentials = false,
+    )
+
+    override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+        lastSearchQuery = query
+        return Page(items = emptyList(), nextPageToken = null)
+    }
+
+    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
+
+    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
+        val normalized = prefix.trim().lowercase()
+        val richMatches = autocompleteTagsByPrefix[normalized]
+            ?: autocompleteTagsByPrefix.entries.firstOrNull { (key, _) ->
+                normalized.startsWith(key.lowercase()) || key.lowercase().startsWith(normalized)
+            }?.value
+        if (richMatches != null) {
+            return richMatches.take(limit)
+        }
+
+        val matches = autocompleteByPrefix[normalized]
+            ?: autocompleteByPrefix.entries.firstOrNull { (key, _) ->
+                normalized.startsWith(key.lowercase()) || key.lowercase().startsWith(normalized)
+            }?.value
+            ?: emptyList()
+        return matches
+            .take(limit)
+            .map { tag -> TagSuggestion(text = tag, type = "tag", count = null) }
+    }
+
+    override suspend fun quickQuery(kind: QuickQueryKind): Query {
+        return Query(
+            mode = QueryMode.Source(sourceKey),
+            includeTags = emptyList(),
+            excludeTags = emptyList(),
+            sort = SortMode.NEWEST,
+            dateRange = null,
+            minScore = null,
+        )
+    }
+
+    override suspend fun resolvePost(id: PostId): Post? = null
 }

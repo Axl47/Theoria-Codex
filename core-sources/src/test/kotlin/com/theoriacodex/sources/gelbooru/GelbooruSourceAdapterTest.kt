@@ -58,6 +58,27 @@ class GelbooruSourceAdapterTest {
         assertTrue(failure.message?.contains("credentials", ignoreCase = true) == true)
     }
 
+    @Test
+    fun `search maps canonical index php post url`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """{"post":[{"id":"12345678","preview_url":"https://gelbooru.com/p.jpg","file_url":"https://gelbooru.com/f.jpg","tags":"a b"}]}""",
+            )
+        }
+        val adapter = GelbooruSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = FakeCredentialsProvider(),
+        )
+
+        val page = adapter.search(sampleQuery(), pageToken = null)
+
+        assertEquals(
+            "https://gelbooru.com/index.php?page=post&s=view&id=12345678",
+            page.items.firstOrNull()?.pageUrl,
+        )
+    }
+
     private fun sampleQuery(): Query {
         return Query(
             mode = QueryMode.Source(SourceKey.GELBOORU),

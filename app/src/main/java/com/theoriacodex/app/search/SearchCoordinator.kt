@@ -16,6 +16,7 @@ import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.QuickQueryKind
+import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.DateRange
@@ -41,6 +42,7 @@ class SearchCoordinator(
     private var hasExecutedSearch = false
     private val appliedByMode = mutableMapOf<String, Query>()
     private var unifiedNextPageTokens: Map<SourceKey, String?> = emptyMap()
+    private var unifiedQueryOverrides: Map<SourceKey, Query> = emptyMap()
     private var sourceNextPageToken: String? = null
 
     var draftQuery by mutableStateOf(defaultQuery())
@@ -56,6 +58,12 @@ class SearchCoordinator(
         private set
 
     var trendingTags by mutableStateOf<List<TagSuggestion>>(emptyList())
+        private set
+
+    var autocompleteSuggestions by mutableStateOf<List<TagSuggestion>>(emptyList())
+        private set
+
+    var tagInputValidationMessage by mutableStateOf<String?>(null)
         private set
 
     var loading by mutableStateOf(false)
@@ -130,6 +138,35 @@ class SearchCoordinator(
         addIncludeTag(trimmed)
     }
 
+    fun canCommitTagInput(input: String): Boolean {
+        val trimmed = input.trim()
+        if (trimmed.isBlank()) return false
+        if (!requiresGelbooruSuggestionSelection()) return true
+        val normalizedTag = normalizeTypedTag(trimmed)
+        if (normalizedTag.isBlank()) return false
+        return isSuggestedTag(normalizedTag)
+    }
+
+    fun commitTagInput(input: String): Boolean {
+        if (!canCommitTagInput(input)) {
+            if (requiresGelbooruSuggestionSelection()) {
+                tagInputValidationMessage = GELBOORU_SUGGESTION_REQUIRED_MESSAGE
+            }
+            return false
+        }
+        addTagInput(input)
+        tagInputValidationMessage = null
+        return true
+    }
+
+    fun clearTagInputValidationMessage() {
+        tagInputValidationMessage = null
+    }
+
+    fun clearAutocompleteSuggestions() {
+        autocompleteSuggestions = emptyList()
+    }
+
     fun addIncludeTag(tag: String) {
         val normalized = tag.trim()
         if (normalized.isBlank()) return
@@ -159,6 +196,7 @@ class SearchCoordinator(
         }
         val restored = appliedByMode[modeKey(resolvedMode)] ?: defaultQuery(resolvedMode)
         draftQuery = restored.copy(mode = resolvedMode)
+        clearTagInputUiState()
     }
 
     fun setSort(sort: SortMode) {
@@ -167,11 +205,13 @@ class SearchCoordinator(
 
     fun resetDraft() {
         draftQuery = appliedQuery
+        clearTagInputUiState()
     }
 
     fun clearDraft() {
         val mode = draftQuery.mode.takeIf(::isModeAvailable) ?: QueryMode.Unified
         draftQuery = defaultQuery(mode)
+        clearTagInputUiState()
     }
 
     fun applyQuickQuery(kind: QuickQueryKind) {
@@ -195,6 +235,7 @@ class SearchCoordinator(
             sort = sort,
             dateRange = dateRange,
         )
+        clearTagInputUiState()
     }
 
     fun addTrendingTag(tag: String) {
@@ -222,6 +263,7 @@ class SearchCoordinator(
         clearSearchResultsForRetry()
         statuses = emptyList()
         errorMessage = null
+        clearTagInputUiState()
         return true
     }
 
@@ -251,6 +293,51 @@ class SearchCoordinator(
             dateRange = null,
             minScore = null,
         )
+    }
+
+    suspend fun refreshAutocompleteSuggestions(input: String) {
+        val prefix = normalizeTypedTag(input)
+        if (prefix.isBlank()) {
+            autocompleteSuggestions = emptyList()
+            return
+        }
+
+        autocompleteSuggestions = when (val mode = draftQuery.mode) {
+            QueryMode.Unified -> {
+                val enabledSources = effectiveEnabledSources()
+                val fetched = enabledSources
+                    .flatMap { source ->
+                        val suggestions = runCatching {
+                            registry.adapterFor(source)?.autocompleteTags(prefix = prefix, limit = 10).orEmpty()
+                        }.getOrDefault(emptyList())
+                        if (suggestions.isNotEmpty()) {
+                            tagSuggestionStore.put(source, suggestions)
+                        }
+                        suggestions
+                    }
+                if (fetched.isNotEmpty()) {
+                    rankSuggestionsByPrefix(fetched, prefix = prefix, limit = 20)
+                } else {
+                    val cached = enabledSources
+                        .flatMap { source -> tagSuggestionStore.get(source, limit = 120) }
+                    rankSuggestionsByPrefix(cached, prefix = prefix, limit = 20)
+                }
+            }
+
+            is QueryMode.Source -> {
+                val fetched = runCatching {
+                    registry.adapterFor(mode.source)?.autocompleteTags(prefix = prefix, limit = 20).orEmpty()
+                }.getOrDefault(emptyList())
+                if (fetched.isNotEmpty()) {
+                    tagSuggestionStore.put(mode.source, fetched)
+                    rankSuggestionsByPrefix(fetched, prefix = prefix, limit = 20)
+                } else {
+                    val cached = tagSuggestionStore.get(mode.source, limit = 120)
+                    val fallback = if (cached.isNotEmpty()) cached else trendingTags
+                    rankSuggestionsByPrefix(fallback, prefix = prefix, limit = 20)
+                }
+            }
+        }
     }
 
     suspend fun loadTrendingTags() {
@@ -346,6 +433,7 @@ class SearchCoordinator(
                         enabledSources = pageableSources,
                         pageTokens = unifiedNextPageTokens.filterKeys { it in pageableSources },
                         weights = effectiveWeights(pageableSources),
+                        queryOverridesBySource = unifiedQueryOverrides.filterKeys { it in pageableSources },
                     )
                     results = mergeResults(results, result.items)
                     statuses = (result.statuses + disabledStatuses)
@@ -431,6 +519,7 @@ class SearchCoordinator(
         loadingMore = false
         canLoadMore = false
         unifiedNextPageTokens = emptyMap()
+        unifiedQueryOverrides = emptyMap()
         sourceNextPageToken = null
         errorMessage = null
         statuses = emptyList()
@@ -454,11 +543,16 @@ class SearchCoordinator(
                         return
                     }
 
+                    unifiedQueryOverrides = buildUnifiedQueryOverrides(
+                        query = appliedQuery,
+                        enabledSources = enabledSources,
+                    )
                     val result = registry.unifiedOrchestrator().search(
                         query = appliedQuery,
                         enabledSources = enabledSources,
                         pageTokens = emptyMap(),
                         weights = effectiveWeights(enabledSources),
+                        queryOverridesBySource = unifiedQueryOverrides,
                     )
                     results = result.items
                     statuses = (result.statuses + disabledStatuses)
@@ -540,7 +634,53 @@ class SearchCoordinator(
         results = emptyList()
         canLoadMore = false
         unifiedNextPageTokens = emptyMap()
+        unifiedQueryOverrides = emptyMap()
         sourceNextPageToken = null
+    }
+
+    private suspend fun buildUnifiedQueryOverrides(
+        query: Query,
+        enabledSources: Set<SourceKey>,
+    ): Map<SourceKey, Query> {
+        if (query.mode != QueryMode.Unified) return emptyMap()
+        if (SourceKey.GELBOORU !in enabledSources) return emptyMap()
+
+        val gelbooruAdapter = registry.adapterFor(SourceKey.GELBOORU) ?: return emptyMap()
+        val includeTags = resolveGelbooruCompatibilityTags(gelbooruAdapter, query.includeTags)
+        val excludeTags = resolveGelbooruCompatibilityTags(gelbooruAdapter, query.excludeTags)
+        val sourceQuery = query.copy(
+            includeTags = includeTags,
+            excludeTags = excludeTags,
+        )
+        return mapOf(SourceKey.GELBOORU to sourceQuery)
+    }
+
+    private suspend fun resolveGelbooruCompatibilityTags(
+        adapter: SourceAdapter,
+        tags: List<String>,
+    ): List<String> {
+        if (tags.isEmpty()) return emptyList()
+
+        val cache = mutableMapOf<String, String>()
+        val resolved = mutableListOf<String>()
+        tags.forEach { raw ->
+            val normalized = raw.trim()
+            if (normalized.isBlank()) return@forEach
+            val key = normalized.lowercase()
+            val mapped = cache.getOrPut(key) {
+                val suggestions = runCatching {
+                    adapter.autocompleteTags(prefix = normalized, limit = 1)
+                }.getOrDefault(emptyList())
+                if (suggestions.isNotEmpty()) {
+                    tagSuggestionStore.put(SourceKey.GELBOORU, suggestions)
+                }
+                suggestions.firstOrNull()?.text?.trim().takeUnless { it.isNullOrBlank() } ?: normalized
+            }
+            if (mapped !in resolved) {
+                resolved += mapped
+            }
+        }
+        return resolved
     }
 
     private fun isPixivUnknownError(error: Throwable): Boolean {
@@ -592,6 +732,49 @@ class SearchCoordinator(
         return runtimeSettings.runtime.enabledSources.intersect(registry.availableSources())
     }
 
+    private fun requiresGelbooruSuggestionSelection(): Boolean {
+        return draftQuery.mode == QueryMode.Source(SourceKey.GELBOORU)
+    }
+
+    private fun normalizeTypedTag(input: String): String {
+        return input.trim().removePrefix("-").trim()
+    }
+
+    private fun isSuggestedTag(tag: String): Boolean {
+        return autocompleteSuggestions.any { suggestion ->
+            suggestion.text.equals(tag, ignoreCase = true)
+        }
+    }
+
+    private fun clearTagInputUiState() {
+        autocompleteSuggestions = emptyList()
+        tagInputValidationMessage = null
+    }
+
+    private fun rankSuggestionsByPrefix(
+        suggestions: List<TagSuggestion>,
+        prefix: String,
+        limit: Int,
+    ): List<TagSuggestion> {
+        val normalizedPrefix = prefix.trim()
+        if (normalizedPrefix.isBlank() || limit <= 0) return emptyList()
+        return suggestions
+            .asSequence()
+            .filter { suggestion ->
+                suggestion.text.contains(normalizedPrefix, ignoreCase = true)
+            }
+            .distinctBy { suggestion -> suggestion.text.trim().lowercase() }
+            .sortedWith(
+                compareByDescending<TagSuggestion> { suggestion ->
+                    suggestion.count ?: Int.MIN_VALUE
+                }.thenBy { suggestion ->
+                    !suggestion.text.startsWith(normalizedPrefix, ignoreCase = true)
+                }.thenBy { suggestion -> suggestion.text.lowercase() }
+            )
+            .take(limit)
+            .toList()
+    }
+
     private fun effectiveWeights(enabledSources: Set<SourceKey>): Map<SourceKey, Double> {
         if (enabledSources.isEmpty()) return emptyMap()
         val raw = enabledSources.associateWith { source ->
@@ -622,3 +805,5 @@ enum class DateRangePreset {
 
 private const val PIXIV_UNKNOWN_RETRY_MESSAGE =
     "Pixiv returned a temporary unknown error. Search was reset. Please retry."
+private const val GELBOORU_SUGGESTION_REQUIRED_MESSAGE =
+    "For Gelbooru, pick a suggested tag from autocomplete."

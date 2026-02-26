@@ -91,6 +91,7 @@ import com.theoriacodex.app.search.SearchScreen
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
 import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.sourceauth.AndroidSecureSourceCredentialsStore
+import com.theoriacodex.app.sourceauth.parseGelbooruCredentialInput
 import com.theoriacodex.app.sourceauth.PixivPkceController
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
 import com.theoriacodex.app.update.AndroidApkInstaller
@@ -212,7 +213,7 @@ fun TheoriaApp(
         RealAdapterRegistry(
             credentialsProvider = credentialsStore,
             httpClient = sourceHttpClient,
-            exposedSources = setOf(SourceKey.PIXIV),
+            exposedSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
         )
     }
     val updateStateStore = remember(storageDirectory) {
@@ -1075,7 +1076,15 @@ fun TheoriaApp(
                             gelbooruApiKey = gelbooruApiKeyInput,
                             gelbooruStatusLabel = gelbooruStatusLabel,
                             onGelbooruUserIdChange = { gelbooruUserIdInput = it.trim() },
-                            onGelbooruApiKeyChange = { gelbooruApiKeyInput = it.trim() },
+                            onGelbooruApiKeyChange = { input ->
+                                val parsed = parseGelbooruCredentialInput(input)
+                                if (parsed != null) {
+                                    gelbooruApiKeyInput = parsed.apiKey
+                                    gelbooruUserIdInput = parsed.userId
+                                } else {
+                                    gelbooruApiKeyInput = input.trim()
+                                }
+                            },
                             onSaveGelbooruCredentials = {
                                 scope.launch {
                                     if (gelbooruUserIdInput.isBlank() || gelbooruApiKeyInput.isBlank()) {

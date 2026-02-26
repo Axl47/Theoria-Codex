@@ -157,6 +157,9 @@ fun SettingsScreen(
                     value = gelbooruApiKey,
                     onValueChange = onGelbooruApiKeyChange,
                     label = { Text("API Key") },
+                    supportingText = {
+                        Text("Paste key or &api_key=<key>&user_id=<id> to auto-fill.")
+                    },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                 )
