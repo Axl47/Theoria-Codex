@@ -49,6 +49,7 @@ Previously completed MVP slices remain in place:
 - Viewer shows a thin playback progress bar under Pixiv ugoira media so loop position is visible while watching animations
 - Viewer animated media now uses an interactive timeline scrubber (drag-to-seek + current time/duration) shared across Pixiv ugoira, GIF, and video playback
 - Viewer Info tag cells now show the source tag video count (when available) as subtle low-opacity metadata under each tag label
+- Viewer Info header now includes a quick `Go to Search` icon action (placed before `Open in browser`) for faster query handoff
 - Codex detail now reuses the same Search result card renderer (thumbnails, animated previews, title/tags, overlays) for consistent browsing UI
 - Search cards now support long-press actions for `Save to Codex`, `Save to device`, and `Copy tags`; Codex cards support long-press actions for `Remove from Codex`, `Save to device`, and `Copy tags`
 - App branding now uses custom launcher icon resources and a shared splash mark shown during startup loading and Search pre-query empty state

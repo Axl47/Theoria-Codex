@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -505,6 +506,16 @@ fun ViewerScreen(
                             Icon(
                                 imageVector = Icons.Default.BookmarkAdd,
                                 contentDescription = "Save to Codex",
+                            )
+                        }
+                        IconButton(onClick = {
+                            mediaPlaybackEnabled = false
+                            onGoToSearch()
+                            showInfoSheet = false
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Go to Search",
                             )
                         }
                         if (!post.pageUrl.isNullOrBlank()) {
