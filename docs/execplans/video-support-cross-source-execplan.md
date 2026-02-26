@@ -21,6 +21,7 @@ After this change, Gelbooru posts that are videos (for example `.mp4` and `.webm
 - [x] (2026-02-26 00:46Z) Apply follow-up playback hardening: booru `Referer`/`User-Agent` headers for Viewer media requests and download requests.
 - [x] (2026-02-26 00:50Z) Add in-card video autoplay previews for Search/Codex cards (muted loop with image fallback), then revalidate app tests/build.
 - [x] (2026-02-26 01:02Z) Add shared interactive timeline scrubber and enable drag-to-seek for Viewer ugoira/GIF/video playback.
+- [x] (2026-02-26 01:07Z) Reduce Viewer video exit lag by force-stopping playback before dismiss and add upcoming-video prefetch warmup.
 - [ ] Perform manual device QA checklist (developer-run).
 
 ## Surprises & Discoveries
@@ -42,6 +43,9 @@ After this change, Gelbooru posts that are videos (for example `.mp4` and `.webm
 
 - Observation: Supporting GIF scrub/seek requires a controllable playback source; passive image decoders don’t expose seek state.
   Evidence: Follow-up requirement to drag playerhead for GIF/Ugoira/video led to a dedicated Viewer GIF playback path plus shared timeline component.
+
+- Observation: Video-prefetching through image loader is ineffective; video needs a transport-level warmup path.
+  Evidence: Existing prefetch path used Coil image enqueue and intentionally skipped video refs; follow-up uses a small byte-range request for upcoming videos.
 
 ## Decision Log
 
@@ -68,6 +72,7 @@ Validation outcome:
 - Follow-up hardening validation: `./gradlew :app:testDebugUnitTest assembleDebug` passed.
 - Search-preview follow-up validation: `./gradlew :app:testDebugUnitTest assembleDebug` passed.
 - Timeline-scrub follow-up validation: `./gradlew :app:testDebugUnitTest assembleDebug` passed.
+- Dismiss/prefetch follow-up validation: `./gradlew :app:testDebugUnitTest assembleDebug` passed.
 
 Remaining work is manual on-device verification (playback UX across several posts/sources).
 
@@ -153,6 +158,8 @@ Key validation transcript excerpts:
   - `BUILD SUCCESSFUL in 4s`
 - `./gradlew :app:testDebugUnitTest assembleDebug`
   - `BUILD SUCCESSFUL in 4s`
+- `./gradlew :app:testDebugUnitTest assembleDebug`
+  - `BUILD SUCCESSFUL in 4s`
 
 ## Interfaces and Dependencies
 
@@ -173,3 +180,4 @@ Revision Note (2026-02-26): Updated progress, discoveries, and outcomes after im
 Revision Note (2026-02-26): Added follow-up viewer/download header hardening after user-reported playback failure.
 Revision Note (2026-02-26): Added Search/Codex card autoplay video previews after user feedback.
 Revision Note (2026-02-26): Added interactive timeline scrubber for ugoira/GIF/video playback after user feedback.
+Revision Note (2026-02-26): Added fast-dismiss video stop + upcoming video prefetch warmup after user feedback.

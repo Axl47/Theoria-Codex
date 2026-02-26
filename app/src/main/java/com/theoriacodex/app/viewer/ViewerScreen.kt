@@ -138,10 +138,32 @@ fun ViewerScreen(
     var interactionSerial by remember { mutableIntStateOf(0) }
     var lastViewerPaginationRequestSize by remember(posts.size) { mutableIntStateOf(-1) }
     val loadedMediaUrls = remember { mutableStateMapOf<String, Boolean>() }
+    val prefetchedVideoUrls = remember { mutableStateMapOf<String, Boolean>() }
+    var pendingDismiss by remember { mutableStateOf(false) }
+    var mediaPlaybackEnabled by remember { mutableStateOf(true) }
     val currentPostIndex = postPagerState.currentPage.coerceIn(0, posts.lastIndex)
     val selectedPost = posts[currentPostIndex]
     val selectedPostMedia = remember(selectedPost) { viewerMediaItems(selectedPost) }
     val selectedMediaIndex = (mediaIndexByPost[currentPostIndex] ?: 0).coerceIn(0, selectedPostMedia.lastIndex)
+
+    LaunchedEffect(posts, launchContext.queryHash, launchContext.startIndex) {
+        pendingDismiss = false
+        mediaPlaybackEnabled = true
+    }
+
+    LaunchedEffect(pendingDismiss) {
+        if (!pendingDismiss) return@LaunchedEffect
+        delay(VIEWER_DISMISS_DELAY_MS)
+        onDismiss()
+    }
+
+    fun requestDismissViewer() {
+        if (pendingDismiss) return
+        mediaPlaybackEnabled = false
+        showInfoSheet = false
+        showMediaActionsSheet = false
+        pendingDismiss = true
+    }
 
     LaunchedEffect(posts, currentPostIndex, selectedMediaIndex) {
         val forwardQueue = buildPrefetchQueue(
@@ -170,12 +192,24 @@ fun ViewerScreen(
                 ?: candidate.post.preview.localPath
                 ?: candidate.post.preview.url
                 ?: return@forEach
-            val request = buildViewerImageRequest(
-                context = context,
-                url = data,
-                sourceKey = candidate.post.id.source,
-            )
-            imageLoader.enqueue(request)
+            if (isVideoMediaRef(candidate.media)) {
+                val videoUrl = candidate.media.url ?: candidate.media.localPath ?: return@forEach
+                if (prefetchedVideoUrls[videoUrl] == true) return@forEach
+                val didPrefetch = prefetchVideoMedia(
+                    location = videoUrl,
+                    headers = viewerRequestHeaders(candidate.post.id.source),
+                )
+                if (didPrefetch) {
+                    prefetchedVideoUrls[videoUrl] = true
+                }
+            } else {
+                val request = buildViewerImageRequest(
+                    context = context,
+                    url = data,
+                    sourceKey = candidate.post.id.source,
+                )
+                imageLoader.enqueue(request)
+            }
         }
     }
 
@@ -333,6 +367,7 @@ fun ViewerScreen(
                                 sourceKey = post.id.source,
                                 modifier = Modifier.fillMaxSize(),
                                 showTimeline = true,
+                                isActive = mediaPlaybackEnabled,
                             )
                         } else if (isGifMedia && !gifLocation.isNullOrBlank()) {
                             ViewerGifPlayer(
@@ -422,7 +457,7 @@ fun ViewerScreen(
                 modifier = Modifier.align(Alignment.TopCenter),
                 source = selectedPost.id.source.name,
                 indexLabel = "${selectedMediaIndex + 1} / ${selectedPostMedia.size}",
-                onBack = onDismiss,
+                onBack = ::requestDismissViewer,
             )
             ViewerActionsBar(
                 modifier = Modifier.align(Alignment.BottomCenter),
@@ -527,6 +562,7 @@ fun ViewerScreen(
                 TextButton(
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                     onClick = {
+                        mediaPlaybackEnabled = false
                         onGoToSearch()
                         showInfoSheet = false
                     },
@@ -735,6 +771,7 @@ private fun ViewerVideoPlayer(
     sourceKey: SourceKey,
     modifier: Modifier = Modifier,
     showTimeline: Boolean = false,
+    isActive: Boolean = true,
 ) {
     val context = LocalContext.current
     val location = media.localPath ?: media.url
@@ -759,6 +796,16 @@ private fun ViewerVideoPlayer(
         onDispose {
             videoViewRef?.stopPlayback()
             videoViewRef = null
+        }
+    }
+
+    LaunchedEffect(isActive, videoViewRef) {
+        val videoView = videoViewRef ?: return@LaunchedEffect
+        if (!isActive) {
+            runCatching { videoView.pause() }
+            runCatching { videoView.stopPlayback() }
+        } else if (!loading && !loadFailed) {
+            runCatching { videoView.start() }
         }
     }
 
@@ -822,7 +869,9 @@ private fun ViewerVideoPlayer(
                         videoView.setVideoURI(uri, headers)
                     }
                     videoView.requestFocus()
-                    videoView.start()
+                    if (isActive) {
+                        videoView.start()
+                    }
                 }
             },
         )
@@ -836,7 +885,7 @@ private fun ViewerVideoPlayer(
                 color = MaterialTheme.colorScheme.onBackground,
             )
         }
-        if (showTimeline && !loading && !loadFailed && durationMs > 0L) {
+        if (isActive && showTimeline && !loading && !loadFailed && durationMs > 0L) {
             MediaTimelineBar(
                 positionMs = positionMs,
                 durationMs = durationMs,
@@ -1002,6 +1051,44 @@ private suspend fun loadGifMovie(
     Movie.decodeByteArray(bytes, 0, bytes.size)
 }
 
+private suspend fun prefetchVideoMedia(
+    location: String,
+    headers: Map<String, String>,
+): Boolean = withContext(Dispatchers.IO) {
+    when {
+        location.startsWith("http://", ignoreCase = true) || location.startsWith("https://", ignoreCase = true) -> {
+            val connection = URL(location).openConnection() as? HttpURLConnection ?: return@withContext false
+            try {
+                connection.instanceFollowRedirects = true
+                connection.connectTimeout = 8_000
+                connection.readTimeout = 8_000
+                connection.setRequestProperty("Range", "bytes=0-$VIDEO_PREFETCH_BYTE_COUNT")
+                headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
+                val statusCode = connection.responseCode
+                if (statusCode !in 200..299 && statusCode != 206) {
+                    false
+                } else {
+                    connection.inputStream.use { input ->
+                        val buffer = ByteArray(16_384)
+                        var remaining = VIDEO_PREFETCH_BYTE_COUNT
+                        while (remaining > 0) {
+                            val read = input.read(buffer, 0, minOf(buffer.size, remaining))
+                            if (read <= 0) break
+                            remaining -= read
+                        }
+                    }
+                    true
+                }
+            } finally {
+                connection.disconnect()
+            }
+        }
+
+        location.startsWith("content://", ignoreCase = true) -> true
+        else -> File(location).exists()
+    }
+}
+
 private fun buildViewerImageRequest(
     context: Context,
     url: String,
@@ -1060,7 +1147,7 @@ private fun buildPrefetchQueue(
         if (direction > 0) {
             while (mediaIndex <= mediaItems.lastIndex && queue.size < limit) {
                 val media = mediaItems[mediaIndex]
-                if (!isPixivUgoira(post, media) && !isVideoMediaRef(media)) {
+                if (!isPixivUgoira(post, media)) {
                     queue += PrefetchCandidate(post = post, media = media)
                 }
                 mediaIndex += 1
@@ -1070,7 +1157,7 @@ private fun buildPrefetchQueue(
         } else {
             while (mediaIndex >= 0 && queue.size < limit) {
                 val media = mediaItems[mediaIndex]
-                if (!isPixivUgoira(post, media) && !isVideoMediaRef(media)) {
+                if (!isPixivUgoira(post, media)) {
                     queue += PrefetchCandidate(post = post, media = media)
                 }
                 mediaIndex -= 1
@@ -1224,6 +1311,8 @@ private const val VIEWER_PREFETCH_LEFT_COUNT = 3
 private const val VIEWER_PREFETCH_RIGHT_COUNT = 3
 private const val VIEWER_PAGINATION_PREFETCH_RATIO = 0.8f
 private const val GIF_FALLBACK_DURATION_MS = 1000L
+private const val VIDEO_PREFETCH_BYTE_COUNT = 384 * 1024
+private const val VIEWER_DISMISS_DELAY_MS = 24L
 
 @Composable
 private fun ViewerChrome(

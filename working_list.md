@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-26T00:36
-updated_at: 2026-02-26T01:02
+updated_at: 2026-02-26T01:07
 ---
 # Working List
 
@@ -24,3 +24,4 @@ updated_at: 2026-02-26T01:02
 - [x] Patch viewer/download request headers for Gelbooru/AIBooru hotlink compatibility and revalidate (`./gradlew :app:testDebugUnitTest assembleDebug`)
 - [x] Add autoplay muted video previews in Search/Codex cards with image fallback and source headers; revalidate (`./gradlew :app:testDebugUnitTest assembleDebug`)
 - [x] Add shared interactive media scrubber and wire draggable seek controls for Viewer ugoira/GIF/video playback (`./gradlew :app:testDebugUnitTest assembleDebug`)
+- [x] Improve Viewer video UX: immediate stop on dismiss and prefetch warmup for upcoming video media (`./gradlew :app:testDebugUnitTest assembleDebug`)
