@@ -381,14 +381,14 @@ fun ViewerScreen(
                                 client = requireNotNull(pixivUgoiraClient),
                                 contentDescription = post.title ?: post.id.sourcePostId,
                                 modifier = Modifier.fillMaxSize(),
-                                showProgressBar = true,
+                                showProgressBar = viewerState.chromeVisible,
                             )
                         } else if (isVideoMedia) {
                             ViewerVideoPlayer(
                                 media = media,
                                 sourceKey = post.id.source,
                                 modifier = Modifier.fillMaxSize(),
-                                showTimeline = true,
+                                showTimeline = viewerState.chromeVisible,
                                 isActive = mediaPlaybackEnabled,
                             )
                         } else if (isGifMedia && !gifLocation.isNullOrBlank()) {
@@ -396,6 +396,7 @@ fun ViewerScreen(
                                 sourceKey = post.id.source,
                                 location = gifLocation,
                                 modifier = Modifier.fillMaxSize(),
+                                showTimeline = viewerState.chromeVisible,
                             )
                         } else if (imageModel != null) {
                             AsyncImage(
@@ -952,34 +953,35 @@ private fun ViewerVideoPlayer(
             )
         }
         if (isActive && showTimeline && !loading && !loadFailed && durationMs > 0L) {
-            MediaTimelineBar(
-                positionMs = positionMs,
-                durationMs = durationMs,
-                onSeekStarted = {
-                    isScrubbing = true
-                },
-                onSeekChanged = { target ->
-                    positionMs = target
-                    seekVideoToTimelinePosition(
-                        videoView = videoViewRef,
-                        mediaPlayer = mediaPlayerRef,
-                        targetMs = target,
-                    )
-                },
-                onSeekFinished = { target ->
-                    seekVideoToTimelinePosition(
-                        videoView = videoViewRef,
-                        mediaPlayer = mediaPlayerRef,
-                        targetMs = target,
-                    )
-                    positionMs = target
-                    isScrubbing = false
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-            )
+            ViewerPlaybackFooter(
+                modifier = Modifier.align(Alignment.BottomCenter),
+            ) {
+                MediaTimelineBar(
+                    positionMs = positionMs,
+                    durationMs = durationMs,
+                    onSeekStarted = {
+                        isScrubbing = true
+                    },
+                    onSeekChanged = { target ->
+                        positionMs = target
+                        seekVideoToTimelinePosition(
+                            videoView = videoViewRef,
+                            mediaPlayer = mediaPlayerRef,
+                            targetMs = target,
+                        )
+                    },
+                    onSeekFinished = { target ->
+                        seekVideoToTimelinePosition(
+                            videoView = videoViewRef,
+                            mediaPlayer = mediaPlayerRef,
+                            targetMs = target,
+                        )
+                        positionMs = target
+                        isScrubbing = false
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }
@@ -989,6 +991,7 @@ private fun ViewerGifPlayer(
     sourceKey: SourceKey,
     location: String,
     modifier: Modifier = Modifier,
+    showTimeline: Boolean = true,
 ) {
     val context = LocalContext.current
     var movie by remember(location) { mutableStateOf<Movie?>(null) }
@@ -1065,24 +1068,47 @@ private fun ViewerGifPlayer(
             }
         }
 
-        MediaTimelineBar(
-            positionMs = positionMs.coerceIn(0L, durationMs),
-            durationMs = durationMs,
-            onSeekStarted = {
-                isScrubbing = true
-            },
-            onSeekChanged = { target ->
-                positionMs = target.coerceIn(0L, durationMs)
-            },
-            onSeekFinished = { target ->
-                positionMs = target.coerceIn(0L, durationMs)
-                isScrubbing = false
-            },
+        if (showTimeline) {
+            ViewerPlaybackFooter(
+                modifier = Modifier.align(Alignment.BottomCenter),
+            ) {
+                MediaTimelineBar(
+                    positionMs = positionMs.coerceIn(0L, durationMs),
+                    durationMs = durationMs,
+                    onSeekStarted = {
+                        isScrubbing = true
+                    },
+                    onSeekChanged = { target ->
+                        positionMs = target.coerceIn(0L, durationMs)
+                    },
+                    onSeekFinished = { target ->
+                        positionMs = target.coerceIn(0L, durationMs)
+                        isScrubbing = false
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ViewerPlaybackFooter(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+    ) {
+        Box(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-        )
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            content()
+        }
     }
 }
 
