@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,52 +44,47 @@ fun MediaTimelineBar(
         .coerceIn(0.0, 1.0)
         .toFloat()
 
-    Surface(
-        modifier = modifier,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.74f),
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = formatTimelineTime(displayPosition),
-                    style = MaterialTheme.typography.labelSmall,
-                )
-                Text(
-                    text = formatTimelineTime(safeDuration),
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
-            Slider(
-                value = normalizedValue,
-                onValueChange = { next ->
-                    if (!isScrubbing) {
-                        isScrubbing = true
-                        onSeekStarted()
-                    }
-                    val normalized = next.coerceIn(0f, 1f).toDouble()
-                    val target = (normalized * safeDuration.toDouble())
-                        .roundToLong()
-                        .coerceIn(0L, safeDuration)
-                    scrubPositionMs = target
-                    onSeekChanged(target)
-                },
-                onValueChangeFinished = {
-                    val target = scrubPositionMs.coerceIn(0L, safeDuration)
-                    onSeekFinished(target)
-                    isScrubbing = false
-                },
-                valueRange = 0f..1f,
-                modifier = Modifier.fillMaxWidth(),
+            Text(
+                text = formatTimelineTime(displayPosition),
+                style = MaterialTheme.typography.labelSmall,
+            )
+            Text(
+                text = formatTimelineTime(safeDuration),
+                style = MaterialTheme.typography.labelSmall,
             )
         }
+        Slider(
+            value = normalizedValue,
+            onValueChange = { next ->
+                if (!isScrubbing) {
+                    isScrubbing = true
+                    onSeekStarted()
+                }
+                val normalized = next.coerceIn(0f, 1f).toDouble()
+                val target = (normalized * safeDuration.toDouble())
+                    .roundToLong()
+                    .coerceIn(0L, safeDuration)
+                scrubPositionMs = target
+                onSeekChanged(target)
+            },
+            onValueChangeFinished = {
+                val target = scrubPositionMs.coerceIn(0L, safeDuration)
+                onSeekFinished(target)
+                isScrubbing = false
+            },
+            valueRange = 0f..1f,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

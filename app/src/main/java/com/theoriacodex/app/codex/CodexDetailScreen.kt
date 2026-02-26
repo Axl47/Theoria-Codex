@@ -137,6 +137,7 @@ fun CodexDetailScreen(
                     SearchResultCard(
                         post = post,
                         pixivUgoiraClient = pixivUgoiraClient,
+                        showSourceBadge = true,
                         onClick = { onOpenViewer(index) },
                         onLongPress = { selectedActionPost = post },
                     )
