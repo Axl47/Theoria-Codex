@@ -82,6 +82,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.core.content.pm.PackageInfoCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.codex.CodexDetailScreen
@@ -659,6 +661,28 @@ fun TheoriaApp(
         }
         onDispose {
             hostActivity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+    }
+
+    DisposableEffect(hostActivity, currentRoute, configuration.orientation) {
+        val window = hostActivity?.window
+        val insetsController = window?.let {
+            WindowInsetsControllerCompat(it, it.decorView)
+        }
+        val shouldUseLandscapeFullscreen =
+            currentRoute == AppRoute.Viewer &&
+                configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
+        if (shouldUseLandscapeFullscreen) {
+            insetsController?.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            insetsController?.hide(WindowInsetsCompat.Type.statusBars())
+        } else {
+            insetsController?.show(WindowInsetsCompat.Type.statusBars())
+        }
+
+        onDispose {
+            insetsController?.show(WindowInsetsCompat.Type.statusBars())
         }
     }
 
