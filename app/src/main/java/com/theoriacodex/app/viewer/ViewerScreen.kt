@@ -3,12 +3,14 @@ package com.theoriacodex.app.viewer
 import android.app.DownloadManager
 import android.content.res.Configuration
 import android.content.Context
+import android.graphics.Movie
 import android.net.Uri
 import android.os.Environment
 import android.webkit.URLUtil
 import android.widget.Toast
 import android.widget.VideoView
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -51,6 +53,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,7 +62,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -70,14 +75,20 @@ import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
+import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraMedia
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -249,6 +260,8 @@ fun ViewerScreen(
                     markInteraction()
                 }
                 val isVideoMedia = isVideoMediaRef(media)
+                val isGifMedia = isGifMediaRef(media)
+                val gifLocation = remember(post, media) { viewerGifLocation(post, media) }
                 val mediaGestureModifier = Modifier.pointerInput(postPage, mediaPage) {
                     detectTapGestures(
                         onDoubleTap = {
@@ -318,6 +331,13 @@ fun ViewerScreen(
                             ViewerVideoPlayer(
                                 media = media,
                                 sourceKey = post.id.source,
+                                modifier = Modifier.fillMaxSize(),
+                                showTimeline = true,
+                            )
+                        } else if (isGifMedia && !gifLocation.isNullOrBlank()) {
+                            ViewerGifPlayer(
+                                sourceKey = post.id.source,
+                                location = gifLocation,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         } else if (imageModel != null) {
@@ -714,6 +734,7 @@ private fun ViewerVideoPlayer(
     media: ImageRef,
     sourceKey: SourceKey,
     modifier: Modifier = Modifier,
+    showTimeline: Boolean = false,
 ) {
     val context = LocalContext.current
     val location = media.localPath ?: media.url
@@ -730,11 +751,35 @@ private fun ViewerVideoPlayer(
     var loading by remember(location) { mutableStateOf(true) }
     var loadFailed by remember(location) { mutableStateOf(false) }
     var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
+    var durationMs by remember(location) { mutableLongStateOf(0L) }
+    var positionMs by remember(location) { mutableLongStateOf(0L) }
+    var isScrubbing by remember(location) { mutableStateOf(false) }
 
     DisposableEffect(location) {
         onDispose {
             videoViewRef?.stopPlayback()
             videoViewRef = null
+        }
+    }
+
+    LaunchedEffect(location, videoViewRef, loadFailed, isScrubbing) {
+        if (loadFailed) return@LaunchedEffect
+        while (true) {
+            delay(120L)
+            val videoView = videoViewRef ?: continue
+            val duration = videoView.duration.takeIf { it > 0 }?.toLong()
+            if (duration != null) {
+                durationMs = duration
+            }
+            if (!isScrubbing) {
+                val nextPosition = videoView.currentPosition.takeIf { it >= 0 }?.toLong() ?: 0L
+                val maxPosition = durationMs.coerceAtLeast(0L)
+                positionMs = if (maxPosition > 0L) {
+                    nextPosition.coerceIn(0L, maxPosition)
+                } else {
+                    nextPosition.coerceAtLeast(0L)
+                }
+            }
         }
     }
 
@@ -748,6 +793,8 @@ private fun ViewerVideoPlayer(
                         loading = false
                         loadFailed = false
                         player.isLooping = true
+                        durationMs = player.duration.takeIf { it > 0 }?.toLong() ?: 0L
+                        positionMs = 0L
                         start()
                     }
                     setOnErrorListener { _, _, _ ->
@@ -763,6 +810,9 @@ private fun ViewerVideoPlayer(
                 if (currentTag != location) {
                     loading = true
                     loadFailed = false
+                    durationMs = 0L
+                    positionMs = 0L
+                    isScrubbing = false
                     videoView.tag = location
                     val headers = viewerRequestHeaders(sourceKey)
                     val uri = Uri.parse(location)
@@ -786,7 +836,170 @@ private fun ViewerVideoPlayer(
                 color = MaterialTheme.colorScheme.onBackground,
             )
         }
+        if (showTimeline && !loading && !loadFailed && durationMs > 0L) {
+            MediaTimelineBar(
+                positionMs = positionMs,
+                durationMs = durationMs,
+                onSeekStarted = {
+                    isScrubbing = true
+                },
+                onSeekChanged = { target ->
+                    positionMs = target
+                    videoViewRef?.seekTo(target.toInt())
+                },
+                onSeekFinished = { target ->
+                    videoViewRef?.seekTo(target.toInt())
+                    positionMs = target
+                    isScrubbing = false
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        }
     }
+}
+
+@Composable
+private fun ViewerGifPlayer(
+    sourceKey: SourceKey,
+    location: String,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    var movie by remember(location) { mutableStateOf<Movie?>(null) }
+    var loading by remember(location) { mutableStateOf(true) }
+    var loadFailed by remember(location) { mutableStateOf(false) }
+    var positionMs by remember(location) { mutableLongStateOf(0L) }
+    var isScrubbing by remember(location) { mutableStateOf(false) }
+
+    LaunchedEffect(location, sourceKey) {
+        loading = true
+        loadFailed = false
+        positionMs = 0L
+        movie = loadGifMovie(
+            context = context,
+            location = location,
+            headers = viewerRequestHeaders(sourceKey),
+        )
+        loading = false
+        if (movie == null) {
+            loadFailed = true
+        }
+    }
+
+    val activeMovie = movie
+    if (activeMovie == null) {
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            if (loading) {
+                CircularProgressIndicator()
+            } else {
+                Text(
+                    text = "Could not play GIF",
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+            }
+        }
+        return
+    }
+
+    val durationMs = remember(activeMovie) {
+        activeMovie.duration().takeIf { it > 0 }?.toLong() ?: GIF_FALLBACK_DURATION_MS
+    }
+
+    LaunchedEffect(activeMovie, durationMs, isScrubbing) {
+        if (isScrubbing) return@LaunchedEffect
+        while (true) {
+            delay(16L)
+            positionMs = if (durationMs <= 0L) {
+                0L
+            } else {
+                val next = positionMs + 16L
+                if (next >= durationMs) 0L else next
+            }
+        }
+    }
+
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val movieWidth = activeMovie.width().toFloat().coerceAtLeast(1f)
+            val movieHeight = activeMovie.height().toFloat().coerceAtLeast(1f)
+            val scale = minOf(size.width / movieWidth, size.height / movieHeight)
+            val drawWidth = movieWidth * scale
+            val drawHeight = movieHeight * scale
+            val offsetX = (size.width - drawWidth) / 2f
+            val offsetY = (size.height - drawHeight) / 2f
+
+            drawIntoCanvas { canvas ->
+                val nativeCanvas = canvas.nativeCanvas
+                nativeCanvas.save()
+                nativeCanvas.translate(offsetX, offsetY)
+                nativeCanvas.scale(scale, scale)
+                activeMovie.setTime(positionMs.toInt())
+                activeMovie.draw(nativeCanvas, 0f, 0f)
+                nativeCanvas.restore()
+            }
+        }
+
+        MediaTimelineBar(
+            positionMs = positionMs.coerceIn(0L, durationMs),
+            durationMs = durationMs,
+            onSeekStarted = {
+                isScrubbing = true
+            },
+            onSeekChanged = { target ->
+                positionMs = target.coerceIn(0L, durationMs)
+            },
+            onSeekFinished = { target ->
+                positionMs = target.coerceIn(0L, durationMs)
+                isScrubbing = false
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        )
+    }
+}
+
+private suspend fun loadGifMovie(
+    context: Context,
+    location: String,
+    headers: Map<String, String>,
+): Movie? = withContext(Dispatchers.IO) {
+    val bytes = when {
+        location.startsWith("http://", ignoreCase = true) || location.startsWith("https://", ignoreCase = true) -> {
+            val connection = URL(location).openConnection() as? HttpURLConnection ?: return@withContext null
+            try {
+                connection.instanceFollowRedirects = true
+                connection.connectTimeout = 12_000
+                connection.readTimeout = 18_000
+                headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
+                val statusCode = connection.responseCode
+                if (statusCode !in 200..299) {
+                    null
+                } else {
+                    connection.inputStream.use { input -> input.readBytes() }
+                }
+            } finally {
+                connection.disconnect()
+            }
+        }
+
+        location.startsWith("content://", ignoreCase = true) -> {
+            context.contentResolver.openInputStream(Uri.parse(location))?.use { input ->
+                input.readBytes()
+            }
+        }
+
+        else -> {
+            val file = File(location)
+            if (file.exists()) file.readBytes() else null
+        }
+    } ?: return@withContext null
+
+    Movie.decodeByteArray(bytes, 0, bytes.size)
 }
 
 private fun buildViewerImageRequest(
@@ -906,6 +1119,17 @@ private fun viewerImageCandidates(post: Post, media: ImageRef): List<String> {
         .distinct()
 }
 
+private fun viewerGifLocation(post: Post, media: ImageRef): String? {
+    val refs = buildList {
+        add(media)
+        post.full?.let { add(it) }
+        add(post.preview)
+    }
+    return refs.firstOrNull(::isGifMediaRef)?.let { ref ->
+        ref.localPath ?: ref.url
+    }
+}
+
 private fun isLikelyImageLocation(mime: String?, location: String): Boolean {
     val normalizedMime = mime?.trim()?.lowercase()
     if (normalizedMime != null) {
@@ -999,6 +1223,7 @@ private fun String.sanitizeFileName(): String {
 private const val VIEWER_PREFETCH_LEFT_COUNT = 3
 private const val VIEWER_PREFETCH_RIGHT_COUNT = 3
 private const val VIEWER_PAGINATION_PREFETCH_RATIO = 0.8f
+private const val GIF_FALLBACK_DURATION_MS = 1000L
 
 @Composable
 private fun ViewerChrome(

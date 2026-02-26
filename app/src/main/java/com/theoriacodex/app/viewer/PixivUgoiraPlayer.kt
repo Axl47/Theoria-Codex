@@ -17,10 +17,7 @@ import android.provider.MediaStore
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.unit.dp
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.theoriacodex.sources.credentials.PixivAuthTokens
@@ -643,10 +639,12 @@ fun PixivUgoiraPlayer(
     var errorMessage by remember(postId) { mutableStateOf<String?>(null) }
     var frameIndex by remember(postId) { mutableIntStateOf(0) }
     var elapsedInLoopMs by remember(postId) { mutableLongStateOf(0L) }
+    var isScrubbing by remember(postId) { mutableStateOf(false) }
 
     LaunchedEffect(postId, client) {
         frameIndex = 0
         elapsedInLoopMs = 0L
+        isScrubbing = false
         errorMessage = null
         playback = client.cached(postId)
         if (playback != null) return@LaunchedEffect
@@ -680,7 +678,30 @@ fun PixivUgoiraPlayer(
     val totalDurationMs = remember(activePlayback) {
         activePlayback.frames.sumOf { it.delayMs.coerceAtLeast(16) }.coerceAtLeast(1)
     }
-    LaunchedEffect(activePlayback, frameIndex) {
+    val maxSeekablePositionMs = remember(totalDurationMs) {
+        (totalDurationMs - 1).coerceAtLeast(0).toLong()
+    }
+
+    fun seekToPosition(targetMs: Long) {
+        val clamped = targetMs.coerceIn(0L, maxSeekablePositionMs)
+        elapsedInLoopMs = clamped
+
+        var accumulated = 0L
+        var resolvedIndex = 0
+        for (index in activePlayback.frames.indices) {
+            val frameDuration = activePlayback.frames[index].delayMs.toLong().coerceAtLeast(16L)
+            val next = accumulated + frameDuration
+            if (clamped < next || index == activePlayback.frames.lastIndex) {
+                resolvedIndex = index
+                break
+            }
+            accumulated = next
+        }
+        frameIndex = resolvedIndex
+    }
+
+    LaunchedEffect(activePlayback, frameIndex, isScrubbing) {
+        if (isScrubbing) return@LaunchedEffect
         val delayMs = activePlayback.frames[frameIndex].delayMs.toLong().coerceAtLeast(16L)
         delay(delayMs)
         val nextIndex = (frameIndex + 1) % activePlayback.frames.size
@@ -703,7 +724,6 @@ fun PixivUgoiraPlayer(
         return
     }
 
-    val progress = (elapsedInLoopMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)
     Box(modifier = modifier) {
         Image(
             bitmap = frame.bitmap.asImageBitmap(),
@@ -712,13 +732,21 @@ fun PixivUgoiraPlayer(
                 .fillMaxSize(),
             contentScale = contentScale,
         )
-        LinearProgressIndicator(
-            progress = { progress },
+        MediaTimelineBar(
+            positionMs = elapsedInLoopMs,
+            durationMs = totalDurationMs.toLong(),
+            onSeekStarted = {
+                isScrubbing = true
+            },
+            onSeekChanged = { target ->
+                seekToPosition(target)
+            },
+            onSeekFinished = { target ->
+                seekToPosition(target)
+                isScrubbing = false
+            },
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(3.dp),
-            trackColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.18f),
+                .align(Alignment.BottomCenter),
         )
     }
 }

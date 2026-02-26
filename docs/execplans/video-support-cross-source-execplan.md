@@ -20,6 +20,7 @@ After this change, Gelbooru posts that are videos (for example `.mp4` and `.webm
 - [x] (2026-02-26 00:42Z) Update docs (`README.md` and `AGENTS.md`) with feature additions and file notes.
 - [x] (2026-02-26 00:46Z) Apply follow-up playback hardening: booru `Referer`/`User-Agent` headers for Viewer media requests and download requests.
 - [x] (2026-02-26 00:50Z) Add in-card video autoplay previews for Search/Codex cards (muted loop with image fallback), then revalidate app tests/build.
+- [x] (2026-02-26 01:02Z) Add shared interactive timeline scrubber and enable drag-to-seek for Viewer ugoira/GIF/video playback.
 - [ ] Perform manual device QA checklist (developer-run).
 
 ## Surprises & Discoveries
@@ -38,6 +39,9 @@ After this change, Gelbooru posts that are videos (for example `.mp4` and `.webm
 
 - Observation: Users expect video behavior parity between Viewer and Search cards; static thumbnails feel incomplete once Viewer supports video playback.
   Evidence: Direct user request after Viewer fix: “The preview in search should also play the videos.”
+
+- Observation: Supporting GIF scrub/seek requires a controllable playback source; passive image decoders don’t expose seek state.
+  Evidence: Follow-up requirement to drag playerhead for GIF/Ugoira/video led to a dedicated Viewer GIF playback path plus shared timeline component.
 
 ## Decision Log
 
@@ -63,6 +67,7 @@ Validation outcome:
 - `./gradlew assembleDebug` passed.
 - Follow-up hardening validation: `./gradlew :app:testDebugUnitTest assembleDebug` passed.
 - Search-preview follow-up validation: `./gradlew :app:testDebugUnitTest assembleDebug` passed.
+- Timeline-scrub follow-up validation: `./gradlew :app:testDebugUnitTest assembleDebug` passed.
 
 Remaining work is manual on-device verification (playback UX across several posts/sources).
 
@@ -146,6 +151,8 @@ Key validation transcript excerpts:
   - `BUILD SUCCESSFUL in 5s`
 - `./gradlew :app:testDebugUnitTest assembleDebug`
   - `BUILD SUCCESSFUL in 4s`
+- `./gradlew :app:testDebugUnitTest assembleDebug`
+  - `BUILD SUCCESSFUL in 4s`
 
 ## Interfaces and Dependencies
 
@@ -165,3 +172,4 @@ Revision Note (2026-02-26): Initial creation for Gelbooru-first cross-source vid
 Revision Note (2026-02-26): Updated progress, discoveries, and outcomes after implementation + validation pass.
 Revision Note (2026-02-26): Added follow-up viewer/download header hardening after user-reported playback failure.
 Revision Note (2026-02-26): Added Search/Codex card autoplay video previews after user feedback.
+Revision Note (2026-02-26): Added interactive timeline scrubber for ugoira/GIF/video playback after user feedback.

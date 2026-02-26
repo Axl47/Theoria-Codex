@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-02-26T00:50
+updated_at: 2026-02-26T01:02
 ---
 # Theoria Codex
 
@@ -46,6 +46,7 @@ Previously completed MVP slices remain in place:
 - Viewer now prefetches the next three upcoming media items while browsing to reduce perceived load time when swiping forward
 - Pixiv ugoira playback now uses an in-memory LRU cache so returning between Search and Viewer reuses decoded animations instead of reloading from network
 - Viewer shows a thin playback progress bar under Pixiv ugoira media so loop position is visible while watching animations
+- Viewer animated media now uses an interactive timeline scrubber (drag-to-seek + current time/duration) shared across Pixiv ugoira, GIF, and video playback
 - Codex detail now reuses the same Search result card renderer (thumbnails, animated previews, title/tags, overlays) for consistent browsing UI
 - Search cards now support long-press actions for `Save to Codex`, `Save to device`, and `Copy tags`; Codex cards support long-press actions for `Remove from Codex`, `Save to device`, and `Copy tags`
 - App branding now uses custom launcher icon resources and a shared splash mark shown during startup loading and Search pre-query empty state
