@@ -147,6 +147,7 @@ fun ViewerScreen(
     val mediaIndexByPost = remember { mutableStateMapOf<Int, Int>() }
     var showInfoSheet by remember { mutableStateOf(false) }
     var interactionSerial by remember { mutableIntStateOf(0) }
+    var timelineInteractionActive by remember { mutableStateOf(false) }
     var lastViewerPaginationRequestSize by remember(posts.size) { mutableIntStateOf(-1) }
     val loadedMediaUrls = remember { mutableStateMapOf<String, Boolean>() }
     val prefetchedVideoUrls = remember { mutableStateMapOf<String, Boolean>() }
@@ -157,6 +158,11 @@ fun ViewerScreen(
     val selectedPostMedia = remember(selectedPost) { viewerMediaItems(selectedPost) }
     val selectedMediaIndex = (mediaIndexByPost[currentPostIndex] ?: 0).coerceIn(0, selectedPostMedia.lastIndex)
     val selectedCurrentMedia = selectedPostMedia.getOrNull(selectedMediaIndex)
+    val currentIsSeekableMedia = selectedCurrentMedia?.let { media ->
+        isVideoMediaRef(media) ||
+            isGifMediaRef(media) ||
+            (isPixivUgoira(selectedPost, media) && pixivUgoiraClient != null)
+    } == true
     val canDownloadCurrentMedia = selectedCurrentMedia?.let { media ->
         (isPixivUgoira(selectedPost, media) && pixivUgoiraClient != null) || !media.url.isNullOrBlank()
     } == true
@@ -306,13 +312,19 @@ fun ViewerScreen(
         markInteraction()
     }
 
-    LaunchedEffect(viewerState.chromeVisible, interactionSerial) {
-        if (viewerState.chromeVisible) {
+    LaunchedEffect(viewerState.chromeVisible, interactionSerial, timelineInteractionActive) {
+        if (viewerState.chromeVisible && !timelineInteractionActive) {
             val serial = interactionSerial
             delay(1500)
-            if (serial == interactionSerial) {
+            if (serial == interactionSerial && !timelineInteractionActive) {
                 viewerState = viewerState.hideChrome()
             }
+        }
+    }
+
+    LaunchedEffect(viewerState.chromeVisible, currentIsSeekableMedia) {
+        if (!viewerState.chromeVisible || !currentIsSeekableMedia) {
+            timelineInteractionActive = false
         }
     }
 
@@ -323,7 +335,8 @@ fun ViewerScreen(
     ) {
         HorizontalPager(
             state = postPagerState,
-            userScrollEnabled = viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f,
+            userScrollEnabled =
+                viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f && !timelineInteractionActive,
             modifier = Modifier.fillMaxSize(),
         ) { postPage ->
             val post = posts[postPage]
@@ -344,7 +357,8 @@ fun ViewerScreen(
 
             VerticalPager(
                 state = mediaPagerState,
-                userScrollEnabled = viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f,
+                userScrollEnabled =
+                    viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f && !timelineInteractionActive,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = if (isLandscape) {
                     PaddingValues(0.dp)
@@ -455,6 +469,9 @@ fun ViewerScreen(
                                     showProgressBar = viewerState.chromeVisible,
                                     seekJumpSerial = seekJumpSerial,
                                     seekJumpDeltaMs = seekJumpDeltaMs,
+                                    onTimelineInteractionActiveChanged = { isActive ->
+                                        timelineInteractionActive = isActive
+                                    },
                                 )
                             }
                         } else if (isVideoMedia) {
@@ -467,6 +484,9 @@ fun ViewerScreen(
                                 isActive = mediaPlaybackEnabled,
                                 seekJumpSerial = seekJumpSerial,
                                 seekJumpDeltaMs = seekJumpDeltaMs,
+                                onTimelineInteractionActiveChanged = { isActive ->
+                                    timelineInteractionActive = isActive
+                                },
                             )
                         } else if (isGifMedia && !gifLocation.isNullOrBlank()) {
                             ViewerGifPlayer(
@@ -477,6 +497,9 @@ fun ViewerScreen(
                                 showTimeline = viewerState.chromeVisible,
                                 seekJumpSerial = seekJumpSerial,
                                 seekJumpDeltaMs = seekJumpDeltaMs,
+                                onTimelineInteractionActiveChanged = { isActive ->
+                                    timelineInteractionActive = isActive
+                                },
                             )
                         } else if (imageModel != null) {
                             AsyncImage(
@@ -870,6 +893,7 @@ private fun ViewerVideoPlayer(
     isActive: Boolean = true,
     seekJumpSerial: Int = 0,
     seekJumpDeltaMs: Long = 0L,
+    onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -1063,6 +1087,7 @@ private fun ViewerVideoPlayer(
                         positionMs = target
                         isScrubbing = false
                     },
+                    onInteractionActiveChanged = onTimelineInteractionActiveChanged,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -1079,6 +1104,7 @@ private fun ViewerGifPlayer(
     showTimeline: Boolean = true,
     seekJumpSerial: Int = 0,
     seekJumpDeltaMs: Long = 0L,
+    onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     var movie by remember(location) { mutableStateOf<Movie?>(null) }
@@ -1182,6 +1208,7 @@ private fun ViewerGifPlayer(
                         positionMs = target.coerceIn(0L, durationMs)
                         isScrubbing = false
                     },
+                    onInteractionActiveChanged = onTimelineInteractionActiveChanged,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

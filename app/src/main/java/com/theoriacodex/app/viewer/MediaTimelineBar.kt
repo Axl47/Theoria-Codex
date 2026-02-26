@@ -18,6 +18,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -44,6 +45,7 @@ fun MediaTimelineBar(
     onSeekStarted: () -> Unit = {},
     onSeekChanged: (Long) -> Unit,
     onSeekFinished: (Long) -> Unit,
+    onInteractionActiveChanged: (Boolean) -> Unit = {},
 ) {
     val safeDuration = durationMs.coerceAtLeast(1L)
     val clampedPosition = positionMs.coerceIn(0L, safeDuration)
@@ -54,6 +56,12 @@ fun MediaTimelineBar(
     LaunchedEffect(clampedPosition, safeDuration, isScrubbing) {
         if (!isScrubbing) {
             scrubPositionMs = clampedPosition
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            onInteractionActiveChanged(false)
         }
     }
 
@@ -97,20 +105,25 @@ fun MediaTimelineBar(
                 .pointerInput(safeDuration, sliderWidthPx) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        if (!isScrubbing) {
-                            isScrubbing = true
-                            onSeekStarted()
+                        onInteractionActiveChanged(true)
+                        try {
+                            if (!isScrubbing) {
+                                isScrubbing = true
+                                onSeekStarted()
+                            }
+                            updateScrubTarget(down.position.x)
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (!change.pressed) break
+                                updateScrubTarget(change.position.x)
+                            }
+                            val target = scrubPositionMs.coerceIn(0L, safeDuration)
+                            onSeekFinished(target)
+                        } finally {
+                            isScrubbing = false
+                            onInteractionActiveChanged(false)
                         }
-                        updateScrubTarget(down.position.x)
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (!change.pressed) break
-                            updateScrubTarget(change.position.x)
-                        }
-                        val target = scrubPositionMs.coerceIn(0L, safeDuration)
-                        onSeekFinished(target)
-                        isScrubbing = false
                     }
                 },
         ) {

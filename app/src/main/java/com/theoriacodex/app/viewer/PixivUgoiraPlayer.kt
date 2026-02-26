@@ -636,6 +636,7 @@ fun PixivUgoiraPlayer(
     showProgressBar: Boolean = false,
     seekJumpSerial: Int = 0,
     seekJumpDeltaMs: Long = 0L,
+    onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
 ) {
     var playback by remember(postId, client) { mutableStateOf(client.cached(postId)) }
     var errorMessage by remember(postId) { mutableStateOf<String?>(null) }
@@ -752,6 +753,7 @@ fun PixivUgoiraPlayer(
                 seekToPosition(target)
                 isScrubbing = false
             },
+            onInteractionActiveChanged = onTimelineInteractionActiveChanged,
             modifier = Modifier
                 .align(Alignment.BottomCenter),
         )

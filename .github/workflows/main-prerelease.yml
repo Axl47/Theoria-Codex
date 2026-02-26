@@ -30,17 +30,17 @@ jobs:
       - name: Compute release metadata
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
-          VERSION_NAME="0.2.0"
+          APP_BUILD_FILE="app/build.gradle.kts"
+          VERSION_NAME="$(sed -nE 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*\"([^\"]+)\".*/\1/p' "$APP_BUILD_FILE" | head -n 1)"
+          VERSION_CODE="$(sed -nE 's/^[[:space:]]*versionCode[[:space:]]*=[[:space:]]*([0-9]+).*/\1/p' "$APP_BUILD_FILE" | head -n 1)"
+          if [ -z "$VERSION_NAME" ] || [ -z "$VERSION_CODE" ]; then
+            echo "Could not resolve versionName/versionCode from $APP_BUILD_FILE"
+            exit 1
+          fi
           if ! [[ "$VERSION_NAME" =~ ^[0-9]{1,4}\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
             echo "VERSION_NAME must follow vX.Y.Z-compatible format (without leading v)"
             exit 1
           fi
-          IFS='.' read -r VERSION_MAJOR VERSION_MINOR VERSION_PATCH <<< "$VERSION_NAME"
-          VERSION_MAJOR=$((10#$VERSION_MAJOR))
-          VERSION_MINOR=$((10#$VERSION_MINOR))
-          VERSION_PATCH=$((10#$VERSION_PATCH))
-          VERSION_CODE_BASE=1500000000
-          VERSION_CODE=$((VERSION_CODE_BASE + VERSION_MAJOR * 10000 + VERSION_MINOR * 100 + VERSION_PATCH))
           RELEASE_TITLE="v${VERSION_NAME}"
           RELEASE_TAG="${RELEASE_TITLE}"
 
