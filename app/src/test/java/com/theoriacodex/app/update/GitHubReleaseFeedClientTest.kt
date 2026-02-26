@@ -261,4 +261,21 @@ class GitHubReleaseFeedClientTest {
         assertEquals("Changelog", sections.first().title)
         assertTrue(sections.first().bullets.isNotEmpty())
     }
+
+    @Test
+    fun `changelog parser skips empty sections with none placeholder`() {
+        val sections = ReleaseChangelogParser.parse(
+            """
+            ## Improvements
+            - None in this build.
+
+            ## Fixes
+            - Fixed crash when retrying update
+            """.trimIndent()
+        )
+
+        assertEquals(1, sections.size)
+        assertEquals("Fixes", sections.first().title)
+        assertEquals("Fixed crash when retrying update", sections.first().bullets.first())
+    }
 }

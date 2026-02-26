@@ -74,7 +74,7 @@ internal object ReleaseChangelogParser {
     private val bulletRegex = Regex("""^(\s*)[-*]\s+(.+?)\s*$""")
     private val fallbackLineRegex = Regex("""^\s*[-*]?\s*(.+?)\s*$""")
     private val ignoredBulletRegex = Regex(
-        pattern = """^(tbd|none|n/?a|none reported(?: in this build)?\.?)$""",
+        pattern = """^(tbd|none|n/?a|none(?: reported)?(?: in this build)?\.?)$""",
         option = RegexOption.IGNORE_CASE,
     )
     private val preferredSectionOrder = listOf(

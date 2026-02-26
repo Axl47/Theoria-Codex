@@ -187,9 +187,6 @@ def build_sections(
             "No commit metadata available for this build."
         )
 
-    if not sections["Known Issues"]:
-        sections["Known Issues"].setdefault("General", []).append("None reported in this build.")
-
     return sections
 
 
@@ -208,19 +205,18 @@ def render_markdown(
     lines.append("")
 
     for section_name in SECTION_ORDER:
-        lines.append(f"## {section_name}")
         scope_groups = sections[section_name]
-        if scope_groups:
-            for scope, bullets in scope_groups.items():
-                if scope == "General":
-                    for bullet in bullets:
-                        lines.append(f"- {bullet}")
-                    continue
-                lines.append(f"- {scope}:")
+        if not scope_groups:
+            continue
+        lines.append(f"## {section_name}")
+        for scope, bullets in scope_groups.items():
+            if scope == "General":
                 for bullet in bullets:
-                    lines.append(f"  - {bullet}")
-        else:
-            lines.append("- None in this build.")
+                    lines.append(f"- {bullet}")
+                continue
+            lines.append(f"- {scope}:")
+            for bullet in bullets:
+                lines.append(f"  - {bullet}")
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
