@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-02-26T00:40
+updated_at: 2026-02-26T00:50
 ---
 # Theoria Codex
 
@@ -40,6 +40,7 @@ Previously completed MVP slices remain in place:
 - Local tag suggestion store now seeds from `app/src/main/assets/tag_store.json` and is persisted to `files/theoria_codex/tag_suggestions.json` to reduce network tag fetches
 - Draft/Applied search flow with explicit Apply semantics
 - Search/Viewer now support GIF rendering (global Coil animated decoder + MIME-aware source mapping); Search and Viewer both support Pixiv ugoira playback by loading Pixiv metadata + zip frames and animating in-place
+- Search result cards now autoplay video posts in-place (muted + looping) with image fallback when a source video preview fails
 - Viewer long-press download now exports Pixiv ugoira content directly to MP4 and saves it to device video storage (with app-storage fallback when MediaStore is unavailable)
 - Viewer now uses horizontal post paging + vertical in-post image paging (per-post `X / Y`), supports long-press image download, and search cards show compact source/image-count overlays
 - Viewer now prefetches the next three upcoming media items while browsing to reduce perceived load time when swiping forward

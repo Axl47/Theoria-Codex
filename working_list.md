@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-26T00:36
-updated_at: 2026-02-26T00:46
+updated_at: 2026-02-26T00:50
 ---
 # Working List
 
@@ -22,3 +22,4 @@ updated_at: 2026-02-26T00:46
   - `./gradlew assembleDebug`
 - [x] Update docs (`README.md`, `AGENTS.md`)
 - [x] Patch viewer/download request headers for Gelbooru/AIBooru hotlink compatibility and revalidate (`./gradlew :app:testDebugUnitTest assembleDebug`)
+- [x] Add autoplay muted video previews in Search/Codex cards with image fallback and source headers; revalidate (`./gradlew :app:testDebugUnitTest assembleDebug`)

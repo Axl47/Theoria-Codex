@@ -19,6 +19,7 @@ After this change, Gelbooru posts that are videos (for example `.mp4` and `.webm
 - [x] (2026-02-26 00:41Z) Add tests for video parsing behavior and run validation commands.
 - [x] (2026-02-26 00:42Z) Update docs (`README.md` and `AGENTS.md`) with feature additions and file notes.
 - [x] (2026-02-26 00:46Z) Apply follow-up playback hardening: booru `Referer`/`User-Agent` headers for Viewer media requests and download requests.
+- [x] (2026-02-26 00:50Z) Add in-card video autoplay previews for Search/Codex cards (muted loop with image fallback), then revalidate app tests/build.
 - [ ] Perform manual device QA checklist (developer-run).
 
 ## Surprises & Discoveries
@@ -34,6 +35,9 @@ After this change, Gelbooru posts that are videos (for example `.mp4` and `.webm
 
 - Observation: Some booru media endpoints can reject in-app playback/downloads without browser-like headers.
   Evidence: User-reported runtime `Could not play video` despite correct MIME typing; follow-up added source-specific `Referer` + `User-Agent` headers in Viewer and app-level download requests.
+
+- Observation: Users expect video behavior parity between Viewer and Search cards; static thumbnails feel incomplete once Viewer supports video playback.
+  Evidence: Direct user request after Viewer fix: “The preview in search should also play the videos.”
 
 ## Decision Log
 
@@ -58,6 +62,7 @@ Validation outcome:
 - `./gradlew :core-sources:test :app:testDebugUnitTest` passed.
 - `./gradlew assembleDebug` passed.
 - Follow-up hardening validation: `./gradlew :app:testDebugUnitTest assembleDebug` passed.
+- Search-preview follow-up validation: `./gradlew :app:testDebugUnitTest assembleDebug` passed.
 
 Remaining work is manual on-device verification (playback UX across several posts/sources).
 
@@ -139,6 +144,8 @@ Key validation transcript excerpts:
   - `BUILD SUCCESSFUL in 2s`
 - `./gradlew :app:testDebugUnitTest assembleDebug`
   - `BUILD SUCCESSFUL in 5s`
+- `./gradlew :app:testDebugUnitTest assembleDebug`
+  - `BUILD SUCCESSFUL in 4s`
 
 ## Interfaces and Dependencies
 
@@ -157,3 +164,4 @@ Expected interfaces after implementation:
 Revision Note (2026-02-26): Initial creation for Gelbooru-first cross-source video support execution.
 Revision Note (2026-02-26): Updated progress, discoveries, and outcomes after implementation + validation pass.
 Revision Note (2026-02-26): Added follow-up viewer/download header hardening after user-reported playback failure.
+Revision Note (2026-02-26): Added Search/Codex card autoplay video previews after user feedback.

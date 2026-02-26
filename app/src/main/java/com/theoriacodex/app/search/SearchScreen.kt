@@ -3,7 +3,9 @@ package com.theoriacodex.app.search
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.net.Uri
 import android.widget.Toast
+import android.widget.VideoView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -61,6 +63,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -84,6 +87,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.theoriacodex.app.media.isAnimatedPost
@@ -96,6 +100,7 @@ import com.theoriacodex.app.viewer.PixivUgoiraPlayer
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
@@ -665,6 +670,12 @@ fun SearchResultCard(
             ),
     ) {
         val title = post.title?.takeIf { it.isNotBlank() } ?: "Untitled"
+        val videoRef = remember(post.id.source, post.id.sourcePostId, post.media, post.full, post.preview) {
+            resolveCardVideoRef(post)
+        }
+        var videoPlaybackFailed by remember(post.id.source, post.id.sourcePostId, videoRef?.url, videoRef?.localPath) {
+            mutableStateOf(false)
+        }
         val previewUrl = resolveCardPreviewUrl(post)
         val ratio = previewAspectRatio(post)
         val imageModel = remember(context, previewUrl, post.id.source) {
@@ -685,6 +696,13 @@ fun SearchResultCard(
                     modifier = Modifier.fillMaxSize(),
                     contentDescription = title,
                     contentScale = ContentScale.Crop,
+                )
+            } else if (videoRef != null && !videoPlaybackFailed) {
+                SearchVideoPreview(
+                    media = videoRef,
+                    sourceKey = post.id.source,
+                    modifier = Modifier.fillMaxSize(),
+                    onPlaybackError = { videoPlaybackFailed = true },
                 )
             } else if (imageModel != null) {
                 AsyncImage(
@@ -729,6 +747,65 @@ fun SearchResultCard(
             }
         }
     }
+}
+
+@Composable
+private fun SearchVideoPreview(
+    media: ImageRef,
+    sourceKey: SourceKey,
+    modifier: Modifier = Modifier,
+    onPlaybackError: () -> Unit = {},
+) {
+    val context = LocalContext.current
+    val location = media.localPath ?: media.url
+    if (location.isNullOrBlank()) {
+        onPlaybackError()
+        return
+    }
+
+    var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
+
+    DisposableEffect(location) {
+        onDispose {
+            videoViewRef?.stopPlayback()
+            videoViewRef = null
+        }
+    }
+
+    AndroidView(
+        modifier = modifier,
+        factory = { _ ->
+            VideoView(context).apply {
+                videoViewRef = this
+                isClickable = false
+                isFocusable = false
+                setOnPreparedListener { player ->
+                    player.isLooping = true
+                    player.setVolume(0f, 0f)
+                    start()
+                }
+                setOnErrorListener { _, _, _ ->
+                    onPlaybackError()
+                    true
+                }
+            }
+        },
+        update = { videoView ->
+            videoViewRef = videoView
+            val currentTag = videoView.tag as? String
+            if (currentTag != location) {
+                videoView.tag = location
+                val headers = searchRequestHeaders(sourceKey)
+                val uri = Uri.parse(location)
+                if (headers.isEmpty()) {
+                    videoView.setVideoURI(uri)
+                } else {
+                    videoView.setVideoURI(uri, headers)
+                }
+                videoView.start()
+            }
+        },
+    )
 }
 
 @Composable
@@ -783,6 +860,17 @@ private fun resolveCardPreviewUrl(post: Post): String? {
     return refs.firstOrNull { ref ->
         !ref.url.isNullOrBlank() && !isVideoMediaRef(ref)
     }?.url
+}
+
+private fun resolveCardVideoRef(post: Post): ImageRef? {
+    val refs = buildList {
+        addAll(post.media)
+        post.full?.let { add(it) }
+        add(post.preview)
+    }
+    return refs.firstOrNull { ref ->
+        (!ref.url.isNullOrBlank() || !ref.localPath.isNullOrBlank()) && isVideoMediaRef(ref)
+    }
 }
 
 private fun formatPostTagsForClipboard(post: Post): String {
@@ -1183,12 +1271,29 @@ private fun buildImageRequest(
         .data(url)
         .crossfade(true)
         .allowHardware(false)
-    if (sourceKey == SourceKey.PIXIV) {
-        builder
-            .addHeader("Referer", "https://www.pixiv.net/")
-            .addHeader("User-Agent", "Mozilla/5.0")
+    searchRequestHeaders(sourceKey).forEach { (name, value) ->
+        builder.addHeader(name, value)
     }
     return builder.build()
+}
+
+private fun searchRequestHeaders(sourceKey: SourceKey): Map<String, String> {
+    return when (sourceKey) {
+        SourceKey.PIXIV -> mapOf(
+            "Referer" to "https://www.pixiv.net/",
+            "User-Agent" to "Mozilla/5.0",
+        )
+
+        SourceKey.GELBOORU -> mapOf(
+            "Referer" to "https://gelbooru.com/",
+            "User-Agent" to "Mozilla/5.0",
+        )
+
+        SourceKey.AIBOORU -> mapOf(
+            "Referer" to "https://aibooru.online/",
+            "User-Agent" to "Mozilla/5.0",
+        )
+    }
 }
 
 private const val PAGINATION_PREFETCH_RATIO = 0.8f
