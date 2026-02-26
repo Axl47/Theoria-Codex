@@ -1070,7 +1070,7 @@ private fun ViewerVideoPlayer(
                 color = MaterialTheme.colorScheme.onBackground,
             )
         }
-        if (isActive && showTimeline && !loading && !loadFailed && durationMs > 0L && playerRef != null) {
+        if (isActive && showTimeline && !loadFailed && durationMs > 0L && playerRef != null) {
             ViewerPlaybackFooter(
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
