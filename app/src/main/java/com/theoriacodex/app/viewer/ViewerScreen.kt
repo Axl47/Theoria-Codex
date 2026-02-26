@@ -41,7 +41,6 @@ import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -72,6 +71,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -480,9 +480,6 @@ fun ViewerScreen(
                 source = selectedPost.id.source.name,
                 indexLabel = "${selectedMediaIndex + 1} / ${selectedPostMedia.size}",
                 onBack = ::requestDismissViewer,
-            )
-            ViewerActionsBar(
-                modifier = Modifier.align(Alignment.BottomCenter),
                 onSave = {
                     onSave(selectedPost)
                     markInteraction()
@@ -1460,6 +1457,8 @@ private fun ViewerChrome(
     source: String,
     indexLabel: String,
     onBack: () -> Unit,
+    onSave: () -> Unit,
+    onInfo: () -> Unit,
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -1475,38 +1474,22 @@ private fun ViewerChrome(
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
-            Text("$source • $indexLabel", style = MaterialTheme.typography.bodyLarge)
-            IconButton(onClick = {}) {
-                Icon(Icons.Default.Info, contentDescription = null, tint = Color.Transparent)
-            }
-        }
-    }
-}
-
-@Composable
-private fun ViewerActionsBar(
-    modifier: Modifier = Modifier,
-    onSave: () -> Unit,
-    onInfo: () -> Unit,
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Button(onClick = onSave) {
-                Icon(Icons.Default.Save, contentDescription = null)
-                Text("Save", modifier = Modifier.padding(start = 8.dp))
-            }
-            TextButton(onClick = onInfo) {
-                Icon(Icons.Default.Info, contentDescription = null)
-                Text("Info", modifier = Modifier.padding(start = 8.dp))
+            Text(
+                text = "$source • $indexLabel",
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f),
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                IconButton(onClick = onSave) {
+                    Icon(Icons.Default.Save, contentDescription = "Save")
+                }
+                IconButton(onClick = onInfo) {
+                    Icon(Icons.Default.Info, contentDescription = "Info")
+                }
             }
         }
     }
