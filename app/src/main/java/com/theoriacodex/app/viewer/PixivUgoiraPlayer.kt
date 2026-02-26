@@ -15,8 +15,11 @@ import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.dp
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.theoriacodex.sources.credentials.PixivAuthTokens
@@ -643,11 +647,13 @@ fun PixivUgoiraPlayer(
     var frameIndex by remember(postId) { mutableIntStateOf(0) }
     var elapsedInLoopMs by remember(postId) { mutableLongStateOf(0L) }
     var isScrubbing by remember(postId) { mutableStateOf(false) }
+    var playbackPaused by remember(postId) { mutableStateOf(false) }
 
     LaunchedEffect(postId, client) {
         frameIndex = 0
         elapsedInLoopMs = 0L
         isScrubbing = false
+        playbackPaused = false
         errorMessage = null
         playback = client.cached(postId)
         if (playback != null) return@LaunchedEffect
@@ -708,8 +714,8 @@ fun PixivUgoiraPlayer(
         seekToPosition(elapsedInLoopMs + seekJumpDeltaMs)
     }
 
-    LaunchedEffect(activePlayback, frameIndex, isScrubbing) {
-        if (isScrubbing) return@LaunchedEffect
+    LaunchedEffect(activePlayback, frameIndex, isScrubbing, playbackPaused) {
+        if (isScrubbing || playbackPaused) return@LaunchedEffect
         val delayMs = activePlayback.frames[frameIndex].delayMs.toLong().coerceAtLeast(16L)
         delay(delayMs)
         val nextIndex = (frameIndex + 1) % activePlayback.frames.size
@@ -740,23 +746,38 @@ fun PixivUgoiraPlayer(
                 .fillMaxSize(),
             contentScale = contentScale,
         )
-        MediaTimelineBar(
-            positionMs = elapsedInLoopMs,
-            durationMs = totalDurationMs.toLong(),
-            onSeekStarted = {
-                isScrubbing = true
-            },
-            onSeekChanged = { target ->
-                seekToPosition(target)
-            },
-            onSeekFinished = { target ->
-                seekToPosition(target)
-                isScrubbing = false
-            },
-            onInteractionActiveChanged = onTimelineInteractionActiveChanged,
+        Row(
             modifier = Modifier
-                .align(Alignment.BottomCenter),
-        )
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TimelinePlaybackButton(
+                isPaused = playbackPaused,
+                onToggle = {
+                    playbackPaused = !playbackPaused
+                    onTimelineInteractionActiveChanged(true)
+                    onTimelineInteractionActiveChanged(false)
+                },
+            )
+            MediaTimelineBar(
+                positionMs = elapsedInLoopMs,
+                durationMs = totalDurationMs.toLong(),
+                onSeekStarted = {
+                    isScrubbing = true
+                },
+                onSeekChanged = { target ->
+                    seekToPosition(target)
+                },
+                onSeekFinished = { target ->
+                    seekToPosition(target)
+                    isScrubbing = false
+                },
+                onInteractionActiveChanged = onTimelineInteractionActiveChanged,
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
 

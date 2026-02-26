@@ -1,6 +1,8 @@
 package com.theoriacodex.app.viewer
 
 import android.app.DownloadManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.res.Configuration
 import android.content.Context
 import android.graphics.Movie
@@ -38,6 +40,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -658,6 +661,21 @@ fun ViewerScreen(
                                 contentDescription = "Go to Search",
                             )
                         }
+                        IconButton(onClick = {
+                            val copied = copyPostUrlToClipboard(context, post)
+                            val message = if (copied) {
+                                "Post URL copied"
+                            } else {
+                                "No post URL available"
+                            }
+                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            showInfoSheet = false
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "Share",
+                            )
+                        }
                         if (!post.pageUrl.isNullOrBlank()) {
                             IconButton(onClick = {
                                 onOpenInBrowser(post)
@@ -744,6 +762,13 @@ fun ViewerScreen(
         }
     }
 
+}
+
+private fun copyPostUrlToClipboard(context: Context, post: Post): Boolean {
+    val pageUrl = post.pageUrl?.trim().takeIf { !it.isNullOrBlank() } ?: return false
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+    clipboard?.setPrimaryClip(ClipData.newPlainText("post_url", pageUrl))
+    return true
 }
 
 private enum class ViewerTagSelection {
@@ -918,6 +943,7 @@ private fun ViewerVideoPlayer(
     var durationMs by remember(location) { mutableLongStateOf(0L) }
     var positionMs by remember(location) { mutableLongStateOf(0L) }
     var isScrubbing by remember(location) { mutableStateOf(false) }
+    var playbackPaused by remember(location) { mutableStateOf(false) }
 
     DisposableEffect(location, sourceKey) {
         loading = true
@@ -925,6 +951,7 @@ private fun ViewerVideoPlayer(
         durationMs = 0L
         positionMs = 0L
         isScrubbing = false
+        playbackPaused = false
         val player = createLoopingExoPlayer(
             context = context,
             location = location,
@@ -947,7 +974,7 @@ private fun ViewerVideoPlayer(
         }
         player.addListener(listener)
         playerRef = player
-        if (isActive) {
+        if (isActive && !playbackPaused) {
             player.playWhenReady = true
             player.play()
         }
@@ -964,9 +991,9 @@ private fun ViewerVideoPlayer(
         }
     }
 
-    LaunchedEffect(isActive, playerRef, loadFailed) {
+    LaunchedEffect(isActive, playerRef, loadFailed, playbackPaused) {
         val player = playerRef ?: return@LaunchedEffect
-        if (!isActive || loadFailed) {
+        if (!isActive || loadFailed || playbackPaused) {
             player.playWhenReady = false
             player.pause()
         } else {
@@ -990,12 +1017,12 @@ private fun ViewerVideoPlayer(
         positionMs = target
     }
 
-    DisposableEffect(lifecycleOwner, playerRef, isActive, loadFailed) {
+    DisposableEffect(lifecycleOwner, playerRef, isActive, loadFailed, playbackPaused) {
         val player = playerRef ?: return@DisposableEffect onDispose { }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME -> {
-                    if (isActive && !loadFailed) {
+                    if (isActive && !loadFailed && !playbackPaused) {
                         runCatching {
                             player.playWhenReady = true
                             player.play()
@@ -1072,24 +1099,46 @@ private fun ViewerVideoPlayer(
             ViewerPlaybackFooter(
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
-                MediaTimelineBar(
-                    positionMs = positionMs,
-                    durationMs = durationMs,
-                    onSeekStarted = {
-                        isScrubbing = true
-                    },
-                    onSeekChanged = { target ->
-                        positionMs = target
-                        playerRef?.seekTo(target)
-                    },
-                    onSeekFinished = { target ->
-                        playerRef?.seekTo(target)
-                        positionMs = target
-                        isScrubbing = false
-                    },
-                    onInteractionActiveChanged = onTimelineInteractionActiveChanged,
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                )
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TimelinePlaybackButton(
+                        isPaused = playbackPaused,
+                        onToggle = {
+                            playbackPaused = !playbackPaused
+                            val player = playerRef
+                            if (playbackPaused) {
+                                player?.playWhenReady = false
+                                player?.pause()
+                            } else if (isActive && !loadFailed) {
+                                player?.playWhenReady = true
+                                player?.play()
+                            }
+                            onTimelineInteractionActiveChanged(true)
+                            onTimelineInteractionActiveChanged(false)
+                        },
+                    )
+                    MediaTimelineBar(
+                        positionMs = positionMs,
+                        durationMs = durationMs,
+                        onSeekStarted = {
+                            isScrubbing = true
+                        },
+                        onSeekChanged = { target ->
+                            positionMs = target
+                            playerRef?.seekTo(target)
+                        },
+                        onSeekFinished = { target ->
+                            playerRef?.seekTo(target)
+                            positionMs = target
+                            isScrubbing = false
+                        },
+                        onInteractionActiveChanged = onTimelineInteractionActiveChanged,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }
@@ -1112,11 +1161,13 @@ private fun ViewerGifPlayer(
     var loadFailed by remember(location) { mutableStateOf(false) }
     var positionMs by remember(location) { mutableLongStateOf(0L) }
     var isScrubbing by remember(location) { mutableStateOf(false) }
+    var playbackPaused by remember(location) { mutableStateOf(false) }
 
     LaunchedEffect(location, sourceKey) {
         loading = true
         loadFailed = false
         positionMs = 0L
+        playbackPaused = false
         movie = loadGifMovie(
             context = context,
             location = location,
@@ -1153,8 +1204,8 @@ private fun ViewerGifPlayer(
         positionMs = target
     }
 
-    LaunchedEffect(activeMovie, durationMs, isScrubbing) {
-        if (isScrubbing) return@LaunchedEffect
+    LaunchedEffect(activeMovie, durationMs, isScrubbing, playbackPaused) {
+        if (isScrubbing || playbackPaused) return@LaunchedEffect
         while (true) {
             delay(16L)
             positionMs = if (durationMs <= 0L) {
@@ -1195,22 +1246,36 @@ private fun ViewerGifPlayer(
             ViewerPlaybackFooter(
                 modifier = Modifier.align(Alignment.BottomCenter),
             ) {
-                MediaTimelineBar(
-                    positionMs = positionMs.coerceIn(0L, durationMs),
-                    durationMs = durationMs,
-                    onSeekStarted = {
-                        isScrubbing = true
-                    },
-                    onSeekChanged = { target ->
-                        positionMs = target.coerceIn(0L, durationMs)
-                    },
-                    onSeekFinished = { target ->
-                        positionMs = target.coerceIn(0L, durationMs)
-                        isScrubbing = false
-                    },
-                    onInteractionActiveChanged = onTimelineInteractionActiveChanged,
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                )
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TimelinePlaybackButton(
+                        isPaused = playbackPaused,
+                        onToggle = {
+                            playbackPaused = !playbackPaused
+                            onTimelineInteractionActiveChanged(true)
+                            onTimelineInteractionActiveChanged(false)
+                        },
+                    )
+                    MediaTimelineBar(
+                        positionMs = positionMs.coerceIn(0L, durationMs),
+                        durationMs = durationMs,
+                        onSeekStarted = {
+                            isScrubbing = true
+                        },
+                        onSeekChanged = { target ->
+                            positionMs = target.coerceIn(0L, durationMs)
+                        },
+                        onSeekFinished = { target ->
+                            positionMs = target.coerceIn(0L, durationMs)
+                            isScrubbing = false
+                        },
+                        onInteractionActiveChanged = onTimelineInteractionActiveChanged,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }

@@ -49,10 +49,10 @@ Previously completed MVP slices remain in place:
 - Viewer now also prefetches upcoming video media into local cache files (for faster replay/re-entry) and force-stops active video playback before dismiss to avoid sluggish exit feel
 - Pixiv ugoira playback now uses an in-memory LRU cache so returning between Search and Viewer reuses decoded animations instead of reloading from network
 - Viewer shows a thin playback progress bar under Pixiv ugoira media so loop position is visible while watching animations
-- Viewer animated media now uses an interactive timeline scrubber (drag-to-seek + current time/duration) shared across Pixiv ugoira, GIF, and video playback
+- Viewer animated media now uses an interactive timeline scrubber (drag-to-seek + current time/duration) shared across Pixiv ugoira, GIF, and video playback, with a left-side pause/play toggle in the footer
 - Viewer zoom gestures now apply to videos the same as images (double-tap toggle, pinch zoom, and pan with pager-lock while zoomed)
 - Viewer Info tag cells now show the source tag video count (when available) as subtle low-opacity metadata under each tag label
-- Viewer Info header now includes a quick `Go to Search` icon action (placed before `Open in browser`) for faster query handoff
+- Viewer Info header now includes quick actions for `Go to Search`, `Share` (copy post URL), and `Open in browser` for faster handoff/export
 - Codex detail now reuses the same Search result card renderer (thumbnails, animated previews, title/tags, overlays) for consistent browsing UI
 - Search cards now support long-press actions for `Save to Codex`, `Save to device`, and `Copy tags`; Codex cards support long-press actions for `Remove from Codex`, `Save to device`, and `Copy tags`
 - App branding now uses custom launcher icon resources and a shared splash mark shown during startup loading and Search pre-query empty state

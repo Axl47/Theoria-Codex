@@ -12,7 +12,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -184,6 +189,24 @@ fun MediaTimelineBar(
                 fontWeight = FontWeight.Medium,
             ),
             modifier = Modifier.widthIn(min = 112.dp),
+        )
+    }
+}
+
+@Composable
+fun TimelinePlaybackButton(
+    isPaused: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    IconButton(
+        onClick = onToggle,
+        modifier = modifier.size(36.dp),
+    ) {
+        Icon(
+            imageVector = if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+            contentDescription = if (isPaused) "Play" else "Pause",
+            tint = Color.White,
         )
     }
 }
