@@ -32,6 +32,7 @@ Previously completed MVP slices remain in place:
 - Search / Explore / Codex / Settings tabs
 - Search results now render real source thumbnails in a variable-height staggered grid and show post titles (when available) instead of raw source IDs
 - Search input UX now supports Enter-to-add-tag and contextual controls that animate in while actively editing
+- Search source mode chips now show source logos for Pixiv and Gelbooru (instead of plain text labels)
 - Search controls include an `Animated only` filter for showing just animated media in current results
 - Animated media detection is now shared across Search/Viewer app layers (GIF/video/ugoira), reducing source-specific edge-case mismatches
 - Search auto-paginates: near the end of loaded results (about 80%), the next source page is fetched automatically

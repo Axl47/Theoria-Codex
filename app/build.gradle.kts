@@ -16,8 +16,8 @@ android {
         applicationId = "com.theoriacodex"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14
-        versionName = "0.1.14"
+        versionCode = 15
+        versionName = "0.2.0"
         if (versionCodeOverride != null) {
             versionCode = versionCodeOverride
         }
@@ -94,6 +94,7 @@ dependencies {
     implementation(libs.androidx.security.crypto)
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
+    implementation(libs.coil.svg)
     implementation(libs.gson)
 
     testImplementation(libs.junit)

@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
@@ -109,6 +110,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import coil.decode.SvgDecoder
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
@@ -142,6 +144,14 @@ fun SearchScreen(
         } else {
             coordinator.results
         }
+    }
+    suspend fun resetScrollToTop() {
+        if (visibleResults.isNotEmpty()) {
+            runCatching {
+                gridState.scrollToItem(index = 0, scrollOffset = 0)
+            }
+        }
+        coordinator.persistSearchScrollState(index = 0, offsetPx = 0)
     }
 
     LaunchedEffect(coordinator.draftQuery.mode) {
@@ -360,6 +370,7 @@ fun SearchScreen(
                                 coordinator.clearDraft()
                                 input = ""
                                 showFilterSheet = false
+                                scope.launch { resetScrollToTop() }
                             },
                             enabled = coordinator.hasPendingChanges,
                         ) {
@@ -368,6 +379,7 @@ fun SearchScreen(
                         TextButton(onClick = {
                             focusManager.clearFocus()
                             onApplySearch()
+                            scope.launch { resetScrollToTop() }
                         }) {
                             Text("Apply")
                         }
@@ -1104,16 +1116,12 @@ private fun ModeRow(
                 selected = option == mode,
                 onClick = { onModeSelected(option) },
                 label = {
-                    val label = when (option) {
-                        QueryMode.Unified -> "Unified"
-                        is QueryMode.Source -> option.source.name
-                    }
                     if (option == QueryMode.Unified) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(label)
+                            Text("Unified")
                             Box(
                                 modifier = Modifier
                                     .background(
@@ -1130,11 +1138,44 @@ private fun ModeRow(
                             }
                         }
                     } else {
-                        Text(label)
+                        val source = (option as QueryMode.Source).source
+                        SourceChipLogo(source = source)
                     }
                 }
             )
         }
+    }
+}
+
+@Composable
+private fun SourceChipLogo(source: SourceKey) {
+    when (source) {
+        SourceKey.PIXIV -> {
+            Image(
+                painter = painterResource(id = R.drawable.pixiv_logo),
+                contentDescription = "Pixiv",
+                modifier = Modifier.height(18.dp),
+                contentScale = ContentScale.Fit,
+            )
+        }
+
+        SourceKey.GELBOORU -> {
+            val context = LocalContext.current
+            val model = remember(context) {
+                ImageRequest.Builder(context)
+                    .data(Uri.parse("android.resource://${context.packageName}/${R.raw.gelbooru_logo}"))
+                    .decoderFactory(SvgDecoder.Factory())
+                    .build()
+            }
+            AsyncImage(
+                model = model,
+                contentDescription = "Gelbooru",
+                modifier = Modifier.size(18.dp),
+                contentScale = ContentScale.Fit,
+            )
+        }
+
+        else -> Text(source.name)
     }
 }
 

@@ -436,6 +436,15 @@ class SearchCoordinator(
         appliedQuery = draftQuery
         appliedByMode[modeKey(appliedQuery.mode)] = appliedQuery
         queryRepository.upsertAppliedQuery(modeKey(appliedQuery.mode), appliedQuery)
+        val hash = appliedQueryHash
+        uiRestoreRepository.setSearchScrollState(
+            queryHash = hash,
+            state = SearchScrollState(
+                firstVisibleItemIndex = 0,
+                firstVisibleItemOffsetPx = 0,
+            ),
+        )
+        queryRepository.upsertScrollOffset(hash, 0)
         executeSearch()
     }
 
