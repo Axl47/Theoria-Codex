@@ -1169,6 +1169,12 @@ fun TheoriaApp(
                                 posts = session.posts,
                                 launchContext = session.context,
                                 pixivUgoiraClient = pixivUgoiraClient,
+                                tagVideoCountProvider = { source, tag ->
+                                    searchCoordinator.tagVideoCount(source, tag)
+                                },
+                                fetchTagVideoCount = { source, tag ->
+                                    searchCoordinator.fetchTagVideoCount(source, tag)
+                                },
                                 canLoadMoreFromSource = session.liveSearchBinding && searchCoordinator.canLoadMore,
                                 loadingMoreFromSource = searchCoordinator.loadingMore,
                                 onLoadMoreFromSource = if (session.liveSearchBinding) {

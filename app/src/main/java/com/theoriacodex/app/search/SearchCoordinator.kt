@@ -96,6 +96,53 @@ class SearchCoordinator(
     val appliedQueryHash: String
         get() = QueryHash.from(appliedQuery)
 
+    fun tagVideoCount(source: SourceKey, tag: String): Int? {
+        val normalized = tag.trim().lowercase()
+        if (normalized.isBlank()) return null
+
+        val cachedCount = tagSuggestionStore
+            .get(source = source, limit = TAG_LOOKUP_LIMIT)
+            .firstOrNull { suggestion ->
+                suggestion.text.trim().lowercase() == normalized
+            }
+            ?.count
+        if (cachedCount != null) return cachedCount
+
+        val autocompleteCount = autocompleteSuggestions
+            .firstOrNull { suggestion ->
+                suggestion.text.trim().lowercase() == normalized
+            }
+            ?.count
+        if (autocompleteCount != null) return autocompleteCount
+
+        return trendingTags
+            .firstOrNull { suggestion ->
+                suggestion.text.trim().lowercase() == normalized
+            }
+            ?.count
+    }
+
+    suspend fun fetchTagVideoCount(source: SourceKey, tag: String): Int? {
+        val normalized = tag.trim()
+        if (normalized.isBlank()) return null
+        tagVideoCount(source, normalized)?.let { return it }
+
+        val adapter = registry.adapterFor(source) ?: return null
+        val fetched = runCatching {
+            adapter.autocompleteTags(prefix = normalized, limit = TAG_FETCH_LIMIT)
+        }.getOrDefault(emptyList())
+        if (fetched.isNotEmpty()) {
+            tagSuggestionStore.put(source, fetched)
+        }
+        val key = normalized.lowercase()
+        return fetched
+            .firstOrNull { suggestion ->
+                suggestion.text.trim().lowercase() == key
+            }
+            ?.count
+            ?: tagVideoCount(source, normalized)
+    }
+
     suspend fun initialize() {
         runtimeSettings = settingsRepository.observeSettings().first()
 
@@ -807,3 +854,5 @@ private const val PIXIV_UNKNOWN_RETRY_MESSAGE =
     "Pixiv returned a temporary unknown error. Search was reset. Please retry."
 private const val GELBOORU_SUGGESTION_REQUIRED_MESSAGE =
     "For Gelbooru, pick a suggested tag from autocomplete."
+private const val TAG_LOOKUP_LIMIT = 20_000
+private const val TAG_FETCH_LIMIT = 25

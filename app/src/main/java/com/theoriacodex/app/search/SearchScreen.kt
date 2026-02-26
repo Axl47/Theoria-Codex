@@ -669,7 +669,7 @@ fun SearchResultCard(
                 onLongClick = onLongPress,
             ),
     ) {
-        val title = post.title?.takeIf { it.isNotBlank() } ?: "Untitled"
+        val title = post.title?.takeIf { it.isNotBlank() } ?: post.id.sourcePostId
         val videoRef = remember(post.id.source, post.id.sourcePostId, post.media, post.full, post.preview) {
             resolveCardVideoRef(post)
         }

@@ -96,6 +96,8 @@ fun ViewerScreen(
     posts: List<Post>,
     launchContext: ViewerLaunchContext,
     pixivUgoiraClient: PixivUgoiraClient? = null,
+    tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
+    fetchTagVideoCount: suspend (SourceKey, String) -> Int? = { _, _ -> null },
     canLoadMoreFromSource: Boolean = false,
     loadingMoreFromSource: Boolean = false,
     onLoadMoreFromSource: (() -> Unit)? = null,
@@ -520,8 +522,26 @@ fun ViewerScreen(
                 }
 
                 Text("Tags", style = MaterialTheme.typography.titleSmall)
+                val distinctTags = remember(post.canonicalTags) { post.canonicalTags.distinct() }
+                var tagVideoCounts by remember(post.id.source, distinctTags) {
+                    mutableStateOf(
+                        distinctTags.associateWith { tag ->
+                            tagVideoCountProvider(post.id.source, tag)
+                        }
+                    )
+                }
+                LaunchedEffect(post.id.source, distinctTags) {
+                    distinctTags.forEach { tag ->
+                        if (tagVideoCounts[tag] != null) return@forEach
+                        val count = fetchTagVideoCount(post.id.source, tag)
+                        if (count != null) {
+                            tagVideoCounts = tagVideoCounts + (tag to count)
+                        }
+                    }
+                }
                 ViewerTagSelectionGrid(
-                    tags = post.canonicalTags.distinct(),
+                    tags = distinctTags,
+                    videoCounts = tagVideoCounts,
                     selections = tagSelections,
                     onIncludeTag = { tag ->
                         when (tagSelections[tag]) {
@@ -647,6 +667,7 @@ private enum class ViewerTagSelection {
 @Composable
 private fun ViewerTagSelectionGrid(
     tags: List<String>,
+    videoCounts: Map<String, Int?>,
     selections: Map<String, ViewerTagSelection>,
     onIncludeTag: (String) -> Unit,
     onExcludeTag: (String) -> Unit,
@@ -669,6 +690,7 @@ private fun ViewerTagSelectionGrid(
             rowTags.forEach { tag ->
                 ViewerTagActionCell(
                     tag = tag,
+                    videoCount = videoCounts[tag],
                     selection = selections[tag],
                     onInclude = { onIncludeTag(tag) },
                     onExclude = { onExcludeTag(tag) },
@@ -685,6 +707,7 @@ private fun ViewerTagSelectionGrid(
 @Composable
 private fun ViewerTagActionCell(
     tag: String,
+    videoCount: Int?,
     selection: ViewerTagSelection?,
     onInclude: () -> Unit,
     onExclude: () -> Unit,
@@ -711,6 +734,13 @@ private fun ViewerTagActionCell(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.labelMedium,
+            )
+        }
+        if (videoCount != null) {
+            Text(
+                text = videoCount.toString(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
             )
         }
         Row(
