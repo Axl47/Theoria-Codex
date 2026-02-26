@@ -284,6 +284,7 @@ fun TheoriaApp(
     var startupUpdateState by remember { mutableStateOf<StartupUpdateState>(StartupUpdateState.Checking) }
     var startupStatusMessage by remember { mutableStateOf("Checking for updates...") }
     var updateChoiceRemote by remember { mutableStateOf<RemoteUpdate?>(null) }
+    var startupUpdateReleaseHistory by remember { mutableStateOf<List<ReleaseChangelogEntry>>(emptyList()) }
     var postInstallChangelog by remember { mutableStateOf<PendingPostInstallChangelog?>(null) }
     var postInstallReleaseHistory by remember { mutableStateOf<List<ReleaseChangelogEntry>>(emptyList()) }
     var latestInstalledChangelog by remember { mutableStateOf<PendingPostInstallChangelog?>(null) }
@@ -406,7 +407,7 @@ fun TheoriaApp(
                     .filter { entry ->
                         entry.versionCode > fromVersionCode && entry.versionCode <= installedVersionCode
                     }
-                    .sortedBy { it.versionCode }
+                    .sortedWith(releaseChangelogNewestFirstComparator())
                 postInstallReleaseHistory = if (updatesSincePreviousInstall.isNotEmpty()) {
                     updatesSincePreviousInstall
                 } else {
@@ -418,6 +419,7 @@ fun TheoriaApp(
 
     suspend fun continueAfterUpdateFailure(message: String) {
         updateChoiceRemote = null
+        startupUpdateReleaseHistory = emptyList()
         startupActionLocked = false
         startupUpdateState = StartupUpdateState.Failed(message)
         startupStatusMessage = message
@@ -436,6 +438,7 @@ fun TheoriaApp(
         when (updateOutcome) {
             StartupUpdateOutcome.ContinueToApp -> {
                 updateChoiceRemote = null
+                startupUpdateReleaseHistory = emptyList()
                 startupActionLocked = false
                 completeAppStartup()
             }
@@ -447,6 +450,7 @@ fun TheoriaApp(
 
             is StartupUpdateOutcome.AwaitingUnknownSources -> {
                 updateChoiceRemote = null
+                startupUpdateReleaseHistory = emptyList()
                 pendingInstallRemote = updateOutcome.remote
                 awaitingUnknownSources = true
                 startupStatusMessage = "Grant install permission to continue update..."
@@ -455,6 +459,7 @@ fun TheoriaApp(
 
             is StartupUpdateOutcome.InstallerLaunched -> {
                 updateChoiceRemote = null
+                startupUpdateReleaseHistory = emptyList()
                 pendingInstallRemote = updateOutcome.remote
                 awaitingInstallerReturn = true
                 startupStatusMessage = "Installer opened. Complete update to reload app."
@@ -480,11 +485,27 @@ fun TheoriaApp(
         }
 
         if (eligibleRemote == null) {
+            startupUpdateReleaseHistory = emptyList()
             completeAppStartup()
             return
         }
 
+        val installedVersionCode = installedAppVersionCode(appContext)
+        val startupHistory = mergeReleaseHistory(
+            remoteHistory = updateFeedClient.mainPrereleaseHistory(limit = 100).getOrElse { emptyList() },
+            localCurrent = latestInstalledChangelog,
+        )
+            .filter { entry ->
+                entry.versionCode > installedVersionCode && entry.versionCode <= eligibleRemote.versionCode
+            }
+            .sortedWith(releaseChangelogNewestFirstComparator())
+
         updateChoiceRemote = eligibleRemote
+        startupUpdateReleaseHistory = if (startupHistory.isNotEmpty()) {
+            startupHistory
+        } else {
+            listOf(eligibleRemote.toReleaseHistoryEntry())
+        }
         startupUpdateState = StartupUpdateState.AwaitingUserChoice(eligibleRemote)
         startupStatusMessage = startupUpdateState.messageText()
     }
@@ -747,7 +768,10 @@ fun TheoriaApp(
                 )
                 if (startupUpdateState is StartupUpdateState.AwaitingUserChoice && promptRemote != null) {
                     StartupUpdatePromptCard(
-                        remote = promptRemote,
+                        releases = startupUpdateReleaseHistory.ifEmpty {
+                            listOf(promptRemote.toReleaseHistoryEntry())
+                        },
+                        installedVersionCode = installedVersionCode,
                         actionEnabled = !startupActionLocked,
                         onYes = {
                             if (startupActionLocked) return@StartupUpdatePromptCard
@@ -761,6 +785,7 @@ fun TheoriaApp(
                                 startupActionLocked = true
                                 startupUpdater.onUserChoseNo(promptRemote)
                                 updateChoiceRemote = null
+                                startupUpdateReleaseHistory = emptyList()
                                 startupUpdateState = StartupUpdateState.NoUpdate
                                 startupStatusMessage = "Update skipped. Loading app..."
                                 startupActionLocked = false
@@ -773,6 +798,7 @@ fun TheoriaApp(
                                 startupActionLocked = true
                                 startupUpdater.onUserChoseRemindLater(promptRemote)
                                 updateChoiceRemote = null
+                                startupUpdateReleaseHistory = emptyList()
                                 startupUpdateState = StartupUpdateState.NoUpdate
                                 startupStatusMessage = "Update postponed for 24 hours. Loading app..."
                                 startupActionLocked = false
@@ -1239,18 +1265,14 @@ fun TheoriaApp(
 
 @Composable
 private fun StartupUpdatePromptCard(
-    remote: RemoteUpdate,
+    releases: List<ReleaseChangelogEntry>,
+    installedVersionCode: Int,
     actionEnabled: Boolean,
     onYes: () -> Unit,
     onNo: () -> Unit,
     onRemindLater: () -> Unit,
 ) {
-    val sections = remote.changelogSections.filter { section -> section.bullets.isNotEmpty() }
-    val subtitleParts = buildList {
-        add(releaseDisplayTitle(remote.releaseName, remote.versionCode))
-        add("vc${remote.versionCode}")
-        add(remote.commitShaShort)
-    }
+    val latestRelease = releases.firstOrNull()
 
     Card(
         modifier = Modifier
@@ -1266,11 +1288,18 @@ private fun StartupUpdatePromptCard(
                 text = "Update available",
                 style = MaterialTheme.typography.titleLarge,
             )
-            Text(
-                text = subtitleParts.joinToString(separator = " • "),
-                style = MaterialTheme.typography.bodySmall,
-            )
-            if (sections.isNotEmpty()) {
+            if (latestRelease != null) {
+                val subtitleParts = buildList {
+                    add(releaseDisplayTitle(latestRelease.releaseName, latestRelease.versionCode))
+                    add("vc${latestRelease.versionCode}")
+                    add(latestRelease.commitShaShort)
+                }
+                Text(
+                    text = subtitleParts.joinToString(separator = " • "),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (releases.isNotEmpty()) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1278,21 +1307,47 @@ private fun StartupUpdatePromptCard(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    sections.forEach { section ->
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = section.title,
-                                style = MaterialTheme.typography.titleSmall,
-                            )
-                            section.bullets.forEach { bullet ->
-                                ChangelogBulletText(bullet = bullet)
+                    releases.forEachIndexed { index, release ->
+                        val titleBase = releaseDisplayTitle(release.releaseName, release.versionCode)
+                        val title = if (release.versionCode == installedVersionCode) {
+                            "$titleBase (Current)"
+                        } else {
+                            titleBase
+                        }
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        val sections = release.changelogSections.filter { section ->
+                            section.bullets.isNotEmpty()
+                        }
+                        if (sections.isNotEmpty()) {
+                            sections.forEach { section ->
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = section.title,
+                                        style = MaterialTheme.typography.titleSmall,
+                                    )
+                                    section.bullets.forEach { bullet ->
+                                        ChangelogBulletText(bullet = bullet)
+                                    }
+                                }
                             }
+                        } else {
+                            Text(
+                                text = firstChangelogLine(release.changelogMarkdown)
+                                    ?: "No changelog details were published for this build.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        if (index != releases.lastIndex) {
+                            HorizontalDivider()
                         }
                     }
                 }
             } else {
                 Text(
-                    text = "No changelog details provided for this build.",
+                    text = "No changelog details were published for this build.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -1556,10 +1611,7 @@ private fun mergeReleaseHistory(
         }
     }
 
-    return entries.sortedWith(
-        compareByDescending<ReleaseChangelogEntry> { it.publishedAtEpochMs ?: Long.MIN_VALUE }
-            .thenByDescending { it.versionCode }
-    )
+    return entries.sortedWith(releaseChangelogNewestFirstComparator())
 }
 
 private fun PendingPostInstallChangelog.toReleaseHistoryEntry(): ReleaseChangelogEntry {
@@ -1572,6 +1624,23 @@ private fun PendingPostInstallChangelog.toReleaseHistoryEntry(): ReleaseChangelo
         changelogMarkdown = changelogMarkdown,
         changelogSections = changelogSections,
     )
+}
+
+private fun RemoteUpdate.toReleaseHistoryEntry(): ReleaseChangelogEntry {
+    return ReleaseChangelogEntry(
+        releaseId = releaseId,
+        versionCode = versionCode,
+        commitShaShort = commitShaShort,
+        releaseName = releaseName,
+        publishedAtEpochMs = publishedAtEpochMs,
+        changelogMarkdown = changelogMarkdown,
+        changelogSections = changelogSections,
+    )
+}
+
+private fun releaseChangelogNewestFirstComparator(): Comparator<ReleaseChangelogEntry> {
+    return compareByDescending<ReleaseChangelogEntry> { it.publishedAtEpochMs ?: Long.MIN_VALUE }
+        .thenByDescending { it.versionCode }
 }
 
 private fun releaseDisplayTitle(releaseName: String?, versionCode: Int): String {
