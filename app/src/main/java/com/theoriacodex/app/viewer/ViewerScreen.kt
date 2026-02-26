@@ -268,6 +268,13 @@ fun ViewerScreen(
         }
     }
 
+    fun onTimelineInteractionChanged(isActive: Boolean) {
+        timelineInteractionActive = isActive
+        if (isActive) {
+            markInteraction()
+        }
+    }
+
     fun downloadCurrentMedia() {
         val media = selectedCurrentMedia
         val isCurrentUgoira = media?.let { isPixivUgoira(selectedPost, it) } == true
@@ -469,9 +476,7 @@ fun ViewerScreen(
                                     showProgressBar = viewerState.chromeVisible,
                                     seekJumpSerial = seekJumpSerial,
                                     seekJumpDeltaMs = seekJumpDeltaMs,
-                                    onTimelineInteractionActiveChanged = { isActive ->
-                                        timelineInteractionActive = isActive
-                                    },
+                                    onTimelineInteractionActiveChanged = ::onTimelineInteractionChanged,
                                 )
                             }
                         } else if (isVideoMedia) {
@@ -484,9 +489,7 @@ fun ViewerScreen(
                                 isActive = mediaPlaybackEnabled,
                                 seekJumpSerial = seekJumpSerial,
                                 seekJumpDeltaMs = seekJumpDeltaMs,
-                                onTimelineInteractionActiveChanged = { isActive ->
-                                    timelineInteractionActive = isActive
-                                },
+                                onTimelineInteractionActiveChanged = ::onTimelineInteractionChanged,
                             )
                         } else if (isGifMedia && !gifLocation.isNullOrBlank()) {
                             ViewerGifPlayer(
@@ -497,9 +500,7 @@ fun ViewerScreen(
                                 showTimeline = viewerState.chromeVisible,
                                 seekJumpSerial = seekJumpSerial,
                                 seekJumpDeltaMs = seekJumpDeltaMs,
-                                onTimelineInteractionActiveChanged = { isActive ->
-                                    timelineInteractionActive = isActive
-                                },
+                                onTimelineInteractionActiveChanged = ::onTimelineInteractionChanged,
                             )
                         } else if (imageModel != null) {
                             AsyncImage(
@@ -1081,6 +1082,7 @@ private fun ViewerVideoPlayer(
                     },
                     onSeekChanged = { target ->
                         positionMs = target
+                        playerRef?.seekTo(target)
                     },
                     onSeekFinished = { target ->
                         playerRef?.seekTo(target)

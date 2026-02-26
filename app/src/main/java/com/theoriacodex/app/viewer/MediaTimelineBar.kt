@@ -106,21 +106,27 @@ fun MediaTimelineBar(
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         onInteractionActiveChanged(true)
+                        var startedScrubbing = false
                         try {
                             if (!isScrubbing) {
                                 isScrubbing = true
                                 onSeekStarted()
+                                startedScrubbing = true
                             }
                             updateScrubTarget(down.position.x)
+                            down.consume()
                             while (true) {
                                 val event = awaitPointerEvent()
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                                if (!change.pressed) break
                                 updateScrubTarget(change.position.x)
+                                change.consume()
+                                if (!change.pressed) break
                             }
-                            val target = scrubPositionMs.coerceIn(0L, safeDuration)
-                            onSeekFinished(target)
                         } finally {
+                            if (startedScrubbing || isScrubbing) {
+                                val target = scrubPositionMs.coerceIn(0L, safeDuration)
+                                onSeekFinished(target)
+                            }
                             isScrubbing = false
                             onInteractionActiveChanged(false)
                         }
