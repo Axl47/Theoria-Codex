@@ -107,6 +107,50 @@ class UnifiedSearchOrchestratorTest {
     }
 
     @Test
+    fun `applies exclude tags client side when source excludes are unsupported`() = runBlocking {
+        val pixivAdapter = FakeAdapter(
+            sourceKey = SourceKey.PIXIV,
+            capabilities = SourceCapabilities(
+                supportsSortNewest = true,
+                supportsSortPopular = true,
+                supportsSortTop = true,
+                supportsSortRandom = true,
+                supportsExcludeTagsServerSide = false,
+                supportsDateRangeServerSide = true,
+                supportsMinScoreServerSide = true,
+                requiresCredentials = false,
+            ),
+            posts = listOf(
+                post(SourceKey.PIXIV, "p1", tags = listOf("landscape", "safe")),
+                post(SourceKey.PIXIV, "p2", tags = listOf("landscape", "nsfw")),
+            ),
+        )
+        val orchestrator = UnifiedSearchOrchestrator(
+            adaptersBySource = mapOf(SourceKey.PIXIV to pixivAdapter)
+        )
+        val query = Query(
+            mode = QueryMode.Unified,
+            includeTags = listOf("landscape"),
+            excludeTags = listOf("nsfw"),
+            sort = SortMode.NEWEST,
+            dateRange = null,
+            minScore = null,
+        )
+
+        val result = orchestrator.search(
+            query = query,
+            enabledSources = setOf(SourceKey.PIXIV),
+            pageTokens = emptyMap(),
+            weights = mapOf(SourceKey.PIXIV to 1.0),
+        )
+
+        assertEquals(1, result.items.size)
+        assertEquals("p1", result.items.first().id.sourcePostId)
+        assertEquals(SourceRunState.SUCCESS, result.statuses.single().state)
+        assertTrue(pixivAdapter.lastSearchQuery?.excludeTags?.isEmpty() == true)
+    }
+
+    @Test
     fun `propagates typed source failure reason`() = runBlocking {
         val orchestrator = UnifiedSearchOrchestrator(
             adaptersBySource = mapOf(
@@ -145,7 +189,7 @@ class UnifiedSearchOrchestratorTest {
         )
     }
 
-    private fun post(source: SourceKey, id: String): Post {
+    private fun post(source: SourceKey, id: String, tags: List<String> = listOf("landscape")): Post {
         return Post(
             id = PostId(source, id),
             preview = ImageRef(url = "https://example.com/$id.jpg", localPath = null, mime = "image/jpeg"),
@@ -153,8 +197,8 @@ class UnifiedSearchOrchestratorTest {
             pageUrl = null,
             width = 100,
             height = 100,
-            canonicalTags = listOf("landscape"),
-            rawTags = listOf("landscape"),
+            canonicalTags = tags,
+            rawTags = tags,
             authorName = null,
             createdAtEpochMs = null,
         )
@@ -179,7 +223,10 @@ class UnifiedSearchOrchestratorTest {
         private val posts: List<Post>,
         private val error: Throwable? = null,
     ) : SourceAdapter {
+        var lastSearchQuery: Query? = null
+
         override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+            lastSearchQuery = query
             if (error != null) throw error
             return Page(items = posts, nextPageToken = null)
         }

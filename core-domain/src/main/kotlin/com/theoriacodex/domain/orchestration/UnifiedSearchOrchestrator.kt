@@ -7,6 +7,7 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.query.CapabilityExclusionReason
 import com.theoriacodex.domain.query.SourceCapabilityGate
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -49,12 +50,40 @@ class UnifiedSearchOrchestrator(
             query = query,
             capabilitiesBySource = candidateAdapters.mapValues { it.value.capabilities },
         )
+        val clientSideExcludeSources = excluded
+            .filterValues { reasons ->
+                reasons.isNotEmpty() &&
+                    reasons.all { reason -> reason == CapabilityExclusionReason.EXCLUDE_TAGS_UNSUPPORTED }
+            }
+            .keys
+        val hardExcluded = excluded
+            .filterValues { reasons ->
+                reasons.any { reason -> reason != CapabilityExclusionReason.EXCLUDE_TAGS_UNSUPPORTED }
+            }
 
         val jobs = candidateAdapters
-            .filterKeys { source -> source !in excluded }
+            .filterKeys { source -> source !in hardExcluded }
             .map { (source, adapter) ->
                 async {
-                    source to runCatching { adapter.search(query, pageTokens[source]) }
+                    val sourceQuery = if (source in clientSideExcludeSources) {
+                        query.copy(excludeTags = emptyList())
+                    } else {
+                        query
+                    }
+                    source to runCatching {
+                        adapter.search(sourceQuery, pageTokens[source]).let { page ->
+                            if (source in clientSideExcludeSources) {
+                                page.copy(
+                                    items = applyClientSideExcludeFilter(
+                                        posts = page.items,
+                                        excludeTags = query.excludeTags,
+                                    )
+                                )
+                            } else {
+                                page
+                            }
+                        }
+                    }
                 }
             }
             .awaitAll()
@@ -62,7 +91,7 @@ class UnifiedSearchOrchestrator(
         val succeededPages = mutableMapOf<SourceKey, Page<Post>>()
         val statuses = mutableListOf<SourceRunStatus>()
 
-        excluded.forEach { (source, reasons) ->
+        hardExcluded.forEach { (source, reasons) ->
             statuses += SourceRunStatus(
                 source = source,
                 state = SourceRunState.EXCLUDED,
@@ -151,6 +180,25 @@ class UnifiedSearchOrchestrator(
         return when (error) {
             is SourceAdapterException -> error.reason
             else -> SourceFailureReason.UNKNOWN
+        }
+    }
+
+    private fun applyClientSideExcludeFilter(
+        posts: List<Post>,
+        excludeTags: List<String>,
+    ): List<Post> {
+        val normalizedExcluded = excludeTags
+            .asSequence()
+            .map { it.trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .toSet()
+        if (normalizedExcluded.isEmpty()) return posts
+        return posts.filterNot { post ->
+            val postTags = (post.canonicalTags + post.rawTags)
+                .asSequence()
+                .map { it.trim().lowercase().removePrefix("-") }
+                .filter { it.isNotBlank() }
+            postTags.any { it in normalizedExcluded }
         }
     }
 }
