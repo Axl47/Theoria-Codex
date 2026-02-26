@@ -99,7 +99,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -154,6 +156,7 @@ fun ViewerScreen(
     var lastViewerPaginationRequestSize by remember(posts.size) { mutableIntStateOf(-1) }
     val loadedMediaUrls = remember { mutableStateMapOf<String, Boolean>() }
     val prefetchedVideoUrls = remember { mutableStateMapOf<String, Boolean>() }
+    val prefetchInFlightVideoUrls = remember { mutableSetOf<String>() }
     var pendingDismiss by remember { mutableStateOf(false) }
     var mediaPlaybackEnabled by remember { mutableStateOf(true) }
     val currentPostIndex = postPagerState.currentPage.coerceIn(0, posts.lastIndex)
@@ -218,11 +221,16 @@ fun ViewerScreen(
             if (isVideoMediaRef(candidate.media)) {
                 val videoLocation = candidate.media.localPath ?: candidate.media.url ?: return@forEach
                 if (prefetchedVideoUrls[videoLocation] == true) return@forEach
-                val didPrefetch = prefetchVideoMedia(
-                    context = context,
-                    media = candidate.media,
-                    headers = viewerRequestHeaders(candidate.post.id.source),
-                )
+                if (!prefetchInFlightVideoUrls.add(videoLocation)) return@forEach
+                val didPrefetch = try {
+                    prefetchVideoMedia(
+                        context = context,
+                        media = candidate.media,
+                        headers = viewerRequestHeaders(candidate.post.id.source),
+                    )
+                } finally {
+                    prefetchInFlightVideoUrls.remove(videoLocation)
+                }
                 if (didPrefetch) {
                     prefetchedVideoUrls[videoLocation] = true
                 }
@@ -242,11 +250,16 @@ fun ViewerScreen(
         if (!isVideoMediaRef(currentMedia)) return@LaunchedEffect
         val location = currentMedia.localPath ?: currentMedia.url ?: return@LaunchedEffect
         if (prefetchedVideoUrls[location] == true) return@LaunchedEffect
-        val didCache = prefetchVideoMedia(
-            context = context,
-            media = currentMedia,
-            headers = viewerRequestHeaders(selectedPost.id.source),
-        )
+        if (!prefetchInFlightVideoUrls.add(location)) return@LaunchedEffect
+        val didCache = try {
+            prefetchVideoMedia(
+                context = context,
+                media = currentMedia,
+                headers = viewerRequestHeaders(selectedPost.id.source),
+            )
+        } finally {
+            prefetchInFlightVideoUrls.remove(location)
+        }
         if (didCache) {
             prefetchedVideoUrls[location] = true
         }
@@ -1350,6 +1363,8 @@ private suspend fun prefetchVideoMedia(
         location.startsWith("http://", ignoreCase = true) || location.startsWith("https://", ignoreCase = true) -> {
             val output = viewerVideoCacheFile(context, location, media.mime)
             if (output.exists() && output.length() > 0L) {
+                output.setLastModified(System.currentTimeMillis())
+                trimViewerVideoCache(context)
                 return@withContext true
             }
             val connection = URL(location).openConnection() as? HttpURLConnection ?: return@withContext false
@@ -1366,7 +1381,13 @@ private suspend fun prefetchVideoMedia(
                     connection.inputStream.use { input ->
                         output.parentFile?.mkdirs()
                         temp.outputStream().use { out ->
-                            input.copyTo(out)
+                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            while (true) {
+                                currentCoroutineContext().ensureActive()
+                                val count = input.read(buffer)
+                                if (count <= 0) break
+                                out.write(buffer, 0, count)
+                            }
                         }
                     }
                     if (temp.length() <= 0L) {
@@ -1376,7 +1397,11 @@ private suspend fun prefetchVideoMedia(
                         if (output.exists()) {
                             output.delete()
                         }
-                        temp.renameTo(output)
+                        val renamed = temp.renameTo(output)
+                        if (renamed) {
+                            trimViewerVideoCache(context)
+                        }
+                        renamed
                     }
                 }
             } finally {
@@ -1389,6 +1414,30 @@ private suspend fun prefetchVideoMedia(
 
         location.startsWith("content://", ignoreCase = true) -> true
         else -> File(location).exists()
+    }
+}
+
+private fun trimViewerVideoCache(context: Context) {
+    val directory = File(context.cacheDir, "theoria_codex/viewer/videos")
+    val files = directory.listFiles()
+        ?.filter { it.isFile && !it.name.endsWith(".part") }
+        ?.toMutableList()
+        ?: return
+    var totalBytes = files.sumOf { it.length() }
+    var fileCount = files.size
+    if (fileCount <= VIEWER_VIDEO_CACHE_MAX_FILES && totalBytes <= VIEWER_VIDEO_CACHE_MAX_BYTES) {
+        return
+    }
+    files.sortBy { it.lastModified() }
+    for (file in files) {
+        if (fileCount <= VIEWER_VIDEO_CACHE_MAX_FILES && totalBytes <= VIEWER_VIDEO_CACHE_MAX_BYTES) {
+            break
+        }
+        val bytes = file.length()
+        if (file.delete()) {
+            fileCount -= 1
+            totalBytes = (totalBytes - bytes).coerceAtLeast(0L)
+        }
     }
 }
 
@@ -1647,6 +1696,8 @@ private const val VIEWER_PREFETCH_LEFT_COUNT = 3
 private const val VIEWER_PREFETCH_RIGHT_COUNT = 3
 private const val VIEWER_PAGINATION_PREFETCH_RATIO = 0.8f
 private const val GIF_FALLBACK_DURATION_MS = 1000L
+private const val VIEWER_VIDEO_CACHE_MAX_FILES = 80
+private const val VIEWER_VIDEO_CACHE_MAX_BYTES = 750L * 1024L * 1024L
 
 @Composable
 private fun ViewerChrome(

@@ -47,6 +47,7 @@ Previously completed MVP slices remain in place:
 - Viewer now uses horizontal post paging + vertical in-post image paging (per-post `X / Y`), supports long-press image download, and search cards show compact source/image-count overlays
 - Viewer now prefetches the next three upcoming media items while browsing to reduce perceived load time when swiping forward
 - Viewer now also prefetches upcoming video media into local cache files (for faster replay/re-entry) and force-stops active video playback before dismiss to avoid sluggish exit feel
+- Viewer video prefetch now deduplicates in-flight downloads, supports cancellation during rapid browsing, and trims old cache files to keep long-scroll sessions stable
 - Pixiv ugoira playback now uses an in-memory LRU cache so returning between Search and Viewer reuses decoded animations instead of reloading from network
 - Viewer shows a thin playback progress bar under Pixiv ugoira media so loop position is visible while watching animations
 - Viewer animated media now uses an interactive timeline scrubber (drag-to-seek + current time/duration) shared across Pixiv ugoira, GIF, and video playback, with a left-side pause/play toggle in the footer
