@@ -103,21 +103,21 @@ class SearchCoordinator(
         val cachedCount = tagSuggestionStore
             .get(source = source, limit = TAG_LOOKUP_LIMIT)
             .firstOrNull { suggestion ->
-                suggestion.text.trim().lowercase() == normalized
+                tagsMatchForSource(source, suggestion.text, normalized)
             }
             ?.count
         if (cachedCount != null) return cachedCount
 
         val autocompleteCount = autocompleteSuggestions
             .firstOrNull { suggestion ->
-                suggestion.text.trim().lowercase() == normalized
+                tagsMatchForSource(source, suggestion.text, normalized)
             }
             ?.count
         if (autocompleteCount != null) return autocompleteCount
 
         return trendingTags
             .firstOrNull { suggestion ->
-                suggestion.text.trim().lowercase() == normalized
+                tagsMatchForSource(source, suggestion.text, normalized)
             }
             ?.count
     }
@@ -128,16 +128,16 @@ class SearchCoordinator(
         tagVideoCount(source, normalized)?.let { return it }
 
         val adapter = registry.adapterFor(source) ?: return null
+        val sourcePrefix = autocompletePrefixForSource(source, normalized)
         val fetched = runCatching {
-            adapter.autocompleteTags(prefix = normalized, limit = TAG_FETCH_LIMIT)
+            adapter.autocompleteTags(prefix = sourcePrefix, limit = TAG_FETCH_LIMIT)
         }.getOrDefault(emptyList())
         if (fetched.isNotEmpty()) {
             tagSuggestionStore.put(source, fetched)
         }
-        val key = normalized.lowercase()
         return fetched
             .firstOrNull { suggestion ->
-                suggestion.text.trim().lowercase() == key
+                tagsMatchForSource(source, suggestion.text, normalized)
             }
             ?.count
             ?: tagVideoCount(source, normalized)
@@ -202,7 +202,7 @@ class SearchCoordinator(
             }
             return false
         }
-        addTagInput(input)
+        addTagInput(resolveCommittedTagInput(input))
         tagInputValidationMessage = null
         return true
     }
@@ -344,8 +344,8 @@ class SearchCoordinator(
     }
 
     suspend fun refreshAutocompleteSuggestions(input: String) {
-        val prefix = normalizeTypedTag(input)
-        if (prefix.isBlank()) {
+        val typedPrefix = normalizeTypedTag(input)
+        if (typedPrefix.isBlank()) {
             autocompleteSuggestions = emptyList()
             return
         }
@@ -355,8 +355,9 @@ class SearchCoordinator(
                 val enabledSources = effectiveEnabledSources()
                 val fetched = enabledSources
                     .flatMap { source ->
+                        val sourcePrefix = autocompletePrefixForSource(source, typedPrefix)
                         val suggestions = runCatching {
-                            registry.adapterFor(source)?.autocompleteTags(prefix = prefix, limit = 10).orEmpty()
+                            registry.adapterFor(source)?.autocompleteTags(prefix = sourcePrefix, limit = 10).orEmpty()
                         }.getOrDefault(emptyList())
                         if (suggestions.isNotEmpty()) {
                             tagSuggestionStore.put(source, suggestions)
@@ -364,25 +365,26 @@ class SearchCoordinator(
                         suggestions
                     }
                 if (fetched.isNotEmpty()) {
-                    rankSuggestionsByPrefix(fetched, prefix = prefix, limit = 20)
+                    rankSuggestionsByPrefix(fetched, prefix = typedPrefix, limit = 20)
                 } else {
                     val cached = enabledSources
                         .flatMap { source -> tagSuggestionStore.get(source, limit = 120) }
-                    rankSuggestionsByPrefix(cached, prefix = prefix, limit = 20)
+                    rankSuggestionsByPrefix(cached, prefix = typedPrefix, limit = 20)
                 }
             }
 
             is QueryMode.Source -> {
+                val sourcePrefix = autocompletePrefixForSource(mode.source, typedPrefix)
                 val fetched = runCatching {
-                    registry.adapterFor(mode.source)?.autocompleteTags(prefix = prefix, limit = 20).orEmpty()
+                    registry.adapterFor(mode.source)?.autocompleteTags(prefix = sourcePrefix, limit = 20).orEmpty()
                 }.getOrDefault(emptyList())
                 if (fetched.isNotEmpty()) {
                     tagSuggestionStore.put(mode.source, fetched)
-                    rankSuggestionsByPrefix(fetched, prefix = prefix, limit = 20)
+                    rankSuggestionsByPrefix(fetched, prefix = typedPrefix, limit = 20)
                 } else {
                     val cached = tagSuggestionStore.get(mode.source, limit = 120)
                     val fallback = if (cached.isNotEmpty()) cached else trendingTags
-                    rankSuggestionsByPrefix(fallback, prefix = prefix, limit = 20)
+                    rankSuggestionsByPrefix(fallback, prefix = typedPrefix, limit = 20)
                 }
             }
         }
@@ -731,8 +733,9 @@ class SearchCoordinator(
             if (normalized.isBlank()) return@forEach
             val key = normalized.lowercase()
             val mapped = cache.getOrPut(key) {
+                val sourcePrefix = autocompletePrefixForSource(SourceKey.GELBOORU, normalized)
                 val suggestions = runCatching {
-                    adapter.autocompleteTags(prefix = normalized, limit = 1)
+                    adapter.autocompleteTags(prefix = sourcePrefix, limit = 1)
                 }.getOrDefault(emptyList())
                 if (suggestions.isNotEmpty()) {
                     tagSuggestionStore.put(SourceKey.GELBOORU, suggestions)
@@ -803,9 +806,49 @@ class SearchCoordinator(
         return input.trim().removePrefix("-").trim()
     }
 
+    private fun autocompletePrefixForSource(source: SourceKey, input: String): String {
+        val normalized = normalizeTypedTag(input)
+        return when (source) {
+            SourceKey.GELBOORU -> normalizeGelbooruToken(normalized)
+            else -> normalized
+        }
+    }
+
+    private fun resolveCommittedTagInput(input: String): String {
+        val trimmed = input.trim()
+        if (!requiresGelbooruSuggestionSelection()) return trimmed
+
+        val isExclude = trimmed.startsWith("-")
+        val typedTag = normalizeTypedTag(trimmed)
+        val matched = autocompleteSuggestions
+            .firstOrNull { suggestion -> tagsMatchForSource(SourceKey.GELBOORU, suggestion.text, typedTag) }
+            ?.text
+            ?.trim()
+            .orEmpty()
+            .ifBlank { typedTag }
+        return if (isExclude) "-$matched" else matched
+    }
+
+    private fun tagsMatchForSource(source: SourceKey, suggestionText: String, typedTag: String): Boolean {
+        val left = suggestionText.trim()
+        val right = typedTag.trim()
+        if (left.isBlank() || right.isBlank()) return false
+        return when (source) {
+            SourceKey.GELBOORU -> normalizeGelbooruToken(left) == normalizeGelbooruToken(right)
+            else -> left.equals(right, ignoreCase = true)
+        }
+    }
+
+    private fun normalizeGelbooruToken(value: String): String {
+        return value
+            .trim()
+            .lowercase()
+            .replace(WHITESPACE_REGEX, "_")
+    }
+
     private fun isSuggestedTag(tag: String): Boolean {
         return autocompleteSuggestions.any { suggestion ->
-            suggestion.text.equals(tag, ignoreCase = true)
+            tagsMatchForSource(SourceKey.GELBOORU, suggestion.text, tag)
         }
     }
 
@@ -819,23 +862,31 @@ class SearchCoordinator(
         prefix: String,
         limit: Int,
     ): List<TagSuggestion> {
-        val normalizedPrefix = prefix.trim()
+        val normalizedPrefix = normalizeMatchToken(prefix)
         if (normalizedPrefix.isBlank() || limit <= 0) return emptyList()
         return suggestions
             .asSequence()
             .filter { suggestion ->
-                suggestion.text.contains(normalizedPrefix, ignoreCase = true)
+                normalizeMatchToken(suggestion.text).contains(normalizedPrefix)
             }
             .distinctBy { suggestion -> suggestion.text.trim().lowercase() }
             .sortedWith(
                 compareByDescending<TagSuggestion> { suggestion ->
                     suggestion.count ?: Int.MIN_VALUE
                 }.thenBy { suggestion ->
-                    !suggestion.text.startsWith(normalizedPrefix, ignoreCase = true)
+                    !normalizeMatchToken(suggestion.text).startsWith(normalizedPrefix)
                 }.thenBy { suggestion -> suggestion.text.lowercase() }
             )
             .take(limit)
             .toList()
+    }
+
+    private fun normalizeMatchToken(value: String): String {
+        return value
+            .trim()
+            .lowercase()
+            .replace('_', ' ')
+            .replace(WHITESPACE_REGEX, " ")
     }
 
     private fun effectiveWeights(enabledSources: Set<SourceKey>): Map<SourceKey, Double> {
@@ -872,3 +923,4 @@ private const val GELBOORU_SUGGESTION_REQUIRED_MESSAGE =
     "For Gelbooru, pick a suggested tag from autocomplete."
 private const val TAG_LOOKUP_LIMIT = 20_000
 private const val TAG_FETCH_LIMIT = 25
+private val WHITESPACE_REGEX = Regex("\\s+")

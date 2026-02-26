@@ -249,6 +249,35 @@ class SearchCoordinatorTest {
     }
 
     @Test
+    fun `gelbooru autocomplete treats spaces as underscores`() = runTest {
+        val gelbooruAdapter = RecordingAdapter(
+            sourceKey = SourceKey.GELBOORU,
+            autocompleteByPrefix = mapOf(
+                "blue_hair" to listOf("blue_hair"),
+            ),
+        )
+        val registry = CompatibilityRegistry(
+            adapters = mapOf(SourceKey.GELBOORU to gelbooruAdapter),
+        )
+        val coordinator = SearchCoordinator(
+            registry = registry,
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.GELBOORU))
+
+        coordinator.refreshAutocompleteSuggestions("blue hair")
+
+        assertEquals("blue_hair", gelbooruAdapter.lastAutocompletePrefix)
+        assertEquals(listOf("blue_hair"), coordinator.autocompleteSuggestions.map { it.text })
+        assertTrue(coordinator.canCommitTagInput("blue hair"))
+        assertTrue(coordinator.commitTagInput("blue hair"))
+        assertTrue("blue_hair" in coordinator.draftQuery.includeTags)
+    }
+
+    @Test
     fun `unified search maps gelbooru compatibility tags and falls back to raw tag`() = runTest {
         val pixivAdapter = RecordingAdapter(sourceKey = SourceKey.PIXIV)
         val gelbooruAdapter = RecordingAdapter(
@@ -426,6 +455,7 @@ private class RecordingAdapter(
     private val autocompleteTagsByPrefix: Map<String, List<TagSuggestion>> = emptyMap(),
 ) : SourceAdapter {
     var lastSearchQuery: Query? = null
+    var lastAutocompletePrefix: String? = null
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
         supportsSortNewest = true,
@@ -446,6 +476,7 @@ private class RecordingAdapter(
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
 
     override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
+        lastAutocompletePrefix = prefix
         val normalized = prefix.trim().lowercase()
         val richMatches = autocompleteTagsByPrefix[normalized]
             ?: autocompleteTagsByPrefix.entries.firstOrNull { (key, _) ->
