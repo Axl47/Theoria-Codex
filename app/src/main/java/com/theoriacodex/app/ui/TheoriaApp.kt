@@ -391,6 +391,9 @@ fun TheoriaApp(
         startDestination = uiRestoreRepository.getLastTab()
             ?: settingsRepository.observeSettings().first().lastSelectedTabRoute
         navReady = true
+        scope.launch {
+            searchCoordinator.restoreLastAppliedSearchIfNeeded()
+        }
         val updateSnapshot = startupUpdater.pendingSnapshot()
         latestInstalledChangelog = updateSnapshot.lastInstalledChangelog
         val pendingChangelog = updateSnapshot.pendingPostInstallChangelog

@@ -93,6 +93,34 @@ class SearchCoordinatorTest {
     }
 
     @Test
+    fun `initialize restores executed-search state when previous apply was persisted`() = runTest {
+        val queryRepository = InMemoryQueryRepository()
+        val settingsRepository = InMemorySettingsRepository()
+        val uiRestoreRepository = InMemoryUiRestoreRepository()
+
+        val firstSession = SearchCoordinator(
+            registry = StubAdapterRegistry(),
+            queryRepository = queryRepository,
+            settingsRepository = settingsRepository,
+            uiRestoreRepository = uiRestoreRepository,
+        )
+        firstSession.initialize()
+        assertFalse(firstSession.hasAnySearchRun)
+        firstSession.applyDraft()
+        assertTrue(firstSession.hasAnySearchRun)
+
+        val restoredSession = SearchCoordinator(
+            registry = StubAdapterRegistry(),
+            queryRepository = queryRepository,
+            settingsRepository = settingsRepository,
+            uiRestoreRepository = uiRestoreRepository,
+        )
+        restoredSession.initialize()
+
+        assertTrue(restoredSession.hasAnySearchRun)
+    }
+
+    @Test
     fun `mode options and source mode availability follow registry`() = runTest {
         val coordinator = SearchCoordinator(
             registry = LimitedStubRegistry(setOf(SourceKey.PIXIV)),
