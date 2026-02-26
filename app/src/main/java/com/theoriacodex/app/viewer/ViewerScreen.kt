@@ -844,6 +844,10 @@ private fun ViewerVideoPlayer(
         }
         return
     }
+    if (!isActive) {
+        Box(modifier = modifier.background(Color.Black)) {}
+        return
+    }
 
     var loading by remember(location) { mutableStateOf(true) }
     var loadFailed by remember(location) { mutableStateOf(false) }

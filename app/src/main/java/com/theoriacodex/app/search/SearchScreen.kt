@@ -82,6 +82,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -106,6 +107,8 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
@@ -757,6 +760,7 @@ private fun SearchVideoPreview(
     onPlaybackError: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val location = media.localPath ?: media.url
     if (location.isNullOrBlank()) {
         onPlaybackError()
@@ -765,8 +769,27 @@ private fun SearchVideoPreview(
 
     var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
 
-    DisposableEffect(location) {
+    DisposableEffect(location, lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME -> {
+                    runCatching {
+                        videoViewRef?.resume()
+                        videoViewRef?.start()
+                    }
+                }
+                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
+                    runCatching {
+                        videoViewRef?.pause()
+                        videoViewRef?.`suspend`()
+                    }
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
             videoViewRef?.stopPlayback()
             videoViewRef = null
         }
@@ -782,7 +805,9 @@ private fun SearchVideoPreview(
                 setOnPreparedListener { player ->
                     player.isLooping = true
                     player.setVolume(0f, 0f)
-                    start()
+                    if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                        start()
+                    }
                 }
                 setOnErrorListener { _, _, _ ->
                     onPlaybackError()
@@ -802,7 +827,9 @@ private fun SearchVideoPreview(
                 } else {
                     videoView.setVideoURI(uri, headers)
                 }
-                videoView.start()
+                if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                    videoView.start()
+                }
             }
         },
     )
