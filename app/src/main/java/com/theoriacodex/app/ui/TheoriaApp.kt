@@ -307,6 +307,14 @@ fun TheoriaApp(
         initial = CacheSnapshot(thumbnailCount = 0, fullImageCount = 0),
     )
     val codices by codexRepository.observeCodices().collectAsState(initial = emptyList())
+    val activeLikesCodexId = remember(activeRecommendationProfile.profileId) {
+        likesCodexIdForProfile(activeRecommendationProfile.profileId)
+    }
+    val visibleCodices = remember(codices, activeLikesCodexId) {
+        codices.filterNot { codex ->
+            codex.codexId.startsWith(LIKES_CODEX_ID_PREFIX) && codex.codexId != activeLikesCodexId
+        }
+    }
 
     var viewerSession by remember { mutableStateOf<ViewerSession?>(null) }
     var showSaveSheet by remember { mutableStateOf(false) }
@@ -414,10 +422,15 @@ fun TheoriaApp(
         }
     }
 
-    suspend fun ensureLikesCodexId(): String {
+    suspend fun ensureLikesCodexId(profile: RecommendationProfile): String {
+        val codexName = if (profile.name.equals(DEFAULT_PROFILE_NAME, ignoreCase = true)) {
+            LIKES_CODEX_NAME
+        } else {
+            "$LIKES_CODEX_NAME (${profile.name})"
+        }
         return codexRepository.ensureCodex(
-            codexId = LIKES_CODEX_ID,
-            name = LIKES_CODEX_NAME,
+            codexId = likesCodexIdForProfile(profile.profileId),
+            name = codexName,
         ).codexId
     }
 
@@ -427,22 +440,17 @@ fun TheoriaApp(
             postId = post.id,
             tags = trainingTagsFor(post),
         )
-        val likesCodexId = ensureLikesCodexId()
+        val likesCodexId = ensureLikesCodexId(activeRecommendationProfile)
         if (nowLiked) {
             codexRepository.addItem(likesCodexId, post)
             return
         }
 
-        val stillLikedInAnyProfile = settings.recommendationProfiles.any { profile ->
-            likesRepository.observeLikedPostIds(profile.profileId).first().contains(post.id)
-        }
-        if (!stillLikedInAnyProfile) {
-            codexRepository.removeItem(
-                codexId = likesCodexId,
-                sourceKey = post.id.source,
-                sourcePostId = post.id.sourcePostId,
-            )
-        }
+        codexRepository.removeItem(
+            codexId = likesCodexId,
+            sourceKey = post.id.source,
+            sourcePostId = post.id.sourcePostId,
+        )
     }
 
     suspend fun clearProfileLikesAndSyncCodex(profileId: String) {
@@ -450,18 +458,20 @@ fun TheoriaApp(
         likesRepository.clearLikes(profileId)
         if (likesToClear.isEmpty()) return
 
-        val likesCodexId = ensureLikesCodexId()
-        val remainingLikedPostIds = settings.recommendationProfiles
-            .flatMap { profile -> likesRepository.observeLikedPostIds(profile.profileId).first() }
-            .toSet()
+        val likesCodexId = likesCodexIdForProfile(profileId)
         likesToClear.forEach { liked ->
-            if (liked.postId !in remainingLikedPostIds) {
-                codexRepository.removeItem(
-                    codexId = likesCodexId,
-                    sourceKey = liked.postId.source,
-                    sourcePostId = liked.postId.sourcePostId,
-                )
-            }
+            codexRepository.removeItem(
+                codexId = likesCodexId,
+                sourceKey = liked.postId.source,
+                sourcePostId = liked.postId.sourcePostId,
+            )
+        }
+    }
+
+    suspend fun removeProfileLikesCodex(profileId: String) {
+        val codexId = likesCodexIdForProfile(profileId)
+        codexRepository.observeCodex(codexId).first()?.let {
+            codexRepository.deleteCodex(codexId)
         }
     }
 
@@ -499,7 +509,7 @@ fun TheoriaApp(
         if (navReady) return
         searchCoordinator.initialize()
         forYouCoordinator.initialize()
-        ensureLikesCodexId()
+        ensureLikesCodexId(activeRecommendationProfile)
         refreshSourceAccountState()
         startDestination = uiRestoreRepository.getLastTab()
             ?: settingsRepository.observeSettings().first().lastSelectedTabRoute
@@ -737,6 +747,10 @@ fun TheoriaApp(
                 }
             }
         }
+    }
+
+    LaunchedEffect(activeRecommendationProfile.profileId, activeRecommendationProfile.name) {
+        ensureLikesCodexId(activeRecommendationProfile)
     }
 
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -1184,7 +1198,7 @@ fun TheoriaApp(
                     }
                     composable(TopLevelDestination.Codex.route) {
                         CodexListScreen(
-                            codices = codices,
+                            codices = visibleCodices,
                             itemCounts = codexItemCounts,
                             onOpenCodex = { codexId ->
                                 navController.navigate(AppRoute.codexDetail(codexId))
@@ -1331,10 +1345,12 @@ fun TheoriaApp(
                             },
                             onRemoveProfile = { profileId ->
                                 scope.launch {
-                                    val removed = settingsRepository.removeRecommendationProfile(profileId)
-                                    if (removed) {
-                                        clearProfileLikesAndSyncCodex(profileId)
-                                    }
+                                    val canRemove = settings.recommendationProfiles.size > 1 &&
+                                        settings.recommendationProfiles.any { profile -> profile.profileId == profileId }
+                                    if (!canRemove) return@launch
+                                    clearProfileLikesAndSyncCodex(profileId)
+                                    removeProfileLikesCodex(profileId)
+                                    settingsRepository.removeRecommendationProfile(profileId)
                                 }
                             },
                             onClearLikesForActiveProfile = {
@@ -2113,6 +2129,14 @@ private fun buildCodexSearchTags(posts: List<Post>): List<String> {
         .map { it.key }
 }
 
+private fun likesCodexIdForProfile(profileId: String): String {
+    return if (profileId == DEFAULT_MAIN_PROFILE_ID) {
+        LIKES_CODEX_ID_PREFIX
+    } else {
+        "${LIKES_CODEX_ID_PREFIX}_$profileId"
+    }
+}
+
 private const val PIXIV_TOKEN_REFRESH_TIMEOUT_MS = 6_000L
 private const val BOTTOM_BAR_HEIGHT_RATIO = 0.085f
 private const val BOTTOM_BAR_ICON_RATIO = 0.38f
@@ -2122,6 +2146,8 @@ private const val MIN_BOTTOM_BAR_ICON_DP = 24
 private const val MAX_BOTTOM_BAR_ICON_DP = 30
 private const val TAB_SWIPE_THRESHOLD_DP = 72
 private const val TAB_SWIPE_HORIZONTAL_BIAS = 1.2f
-private const val LIKES_CODEX_ID = "system_likes_codex"
+private const val DEFAULT_MAIN_PROFILE_ID = "profile-main"
+private const val DEFAULT_PROFILE_NAME = "Main"
+private const val LIKES_CODEX_ID_PREFIX = "system_likes_codex"
 private const val LIKES_CODEX_NAME = "Likes"
 private const val CODEX_SEARCH_TAG_LIMIT = 3
