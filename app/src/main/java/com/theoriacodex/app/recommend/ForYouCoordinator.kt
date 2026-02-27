@@ -68,6 +68,9 @@ class ForYouCoordinator(
     var seedId by mutableStateOf("init")
         private set
 
+    var sortMode by mutableStateOf(SortMode.NEWEST)
+        private set
+
     suspend fun initialize() {
         runtimeSettings = settingsRepository.observeSettings().first()
         activeProfile = runtimeSettings.activeProfile
@@ -85,6 +88,12 @@ class ForYouCoordinator(
     suspend fun refresh(shuffle: Boolean = true) {
         if (loading) return
         executeFeed(shuffle = shuffle)
+    }
+
+    suspend fun setSortMode(mode: SortMode) {
+        if (sortMode == mode) return
+        sortMode = mode
+        refresh(shuffle = false)
     }
 
     fun clear() {
@@ -324,7 +333,7 @@ class ForYouCoordinator(
             mode = QueryMode.Source(source),
             includeTags = includeTags,
             excludeTags = emptyList(),
-            sort = SortMode.NEWEST,
+            sort = sortMode,
             dateRange = null,
             minScore = null,
         )
@@ -348,7 +357,7 @@ class ForYouCoordinator(
             mode = QueryMode.Unified,
             includeTags = emptyList(),
             excludeTags = emptyList(),
-            sort = SortMode.NEWEST,
+            sort = sortMode,
             dateRange = null,
             minScore = null,
         )
