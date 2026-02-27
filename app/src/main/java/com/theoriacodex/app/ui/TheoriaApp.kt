@@ -126,7 +126,7 @@ import com.theoriacodex.data.repository.FileBackedLikesRepository
 import com.theoriacodex.data.repository.FileBackedQueryRepository
 import com.theoriacodex.data.repository.FileBackedSettingsRepository
 import com.theoriacodex.data.repository.FileBackedUiRestoreRepository
-import com.theoriacodex.data.repository.UserProfile
+import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.SourceAdapterException
@@ -291,11 +291,17 @@ fun TheoriaApp(
     }
 
     val settings by settingsRepository.observeSettings().collectAsState(initial = AppSettings())
+    val activeRecommendationProfile = remember(settings.recommendationProfiles, settings.activeProfileId) {
+        settings.recommendationProfiles
+            .firstOrNull { it.profileId == settings.activeProfileId }
+            ?: settings.recommendationProfiles.firstOrNull()
+            ?: RecommendationProfile(profileId = "profile-main", name = "Main")
+    }
     val likedPostIds by likesRepository
-        .observeLikedPostIds(settings.activeProfile)
+        .observeLikedPostIds(activeRecommendationProfile.profileId)
         .collectAsState(initial = emptySet())
     val activeProfileLikes by likesRepository
-        .observeLikes(settings.activeProfile)
+        .observeLikes(activeRecommendationProfile.profileId)
         .collectAsState(initial = emptyList())
     val cacheSnapshot by cacheRepository.observeSnapshot().collectAsState(
         initial = CacheSnapshot(thumbnailCount = 0, fullImageCount = 0),
@@ -417,7 +423,7 @@ fun TheoriaApp(
 
     suspend fun toggleLikeAndSyncCodex(post: Post) {
         val nowLiked = likesRepository.toggleLike(
-            profile = settings.activeProfile,
+            profileId = activeRecommendationProfile.profileId,
             postId = post.id,
             tags = trainingTagsFor(post),
         )
@@ -427,8 +433,8 @@ fun TheoriaApp(
             return
         }
 
-        val stillLikedInAnyProfile = UserProfile.entries.any { profile ->
-            likesRepository.observeLikedPostIds(profile).first().contains(post.id)
+        val stillLikedInAnyProfile = settings.recommendationProfiles.any { profile ->
+            likesRepository.observeLikedPostIds(profile.profileId).first().contains(post.id)
         }
         if (!stillLikedInAnyProfile) {
             codexRepository.removeItem(
@@ -439,15 +445,14 @@ fun TheoriaApp(
         }
     }
 
-    suspend fun clearActiveProfileLikesAndSyncCodex() {
-        val profile = settings.activeProfile
-        val likesToClear = likesRepository.observeLikes(profile).first()
-        likesRepository.clearLikes(profile)
+    suspend fun clearProfileLikesAndSyncCodex(profileId: String) {
+        val likesToClear = likesRepository.observeLikes(profileId).first()
+        likesRepository.clearLikes(profileId)
         if (likesToClear.isEmpty()) return
 
         val likesCodexId = ensureLikesCodexId()
-        val remainingLikedPostIds = UserProfile.entries
-            .flatMap { userProfile -> likesRepository.observeLikedPostIds(userProfile).first() }
+        val remainingLikedPostIds = settings.recommendationProfiles
+            .flatMap { profile -> likesRepository.observeLikedPostIds(profile.profileId).first() }
             .toSet()
         likesToClear.forEach { liked ->
             if (liked.postId !in remainingLikedPostIds) {
@@ -1100,7 +1105,8 @@ fun TheoriaApp(
                     composable(TopLevelDestination.ForYou.route) {
                         ForYouScreen(
                             coordinator = forYouCoordinator,
-                            activeProfile = settings.activeProfile,
+                            activeProfileId = activeRecommendationProfile.profileId,
+                            activeProfileName = activeRecommendationProfile.name,
                             likesCount = activeProfileLikes.size,
                             likedPostIds = likedPostIds,
                             pixivUgoiraClient = pixivUgoiraClient,
@@ -1216,7 +1222,8 @@ fun TheoriaApp(
                     composable(TopLevelDestination.Settings.route) {
                         SettingsScreen(
                             settings = settings,
-                            activeProfile = settings.activeProfile,
+                            recommendationProfiles = settings.recommendationProfiles,
+                            activeProfileId = activeRecommendationProfile.profileId,
                             likesCount = activeProfileLikes.size,
                             availableSources = searchCoordinator.availableSources,
                             cacheSnapshot = cacheSnapshot,
@@ -1281,11 +1288,22 @@ fun TheoriaApp(
                             onSetSourceWeights = { weights ->
                                 scope.launch { settingsRepository.setSourceWeights(weights) }
                             },
-                            onSetActiveProfile = { profile ->
-                                scope.launch { settingsRepository.setActiveProfile(profile) }
+                            onSetActiveProfile = { profileId ->
+                                scope.launch { settingsRepository.setActiveProfile(profileId) }
+                            },
+                            onAddProfile = { name ->
+                                scope.launch { settingsRepository.addRecommendationProfile(name) }
+                            },
+                            onRemoveProfile = { profileId ->
+                                scope.launch {
+                                    val removed = settingsRepository.removeRecommendationProfile(profileId)
+                                    if (removed) {
+                                        clearProfileLikesAndSyncCodex(profileId)
+                                    }
+                                }
                             },
                             onClearLikesForActiveProfile = {
-                                scope.launch { clearActiveProfileLikesAndSyncCodex() }
+                                scope.launch { clearProfileLikesAndSyncCodex(activeRecommendationProfile.profileId) }
                             },
                             onSetCacheFullImageOnSave = { enabled ->
                                 scope.launch { settingsRepository.setCacheFullImageOnSave(enabled) }

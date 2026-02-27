@@ -28,14 +28,15 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CacheSnapshot
+import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ScenarioPreset
-import com.theoriacodex.data.repository.UserProfile
 import com.theoriacodex.domain.model.SourceKey
 
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
-    activeProfile: UserProfile,
+    recommendationProfiles: List<RecommendationProfile>,
+    activeProfileId: String,
     likesCount: Int,
     availableSources: List<SourceKey>,
     cacheSnapshot: CacheSnapshot,
@@ -53,7 +54,9 @@ fun SettingsScreen(
     onClearGelbooruCredentials: () -> Unit,
     onSetEnabledSources: (Set<SourceKey>) -> Unit,
     onSetSourceWeights: (Map<SourceKey, Double>) -> Unit,
-    onSetActiveProfile: (UserProfile) -> Unit,
+    onSetActiveProfile: (String) -> Unit,
+    onAddProfile: (String) -> Unit,
+    onRemoveProfile: (String) -> Unit,
     onClearLikesForActiveProfile: () -> Unit,
     onSetCacheFullImageOnSave: (Boolean) -> Unit,
     onSetScenarioPreset: (ScenarioPreset) -> Unit,
@@ -63,6 +66,7 @@ fun SettingsScreen(
     onOpenChangelog: () -> Unit,
 ) {
     var showClearCacheOptions by remember { mutableStateOf(false) }
+    var newProfileName by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
@@ -86,18 +90,46 @@ fun SettingsScreen(
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text("Profile", style = MaterialTheme.typography.titleMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = activeProfile == UserProfile.USER_1,
-                        onClick = { onSetActiveProfile(UserProfile.USER_1) },
-                        label = { Text("User 1") },
+                Text("Recommendation Profiles", style = MaterialTheme.typography.titleMedium)
+                recommendationProfiles.forEach { profile ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        FilterChip(
+                            selected = activeProfileId == profile.profileId,
+                            onClick = { onSetActiveProfile(profile.profileId) },
+                            label = { Text(profile.name) },
+                        )
+                        TextButton(
+                            enabled = recommendationProfiles.size > 1,
+                            onClick = {
+                                onRemoveProfile(profile.profileId)
+                            },
+                        ) {
+                            Text("Remove")
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        modifier = Modifier.weight(1f),
+                        value = newProfileName,
+                        onValueChange = { newProfileName = it },
+                        label = { Text("New profile") },
+                        singleLine = true,
                     )
-                    FilterChip(
-                        selected = activeProfile == UserProfile.USER_2,
-                        onClick = { onSetActiveProfile(UserProfile.USER_2) },
-                        label = { Text("User 2") },
-                    )
+                    Button(onClick = {
+                        onAddProfile(newProfileName)
+                        newProfileName = ""
+                    }) {
+                        Text("Add")
+                    }
                 }
                 Text(
                     text = "Liked posts in active profile: $likesCount",

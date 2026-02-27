@@ -41,17 +41,17 @@ interface ExploreRepository {
 }
 
 data class LikedPost(
-    val profile: UserProfile,
+    val profileId: String,
     val postId: PostId,
     val likedAtEpochMs: Long,
     val tags: List<String>,
 )
 
 interface LikesRepository {
-    fun observeLikes(profile: UserProfile): Flow<List<LikedPost>>
-    fun observeLikedPostIds(profile: UserProfile): Flow<Set<PostId>>
-    suspend fun toggleLike(profile: UserProfile, postId: PostId, tags: List<String>): Boolean
-    suspend fun clearLikes(profile: UserProfile)
+    fun observeLikes(profileId: String): Flow<List<LikedPost>>
+    fun observeLikedPostIds(profileId: String): Flow<Set<PostId>>
+    suspend fun toggleLike(profileId: String, postId: PostId, tags: List<String>): Boolean
+    suspend fun clearLikes(profileId: String)
 }
 
 data class SourceRuntimeSettings(
@@ -67,9 +67,18 @@ data class CacheSettings(
     val cacheFullImageOnSave: Boolean = false,
 )
 
-enum class UserProfile {
-    USER_1,
-    USER_2,
+data class RecommendationProfile(
+    val profileId: String,
+    val name: String,
+)
+
+private val DEFAULT_RECOMMENDATION_PROFILES = listOf(
+    RecommendationProfile(profileId = "profile-main", name = "Main"),
+    RecommendationProfile(profileId = "profile-alt", name = "Alt"),
+)
+
+fun defaultRecommendationProfiles(): List<RecommendationProfile> {
+    return DEFAULT_RECOMMENDATION_PROFILES
 }
 
 data class AppSettings(
@@ -77,7 +86,8 @@ data class AppSettings(
     val cache: CacheSettings = CacheSettings(),
     val scenarioPreset: ScenarioPreset = ScenarioPreset.NORMAL,
     val lastSelectedTabRoute: String = "search",
-    val activeProfile: UserProfile = UserProfile.USER_1,
+    val recommendationProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
+    val activeProfileId: String = defaultRecommendationProfiles().first().profileId,
 )
 
 enum class ScenarioPreset {
@@ -95,7 +105,9 @@ interface SettingsRepository {
     suspend fun setCacheFullImageOnSave(enabled: Boolean)
     suspend fun setScenarioPreset(preset: ScenarioPreset)
     suspend fun setLastTab(route: String)
-    suspend fun setActiveProfile(profile: UserProfile)
+    suspend fun setActiveProfile(profileId: String)
+    suspend fun addRecommendationProfile(name: String): RecommendationProfile
+    suspend fun removeRecommendationProfile(profileId: String): Boolean
 }
 
 data class CacheSnapshot(

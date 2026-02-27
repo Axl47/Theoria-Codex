@@ -43,7 +43,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.viewer.PixivUgoiraClient
-import com.theoriacodex.data.repository.UserProfile
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -54,7 +53,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun ForYouScreen(
     coordinator: ForYouCoordinator,
-    activeProfile: UserProfile,
+    activeProfileId: String,
+    activeProfileName: String,
     likesCount: Int,
     likedPostIds: Set<PostId>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
@@ -67,12 +67,12 @@ fun ForYouScreen(
     var showSortSheet by remember { mutableStateOf(false) }
     val visibleResults = coordinator.results
 
-    LaunchedEffect(activeProfile, likesCount) {
+    LaunchedEffect(activeProfileId, likesCount) {
         if (likesCount == 0) {
             coordinator.clear()
         } else {
             val shouldRefresh = coordinator.results.isEmpty() ||
-                coordinator.activeProfile != activeProfile ||
+                coordinator.activeProfileId != activeProfileId ||
                 coordinator.activeProfileLikesCount != likesCount
             if (shouldRefresh) {
                 coordinator.refresh(shuffle = false)
@@ -133,7 +133,7 @@ fun ForYouScreen(
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("For You", style = MaterialTheme.typography.titleLarge)
                 Text(
-                    text = profileLabel(activeProfile),
+                    text = activeProfileName,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -289,13 +289,6 @@ fun ForYouScreen(
             },
             onDismiss = { showSortSheet = false },
         )
-    }
-}
-
-private fun profileLabel(profile: UserProfile): String {
-    return when (profile) {
-        UserProfile.USER_1 -> "User 1"
-        UserProfile.USER_2 -> "User 2"
     }
 }
 

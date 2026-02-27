@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-02-27T04:11
+updated_at: 2026-02-27T05:05
 ---
 # Theoria Codex
 
@@ -32,7 +32,7 @@ Previously completed MVP slices remain in place:
 - Search / For You / Explore / Codex / Settings tabs
 - Search result cards now include a heart toggle that stores per-profile liked-tag memory from the post's source tags
 - New `For You` tab provides a browsing-first personalized feed generated from liked tags with per-source tag sets in Unified mode (still merged with existing source weights)
-- App now supports two local user profiles (`User 1` and `User 2`) with independent hearts/recommendation memory and profile switching in Settings
+- App now supports dynamic local recommendation profiles (minimum 1) so one user can maintain separate recommendation purposes; profiles can be added/removed in Settings and each profile keeps independent heart/recommendation memory
 - Recommendation likes are persisted in `files/theoria_codex/likes_store.json` and can be cleared per active profile from Settings
 - Codex now auto-creates a system `Likes` board (`system_likes_codex`) and keeps it synced with heart toggles (add on like; remove when no profile still likes that post)
 - Search results now render real source thumbnails in a variable-height staggered grid and show post titles (when available) instead of raw source IDs

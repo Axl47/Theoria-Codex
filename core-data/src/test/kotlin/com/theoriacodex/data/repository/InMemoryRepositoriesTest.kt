@@ -100,7 +100,7 @@ class InMemoryRepositoriesTest {
         repo.setEnabledSources(setOf(SourceKey.PIXIV, SourceKey.GELBOORU))
         repo.setSourceWeights(mapOf(SourceKey.PIXIV to 3.0, SourceKey.GELBOORU to 1.0))
         repo.setScenarioPreset(ScenarioPreset.PARTIAL_FAILURE)
-        repo.setActiveProfile(UserProfile.USER_2)
+        repo.setActiveProfile("profile-alt")
 
         val settings = repo.observeSettings().first()
         val pixivWeight = settings.runtime.sourceWeights.getValue(SourceKey.PIXIV)
@@ -109,7 +109,30 @@ class InMemoryRepositoriesTest {
         assertEquals(1.0, pixivWeight + gelbooruWeight, 0.0001)
         assertTrue(pixivWeight > gelbooruWeight)
         assertEquals(ScenarioPreset.PARTIAL_FAILURE, settings.scenarioPreset)
-        assertEquals(UserProfile.USER_2, settings.activeProfile)
+        assertEquals("profile-alt", settings.activeProfileId)
+    }
+
+    @Test
+    fun `settings repository supports dynamic recommendation profiles`() = runTest {
+        val repo = InMemorySettingsRepository()
+
+        val created = repo.addRecommendationProfile("Sketching")
+        var settings = repo.observeSettings().first()
+
+        assertTrue(settings.recommendationProfiles.any { it.profileId == created.profileId && it.name == "Sketching" })
+        assertEquals(created.profileId, settings.activeProfileId)
+
+        assertTrue(repo.removeRecommendationProfile(created.profileId))
+        settings = repo.observeSettings().first()
+        assertTrue(settings.recommendationProfiles.none { it.profileId == created.profileId })
+
+        val removable = settings.recommendationProfiles.drop(1)
+        removable.forEach { profile ->
+            assertTrue(repo.removeRecommendationProfile(profile.profileId))
+        }
+        settings = repo.observeSettings().first()
+        assertEquals(1, settings.recommendationProfiles.size)
+        assertFalse(repo.removeRecommendationProfile(settings.recommendationProfiles.first().profileId))
     }
 
     @Test
@@ -118,24 +141,24 @@ class InMemoryRepositoriesTest {
         val post = samplePost("1")
 
         val added = repo.toggleLike(
-            profile = UserProfile.USER_1,
+            profileId = "profile-main",
             postId = post.id,
             tags = listOf("cloud", "cloud", "sky"),
         )
 
         assertTrue(added)
-        assertTrue(post.id in repo.observeLikedPostIds(UserProfile.USER_1).first())
-        assertEquals(1, repo.observeLikes(UserProfile.USER_1).first().size)
-        assertTrue(repo.observeLikedPostIds(UserProfile.USER_2).first().isEmpty())
+        assertTrue(post.id in repo.observeLikedPostIds("profile-main").first())
+        assertEquals(1, repo.observeLikes("profile-main").first().size)
+        assertTrue(repo.observeLikedPostIds("profile-alt").first().isEmpty())
 
         val removed = repo.toggleLike(
-            profile = UserProfile.USER_1,
+            profileId = "profile-main",
             postId = post.id,
             tags = listOf("ignored"),
         )
 
         assertFalse(removed)
-        assertTrue(repo.observeLikedPostIds(UserProfile.USER_1).first().isEmpty())
+        assertTrue(repo.observeLikedPostIds("profile-main").first().isEmpty())
     }
 
     @Test

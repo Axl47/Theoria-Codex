@@ -11,7 +11,7 @@ import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.LikedPost
 import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.data.repository.SettingsRepository
-import com.theoriacodex.data.repository.UserProfile
+import com.theoriacodex.data.repository.defaultRecommendationProfiles
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
@@ -58,7 +58,7 @@ class ForYouCoordinator(
     var errorMessage by mutableStateOf<String?>(null)
         private set
 
-    var activeProfile by mutableStateOf(UserProfile.USER_1)
+    var activeProfileId by mutableStateOf(defaultRecommendationProfiles().first().profileId)
         private set
 
     var activeProfileLikesCount by mutableStateOf(0)
@@ -75,16 +75,16 @@ class ForYouCoordinator(
 
     suspend fun initialize() {
         runtimeSettings = settingsRepository.observeSettings().first()
-        activeProfile = runtimeSettings.activeProfile
+        activeProfileId = runtimeSettings.activeProfileId
     }
 
     fun onSettingsChanged(settings: AppSettings): Boolean {
         val previousRuntime = runtimeSettings.runtime
-        val previousProfile = runtimeSettings.activeProfile
+        val previousProfile = runtimeSettings.activeProfileId
         runtimeSettings = settings
-        activeProfile = settings.activeProfile
+        activeProfileId = settings.activeProfileId
         return hasExecutedFeed &&
-            (previousRuntime != settings.runtime || previousProfile != settings.activeProfile)
+            (previousRuntime != settings.runtime || previousProfile != settings.activeProfileId)
     }
 
     suspend fun refresh(shuffle: Boolean = true) {
@@ -175,7 +175,7 @@ class ForYouCoordinator(
         nextPageTokens = emptyMap()
         try {
             val enabledSources = effectiveEnabledSources()
-            val likes = likesRepository.observeLikes(activeProfile).first()
+            val likes = likesRepository.observeLikes(activeProfileId).first()
             activeProfileLikesCount = likes.size
             affinityStatsBySource = buildAffinityBySource(
                 likes = likes,

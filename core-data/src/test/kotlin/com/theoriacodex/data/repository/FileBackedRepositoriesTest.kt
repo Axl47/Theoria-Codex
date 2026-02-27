@@ -79,7 +79,7 @@ class FileBackedRepositoriesTest {
         first.setCacheFullImageOnSave(true)
         first.setScenarioPreset(ScenarioPreset.EMPTY_RESULTS)
         first.setLastTab("codex")
-        first.setActiveProfile(UserProfile.USER_2)
+        first.setActiveProfile("profile-alt")
 
         val second = FileBackedSettingsRepository(dir)
         val loaded = second.observeSettings().first()
@@ -87,9 +87,26 @@ class FileBackedRepositoriesTest {
         assertTrue(loaded.cache.cacheFullImageOnSave)
         assertEquals(ScenarioPreset.EMPTY_RESULTS, loaded.scenarioPreset)
         assertEquals("codex", loaded.lastSelectedTabRoute)
-        assertEquals(UserProfile.USER_2, loaded.activeProfile)
+        assertEquals("profile-alt", loaded.activeProfileId)
         val total = loaded.runtime.sourceWeights.values.sum()
         assertEquals(1.0, total, 0.0001)
+    }
+
+    @Test
+    fun `settings repository persists dynamic recommendation profiles`() = runTest {
+        val dir = Files.createTempDirectory("settings-profiles-").toFile()
+        val first = FileBackedSettingsRepository(dir)
+        val created = first.addRecommendationProfile("Anime Mood")
+        first.setActiveProfile(created.profileId)
+
+        val second = FileBackedSettingsRepository(dir)
+        val loaded = second.observeSettings().first()
+
+        assertEquals(created.profileId, loaded.activeProfileId)
+        assertTrue(loaded.recommendationProfiles.any { it.profileId == created.profileId && it.name == "Anime Mood" })
+        assertTrue(second.removeRecommendationProfile(created.profileId))
+        val third = FileBackedSettingsRepository(dir)
+        assertTrue(third.observeSettings().first().recommendationProfiles.none { it.profileId == created.profileId })
     }
 
     @Test
@@ -100,19 +117,19 @@ class FileBackedRepositoriesTest {
         val gelbooruPost = samplePost("11", localPath = null, source = SourceKey.GELBOORU)
 
         first.toggleLike(
-            profile = UserProfile.USER_1,
+            profileId = "profile-main",
             postId = pixivPost.id,
             tags = listOf("cloud", "sky"),
         )
         first.toggleLike(
-            profile = UserProfile.USER_2,
+            profileId = "profile-alt",
             postId = gelbooruPost.id,
             tags = listOf("sunset"),
         )
 
         val second = FileBackedLikesRepository(dir)
-        val user1Likes = second.observeLikes(UserProfile.USER_1).first()
-        val user2Likes = second.observeLikes(UserProfile.USER_2).first()
+        val user1Likes = second.observeLikes("profile-main").first()
+        val user2Likes = second.observeLikes("profile-alt").first()
 
         assertEquals(1, user1Likes.size)
         assertEquals(pixivPost.id, user1Likes.first().postId)
@@ -120,10 +137,10 @@ class FileBackedRepositoriesTest {
         assertEquals(1, user2Likes.size)
         assertEquals(gelbooruPost.id, user2Likes.first().postId)
 
-        second.clearLikes(UserProfile.USER_1)
+        second.clearLikes("profile-main")
         val third = FileBackedLikesRepository(dir)
-        assertTrue(third.observeLikes(UserProfile.USER_1).first().isEmpty())
-        assertEquals(1, third.observeLikes(UserProfile.USER_2).first().size)
+        assertTrue(third.observeLikes("profile-main").first().isEmpty())
+        assertEquals(1, third.observeLikes("profile-alt").first().size)
     }
 
     @Test

@@ -270,10 +270,46 @@ class FileBackedSettingsRepository(
         }
     }
 
-    override suspend fun setActiveProfile(profile: UserProfile) {
+    override suspend fun setActiveProfile(profileId: String) {
         updateSettings {
-            it.copy(activeProfile = profile)
+            it.copy(activeProfileId = profileId)
         }
+    }
+
+    override suspend fun addRecommendationProfile(name: String): RecommendationProfile {
+        val profileName = name.trim().ifBlank {
+            "Profile ${settingsFlow.value.recommendationProfiles.size + 1}"
+        }
+        val created = RecommendationProfile(
+            profileId = UUID.randomUUID().toString(),
+            name = profileName,
+        )
+        updateSettings {
+            it.copy(
+                recommendationProfiles = it.recommendationProfiles + created,
+                activeProfileId = created.profileId,
+            )
+        }
+        return created
+    }
+
+    override suspend fun removeRecommendationProfile(profileId: String): Boolean {
+        if (settingsFlow.value.recommendationProfiles.size <= 1) return false
+        if (settingsFlow.value.recommendationProfiles.none { it.profileId == profileId }) return false
+
+        updateSettings { current ->
+            val remaining = current.recommendationProfiles.filterNot { it.profileId == profileId }
+            val nextActiveId = if (current.activeProfileId == profileId) {
+                remaining.first().profileId
+            } else {
+                current.activeProfileId
+            }
+            current.copy(
+                recommendationProfiles = remaining,
+                activeProfileId = nextActiveId,
+            )
+        }
+        return true
     }
 
     private fun persist() {
@@ -451,24 +487,25 @@ class FileBackedLikesRepository(
 ) : LikesRepository {
     private val mutex = Mutex()
     private val storageFile = baseDirectory.resolve("likes_store.json")
-    private val likesFlow = MutableStateFlow<Map<UserProfile, Map<PostId, LikedPost>>>(emptyMap())
+    private val likesFlow = MutableStateFlow<Map<String, Map<PostId, LikedPost>>>(emptyMap())
 
     init {
         storageFile.parentFile?.mkdirs()
         val stored = readJson(storageFile, LikesStoreFile())
-        val grouped = mutableMapOf<UserProfile, MutableMap<PostId, LikedPost>>()
+        val grouped = mutableMapOf<String, MutableMap<PostId, LikedPost>>()
         stored.likes.orEmpty().forEach { record ->
             val source = record.source
                 ?.let { name -> runCatching { SourceKey.valueOf(name) }.getOrNull() }
                 ?: return@forEach
             val sourcePostId = record.sourcePostId?.trim().orEmpty()
             if (sourcePostId.isBlank()) return@forEach
-            val profile = record.profile
-                ?.let { name -> runCatching { UserProfile.valueOf(name) }.getOrNull() }
-                ?: UserProfile.USER_1
+            val profileId = parseStoredProfileId(
+                profileId = record.profileId,
+                legacyProfile = record.profile,
+            )
             val postId = PostId(source = source, sourcePostId = sourcePostId)
-            grouped.getOrPut(profile) { mutableMapOf() }[postId] = LikedPost(
-                profile = profile,
+            grouped.getOrPut(profileId) { mutableMapOf() }[postId] = LikedPost(
+                profileId = profileId,
                 postId = postId,
                 likedAtEpochMs = record.likedAtEpochMs ?: System.currentTimeMillis(),
                 tags = normalizeLikedTags(record.tags.orEmpty()),
@@ -477,30 +514,30 @@ class FileBackedLikesRepository(
         likesFlow.value = grouped.mapValues { (_, likes) -> likes.toMap() }
     }
 
-    override fun observeLikes(profile: UserProfile): Flow<List<LikedPost>> {
+    override fun observeLikes(profileId: String): Flow<List<LikedPost>> {
         return likesFlow.map { byProfile ->
-            byProfile[profile]
+            byProfile[profileId]
                 .orEmpty()
                 .values
                 .sortedByDescending { it.likedAtEpochMs }
         }
     }
 
-    override fun observeLikedPostIds(profile: UserProfile): Flow<Set<PostId>> {
+    override fun observeLikedPostIds(profileId: String): Flow<Set<PostId>> {
         return likesFlow.map { byProfile ->
-            byProfile[profile]
+            byProfile[profileId]
                 .orEmpty()
                 .keys
         }
     }
 
-    override suspend fun toggleLike(profile: UserProfile, postId: PostId, tags: List<String>): Boolean {
+    override suspend fun toggleLike(profileId: String, postId: PostId, tags: List<String>): Boolean {
         return mutex.withLock {
-            val profileLikes = likesFlow.value[profile].orEmpty().toMutableMap()
+            val profileLikes = likesFlow.value[profileId].orEmpty().toMutableMap()
             val existing = profileLikes[postId]
             val nowLiked = if (existing == null) {
                 profileLikes[postId] = LikedPost(
-                    profile = profile,
+                    profileId = profileId,
                     postId = postId,
                     likedAtEpochMs = System.currentTimeMillis(),
                     tags = normalizeLikedTags(tags),
@@ -510,15 +547,15 @@ class FileBackedLikesRepository(
                 profileLikes -= postId
                 false
             }
-            likesFlow.value = likesFlow.value + (profile to profileLikes)
+            likesFlow.value = likesFlow.value + (profileId to profileLikes)
             persist()
             nowLiked
         }
     }
 
-    override suspend fun clearLikes(profile: UserProfile) {
+    override suspend fun clearLikes(profileId: String) {
         mutex.withLock {
-            likesFlow.value = likesFlow.value - profile
+            likesFlow.value = likesFlow.value - profileId
             persist()
         }
     }
@@ -526,9 +563,9 @@ class FileBackedLikesRepository(
     private fun persist() {
         val flattened = likesFlow.value
             .entries
-            .flatMap { (profile, likes) ->
+            .flatMap { (profileId, likes) ->
                 likes.values.map { liked ->
-                    LikedPostRecord.fromDomain(profile = profile, liked = liked)
+                    LikedPostRecord.fromDomain(profileId = profileId, liked = liked)
                 }
             }
             .sortedByDescending { it.likedAtEpochMs ?: Long.MIN_VALUE }
@@ -749,6 +786,8 @@ private data class SettingsStoreFile(
     val cacheFullImageOnSave: Boolean = false,
     val scenarioPreset: String = ScenarioPreset.NORMAL.name,
     val lastSelectedTabRoute: String = "search",
+    val recommendationProfiles: List<RecommendationProfileRecord>? = null,
+    val activeProfileId: String? = null,
     val activeProfile: String? = null,
 ) {
     fun toDomain(): AppSettings {
@@ -758,15 +797,26 @@ private data class SettingsStoreFile(
                 runCatching { SourceKey.valueOf(key) }.getOrNull()?.let { source -> source to value }
             }.toMap(),
         )
+        val profiles = recommendationProfiles
+            ?.mapNotNull { it.toDomainOrNull() }
+            .orEmpty()
+            .ifEmpty { defaultRecommendationProfiles() }
+        val resolvedActiveProfileId = activeProfileId
+            ?.trim()
+            ?.takeIf { value -> profiles.any { profile -> profile.profileId == value } }
+            ?: parseStoredProfileId(
+                profileId = activeProfile,
+                legacyProfile = activeProfile,
+            ).takeIf { value -> profiles.any { profile -> profile.profileId == value } }
+            ?: profiles.first().profileId
         return normalizeSettings(
             AppSettings(
                 runtime = runtime,
                 cache = CacheSettings(cacheFullImageOnSave = cacheFullImageOnSave),
                 scenarioPreset = runCatching { ScenarioPreset.valueOf(scenarioPreset) }.getOrDefault(ScenarioPreset.NORMAL),
                 lastSelectedTabRoute = lastSelectedTabRoute,
-                activeProfile = activeProfile
-                    ?.let { value -> runCatching { UserProfile.valueOf(value) }.getOrNull() }
-                    ?: UserProfile.USER_1,
+                recommendationProfiles = profiles,
+                activeProfileId = resolvedActiveProfileId,
             )
         )
     }
@@ -779,7 +829,32 @@ private data class SettingsStoreFile(
                 cacheFullImageOnSave = settings.cache.cacheFullImageOnSave,
                 scenarioPreset = settings.scenarioPreset.name,
                 lastSelectedTabRoute = settings.lastSelectedTabRoute,
-                activeProfile = settings.activeProfile.name,
+                recommendationProfiles = settings.recommendationProfiles.map { profile ->
+                    RecommendationProfileRecord.fromDomain(profile)
+                },
+                activeProfileId = settings.activeProfileId,
+                activeProfile = null,
+            )
+        }
+    }
+}
+
+private data class RecommendationProfileRecord(
+    val profileId: String? = null,
+    val name: String? = null,
+) {
+    fun toDomainOrNull(): RecommendationProfile? {
+        val id = profileId?.trim().orEmpty()
+        val profileName = name?.trim().orEmpty()
+        if (id.isBlank() || profileName.isBlank()) return null
+        return RecommendationProfile(profileId = id, name = profileName)
+    }
+
+    companion object {
+        fun fromDomain(profile: RecommendationProfile): RecommendationProfileRecord {
+            return RecommendationProfileRecord(
+                profileId = profile.profileId,
+                name = profile.name,
             )
         }
     }
@@ -828,6 +903,7 @@ private data class LikesStoreFile(
 )
 
 private data class LikedPostRecord(
+    val profileId: String? = null,
     val profile: String? = null,
     val source: String? = null,
     val sourcePostId: String? = null,
@@ -835,9 +911,10 @@ private data class LikedPostRecord(
     val tags: List<String>? = null,
 ) {
     companion object {
-        fun fromDomain(profile: UserProfile, liked: LikedPost): LikedPostRecord {
+        fun fromDomain(profileId: String, liked: LikedPost): LikedPostRecord {
             return LikedPostRecord(
-                profile = profile.name,
+                profileId = profileId,
+                profile = null,
                 source = liked.postId.source.name,
                 sourcePostId = liked.postId.sourcePostId,
                 likedAtEpochMs = liked.likedAtEpochMs,
@@ -852,9 +929,46 @@ private fun normalizeSettings(settings: AppSettings): AppSettings {
         enabledSources = settings.runtime.enabledSources,
         rawWeights = settings.runtime.sourceWeights,
     )
+    val normalizedProfiles = settings.recommendationProfiles
+        .asSequence()
+        .map { profile ->
+            RecommendationProfile(
+                profileId = profile.profileId.trim(),
+                name = profile.name.trim(),
+            )
+        }
+        .filter { profile -> profile.profileId.isNotBlank() && profile.name.isNotBlank() }
+        .distinctBy { profile -> profile.profileId }
+        .toList()
+        .ifEmpty { defaultRecommendationProfiles() }
+    val activeProfileId = settings.activeProfileId
+        .takeIf { active -> normalizedProfiles.any { profile -> profile.profileId == active } }
+        ?: normalizedProfiles.first().profileId
     return settings.copy(
         runtime = settings.runtime.copy(sourceWeights = normalizedWeights),
+        recommendationProfiles = normalizedProfiles,
+        activeProfileId = activeProfileId,
     )
+}
+
+private fun parseStoredProfileId(
+    profileId: String?,
+    legacyProfile: String?,
+): String {
+    val normalizedProfileId = profileId?.trim().orEmpty()
+    if (normalizedProfileId.isNotBlank()) {
+        return when (normalizedProfileId) {
+            "USER_1" -> "profile-main"
+            "USER_2" -> "profile-alt"
+            else -> normalizedProfileId
+        }
+    }
+
+    return when (legacyProfile?.trim()) {
+        "USER_1" -> "profile-main"
+        "USER_2" -> "profile-alt"
+        else -> "profile-main"
+    }
 }
 
 private fun normalizeWeights(

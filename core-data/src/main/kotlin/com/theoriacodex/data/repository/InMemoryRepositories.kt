@@ -188,54 +188,91 @@ class InMemorySettingsRepository : SettingsRepository {
         settings.value = settings.value.copy(lastSelectedTabRoute = route)
     }
 
-    override suspend fun setActiveProfile(profile: UserProfile) {
-        settings.value = settings.value.copy(activeProfile = profile)
+    override suspend fun setActiveProfile(profileId: String) {
+        settings.value = normalizeSettings(settings.value.copy(activeProfileId = profileId))
+    }
+
+    override suspend fun addRecommendationProfile(name: String): RecommendationProfile {
+        val profileName = name.trim().ifBlank {
+            "Profile ${settings.value.recommendationProfiles.size + 1}"
+        }
+        val created = RecommendationProfile(
+            profileId = UUID.randomUUID().toString(),
+            name = profileName,
+        )
+        settings.value = normalizeSettings(
+            settings.value.copy(
+                recommendationProfiles = settings.value.recommendationProfiles + created,
+                activeProfileId = created.profileId,
+            )
+        )
+        return created
+    }
+
+    override suspend fun removeRecommendationProfile(profileId: String): Boolean {
+        val current = settings.value
+        if (current.recommendationProfiles.size <= 1) return false
+        if (current.recommendationProfiles.none { it.profileId == profileId }) return false
+
+        val remaining = current.recommendationProfiles.filterNot { it.profileId == profileId }
+        val nextActive = if (current.activeProfileId == profileId) {
+            remaining.first().profileId
+        } else {
+            current.activeProfileId
+        }
+        settings.value = normalizeSettings(
+            current.copy(
+                recommendationProfiles = remaining,
+                activeProfileId = nextActive,
+            )
+        )
+        return true
     }
 }
 
 class InMemoryLikesRepository : LikesRepository {
     private val mutex = Mutex()
-    private val likesByProfile = MutableStateFlow<Map<UserProfile, Map<PostId, LikedPost>>>(emptyMap())
+    private val likesByProfile = MutableStateFlow<Map<String, Map<PostId, LikedPost>>>(emptyMap())
 
-    override fun observeLikes(profile: UserProfile): Flow<List<LikedPost>> {
+    override fun observeLikes(profileId: String): Flow<List<LikedPost>> {
         return likesByProfile.map { byProfile ->
-            byProfile[profile]
+            byProfile[profileId]
                 .orEmpty()
                 .values
                 .sortedByDescending { it.likedAtEpochMs }
         }
     }
 
-    override fun observeLikedPostIds(profile: UserProfile): Flow<Set<PostId>> {
+    override fun observeLikedPostIds(profileId: String): Flow<Set<PostId>> {
         return likesByProfile.map { byProfile ->
-            byProfile[profile].orEmpty().keys
+            byProfile[profileId].orEmpty().keys
         }
     }
 
-    override suspend fun toggleLike(profile: UserProfile, postId: PostId, tags: List<String>): Boolean {
+    override suspend fun toggleLike(profileId: String, postId: PostId, tags: List<String>): Boolean {
         return mutex.withLock {
-            val profileLikes = likesByProfile.value[profile].orEmpty().toMutableMap()
+            val profileLikes = likesByProfile.value[profileId].orEmpty().toMutableMap()
             val existing = profileLikes[postId]
             if (existing != null) {
                 profileLikes -= postId
-                likesByProfile.value = likesByProfile.value + (profile to profileLikes)
+                likesByProfile.value = likesByProfile.value + (profileId to profileLikes)
                 false
             } else {
                 profileLikes[postId] = LikedPost(
-                    profile = profile,
+                    profileId = profileId,
                     postId = postId,
                     likedAtEpochMs = System.currentTimeMillis(),
                     tags = normalizeLikedTags(tags),
                 )
-                likesByProfile.value = likesByProfile.value + (profile to profileLikes)
+                likesByProfile.value = likesByProfile.value + (profileId to profileLikes)
                 true
             }
         }
     }
 
-    override suspend fun clearLikes(profile: UserProfile) {
+    override suspend fun clearLikes(profileId: String) {
         mutex.withLock {
-            likesByProfile.value = likesByProfile.value - profile
+            likesByProfile.value = likesByProfile.value - profileId
         }
     }
 }
@@ -333,8 +370,25 @@ private fun normalizeSettings(settings: AppSettings): AppSettings {
         enabledSources = settings.runtime.enabledSources,
         rawWeights = settings.runtime.sourceWeights,
     )
+    val normalizedProfiles = settings.recommendationProfiles
+        .asSequence()
+        .map { profile ->
+            RecommendationProfile(
+                profileId = profile.profileId.trim(),
+                name = profile.name.trim(),
+            )
+        }
+        .filter { profile -> profile.profileId.isNotBlank() && profile.name.isNotBlank() }
+        .distinctBy { profile -> profile.profileId }
+        .toList()
+        .ifEmpty { defaultRecommendationProfiles() }
+    val activeProfileId = settings.activeProfileId
+        .takeIf { active -> normalizedProfiles.any { profile -> profile.profileId == active } }
+        ?: normalizedProfiles.first().profileId
     return settings.copy(
         runtime = settings.runtime.copy(sourceWeights = normalizedWeights),
+        recommendationProfiles = normalizedProfiles,
+        activeProfileId = activeProfileId,
     )
 }
 
