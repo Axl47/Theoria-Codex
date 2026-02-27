@@ -35,6 +35,7 @@ fun CodexListScreen(
     codices: List<Codex>,
     itemCounts: Map<String, Int>,
     onOpenCodex: (String) -> Unit,
+    onSearchFromCodex: (String) -> Unit,
     onCreateCodex: (String) -> Unit,
     onRenameCodex: (String, String) -> Unit,
     onDeleteCodex: (String) -> Unit,
@@ -108,6 +109,7 @@ fun CodexListScreen(
                                 )
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                TextButton(onClick = { onSearchFromCodex(codex.codexId) }) { Text("Search") }
                                 TextButton(onClick = { renameTarget = codex }) { Text("Rename") }
                                 TextButton(onClick = { onDeleteCodex(codex.codexId) }) { Text("Delete") }
                             }

@@ -503,10 +503,18 @@ fun SearchScreen(
                             } else {
                                 EmptyBlock(
                                     hasPendingChanges = coordinator.hasPendingChanges,
-                                    messageOverride = if (animatedOnly && coordinator.results.isNotEmpty()) {
-                                        "No animated media found for the current results."
-                                    } else {
-                                        null
+                                    messageOverride = when {
+                                        animatedOnly &&
+                                            coordinator.results.isNotEmpty() &&
+                                            (coordinator.loadingMore || coordinator.canLoadMore) -> {
+                                            "No animated media yet. Retrying with more pages..."
+                                        }
+
+                                        animatedOnly && coordinator.results.isNotEmpty() -> {
+                                            "No animated media found for the current results."
+                                        }
+
+                                        else -> null
                                     },
                                 )
                             }

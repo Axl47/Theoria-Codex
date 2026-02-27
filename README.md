@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-02-27T05:05
+updated_at: 2026-02-27T05:22
 ---
 # Theoria Codex
 
@@ -35,6 +35,7 @@ Previously completed MVP slices remain in place:
 - App now supports dynamic local recommendation profiles (minimum 1) so one user can maintain separate recommendation purposes; profiles can be added/removed in Settings and each profile keeps independent heart/recommendation memory
 - Recommendation likes are persisted in `files/theoria_codex/likes_store.json` and can be cleared per active profile from Settings
 - Codex now auto-creates a system `Likes` board (`system_likes_codex`) and keeps it synced with heart toggles (add on like; remove when no profile still likes that post)
+- Codex list now includes a `Search` action that builds a Unified search draft from that codex's per-post unique canonical tags (top weighted tags), applies it, and navigates directly to Search
 - Search results now render real source thumbnails in a variable-height staggered grid and show post titles (when available) instead of raw source IDs
 - Search input UX now supports Enter-to-add-tag and contextual controls that animate in while actively editing
 - Search source mode chips now show source logos for Pixiv and Gelbooru (instead of plain text labels)
@@ -44,6 +45,9 @@ Previously completed MVP slices remain in place:
 - Bottom navigation is compact icon-only for higher content density
 - Outside Viewer, horizontal swipes now switch between top-level tabs (Search/Explore/Codex/Settings)
 - Local tag suggestion store now seeds from `app/src/main/assets/tag_store.json` and is persisted to `files/theoria_codex/tag_suggestions.json` to reduce network tag fetches
+- Search/Explore trending tags now auto-refresh in the background (TTL-based) while still rendering cached suggestions immediately, so Pixiv/Gelbooru suggestion pools stay fresh without blocking UI
+- Search now ingests seen post tags from loaded results (Pixiv + Gelbooru) into the local suggestion store, improving autocomplete and fallback relevance over time
+- Viewer tag metadata now supports batched Gelbooru tag-count lookups and caches those counts in the suggestion store, reducing repeated per-tag network fetch latency in Info sheet renders
 - Draft/Applied search flow with explicit Apply semantics
 - Search/Viewer now support GIF rendering (global Coil animated decoder + MIME-aware source mapping); Search and Viewer both support Pixiv ugoira playback by loading Pixiv metadata + zip frames and animating in-place
 - Search result cards now autoplay video posts in-place (muted + looping) with image fallback when a source video preview fails

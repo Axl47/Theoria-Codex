@@ -465,6 +465,36 @@ fun TheoriaApp(
         }
     }
 
+    suspend fun searchFromCodex(codexId: String) {
+        val posts = codexRepository
+            .observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED)
+            .first()
+        val includeTags = buildCodexSearchTags(posts)
+        if (includeTags.isEmpty()) {
+            Toast.makeText(appContext, "Codex has no searchable tags", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (!searchCoordinator.prepareExploreTagSearch(includeTags = includeTags)) {
+            Toast.makeText(appContext, "Could not prepare search", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        searchCoordinator.applyDraft()
+        navController.navigate(TopLevelDestination.Search.route) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+        Toast.makeText(
+            appContext,
+            "Searching codex tags: ${includeTags.joinToString(separator = ", ")}",
+            Toast.LENGTH_SHORT,
+        ).show()
+    }
+
     suspend fun completeAppStartup() {
         if (navReady) return
         searchCoordinator.initialize()
@@ -1159,6 +1189,11 @@ fun TheoriaApp(
                             onOpenCodex = { codexId ->
                                 navController.navigate(AppRoute.codexDetail(codexId))
                             },
+                            onSearchFromCodex = { codexId ->
+                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                    searchFromCodex(codexId)
+                                }
+                            },
                             onCreateCodex = { name ->
                                 scope.launch { codexRepository.createCodex(name) }
                             },
@@ -1395,8 +1430,8 @@ fun TheoriaApp(
                                 tagVideoCountProvider = { source, tag ->
                                     searchCoordinator.tagVideoCount(source, tag)
                                 },
-                                fetchTagVideoCount = { source, tag ->
-                                    searchCoordinator.fetchTagVideoCount(source, tag)
+                                fetchTagVideoCounts = { source, tags ->
+                                    searchCoordinator.fetchTagVideoCounts(source, tags)
                                 },
                                 canLoadMoreFromSource = canLoadMoreFromSource,
                                 loadingMoreFromSource = loadingMoreFromSource,
@@ -2052,6 +2087,32 @@ private fun loadSeedTagSuggestions(context: Context): Map<SourceKey, List<TagSug
     }.toMap()
 }
 
+private fun buildCodexSearchTags(posts: List<Post>): List<String> {
+    if (posts.isEmpty()) return emptyList()
+
+    val frequency = mutableMapOf<String, Int>()
+    posts.forEach { post ->
+        val uniquePostTags = post.canonicalTags
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.startsWith("-") }
+            .distinctBy { it.lowercase() }
+            .toList()
+        uniquePostTags.forEach { tag ->
+            frequency[tag] = (frequency[tag] ?: 0) + 1
+        }
+    }
+
+    return frequency
+        .entries
+        .sortedWith(
+            compareByDescending<Map.Entry<String, Int>> { it.value }
+                .thenBy { it.key.lowercase() }
+        )
+        .take(CODEX_SEARCH_TAG_LIMIT)
+        .map { it.key }
+}
+
 private const val PIXIV_TOKEN_REFRESH_TIMEOUT_MS = 6_000L
 private const val BOTTOM_BAR_HEIGHT_RATIO = 0.085f
 private const val BOTTOM_BAR_ICON_RATIO = 0.38f
@@ -2063,3 +2124,4 @@ private const val TAB_SWIPE_THRESHOLD_DP = 72
 private const val TAB_SWIPE_HORIZONTAL_BIAS = 1.2f
 private const val LIKES_CODEX_ID = "system_likes_codex"
 private const val LIKES_CODEX_NAME = "Likes"
+private const val CODEX_SEARCH_TAG_LIMIT = 3

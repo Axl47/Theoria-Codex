@@ -109,7 +109,7 @@ fun ExploreScreen(
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text("Trending tags", style = MaterialTheme.typography.titleMedium)
-                IconButton(onClick = { scope.launch { coordinator.loadTrendingTags() } }) {
+                IconButton(onClick = { scope.launch { coordinator.loadTrendingTags(forceRefresh = true) } }) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Refresh trending tags",

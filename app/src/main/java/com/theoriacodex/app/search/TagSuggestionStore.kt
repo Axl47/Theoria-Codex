@@ -18,6 +18,7 @@ object NoOpTagSuggestionStore : TagSuggestionStore {
 class FileBackedTagSuggestionStore(
     private val storeFile: File,
     private val seedData: Map<SourceKey, List<TagSuggestion>> = emptyMap(),
+    private val maxEntriesPerSource: Int = DEFAULT_MAX_ENTRIES_PER_SOURCE,
     private val gson: Gson = Gson(),
 ) : TagSuggestionStore {
     private val lock = Any()
@@ -37,14 +38,16 @@ class FileBackedTagSuggestionStore(
                 existing = inMemory[source].orEmpty(),
                 incoming = suggestions,
             )
-            inMemory[source] = merged.toMutableList()
+            inMemory[source] = merged.take(maxEntriesPerSource).toMutableList()
             persistLocked()
         }
     }
 
     private fun loadInitial(): MutableMap<SourceKey, MutableList<TagSuggestion>> {
         val seeded = seedData.mapValues { (_, values) ->
-            mergeByText(existing = emptyList(), incoming = values).toMutableList()
+            mergeByText(existing = emptyList(), incoming = values)
+                .take(maxEntriesPerSource)
+                .toMutableList()
         }.toMutableMap()
         if (!storeFile.exists()) {
             return seeded
@@ -61,7 +64,9 @@ class FileBackedTagSuggestionStore(
                 }
             }
             val existing = seeded[source].orEmpty()
-            seeded[source] = mergeByText(existing = existing, incoming = parsed).toMutableList()
+            seeded[source] = mergeByText(existing = existing, incoming = parsed)
+                .take(maxEntriesPerSource)
+                .toMutableList()
         }
         return seeded
     }
@@ -98,17 +103,47 @@ private fun mergeByText(
     incoming: List<TagSuggestion>,
 ): List<TagSuggestion> {
     val byKey = linkedMapOf<String, TagSuggestion>()
-    (existing + incoming).forEach { suggestion ->
+    (incoming + existing).forEach { suggestion ->
         val key = suggestion.text.trim().lowercase()
         if (key.isBlank()) return@forEach
         val previous = byKey[key]
+        val normalized = suggestion.copy(text = suggestion.text.trim())
         byKey[key] = when {
-            previous == null -> suggestion.copy(text = suggestion.text.trim())
+            previous == null -> normalized
             else -> previous.copy(
-                type = previous.type ?: suggestion.type,
-                count = previous.count ?: suggestion.count,
+                type = preferredSuggestionType(primary = previous.type, secondary = normalized.type),
+                count = maxCount(previous.count, normalized.count),
             )
         }
     }
     return byKey.values.toList()
 }
+
+private fun preferredSuggestionType(primary: String?, secondary: String?): String? {
+    val primaryRank = suggestionTypeRank(primary)
+    val secondaryRank = suggestionTypeRank(secondary)
+    return if (primaryRank >= secondaryRank) primary else secondary
+}
+
+private fun suggestionTypeRank(type: String?): Int {
+    return when (type?.trim()?.lowercase()) {
+        "tag_count_lookup" -> 5
+        "trending" -> 4
+        "tag" -> 3
+        "seen" -> 2
+        "pixiv_tags_page" -> 1
+        "seed" -> 0
+        null, "" -> -1
+        else -> 1
+    }
+}
+
+private fun maxCount(first: Int?, second: Int?): Int? {
+    return when {
+        first == null -> second
+        second == null -> first
+        else -> maxOf(first, second)
+    }
+}
+
+private const val DEFAULT_MAX_ENTRIES_PER_SOURCE = 25_000

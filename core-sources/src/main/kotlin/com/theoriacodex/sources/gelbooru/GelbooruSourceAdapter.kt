@@ -10,6 +10,7 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -28,7 +29,7 @@ class GelbooruSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val credentialsProvider: SourceCredentialsProvider,
     private val gson: Gson = Gson(),
-) : SourceAdapter {
+) : SourceAdapter, TagCountLookupSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.GELBOORU
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -85,6 +86,35 @@ class GelbooruSourceAdapter(
             ),
         )
         return parseTagItems(response).mapNotNull { parseTag(it, "tag") }
+    }
+
+    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> {
+        val normalizedTags = tags
+            .asSequence()
+            .map(::normalizeGelbooruTagToken)
+            .filter { it.isNotBlank() }
+            .distinct()
+            .toList()
+        if (normalizedTags.isEmpty()) return emptyMap()
+
+        val countsByName = linkedMapOf<String, Int>()
+        normalizedTags.chunked(GELBOORU_TAG_COUNT_BATCH_SIZE).forEach { chunk ->
+            val response = request(
+                query = baseQuery(
+                    "s" to "tag",
+                    "q" to "index",
+                    "names" to chunk.joinToString(" "),
+                    "limit" to chunk.size.toString(),
+                )
+            )
+            parseTagItems(response).forEach tagItemLoop@{ raw ->
+                val name = raw.get("name")?.asString?.trim().orEmpty()
+                if (name.isBlank()) return@tagItemLoop
+                val count = raw.get("count")?.asInt ?: raw.get("post_count")?.asInt ?: return@tagItemLoop
+                countsByName.putIfAbsent(name, count)
+            }
+        }
+        return countsByName
     }
 
     override suspend fun quickQuery(kind: QuickQueryKind): Query {
@@ -277,4 +307,10 @@ private fun looksLikeAuthBlocked(body: String): Boolean {
     return "access denied" in lowered || "api key" in lowered && "required" in lowered
 }
 
+private fun normalizeGelbooruTagToken(value: String): String {
+    return value.trim().replace(WHITESPACE_REGEX, "_")
+}
+
 private const val GELBOORU_DAPI_URL = "https://gelbooru.com/index.php"
+private const val GELBOORU_TAG_COUNT_BATCH_SIZE = 50
+private val WHITESPACE_REGEX = Regex("\\s+")

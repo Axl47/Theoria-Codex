@@ -11,6 +11,7 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
+import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -230,6 +231,7 @@ class SearchCoordinatorTest {
             queryRepository = InMemoryQueryRepository(),
             settingsRepository = InMemorySettingsRepository(),
             uiRestoreRepository = InMemoryUiRestoreRepository(),
+            tagSuggestionStore = InMemoryTagSuggestionStore(),
         )
         coordinator.initialize()
         coordinator.setMode(QueryMode.Source(SourceKey.GELBOORU))
@@ -264,6 +266,7 @@ class SearchCoordinatorTest {
             queryRepository = InMemoryQueryRepository(),
             settingsRepository = InMemorySettingsRepository(),
             uiRestoreRepository = InMemoryUiRestoreRepository(),
+            tagSuggestionStore = InMemoryTagSuggestionStore(),
         )
         coordinator.initialize()
         coordinator.setMode(QueryMode.Source(SourceKey.GELBOORU))
@@ -275,6 +278,63 @@ class SearchCoordinatorTest {
         assertTrue(coordinator.canCommitTagInput("blue hair"))
         assertTrue(coordinator.commitTagInput("blue hair"))
         assertTrue("blue_hair" in coordinator.draftQuery.includeTags)
+    }
+
+    @Test
+    fun `pixiv source mode smart add resolves to suggested canonical tag`() = runTest {
+        val pixivAdapter = RecordingAdapter(
+            sourceKey = SourceKey.PIXIV,
+            autocompleteByPrefix = mapOf(
+                "blue hair" to listOf("blue_hair"),
+            ),
+        )
+        val registry = CompatibilityRegistry(
+            adapters = mapOf(SourceKey.PIXIV to pixivAdapter),
+        )
+        val coordinator = SearchCoordinator(
+            registry = registry,
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+            tagSuggestionStore = InMemoryTagSuggestionStore(),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
+
+        coordinator.refreshAutocompleteSuggestions("blue hair")
+
+        assertTrue(coordinator.canCommitTagInput("blue hair"))
+        assertTrue(coordinator.commitTagInput("blue hair"))
+        assertTrue("blue_hair" in coordinator.draftQuery.includeTags)
+        assertFalse("blue hair" in coordinator.draftQuery.includeTags)
+    }
+
+    @Test
+    fun `gelbooru batch tag counts are cached for subsequent lookups`() = runTest {
+        val gelbooruAdapter = RecordingAdapter(
+            sourceKey = SourceKey.GELBOORU,
+            tagCountsByName = mapOf("blue_hair" to 321),
+        )
+        val registry = CompatibilityRegistry(
+            adapters = mapOf(SourceKey.GELBOORU to gelbooruAdapter),
+        )
+        val coordinator = SearchCoordinator(
+            registry = registry,
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+            tagSuggestionStore = InMemoryTagSuggestionStore(),
+        )
+        coordinator.initialize()
+
+        val first = coordinator.fetchTagVideoCounts(SourceKey.GELBOORU, listOf("blue hair"))
+
+        assertEquals(321, first["blue hair"])
+        assertEquals(1, gelbooruAdapter.batchTagLookupCount)
+        assertEquals(321, coordinator.tagVideoCount(SourceKey.GELBOORU, "blue hair"))
+
+        coordinator.fetchTagVideoCounts(SourceKey.GELBOORU, listOf("blue hair"))
+        assertEquals(1, gelbooruAdapter.batchTagLookupCount)
     }
 
     @Test
@@ -453,9 +513,11 @@ private class RecordingAdapter(
     override val sourceKey: SourceKey,
     private val autocompleteByPrefix: Map<String, List<String>> = emptyMap(),
     private val autocompleteTagsByPrefix: Map<String, List<TagSuggestion>> = emptyMap(),
-) : SourceAdapter {
+    private val tagCountsByName: Map<String, Int> = emptyMap(),
+) : SourceAdapter, TagCountLookupSourceAdapter {
     var lastSearchQuery: Query? = null
     var lastAutocompletePrefix: String? = null
+    var batchTagLookupCount: Int = 0
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
         supportsSortNewest = true,
@@ -507,5 +569,33 @@ private class RecordingAdapter(
         )
     }
 
+    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> {
+        if (tags.isEmpty()) return emptyMap()
+        batchTagLookupCount += 1
+        return tags.mapNotNull { raw ->
+            val normalized = raw.trim().replace(' ', '_').lowercase()
+            tagCountsByName[normalized]?.let { count -> normalized to count }
+        }.toMap()
+    }
+
     override suspend fun resolvePost(id: PostId): Post? = null
+}
+
+private class InMemoryTagSuggestionStore : TagSuggestionStore {
+    private val bySource = mutableMapOf<SourceKey, LinkedHashMap<String, TagSuggestion>>()
+
+    override fun get(source: SourceKey, limit: Int): List<TagSuggestion> {
+        if (limit <= 0) return emptyList()
+        return bySource[source].orEmpty().values.take(limit)
+    }
+
+    override fun put(source: SourceKey, suggestions: List<TagSuggestion>) {
+        if (suggestions.isEmpty()) return
+        val bucket = bySource.getOrPut(source) { linkedMapOf() }
+        suggestions.forEach { suggestion ->
+            val text = suggestion.text.trim()
+            if (text.isBlank()) return@forEach
+            bucket[text.lowercase()] = suggestion.copy(text = text)
+        }
+    }
 }

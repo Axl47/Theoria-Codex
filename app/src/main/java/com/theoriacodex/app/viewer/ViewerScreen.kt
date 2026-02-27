@@ -117,7 +117,7 @@ fun ViewerScreen(
     launchContext: ViewerLaunchContext,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
-    fetchTagVideoCount: suspend (SourceKey, String) -> Int? = { _, _ -> null },
+    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
     canLoadMoreFromSource: Boolean = false,
     loadingMoreFromSource: Boolean = false,
     onLoadMoreFromSource: (() -> Unit)? = null,
@@ -733,12 +733,11 @@ fun ViewerScreen(
                     )
                 }
                 LaunchedEffect(post.id.source, distinctTags) {
-                    distinctTags.forEach { tag ->
-                        if (tagVideoCounts[tag] != null) return@forEach
-                        val count = fetchTagVideoCount(post.id.source, tag)
-                        if (count != null) {
-                            tagVideoCounts = tagVideoCounts + (tag to count)
-                        }
+                    val missingTags = distinctTags.filter { tag -> tagVideoCounts[tag] == null }
+                    if (missingTags.isEmpty()) return@LaunchedEffect
+                    val fetchedCounts = fetchTagVideoCounts(post.id.source, missingTags)
+                    if (fetchedCounts.isNotEmpty()) {
+                        tagVideoCounts = tagVideoCounts + fetchedCounts
                     }
                 }
                 ViewerTagSelectionGrid(

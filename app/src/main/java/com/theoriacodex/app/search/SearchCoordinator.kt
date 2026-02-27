@@ -19,6 +19,7 @@ import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
@@ -37,6 +38,7 @@ class SearchCoordinator(
     private val settingsRepository: SettingsRepository = InMemorySettingsRepository(),
     private val uiRestoreRepository: UiRestoreRepository = InMemoryUiRestoreRepository(),
     private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private var runtimeSettings: AppSettings = AppSettings()
     private var hasExecutedSearch = false
@@ -44,6 +46,7 @@ class SearchCoordinator(
     private var unifiedNextPageTokens: Map<SourceKey, String?> = emptyMap()
     private var unifiedQueryOverrides: Map<SourceKey, Query> = emptyMap()
     private var sourceNextPageToken: String? = null
+    private val lastTrendingRefreshAtBySource = mutableMapOf<SourceKey, Long>()
 
     var draftQuery by mutableStateOf(defaultQuery())
         private set
@@ -125,22 +128,69 @@ class SearchCoordinator(
     suspend fun fetchTagVideoCount(source: SourceKey, tag: String): Int? {
         val normalized = tag.trim()
         if (normalized.isBlank()) return null
-        tagVideoCount(source, normalized)?.let { return it }
+        return fetchTagVideoCounts(source, tags = listOf(normalized))[normalized]
+    }
 
-        val adapter = registry.adapterFor(source) ?: return null
-        val sourcePrefix = autocompletePrefixForSource(source, normalized)
-        val fetched = runCatching {
-            adapter.autocompleteTags(prefix = sourcePrefix, limit = TAG_FETCH_LIMIT)
-        }.getOrDefault(emptyList())
-        if (fetched.isNotEmpty()) {
-            tagSuggestionStore.put(source, fetched)
-        }
-        return fetched
-            .firstOrNull { suggestion ->
-                tagsMatchForSource(source, suggestion.text, normalized)
+    suspend fun fetchTagVideoCounts(source: SourceKey, tags: List<String>): Map<String, Int?> {
+        val requested = tags
+            .asSequence()
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .distinct()
+            .toList()
+        if (requested.isEmpty()) return emptyMap()
+
+        val resolved = requested.associateWith { tag -> tagVideoCount(source, tag) }.toMutableMap()
+        var missing = requested.filter { tag -> resolved[tag] == null }
+        if (missing.isEmpty()) return resolved
+
+        val adapter = registry.adapterFor(source) ?: return resolved
+        if (adapter is TagCountLookupSourceAdapter) {
+            val sourceTags = missing.map { tag -> autocompletePrefixForSource(source, tag) }
+            val batchCounts = runCatching {
+                adapter.fetchTagCounts(sourceTags)
+            }.getOrDefault(emptyMap())
+            if (batchCounts.isNotEmpty()) {
+                tagSuggestionStore.put(
+                    source = source,
+                    suggestions = batchCounts.map { (tagText, count) ->
+                        TagSuggestion(
+                            text = tagText,
+                            type = "tag_count_lookup",
+                            count = count,
+                        )
+                    },
+                )
+                missing.forEach { tag ->
+                    val matched = batchCounts.entries
+                        .firstOrNull { (name, _) -> tagsMatchForSource(source, name, tag) }
+                        ?.value
+                    if (matched != null) {
+                        resolved[tag] = matched
+                    }
+                }
             }
-            ?.count
-            ?: tagVideoCount(source, normalized)
+            missing = requested.filter { tag -> resolved[tag] == null }
+        }
+
+        missing.forEach { tag ->
+            val sourcePrefix = autocompletePrefixForSource(source, tag)
+            val fetched = runCatching {
+                adapter.autocompleteTags(prefix = sourcePrefix, limit = TAG_FETCH_LIMIT)
+            }.getOrDefault(emptyList())
+            if (fetched.isNotEmpty()) {
+                tagSuggestionStore.put(source, fetched)
+            }
+            val count = fetched
+                .firstOrNull { suggestion -> tagsMatchForSource(source, suggestion.text, tag) }
+                ?.count
+                ?: tagVideoCount(source, tag)
+            if (count != null) {
+                resolved[tag] = count
+            }
+        }
+
+        return resolved
     }
 
     suspend fun initialize() {
@@ -390,49 +440,111 @@ class SearchCoordinator(
         }
     }
 
-    suspend fun loadTrendingTags() {
+    suspend fun loadTrendingTags(forceRefresh: Boolean = false) {
         errorMessage = null
-        val mode = draftQuery.mode
-
-        trendingTags = when (mode) {
+        val now = clock()
+        when (val mode = draftQuery.mode) {
             QueryMode.Unified -> {
                 val enabled = effectiveEnabledSources()
-                val cached = enabled
-                    .flatMap { source -> tagSuggestionStore.get(source, limit = 10) }
-                    .distinctBy { it.text }
-                    .take(20)
-                if (cached.isNotEmpty()) {
-                    cached
-                } else {
-                    enabled
-                        .flatMap { source ->
-                            val fetched = runCatching {
-                                registry.adapterFor(source)?.trendingTags(limit = 10).orEmpty()
-                            }.getOrDefault(emptyList())
-                            if (fetched.isNotEmpty()) {
-                                tagSuggestionStore.put(source, fetched)
-                            }
-                            fetched
-                        }
-                        .distinctBy { it.text }
-                        .take(20)
+                if (enabled.isEmpty()) {
+                    trendingTags = emptyList()
+                    return
+                }
+
+                val cachedBySource = enabled.associateWith { source ->
+                    tagSuggestionStore.get(source, limit = TRENDING_PER_SOURCE_CACHE_LIMIT)
+                }
+                trendingTags = rankTrendingSuggestions(
+                    suggestions = cachedBySource.values.flatten(),
+                    limit = UNIFIED_TRENDING_LIMIT,
+                )
+
+                val sourcesToRefresh = enabled.filter { source ->
+                    shouldRefreshTrending(
+                        source = source,
+                        nowEpochMs = now,
+                        forceRefresh = forceRefresh,
+                        cached = cachedBySource[source].orEmpty(),
+                    )
+                }
+                if (sourcesToRefresh.isEmpty()) {
+                    return
+                }
+
+                var refreshedAny = false
+                sourcesToRefresh.forEach { source ->
+                    val fetched = fetchTrendingForSource(source = source, limit = TRENDING_FETCH_PER_SOURCE_LIMIT)
+                    if (fetched.isNotEmpty()) {
+                        refreshedAny = true
+                    }
+                }
+                if (refreshedAny || trendingTags.isEmpty()) {
+                    val refreshed = enabled.flatMap { source ->
+                        tagSuggestionStore.get(source, limit = TRENDING_PER_SOURCE_CACHE_LIMIT)
+                    }
+                    trendingTags = rankTrendingSuggestions(
+                        suggestions = refreshed,
+                        limit = UNIFIED_TRENDING_LIMIT,
+                    )
                 }
             }
+
             is QueryMode.Source -> {
-                val cached = tagSuggestionStore.get(mode.source, limit = 20)
-                if (cached.isNotEmpty()) {
-                    cached
-                } else {
-                    val fetched = runCatching {
-                        registry.adapterFor(mode.source)?.trendingTags(limit = 20).orEmpty()
-                    }.getOrDefault(emptyList())
-                    if (fetched.isNotEmpty()) {
-                        tagSuggestionStore.put(mode.source, fetched)
-                    }
-                    fetched
+                val source = mode.source
+                val cached = tagSuggestionStore.get(source, limit = SOURCE_TRENDING_LIMIT)
+                trendingTags = rankTrendingSuggestions(cached, limit = SOURCE_TRENDING_LIMIT)
+
+                if (!shouldRefreshTrending(source, now, forceRefresh, cached)) {
+                    return
+                }
+
+                val fetched = fetchTrendingForSource(source = source, limit = SOURCE_TRENDING_LIMIT)
+                if (fetched.isNotEmpty() || trendingTags.isEmpty()) {
+                    val refreshed = tagSuggestionStore.get(source, limit = SOURCE_TRENDING_LIMIT)
+                    trendingTags = rankTrendingSuggestions(refreshed, limit = SOURCE_TRENDING_LIMIT)
                 }
             }
         }
+    }
+
+    private fun shouldRefreshTrending(
+        source: SourceKey,
+        nowEpochMs: Long,
+        forceRefresh: Boolean,
+        cached: List<TagSuggestion>,
+    ): Boolean {
+        if (forceRefresh) return true
+        if (cached.isEmpty()) return true
+        val lastRefresh = lastTrendingRefreshAtBySource[source] ?: return true
+        return nowEpochMs - lastRefresh >= TRENDING_REFRESH_INTERVAL_MS
+    }
+
+    private suspend fun fetchTrendingForSource(source: SourceKey, limit: Int): List<TagSuggestion> {
+        val fetched = runCatching {
+            registry.adapterFor(source)?.trendingTags(limit = limit).orEmpty()
+        }.getOrDefault(emptyList())
+        lastTrendingRefreshAtBySource[source] = clock()
+        if (fetched.isNotEmpty()) {
+            tagSuggestionStore.put(source, fetched)
+        }
+        return fetched
+    }
+
+    private fun rankTrendingSuggestions(
+        suggestions: List<TagSuggestion>,
+        limit: Int,
+    ): List<TagSuggestion> {
+        if (limit <= 0) return emptyList()
+        return suggestions
+            .asSequence()
+            .filter { suggestion -> suggestion.text.isNotBlank() }
+            .distinctBy { suggestion -> normalizeMatchToken(suggestion.text) }
+            .sortedWith(
+                compareByDescending<TagSuggestion> { suggestion -> suggestion.count ?: Int.MIN_VALUE }
+                    .thenBy { suggestion -> suggestion.text.lowercase() }
+            )
+            .take(limit)
+            .toList()
     }
 
     suspend fun applyDraft() {
@@ -501,6 +613,7 @@ class SearchCoordinator(
                         queryOverridesBySource = unifiedQueryOverrides.filterKeys { it in pageableSources },
                     )
                     results = mergeResults(results, result.items)
+                    rememberSeenTags(result.items)
                     statuses = (result.statuses + disabledStatuses)
                         .distinctBy { it.source }
                         .sortedBy { it.source.name }
@@ -522,6 +635,7 @@ class SearchCoordinator(
                     }
                     val page = adapter.search(appliedQuery, pageToken = token)
                     results = mergeResults(results, page.items)
+                    rememberSeenTags(page.items)
                     statuses = listOf(SourceRunStatus(mode.source, state = SourceRunState.SUCCESS))
                     sourceNextPageToken = page.nextPageToken
                     canLoadMore = !sourceNextPageToken.isNullOrBlank()
@@ -620,6 +734,7 @@ class SearchCoordinator(
                         queryOverridesBySource = unifiedQueryOverrides,
                     )
                     results = result.items
+                    rememberSeenTags(result.items)
                     statuses = (result.statuses + disabledStatuses)
                         .distinctBy { it.source }
                         .sortedBy { it.source.name }
@@ -656,6 +771,7 @@ class SearchCoordinator(
                     }
                     val page = adapter.search(appliedQuery, pageToken = null)
                     results = page.items
+                    rememberSeenTags(page.items)
                     statuses = listOf(SourceRunStatus(mode.source, state = SourceRunState.SUCCESS))
                     sourceNextPageToken = page.nextPageToken
                     canLoadMore = !sourceNextPageToken.isNullOrBlank()
@@ -780,6 +896,30 @@ class SearchCoordinator(
         return merged
     }
 
+    private fun rememberSeenTags(posts: List<Post>) {
+        if (posts.isEmpty()) return
+
+        posts
+            .groupBy { post -> post.id.source }
+            .forEach { (source, sourcePosts) ->
+                val seenSuggestions = sourcePosts
+                    .asSequence()
+                    .flatMap { post ->
+                        val tags = post.rawTags.ifEmpty { post.canonicalTags }
+                        tags.asSequence()
+                    }
+                    .map(String::trim)
+                    .filter(String::isNotBlank)
+                    .map { tag -> TagSuggestion(text = normalizeStoredTagForSource(source, tag), type = "seen", count = null) }
+                    .distinctBy { suggestion -> sourceTagKey(source, suggestion.text) }
+                    .take(SEEN_TAGS_PER_SOURCE_INGEST_LIMIT)
+                    .toList()
+                if (seenSuggestions.isNotEmpty()) {
+                    tagSuggestionStore.put(source, seenSuggestions)
+                }
+            }
+    }
+
     private fun modeKey(mode: QueryMode): String {
         return when (mode) {
             QueryMode.Unified -> "unified"
@@ -816,12 +956,13 @@ class SearchCoordinator(
 
     private fun resolveCommittedTagInput(input: String): String {
         val trimmed = input.trim()
-        if (!requiresGelbooruSuggestionSelection()) return trimmed
+        val source = (draftQuery.mode as? QueryMode.Source)?.source ?: return trimmed
+        if (source !in SUGGESTION_CANONICALIZATION_SOURCES) return trimmed
 
         val isExclude = trimmed.startsWith("-")
         val typedTag = normalizeTypedTag(trimmed)
         val matched = autocompleteSuggestions
-            .firstOrNull { suggestion -> tagsMatchForSource(SourceKey.GELBOORU, suggestion.text, typedTag) }
+            .firstOrNull { suggestion -> tagsMatchForSource(source, suggestion.text, typedTag) }
             ?.text
             ?.trim()
             .orEmpty()
@@ -835,6 +976,7 @@ class SearchCoordinator(
         if (left.isBlank() || right.isBlank()) return false
         return when (source) {
             SourceKey.GELBOORU -> normalizeGelbooruToken(left) == normalizeGelbooruToken(right)
+            SourceKey.PIXIV -> normalizeMatchToken(left) == normalizeMatchToken(right)
             else -> left.equals(right, ignoreCase = true)
         }
     }
@@ -844,6 +986,23 @@ class SearchCoordinator(
             .trim()
             .lowercase()
             .replace(WHITESPACE_REGEX, "_")
+    }
+
+    private fun normalizeStoredTagForSource(source: SourceKey, value: String): String {
+        val normalized = value.trim()
+        if (normalized.isBlank()) return ""
+        return when (source) {
+            SourceKey.GELBOORU -> normalizeGelbooruToken(normalized)
+            else -> normalized
+        }
+    }
+
+    private fun sourceTagKey(source: SourceKey, tag: String): String {
+        return when (source) {
+            SourceKey.GELBOORU -> normalizeGelbooruToken(tag)
+            SourceKey.PIXIV -> normalizeMatchToken(tag)
+            else -> tag.trim().lowercase()
+        }
     }
 
     private fun isSuggestedTag(tag: String): Boolean {
@@ -923,4 +1082,11 @@ private const val GELBOORU_SUGGESTION_REQUIRED_MESSAGE =
     "For Gelbooru, pick a suggested tag from autocomplete."
 private const val TAG_LOOKUP_LIMIT = 20_000
 private const val TAG_FETCH_LIMIT = 25
+private const val TRENDING_REFRESH_INTERVAL_MS = 12L * 60L * 60L * 1000L
+private const val TRENDING_FETCH_PER_SOURCE_LIMIT = 10
+private const val TRENDING_PER_SOURCE_CACHE_LIMIT = 40
+private const val SOURCE_TRENDING_LIMIT = 20
+private const val UNIFIED_TRENDING_LIMIT = 20
+private const val SEEN_TAGS_PER_SOURCE_INGEST_LIMIT = 240
+private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(SourceKey.PIXIV, SourceKey.GELBOORU)
 private val WHITESPACE_REGEX = Regex("\\s+")

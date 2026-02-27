@@ -16,6 +16,10 @@ interface SourceAdapter {
     suspend fun resolvePost(id: PostId): Post?
 }
 
+interface TagCountLookupSourceAdapter {
+    suspend fun fetchTagCounts(tags: List<String>): Map<String, Int>
+}
+
 data class Page<T>(
     val items: List<T>,
     val nextPageToken: String?,

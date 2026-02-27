@@ -12,6 +12,7 @@ import com.theoriacodex.sources.testing.FakeCredentialsProvider
 import com.theoriacodex.sources.testing.FakeHttpClient
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -98,6 +99,35 @@ class GelbooruSourceAdapterTest {
 
         assertEquals("image/jpeg", post.preview.mime)
         assertEquals("video/mp4", post.full?.mime)
+    }
+
+    @Test
+    fun `fetch tag counts batches names lookup and returns counts`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "tag": [
+                        {"name":"blue_hair","count":"1200"},
+                        {"name":"landscape","count":"560"}
+                      ]
+                    }
+                """.trimIndent(),
+            )
+        }
+        val adapter = GelbooruSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = FakeCredentialsProvider(),
+        )
+
+        val counts = adapter.fetchTagCounts(listOf("blue hair", "landscape"))
+
+        assertEquals("blue_hair landscape", httpClient.lastGet?.query?.get("names"))
+        assertEquals("2", httpClient.lastGet?.query?.get("limit"))
+        assertEquals(1200, counts["blue_hair"])
+        assertEquals(560, counts["landscape"])
+        assertNull(counts["missing"])
     }
 
     private fun sampleQuery(): Query {
