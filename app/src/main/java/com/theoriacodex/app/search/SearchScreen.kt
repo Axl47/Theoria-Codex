@@ -103,6 +103,8 @@ import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.isVideoMediaRef
+import com.theoriacodex.app.recommend.associatedDisplayTag
+import com.theoriacodex.app.recommend.buildSourceTagAffinity
 import com.theoriacodex.app.R
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
@@ -155,6 +157,43 @@ fun SearchScreen(
             coordinator.results.filter(::isAnimatedPost)
         } else {
             coordinator.results
+        }
+    }
+    val displayTagSeedBySource = remember(
+        coordinator.appliedQuery.mode,
+        coordinator.appliedQuery.includeTags,
+        visibleResults,
+    ) {
+        when (val mode = coordinator.appliedQuery.mode) {
+            is QueryMode.Source -> mapOf(mode.source to coordinator.appliedQuery.includeTags)
+            QueryMode.Unified -> {
+                val sources = visibleResults
+                    .asSequence()
+                    .map { post -> post.id.source }
+                    .toSet()
+                sources.associateWith { coordinator.appliedQuery.includeTags }
+            }
+        }
+    }
+    val displayTagAffinityBySource = remember(visibleResults) {
+        val documentsBySource = visibleResults
+            .groupBy { post -> post.id.source }
+            .mapValues { (_, posts) ->
+                posts.map { post -> post.canonicalTags }
+            }
+        buildSourceTagAffinity(documentsBySource = documentsBySource)
+    }
+    val displayTagByPostId = remember(
+        visibleResults,
+        displayTagSeedBySource,
+        displayTagAffinityBySource,
+    ) {
+        visibleResults.associate { post ->
+            post.id to associatedDisplayTag(
+                post = post,
+                seedTagsBySource = displayTagSeedBySource,
+                affinityBySource = displayTagAffinityBySource,
+            )
         }
     }
     suspend fun resetScrollToTop() {
@@ -502,6 +541,7 @@ fun SearchScreen(
                                     post = post,
                                     pixivUgoiraClient = pixivUgoiraClient,
                                     showSourceBadge = coordinator.appliedQuery.mode == QueryMode.Unified,
+                                    displayTag = displayTagByPostId[post.id],
                                     liked = post.id in likedPostIds,
                                     onToggleLike = onToggleLike?.let { toggle ->
                                         { toggle(post) }
