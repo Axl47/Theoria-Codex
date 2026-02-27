@@ -28,6 +28,31 @@ class InMemoryCodexRepository : CodexRepository {
         return codices.map { all -> all.firstOrNull { it.codexId == codexId } }
     }
 
+    override suspend fun ensureCodex(codexId: String, name: String): Codex {
+        return mutex.withLock {
+            val existing = codices.value.firstOrNull { it.codexId == codexId }
+            if (existing != null) {
+                if (existing.name == name) {
+                    existing
+                } else {
+                    val updated = existing.copy(name = name)
+                    codices.value = codices.value.map { codex ->
+                        if (codex.codexId == codexId) updated else codex
+                    }
+                    updated
+                }
+            } else {
+                val created = Codex(
+                    codexId = codexId,
+                    name = name,
+                    createdAtEpochMs = System.currentTimeMillis(),
+                )
+                codices.value = codices.value + created
+                created
+            }
+        }
+    }
+
     override suspend fun createCodex(name: String): Codex {
         return mutex.withLock {
             val created = Codex(

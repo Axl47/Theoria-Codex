@@ -408,10 +408,63 @@ fun TheoriaApp(
         }
     }
 
+    suspend fun ensureLikesCodexId(): String {
+        return codexRepository.ensureCodex(
+            codexId = LIKES_CODEX_ID,
+            name = LIKES_CODEX_NAME,
+        ).codexId
+    }
+
+    suspend fun toggleLikeAndSyncCodex(post: Post) {
+        val nowLiked = likesRepository.toggleLike(
+            profile = settings.activeProfile,
+            postId = post.id,
+            tags = trainingTagsFor(post),
+        )
+        val likesCodexId = ensureLikesCodexId()
+        if (nowLiked) {
+            codexRepository.addItem(likesCodexId, post)
+            return
+        }
+
+        val stillLikedInAnyProfile = UserProfile.entries.any { profile ->
+            likesRepository.observeLikedPostIds(profile).first().contains(post.id)
+        }
+        if (!stillLikedInAnyProfile) {
+            codexRepository.removeItem(
+                codexId = likesCodexId,
+                sourceKey = post.id.source,
+                sourcePostId = post.id.sourcePostId,
+            )
+        }
+    }
+
+    suspend fun clearActiveProfileLikesAndSyncCodex() {
+        val profile = settings.activeProfile
+        val likesToClear = likesRepository.observeLikes(profile).first()
+        likesRepository.clearLikes(profile)
+        if (likesToClear.isEmpty()) return
+
+        val likesCodexId = ensureLikesCodexId()
+        val remainingLikedPostIds = UserProfile.entries
+            .flatMap { userProfile -> likesRepository.observeLikedPostIds(userProfile).first() }
+            .toSet()
+        likesToClear.forEach { liked ->
+            if (liked.postId !in remainingLikedPostIds) {
+                codexRepository.removeItem(
+                    codexId = likesCodexId,
+                    sourceKey = liked.postId.source,
+                    sourcePostId = liked.postId.sourcePostId,
+                )
+            }
+        }
+    }
+
     suspend fun completeAppStartup() {
         if (navReady) return
         searchCoordinator.initialize()
         forYouCoordinator.initialize()
+        ensureLikesCodexId()
         refreshSourceAccountState()
         startDestination = uiRestoreRepository.getLastTab()
             ?: settingsRepository.observeSettings().first().lastSelectedTabRoute
@@ -1012,11 +1065,7 @@ fun TheoriaApp(
                             likedPostIds = likedPostIds,
                             onToggleLike = { post ->
                                 scope.launch {
-                                    likesRepository.toggleLike(
-                                        profile = settings.activeProfile,
-                                        postId = post.id,
-                                        tags = trainingTagsFor(post),
-                                    )
+                                    toggleLikeAndSyncCodex(post)
                                 }
                             },
                             onOpenViewer = { posts, context, animatedOnly ->
@@ -1057,11 +1106,7 @@ fun TheoriaApp(
                             pixivUgoiraClient = pixivUgoiraClient,
                             onToggleLike = { post ->
                                 scope.launch {
-                                    likesRepository.toggleLike(
-                                        profile = settings.activeProfile,
-                                        postId = post.id,
-                                        tags = trainingTagsFor(post),
-                                    )
+                                    toggleLikeAndSyncCodex(post)
                                 }
                             },
                             onOpenViewer = { posts, context ->
@@ -1240,7 +1285,7 @@ fun TheoriaApp(
                                 scope.launch { settingsRepository.setActiveProfile(profile) }
                             },
                             onClearLikesForActiveProfile = {
-                                scope.launch { likesRepository.clearLikes(settings.activeProfile) }
+                                scope.launch { clearActiveProfileLikesAndSyncCodex() }
                             },
                             onSetCacheFullImageOnSave = { enabled ->
                                 scope.launch { settingsRepository.setCacheFullImageOnSave(enabled) }
@@ -1341,11 +1386,7 @@ fun TheoriaApp(
                                 likedPostIds = likedPostIds,
                                 onToggleLike = { post ->
                                     scope.launch {
-                                        likesRepository.toggleLike(
-                                            profile = settings.activeProfile,
-                                            postId = post.id,
-                                            tags = trainingTagsFor(post),
-                                        )
+                                        toggleLikeAndSyncCodex(post)
                                     }
                                 },
                                 onDismiss = {
@@ -2002,3 +2043,5 @@ private const val MIN_BOTTOM_BAR_ICON_DP = 24
 private const val MAX_BOTTOM_BAR_ICON_DP = 30
 private const val TAB_SWIPE_THRESHOLD_DP = 72
 private const val TAB_SWIPE_HORIZONTAL_BIAS = 1.2f
+private const val LIKES_CODEX_ID = "system_likes_codex"
+private const val LIKES_CODEX_NAME = "Likes"

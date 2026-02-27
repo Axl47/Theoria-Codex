@@ -53,6 +53,33 @@ class FileBackedCodexRepository(
         return codicesFlow.map { codices -> codices.firstOrNull { it.codexId == codexId } }
     }
 
+    override suspend fun ensureCodex(codexId: String, name: String): Codex {
+        return mutex.withLock {
+            val existing = codicesFlow.value.firstOrNull { it.codexId == codexId }
+            if (existing != null) {
+                if (existing.name == name) {
+                    existing
+                } else {
+                    val updated = existing.copy(name = name)
+                    codicesFlow.value = codicesFlow.value.map { codex ->
+                        if (codex.codexId == codexId) updated else codex
+                    }
+                    persist()
+                    updated
+                }
+            } else {
+                val codex = Codex(
+                    codexId = codexId,
+                    name = name,
+                    createdAtEpochMs = System.currentTimeMillis(),
+                )
+                codicesFlow.value = codicesFlow.value + codex
+                persist()
+                codex
+            }
+        }
+    }
+
     override suspend fun createCodex(name: String): Codex {
         return mutex.withLock {
             val codex = Codex(

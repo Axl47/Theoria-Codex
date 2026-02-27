@@ -50,6 +50,18 @@ class InMemoryRepositoriesTest {
     }
 
     @Test
+    fun `codex repository ensures stable system codex`() = runTest {
+        val repo = InMemoryCodexRepository()
+
+        val first = repo.ensureCodex(codexId = "system_likes_codex", name = "Likes")
+        val second = repo.ensureCodex(codexId = "system_likes_codex", name = "Likes")
+
+        assertEquals(first.codexId, second.codexId)
+        assertEquals("Likes", second.name)
+        assertEquals(1, repo.observeCodices().first().size)
+    }
+
+    @Test
     fun `query repository stores query and scroll offset`() = runTest {
         val repo = InMemoryQueryRepository()
         val query = Query(

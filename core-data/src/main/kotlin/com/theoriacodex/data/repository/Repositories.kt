@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.Flow
 interface CodexRepository {
     fun observeCodices(): Flow<List<Codex>>
     fun observeCodex(codexId: String): Flow<Codex?>
+    suspend fun ensureCodex(codexId: String, name: String): Codex
     suspend fun createCodex(name: String): Codex
     suspend fun renameCodex(codexId: String, name: String)
     suspend fun deleteCodex(codexId: String)

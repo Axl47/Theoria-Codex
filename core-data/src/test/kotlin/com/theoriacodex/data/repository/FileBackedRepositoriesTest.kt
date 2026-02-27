@@ -35,6 +35,21 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
+    fun `codex repository ensures stable system codex across restarts`() = runTest {
+        val dir = Files.createTempDirectory("codex-likes-system-").toFile()
+        val first = FileBackedCodexRepository(dir)
+        first.ensureCodex(codexId = "system_likes_codex", name = "Likes")
+
+        val second = FileBackedCodexRepository(dir)
+        val existing = second.ensureCodex(codexId = "system_likes_codex", name = "Likes")
+        val codices = second.observeCodices().first()
+
+        assertEquals("system_likes_codex", existing.codexId)
+        assertEquals("Likes", existing.name)
+        assertEquals(1, codices.size)
+    }
+
+    @Test
     fun `query repository persists applied query and scroll offsets`() = runTest {
         val dir = Files.createTempDirectory("query-store-").toFile()
         val first = FileBackedQueryRepository(dir)
