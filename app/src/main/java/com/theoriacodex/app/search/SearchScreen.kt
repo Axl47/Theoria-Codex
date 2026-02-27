@@ -40,11 +40,13 @@ import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -111,6 +113,7 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
@@ -129,6 +132,8 @@ import kotlin.math.abs
 fun SearchScreen(
     coordinator: SearchCoordinator,
     pixivUgoiraClient: PixivUgoiraClient? = null,
+    likedPostIds: Set<PostId> = emptySet(),
+    onToggleLike: ((Post) -> Unit)? = null,
     onOpenViewer: (List<Post>, ViewerLaunchContext, Boolean) -> Unit,
     onApplySearch: () -> Unit,
     onRetrySearch: () -> Unit,
@@ -497,6 +502,10 @@ fun SearchScreen(
                                     post = post,
                                     pixivUgoiraClient = pixivUgoiraClient,
                                     showSourceBadge = coordinator.appliedQuery.mode == QueryMode.Unified,
+                                    liked = post.id in likedPostIds,
+                                    onToggleLike = onToggleLike?.let { toggle ->
+                                        { toggle(post) }
+                                    },
                                     onClick = {
                                         focusManager.clearFocus()
                                         val context = coordinator.buildViewerLaunchContext(
@@ -680,6 +689,8 @@ fun SearchResultCard(
     post: Post,
     pixivUgoiraClient: PixivUgoiraClient?,
     showSourceBadge: Boolean = false,
+    liked: Boolean = false,
+    onToggleLike: (() -> Unit)? = null,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
 ) {
@@ -754,6 +765,38 @@ fun SearchResultCard(
                         .align(Alignment.TopEnd)
                         .padding(8.dp),
                 )
+            }
+            if (onToggleLike != null) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .size(30.dp)
+                        .clickable(onClick = onToggleLike),
+                    color = Color.Black.copy(alpha = 0.55f),
+                    shape = CircleShape,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (liked) {
+                                Icons.Default.Favorite
+                            } else {
+                                Icons.Outlined.FavoriteBorder
+                            },
+                            contentDescription = if (liked) {
+                                "Unlike post"
+                            } else {
+                                "Like post"
+                            },
+                            tint = if (liked) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                Color.White
+                            },
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
             }
         }
 

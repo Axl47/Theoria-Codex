@@ -64,6 +64,7 @@ class FileBackedRepositoriesTest {
         first.setCacheFullImageOnSave(true)
         first.setScenarioPreset(ScenarioPreset.EMPTY_RESULTS)
         first.setLastTab("codex")
+        first.setActiveProfile(UserProfile.USER_2)
 
         val second = FileBackedSettingsRepository(dir)
         val loaded = second.observeSettings().first()
@@ -71,8 +72,43 @@ class FileBackedRepositoriesTest {
         assertTrue(loaded.cache.cacheFullImageOnSave)
         assertEquals(ScenarioPreset.EMPTY_RESULTS, loaded.scenarioPreset)
         assertEquals("codex", loaded.lastSelectedTabRoute)
+        assertEquals(UserProfile.USER_2, loaded.activeProfile)
         val total = loaded.runtime.sourceWeights.values.sum()
         assertEquals(1.0, total, 0.0001)
+    }
+
+    @Test
+    fun `likes repository persists toggles and profile isolation`() = runTest {
+        val dir = Files.createTempDirectory("likes-store-").toFile()
+        val first = FileBackedLikesRepository(dir)
+        val pixivPost = samplePost("10", localPath = null, source = SourceKey.PIXIV)
+        val gelbooruPost = samplePost("11", localPath = null, source = SourceKey.GELBOORU)
+
+        first.toggleLike(
+            profile = UserProfile.USER_1,
+            postId = pixivPost.id,
+            tags = listOf("cloud", "sky"),
+        )
+        first.toggleLike(
+            profile = UserProfile.USER_2,
+            postId = gelbooruPost.id,
+            tags = listOf("sunset"),
+        )
+
+        val second = FileBackedLikesRepository(dir)
+        val user1Likes = second.observeLikes(UserProfile.USER_1).first()
+        val user2Likes = second.observeLikes(UserProfile.USER_2).first()
+
+        assertEquals(1, user1Likes.size)
+        assertEquals(pixivPost.id, user1Likes.first().postId)
+        assertEquals(listOf("cloud", "sky"), user1Likes.first().tags)
+        assertEquals(1, user2Likes.size)
+        assertEquals(gelbooruPost.id, user2Likes.first().postId)
+
+        second.clearLikes(UserProfile.USER_1)
+        val third = FileBackedLikesRepository(dir)
+        assertTrue(third.observeLikes(UserProfile.USER_1).first().isEmpty())
+        assertEquals(1, third.observeLikes(UserProfile.USER_2).first().size)
     }
 
     @Test

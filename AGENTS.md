@@ -25,6 +25,10 @@ Whenever new updates are made, this file (`AGENTS.md`) should be updated with an
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/res/layout/player_view_texture.xml`: texture-backed `androidx.media3.ui.PlayerView` layout (`surface_type=texture_view`) used by Compose `AndroidView` hosts to avoid lingering `VideoView/SurfaceView` teardown artifacts.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/update/` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/test/java/com/theoriacodex/app/update/GitHubReleaseFeedClientTest.kt`: startup auto-update module (GitHub prerelease feed parsing, download, APK validation, installer launch orchestration, persisted pending state) plus parser contract tests.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/.github/workflows/main-prerelease.yml`: CI release publisher contract for main-channel updater (release title/tag `v<major>.<minor>.<patch>` plus semver-derived Android `versionCode`, with updater backward-compatibility for legacy `main-vc<versionCode>-<sha>` tags and fixed `theoria-codex-main.apk` asset).
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/execplans/for-you-recommendations-execplan.md`: living ExecPlan for the two-profile recommendation system, hearted-tag memory, and `For You` tab rollout.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/recommend/`: recommendation runtime package containing `ForYouCoordinator`, `ForYouScreen`, and post training-tag extraction helpers.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-domain/src/main/kotlin/com/theoriacodex/domain/recommendation/`: source-aware tag affinity and recommendation tag-set generator used by the app `For You` feed.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-data/src/main/kotlin/com/theoriacodex/data/repository/FileBackedRepositories.kt` (`likes_store.json`): local file-backed likes repository with per-profile/per-post tag memory used by recommendation training.
 
 ## Final Output
 

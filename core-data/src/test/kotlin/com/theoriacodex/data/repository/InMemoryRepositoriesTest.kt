@@ -10,6 +10,7 @@ import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -87,6 +88,7 @@ class InMemoryRepositoriesTest {
         repo.setEnabledSources(setOf(SourceKey.PIXIV, SourceKey.GELBOORU))
         repo.setSourceWeights(mapOf(SourceKey.PIXIV to 3.0, SourceKey.GELBOORU to 1.0))
         repo.setScenarioPreset(ScenarioPreset.PARTIAL_FAILURE)
+        repo.setActiveProfile(UserProfile.USER_2)
 
         val settings = repo.observeSettings().first()
         val pixivWeight = settings.runtime.sourceWeights.getValue(SourceKey.PIXIV)
@@ -95,6 +97,33 @@ class InMemoryRepositoriesTest {
         assertEquals(1.0, pixivWeight + gelbooruWeight, 0.0001)
         assertTrue(pixivWeight > gelbooruWeight)
         assertEquals(ScenarioPreset.PARTIAL_FAILURE, settings.scenarioPreset)
+        assertEquals(UserProfile.USER_2, settings.activeProfile)
+    }
+
+    @Test
+    fun `likes repository toggles and isolates profiles`() = runTest {
+        val repo = InMemoryLikesRepository()
+        val post = samplePost("1")
+
+        val added = repo.toggleLike(
+            profile = UserProfile.USER_1,
+            postId = post.id,
+            tags = listOf("cloud", "cloud", "sky"),
+        )
+
+        assertTrue(added)
+        assertTrue(post.id in repo.observeLikedPostIds(UserProfile.USER_1).first())
+        assertEquals(1, repo.observeLikes(UserProfile.USER_1).first().size)
+        assertTrue(repo.observeLikedPostIds(UserProfile.USER_2).first().isEmpty())
+
+        val removed = repo.toggleLike(
+            profile = UserProfile.USER_1,
+            postId = post.id,
+            tags = listOf("ignored"),
+        )
+
+        assertFalse(removed)
+        assertTrue(repo.observeLikedPostIds(UserProfile.USER_1).first().isEmpty())
     }
 
     @Test

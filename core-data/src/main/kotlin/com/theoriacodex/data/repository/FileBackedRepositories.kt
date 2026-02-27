@@ -243,6 +243,12 @@ class FileBackedSettingsRepository(
         }
     }
 
+    override suspend fun setActiveProfile(profile: UserProfile) {
+        updateSettings {
+            it.copy(activeProfile = profile)
+        }
+    }
+
     private fun persist() {
         writeJson(storageFile, SettingsStoreFile.fromDomain(settingsFlow.value))
     }
@@ -410,6 +416,96 @@ class FileBackedUiRestoreRepository(
                 viewerLaunchContext = viewerContextFlow.value?.let(ViewerLaunchContextRecord::fromDomain),
             ),
         )
+    }
+}
+
+class FileBackedLikesRepository(
+    baseDirectory: File,
+) : LikesRepository {
+    private val mutex = Mutex()
+    private val storageFile = baseDirectory.resolve("likes_store.json")
+    private val likesFlow = MutableStateFlow<Map<UserProfile, Map<PostId, LikedPost>>>(emptyMap())
+
+    init {
+        storageFile.parentFile?.mkdirs()
+        val stored = readJson(storageFile, LikesStoreFile())
+        val grouped = mutableMapOf<UserProfile, MutableMap<PostId, LikedPost>>()
+        stored.likes.orEmpty().forEach { record ->
+            val source = record.source
+                ?.let { name -> runCatching { SourceKey.valueOf(name) }.getOrNull() }
+                ?: return@forEach
+            val sourcePostId = record.sourcePostId?.trim().orEmpty()
+            if (sourcePostId.isBlank()) return@forEach
+            val profile = record.profile
+                ?.let { name -> runCatching { UserProfile.valueOf(name) }.getOrNull() }
+                ?: UserProfile.USER_1
+            val postId = PostId(source = source, sourcePostId = sourcePostId)
+            grouped.getOrPut(profile) { mutableMapOf() }[postId] = LikedPost(
+                profile = profile,
+                postId = postId,
+                likedAtEpochMs = record.likedAtEpochMs ?: System.currentTimeMillis(),
+                tags = normalizeLikedTags(record.tags.orEmpty()),
+            )
+        }
+        likesFlow.value = grouped.mapValues { (_, likes) -> likes.toMap() }
+    }
+
+    override fun observeLikes(profile: UserProfile): Flow<List<LikedPost>> {
+        return likesFlow.map { byProfile ->
+            byProfile[profile]
+                .orEmpty()
+                .values
+                .sortedByDescending { it.likedAtEpochMs }
+        }
+    }
+
+    override fun observeLikedPostIds(profile: UserProfile): Flow<Set<PostId>> {
+        return likesFlow.map { byProfile ->
+            byProfile[profile]
+                .orEmpty()
+                .keys
+        }
+    }
+
+    override suspend fun toggleLike(profile: UserProfile, postId: PostId, tags: List<String>): Boolean {
+        return mutex.withLock {
+            val profileLikes = likesFlow.value[profile].orEmpty().toMutableMap()
+            val existing = profileLikes[postId]
+            val nowLiked = if (existing == null) {
+                profileLikes[postId] = LikedPost(
+                    profile = profile,
+                    postId = postId,
+                    likedAtEpochMs = System.currentTimeMillis(),
+                    tags = normalizeLikedTags(tags),
+                )
+                true
+            } else {
+                profileLikes -= postId
+                false
+            }
+            likesFlow.value = likesFlow.value + (profile to profileLikes)
+            persist()
+            nowLiked
+        }
+    }
+
+    override suspend fun clearLikes(profile: UserProfile) {
+        mutex.withLock {
+            likesFlow.value = likesFlow.value - profile
+            persist()
+        }
+    }
+
+    private fun persist() {
+        val flattened = likesFlow.value
+            .entries
+            .flatMap { (profile, likes) ->
+                likes.values.map { liked ->
+                    LikedPostRecord.fromDomain(profile = profile, liked = liked)
+                }
+            }
+            .sortedByDescending { it.likedAtEpochMs ?: Long.MIN_VALUE }
+        writeJson(storageFile, LikesStoreFile(likes = flattened))
     }
 }
 
@@ -626,6 +722,7 @@ private data class SettingsStoreFile(
     val cacheFullImageOnSave: Boolean = false,
     val scenarioPreset: String = ScenarioPreset.NORMAL.name,
     val lastSelectedTabRoute: String = "search",
+    val activeProfile: String? = null,
 ) {
     fun toDomain(): AppSettings {
         val runtime = SourceRuntimeSettings(
@@ -640,6 +737,9 @@ private data class SettingsStoreFile(
                 cache = CacheSettings(cacheFullImageOnSave = cacheFullImageOnSave),
                 scenarioPreset = runCatching { ScenarioPreset.valueOf(scenarioPreset) }.getOrDefault(ScenarioPreset.NORMAL),
                 lastSelectedTabRoute = lastSelectedTabRoute,
+                activeProfile = activeProfile
+                    ?.let { value -> runCatching { UserProfile.valueOf(value) }.getOrNull() }
+                    ?: UserProfile.USER_1,
             )
         )
     }
@@ -652,6 +752,7 @@ private data class SettingsStoreFile(
                 cacheFullImageOnSave = settings.cache.cacheFullImageOnSave,
                 scenarioPreset = settings.scenarioPreset.name,
                 lastSelectedTabRoute = settings.lastSelectedTabRoute,
+                activeProfile = settings.activeProfile.name,
             )
         }
     }
@@ -695,6 +796,30 @@ private data class ViewerLaunchContextRecord(
     }
 }
 
+private data class LikesStoreFile(
+    val likes: List<LikedPostRecord>? = null,
+)
+
+private data class LikedPostRecord(
+    val profile: String? = null,
+    val source: String? = null,
+    val sourcePostId: String? = null,
+    val likedAtEpochMs: Long? = null,
+    val tags: List<String>? = null,
+) {
+    companion object {
+        fun fromDomain(profile: UserProfile, liked: LikedPost): LikedPostRecord {
+            return LikedPostRecord(
+                profile = profile.name,
+                source = liked.postId.source.name,
+                sourcePostId = liked.postId.sourcePostId,
+                likedAtEpochMs = liked.likedAtEpochMs,
+                tags = liked.tags,
+            )
+        }
+    }
+}
+
 private fun normalizeSettings(settings: AppSettings): AppSettings {
     val normalizedWeights = normalizeWeights(
         enabledSources = settings.runtime.enabledSources,
@@ -716,6 +841,15 @@ private fun normalizeWeights(
     }
     val total = positiveWeights.values.sum().takeIf { it > 0.0 } ?: enabledSources.size.toDouble()
     return positiveWeights.mapValues { (_, weight) -> weight / total }
+}
+
+private fun normalizeLikedTags(tags: List<String>): List<String> {
+    return tags
+        .asSequence()
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinctBy { it.lowercase() }
+        .toList()
 }
 
 private fun sortCodexPairs(

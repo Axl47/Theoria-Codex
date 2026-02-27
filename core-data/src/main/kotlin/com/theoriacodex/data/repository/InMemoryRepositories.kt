@@ -162,6 +162,57 @@ class InMemorySettingsRepository : SettingsRepository {
     override suspend fun setLastTab(route: String) {
         settings.value = settings.value.copy(lastSelectedTabRoute = route)
     }
+
+    override suspend fun setActiveProfile(profile: UserProfile) {
+        settings.value = settings.value.copy(activeProfile = profile)
+    }
+}
+
+class InMemoryLikesRepository : LikesRepository {
+    private val mutex = Mutex()
+    private val likesByProfile = MutableStateFlow<Map<UserProfile, Map<PostId, LikedPost>>>(emptyMap())
+
+    override fun observeLikes(profile: UserProfile): Flow<List<LikedPost>> {
+        return likesByProfile.map { byProfile ->
+            byProfile[profile]
+                .orEmpty()
+                .values
+                .sortedByDescending { it.likedAtEpochMs }
+        }
+    }
+
+    override fun observeLikedPostIds(profile: UserProfile): Flow<Set<PostId>> {
+        return likesByProfile.map { byProfile ->
+            byProfile[profile].orEmpty().keys
+        }
+    }
+
+    override suspend fun toggleLike(profile: UserProfile, postId: PostId, tags: List<String>): Boolean {
+        return mutex.withLock {
+            val profileLikes = likesByProfile.value[profile].orEmpty().toMutableMap()
+            val existing = profileLikes[postId]
+            if (existing != null) {
+                profileLikes -= postId
+                likesByProfile.value = likesByProfile.value + (profile to profileLikes)
+                false
+            } else {
+                profileLikes[postId] = LikedPost(
+                    profile = profile,
+                    postId = postId,
+                    likedAtEpochMs = System.currentTimeMillis(),
+                    tags = normalizeLikedTags(tags),
+                )
+                likesByProfile.value = likesByProfile.value + (profile to profileLikes)
+                true
+            }
+        }
+    }
+
+    override suspend fun clearLikes(profile: UserProfile) {
+        mutex.withLock {
+            likesByProfile.value = likesByProfile.value - profile
+        }
+    }
 }
 
 class InMemoryCacheRepository : CacheRepository {
@@ -241,6 +292,15 @@ class InMemoryUiRestoreRepository : UiRestoreRepository {
     override suspend fun setViewerLaunchContext(context: ViewerLaunchContext?) {
         viewerLaunchContext.value = context
     }
+}
+
+private fun normalizeLikedTags(tags: List<String>): List<String> {
+    return tags
+        .asSequence()
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinctBy { it.lowercase() }
+        .toList()
 }
 
 private fun normalizeSettings(settings: AppSettings): AppSettings {

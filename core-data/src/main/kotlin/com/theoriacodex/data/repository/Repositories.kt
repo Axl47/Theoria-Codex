@@ -4,6 +4,7 @@ import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
@@ -38,6 +39,20 @@ interface ExploreRepository {
     suspend fun trendingTags(limit: Int): List<TagSuggestion>
 }
 
+data class LikedPost(
+    val profile: UserProfile,
+    val postId: PostId,
+    val likedAtEpochMs: Long,
+    val tags: List<String>,
+)
+
+interface LikesRepository {
+    fun observeLikes(profile: UserProfile): Flow<List<LikedPost>>
+    fun observeLikedPostIds(profile: UserProfile): Flow<Set<PostId>>
+    suspend fun toggleLike(profile: UserProfile, postId: PostId, tags: List<String>): Boolean
+    suspend fun clearLikes(profile: UserProfile)
+}
+
 data class SourceRuntimeSettings(
     val enabledSources: Set<SourceKey> = SourceKey.entries.toSet(),
     val sourceWeights: Map<SourceKey, Double> = mapOf(
@@ -51,11 +66,17 @@ data class CacheSettings(
     val cacheFullImageOnSave: Boolean = false,
 )
 
+enum class UserProfile {
+    USER_1,
+    USER_2,
+}
+
 data class AppSettings(
     val runtime: SourceRuntimeSettings = SourceRuntimeSettings(),
     val cache: CacheSettings = CacheSettings(),
     val scenarioPreset: ScenarioPreset = ScenarioPreset.NORMAL,
     val lastSelectedTabRoute: String = "search",
+    val activeProfile: UserProfile = UserProfile.USER_1,
 )
 
 enum class ScenarioPreset {
@@ -73,6 +94,7 @@ interface SettingsRepository {
     suspend fun setCacheFullImageOnSave(enabled: Boolean)
     suspend fun setScenarioPreset(preset: ScenarioPreset)
     suspend fun setLastTab(route: String)
+    suspend fun setActiveProfile(profile: UserProfile)
 }
 
 data class CacheSnapshot(
@@ -90,6 +112,7 @@ interface CacheRepository {
 
 enum class ViewerStreamSource {
     SEARCH,
+    FOR_YOU,
     CODEX,
 }
 

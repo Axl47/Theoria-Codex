@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -90,6 +91,9 @@ import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.SaveToCodexSheet
 import com.theoriacodex.app.explore.ExploreScreen
+import com.theoriacodex.app.recommend.ForYouCoordinator
+import com.theoriacodex.app.recommend.ForYouScreen
+import com.theoriacodex.app.recommend.trainingTagsFor
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.SearchScreen
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
@@ -118,9 +122,11 @@ import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.FileBackedCacheRepository
 import com.theoriacodex.data.repository.FileBackedCodexRepository
+import com.theoriacodex.data.repository.FileBackedLikesRepository
 import com.theoriacodex.data.repository.FileBackedQueryRepository
 import com.theoriacodex.data.repository.FileBackedSettingsRepository
 import com.theoriacodex.data.repository.FileBackedUiRestoreRepository
+import com.theoriacodex.data.repository.UserProfile
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.SourceAdapterException
@@ -147,6 +153,7 @@ import kotlin.math.abs
 
 enum class TopLevelDestination(val route: String, val label: String) {
     Search("search", "Search"),
+    ForYou("for_you", "For You"),
     Explore("explore", "Explore"),
     Codex("codex", "Codex"),
     Settings("settings", "Settings"),
@@ -260,6 +267,7 @@ fun TheoriaApp(
     }
 
     val codexRepository = remember(storageDirectory) { FileBackedCodexRepository(storageDirectory) }
+    val likesRepository = remember(storageDirectory) { FileBackedLikesRepository(storageDirectory) }
     val queryRepository = remember(storageDirectory) { FileBackedQueryRepository(storageDirectory) }
     val settingsRepository = remember(storageDirectory) { FileBackedSettingsRepository(storageDirectory) }
     val cacheRepository = remember(storageDirectory) { FileBackedCacheRepository(storageDirectory) }
@@ -273,8 +281,22 @@ fun TheoriaApp(
             tagSuggestionStore = tagSuggestionStore,
         )
     }
+    val forYouCoordinator = remember {
+        ForYouCoordinator(
+            registry = realRegistry,
+            settingsRepository = settingsRepository,
+            likesRepository = likesRepository,
+            tagSuggestionStore = tagSuggestionStore,
+        )
+    }
 
     val settings by settingsRepository.observeSettings().collectAsState(initial = AppSettings())
+    val likedPostIds by likesRepository
+        .observeLikedPostIds(settings.activeProfile)
+        .collectAsState(initial = emptySet())
+    val activeProfileLikes by likesRepository
+        .observeLikes(settings.activeProfile)
+        .collectAsState(initial = emptyList())
     val cacheSnapshot by cacheRepository.observeSnapshot().collectAsState(
         initial = CacheSnapshot(thumbnailCount = 0, fullImageCount = 0),
     )
@@ -389,6 +411,7 @@ fun TheoriaApp(
     suspend fun completeAppStartup() {
         if (navReady) return
         searchCoordinator.initialize()
+        forYouCoordinator.initialize()
         refreshSourceAccountState()
         startDestination = uiRestoreRepository.getLastTab()
             ?: settingsRepository.observeSettings().first().lastSelectedTabRoute
@@ -595,9 +618,18 @@ fun TheoriaApp(
     }
 
     LaunchedEffect(settings) {
-        val shouldRefresh = searchCoordinator.onSettingsChanged(settings)
-        if (shouldRefresh) {
+        val shouldRefreshSearch = searchCoordinator.onSettingsChanged(settings)
+        if (shouldRefreshSearch) {
             searchCoordinator.retry()
+        }
+
+        val shouldRefreshForYou = forYouCoordinator.onSettingsChanged(settings)
+        if (shouldRefreshForYou) {
+            if (activeProfileLikes.isEmpty()) {
+                forYouCoordinator.clear()
+            } else {
+                forYouCoordinator.refresh(shuffle = false)
+            }
         }
     }
 
@@ -761,6 +793,7 @@ fun TheoriaApp(
 
     LaunchedEffect(
         searchCoordinator.results,
+        forYouCoordinator.results,
         searchCoordinator.appliedQueryHash,
         viewerSession?.context?.streamSource,
         viewerSession?.liveSearchBinding,
@@ -768,13 +801,22 @@ fun TheoriaApp(
     ) {
         val session = viewerSession ?: return@LaunchedEffect
         if (!session.liveSearchBinding) return@LaunchedEffect
-        if (session.context.streamSource != ViewerStreamSource.SEARCH) return@LaunchedEffect
-        if (session.context.queryHash != searchCoordinator.appliedQueryHash) return@LaunchedEffect
+        val incomingForViewer = when (session.context.streamSource) {
+            ViewerStreamSource.SEARCH -> {
+                if (session.context.queryHash != searchCoordinator.appliedQueryHash) return@LaunchedEffect
+                if (session.searchAnimatedOnly) {
+                    searchCoordinator.results.filter(::isAnimatedPost)
+                } else {
+                    searchCoordinator.results
+                }
+            }
 
-        val incomingForViewer = if (session.searchAnimatedOnly) {
-            searchCoordinator.results.filter(::isAnimatedPost)
-        } else {
-            searchCoordinator.results
+            ViewerStreamSource.FOR_YOU -> {
+                if (!session.context.queryHash.startsWith("for_you:")) return@LaunchedEffect
+                forYouCoordinator.results
+            }
+
+            ViewerStreamSource.CODEX -> return@LaunchedEffect
         }
         val merged = mergeViewerPosts(session.posts, incomingForViewer)
         if (merged.size != session.posts.size) {
@@ -890,6 +932,7 @@ fun TheoriaApp(
                                     icon = {
                                         val icon = when (destination) {
                                             TopLevelDestination.Search -> Icons.Default.Search
+                                            TopLevelDestination.ForYou -> Icons.Default.Favorite
                                             TopLevelDestination.Explore -> Icons.Default.Explore
                                             TopLevelDestination.Codex -> Icons.Default.Collections
                                             TopLevelDestination.Settings -> Icons.Default.Settings
@@ -966,6 +1009,16 @@ fun TheoriaApp(
                         SearchScreen(
                             coordinator = searchCoordinator,
                             pixivUgoiraClient = pixivUgoiraClient,
+                            likedPostIds = likedPostIds,
+                            onToggleLike = { post ->
+                                scope.launch {
+                                    likesRepository.toggleLike(
+                                        profile = settings.activeProfile,
+                                        postId = post.id,
+                                        tags = trainingTagsFor(post),
+                                    )
+                                }
+                            },
                             onOpenViewer = { posts, context, animatedOnly ->
                                 viewerSession = ViewerSession(
                                     posts = posts,
@@ -991,6 +1044,42 @@ fun TheoriaApp(
                             onRetrySearch = {
                                 scope.launch(start = CoroutineStart.UNDISPATCHED) {
                                     searchCoordinator.retry()
+                                }
+                            },
+                        )
+                    }
+                    composable(TopLevelDestination.ForYou.route) {
+                        ForYouScreen(
+                            coordinator = forYouCoordinator,
+                            activeProfile = settings.activeProfile,
+                            likesCount = activeProfileLikes.size,
+                            likedPostIds = likedPostIds,
+                            pixivUgoiraClient = pixivUgoiraClient,
+                            onToggleLike = { post ->
+                                scope.launch {
+                                    likesRepository.toggleLike(
+                                        profile = settings.activeProfile,
+                                        postId = post.id,
+                                        tags = trainingTagsFor(post),
+                                    )
+                                }
+                            },
+                            onOpenViewer = { posts, context ->
+                                viewerSession = ViewerSession(
+                                    posts = posts,
+                                    context = context,
+                                    liveSearchBinding = true,
+                                )
+                                scope.launch { searchCoordinator.setViewerLaunchContext(context) }
+                                navController.navigate(AppRoute.Viewer)
+                            },
+                            onGoToSearch = {
+                                navController.navigate(TopLevelDestination.Search.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
                             },
                         )
@@ -1082,6 +1171,8 @@ fun TheoriaApp(
                     composable(TopLevelDestination.Settings.route) {
                         SettingsScreen(
                             settings = settings,
+                            activeProfile = settings.activeProfile,
+                            likesCount = activeProfileLikes.size,
                             availableSources = searchCoordinator.availableSources,
                             cacheSnapshot = cacheSnapshot,
                             showDeveloperScenarios = false,
@@ -1145,6 +1236,12 @@ fun TheoriaApp(
                             onSetSourceWeights = { weights ->
                                 scope.launch { settingsRepository.setSourceWeights(weights) }
                             },
+                            onSetActiveProfile = { profile ->
+                                scope.launch { settingsRepository.setActiveProfile(profile) }
+                            },
+                            onClearLikesForActiveProfile = {
+                                scope.launch { likesRepository.clearLikes(settings.activeProfile) }
+                            },
                             onSetCacheFullImageOnSave = { enabled ->
                                 scope.launch { settingsRepository.setCacheFullImageOnSave(enabled) }
                             },
@@ -1192,6 +1289,42 @@ fun TheoriaApp(
                                 Text("No viewer session")
                             }
                         } else {
+                            val canLoadMoreFromSource = when (session.context.streamSource) {
+                                ViewerStreamSource.SEARCH -> session.liveSearchBinding && searchCoordinator.canLoadMore
+                                ViewerStreamSource.FOR_YOU -> session.liveSearchBinding && forYouCoordinator.canLoadMore
+                                ViewerStreamSource.CODEX -> false
+                            }
+                            val loadingMoreFromSource = when (session.context.streamSource) {
+                                ViewerStreamSource.SEARCH -> searchCoordinator.loadingMore
+                                ViewerStreamSource.FOR_YOU -> forYouCoordinator.loadingMore
+                                ViewerStreamSource.CODEX -> false
+                            }
+                            val onLoadMoreFromSource = when (session.context.streamSource) {
+                                ViewerStreamSource.SEARCH -> {
+                                    if (session.liveSearchBinding) {
+                                        {
+                                            scope.launch { searchCoordinator.loadNextPage() }
+                                            Unit
+                                        }
+                                    } else {
+                                        null
+                                    }
+                                }
+
+                                ViewerStreamSource.FOR_YOU -> {
+                                    if (session.liveSearchBinding) {
+                                        {
+                                            scope.launch { forYouCoordinator.loadNextPage() }
+                                            Unit
+                                        }
+                                    } else {
+                                        null
+                                    }
+                                }
+
+                                ViewerStreamSource.CODEX -> null
+                            }
+
                             ViewerScreen(
                                 posts = session.posts,
                                 launchContext = session.context,
@@ -1202,13 +1335,9 @@ fun TheoriaApp(
                                 fetchTagVideoCount = { source, tag ->
                                     searchCoordinator.fetchTagVideoCount(source, tag)
                                 },
-                                canLoadMoreFromSource = session.liveSearchBinding && searchCoordinator.canLoadMore,
-                                loadingMoreFromSource = searchCoordinator.loadingMore,
-                                onLoadMoreFromSource = if (session.liveSearchBinding) {
-                                    { scope.launch { searchCoordinator.loadNextPage() } }
-                                } else {
-                                    null
-                                },
+                                canLoadMoreFromSource = canLoadMoreFromSource,
+                                loadingMoreFromSource = loadingMoreFromSource,
+                                onLoadMoreFromSource = onLoadMoreFromSource,
                                 onDismiss = {
                                     viewerSession = null
                                     scope.launch { searchCoordinator.setViewerLaunchContext(null) }

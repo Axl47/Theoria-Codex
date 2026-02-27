@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-02-26T01:07
+updated_at: 2026-02-27T03:02
 ---
 # Theoria Codex
 
@@ -29,7 +29,11 @@ The app is now in second-pass source cutover state:
 
 Previously completed MVP slices remain in place:
 
-- Search / Explore / Codex / Settings tabs
+- Search / For You / Explore / Codex / Settings tabs
+- Search result cards now include a heart toggle that stores per-profile liked-tag memory from the post's source tags
+- New `For You` tab provides a browsing-first personalized feed generated from liked tags with per-source tag sets in Unified mode (still merged with existing source weights)
+- App now supports two local user profiles (`User 1` and `User 2`) with independent hearts/recommendation memory and profile switching in Settings
+- Recommendation likes are persisted in `files/theoria_codex/likes_store.json` and can be cleared per active profile from Settings
 - Search results now render real source thumbnails in a variable-height staggered grid and show post titles (when available) instead of raw source IDs
 - Search input UX now supports Enter-to-add-tag and contextual controls that animate in while actively editing
 - Search source mode chips now show source logos for Pixiv and Gelbooru (instead of plain text labels)
@@ -68,9 +72,10 @@ Previously completed MVP slices remain in place:
 - Settings now includes an `Updates` section with an `Open changelog` action that loads prerelease history and shows all available release notes; release titles use the published release name (for example `v0.1.9`) and the installed build is marked as `(Current)`
 - During installer handoff, startup no longer auto-falls back immediately on transient resumes; it waits for confirmed install completion, and offers an explicit `Continue current version` action if the user decides not to finish installing
 - File-backed persistence for query/settings/cache/codex/UI restore state
-The project now includes a runnable portrait-locked Android MVP with four top-level tabs:
+The project now includes a runnable portrait-locked Android MVP with five top-level tabs:
 
 - Search
+- For You
 - Explore
 - Codex
 - Settings
