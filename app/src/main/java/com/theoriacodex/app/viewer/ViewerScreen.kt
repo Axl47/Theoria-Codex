@@ -38,10 +38,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -94,6 +96,7 @@ import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import java.net.HttpURLConnection
@@ -118,6 +121,8 @@ fun ViewerScreen(
     canLoadMoreFromSource: Boolean = false,
     loadingMoreFromSource: Boolean = false,
     onLoadMoreFromSource: (() -> Unit)? = null,
+    likedPostIds: Set<PostId> = emptySet(),
+    onToggleLike: ((Post) -> Unit)? = null,
     onDismiss: () -> Unit,
     onSave: (Post) -> Unit,
     onOpenInBrowser: (Post) -> Unit,
@@ -163,6 +168,7 @@ fun ViewerScreen(
     var mediaPlaybackEnabled by remember { mutableStateOf(true) }
     val currentPostIndex = postPagerState.currentPage.coerceIn(0, posts.lastIndex)
     val selectedPost = posts[currentPostIndex]
+    val selectedPostLiked = selectedPost.id in likedPostIds
     val selectedPostMedia = remember(selectedPost) { viewerMediaItems(selectedPost) }
     val selectedMediaIndex = (mediaIndexByPost[currentPostIndex] ?: 0).coerceIn(0, selectedPostMedia.lastIndex)
     val selectedCurrentMedia = selectedPostMedia.getOrNull(selectedMediaIndex)
@@ -629,6 +635,13 @@ fun ViewerScreen(
                 source = selectedPost.id.source.name,
                 indexLabel = "${selectedMediaIndex + 1} / ${selectedPostMedia.size}",
                 onBack = ::requestDismissViewer,
+                liked = selectedPostLiked,
+                onToggleLike = onToggleLike?.let { toggle ->
+                    {
+                        toggle(selectedPost)
+                        markInteraction()
+                    }
+                },
                 onDownload = ::downloadCurrentMedia,
                 downloadEnabled = canDownloadCurrentMedia,
                 onInfo = {
@@ -1752,6 +1765,8 @@ private fun ViewerChrome(
     source: String,
     indexLabel: String,
     onBack: () -> Unit,
+    liked: Boolean,
+    onToggleLike: (() -> Unit)? = null,
     onDownload: () -> Unit,
     downloadEnabled: Boolean,
     onInfo: () -> Unit,
@@ -1767,8 +1782,34 @@ private fun ViewerChrome(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+                if (onToggleLike != null) {
+                    IconButton(onClick = onToggleLike) {
+                        Icon(
+                            imageVector = if (liked) {
+                                Icons.Default.Favorite
+                            } else {
+                                Icons.Outlined.FavoriteBorder
+                            },
+                            contentDescription = if (liked) {
+                                "Unlike post"
+                            } else {
+                                "Like post"
+                            },
+                            tint = if (liked) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                    }
+                }
             }
             Text(
                 text = "$source • $indexLabel",

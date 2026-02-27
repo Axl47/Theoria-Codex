@@ -1338,6 +1338,16 @@ fun TheoriaApp(
                                 canLoadMoreFromSource = canLoadMoreFromSource,
                                 loadingMoreFromSource = loadingMoreFromSource,
                                 onLoadMoreFromSource = onLoadMoreFromSource,
+                                likedPostIds = likedPostIds,
+                                onToggleLike = { post ->
+                                    scope.launch {
+                                        likesRepository.toggleLike(
+                                            profile = settings.activeProfile,
+                                            postId = post.id,
+                                            tags = trainingTagsFor(post),
+                                        )
+                                    }
+                                },
                                 onDismiss = {
                                     viewerSession = null
                                     scope.launch { searchCoordinator.setViewerLaunchContext(null) }
