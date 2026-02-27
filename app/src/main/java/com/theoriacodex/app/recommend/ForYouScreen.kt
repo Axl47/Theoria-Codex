@@ -242,6 +242,7 @@ fun ForYouScreen(
                             post = post,
                             pixivUgoiraClient = pixivUgoiraClient,
                             showSourceBadge = true,
+                            displayTag = coordinator.displayTagFor(post),
                             liked = post.id in likedPostIds,
                             onToggleLike = { onToggleLike(post) },
                             onClick = {

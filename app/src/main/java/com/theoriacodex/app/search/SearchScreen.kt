@@ -689,6 +689,7 @@ fun SearchResultCard(
     post: Post,
     pixivUgoiraClient: PixivUgoiraClient?,
     showSourceBadge: Boolean = false,
+    displayTag: String? = null,
     liked: Boolean = false,
     onToggleLike: (() -> Unit)? = null,
     onClick: () -> Unit,
@@ -810,7 +811,7 @@ fun SearchResultCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            val firstTag = post.canonicalTags.firstOrNull()
+            val firstTag = displayTag ?: post.canonicalTags.firstOrNull()
             if (firstTag != null || showSourceBadge) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
