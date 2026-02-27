@@ -237,7 +237,10 @@ fun ForYouScreen(
                     verticalItemSpacing = 6.dp,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    itemsIndexed(visibleResults) { index, post ->
+                    itemsIndexed(
+                        items = visibleResults,
+                        key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" },
+                    ) { index, post ->
                         SearchResultCard(
                             post = post,
                             pixivUgoiraClient = pixivUgoiraClient,
