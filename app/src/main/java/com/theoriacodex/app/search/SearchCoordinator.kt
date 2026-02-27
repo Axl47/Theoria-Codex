@@ -206,7 +206,9 @@ class SearchCoordinator(
         val unified = appliedByMode[modeKey(QueryMode.Unified)] ?: defaultQuery()
         appliedQuery = unified
         draftQuery = unified
-        hasExecutedSearch = queryRepository.getScrollOffset(appliedQueryHash) != null
+        hasExecutedSearch =
+            appliedByMode.containsKey(modeKey(appliedQuery.mode)) ||
+            queryRepository.getScrollOffset(appliedQueryHash) != null
     }
 
     fun onSettingsChanged(settings: AppSettings): Boolean {
@@ -569,6 +571,7 @@ class SearchCoordinator(
 
     suspend fun restoreLastAppliedSearchIfNeeded() {
         if (!hasExecutedSearch) return
+        if (hasPendingChanges) return
         if (loading || loadingMore || results.isNotEmpty()) return
         executeSearch()
     }
