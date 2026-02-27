@@ -57,7 +57,12 @@ fun ForYouScreen(
         if (likesCount == 0) {
             coordinator.clear()
         } else {
-            coordinator.refresh(shuffle = false)
+            val shouldRefresh = coordinator.results.isEmpty() ||
+                coordinator.activeProfile != activeProfile ||
+                coordinator.activeProfileLikesCount != likesCount
+            if (shouldRefresh) {
+                coordinator.refresh(shuffle = false)
+            }
         }
     }
 
