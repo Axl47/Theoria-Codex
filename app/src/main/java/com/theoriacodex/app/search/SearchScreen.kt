@@ -933,10 +933,10 @@ private fun SearchVideoPreview(
         )
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (
-                    playbackState == Player.STATE_READY &&
-                    lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-                ) {
+                if (playerRef !== player) return
+                if (playbackState != Player.STATE_READY) return
+                if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
+                runCatching {
                     player.playWhenReady = true
                     player.play()
                 }
@@ -973,16 +973,24 @@ private fun SearchVideoPreview(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-            player.playWhenReady = true
-            player.play()
+            runCatching {
+                player.playWhenReady = true
+                player.play()
+            }
         }
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             player.removeListener(listener)
-            player.playWhenReady = false
-            player.pause()
-            playerViewRef?.player = null
-            player.release()
+            runCatching {
+                player.playWhenReady = false
+                player.pause()
+            }
+            runCatching {
+                playerViewRef?.player = null
+            }
+            runCatching {
+                player.release()
+            }
             if (playerRef === player) {
                 playerRef = null
             }

@@ -996,6 +996,7 @@ private fun ViewerVideoPlayer(
         )
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playerRef !== player) return
                 runCatching {
                     loading = playbackState == Player.STATE_IDLE || playbackState == Player.STATE_BUFFERING
                     val duration = player.duration.takeIf { it > 0L }
@@ -1006,6 +1007,7 @@ private fun ViewerVideoPlayer(
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                if (playerRef !== player) return
                 loading = false
                 loadFailed = true
             }
@@ -1020,6 +1022,9 @@ private fun ViewerVideoPlayer(
         }
         onDispose {
             player.removeListener(listener)
+            if (playerRef === player) {
+                playerRef = null
+            }
             runCatching {
                 player.playWhenReady = false
                 player.pause()
@@ -1027,9 +1032,6 @@ private fun ViewerVideoPlayer(
             playerViewRef?.player = null
             runCatching {
                 player.release()
-            }
-            if (playerRef === player) {
-                playerRef = null
             }
             playerViewRef = null
         }
