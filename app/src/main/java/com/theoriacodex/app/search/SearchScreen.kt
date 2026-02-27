@@ -210,7 +210,11 @@ fun SearchScreen(
         coordinator.loadTrendingTags()
     }
 
-    LaunchedEffect(coordinator.draftQuery.mode, input) {
+    LaunchedEffect(coordinator.draftQuery.mode, input, searchFieldFocused) {
+        if (!searchFieldFocused) {
+            coordinator.clearAutocompleteSuggestions()
+            return@LaunchedEffect
+        }
         val trimmed = input.trim()
         if (trimmed.isBlank()) {
             coordinator.clearAutocompleteSuggestions()
@@ -443,7 +447,8 @@ fun SearchScreen(
                             Text("Reset")
                         }
                         TextButton(onClick = {
-                            focusManager.clearFocus()
+                            focusManager.clearFocus(force = true)
+                            coordinator.clearAutocompleteSuggestions()
                             onApplySearch()
                             scope.launch { resetScrollToTop() }
                         }) {
