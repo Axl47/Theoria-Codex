@@ -97,6 +97,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.AspectRatioFrameLayout
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.theoriacodex.app.media.isAnimatedPost
@@ -1013,6 +1014,7 @@ private fun SearchVideoPreview(
                 createTexturePlayerView(factoryContext).apply {
                     player = playerRef
                     useController = false
+                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     playerViewRef = this
                     isClickable = false
                     isFocusable = false
@@ -1021,6 +1023,7 @@ private fun SearchVideoPreview(
             update = { playerView ->
                 playerViewRef = playerView
                 playerView.useController = false
+                playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                 playerView.player = playerRef
                 playerView.isClickable = false
                 playerView.isFocusable = false
