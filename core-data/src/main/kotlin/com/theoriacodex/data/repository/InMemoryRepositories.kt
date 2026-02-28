@@ -65,6 +65,23 @@ class InMemoryCodexRepository : CodexRepository {
         }
     }
 
+    override suspend fun reorderCodex(codexId: String, targetIndex: Int) {
+        mutex.withLock {
+            val current = codices.value
+            if (current.isEmpty()) return@withLock
+            val sourceIndex = current.indexOfFirst { codex -> codex.codexId == codexId }
+            if (sourceIndex < 0) return@withLock
+
+            val clampedTarget = targetIndex.coerceIn(0, current.lastIndex)
+            if (sourceIndex == clampedTarget) return@withLock
+
+            val reordered = current.toMutableList()
+            val moved = reordered.removeAt(sourceIndex)
+            reordered.add(clampedTarget, moved)
+            codices.value = reordered
+        }
+    }
+
     override suspend fun renameCodex(codexId: String, name: String) {
         mutex.withLock {
             codices.value = codices.value.map {

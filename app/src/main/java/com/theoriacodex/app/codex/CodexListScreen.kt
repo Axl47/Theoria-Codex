@@ -8,9 +8,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -36,6 +41,7 @@ fun CodexListScreen(
     itemCounts: Map<String, Int>,
     onOpenCodex: (String) -> Unit,
     onSearchFromCodex: (String) -> Unit,
+    onReorderCodex: (String, String) -> Unit,
     onCreateCodex: (String) -> Unit,
     onRenameCodex: (String, String) -> Unit,
     onDeleteCodex: (String) -> Unit,
@@ -78,7 +84,10 @@ fun CodexListScreen(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(codices, key = { it.codexId }) { codex ->
+                itemsIndexed(
+                    items = codices,
+                    key = { _, codex -> codex.codexId },
+                ) { index, codex ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -108,7 +117,29 @@ fun CodexListScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                IconButton(
+                                    enabled = index > 0,
+                                    onClick = {
+                                        onReorderCodex(codex.codexId, codices[index - 1].codexId)
+                                    },
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowUpward,
+                                        contentDescription = "Move codex up",
+                                    )
+                                }
+                                IconButton(
+                                    enabled = index < codices.lastIndex,
+                                    onClick = {
+                                        onReorderCodex(codex.codexId, codices[index + 1].codexId)
+                                    },
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowDownward,
+                                        contentDescription = "Move codex down",
+                                    )
+                                }
                                 TextButton(onClick = { onSearchFromCodex(codex.codexId) }) { Text("Search") }
                                 TextButton(onClick = { renameTarget = codex }) { Text("Rename") }
                                 TextButton(onClick = { onDeleteCodex(codex.codexId) }) { Text("Delete") }

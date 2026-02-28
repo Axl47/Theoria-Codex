@@ -14,6 +14,7 @@ interface CodexRepository {
     fun observeCodex(codexId: String): Flow<Codex?>
     suspend fun ensureCodex(codexId: String, name: String): Codex
     suspend fun createCodex(name: String): Codex
+    suspend fun reorderCodex(codexId: String, targetIndex: Int)
     suspend fun renameCodex(codexId: String, name: String)
     suspend fun deleteCodex(codexId: String)
     fun observeCodexItems(codexId: String): Flow<List<CodexItem>>

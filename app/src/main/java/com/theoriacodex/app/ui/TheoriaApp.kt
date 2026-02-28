@@ -505,6 +505,12 @@ fun TheoriaApp(
         ).show()
     }
 
+    suspend fun reorderCodex(codexId: String, targetCodexId: String) {
+        val targetIndex = codices.indexOfFirst { codex -> codex.codexId == targetCodexId }
+        if (targetIndex < 0) return
+        codexRepository.reorderCodex(codexId = codexId, targetIndex = targetIndex)
+    }
+
     suspend fun completeAppStartup() {
         if (navReady) return
         searchCoordinator.initialize()
@@ -1206,6 +1212,11 @@ fun TheoriaApp(
                             onSearchFromCodex = { codexId ->
                                 scope.launch(start = CoroutineStart.UNDISPATCHED) {
                                     searchFromCodex(codexId)
+                                }
+                            },
+                            onReorderCodex = { codexId, targetCodexId ->
+                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                    reorderCodex(codexId, targetCodexId)
                                 }
                             },
                             onCreateCodex = { name ->

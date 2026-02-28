@@ -62,6 +62,19 @@ class InMemoryRepositoriesTest {
     }
 
     @Test
+    fun `codex repository supports reordering`() = runTest {
+        val repo = InMemoryCodexRepository()
+        val first = repo.createCodex("First")
+        val second = repo.createCodex("Second")
+        val third = repo.createCodex("Third")
+
+        repo.reorderCodex(codexId = third.codexId, targetIndex = 0)
+
+        val reordered = repo.observeCodices().first()
+        assertEquals(listOf(third.codexId, first.codexId, second.codexId), reordered.map { it.codexId })
+    }
+
+    @Test
     fun `query repository stores query and scroll offset`() = runTest {
         val repo = InMemoryQueryRepository()
         val query = Query(

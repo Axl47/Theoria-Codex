@@ -50,6 +50,22 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
+    fun `codex repository persists reorder across restarts`() = runTest {
+        val dir = Files.createTempDirectory("codex-reorder-").toFile()
+        val first = FileBackedCodexRepository(dir)
+        val alpha = first.createCodex("Alpha")
+        val beta = first.createCodex("Beta")
+        val gamma = first.createCodex("Gamma")
+
+        first.reorderCodex(codexId = gamma.codexId, targetIndex = 0)
+
+        val second = FileBackedCodexRepository(dir)
+        val orderedIds = second.observeCodices().first().map { codex -> codex.codexId }
+
+        assertEquals(listOf(gamma.codexId, alpha.codexId, beta.codexId), orderedIds)
+    }
+
+    @Test
     fun `query repository persists applied query and scroll offsets`() = runTest {
         val dir = Files.createTempDirectory("query-store-").toFile()
         val first = FileBackedQueryRepository(dir)
