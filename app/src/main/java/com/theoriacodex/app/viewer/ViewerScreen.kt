@@ -953,8 +953,10 @@ private fun ViewerVideoPlayer(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val location = resolveViewerVideoLocation(context, media)
-    if (location.isNullOrBlank()) {
+    val playbackLocation = remember(media.localPath, media.url, media.mime) {
+        resolveViewerVideoLocation(context, media)
+    }
+    if (playbackLocation.isNullOrBlank()) {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
             Text(
                 text = "Video unavailable",
@@ -968,18 +970,18 @@ private fun ViewerVideoPlayer(
         return
     }
 
-    var loading by remember(location) { mutableStateOf(true) }
-    var loadFailed by remember(location) { mutableStateOf(false) }
-    var playerRef by remember(location, sourceKey) { mutableStateOf<ExoPlayer?>(null) }
+    var loading by remember(playbackLocation) { mutableStateOf(true) }
+    var loadFailed by remember(playbackLocation) { mutableStateOf(false) }
+    var playerRef by remember(playbackLocation, sourceKey) { mutableStateOf<ExoPlayer?>(null) }
     var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
-    var durationMs by remember(location) { mutableLongStateOf(0L) }
-    var positionMs by remember(location) { mutableLongStateOf(0L) }
-    var isScrubbing by remember(location) { mutableStateOf(false) }
-    var playbackPaused by remember(location) { mutableStateOf(false) }
-    var lastSeekDispatchAtMs by remember(location) { mutableLongStateOf(0L) }
-    var lastSeekDispatchTargetMs by remember(location) { mutableLongStateOf(0L) }
+    var durationMs by remember(playbackLocation) { mutableLongStateOf(0L) }
+    var positionMs by remember(playbackLocation) { mutableLongStateOf(0L) }
+    var isScrubbing by remember(playbackLocation) { mutableStateOf(false) }
+    var playbackPaused by remember(playbackLocation) { mutableStateOf(false) }
+    var lastSeekDispatchAtMs by remember(playbackLocation) { mutableLongStateOf(0L) }
+    var lastSeekDispatchTargetMs by remember(playbackLocation) { mutableLongStateOf(0L) }
 
-    DisposableEffect(location, sourceKey) {
+    DisposableEffect(playbackLocation, sourceKey) {
         loading = true
         loadFailed = false
         durationMs = 0L
@@ -990,7 +992,7 @@ private fun ViewerVideoPlayer(
         lastSeekDispatchTargetMs = 0L
         val player = createLoopingExoPlayer(
             context = context,
-            location = location,
+            location = playbackLocation,
             headers = viewerRequestHeaders(sourceKey),
             muted = false,
         )
@@ -1096,7 +1098,7 @@ private fun ViewerVideoPlayer(
         }
     }
 
-    LaunchedEffect(location, playerRef, loadFailed, isScrubbing) {
+    LaunchedEffect(playbackLocation, playerRef, loadFailed, isScrubbing) {
         if (loadFailed) return@LaunchedEffect
         while (true) {
             delay(120L)
