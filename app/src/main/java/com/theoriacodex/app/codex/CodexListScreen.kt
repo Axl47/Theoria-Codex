@@ -48,6 +48,7 @@ fun CodexListScreen(
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<Codex?>(null) }
+    var deleteTarget by remember { mutableStateOf<Codex?>(null) }
 
     Column(
         modifier = Modifier
@@ -142,7 +143,7 @@ fun CodexListScreen(
                                 }
                                 TextButton(onClick = { onSearchFromCodex(codex.codexId) }) { Text("Search") }
                                 TextButton(onClick = { renameTarget = codex }) { Text("Rename") }
-                                TextButton(onClick = { onDeleteCodex(codex.codexId) }) { Text("Delete") }
+                                TextButton(onClick = { deleteTarget = codex }) { Text("Delete") }
                             }
                         }
                     }
@@ -172,6 +173,32 @@ fun CodexListScreen(
             onSave = { name ->
                 onRenameCodex(rename.codexId, name)
                 renameTarget = null
+            },
+        )
+    }
+
+    val delete = deleteTarget
+    if (delete != null) {
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("Delete Codex?") },
+            text = {
+                Text("Delete \"${delete.name}\" and all saved items in it? This cannot be undone.")
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) {
+                    Text("Cancel")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteCodex(delete.codexId)
+                        deleteTarget = null
+                    },
+                ) {
+                    Text("Delete")
+                }
             },
         )
     }

@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-02-27T06:03
+updated_at: 2026-02-27T06:17
 ---
 # Theoria Codex
 
@@ -37,6 +37,7 @@ Previously completed MVP slices remain in place:
 - Codex now auto-creates a system `Likes` board (`system_likes_codex`) and keeps it synced with heart toggles (add on like; remove when no profile still likes that post)
 - Codex list now includes a `Search` action that builds a Unified search draft from that codex's per-post unique canonical tags (top weighted tags), applies it, and navigates directly to Search
 - Codex list now supports manual reordering (move up/down), and codex order is persisted across app restarts
+- Codex delete actions now show confirmation dialogs from both list and detail screens
 - Search results now render real source thumbnails in a variable-height staggered grid and show post titles (when available) instead of raw source IDs
 - Search input UX now supports Enter-to-add-tag and contextual controls that animate in while actively editing
 - Search source mode chips now show source logos for Pixiv and Gelbooru (instead of plain text labels)

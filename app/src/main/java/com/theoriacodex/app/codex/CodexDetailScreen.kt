@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -56,6 +57,7 @@ fun CodexDetailScreen(
     onDeleteCodex: () -> Unit,
 ) {
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     if (codexName == null) {
         Column(
@@ -86,7 +88,7 @@ fun CodexDetailScreen(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(onClick = onBack) { Text("Back") }
-                TextButton(onClick = onDeleteCodex) { Text("Delete") }
+                TextButton(onClick = { showDeleteConfirm = true }) { Text("Delete") }
             }
         }
 
@@ -232,6 +234,31 @@ fun CodexDetailScreen(
                 }
             }
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Codex?") },
+            text = {
+                Text("Delete \"$codexName\" and all saved items in it? This cannot be undone.")
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        onDeleteCodex()
+                    },
+                ) {
+                    Text("Delete")
+                }
+            },
+        )
     }
 }
 
