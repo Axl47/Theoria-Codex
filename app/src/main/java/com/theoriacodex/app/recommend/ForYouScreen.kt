@@ -34,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
@@ -41,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -65,7 +67,14 @@ fun ForYouScreen(
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
     var showSortSheet by remember { mutableStateOf(false) }
-    val visibleResults = coordinator.results
+    var animatedOnly by rememberSaveable { mutableStateOf(false) }
+    val visibleResults = remember(coordinator.results, animatedOnly) {
+        if (animatedOnly) {
+            coordinator.results.filter(::isAnimatedPost)
+        } else {
+            coordinator.results
+        }
+    }
 
     LaunchedEffect(activeProfileId, likesCount) {
         if (likesCount == 0) {
@@ -81,6 +90,7 @@ fun ForYouScreen(
     }
 
     LaunchedEffect(
+        animatedOnly,
         visibleResults.size,
         coordinator.loading,
         coordinator.loadingMore,
@@ -100,6 +110,21 @@ fun ForYouScreen(
                 coordinator.loadNextPage()
             }
         }
+    }
+
+    LaunchedEffect(
+        animatedOnly,
+        visibleResults.size,
+        coordinator.results.size,
+        coordinator.loading,
+        coordinator.loadingMore,
+        coordinator.canLoadMore,
+    ) {
+        if (!animatedOnly) return@LaunchedEffect
+        if (visibleResults.isNotEmpty()) return@LaunchedEffect
+        if (coordinator.results.isEmpty()) return@LaunchedEffect
+        if (coordinator.loading || coordinator.loadingMore || !coordinator.canLoadMore) return@LaunchedEffect
+        coordinator.loadNextPage()
     }
 
     Scaffold(
@@ -220,7 +245,11 @@ fun ForYouScreen(
             visibleResults.isEmpty() -> {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "No recommendations yet. Tap Refresh to try a broader seed.",
+                        text = if (animatedOnly && coordinator.results.isNotEmpty()) {
+                            "No animated media found for this feed yet."
+                        } else {
+                            "No recommendations yet. Tap Refresh to try a broader seed."
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(20.dp),
@@ -285,10 +314,14 @@ fun ForYouScreen(
     if (showSortSheet) {
         ForYouSortSheet(
             selectedSort = coordinator.sortMode,
+            animatedOnly = animatedOnly,
             onSelectSort = { sort ->
                 scope.launch {
                     coordinator.setSortMode(sort)
                 }
+            },
+            onAnimatedOnlyChange = { enabled ->
+                animatedOnly = enabled
             },
             onDismiss = { showSortSheet = false },
         )
@@ -301,7 +334,9 @@ private const val FOR_YOU_PREFETCH_RATIO = 0.8f
 @Composable
 private fun ForYouSortSheet(
     selectedSort: SortMode,
+    animatedOnly: Boolean,
     onSelectSort: (SortMode) -> Unit,
+    onAnimatedOnlyChange: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -311,6 +346,17 @@ private fun ForYouSortSheet(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            Text("Media Types", style = MaterialTheme.typography.titleMedium)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    FilterChip(
+                        selected = animatedOnly,
+                        onClick = { onAnimatedOnlyChange(!animatedOnly) },
+                        label = { Text("Animated only") },
+                    )
+                }
+            }
+
             Text("Sort", style = MaterialTheme.typography.titleMedium)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(SortMode.entries.toList()) { mode ->
