@@ -140,6 +140,7 @@ import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import com.theoriacodex.sources.pixiv.PixivAuthApi
 import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -307,12 +308,16 @@ fun TheoriaApp(
         initial = CacheSnapshot(thumbnailCount = 0, fullImageCount = 0),
     )
     val codices by codexRepository.observeCodices().collectAsState(initial = emptyList())
-    val activeLikesCodexId = remember(activeRecommendationProfile.profileId) {
-        likesCodexIdForProfile(activeRecommendationProfile.profileId)
+    val saveSheetCodicesByProfile = remember(codices, settings.recommendationProfiles) {
+        settings.recommendationProfiles.associate { profile ->
+            profile.profileId to codices.filter { codex ->
+                codexBelongsToProfile(codex.codexId, profile.profileId)
+            }
+        }
     }
-    val visibleCodices = remember(codices, activeLikesCodexId) {
-        codices.filterNot { codex ->
-            codex.codexId.startsWith(LIKES_CODEX_ID_PREFIX) && codex.codexId != activeLikesCodexId
+    val visibleCodices = remember(codices, activeRecommendationProfile.profileId) {
+        codices.filter { codex ->
+            codexBelongsToProfile(codex.codexId, activeRecommendationProfile.profileId)
         }
     }
 
@@ -336,6 +341,7 @@ fun TheoriaApp(
     var awaitingInstallerReturn by remember { mutableStateOf(false) }
     var pendingPostDeepLinkUri by remember { mutableStateOf<Uri?>(null) }
     val codexItemCounts = remember { mutableStateMapOf<String, Int>() }
+    val codexCoverModels = remember { mutableStateMapOf<String, Any?>() }
 
     var pixivStatusLabel by remember { mutableStateOf("Not connected") }
     var pixivConnected by remember { mutableStateOf(false) }
@@ -473,6 +479,15 @@ fun TheoriaApp(
         codexRepository.observeCodex(codexId).first()?.let {
             codexRepository.deleteCodex(codexId)
         }
+    }
+
+    suspend fun removeProfileScopedCodices(profileId: String) {
+        val prefix = "${PROFILE_CODEX_ID_PREFIX}_${profileId}_"
+        codices
+            .filter { codex -> codex.codexId.startsWith(prefix) }
+            .forEach { codex ->
+                codexRepository.deleteCodex(codex.codexId)
+            }
     }
 
     suspend fun searchFromCodex(codexId: String) {
@@ -743,12 +758,27 @@ fun TheoriaApp(
             .filterNot { it in activeIds }
             .toList()
             .forEach { codexItemCounts.remove(it) }
+        codexCoverModels.keys
+            .filterNot { it in activeIds }
+            .toList()
+            .forEach { codexCoverModels.remove(it) }
 
         coroutineScope {
             codices.forEach { codex ->
                 launch {
                     codexRepository.observeCodexItems(codex.codexId).collect { items ->
                         codexItemCounts[codex.codexId] = items.size
+                    }
+                }
+                launch {
+                    codexRepository.observeCodexPosts(codex.codexId, CodexSortMode.NEWEST_SAVED).collect { posts ->
+                        val coverModel = posts.firstOrNull()?.let { post ->
+                            resolveCodexCoverModel(
+                                storageDirectory = storageDirectory,
+                                post = post,
+                            )
+                        }
+                        codexCoverModels[codex.codexId] = coverModel
                     }
                 }
             }
@@ -1220,7 +1250,12 @@ fun TheoriaApp(
                                 }
                             },
                             onCreateCodex = { name ->
-                                scope.launch { codexRepository.createCodex(name) }
+                                scope.launch {
+                                    codexRepository.ensureCodex(
+                                        codexId = profileScopedCodexId(activeRecommendationProfile.profileId),
+                                        name = name,
+                                    )
+                                }
                             },
                             onRenameCodex = { codexId, name ->
                                 scope.launch { codexRepository.renameCodex(codexId, name) }
@@ -1361,6 +1396,7 @@ fun TheoriaApp(
                                     if (!canRemove) return@launch
                                     clearProfileLikesAndSyncCodex(profileId)
                                     removeProfileLikesCodex(profileId)
+                                    removeProfileScopedCodices(profileId)
                                     settingsRepository.removeRecommendationProfile(profileId)
                                 }
                             },
@@ -1517,9 +1553,18 @@ fun TheoriaApp(
         if (showSaveSheet && pendingSavePost != null) {
             val post = requireNotNull(pendingSavePost)
             SaveToCodexSheet(
-                codices = codices,
-                onCreateCodex = { name ->
-                    scope.launch { codexRepository.createCodex(name) }
+                profiles = settings.recommendationProfiles,
+                initialProfileId = activeRecommendationProfile.profileId,
+                codicesByProfile = saveSheetCodicesByProfile,
+                codexItemCounts = codexItemCounts,
+                codexCoverModels = codexCoverModels,
+                onCreateCodex = { profileId, name ->
+                    scope.launch {
+                        codexRepository.ensureCodex(
+                            codexId = profileScopedCodexId(profileId),
+                            name = name,
+                        )
+                    }
                 },
                 onSelectCodex = { codexId ->
                     scope.launch {
@@ -2148,6 +2193,54 @@ private fun likesCodexIdForProfile(profileId: String): String {
     }
 }
 
+private fun profileScopedCodexId(profileId: String): String {
+    return "${PROFILE_CODEX_ID_PREFIX}_${profileId}_${UUID.randomUUID()}"
+}
+
+private fun codexBelongsToProfile(codexId: String, profileId: String): Boolean {
+    if (codexId.startsWith(LIKES_CODEX_ID_PREFIX)) {
+        return codexId == likesCodexIdForProfile(profileId)
+    }
+    if (codexId.startsWith("${PROFILE_CODEX_ID_PREFIX}_")) {
+        return codexId.startsWith("${PROFILE_CODEX_ID_PREFIX}_${profileId}_")
+    }
+    return true
+}
+
+private fun resolveCodexCoverModel(
+    storageDirectory: File,
+    post: Post,
+): Any? {
+    val key = "${post.id.source.name}_${post.id.sourcePostId}"
+    val thumbnailDirectory = storageDirectory.resolve("cache/thumbnails")
+    val localCover = thumbnailDirectory
+        .listFiles()
+        ?.firstOrNull { file ->
+            file.isFile && file.name.startsWith("$key.") && !file.name.endsWith(".url")
+        }
+    if (localCover != null) {
+        return localCover
+    }
+
+    val remotePointer = thumbnailDirectory.resolve("$key.url")
+    if (remotePointer.exists()) {
+        val remoteUrl = runCatching { remotePointer.readText().trim() }.getOrNull()
+        if (!remoteUrl.isNullOrBlank()) {
+            return remoteUrl
+        }
+    }
+
+    val previewLocalPath = post.preview.localPath
+    if (!previewLocalPath.isNullOrBlank()) {
+        val previewFile = File(previewLocalPath)
+        if (previewFile.exists()) {
+            return previewFile
+        }
+    }
+
+    return post.preview.url
+}
+
 private const val PIXIV_TOKEN_REFRESH_TIMEOUT_MS = 6_000L
 private const val BOTTOM_BAR_HEIGHT_RATIO = 0.085f
 private const val BOTTOM_BAR_ICON_RATIO = 0.38f
@@ -2160,5 +2253,6 @@ private const val TAB_SWIPE_HORIZONTAL_BIAS = 1.2f
 private const val DEFAULT_MAIN_PROFILE_ID = "profile-main"
 private const val DEFAULT_PROFILE_NAME = "Main"
 private const val LIKES_CODEX_ID_PREFIX = "system_likes_codex"
+private const val PROFILE_CODEX_ID_PREFIX = "profile_codex"
 private const val LIKES_CODEX_NAME = "Likes"
 private const val CODEX_SEARCH_TAG_LIMIT = 3

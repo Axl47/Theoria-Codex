@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-02-27T06:17
+updated_at: 2026-02-27T06:39
 ---
 # Theoria Codex
 
@@ -67,6 +67,7 @@ Previously completed MVP slices remain in place:
 - Viewer Info header now includes quick actions for `Go to Search`, `Share` (copy post URL), and `Open in browser` for faster handoff/export
 - Codex detail now reuses the same Search result card renderer (thumbnails, animated previews, title/tags, overlays) for consistent browsing UI
 - Search cards now support long-press actions for `Save to Codex`, `Save to device`, and `Copy tags`; Codex cards support long-press actions for `Remove from Codex`, `Save to device`, and `Copy tags`
+- `Save to Codex` sheet now has a board-style UI pass with per-profile board browsing (profile switch cycles locally inside the sheet without changing app active profile) and board cover thumbnails sourced from cached thumbnail artifacts when available
 - App branding now uses custom launcher icon resources and a shared splash mark shown during startup loading and Search pre-query empty state
 - Tag seeder script now supports direct Pixiv tag-page ingestion via `--pixiv-tags-url` (with HTML fallback via `--pixiv-tags-html`)
 - Viewer now prefetches up to three media items on both sides of the current position and can trigger `load next page` while still inside Viewer for live Search sessions (including animated-only Viewer sessions)
