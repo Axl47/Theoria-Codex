@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
@@ -67,6 +68,7 @@ fun SettingsScreen(
 ) {
     var showClearCacheOptions by remember { mutableStateOf(false) }
     var newProfileName by remember { mutableStateOf("") }
+    var profileDeleteTarget by remember { mutableStateOf<RecommendationProfile?>(null) }
 
     Column(
         modifier = Modifier
@@ -105,7 +107,7 @@ fun SettingsScreen(
                         TextButton(
                             enabled = recommendationProfiles.size > 1,
                             onClick = {
-                                onRemoveProfile(profile.profileId)
+                                profileDeleteTarget = profile
                             },
                         ) {
                             Text("Remove")
@@ -348,6 +350,34 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+
+        val profileToDelete = profileDeleteTarget
+        if (profileToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { profileDeleteTarget = null },
+                title = { Text("Delete Profile?") },
+                text = {
+                    Text(
+                        "Delete profile \"${profileToDelete.name}\" and its likes/codex data? This cannot be undone.",
+                    )
+                },
+                dismissButton = {
+                    TextButton(onClick = { profileDeleteTarget = null }) {
+                        Text("Cancel")
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            onRemoveProfile(profileToDelete.profileId)
+                            profileDeleteTarget = null
+                        },
+                    ) {
+                        Text("Delete")
+                    }
+                },
+            )
         }
     }
 }
