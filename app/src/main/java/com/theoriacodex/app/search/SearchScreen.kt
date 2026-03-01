@@ -636,62 +636,58 @@ fun SearchScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Row {
-                        IconButton(
-                            onClick = {
-                                selectedActionPost = null
-                                onSaveToDevice(post)
-                            },
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Download,
-                                contentDescription = "Save to device",
-                            )
-                        }
-                        IconButton(
-                            onClick = {
-                                selectedActionPost = null
-                                onRequestSaveToCodex(post)
-                            },
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.BookmarkAdd,
-                                contentDescription = "Save to Codex",
-                            )
-                        }
+                    IconButton(
+                        onClick = {
+                            selectedActionPost = null
+                            onSaveToDevice(post)
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Download,
+                            contentDescription = "Save to device",
+                        )
                     }
-                    Row {
-                        IconButton(
-                            onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                val formatted = formatPostTagsForClipboard(post)
-                                clipboard?.setPrimaryClip(ClipData.newPlainText("tags", formatted))
-                                Toast.makeText(context, "Tags copied", Toast.LENGTH_SHORT).show()
-                                selectedActionPost = null
-                            },
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ContentCopy,
-                                contentDescription = "Copy tags",
-                            )
-                        }
-                        IconButton(
-                            onClick = {
-                                val copied = copyPostUrlToClipboard(context, post)
-                                val message = if (copied) {
-                                    "Post URL copied"
-                                } else {
-                                    "No post URL available"
-                                }
-                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                                selectedActionPost = null
-                            },
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Share,
-                                contentDescription = "Share",
-                            )
-                        }
+                    IconButton(
+                        onClick = {
+                            selectedActionPost = null
+                            onRequestSaveToCodex(post)
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.BookmarkAdd,
+                            contentDescription = "Save to Codex",
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            val formatted = formatPostTagsForClipboard(post)
+                            clipboard?.setPrimaryClip(ClipData.newPlainText("tags", formatted))
+                            Toast.makeText(context, "Tags copied", Toast.LENGTH_SHORT).show()
+                            selectedActionPost = null
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy tags",
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            val copied = copyPostUrlToClipboard(context, post)
+                            val message = if (copied) {
+                                "Post URL copied"
+                            } else {
+                                "No post URL available"
+                            }
+                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            selectedActionPost = null
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share",
+                        )
                     }
                 }
                 Text(

@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -177,55 +178,57 @@ fun CodexDetailScreen(
                             contentDescription = "Save to device",
                         )
                     }
-                    Row {
-                        IconButton(
-                            onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                val formatted = formatPostTagsForClipboard(post)
-                                clipboard?.setPrimaryClip(ClipData.newPlainText("tags", formatted))
-                                Toast.makeText(context, "Tags copied", Toast.LENGTH_SHORT).show()
-                                selectedActionPost = null
-                            },
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ContentCopy,
-                                contentDescription = "Copy tags",
-                            )
-                        }
-                        IconButton(
-                            onClick = {
-                                val copied = copyPostUrlToClipboard(context, post)
-                                val message = if (copied) {
-                                    "Post URL copied"
-                                } else {
-                                    "No post URL available"
-                                }
-                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                                selectedActionPost = null
-                            },
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Share,
-                                contentDescription = "Share",
-                            )
-                        }
+                    IconButton(
+                        onClick = {
+                            selectedActionPost = null
+                            onRemovePost(post)
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Remove from Codex",
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            val formatted = formatPostTagsForClipboard(post)
+                            clipboard?.setPrimaryClip(ClipData.newPlainText("tags", formatted))
+                            Toast.makeText(context, "Tags copied", Toast.LENGTH_SHORT).show()
+                            selectedActionPost = null
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy tags",
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            val copied = copyPostUrlToClipboard(context, post)
+                            val message = if (copied) {
+                                "Post URL copied"
+                            } else {
+                                "No post URL available"
+                            }
+                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            selectedActionPost = null
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share",
+                        )
                     }
                 }
                 Text(
                     text = post.title?.takeIf { it.isNotBlank() } ?: post.id.sourcePostId,
                     style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                TextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = {
-                        selectedActionPost = null
-                        onRemovePost(post)
-                    },
-                ) {
-                    Text("Remove from Codex")
-                }
                 TextButton(
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { selectedActionPost = null },
