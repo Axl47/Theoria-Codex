@@ -520,6 +520,25 @@ fun TheoriaApp(
         ).show()
     }
 
+    suspend fun downloadCodex(codexId: String) {
+        val posts = codexRepository
+            .observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED)
+            .first()
+        if (posts.isEmpty()) {
+            Toast.makeText(appContext, "Codex has no posts to download", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        posts.forEach { post ->
+            requestSaveToDevice(post)
+        }
+        Toast.makeText(
+            appContext,
+            "Downloading ${posts.size} posts from codex",
+            Toast.LENGTH_SHORT,
+        ).show()
+    }
+
     suspend fun commitVisibleCodexOrder(orderedVisibleIds: List<String>) {
         if (orderedVisibleIds.isEmpty()) return
         val idSet = orderedVisibleIds.toSet()
@@ -1256,6 +1275,11 @@ fun TheoriaApp(
                             codexCoverModels = codexCoverModels,
                             onOpenCodex = { codexId ->
                                 navController.navigate(AppRoute.codexDetail(codexId))
+                            },
+                            onDownloadCodex = { codexId ->
+                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                    downloadCodex(codexId)
+                                }
                             },
                             onSearchFromCodex = { codexId ->
                                 scope.launch(start = CoroutineStart.UNDISPATCHED) {

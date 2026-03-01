@@ -2,7 +2,9 @@ package com.theoriacodex.app.codex
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,13 +27,15 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Reorder
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -53,17 +57,20 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.theoriacodex.domain.model.Codex
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CodexListScreen(
     codices: List<Codex>,
     itemCounts: Map<String, Int>,
     codexCoverModels: Map<String, Any?>,
     onOpenCodex: (String) -> Unit,
+    onDownloadCodex: (String) -> Unit,
     onSearchFromCodex: (String) -> Unit,
     onCommitReorder: (List<String>) -> Unit,
     onCreateCodex: (String) -> Unit,
@@ -73,6 +80,7 @@ fun CodexListScreen(
     var showCreateDialog by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<Codex?>(null) }
     var deleteTarget by remember { mutableStateOf<Codex?>(null) }
+    var actionTarget by remember { mutableStateOf<Codex?>(null) }
     var reorderMode by remember { mutableStateOf(false) }
 
     var reorderDraft by remember { mutableStateOf(codices) }
@@ -279,9 +287,7 @@ fun CodexListScreen(
                         itemCount = itemCounts[codex.codexId] ?: 0,
                         coverModel = codexCoverModels[codex.codexId],
                         onOpen = { onOpenCodex(codex.codexId) },
-                        onSearch = { onSearchFromCodex(codex.codexId) },
-                        onRename = { renameTarget = codex },
-                        onDelete = { deleteTarget = codex },
+                        onLongPress = { actionTarget = codex },
                     )
                 }
             }
@@ -338,6 +344,85 @@ fun CodexListScreen(
             },
         )
     }
+
+    val actionCodex = actionTarget
+    if (actionCodex != null) {
+        ModalBottomSheet(
+            onDismissRequest = { actionTarget = null },
+            dragHandle = null,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    IconButton(
+                        onClick = {
+                            actionTarget = null
+                            onDownloadCodex(actionCodex.codexId)
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Download,
+                            contentDescription = "Download codex",
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            actionTarget = null
+                            onSearchFromCodex(actionCodex.codexId)
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search from codex",
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            renameTarget = actionCodex
+                            actionTarget = null
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Rename codex",
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            deleteTarget = actionCodex
+                            actionTarget = null
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete codex",
+                        )
+                    }
+                }
+                Text(
+                    text = actionCodex.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { actionTarget = null },
+                ) {
+                    Text("Cancel")
+                }
+            }
+        }
+    }
 }
 
 private fun moveCodex(
@@ -354,20 +439,22 @@ private fun moveCodex(
     return mutable
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CodexGridTile(
     codex: Codex,
     itemCount: Int,
     coverModel: Any?,
     onOpen: () -> Unit,
-    onSearch: () -> Unit,
-    onRename: () -> Unit,
-    onDelete: () -> Unit,
+    onLongPress: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onOpen),
+            .combinedClickable(
+                onClick = onOpen,
+                onLongClick = onLongPress,
+            ),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(
@@ -398,66 +485,23 @@ private fun CodexGridTile(
                 }
             }
 
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(8.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Reorder,
-                    contentDescription = null,
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 6.dp),
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
         }
 
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 2.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                Text(
-                    text = codex.name,
-                    style = MaterialTheme.typography.titleLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = "$itemCount items",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
-                IconButton(onClick = onSearch) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search from codex",
-                    )
-                }
-                IconButton(onClick = onRename) {
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = "Rename codex",
-                    )
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete codex",
-                    )
-                }
-            }
+            Text(
+                text = codex.name,
+                style = MaterialTheme.typography.titleLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "$itemCount items",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
