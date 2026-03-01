@@ -2,7 +2,7 @@ package com.theoriacodex.app.codex
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -146,6 +146,7 @@ fun CodexListScreen(
         } else if (reorderMode) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
+                userScrollEnabled = draggingCodexId == null,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 itemsIndexed(reorderDraft, key = { _, codex -> codex.codexId }) { index, codex ->
@@ -163,41 +164,6 @@ fun CodexListScreen(
                                 if (height > 1f) {
                                     itemHeightPx = height
                                 }
-                            }
-                            .pointerInput(reorderDraft, itemHeightPx, draggingCodexId) {
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart = {
-                                        draggingCodexId = codex.codexId
-                                        draggingIndex = index
-                                        dragOffsetY = 0f
-                                    },
-                                    onDragCancel = {
-                                        draggingCodexId = null
-                                        draggingIndex = -1
-                                        dragOffsetY = 0f
-                                    },
-                                    onDragEnd = {
-                                        draggingCodexId = null
-                                        draggingIndex = -1
-                                        dragOffsetY = 0f
-                                    },
-                                    onDrag = { change, dragAmount ->
-                                        if (draggingCodexId != codex.codexId) return@detectDragGesturesAfterLongPress
-                                        change.consume()
-                                        dragOffsetY += dragAmount.y
-                                        val baseIndex = draggingIndex.takeIf { it >= 0 } ?: index
-                                        val delta = (dragOffsetY / itemHeightPx).toInt()
-                                        val target = (baseIndex + delta).coerceIn(0, reorderDraft.lastIndex)
-                                        if (target != baseIndex) {
-                                            val moved = reorderDraft.toMutableList()
-                                            val item = moved.removeAt(baseIndex)
-                                            moved.add(target, item)
-                                            reorderDraft = moved
-                                            draggingIndex = target
-                                            dragOffsetY = 0f
-                                        }
-                                    },
-                                )
                             }
                             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
                             .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -251,10 +217,51 @@ fun CodexListScreen(
                                 )
                             }
 
-                            Icon(
-                                imageVector = Icons.Default.DragHandle,
-                                contentDescription = "Drag to reorder",
-                            )
+                            IconButton(
+                                modifier = Modifier.pointerInput(codex.codexId, itemHeightPx) {
+                                    detectDragGestures(
+                                        onDragStart = {
+                                            draggingCodexId = codex.codexId
+                                            draggingIndex = index
+                                            dragOffsetY = 0f
+                                        },
+                                        onDragCancel = {
+                                            draggingCodexId = null
+                                            draggingIndex = -1
+                                            dragOffsetY = 0f
+                                        },
+                                        onDragEnd = {
+                                            draggingCodexId = null
+                                            draggingIndex = -1
+                                            dragOffsetY = 0f
+                                        },
+                                        onDrag = { change, dragAmount ->
+                                            if (draggingCodexId != codex.codexId) return@detectDragGestures
+                                            change.consume()
+                                            dragOffsetY += dragAmount.y
+
+                                            val currentIndex = draggingIndex.takeIf { it >= 0 } ?: index
+                                            val threshold = itemHeightPx * 0.55f
+
+                                            if (dragOffsetY >= threshold && currentIndex < reorderDraft.lastIndex) {
+                                                reorderDraft = moveCodex(reorderDraft, currentIndex, currentIndex + 1)
+                                                draggingIndex = currentIndex + 1
+                                                dragOffsetY -= itemHeightPx
+                                            } else if (dragOffsetY <= -threshold && currentIndex > 0) {
+                                                reorderDraft = moveCodex(reorderDraft, currentIndex, currentIndex - 1)
+                                                draggingIndex = currentIndex - 1
+                                                dragOffsetY += itemHeightPx
+                                            }
+                                        },
+                                    )
+                                },
+                                onClick = {},
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DragHandle,
+                                    contentDescription = "Drag to reorder",
+                                )
+                            }
                         }
                     }
                 }
@@ -331,6 +338,20 @@ fun CodexListScreen(
             },
         )
     }
+}
+
+private fun moveCodex(
+    codices: List<Codex>,
+    fromIndex: Int,
+    toIndex: Int,
+): List<Codex> {
+    if (fromIndex == toIndex) return codices
+    if (fromIndex !in codices.indices || toIndex !in codices.indices) return codices
+
+    val mutable = codices.toMutableList()
+    val moved = mutable.removeAt(fromIndex)
+    mutable.add(toIndex, moved)
+    return mutable
 }
 
 @Composable
