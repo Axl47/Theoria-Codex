@@ -2204,7 +2204,7 @@ private fun codexBelongsToProfile(codexId: String, profileId: String): Boolean {
     if (codexId.startsWith("${PROFILE_CODEX_ID_PREFIX}_")) {
         return codexId.startsWith("${PROFILE_CODEX_ID_PREFIX}_${profileId}_")
     }
-    return true
+    return profileId == DEFAULT_MAIN_PROFILE_ID
 }
 
 private fun resolveCodexCoverModel(
