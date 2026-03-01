@@ -520,10 +520,27 @@ fun TheoriaApp(
         ).show()
     }
 
-    suspend fun reorderCodex(codexId: String, targetCodexId: String) {
-        val targetIndex = codices.indexOfFirst { codex -> codex.codexId == targetCodexId }
-        if (targetIndex < 0) return
-        codexRepository.reorderCodex(codexId = codexId, targetIndex = targetIndex)
+    suspend fun commitVisibleCodexOrder(orderedVisibleIds: List<String>) {
+        if (orderedVisibleIds.isEmpty()) return
+        val idSet = orderedVisibleIds.toSet()
+        if (idSet.size != orderedVisibleIds.size) return
+
+        val codexById = codices.associateBy { codex -> codex.codexId }
+        if (!orderedVisibleIds.all { id -> codexById.containsKey(id) }) return
+
+        val visibleSlots = codices.mapIndexedNotNull { index, codex ->
+            index.takeIf { codex.codexId in idSet }
+        }
+        if (visibleSlots.size != orderedVisibleIds.size) return
+
+        val desired = codices.toMutableList()
+        orderedVisibleIds.forEachIndexed { orderIndex, codexId ->
+            val slot = visibleSlots[orderIndex]
+            desired[slot] = codexById.getValue(codexId)
+        }
+        desired.forEachIndexed { index, codex ->
+            codexRepository.reorderCodex(codex.codexId, index)
+        }
     }
 
     suspend fun completeAppStartup() {
@@ -1236,6 +1253,7 @@ fun TheoriaApp(
                         CodexListScreen(
                             codices = visibleCodices,
                             itemCounts = codexItemCounts,
+                            codexCoverModels = codexCoverModels,
                             onOpenCodex = { codexId ->
                                 navController.navigate(AppRoute.codexDetail(codexId))
                             },
@@ -1244,9 +1262,9 @@ fun TheoriaApp(
                                     searchFromCodex(codexId)
                                 }
                             },
-                            onReorderCodex = { codexId, targetCodexId ->
+                            onCommitReorder = { orderedVisibleIds ->
                                 scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                    reorderCodex(codexId, targetCodexId)
+                                    commitVisibleCodexOrder(orderedVisibleIds)
                                 }
                             },
                             onCreateCodex = { name ->

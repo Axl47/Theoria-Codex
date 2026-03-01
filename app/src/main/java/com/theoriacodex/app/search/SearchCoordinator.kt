@@ -827,16 +827,28 @@ class SearchCoordinator(
         enabledSources: Set<SourceKey>,
     ): Map<SourceKey, Query> {
         if (query.mode != QueryMode.Unified) return emptyMap()
-        if (SourceKey.GELBOORU !in enabledSources) return emptyMap()
+        val overrides = mutableMapOf<SourceKey, Query>()
 
-        val gelbooruAdapter = registry.adapterFor(SourceKey.GELBOORU) ?: return emptyMap()
-        val includeTags = resolveGelbooruCompatibilityTags(gelbooruAdapter, query.includeTags)
-        val excludeTags = resolveGelbooruCompatibilityTags(gelbooruAdapter, query.excludeTags)
-        val sourceQuery = query.copy(
-            includeTags = includeTags,
-            excludeTags = excludeTags,
-        )
-        return mapOf(SourceKey.GELBOORU to sourceQuery)
+        if (SourceKey.GELBOORU in enabledSources) {
+            val gelbooruAdapter = registry.adapterFor(SourceKey.GELBOORU)
+            if (gelbooruAdapter != null) {
+                val includeTags = resolveGelbooruCompatibilityTags(gelbooruAdapter, query.includeTags)
+                val excludeTags = resolveGelbooruCompatibilityTags(gelbooruAdapter, query.excludeTags)
+                overrides[SourceKey.GELBOORU] = query.copy(
+                    includeTags = includeTags,
+                    excludeTags = excludeTags,
+                )
+            }
+        }
+
+        if (SourceKey.PIXIV in enabledSources) {
+            overrides[SourceKey.PIXIV] = query.copy(
+                includeTags = resolvePixivCompatibilityTags(query.includeTags),
+                excludeTags = resolvePixivCompatibilityTags(query.excludeTags),
+            )
+        }
+
+        return overrides
     }
 
     private suspend fun resolveGelbooruCompatibilityTags(
@@ -862,6 +874,26 @@ class SearchCoordinator(
                 suggestions.firstOrNull()?.text?.trim().takeUnless { it.isNullOrBlank() } ?: normalized
             }
             if (mapped !in resolved) {
+                resolved += mapped
+            }
+        }
+        return resolved
+    }
+
+    private fun resolvePixivCompatibilityTags(tags: List<String>): List<String> {
+        if (tags.isEmpty()) return emptyList()
+
+        val resolved = mutableListOf<String>()
+        val seen = mutableSetOf<String>()
+        tags.forEach { raw ->
+            val mapped = raw
+                .trim()
+                .replace('_', ' ')
+                .replace(WHITESPACE_REGEX, " ")
+            if (mapped.isBlank()) return@forEach
+
+            val dedupeKey = normalizeMatchToken(mapped)
+            if (seen.add(dedupeKey)) {
                 resolved += mapped
             }
         }

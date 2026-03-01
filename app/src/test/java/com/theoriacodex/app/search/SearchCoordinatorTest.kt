@@ -370,6 +370,34 @@ class SearchCoordinatorTest {
     }
 
     @Test
+    fun `unified search treats underscores as spaces for pixiv tags`() = runTest {
+        val pixivAdapter = RecordingAdapter(sourceKey = SourceKey.PIXIV)
+        val gelbooruAdapter = RecordingAdapter(sourceKey = SourceKey.GELBOORU)
+        val registry = CompatibilityRegistry(
+            adapters = mapOf(
+                SourceKey.PIXIV to pixivAdapter,
+                SourceKey.GELBOORU to gelbooruAdapter,
+            ),
+        )
+        val coordinator = SearchCoordinator(
+            registry = registry,
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+        coordinator.addIncludeTag("blue_hair")
+        coordinator.addExcludeTag("long_hair")
+
+        coordinator.applyDraft()
+
+        assertEquals(listOf("blue hair"), pixivAdapter.lastSearchQuery?.includeTags)
+        assertEquals(listOf("long hair"), pixivAdapter.lastSearchQuery?.excludeTags)
+        assertEquals(listOf("blue_hair"), gelbooruAdapter.lastSearchQuery?.includeTags)
+        assertEquals(listOf("long_hair"), gelbooruAdapter.lastSearchQuery?.excludeTags)
+    }
+
+    @Test
     fun `autocomplete suggestions are sorted by post count descending`() = runTest {
         val registry = CompatibilityRegistry(
             adapters = mapOf(
