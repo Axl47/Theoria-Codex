@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -70,7 +71,9 @@ fun CodexListScreen(
     itemCounts: Map<String, Int>,
     codexCoverModels: Map<String, Any?>,
     onOpenCodex: (String) -> Unit,
+    onImportCodex: () -> Unit,
     onDownloadCodex: (String) -> Unit,
+    onShareCodex: (String) -> Unit,
     onSearchFromCodex: (String) -> Unit,
     onCommitReorder: (List<String>) -> Unit,
     onCreateCodex: (String) -> Unit,
@@ -115,6 +118,9 @@ fun CodexListScreen(
         ) {
             Text("Codex", style = MaterialTheme.typography.titleLarge)
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onImportCodex) {
+                    Text("Import")
+                }
                 TextButton(
                     onClick = {
                         if (!reorderMode) {
@@ -370,6 +376,17 @@ fun CodexListScreen(
                         Icon(
                             imageVector = Icons.Default.Download,
                             contentDescription = "Download codex",
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            actionTarget = null
+                            onShareCodex(actionCodex.codexId)
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share codex",
                         )
                     }
                     IconButton(

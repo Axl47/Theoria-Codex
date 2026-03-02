@@ -1,6 +1,7 @@
 package com.theoriacodex.app.ui
 
 import android.app.Activity
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.app.DownloadManager
@@ -14,6 +15,8 @@ import android.webkit.URLUtil
 import android.widget.Toast
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -83,6 +86,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.core.content.pm.PackageInfoCompat
+import androidx.core.content.FileProvider
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.media.isAnimatedPost
@@ -538,6 +542,120 @@ fun TheoriaApp(
             Toast.LENGTH_SHORT,
         ).show()
     }
+
+    suspend fun shareCodex(codexId: String) {
+        val codex = codexRepository.observeCodex(codexId).first()
+        if (codex == null) {
+            Toast.makeText(appContext, "Codex not found", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val posts = codexRepository.observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED).first()
+        val export = CodexShareFile(
+            title = codex.name,
+            posts = posts.map { post ->
+                CodexSharePost(
+                    source = post.id.source.name,
+                    sourcePostId = post.id.sourcePostId,
+                )
+            },
+        )
+
+        val exportsDirectory = storageDirectory.resolve("exports").apply { mkdirs() }
+        val fileName = "${sanitizeCodexExportName(codex.name)}-${System.currentTimeMillis()}.json"
+        val exportFile = exportsDirectory.resolve(fileName)
+        runCatching {
+            exportFile.writeText(Gson().toJson(export))
+            val contentUri = FileProvider.getUriForFile(
+                appContext,
+                "${appContext.packageName}.fileprovider",
+                exportFile,
+            )
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/json"
+                putExtra(Intent.EXTRA_STREAM, contentUri)
+                putExtra(Intent.EXTRA_SUBJECT, codex.name)
+                clipData = ClipData.newRawUri("codex_export", contentUri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val chooser = Intent.createChooser(shareIntent, "Share codex").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            appContext.startActivity(chooser)
+        }.onFailure {
+            Toast.makeText(appContext, "Could not export codex", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    suspend fun importCodexFromUri(uri: Uri) {
+        val raw = runCatching {
+            appContext.contentResolver.openInputStream(uri)
+                ?.bufferedReader()
+                ?.use { it.readText() }
+        }.getOrNull()
+        if (raw.isNullOrBlank()) {
+            Toast.makeText(appContext, "Could not read codex file", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val parsed = runCatching { Gson().fromJson(raw, CodexShareFile::class.java) }.getOrNull()
+        val title = parsed?.title?.trim().orEmpty()
+        if (title.isBlank()) {
+            Toast.makeText(appContext, "Invalid codex file", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val profileId = activeRecommendationProfile.profileId
+        val codex = codexRepository.ensureCodex(
+            codexId = profileScopedCodexId(profileId),
+            name = title,
+        )
+
+        val entries = parsed?.posts.orEmpty()
+            .mapNotNull { item ->
+                val source = item.source
+                    .trim()
+                    .uppercase()
+                    .let { value -> runCatching { SourceKey.valueOf(value) }.getOrNull() }
+                    ?: return@mapNotNull null
+                val sourcePostId = item.sourcePostId.trim()
+                if (sourcePostId.isBlank()) return@mapNotNull null
+                PostId(source = source, sourcePostId = sourcePostId)
+            }
+            .distinctBy { postId -> "${postId.source.name}:${postId.sourcePostId}" }
+
+        if (entries.isEmpty()) {
+            Toast.makeText(appContext, "Imported codex with no posts", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        var imported = 0
+        entries.forEach { postId ->
+            val adapter = realRegistry.adapterFor(postId.source) ?: return@forEach
+            val resolved = runCatching {
+                adapter.resolvePost(postId)
+            }.getOrNull() ?: return@forEach
+
+            codexRepository.addItem(codex.codexId, resolved)
+            cacheRepository.cacheThumbnail(resolved)
+            imported += 1
+        }
+        val skipped = entries.size - imported
+        Toast.makeText(
+            appContext,
+            "Imported $imported posts${if (skipped > 0) " ($skipped skipped)" else ""}",
+            Toast.LENGTH_SHORT,
+        ).show()
+    }
+
+    val importCodexLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            scope.launch {
+                importCodexFromUri(uri)
+            }
+        },
+    )
 
     suspend fun commitVisibleCodexOrder(orderedVisibleIds: List<String>) {
         if (orderedVisibleIds.isEmpty()) return
@@ -1276,9 +1394,17 @@ fun TheoriaApp(
                             onOpenCodex = { codexId ->
                                 navController.navigate(AppRoute.codexDetail(codexId))
                             },
+                            onImportCodex = {
+                                importCodexLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
+                            },
                             onDownloadCodex = { codexId ->
                                 scope.launch(start = CoroutineStart.UNDISPATCHED) {
                                     downloadCodex(codexId)
+                                }
+                            },
+                            onShareCodex = { codexId ->
+                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                    shareCodex(codexId)
                                 }
                             },
                             onSearchFromCodex = { codexId ->
@@ -2282,6 +2408,26 @@ private fun resolveCodexCoverModel(
 
     return post.preview.url
 }
+
+private fun sanitizeCodexExportName(name: String): String {
+    val normalized = name
+        .trim()
+        .lowercase()
+        .replace(Regex("[^a-z0-9]+"), "-")
+        .trim('-')
+    return normalized.ifBlank { "codex" }
+}
+
+private data class CodexShareFile(
+    val version: Int = 1,
+    val title: String,
+    val posts: List<CodexSharePost>,
+)
+
+private data class CodexSharePost(
+    val source: String,
+    val sourcePostId: String,
+)
 
 private const val PIXIV_TOKEN_REFRESH_TIMEOUT_MS = 6_000L
 private const val BOTTOM_BAR_HEIGHT_RATIO = 0.085f

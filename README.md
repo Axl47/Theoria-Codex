@@ -1,12 +1,15 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-02-27T07:18
+updated_at: 2026-02-27T07:36
 ---
 # Theoria Codex
 
 Theoria Codex is an Android-first, local-first, tag-driven art browser.
 
 The product spec lives at `./docs/TheoriaSpec.md`.
+
+Recent updates:
+- Codex long-press actions now include share/export to `.json` (title + source/post IDs), and Codex tab has an Import action to reconstruct codices from exported files.
 
 - The project includes five top-level tabs:
   - Search

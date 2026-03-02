@@ -3,4 +3,7 @@
     <files-path
         name="update_apks"
         path="theoria_codex/updates/" />
+    <files-path
+        name="codex_exports"
+        path="theoria_codex/exports/" />
 </paths>
