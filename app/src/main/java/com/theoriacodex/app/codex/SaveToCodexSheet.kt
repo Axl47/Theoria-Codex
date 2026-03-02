@@ -111,7 +111,7 @@ fun SaveToCodexSheet(
                     )
                 }
                 Text(
-                    text = "Save to board",
+                    text = "Save to Codex",
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.titleLarge,
@@ -136,7 +136,7 @@ fun SaveToCodexSheet(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        text = "No boards in this profile yet.",
+                        text = "No codices in this profile yet.",
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 20.dp),
@@ -171,7 +171,7 @@ fun SaveToCodexSheet(
             )
             SheetActionRow(
                 icon = Icons.Default.Add,
-                label = "Create board",
+                label = "Create Codex",
                 onClick = { showCreateDialog = true },
             )
         }
@@ -308,7 +308,7 @@ private fun CreateCodexDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Create board") },
+        title = { Text("Create Codex") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!profileName.isNullOrBlank()) {
@@ -322,7 +322,7 @@ private fun CreateCodexDialog(
                     modifier = Modifier.fillMaxWidth(),
                     value = value,
                     onValueChange = { input -> value = input.replace("\n", " ") },
-                    label = { Text("Board name") },
+                    label = { Text("Codex name") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text,
