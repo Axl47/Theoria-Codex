@@ -1728,11 +1728,18 @@ fun TheoriaApp(
                 codexCoverModels = codexCoverModels,
                 onCreateCodex = { profileId, name ->
                     scope.launch {
-                        codexRepository.ensureCodex(
+                        val codex = codexRepository.ensureCodex(
                             codexId = profileScopedCodexId(profileId),
                             name = name,
                         )
+                        codexRepository.addItem(codex.codexId, post)
+                        cacheRepository.cacheThumbnail(post)
+                        if (settings.cache.cacheFullImageOnSave) {
+                            cacheRepository.cacheFull(post)
+                        }
                     }
+                    showSaveSheet = false
+                    pendingSavePost = null
                 },
                 onSelectCodex = { codexId ->
                     scope.launch {
