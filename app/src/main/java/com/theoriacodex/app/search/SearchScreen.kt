@@ -327,6 +327,13 @@ fun SearchScreen(
         }
     }
 
+    fun applyDraftAndResetScroll() {
+        focusManager.clearFocus(force = true)
+        coordinator.clearAutocompleteSuggestions()
+        onApplySearch()
+        scope.launch { resetScrollToTop() }
+    }
+
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
@@ -448,10 +455,7 @@ fun SearchScreen(
                             Text("Reset")
                         }
                         TextButton(onClick = {
-                            focusManager.clearFocus(force = true)
-                            coordinator.clearAutocompleteSuggestions()
-                            onApplySearch()
-                            scope.launch { resetScrollToTop() }
+                            applyDraftAndResetScroll()
                         }) {
                             Text("Apply")
                         }
@@ -713,6 +717,7 @@ fun SearchScreen(
             coordinator = coordinator,
             animatedOnly = animatedOnly,
             onAnimatedOnlyChange = { animatedOnly = it },
+            onSortChanged = { applyDraftAndResetScroll() },
             onDismiss = {
                 scope.launch {
                     sheetState.hide()
@@ -1139,6 +1144,7 @@ private fun FilterSheet(
     coordinator: SearchCoordinator,
     animatedOnly: Boolean,
     onAnimatedOnlyChange: (Boolean) -> Unit,
+    onSortChanged: () -> Unit,
     onDismiss: () -> Unit,
     sheetState: androidx.compose.material3.SheetState,
 ) {
@@ -1178,7 +1184,11 @@ private fun FilterSheet(
                     val mode = SortMode.entries[index]
                     FilterChip(
                         selected = coordinator.draftQuery.sort == mode,
-                        onClick = { coordinator.setSort(mode) },
+                        onClick = {
+                            if (coordinator.draftQuery.sort == mode) return@FilterChip
+                            coordinator.setSort(mode)
+                            onSortChanged()
+                        },
                         label = { Text(mode.name) },
                     )
                 }
