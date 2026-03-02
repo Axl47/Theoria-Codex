@@ -55,12 +55,18 @@ class FileBackedCodexRepository(
 
     override suspend fun ensureCodex(codexId: String, name: String): Codex {
         return mutex.withLock {
-            val existing = codicesFlow.value.firstOrNull { it.codexId == codexId }
+            val current = codicesFlow.value
+            val existing = current.firstOrNull { it.codexId == codexId }
+            val resolvedName = resolveUniqueCodexName(
+                requestedName = name,
+                existingCodices = current,
+                excludeCodexId = codexId,
+            )
             if (existing != null) {
-                if (existing.name == name) {
+                if (existing.name == resolvedName) {
                     existing
                 } else {
-                    val updated = existing.copy(name = name)
+                    val updated = existing.copy(name = resolvedName)
                     codicesFlow.value = codicesFlow.value.map { codex ->
                         if (codex.codexId == codexId) updated else codex
                     }
@@ -70,7 +76,7 @@ class FileBackedCodexRepository(
             } else {
                 val codex = Codex(
                     codexId = codexId,
-                    name = name,
+                    name = resolvedName,
                     createdAtEpochMs = System.currentTimeMillis(),
                 )
                 codicesFlow.value = codicesFlow.value + codex
@@ -82,9 +88,13 @@ class FileBackedCodexRepository(
 
     override suspend fun createCodex(name: String): Codex {
         return mutex.withLock {
+            val resolvedName = resolveUniqueCodexName(
+                requestedName = name,
+                existingCodices = codicesFlow.value,
+            )
             val codex = Codex(
                 codexId = UUID.randomUUID().toString(),
-                name = name,
+                name = resolvedName,
                 createdAtEpochMs = System.currentTimeMillis(),
             )
             codicesFlow.value = codicesFlow.value + codex
@@ -113,8 +123,16 @@ class FileBackedCodexRepository(
 
     override suspend fun renameCodex(codexId: String, name: String) {
         mutex.withLock {
-            codicesFlow.value = codicesFlow.value.map { existing ->
-                if (existing.codexId == codexId) existing.copy(name = name) else existing
+            val current = codicesFlow.value
+            val existing = current.firstOrNull { it.codexId == codexId } ?: return@withLock
+            val resolvedName = resolveUniqueCodexName(
+                requestedName = name,
+                existingCodices = current,
+                excludeCodexId = codexId,
+            )
+            if (existing.name == resolvedName) return@withLock
+            codicesFlow.value = codicesFlow.value.map { codex ->
+                if (codex.codexId == codexId) codex.copy(name = resolvedName) else codex
             }
             persist()
         }
@@ -1009,6 +1027,35 @@ private fun normalizeLikedTags(tags: List<String>): List<String> {
         .filter { it.isNotBlank() }
         .distinctBy { it.lowercase() }
         .toList()
+}
+
+private fun resolveUniqueCodexName(
+    requestedName: String,
+    existingCodices: List<Codex>,
+    excludeCodexId: String? = null,
+): String {
+    val baseName = requestedName.trim().ifBlank { "Codex" }
+    val occupiedNames = existingCodices
+        .asSequence()
+        .filter { codex -> codex.codexId != excludeCodexId }
+        .map { codex -> normalizeCodexNameKey(codex.name) }
+        .toSet()
+    if (normalizeCodexNameKey(baseName) !in occupiedNames) {
+        return baseName
+    }
+
+    var suffix = 2
+    while (true) {
+        val candidate = "$baseName $suffix"
+        if (normalizeCodexNameKey(candidate) !in occupiedNames) {
+            return candidate
+        }
+        suffix += 1
+    }
+}
+
+private fun normalizeCodexNameKey(name: String): String {
+    return name.trim().lowercase()
 }
 
 private fun sortCodexPairs(

@@ -30,12 +30,18 @@ class InMemoryCodexRepository : CodexRepository {
 
     override suspend fun ensureCodex(codexId: String, name: String): Codex {
         return mutex.withLock {
-            val existing = codices.value.firstOrNull { it.codexId == codexId }
+            val current = codices.value
+            val existing = current.firstOrNull { it.codexId == codexId }
+            val resolvedName = resolveUniqueCodexName(
+                requestedName = name,
+                existingCodices = current,
+                excludeCodexId = codexId,
+            )
             if (existing != null) {
-                if (existing.name == name) {
+                if (existing.name == resolvedName) {
                     existing
                 } else {
-                    val updated = existing.copy(name = name)
+                    val updated = existing.copy(name = resolvedName)
                     codices.value = codices.value.map { codex ->
                         if (codex.codexId == codexId) updated else codex
                     }
@@ -44,7 +50,7 @@ class InMemoryCodexRepository : CodexRepository {
             } else {
                 val created = Codex(
                     codexId = codexId,
-                    name = name,
+                    name = resolvedName,
                     createdAtEpochMs = System.currentTimeMillis(),
                 )
                 codices.value = codices.value + created
@@ -55,9 +61,13 @@ class InMemoryCodexRepository : CodexRepository {
 
     override suspend fun createCodex(name: String): Codex {
         return mutex.withLock {
+            val resolvedName = resolveUniqueCodexName(
+                requestedName = name,
+                existingCodices = codices.value,
+            )
             val created = Codex(
                 codexId = UUID.randomUUID().toString(),
-                name = name,
+                name = resolvedName,
                 createdAtEpochMs = System.currentTimeMillis(),
             )
             codices.value = codices.value + created
@@ -84,8 +94,16 @@ class InMemoryCodexRepository : CodexRepository {
 
     override suspend fun renameCodex(codexId: String, name: String) {
         mutex.withLock {
+            val current = codices.value
+            val existing = current.firstOrNull { it.codexId == codexId } ?: return@withLock
+            val resolvedName = resolveUniqueCodexName(
+                requestedName = name,
+                existingCodices = current,
+                excludeCodexId = codexId,
+            )
+            if (existing.name == resolvedName) return@withLock
             codices.value = codices.value.map {
-                if (it.codexId == codexId) it.copy(name = name) else it
+                if (it.codexId == codexId) it.copy(name = resolvedName) else it
             }
         }
     }
@@ -380,6 +398,35 @@ private fun normalizeLikedTags(tags: List<String>): List<String> {
         .filter { it.isNotBlank() }
         .distinctBy { it.lowercase() }
         .toList()
+}
+
+private fun resolveUniqueCodexName(
+    requestedName: String,
+    existingCodices: List<Codex>,
+    excludeCodexId: String? = null,
+): String {
+    val baseName = requestedName.trim().ifBlank { "Codex" }
+    val occupiedNames = existingCodices
+        .asSequence()
+        .filter { codex -> codex.codexId != excludeCodexId }
+        .map { codex -> normalizeCodexNameKey(codex.name) }
+        .toSet()
+    if (normalizeCodexNameKey(baseName) !in occupiedNames) {
+        return baseName
+    }
+
+    var suffix = 2
+    while (true) {
+        val candidate = "$baseName $suffix"
+        if (normalizeCodexNameKey(candidate) !in occupiedNames) {
+            return candidate
+        }
+        suffix += 1
+    }
+}
+
+private fun normalizeCodexNameKey(name: String): String {
+    return name.trim().lowercase()
 }
 
 private fun normalizeSettings(settings: AppSettings): AppSettings {

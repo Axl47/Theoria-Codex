@@ -344,6 +344,7 @@ fun TheoriaApp(
     var awaitingUnknownSources by remember { mutableStateOf(false) }
     var awaitingInstallerReturn by remember { mutableStateOf(false) }
     var pendingPostDeepLinkUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingCodexImportUri by remember { mutableStateOf<Uri?>(null) }
     val codexItemCounts = remember { mutableStateMapOf<String, Int>() }
     val codexCoverModels = remember { mutableStateMapOf<String, Any?>() }
 
@@ -628,12 +629,15 @@ fun TheoriaApp(
             return
         }
 
+        refreshSourceAccountState()
+
         var imported = 0
         entries.forEach { postId ->
             val adapter = realRegistry.adapterFor(postId.source) ?: return@forEach
-            val resolved = runCatching {
+            val resolvedFromSource = runCatching {
                 adapter.resolvePost(postId)
-            }.getOrNull() ?: return@forEach
+            }.getOrNull()
+            val resolved = resolvedFromSource ?: codexRepository.getPost(postId) ?: return@forEach
 
             codexRepository.addItem(codex.codexId, resolved)
             cacheRepository.cacheThumbnail(resolved)
@@ -827,10 +831,37 @@ fun TheoriaApp(
             } else {
                 pixivStatusLabel = "Connection failed: ${result.exceptionOrNull()?.message ?: "Unknown error"}"
             }
+        } else if (isCodexImportUri(appContext, uri)) {
+            pendingCodexImportUri = uri
         } else {
             pendingPostDeepLinkUri = uri
         }
         onIncomingUriConsumed()
+    }
+
+    LaunchedEffect(navReady, pendingCodexImportUri) {
+        if (!navReady) return@LaunchedEffect
+        val uri = pendingCodexImportUri ?: return@LaunchedEffect
+        fun consumePendingImportUriIfCurrent() {
+            if (pendingCodexImportUri == uri) {
+                pendingCodexImportUri = null
+            }
+        }
+        runCatching {
+            appContext.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        try {
+            importCodexFromUri(uri)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            Toast.makeText(appContext, "Could not import codex file", Toast.LENGTH_SHORT).show()
+        } finally {
+            consumePendingImportUriIfCurrent()
+        }
     }
 
     LaunchedEffect(navReady, pendingPostDeepLinkUri) {
@@ -2053,6 +2084,25 @@ private fun parsePixivPostIdFromUri(uri: Uri): String? {
     return match.groupValues.getOrNull(2)?.takeIf(String::isDigitsOnly)
 }
 
+private fun isCodexImportUri(context: Context, uri: Uri): Boolean {
+    val scheme = uri.scheme?.lowercase().orEmpty()
+    if (scheme != "content" && scheme != "file") return false
+
+    val path = uri.path?.lowercase().orEmpty()
+    val lastSegment = uri.lastPathSegment?.lowercase().orEmpty()
+    if (path.endsWith(".json") || lastSegment.endsWith(".json")) {
+        return true
+    }
+
+    val mimeType = runCatching {
+        context.contentResolver.getType(uri)
+    }.getOrNull()?.lowercase()
+    if (mimeType == null || mimeType in CODEX_IMPORT_MIME_TYPES || mimeType == "application/octet-stream") {
+        return true
+    }
+    return false
+}
+
 private fun parseGelbooruPostIdFromUri(uri: Uri): String? {
     val scheme = uri.scheme?.lowercase().orEmpty()
     val host = uri.host?.lowercase().orEmpty()
@@ -2451,3 +2501,4 @@ private const val LIKES_CODEX_ID_PREFIX = "system_likes_codex"
 private const val PROFILE_CODEX_ID_PREFIX = "profile_codex"
 private const val LIKES_CODEX_NAME = "Likes"
 private const val CODEX_SEARCH_TAG_LIMIT = 3
+private val CODEX_IMPORT_MIME_TYPES = setOf("application/json", "text/json")

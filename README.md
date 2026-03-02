@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-02-27T07:36
+updated_at: 2026-03-01T19:05
 ---
 # Theoria Codex
 
@@ -10,6 +10,9 @@ The product spec lives at `./docs/TheoriaSpec.md`.
 
 Recent updates:
 - Codex long-press actions now include share/export to `.json` (title + source/post IDs), and Codex tab has an Import action to reconstruct codices from exported files.
+- The app now registers `.json` open intents so opening a Codex export file launches Theoria Codex and attempts import automatically.
+- Codex import now accepts provider-backed JSON URIs (including chat/file-share `content://` streams) in addition to public-folder files.
+- Codex names now auto-deduplicate on create/rename/import by appending numeric suffixes (` 2`, ` 3`, ...).
 
 - The project includes five top-level tabs:
   - Search

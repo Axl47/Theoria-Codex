@@ -62,6 +62,22 @@ class InMemoryRepositoriesTest {
     }
 
     @Test
+    fun `codex repository appends numeric suffix for duplicate names`() = runTest {
+        val repo = InMemoryCodexRepository()
+
+        val first = repo.createCodex("Favorites")
+        val second = repo.createCodex("Favorites")
+        val third = repo.ensureCodex(codexId = "manual", name = "Favorites")
+
+        repo.renameCodex(second.codexId, "Favorites")
+
+        val names = repo.observeCodices().first().associateBy({ it.codexId }, { it.name })
+        assertEquals("Favorites", names[first.codexId])
+        assertEquals("Favorites 2", names[second.codexId])
+        assertEquals("Favorites 3", names[third.codexId])
+    }
+
+    @Test
     fun `codex repository supports reordering`() = runTest {
         val repo = InMemoryCodexRepository()
         val first = repo.createCodex("First")

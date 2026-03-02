@@ -50,6 +50,24 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
+    fun `codex repository appends numeric suffix for duplicate names across restarts`() = runTest {
+        val dir = Files.createTempDirectory("codex-duplicate-names-").toFile()
+        val first = FileBackedCodexRepository(dir)
+
+        val alpha = first.createCodex("Favorites")
+        val beta = first.createCodex("Favorites")
+        val gamma = first.ensureCodex(codexId = "manual", name = "Favorites")
+        first.renameCodex(beta.codexId, "Favorites")
+
+        val second = FileBackedCodexRepository(dir)
+        val names = second.observeCodices().first().associateBy({ it.codexId }, { it.name })
+
+        assertEquals("Favorites", names[alpha.codexId])
+        assertEquals("Favorites 2", names[beta.codexId])
+        assertEquals("Favorites 3", names[gamma.codexId])
+    }
+
+    @Test
     fun `codex repository persists reorder across restarts`() = runTest {
         val dir = Files.createTempDirectory("codex-reorder-").toFile()
         val first = FileBackedCodexRepository(dir)
