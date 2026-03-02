@@ -203,9 +203,15 @@ class SearchCoordinator(
             }
         }
 
-        val unified = appliedByMode[modeKey(QueryMode.Unified)] ?: defaultQuery()
-        appliedQuery = unified
-        draftQuery = unified
+        val lastApplied = queryRepository.observeAppliedQuery(LAST_ACTIVE_QUERY_KEY).first()
+            ?.takeIf { query -> isModeAvailable(query.mode) }
+        val restored = if (lastApplied != null) {
+            appliedByMode[modeKey(lastApplied.mode)] ?: defaultQuery(lastApplied.mode)
+        } else {
+            appliedByMode[modeKey(QueryMode.Unified)] ?: defaultQuery()
+        }
+        appliedQuery = restored
+        draftQuery = restored
         hasExecutedSearch =
             appliedByMode.containsKey(modeKey(appliedQuery.mode)) ||
             queryRepository.getScrollOffset(appliedQueryHash) != null
@@ -553,6 +559,7 @@ class SearchCoordinator(
         appliedQuery = draftQuery
         appliedByMode[modeKey(appliedQuery.mode)] = appliedQuery
         queryRepository.upsertAppliedQuery(modeKey(appliedQuery.mode), appliedQuery)
+        queryRepository.upsertAppliedQuery(LAST_ACTIVE_QUERY_KEY, appliedQuery)
         val hash = appliedQueryHash
         uiRestoreRepository.setSearchScrollState(
             queryHash = hash,
@@ -1133,6 +1140,7 @@ private const val TRENDING_PER_SOURCE_CACHE_LIMIT = 40
 private const val SOURCE_TRENDING_LIMIT = 20
 private const val UNIFIED_TRENDING_LIMIT = 20
 private const val SEEN_TAGS_PER_SOURCE_INGEST_LIMIT = 240
+private const val LAST_ACTIVE_QUERY_KEY = "last_active"
 private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(SourceKey.PIXIV, SourceKey.GELBOORU)
 private val WHITESPACE_REGEX = Regex("\\s+")
 private val PIXIV_TRAILING_PARENTHESIS_REGEX = Regex("\\s*\\([^)]*\\)\\s*$")

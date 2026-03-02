@@ -122,6 +122,36 @@ class SearchCoordinatorTest {
     }
 
     @Test
+    fun `initialize restores last applied source mode after restart`() = runTest {
+        val queryRepository = InMemoryQueryRepository()
+        val settingsRepository = InMemorySettingsRepository()
+        val uiRestoreRepository = InMemoryUiRestoreRepository()
+
+        val firstSession = SearchCoordinator(
+            registry = StubAdapterRegistry(),
+            queryRepository = queryRepository,
+            settingsRepository = settingsRepository,
+            uiRestoreRepository = uiRestoreRepository,
+        )
+        firstSession.initialize()
+        firstSession.setMode(QueryMode.Source(SourceKey.PIXIV))
+        firstSession.addIncludeTag("landscape")
+        firstSession.applyDraft()
+
+        val restoredSession = SearchCoordinator(
+            registry = StubAdapterRegistry(),
+            queryRepository = queryRepository,
+            settingsRepository = settingsRepository,
+            uiRestoreRepository = uiRestoreRepository,
+        )
+        restoredSession.initialize()
+
+        assertEquals(QueryMode.Source(SourceKey.PIXIV), restoredSession.appliedQuery.mode)
+        assertEquals(QueryMode.Source(SourceKey.PIXIV), restoredSession.draftQuery.mode)
+        assertTrue("landscape" in restoredSession.appliedQuery.includeTags)
+    }
+
+    @Test
     fun `mode options and source mode availability follow registry`() = runTest {
         val coordinator = SearchCoordinator(
             registry = LimitedStubRegistry(setOf(SourceKey.PIXIV)),
