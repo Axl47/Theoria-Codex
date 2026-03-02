@@ -561,7 +561,7 @@ fun TheoriaApp(
         )
 
         val exportsDirectory = storageDirectory.resolve("exports").apply { mkdirs() }
-        val fileName = "${sanitizeCodexExportName(codex.name)}-${System.currentTimeMillis()}.json"
+        val fileName = "${sanitizeCodexExportName(codex.name)}.json"
         val exportFile = exportsDirectory.resolve(fileName)
         runCatching {
             exportFile.writeText(Gson().toJson(export))
@@ -2420,8 +2420,8 @@ private fun sanitizeCodexExportName(name: String): String {
     val normalized = name
         .trim()
         .lowercase()
-        .replace(Regex("[^a-z0-9]+"), "-")
-        .trim('-')
+        .replace(Regex("[^a-z0-9]+"), "_")
+        .trim('_')
     return normalized.ifBlank { "codex" }
 }
 
