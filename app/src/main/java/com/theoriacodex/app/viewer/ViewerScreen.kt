@@ -11,6 +11,7 @@ import android.os.Environment
 import android.os.SystemClock
 import android.webkit.URLUtil
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -197,6 +198,10 @@ fun ViewerScreen(
         mediaPlaybackEnabled = false
         showInfoSheet = false
         pendingDismiss = true
+    }
+
+    BackHandler(enabled = !pendingDismiss) {
+        requestDismissViewer()
     }
 
     LaunchedEffect(posts, currentPostIndex, selectedMediaIndex) {
@@ -973,7 +978,7 @@ private fun ViewerVideoPlayer(
     var loading by remember(playbackLocation) { mutableStateOf(true) }
     var loadFailed by remember(playbackLocation) { mutableStateOf(false) }
     var playerRef by remember(playbackLocation, sourceKey) { mutableStateOf<ExoPlayer?>(null) }
-    var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
+    var playerViewRef by remember(playbackLocation, sourceKey) { mutableStateOf<PlayerView?>(null) }
     var durationMs by remember(playbackLocation) { mutableLongStateOf(0L) }
     var positionMs by remember(playbackLocation) { mutableLongStateOf(0L) }
     var isScrubbing by remember(playbackLocation) { mutableStateOf(false) }
@@ -1031,7 +1036,9 @@ private fun ViewerVideoPlayer(
                 player.playWhenReady = false
                 player.pause()
             }
-            playerViewRef?.player = null
+            runCatching {
+                playerViewRef?.player = null
+            }
             runCatching {
                 player.release()
             }
