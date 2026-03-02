@@ -75,6 +75,45 @@ class PixivSourceAdapterTest {
         assertTrue(httpClient.lastGet?.headers?.containsKey("Authorization") == true)
     }
 
+    @Test
+    fun `search normalizes booru-style tags for pixiv word query`() = runTest {
+        val credentials = FakeCredentialsProvider().apply {
+            pixivTokens = PixivAuthTokens(
+                accessToken = "access",
+                refreshToken = "refresh",
+                expiresAtEpochMs = Long.MAX_VALUE,
+            )
+        }
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "illusts": []
+                    }
+                """.trimIndent(),
+            )
+        }
+        val adapter = PixivSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = credentials,
+        )
+
+        adapter.search(
+            Query(
+                mode = QueryMode.Source(SourceKey.PIXIV),
+                includeTags = listOf("this_is_a_tag_(Game)"),
+                excludeTags = listOf("nsfw_(content)"),
+                sort = SortMode.NEWEST,
+                dateRange = null,
+                minScore = null,
+            ),
+            pageToken = null,
+        )
+
+        assertEquals("this is a tag -nsfw", httpClient.lastGet?.query?.get("word"))
+    }
+
     private fun sampleQuery(): Query {
         return Query(
             mode = QueryMode.Source(SourceKey.PIXIV),

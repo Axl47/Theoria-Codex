@@ -344,9 +344,27 @@ private fun mapHttpFailure(statusCode: Int): SourceFailureReason {
 }
 
 private fun compileTagQuery(query: Query): String {
-    val include = query.includeTags.map { it.trim() }.filter { it.isNotBlank() }
-    val exclude = query.excludeTags.map { it.trim() }.filter { it.isNotBlank() }.map { "-$it" }
+    val include = query.includeTags
+        .map(::normalizePixivTagToken)
+        .filter { it.isNotBlank() }
+    val exclude = query.excludeTags
+        .map(::normalizePixivTagToken)
+        .filter { it.isNotBlank() }
+        .map { "-$it" }
     return (include + exclude).joinToString(" ")
+}
+
+private fun normalizePixivTagToken(raw: String): String {
+    var normalized = raw
+        .trim()
+        .removePrefix("-")
+        .replace('_', ' ')
+        .replace(PIXIV_TAG_WHITESPACE_REGEX, " ")
+        .trim()
+    while (normalized.isNotBlank() && PIXIV_TRAILING_PARENTHESIS_REGEX.containsMatchIn(normalized)) {
+        normalized = normalized.replace(PIXIV_TRAILING_PARENTHESIS_REGEX, "").trim()
+    }
+    return normalized
 }
 
 private fun parseIsoInstant(value: String?): Long? {
@@ -374,3 +392,5 @@ private fun JsonArray?.orEmpty(): List<com.google.gson.JsonElement> {
 
 private const val PIXIV_API_BASE: String = "https://app-api.pixiv.net"
 const val PIXIV_UGOIRA_MIME: String = "image/ugoira"
+private val PIXIV_TRAILING_PARENTHESIS_REGEX = Regex("\\s*\\([^)]*\\)\\s*$")
+private val PIXIV_TAG_WHITESPACE_REGEX = Regex("\\s+")

@@ -886,10 +886,7 @@ class SearchCoordinator(
         val resolved = mutableListOf<String>()
         val seen = mutableSetOf<String>()
         tags.forEach { raw ->
-            val mapped = raw
-                .trim()
-                .replace('_', ' ')
-                .replace(WHITESPACE_REGEX, " ")
+            val mapped = normalizePixivCompatibilityToken(raw)
             if (mapped.isBlank()) return@forEach
 
             val dedupeKey = normalizeMatchToken(mapped)
@@ -898,6 +895,19 @@ class SearchCoordinator(
             }
         }
         return resolved
+    }
+
+    private fun normalizePixivCompatibilityToken(raw: String): String {
+        var normalized = raw
+            .trim()
+            .removePrefix("-")
+            .replace('_', ' ')
+            .replace(WHITESPACE_REGEX, " ")
+            .trim()
+        while (normalized.isNotBlank() && PIXIV_TRAILING_PARENTHESIS_REGEX.containsMatchIn(normalized)) {
+            normalized = normalized.replace(PIXIV_TRAILING_PARENTHESIS_REGEX, "").trim()
+        }
+        return normalized
     }
 
     private fun isPixivUnknownError(error: Throwable): Boolean {
@@ -1125,3 +1135,4 @@ private const val UNIFIED_TRENDING_LIMIT = 20
 private const val SEEN_TAGS_PER_SOURCE_INGEST_LIMIT = 240
 private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(SourceKey.PIXIV, SourceKey.GELBOORU)
 private val WHITESPACE_REGEX = Regex("\\s+")
+private val PIXIV_TRAILING_PARENTHESIS_REGEX = Regex("\\s*\\([^)]*\\)\\s*$")

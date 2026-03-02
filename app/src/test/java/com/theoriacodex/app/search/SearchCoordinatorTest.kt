@@ -370,7 +370,7 @@ class SearchCoordinatorTest {
     }
 
     @Test
-    fun `unified search treats underscores as spaces for pixiv tags`() = runTest {
+    fun `unified search normalizes pixiv tags by removing underscores and trailing disambiguation`() = runTest {
         val pixivAdapter = RecordingAdapter(sourceKey = SourceKey.PIXIV)
         val gelbooruAdapter = RecordingAdapter(sourceKey = SourceKey.GELBOORU)
         val registry = CompatibilityRegistry(
@@ -386,15 +386,15 @@ class SearchCoordinatorTest {
             uiRestoreRepository = InMemoryUiRestoreRepository(),
         )
         coordinator.initialize()
-        coordinator.addIncludeTag("blue_hair")
-        coordinator.addExcludeTag("long_hair")
+        coordinator.addIncludeTag("this_is_a_tag_(Game)")
+        coordinator.addExcludeTag("nsfw_(content)")
 
         coordinator.applyDraft()
 
-        assertEquals(listOf("blue hair"), pixivAdapter.lastSearchQuery?.includeTags)
-        assertEquals(listOf("long hair"), pixivAdapter.lastSearchQuery?.excludeTags)
-        assertEquals(listOf("blue_hair"), gelbooruAdapter.lastSearchQuery?.includeTags)
-        assertEquals(listOf("long_hair"), gelbooruAdapter.lastSearchQuery?.excludeTags)
+        assertEquals(listOf("this is a tag"), pixivAdapter.lastSearchQuery?.includeTags)
+        assertEquals(listOf("nsfw"), pixivAdapter.lastSearchQuery?.excludeTags)
+        assertEquals(listOf("this_is_a_tag_(Game)"), gelbooruAdapter.lastSearchQuery?.includeTags)
+        assertEquals(listOf("nsfw_(content)"), gelbooruAdapter.lastSearchQuery?.excludeTags)
     }
 
     @Test
