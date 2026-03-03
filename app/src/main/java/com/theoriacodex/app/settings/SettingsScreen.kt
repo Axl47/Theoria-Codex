@@ -29,6 +29,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CacheSnapshot
+import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ScenarioPreset
 import com.theoriacodex.domain.model.SourceKey
@@ -38,7 +39,9 @@ fun SettingsScreen(
     settings: AppSettings,
     recommendationProfiles: List<RecommendationProfile>,
     activeProfileId: String,
+    activeProfileName: String,
     likesCount: Int,
+    forYouBlacklistEntries: List<ForYouBlacklistEntry>,
     availableSources: List<SourceKey>,
     cacheSnapshot: CacheSnapshot,
     showDeveloperScenarios: Boolean,
@@ -59,6 +62,7 @@ fun SettingsScreen(
     onAddProfile: (String) -> Unit,
     onRemoveProfile: (String) -> Unit,
     onClearLikesForActiveProfile: () -> Unit,
+    onRemoveForYouBlacklistEntry: (SourceKey, List<String>) -> Unit,
     onSetCacheFullImageOnSave: (Boolean) -> Unit,
     onSetScenarioPreset: (ScenarioPreset) -> Unit,
     onClearThumbnailCache: () -> Unit,
@@ -142,6 +146,46 @@ fun SettingsScreen(
                     onClick = onClearLikesForActiveProfile,
                 ) {
                     Text("Clear active profile likes")
+                }
+            }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("For You blacklist", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = "Hidden tag sets for $activeProfileName",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (forYouBlacklistEntries.isEmpty()) {
+                    Text(
+                        text = "No blacklisted tags yet.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else {
+                    forYouBlacklistEntries.forEach { entry ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "${entry.source.name}: ${entry.tags.joinToString(" + ")}",
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            TextButton(
+                                onClick = { onRemoveForYouBlacklistEntry(entry.source, entry.tags) },
+                            ) {
+                                Text("Remove")
+                            }
+                        }
+                    }
                 }
             }
         }

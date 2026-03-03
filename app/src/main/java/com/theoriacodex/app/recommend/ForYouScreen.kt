@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
@@ -61,6 +62,7 @@ fun ForYouScreen(
     likedPostIds: Set<PostId>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     onToggleLike: (Post) -> Unit,
+    onBlacklistCurrentSeed: () -> Unit,
     onOpenViewer: (List<Post>, ViewerLaunchContext) -> Unit,
     onGoToSearch: () -> Unit,
 ) {
@@ -163,18 +165,29 @@ fun ForYouScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            IconButton(
-                enabled = likesCount > 0 && !coordinator.loading,
-                onClick = {
-                    scope.launch {
-                        coordinator.refresh(shuffle = true)
-                    }
-                },
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Shuffle recommendations",
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                IconButton(
+                    enabled = likesCount > 0 && !coordinator.loading && coordinator.seedSummaryBySource.isNotEmpty(),
+                    onClick = onBlacklistCurrentSeed,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Blacklist current recommendation tags",
+                    )
+                }
+                IconButton(
+                    enabled = likesCount > 0 && !coordinator.loading,
+                    onClick = {
+                        scope.launch {
+                            coordinator.refresh(shuffle = true)
+                        }
+                    },
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Shuffle recommendations",
+                    )
+                }
             }
         }
 

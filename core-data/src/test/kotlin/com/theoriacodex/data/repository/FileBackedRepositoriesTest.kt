@@ -12,6 +12,7 @@ import java.nio.file.Files
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -131,6 +132,13 @@ class FileBackedRepositoriesTest {
         val dir = Files.createTempDirectory("settings-profiles-").toFile()
         val first = FileBackedSettingsRepository(dir)
         val created = first.addRecommendationProfile("Anime Mood")
+        assertTrue(
+            first.addForYouBlacklistEntry(
+                profileId = created.profileId,
+                source = SourceKey.PIXIV,
+                tags = listOf("portrait", "artist"),
+            )
+        )
         first.setActiveProfile(created.profileId)
 
         val second = FileBackedSettingsRepository(dir)
@@ -138,9 +146,47 @@ class FileBackedRepositoriesTest {
 
         assertEquals(created.profileId, loaded.activeProfileId)
         assertTrue(loaded.recommendationProfiles.any { it.profileId == created.profileId && it.name == "Anime Mood" })
+        assertEquals(1, loaded.forYouBlacklistByProfile[created.profileId].orEmpty().size)
         assertTrue(second.removeRecommendationProfile(created.profileId))
         val third = FileBackedSettingsRepository(dir)
         assertTrue(third.observeSettings().first().recommendationProfiles.none { it.profileId == created.profileId })
+        assertTrue(third.observeSettings().first().forYouBlacklistByProfile[created.profileId].isNullOrEmpty())
+    }
+
+    @Test
+    fun `settings repository persists for you blacklist entries`() = runTest {
+        val dir = Files.createTempDirectory("settings-for-you-blacklist-").toFile()
+        val first = FileBackedSettingsRepository(dir)
+        val profileId = first.observeSettings().first().activeProfileId
+
+        assertTrue(
+            first.addForYouBlacklistEntry(
+                profileId = profileId,
+                source = SourceKey.GELBOORU,
+                tags = listOf("Cloud", "Sky"),
+            )
+        )
+        assertFalse(
+            first.addForYouBlacklistEntry(
+                profileId = profileId,
+                source = SourceKey.GELBOORU,
+                tags = listOf("sky", "cloud"),
+            )
+        )
+
+        val second = FileBackedSettingsRepository(dir)
+        val loaded = second.observeSettings().first()
+        assertEquals(listOf("cloud", "sky"), loaded.forYouBlacklistByProfile[profileId].orEmpty().first().tags)
+
+        assertTrue(
+            second.removeForYouBlacklistEntry(
+                profileId = profileId,
+                source = SourceKey.GELBOORU,
+                tags = listOf("cloud", "sky"),
+            )
+        )
+        val third = FileBackedSettingsRepository(dir)
+        assertTrue(third.observeSettings().first().forYouBlacklistByProfile[profileId].isNullOrEmpty())
     }
 
     @Test

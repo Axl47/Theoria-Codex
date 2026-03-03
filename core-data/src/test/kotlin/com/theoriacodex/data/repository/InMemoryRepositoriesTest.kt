@@ -146,6 +146,13 @@ class InMemoryRepositoriesTest {
         val repo = InMemorySettingsRepository()
 
         val created = repo.addRecommendationProfile("Sketching")
+        assertTrue(
+            repo.addForYouBlacklistEntry(
+                profileId = created.profileId,
+                source = SourceKey.PIXIV,
+                tags = listOf("artist", "portrait"),
+            )
+        )
         var settings = repo.observeSettings().first()
 
         assertTrue(settings.recommendationProfiles.any { it.profileId == created.profileId && it.name == "Sketching" })
@@ -154,6 +161,7 @@ class InMemoryRepositoriesTest {
         assertTrue(repo.removeRecommendationProfile(created.profileId))
         settings = repo.observeSettings().first()
         assertTrue(settings.recommendationProfiles.none { it.profileId == created.profileId })
+        assertTrue(settings.forYouBlacklistByProfile[created.profileId].isNullOrEmpty())
 
         val removable = settings.recommendationProfiles.drop(1)
         removable.forEach { profile ->
@@ -162,6 +170,42 @@ class InMemoryRepositoriesTest {
         settings = repo.observeSettings().first()
         assertEquals(1, settings.recommendationProfiles.size)
         assertFalse(repo.removeRecommendationProfile(settings.recommendationProfiles.first().profileId))
+    }
+
+    @Test
+    fun `settings repository deduplicates for you blacklist entries`() = runTest {
+        val repo = InMemorySettingsRepository()
+        val profileId = repo.observeSettings().first().activeProfileId
+
+        assertTrue(
+            repo.addForYouBlacklistEntry(
+                profileId = profileId,
+                source = SourceKey.PIXIV,
+                tags = listOf("Night", "Cat"),
+            )
+        )
+        assertFalse(
+            repo.addForYouBlacklistEntry(
+                profileId = profileId,
+                source = SourceKey.PIXIV,
+                tags = listOf("cat", "night"),
+            )
+        )
+
+        var settings = repo.observeSettings().first()
+        val entries = settings.forYouBlacklistByProfile[profileId].orEmpty()
+        assertEquals(1, entries.size)
+        assertEquals(listOf("cat", "night"), entries.first().tags)
+
+        assertTrue(
+            repo.removeForYouBlacklistEntry(
+                profileId = profileId,
+                source = SourceKey.PIXIV,
+                tags = listOf("cat", "night"),
+            )
+        )
+        settings = repo.observeSettings().first()
+        assertTrue(settings.forYouBlacklistByProfile[profileId].isNullOrEmpty())
     }
 
     @Test

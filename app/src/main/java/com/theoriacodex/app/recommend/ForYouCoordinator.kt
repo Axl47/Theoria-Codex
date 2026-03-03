@@ -81,10 +81,15 @@ class ForYouCoordinator(
     fun onSettingsChanged(settings: AppSettings): Boolean {
         val previousRuntime = runtimeSettings.runtime
         val previousProfile = runtimeSettings.activeProfileId
+        val previousBlacklist = runtimeSettings.forYouBlacklistByProfile
         runtimeSettings = settings
         activeProfileId = settings.activeProfileId
         return hasExecutedFeed &&
-            (previousRuntime != settings.runtime || previousProfile != settings.activeProfileId)
+            (
+                previousRuntime != settings.runtime ||
+                    previousProfile != settings.activeProfileId ||
+                    previousBlacklist != settings.forYouBlacklistByProfile
+                )
     }
 
     suspend fun refresh(shuffle: Boolean = true) {
@@ -96,6 +101,27 @@ class ForYouCoordinator(
         if (sortMode == mode) return
         sortMode = mode
         refresh(shuffle = false)
+    }
+
+    suspend fun blacklistCurrentSeedAndRefresh(): Int {
+        val currentSeed = seedSummaryBySource
+        if (currentSeed.isEmpty()) return 0
+
+        var additions = 0
+        currentSeed.forEach { (source, tags) ->
+            val added = settingsRepository.addForYouBlacklistEntry(
+                profileId = activeProfileId,
+                source = source,
+                tags = tags,
+            )
+            if (added) {
+                additions += 1
+            }
+        }
+
+        runtimeSettings = settingsRepository.observeSettings().first()
+        refresh(shuffle = true)
+        return additions
     }
 
     fun clear() {
@@ -175,6 +201,7 @@ class ForYouCoordinator(
         nextPageTokens = emptyMap()
         try {
             val enabledSources = effectiveEnabledSources()
+            val blacklistedSeedKeys = blacklistedSeedKeysBySource()
             val likes = likesRepository.observeLikes(activeProfileId).first()
             activeProfileLikesCount = likes.size
             affinityStatsBySource = buildAffinityBySource(
@@ -195,11 +222,15 @@ class ForYouCoordinator(
                 likes = likes,
                 enabledSources = enabledSources,
                 shuffle = shuffle,
+                blacklistedSeedKeys = blacklistedSeedKeys,
             )
             val initialSeed = if (personalizedSeed.isNotEmpty()) {
                 personalizedSeed
             } else {
-                buildTrendingSeed(enabledSources)
+                buildTrendingSeed(
+                    enabledSources = enabledSources,
+                    blacklistedSeedKeys = blacklistedSeedKeys,
+                )
             }
 
             if (initialSeed.isEmpty()) {
@@ -216,7 +247,10 @@ class ForYouCoordinator(
                 return
             }
 
-            val trendingSeed = buildTrendingSeed(enabledSources)
+            val trendingSeed = buildTrendingSeed(
+                enabledSources = enabledSources,
+                blacklistedSeedKeys = blacklistedSeedKeys,
+            )
             if (trendingSeed.isNotEmpty() && trendingSeed != initialSeed) {
                 val trendingResult = runFeedSeed(trendingSeed)
                 applyFeedResult(seed = trendingSeed, result = trendingResult)
@@ -279,6 +313,7 @@ class ForYouCoordinator(
         likes: List<LikedPost>,
         enabledSources: Set<SourceKey>,
         shuffle: Boolean,
+        blacklistedSeedKeys: Map<SourceKey, Set<String>>,
     ): Map<SourceKey, List<String>> {
         val random = if (shuffle) {
             Random(System.currentTimeMillis())
@@ -298,11 +333,12 @@ class ForYouCoordinator(
                     return@mapNotNull null
                 }
                 val fallbackTags = fallbackTagsForSource(source)
-                val includeTags = ForYouTagSetGenerator.generate(
+                val includeTags = selectAllowedSeed(
                     source = source,
                     likedDocuments = documents,
                     fallbackCandidates = fallbackTags,
                     random = random,
+                    blockedKeys = blacklistedSeedKeys[source].orEmpty(),
                 )
                 includeTags.takeIf { it.isNotEmpty() }?.let { tags -> source to tags }
             }
@@ -311,20 +347,46 @@ class ForYouCoordinator(
 
     private suspend fun buildTrendingSeed(
         enabledSources: Set<SourceKey>,
+        blacklistedSeedKeys: Map<SourceKey, Set<String>>,
     ): Map<SourceKey, List<String>> {
         return enabledSources
             .sortedBy { it.name }
             .mapNotNull { source ->
                 val fallbackTags = fallbackTagsForSource(source)
-                val includeTags = ForYouTagSetGenerator.generate(
+                val includeTags = selectAllowedSeed(
                     source = source,
                     likedDocuments = emptyList(),
                     fallbackCandidates = fallbackTags,
                     random = Random(source.name.hashCode()),
+                    blockedKeys = blacklistedSeedKeys[source].orEmpty(),
                 )
                 includeTags.takeIf { it.isNotEmpty() }?.let { tags -> source to tags }
             }
             .toMap()
+    }
+
+    private fun selectAllowedSeed(
+        source: SourceKey,
+        likedDocuments: List<List<String>>,
+        fallbackCandidates: List<String>,
+        random: Random,
+        blockedKeys: Set<String>,
+    ): List<String> {
+        repeat(FOR_YOU_SEED_ATTEMPTS) {
+            val includeTags = ForYouTagSetGenerator.generate(
+                source = source,
+                likedDocuments = likedDocuments,
+                fallbackCandidates = fallbackCandidates,
+                random = random,
+            )
+            if (includeTags.isEmpty()) {
+                return emptyList()
+            }
+            if (seedKey(includeTags) !in blockedKeys) {
+                return includeTags
+            }
+        }
+        return emptyList()
     }
 
     private suspend fun fallbackTagsForSource(source: SourceKey): List<String> {
@@ -423,6 +485,31 @@ class ForYouCoordinator(
             .filterValues { documents -> documents.isNotEmpty() }
         return buildSourceTagAffinity(documentsBySource = documentsBySource)
     }
+
+    private fun blacklistedSeedKeysBySource(): Map<SourceKey, Set<String>> {
+        return runtimeSettings
+            .forYouBlacklistByProfile[activeProfileId]
+            .orEmpty()
+            .groupBy { entry -> entry.source }
+            .mapValues { (_, entries) ->
+                entries
+                    .asSequence()
+                    .map { entry -> seedKey(entry.tags) }
+                    .filter { key -> key.isNotBlank() }
+                    .toSet()
+            }
+    }
+
+    private fun seedKey(tags: List<String>): String {
+        return tags
+            .asSequence()
+            .map { tag -> tag.trim().lowercase() }
+            .filter { tag -> tag.isNotBlank() }
+            .distinct()
+            .sorted()
+            .joinToString(separator = "+")
+    }
 }
 
 private const val TRENDING_FALLBACK_LIMIT = 20
+private const val FOR_YOU_SEED_ATTEMPTS = 16

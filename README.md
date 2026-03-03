@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-03-01T19:05
+updated_at: 2026-03-02T22:45
 ---
 # Theoria Codex
 
@@ -13,6 +13,7 @@ Recent updates:
 - The app now registers `.json` open intents so opening a Codex export file launches Theoria Codex and attempts import automatically.
 - Codex import now accepts provider-backed JSON URIs (including chat/file-share `content://` streams) in addition to public-folder files.
 - Codex names now auto-deduplicate on create/rename/import by appending numeric suffixes (` 2`, ` 3`, ...).
+- `For You` now supports profile-scoped blacklist controls: trash the current recommendation seed to hide it and refresh immediately, then manage/remove blacklisted tag sets from Settings.
 
 - The project includes five top-level tabs:
   - Search

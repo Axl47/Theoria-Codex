@@ -73,6 +73,11 @@ data class RecommendationProfile(
     val name: String,
 )
 
+data class ForYouBlacklistEntry(
+    val source: SourceKey,
+    val tags: List<String>,
+)
+
 private val DEFAULT_RECOMMENDATION_PROFILES = listOf(
     RecommendationProfile(profileId = "profile-main", name = "Main"),
     RecommendationProfile(profileId = "profile-alt", name = "Alt"),
@@ -89,6 +94,7 @@ data class AppSettings(
     val lastSelectedTabRoute: String = "search",
     val recommendationProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
     val activeProfileId: String = defaultRecommendationProfiles().first().profileId,
+    val forYouBlacklistByProfile: Map<String, List<ForYouBlacklistEntry>> = emptyMap(),
 )
 
 enum class ScenarioPreset {
@@ -109,6 +115,8 @@ interface SettingsRepository {
     suspend fun setActiveProfile(profileId: String)
     suspend fun addRecommendationProfile(name: String): RecommendationProfile
     suspend fun removeRecommendationProfile(profileId: String): Boolean
+    suspend fun addForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean
+    suspend fun removeForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean
 }
 
 data class CacheSnapshot(

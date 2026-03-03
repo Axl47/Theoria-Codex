@@ -130,6 +130,7 @@ import com.theoriacodex.data.repository.FileBackedLikesRepository
 import com.theoriacodex.data.repository.FileBackedQueryRepository
 import com.theoriacodex.data.repository.FileBackedSettingsRepository
 import com.theoriacodex.data.repository.FileBackedUiRestoreRepository
+import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -308,6 +309,14 @@ fun TheoriaApp(
     val activeProfileLikes by likesRepository
         .observeLikes(activeRecommendationProfile.profileId)
         .collectAsState(initial = emptyList())
+    val activeProfileForYouBlacklist = remember(settings.forYouBlacklistByProfile, activeRecommendationProfile.profileId) {
+        settings.forYouBlacklistByProfile[activeRecommendationProfile.profileId]
+            .orEmpty()
+            .sortedWith(
+                compareBy<ForYouBlacklistEntry> { entry -> entry.source.name }
+                    .thenBy { entry -> entry.tags.joinToString(separator = "+") }
+            )
+    }
     val cacheSnapshot by cacheRepository.observeSnapshot().collectAsState(
         initial = CacheSnapshot(thumbnailCount = 0, fullImageCount = 0),
     )
@@ -1380,6 +1389,25 @@ fun TheoriaApp(
                                     toggleLikeAndSyncCodex(post)
                                 }
                             },
+                            onBlacklistCurrentSeed = {
+                                scope.launch {
+                                    if (forYouCoordinator.loading) return@launch
+                                    val added = forYouCoordinator.blacklistCurrentSeedAndRefresh()
+                                    if (added > 0) {
+                                        Toast.makeText(
+                                            appContext,
+                                            "Blacklisted $added recommendation tag set${if (added > 1) "s" else ""}",
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    } else {
+                                        Toast.makeText(
+                                            appContext,
+                                            "Current recommendation is already blacklisted",
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                    }
+                                }
+                            },
                             onOpenViewer = { posts, context ->
                                 viewerSession = ViewerSession(
                                     posts = posts,
@@ -1518,7 +1546,9 @@ fun TheoriaApp(
                             settings = settings,
                             recommendationProfiles = settings.recommendationProfiles,
                             activeProfileId = activeRecommendationProfile.profileId,
+                            activeProfileName = activeRecommendationProfile.name,
                             likesCount = activeProfileLikes.size,
+                            forYouBlacklistEntries = activeProfileForYouBlacklist,
                             availableSources = searchCoordinator.availableSources,
                             cacheSnapshot = cacheSnapshot,
                             showDeveloperScenarios = false,
@@ -1601,6 +1631,15 @@ fun TheoriaApp(
                             },
                             onClearLikesForActiveProfile = {
                                 scope.launch { clearProfileLikesAndSyncCodex(activeRecommendationProfile.profileId) }
+                            },
+                            onRemoveForYouBlacklistEntry = { source, tags ->
+                                scope.launch {
+                                    settingsRepository.removeForYouBlacklistEntry(
+                                        profileId = activeRecommendationProfile.profileId,
+                                        source = source,
+                                        tags = tags,
+                                    )
+                                }
                             },
                             onSetCacheFullImageOnSave = { enabled ->
                                 scope.launch { settingsRepository.setCacheFullImageOnSave(enabled) }

@@ -259,6 +259,52 @@ class InMemorySettingsRepository : SettingsRepository {
             current.copy(
                 recommendationProfiles = remaining,
                 activeProfileId = nextActive,
+                forYouBlacklistByProfile = current.forYouBlacklistByProfile - profileId,
+            )
+        )
+        return true
+    }
+
+    override suspend fun addForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean {
+        val normalizedTags = normalizeBlacklistTags(tags)
+        if (normalizedTags.isEmpty()) return false
+        val current = settings.value
+        val existing = current.forYouBlacklistByProfile[profileId].orEmpty()
+        val alreadyPresent = existing.any { entry ->
+            entry.source == source && normalizeBlacklistTags(entry.tags) == normalizedTags
+        }
+        if (alreadyPresent) return false
+        val updated = existing + ForYouBlacklistEntry(
+            source = source,
+            tags = normalizedTags,
+        )
+        settings.value = normalizeSettings(
+            current.copy(
+                forYouBlacklistByProfile = current.forYouBlacklistByProfile + (profileId to updated),
+            )
+        )
+        return true
+    }
+
+    override suspend fun removeForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean {
+        val normalizedTags = normalizeBlacklistTags(tags)
+        if (normalizedTags.isEmpty()) return false
+        val current = settings.value
+        val existing = current.forYouBlacklistByProfile[profileId].orEmpty()
+        if (existing.isEmpty()) return false
+        val updated = existing.filterNot { entry ->
+            entry.source == source && normalizeBlacklistTags(entry.tags) == normalizedTags
+        }
+        if (updated.size == existing.size) return false
+        val updatedMap = current.forYouBlacklistByProfile.toMutableMap()
+        if (updated.isEmpty()) {
+            updatedMap.remove(profileId)
+        } else {
+            updatedMap[profileId] = updated
+        }
+        settings.value = normalizeSettings(
+            current.copy(
+                forYouBlacklistByProfile = updatedMap,
             )
         )
         return true
@@ -449,11 +495,43 @@ private fun normalizeSettings(settings: AppSettings): AppSettings {
     val activeProfileId = settings.activeProfileId
         .takeIf { active -> normalizedProfiles.any { profile -> profile.profileId == active } }
         ?: normalizedProfiles.first().profileId
+    val profileIds = normalizedProfiles.mapTo(mutableSetOf()) { profile -> profile.profileId }
+    val normalizedBlacklist = settings.forYouBlacklistByProfile
+        .mapNotNull { (profileId, entries) ->
+            val normalizedProfileId = profileId.trim()
+            if (normalizedProfileId !in profileIds) return@mapNotNull null
+            val normalizedEntries = entries
+                .asSequence()
+                .mapNotNull { entry ->
+                    val normalizedTags = normalizeBlacklistTags(entry.tags)
+                    if (normalizedTags.isEmpty()) {
+                        null
+                    } else {
+                        ForYouBlacklistEntry(source = entry.source, tags = normalizedTags)
+                    }
+                }
+                .distinctBy { entry -> "${entry.source.name}:${entry.tags.joinToString("+")}" }
+                .toList()
+            normalizedProfileId to normalizedEntries
+        }
+        .toMap()
+        .filterValues { entries -> entries.isNotEmpty() }
     return settings.copy(
         runtime = settings.runtime.copy(sourceWeights = normalizedWeights),
         recommendationProfiles = normalizedProfiles,
         activeProfileId = activeProfileId,
+        forYouBlacklistByProfile = normalizedBlacklist,
     )
+}
+
+private fun normalizeBlacklistTags(tags: List<String>): List<String> {
+    return tags
+        .asSequence()
+        .map { it.trim().lowercase() }
+        .filter { it.isNotBlank() }
+        .distinct()
+        .sorted()
+        .toList()
 }
 
 private fun normalizeWeights(

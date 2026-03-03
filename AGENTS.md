@@ -27,9 +27,10 @@ Whenever new updates are made, this file (`AGENTS.md`) should be updated with an
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/.github/workflows/main-prerelease.yml`: CI release publisher contract for main-channel updater (release title/tag `v<major>.<minor>.<patch>` plus semver-derived Android `versionCode`, with updater backward-compatibility for legacy `main-vc<versionCode>-<sha>` tags and fixed `theoria-codex-main.apk` asset).
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/execplans/for-you-recommendations-execplan.md`: living ExecPlan for the two-profile recommendation system, hearted-tag memory, and `For You` tab rollout.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/execplans/dynamic-tag-refresh-and-count-cache-execplan.md`: living ExecPlan for automatic trending-tag refresh, seen-tag ingestion, and Gelbooru batch tag-count caching.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/execplans/for-you-blacklist-execplan.md`: living ExecPlan for profile-scoped For You blacklist behavior, feed trash action, and Settings blacklist management.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/recommend/`: recommendation runtime package containing `ForYouCoordinator`, `ForYouScreen`, and post training-tag extraction helpers.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-domain/src/main/kotlin/com/theoriacodex/domain/recommendation/`: source-aware tag affinity and recommendation tag-set generator used by the app `For You` feed.
-- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-data/src/main/kotlin/com/theoriacodex/data/repository/FileBackedRepositories.kt` (`likes_store.json`): local file-backed likes repository with per-profile/per-post tag memory used by recommendation training.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-data/src/main/kotlin/com/theoriacodex/data/repository/FileBackedRepositories.kt` (`likes_store.json`, `settings_store.json`): local file-backed likes repository with per-profile/per-post tag memory used by recommendation training, plus profile-scoped For You blacklist persistence in settings.
 
 ## Final Output
 
