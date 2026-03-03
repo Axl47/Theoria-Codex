@@ -17,6 +17,8 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
@@ -69,12 +72,14 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import com.theoriacodex.app.R
 import com.theoriacodex.app.BuildConfig
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -156,6 +161,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 enum class TopLevelDestination(val route: String, val label: String) {
     Search("search", "Search"),
@@ -1008,6 +1014,39 @@ fun TheoriaApp(
     val bottomBarHeight = bottomBarHeightDp.dp
     val bottomBarIconSize = bottomBarIconSizeDp.dp
     val tabSwipeThresholdPx = with(density) { TAB_SWIPE_THRESHOLD_DP.dp.toPx() }
+    val tabSwipeTrackStartPx = with(density) { TAB_SWIPE_TRACK_START_DP.dp.toPx() }
+    var navHostWidthPx by remember { mutableStateOf(0f) }
+    var tabSwipeOffsetTargetPx by remember { mutableStateOf(0f) }
+    var tabSwipeAnimationDurationMs by remember { mutableStateOf(0) }
+    var pendingSwipeDestination by remember { mutableStateOf<TopLevelDestination?>(null) }
+    val animatedTabSwipeOffsetPx by animateFloatAsState(
+        targetValue = tabSwipeOffsetTargetPx,
+        animationSpec = tween(durationMillis = tabSwipeAnimationDurationMs),
+        label = "tabSwipeOffset",
+    )
+
+    LaunchedEffect(showBottomBar) {
+        if (!showBottomBar) {
+            pendingSwipeDestination = null
+            tabSwipeAnimationDurationMs = 0
+            tabSwipeOffsetTargetPx = 0f
+        }
+    }
+
+    LaunchedEffect(pendingSwipeDestination) {
+        val destination = pendingSwipeDestination ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(TAB_SWIPE_COMMIT_DURATION_MS.toLong())
+        navController.navigate(destination.route) {
+            popUpTo(navController.graph.findStartDestination().id) {
+                saveState = true
+            }
+            launchSingleTop = true
+            restoreState = true
+        }
+        pendingSwipeDestination = null
+        tabSwipeAnimationDurationMs = TAB_SWIPE_SETTLE_DURATION_MS
+        tabSwipeOffsetTargetPx = 0f
+    }
 
     LaunchedEffect(currentRoute) {
         if (currentRoute in TopLevelDestination.entries.map { it.route }) {
@@ -1288,16 +1327,35 @@ fun TheoriaApp(
                     startDestination = startDestination,
                     modifier = Modifier
                         .padding(innerPadding)
-                        .pointerInput(showBottomBar, tabSwipeThresholdPx) {
+                        .onSizeChanged { size ->
+                            navHostWidthPx = size.width.toFloat()
+                        }
+                        .offset {
+                            IntOffset(
+                                x = animatedTabSwipeOffsetPx.roundToInt(),
+                                y = 0,
+                            )
+                        }
+                        .pointerInput(showBottomBar, tabSwipeThresholdPx, tabSwipeTrackStartPx, navHostWidthPx) {
                             if (!showBottomBar) return@pointerInput
                             awaitEachGesture {
+                                if (pendingSwipeDestination != null) {
+                                    return@awaitEachGesture
+                                }
                                 val firstDown = awaitFirstDown(
                                     requireUnconsumed = false,
                                     pass = PointerEventPass.Initial,
                                 )
                                 val pointerId = firstDown.id
+                                val activeRoute = latestCurrentRoute.value ?: return@awaitEachGesture
+                                val currentTabIndex = TopLevelDestination.entries.indexOfFirst { tab ->
+                                    tab.route == activeRoute
+                                }
+                                if (currentTabIndex == -1) return@awaitEachGesture
+
                                 var totalHorizontalDrag = 0f
                                 var totalVerticalDrag = 0f
+                                var trackingHorizontal = false
 
                                 while (true) {
                                     val event = awaitPointerEvent(pass = PointerEventPass.Initial)
@@ -1307,18 +1365,44 @@ fun TheoriaApp(
                                     val delta = change.positionChangeIgnoreConsumed()
                                     totalHorizontalDrag += delta.x
                                     totalVerticalDrag += delta.y
+
+                                    if (!trackingHorizontal && abs(totalHorizontalDrag) >= tabSwipeTrackStartPx) {
+                                        if (abs(totalHorizontalDrag) > abs(totalVerticalDrag) * TAB_SWIPE_HORIZONTAL_BIAS) {
+                                            trackingHorizontal = true
+                                        } else {
+                                            break
+                                        }
+                                    }
+
+                                    if (trackingHorizontal) {
+                                        val dragOffset = when {
+                                            totalHorizontalDrag > 0f && currentTabIndex == 0 -> {
+                                                totalHorizontalDrag * TAB_SWIPE_EDGE_DAMPING
+                                            }
+
+                                            totalHorizontalDrag < 0f && currentTabIndex == TopLevelDestination.entries.lastIndex -> {
+                                                totalHorizontalDrag * TAB_SWIPE_EDGE_DAMPING
+                                            }
+
+                                            else -> totalHorizontalDrag
+                                        }
+                                        tabSwipeAnimationDurationMs = 0
+                                        tabSwipeOffsetTargetPx = dragOffset
+                                    }
+
                                     if (!change.pressed) break
                                 }
 
-                                if (abs(totalHorizontalDrag) < tabSwipeThresholdPx) return@awaitEachGesture
-                                if (abs(totalHorizontalDrag) <= abs(totalVerticalDrag) * TAB_SWIPE_HORIZONTAL_BIAS) {
+                                if (!trackingHorizontal || abs(totalHorizontalDrag) < tabSwipeThresholdPx) {
+                                    tabSwipeAnimationDurationMs = TAB_SWIPE_SETTLE_DURATION_MS
+                                    tabSwipeOffsetTargetPx = 0f
                                     return@awaitEachGesture
                                 }
-                                val activeRoute = latestCurrentRoute.value ?: return@awaitEachGesture
-                                val currentTabIndex = TopLevelDestination.entries.indexOfFirst { tab ->
-                                    tab.route == activeRoute
+                                if (abs(totalHorizontalDrag) <= abs(totalVerticalDrag) * TAB_SWIPE_HORIZONTAL_BIAS) {
+                                    tabSwipeAnimationDurationMs = TAB_SWIPE_SETTLE_DURATION_MS
+                                    tabSwipeOffsetTargetPx = 0f
+                                    return@awaitEachGesture
                                 }
-                                if (currentTabIndex == -1) return@awaitEachGesture
 
                                 val targetTabIndex = if (totalHorizontalDrag < 0f) {
                                     currentTabIndex + 1
@@ -1326,14 +1410,22 @@ fun TheoriaApp(
                                     currentTabIndex - 1
                                 }
                                 val destination = TopLevelDestination.entries.getOrNull(targetTabIndex)
-                                    ?: return@awaitEachGesture
-                                navController.navigate(destination.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
+                                if (destination == null) {
+                                    tabSwipeAnimationDurationMs = TAB_SWIPE_SETTLE_DURATION_MS
+                                    tabSwipeOffsetTargetPx = 0f
+                                    return@awaitEachGesture
                                 }
+
+                                val containerWidth = navHostWidthPx.takeIf { it > 0f }
+                                    ?: (tabSwipeThresholdPx * TAB_SWIPE_FALLBACK_WIDTH_MULTIPLIER)
+                                val targetOffset = if (totalHorizontalDrag < 0f) {
+                                    -containerWidth
+                                } else {
+                                    containerWidth
+                                }
+                                tabSwipeAnimationDurationMs = TAB_SWIPE_COMMIT_DURATION_MS
+                                tabSwipeOffsetTargetPx = targetOffset
+                                pendingSwipeDestination = destination
                             }
                         },
                 ) {
@@ -2532,8 +2624,13 @@ private const val MIN_BOTTOM_BAR_HEIGHT_DP = 68
 private const val MAX_BOTTOM_BAR_HEIGHT_DP = 88
 private const val MIN_BOTTOM_BAR_ICON_DP = 24
 private const val MAX_BOTTOM_BAR_ICON_DP = 30
+private const val TAB_SWIPE_TRACK_START_DP = 12
 private const val TAB_SWIPE_THRESHOLD_DP = 72
 private const val TAB_SWIPE_HORIZONTAL_BIAS = 1.2f
+private const val TAB_SWIPE_EDGE_DAMPING = 0.35f
+private const val TAB_SWIPE_FALLBACK_WIDTH_MULTIPLIER = 3f
+private const val TAB_SWIPE_SETTLE_DURATION_MS = 180
+private const val TAB_SWIPE_COMMIT_DURATION_MS = 120
 private const val DEFAULT_MAIN_PROFILE_ID = "profile-main"
 private const val DEFAULT_PROFILE_NAME = "Main"
 private const val LIKES_CODEX_ID_PREFIX = "system_likes_codex"
