@@ -223,7 +223,7 @@ fun TheoriaApp(
         RealAdapterRegistry(
             credentialsProvider = credentialsStore,
             httpClient = sourceHttpClient,
-            exposedSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
+            exposedSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.NHENTAI),
         )
     }
     val updateStateStore = remember(storageDirectory) {
@@ -2153,11 +2153,29 @@ private fun parseGelbooruPostIdFromUri(uri: Uri): String? {
     return postId?.takeIf(String::isDigitsOnly)
 }
 
+private fun parseNhentaiGalleryIdFromUri(uri: Uri): String? {
+    val scheme = uri.scheme?.lowercase().orEmpty()
+    val host = uri.host?.lowercase().orEmpty()
+    if (scheme != "https" && scheme != "http") return null
+    if (host != "nhentai.net" && host != "www.nhentai.net") return null
+
+    val path = uri.encodedPath.orEmpty()
+    val match = Regex("^/g/(\\d+)(?:/)?$").matchEntire(path) ?: return null
+    return match.groupValues.getOrNull(1)?.takeIf(String::isDigitsOnly)
+}
+
 private fun parseExternalPostDeepLink(uri: Uri): ExternalPostDeepLink? {
     parsePixivPostIdFromUri(uri)?.let { postId ->
         return ExternalPostDeepLink(
             source = SourceKey.PIXIV,
             sourceLabel = "Pixiv",
+            postId = postId,
+        )
+    }
+    parseNhentaiGalleryIdFromUri(uri)?.let { postId ->
+        return ExternalPostDeepLink(
+            source = SourceKey.NHENTAI,
+            sourceLabel = "NHentai",
             postId = postId,
         )
     }
@@ -2335,6 +2353,12 @@ private fun enqueuePostDownload(context: Context, post: Post): Boolean {
         SourceKey.AIBOORU -> {
             request
                 .addRequestHeader("Referer", "https://aibooru.online/")
+                .addRequestHeader("User-Agent", "Mozilla/5.0")
+        }
+
+        SourceKey.NHENTAI -> {
+            request
+                .addRequestHeader("Referer", "https://nhentai.net/")
                 .addRequestHeader("User-Agent", "Mozilla/5.0")
         }
     }

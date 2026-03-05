@@ -1594,6 +1594,11 @@ private fun searchRequestHeaders(sourceKey: SourceKey): Map<String, String> {
             "Referer" to "https://aibooru.online/",
             "User-Agent" to "Mozilla/5.0",
         )
+
+        SourceKey.NHENTAI -> mapOf(
+            "Referer" to "https://nhentai.net/",
+            "User-Agent" to "Mozilla/5.0",
+        )
     }
 }
 

@@ -19,17 +19,18 @@ class StubAdapterRegistryTest {
 
         val result = registry.unifiedOrchestrator().search(
             query = sampleQuery(),
-            enabledSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.AIBOORU),
+            enabledSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.NHENTAI),
             pageTokens = emptyMap(),
             weights = mapOf(
-                SourceKey.PIXIV to 0.5,
-                SourceKey.GELBOORU to 0.3,
-                SourceKey.AIBOORU to 0.2,
+                SourceKey.PIXIV to 0.45,
+                SourceKey.GELBOORU to 0.25,
+                SourceKey.AIBOORU to 0.15,
+                SourceKey.NHENTAI to 0.15,
             ),
         )
 
         assertTrue(result.items.isNotEmpty())
-        assertEquals(3, result.statuses.count { it.state == SourceRunState.SUCCESS })
+        assertEquals(4, result.statuses.count { it.state == SourceRunState.SUCCESS })
     }
 
     @Test
@@ -39,12 +40,13 @@ class StubAdapterRegistryTest {
 
         val result = registry.unifiedOrchestrator().search(
             query = sampleQuery(),
-            enabledSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.AIBOORU),
+            enabledSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.NHENTAI),
             pageTokens = emptyMap(),
             weights = mapOf(
-                SourceKey.PIXIV to 0.5,
-                SourceKey.GELBOORU to 0.3,
-                SourceKey.AIBOORU to 0.2,
+                SourceKey.PIXIV to 0.45,
+                SourceKey.GELBOORU to 0.25,
+                SourceKey.AIBOORU to 0.15,
+                SourceKey.NHENTAI to 0.15,
             ),
         )
 

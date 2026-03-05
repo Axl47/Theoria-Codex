@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-03-05T18:10
+updated_at: 2026-03-05T22:20
 ---
 # Theoria Codex
 
@@ -9,6 +9,7 @@ Theoria Codex is an Android-first, local-first, tag-driven art browser.
 The product spec lives at `./docs/TheoriaSpec.md`.
 
 Recent updates:
+- NHentai is now available as a real source in Search and Unified mode, including gallery-page parsing, tag suggestions, fixed browser-style request headers, and gallery deep-link opening via `nhentai.net/g/<id>/` URLs.
 - Codex long-press actions now include share/export to `.json` (title + source/post IDs), and Codex tab has an Import action to reconstruct codices from exported files.
 - The app now registers `.json` open intents so opening a Codex export file launches Theoria Codex and attempts import automatically.
 - Codex import now accepts provider-backed JSON URIs (including chat/file-share `content://` streams) in addition to public-folder files.

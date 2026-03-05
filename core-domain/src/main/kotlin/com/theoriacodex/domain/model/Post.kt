@@ -4,6 +4,7 @@ enum class SourceKey {
     PIXIV,
     GELBOORU,
     AIBOORU,
+    NHENTAI,
 }
 
 data class PostId(

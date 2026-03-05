@@ -7,6 +7,7 @@ fun trainingTagsFor(post: Post): List<String> {
     val preferred = when (post.id.source) {
         SourceKey.PIXIV -> post.rawTags.takeIf { it.isNotEmpty() } ?: post.canonicalTags
         SourceKey.GELBOORU, SourceKey.AIBOORU -> post.canonicalTags.takeIf { it.isNotEmpty() } ?: post.rawTags
+        SourceKey.NHENTAI -> post.canonicalTags.takeIf { it.isNotEmpty() } ?: post.rawTags
     }
     return preferred
         .asSequence()

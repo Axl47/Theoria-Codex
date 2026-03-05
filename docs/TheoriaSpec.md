@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T17:45
-updated_at: 2026-02-24T17:59
+updated_at: 2026-03-05T22:20
 ---
 # Theoria Codex — UI Spec v1 (Android / Portrait-only MVP)
 
@@ -11,7 +11,7 @@ Theoria Codex is an Android-first, local-first, tag-driven art browser designed 
 1. Discover: build precise tag queries and browse results quickly.
 2. Collect: save posts into user-defined collections called **Codices** (“Boards”).
 
-MVP is implemented **end-to-end using stub source adapters** (JSON fixtures). Real Pixiv/Gelbooru/AIBooru integration is a second pass; the UI, state model, persistence, and adapter contracts must not change when real sources are added.
+MVP is implemented **end-to-end using stub source adapters** (JSON fixtures). Real Pixiv/Gelbooru/AIBooru/NHentai integration now exists in `:core-sources`; the UI, state model, persistence, and adapter contracts remain unchanged so stubs and real sources can swap transparently.
 
 ---
 
@@ -21,7 +21,7 @@ Included:
 
 * Tabs: **Search**, **Explore**, **Codex**, **Settings**
 * Query-first Search with chips + autocomplete
-* Mode toggle: **Unified / Pixiv / Gelbooru / AIBooru** (Unified works with stubs now)
+* Mode toggle: **Unified / Pixiv / Gelbooru / AIBooru / NHentai** (Unified works with stubs now)
 * Filter/Sort bottom sheet
 * Apply model: changes are staged and applied only on explicit **Apply**
 * Results: 2-column **staggered** masonry grid (portrait-only)
@@ -139,6 +139,7 @@ Enum:
 * `PIXIV`
 * `GELBOORU`
 * `AIBOORU`
+* `NHENTAI`
 
 ### 5.2 PostId
 
@@ -409,6 +410,7 @@ Component: segmented control with 4–5 options:
 * Pixiv
 * Gelbooru
 * AIBooru
+* NHentai
 
 Rules:
 
@@ -456,7 +458,7 @@ Tile overlay (minimal):
 
   * Height: 20–24dp
   * Padding: 8dp horizontal, 2–4dp vertical
-  * Text: source short label (PX / GB / AI) or full
+  * Text: source short label (PX / GB / AI / NH) or full
 * No other text.
 
 Grid states:
@@ -744,9 +746,10 @@ B) Unified mode
   * Pixiv (enabled by default)
   * Gelbooru (enabled by default)
   * AIBooru (enabled by default)
+  * NHentai (enabled by default)
 * Merge weights (sliders)
 
-  * Default: Pixiv 0.5, Gelbooru 0.3, AIBooru 0.2
+  * Default: Pixiv 0.45, Gelbooru 0.25, AIBooru 0.15, NHentai 0.15
   * Sum must be 1.0 (normalize automatically)
 * “Strict unified enforcement” (info label; fixed true)
 
@@ -878,7 +881,7 @@ Modularity:
 
 * Default mode: last used (initially Unified)
 * Enabled sources: all on
-* Weights: Pixiv 0.5, Gelbooru 0.3, AIBooru 0.2
+* Weights: Pixiv 0.45, Gelbooru 0.25, AIBooru 0.15, NHentai 0.15
 * Cache full image on Codex save: OFF
 * Apply model: Apply button required (fixed)
 

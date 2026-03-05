@@ -114,7 +114,7 @@ object ForYouTagSetGenerator {
 
         return when (source) {
             SourceKey.GELBOORU, SourceKey.AIBOORU -> cleaned.replace(' ', '_')
-            SourceKey.PIXIV -> cleaned
+            SourceKey.PIXIV, SourceKey.NHENTAI -> cleaned
         }.takeIf { it.isNotBlank() }
     }
 

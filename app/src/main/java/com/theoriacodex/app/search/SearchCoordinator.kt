@@ -1028,7 +1028,7 @@ class SearchCoordinator(
         if (left.isBlank() || right.isBlank()) return false
         return when (source) {
             SourceKey.GELBOORU -> normalizeGelbooruToken(left) == normalizeGelbooruToken(right)
-            SourceKey.PIXIV -> normalizeMatchToken(left) == normalizeMatchToken(right)
+            SourceKey.PIXIV, SourceKey.NHENTAI -> normalizeMatchToken(left) == normalizeMatchToken(right)
             else -> left.equals(right, ignoreCase = true)
         }
     }
@@ -1052,7 +1052,7 @@ class SearchCoordinator(
     private fun sourceTagKey(source: SourceKey, tag: String): String {
         return when (source) {
             SourceKey.GELBOORU -> normalizeGelbooruToken(tag)
-            SourceKey.PIXIV -> normalizeMatchToken(tag)
+            SourceKey.PIXIV, SourceKey.NHENTAI -> normalizeMatchToken(tag)
             else -> tag.trim().lowercase()
         }
     }
@@ -1141,6 +1141,6 @@ private const val SOURCE_TRENDING_LIMIT = 20
 private const val UNIFIED_TRENDING_LIMIT = 20
 private const val SEEN_TAGS_PER_SOURCE_INGEST_LIMIT = 240
 private const val LAST_ACTIVE_QUERY_KEY = "last_active"
-private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(SourceKey.PIXIV, SourceKey.GELBOORU)
+private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.NHENTAI)
 private val WHITESPACE_REGEX = Regex("\\s+")
 private val PIXIV_TRAILING_PARENTHESIS_REGEX = Regex("\\s*\\([^)]*\\)\\s*$")

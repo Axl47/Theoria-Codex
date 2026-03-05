@@ -48,6 +48,7 @@ class StubFixtureLoader(
             SourceKey.PIXIV -> "pixiv"
             SourceKey.GELBOORU -> "gelbooru"
             SourceKey.AIBOORU -> "aibooru"
+            SourceKey.NHENTAI -> "nhentai"
         }
     }
 }
