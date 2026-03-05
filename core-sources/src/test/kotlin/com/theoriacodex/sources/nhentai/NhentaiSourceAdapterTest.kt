@@ -166,7 +166,7 @@ class NhentaiSourceAdapterTest {
         val page = adapter.search(
             query = Query(
                 mode = QueryMode.Source(SourceKey.NHENTAI),
-                includeTags = listOf("634609"),
+                includeTags = listOf("english", "634609"),
                 excludeTags = emptyList(),
                 sort = SortMode.NEWEST,
                 dateRange = null,

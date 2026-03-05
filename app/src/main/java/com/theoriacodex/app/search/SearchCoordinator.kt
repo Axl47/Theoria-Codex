@@ -1197,6 +1197,7 @@ private val NHENTAI_LANGUAGE_TAG_BY_FILTER = mapOf(
     NhentaiLanguageFilter.CHINESE to "chinese",
     NhentaiLanguageFilter.JAPANESE to "japanese",
 )
+private val NHENTAI_LANGUAGE_FILTER_TAGS = NHENTAI_LANGUAGE_TAG_BY_FILTER.values.toSet()
 private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.NHENTAI)
 private val WHITESPACE_REGEX = Regex("\\s+")
 private val PIXIV_TRAILING_PARENTHESIS_REGEX = Regex("\\s*\\([^)]*\\)\\s*$")
@@ -1228,9 +1229,12 @@ private fun Query.directNhentaiGalleryIdCandidate(): String? {
         .map(String::trim)
         .filter(String::isNotBlank)
         .toList()
-    if (includes.size != 1) return null
+    val searchable = includes.filterNot { tag ->
+        normalizeNhentaiLanguageTag(tag) in NHENTAI_LANGUAGE_FILTER_TAGS
+    }
+    if (searchable.size != 1) return null
 
-    return includes.first().takeIf(String::isDigitsOnly)
+    return searchable.first().takeIf(String::isDigitsOnly)
 }
 
 private fun String.isDigitsOnly(): Boolean {

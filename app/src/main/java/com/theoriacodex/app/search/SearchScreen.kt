@@ -327,14 +327,26 @@ fun SearchScreen(
         coordinator.hasPendingChanges
 
     fun commitTagInput() {
+        val typed = input.trim()
         val committed = coordinator.commitTagInput(input)
         if (committed) {
             input = ""
             focusManager.clearFocus()
+            if (typed.isDigitsOnly() && coordinator.directNhentaiGalleryIdCandidate() != null) {
+                coordinator.clearAutocompleteSuggestions()
+                onApplySearch()
+                scope.launch { resetScrollToTop() }
+            }
         }
     }
 
     fun applyDraftAndResetScroll() {
+        val pendingTyped = input.trim()
+        if (pendingTyped.isDigitsOnly() && coordinator.canCommitTagInput(pendingTyped)) {
+            if (coordinator.commitTagInput(pendingTyped)) {
+                input = ""
+            }
+        }
         focusManager.clearFocus(force = true)
         coordinator.clearAutocompleteSuggestions()
         onApplySearch()
@@ -1653,6 +1665,10 @@ private fun searchRequestHeaders(sourceKey: SourceKey): Map<String, String> {
             "User-Agent" to "Mozilla/5.0",
         )
     }
+}
+
+private fun String.isDigitsOnly(): Boolean {
+    return isNotBlank() && all { ch -> ch.isDigit() }
 }
 
 private const val PAGINATION_PREFETCH_RATIO = 0.8f

@@ -386,8 +386,19 @@ private fun Query.directNhentaiGalleryIdCandidate(): String? {
         .map(String::trim)
         .filter(String::isNotBlank)
         .toList()
-    if (includes.size != 1) return null
-    return includes.first().takeIf(String::isDigitsOnly)
+    val searchable = includes.filterNot { tag ->
+        normalizeNhentaiLanguageTag(tag) in NHENTAI_LANGUAGE_FILTER_TAGS
+    }
+    if (searchable.size != 1) return null
+    return searchable.first().takeIf(String::isDigitsOnly)
+}
+
+private fun normalizeNhentaiLanguageTag(value: String): String {
+    return value
+        .trim()
+        .lowercase()
+        .replace('_', ' ')
+        .replace(NHENTAI_WHITESPACE_REGEX, " ")
 }
 
 private fun mapSortParam(sortMode: SortMode): String? {
@@ -472,4 +483,5 @@ private val NHENTAI_DEFAULT_HEADERS = mapOf(
     "User-Agent" to "Mozilla/5.0",
     "Referer" to "https://nhentai.net/",
 )
+private val NHENTAI_LANGUAGE_FILTER_TAGS = setOf("english", "chinese", "japanese")
 private val NHENTAI_WHITESPACE_REGEX = Regex("\\s+")

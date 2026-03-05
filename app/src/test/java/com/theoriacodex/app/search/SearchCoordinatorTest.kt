@@ -369,6 +369,8 @@ class SearchCoordinatorTest {
         coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
         coordinator.addIncludeTag("634609")
         assertEquals("634609", coordinator.directNhentaiGalleryIdCandidate())
+        coordinator.setNhentaiLanguageFilter(NhentaiLanguageFilter.ENGLISH)
+        assertEquals("634609", coordinator.directNhentaiGalleryIdCandidate())
 
         coordinator.setMode(QueryMode.Unified)
         coordinator.addIncludeTag("634609")
