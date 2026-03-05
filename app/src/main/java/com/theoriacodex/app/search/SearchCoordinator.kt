@@ -1187,9 +1187,9 @@ private const val UNIFIED_TRENDING_LIMIT = 20
 private const val SEEN_TAGS_PER_SOURCE_INGEST_LIMIT = 240
 private const val LAST_ACTIVE_QUERY_KEY = "last_active"
 private val SOURCE_DISPLAY_ORDER = listOf(
+    SourceKey.GELBOORU,
     SourceKey.PIXIV,
     SourceKey.NHENTAI,
-    SourceKey.GELBOORU,
     SourceKey.AIBOORU,
 )
 private val NHENTAI_LANGUAGE_TAG_BY_FILTER = mapOf(
