@@ -340,6 +340,45 @@ class SearchCoordinatorTest {
     }
 
     @Test
+    fun `nhentai language filter toggles language tags in include list`() = runTest {
+        val coordinator = coordinator()
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
+        coordinator.addIncludeTag("artist:example")
+
+        coordinator.setNhentaiLanguageFilter(NhentaiLanguageFilter.CHINESE)
+        assertEquals(NhentaiLanguageFilter.CHINESE, coordinator.selectedNhentaiLanguageFilter())
+        assertTrue("chinese" in coordinator.draftQuery.includeTags)
+
+        coordinator.setNhentaiLanguageFilter(NhentaiLanguageFilter.JAPANESE)
+        assertEquals(NhentaiLanguageFilter.JAPANESE, coordinator.selectedNhentaiLanguageFilter())
+        assertFalse("chinese" in coordinator.draftQuery.includeTags)
+        assertTrue("japanese" in coordinator.draftQuery.includeTags)
+
+        coordinator.setNhentaiLanguageFilter(NhentaiLanguageFilter.ANY)
+        assertEquals(NhentaiLanguageFilter.ANY, coordinator.selectedNhentaiLanguageFilter())
+        assertFalse("japanese" in coordinator.draftQuery.includeTags)
+        assertTrue("artist:example" in coordinator.draftQuery.includeTags)
+    }
+
+    @Test
+    fun `direct nhentai gallery id candidate supports source and unified modes`() = runTest {
+        val coordinator = coordinator()
+        coordinator.initialize()
+
+        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
+        coordinator.addIncludeTag("634609")
+        assertEquals("634609", coordinator.directNhentaiGalleryIdCandidate())
+
+        coordinator.setMode(QueryMode.Unified)
+        coordinator.addIncludeTag("634609")
+        assertEquals("634609", coordinator.directNhentaiGalleryIdCandidate())
+
+        coordinator.addExcludeTag("english")
+        assertNull(coordinator.directNhentaiGalleryIdCandidate())
+    }
+
+    @Test
     fun `gelbooru batch tag counts are cached for subsequent lookups`() = runTest {
         val gelbooruAdapter = RecordingAdapter(
             sourceKey = SourceKey.GELBOORU,

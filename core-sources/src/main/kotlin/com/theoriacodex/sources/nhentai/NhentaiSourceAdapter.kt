@@ -47,6 +47,20 @@ class NhentaiSourceAdapter(
     private var lastRequestAtEpochMs: Long = 0L
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+        val directGalleryId = query.directNhentaiGalleryIdCandidate()
+        if (directGalleryId != null) {
+            val resolved = resolvePost(
+                PostId(
+                    source = SourceKey.NHENTAI,
+                    sourcePostId = directGalleryId,
+                )
+            )
+            return Page(
+                items = listOfNotNull(resolved),
+                nextPageToken = null,
+            )
+        }
+
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(1) ?: 1
         val compiledQuery = compileNhentaiQuery(query)
         val params = linkedMapOf("page" to pageIndex.toString())
@@ -363,6 +377,17 @@ private fun normalizeNhentaiTag(value: String): String {
         .replace('_', ' ')
         .replace(NHENTAI_WHITESPACE_REGEX, " ")
         .trim()
+}
+
+private fun Query.directNhentaiGalleryIdCandidate(): String? {
+    if (excludeTags.isNotEmpty()) return null
+    val includes = includeTags
+        .asSequence()
+        .map(String::trim)
+        .filter(String::isNotBlank)
+        .toList()
+    if (includes.size != 1) return null
+    return includes.first().takeIf(String::isDigitsOnly)
 }
 
 private fun mapSortParam(sortMode: SortMode): String? {

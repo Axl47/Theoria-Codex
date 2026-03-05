@@ -136,6 +136,51 @@ class NhentaiSourceAdapterTest {
         assertTrue(failure.message?.contains("non-JSON", ignoreCase = true) == true)
     }
 
+    @Test
+    fun `search resolves direct gallery id without search endpoint`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "id": 634609,
+                      "media_id": 3822885,
+                      "title": {
+                        "pretty": "Direct ID"
+                      },
+                      "images": {
+                        "thumbnail": {"t": "w", "w": 250, "h": 360},
+                        "cover": {"t": "w", "w": 700, "h": 1000},
+                        "pages": [
+                          {"t": "w", "w": 1200, "h": 1800}
+                        ]
+                      },
+                      "tags": [],
+                      "upload_date": 1710000000
+                    }
+                """.trimIndent(),
+            )
+        }
+        val adapter = NhentaiSourceAdapter(httpClient = httpClient)
+
+        val page = adapter.search(
+            query = Query(
+                mode = QueryMode.Source(SourceKey.NHENTAI),
+                includeTags = listOf("634609"),
+                excludeTags = emptyList(),
+                sort = SortMode.NEWEST,
+                dateRange = null,
+                minScore = null,
+            ),
+            pageToken = null,
+        )
+
+        assertEquals("https://nhentai.net/api/gallery/634609", httpClient.lastGet?.url)
+        assertTrue(httpClient.lastGet?.query?.isEmpty() == true)
+        assertEquals(1, page.items.size)
+        assertEquals("634609", page.items.first().id.sourcePostId)
+    }
+
     private fun sampleQuery(): Query {
         return Query(
             mode = QueryMode.Source(SourceKey.NHENTAI),

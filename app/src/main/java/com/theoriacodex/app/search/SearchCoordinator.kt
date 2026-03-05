@@ -22,6 +22,7 @@ import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
@@ -82,7 +83,10 @@ class SearchCoordinator(
         private set
 
     val availableSources: List<SourceKey>
-        get() = registry.availableSources().toList().sortedBy { it.name }
+        get() = registry.availableSources().toList().sortedWith(
+            compareBy<SourceKey> { source -> sourceDisplayOrderIndex(source) }
+                .thenBy { source -> source.name }
+        )
 
     val modeOptions: List<QueryMode>
         get() = listOf(QueryMode.Unified) + availableSources.map(QueryMode::Source)
@@ -391,6 +395,36 @@ class SearchCoordinator(
 
     fun setMinScore(minScore: Int?) {
         draftQuery = draftQuery.copy(minScore = minScore)
+    }
+
+    fun selectedNhentaiLanguageFilter(): NhentaiLanguageFilter {
+        val match = draftQuery.includeTags.firstNotNullOfOrNull { tag ->
+            nhentaiLanguageFilterForTag(tag)
+        }
+        return match ?: NhentaiLanguageFilter.ANY
+    }
+
+    fun setNhentaiLanguageFilter(filter: NhentaiLanguageFilter) {
+        val cleaned = draftQuery.includeTags.filterNot { tag ->
+            nhentaiLanguageFilterForTag(tag) != null
+        }
+        val languageTag = NHENTAI_LANGUAGE_TAG_BY_FILTER[filter]
+        val nextInclude = if (languageTag == null || languageTag in cleaned) {
+            cleaned
+        } else {
+            cleaned + languageTag
+        }
+        draftQuery = draftQuery.copy(includeTags = nextInclude)
+    }
+
+    fun directNhentaiGalleryIdCandidate(query: Query = draftQuery): String? {
+        return query.directNhentaiGalleryIdCandidate()
+    }
+
+    suspend fun resolveNhentaiGalleryById(galleryId: String): Post? {
+        val normalizedId = galleryId.trim().takeIf(String::isDigitsOnly) ?: return null
+        val adapter = registry.adapterFor(SourceKey.NHENTAI) ?: return null
+        return adapter.resolvePost(PostId(source = SourceKey.NHENTAI, sourcePostId = normalizedId))
     }
 
     fun resetFilters() {
@@ -1119,6 +1153,10 @@ class SearchCoordinator(
             minScore = null,
         )
     }
+
+    private fun sourceDisplayOrderIndex(source: SourceKey): Int {
+        return SOURCE_DISPLAY_ORDER.indexOf(source).takeIf { it >= 0 } ?: Int.MAX_VALUE
+    }
 }
 
 enum class DateRangePreset {
@@ -1126,6 +1164,13 @@ enum class DateRangePreset {
     TODAY,
     LAST_7_DAYS,
     LAST_30_DAYS,
+}
+
+enum class NhentaiLanguageFilter {
+    ANY,
+    ENGLISH,
+    CHINESE,
+    JAPANESE,
 }
 
 private const val PIXIV_UNKNOWN_RETRY_MESSAGE =
@@ -1141,6 +1186,53 @@ private const val SOURCE_TRENDING_LIMIT = 20
 private const val UNIFIED_TRENDING_LIMIT = 20
 private const val SEEN_TAGS_PER_SOURCE_INGEST_LIMIT = 240
 private const val LAST_ACTIVE_QUERY_KEY = "last_active"
+private val SOURCE_DISPLAY_ORDER = listOf(
+    SourceKey.PIXIV,
+    SourceKey.NHENTAI,
+    SourceKey.GELBOORU,
+    SourceKey.AIBOORU,
+)
+private val NHENTAI_LANGUAGE_TAG_BY_FILTER = mapOf(
+    NhentaiLanguageFilter.ENGLISH to "english",
+    NhentaiLanguageFilter.CHINESE to "chinese",
+    NhentaiLanguageFilter.JAPANESE to "japanese",
+)
 private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.NHENTAI)
 private val WHITESPACE_REGEX = Regex("\\s+")
 private val PIXIV_TRAILING_PARENTHESIS_REGEX = Regex("\\s*\\([^)]*\\)\\s*$")
+
+private fun nhentaiLanguageFilterForTag(tag: String): NhentaiLanguageFilter? {
+    return when (normalizeNhentaiLanguageTag(tag)) {
+        "english" -> NhentaiLanguageFilter.ENGLISH
+        "chinese" -> NhentaiLanguageFilter.CHINESE
+        "japanese" -> NhentaiLanguageFilter.JAPANESE
+        else -> null
+    }
+}
+
+private fun normalizeNhentaiLanguageTag(value: String): String {
+    return value
+        .trim()
+        .lowercase()
+        .replace('_', ' ')
+        .replace(WHITESPACE_REGEX, " ")
+}
+
+private fun Query.directNhentaiGalleryIdCandidate(): String? {
+    val supportsDirectLookup = mode == QueryMode.Unified || mode == QueryMode.Source(SourceKey.NHENTAI)
+    if (!supportsDirectLookup) return null
+    if (excludeTags.isNotEmpty()) return null
+
+    val includes = includeTags
+        .asSequence()
+        .map(String::trim)
+        .filter(String::isNotBlank)
+        .toList()
+    if (includes.size != 1) return null
+
+    return includes.first().takeIf(String::isDigitsOnly)
+}
+
+private fun String.isDigitsOnly(): Boolean {
+    return isNotBlank() && all { ch -> ch.isDigit() }
+}

@@ -1348,7 +1348,34 @@ fun TheoriaApp(
                                         },
                                         onApplySearch = {
                                             scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                                val directNhentaiId = searchCoordinator.directNhentaiGalleryIdCandidate()
                                                 searchCoordinator.applyDraft()
+                                                if (directNhentaiId != null) {
+                                                    val resolved = searchCoordinator.results.firstOrNull { post ->
+                                                        post.id.source == SourceKey.NHENTAI &&
+                                                            post.id.sourcePostId == directNhentaiId
+                                                    } ?: runCatching {
+                                                        searchCoordinator.resolveNhentaiGalleryById(directNhentaiId)
+                                                    }.getOrNull()
+
+                                                    if (resolved != null) {
+                                                        val context = ViewerLaunchContext(
+                                                            queryHash = "nhentai-search-id:$directNhentaiId",
+                                                            startIndex = 0,
+                                                            streamSource = ViewerStreamSource.SEARCH,
+                                                            scrollOffsetHint = 0,
+                                                        )
+                                                        viewerSession = ViewerSession(
+                                                            posts = listOf(resolved),
+                                                            context = context,
+                                                            liveSearchBinding = false,
+                                                        )
+                                                        searchCoordinator.setViewerLaunchContext(context)
+                                                        navController.navigate(AppRoute.Viewer) {
+                                                            launchSingleTop = true
+                                                        }
+                                                    }
+                                                }
                                             }
                                         },
                                         onRetrySearch = {

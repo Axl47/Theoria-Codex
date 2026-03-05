@@ -154,8 +154,15 @@ fun SearchScreen(
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
     val queryHash = coordinator.appliedQueryHash
-    val visibleResults = remember(coordinator.results, animatedOnly) {
-        if (animatedOnly) {
+    val isNhentaiSourceMode = coordinator.draftQuery.mode == QueryMode.Source(SourceKey.NHENTAI)
+    val animatedFilterActive = animatedOnly && !isNhentaiSourceMode
+    LaunchedEffect(isNhentaiSourceMode) {
+        if (isNhentaiSourceMode) {
+            animatedOnly = false
+        }
+    }
+    val visibleResults = remember(coordinator.results, animatedFilterActive) {
+        if (animatedFilterActive) {
             coordinator.results.filter(::isAnimatedPost)
         } else {
             coordinator.results
@@ -239,8 +246,8 @@ fun SearchScreen(
         }
     }
 
-    LaunchedEffect(queryHash, visibleResults.size, animatedOnly) {
-        if (animatedOnly) return@LaunchedEffect
+    LaunchedEffect(queryHash, visibleResults.size, animatedFilterActive) {
+        if (animatedFilterActive) return@LaunchedEffect
         val restored = coordinator.restoreSearchScrollState() ?: return@LaunchedEffect
         if (visibleResults.isNotEmpty()) {
             val lastIndex = visibleResults.lastIndex.coerceAtLeast(0)
@@ -251,8 +258,8 @@ fun SearchScreen(
         }
     }
 
-    LaunchedEffect(queryHash, visibleResults.size, animatedOnly) {
-        if (animatedOnly || visibleResults.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(queryHash, visibleResults.size, animatedFilterActive) {
+        if (animatedFilterActive || visibleResults.isEmpty()) return@LaunchedEffect
         snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
             .collectLatest { (index, offset) ->
                 coordinator.persistSearchScrollState(index = index, offsetPx = offset)
@@ -266,7 +273,7 @@ fun SearchScreen(
         coordinator.canLoadMore,
         coordinator.loading,
         coordinator.loadingMore,
-        animatedOnly,
+        animatedFilterActive,
     ) {
         snapshotFlow {
             (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to coordinator.loadingMore
@@ -286,7 +293,7 @@ fun SearchScreen(
 
             // Keep filling animated feed when the filtered set is still too small.
             val shouldTriggerForAnimatedBuffer =
-                animatedOnly &&
+                animatedFilterActive &&
                     totalVisible < ANIMATED_PREFETCH_MIN_VISIBLE &&
                     coordinator.results.isNotEmpty()
 
@@ -521,7 +528,7 @@ fun SearchScreen(
                                     },
                                 )
                             }
-                            if (!coordinator.hasAnySearchRun && !animatedOnly) {
+                            if (!coordinator.hasAnySearchRun && !animatedFilterActive) {
                                 SearchStartSplash(
                                     modifier = Modifier.fillMaxWidth(),
                                 )
@@ -529,13 +536,13 @@ fun SearchScreen(
                                 EmptyBlock(
                                     hasPendingChanges = coordinator.hasPendingChanges,
                                     messageOverride = when {
-                                        animatedOnly &&
+                                        animatedFilterActive &&
                                             coordinator.results.isNotEmpty() &&
                                             (coordinator.loadingMore || coordinator.canLoadMore) -> {
                                             "No animated media yet. Retrying with more pages..."
                                         }
 
-                                        animatedOnly && coordinator.results.isNotEmpty() -> {
+                                        animatedFilterActive && coordinator.results.isNotEmpty() -> {
                                             "No animated media found for the current results."
                                         }
 
@@ -589,7 +596,7 @@ fun SearchScreen(
                                             scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
                                         )
                                         scope.launch { coordinator.setViewerLaunchContext(context) }
-                                        onOpenViewer(visibleResults, context, animatedOnly)
+                                        onOpenViewer(visibleResults, context, animatedFilterActive)
                                     },
                                     onLongPress = {
                                         focusManager.clearFocus()
@@ -717,6 +724,9 @@ fun SearchScreen(
             coordinator = coordinator,
             animatedOnly = animatedOnly,
             onAnimatedOnlyChange = { animatedOnly = it },
+            showAnimatedOnlyFilter = !isNhentaiSourceMode,
+            nhentaiLanguageFilter = coordinator.selectedNhentaiLanguageFilter(),
+            onNhentaiLanguageFilterChange = { filter -> coordinator.setNhentaiLanguageFilter(filter) },
             onSortChanged = { applyDraftAndResetScroll() },
             onDismiss = {
                 scope.launch {
@@ -1144,6 +1154,9 @@ private fun FilterSheet(
     coordinator: SearchCoordinator,
     animatedOnly: Boolean,
     onAnimatedOnlyChange: (Boolean) -> Unit,
+    showAnimatedOnlyFilter: Boolean,
+    nhentaiLanguageFilter: NhentaiLanguageFilter,
+    onNhentaiLanguageFilterChange: (NhentaiLanguageFilter) -> Unit,
     onSortChanged: () -> Unit,
     onDismiss: () -> Unit,
     sheetState: androidx.compose.material3.SheetState,
@@ -1166,14 +1179,38 @@ private fun FilterSheet(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("Media Types", style = MaterialTheme.typography.titleMedium)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item {
-                    FilterChip(
-                        selected = animatedOnly,
-                        onClick = { onAnimatedOnlyChange(!animatedOnly) },
-                        label = { Text("Animated only") },
-                    )
+            if (showAnimatedOnlyFilter) {
+                Text("Media Types", style = MaterialTheme.typography.titleMedium)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item {
+                        FilterChip(
+                            selected = animatedOnly,
+                            onClick = { onAnimatedOnlyChange(!animatedOnly) },
+                            label = { Text("Animated only") },
+                        )
+                    }
+                }
+            } else {
+                Text("Language", style = MaterialTheme.typography.titleMedium)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(NhentaiLanguageFilter.entries.size) { index ->
+                        val languageFilter = NhentaiLanguageFilter.entries[index]
+                        val label = when (languageFilter) {
+                            NhentaiLanguageFilter.ANY -> "Any"
+                            NhentaiLanguageFilter.ENGLISH -> "English"
+                            NhentaiLanguageFilter.CHINESE -> "Chinese"
+                            NhentaiLanguageFilter.JAPANESE -> "Japanese"
+                        }
+                        FilterChip(
+                            selected = nhentaiLanguageFilter == languageFilter,
+                            onClick = {
+                                if (nhentaiLanguageFilter == languageFilter) return@FilterChip
+                                onNhentaiLanguageFilterChange(languageFilter)
+                                onSortChanged()
+                            },
+                            label = { Text(label) },
+                        )
+                    }
                 }
             }
 
