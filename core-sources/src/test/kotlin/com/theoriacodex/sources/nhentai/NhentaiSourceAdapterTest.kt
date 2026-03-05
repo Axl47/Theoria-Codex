@@ -70,14 +70,14 @@ class NhentaiSourceAdapterTest {
                             "pretty": "Test Gallery"
                           },
                           "images": {
-                            "thumbnail": {"t": "j", "w": 350, "h": 500},
-                            "cover": {"t": "p", "w": 700, "h": 1000},
+                            "thumbnail": {"t": "w", "w": 350, "h": 500},
+                            "cover": {"t": "w", "w": 700, "h": 1000},
                             "pages": [
-                              {"t": "j", "w": 1200, "h": 1800},
+                              {"t": "w", "w": 1200, "h": 1800},
                               {"t": "g", "w": 1200, "h": 1800}
                             ]
                           },
-                          "scanlator": "",
+                          "scanlator": null,
                           "upload_date": 1710000000,
                           "tags": [
                             {"id": 1, "type": "tag", "name": "big breasts", "count": 5000}
@@ -100,9 +100,9 @@ class NhentaiSourceAdapterTest {
         val post = page.items.firstOrNull()
         assertNotNull(post)
         assertEquals(SourceKey.NHENTAI, post?.id?.source)
-        assertEquals("https://t.nhentai.net/galleries/9876/thumb.jpg", post?.preview?.url)
+        assertEquals("https://t.nhentai.net/galleries/9876/thumb.webp", post?.preview?.url)
         assertEquals(2, post?.media?.size)
-        assertEquals("https://i.nhentai.net/galleries/9876/1.jpg", post?.media?.get(0)?.url)
+        assertEquals("https://i.nhentai.net/galleries/9876/1.webp", post?.media?.get(0)?.url)
         assertEquals("https://i.nhentai.net/galleries/9876/2.gif", post?.media?.get(1)?.url)
         assertEquals("https://nhentai.net/g/123/", post?.pageUrl)
     }

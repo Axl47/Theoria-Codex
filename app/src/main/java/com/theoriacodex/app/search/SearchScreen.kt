@@ -1386,6 +1386,22 @@ private fun SourceChipLogo(
             )
         }
 
+        SourceKey.NHENTAI -> {
+            val context = LocalContext.current
+            val model = remember(context) {
+                ImageRequest.Builder(context)
+                    .data(Uri.parse("android.resource://${context.packageName}/${R.raw.nhentai_logo}"))
+                    .decoderFactory(SvgDecoder.Factory())
+                    .build()
+            }
+            AsyncImage(
+                model = model,
+                contentDescription = "NHentai",
+                modifier = modifier.height(size),
+                contentScale = ContentScale.Fit,
+            )
+        }
+
         else -> Text(source.name)
     }
 }

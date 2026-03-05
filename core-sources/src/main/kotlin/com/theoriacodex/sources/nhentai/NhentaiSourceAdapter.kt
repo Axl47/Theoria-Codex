@@ -210,24 +210,24 @@ class NhentaiSourceAdapter(
 
     private fun parseGallery(raw: JsonObject): Post? {
         val galleryId = raw.get("id").asLongOrNull()?.toString()
-            ?: raw.get("id")?.asString?.trim()?.takeIf { it.isNotBlank() }
+            ?: raw.get("id").asStringOrNull()?.trim()?.takeIf { it.isNotBlank() }
             ?: return null
         val mediaId = raw.get("media_id").asLongOrNull()?.toString()
-            ?: raw.get("media_id")?.asString?.trim()?.takeIf { it.isNotBlank() }
+            ?: raw.get("media_id").asStringOrNull()?.trim()?.takeIf { it.isNotBlank() }
             ?: return null
         val images = raw.optionalJsonObject("images") ?: return null
         val thumbnail = images.optionalJsonObject("thumbnail")
         val cover = images.optionalJsonObject("cover")
         val pages = images.optionalJsonArray("pages").orEmpty()
 
-        val thumbExt = imageExtension(thumbnail?.get("t")?.asString)
-        val coverExt = imageExtension(cover?.get("t")?.asString)
+        val thumbExt = imageExtension(thumbnail?.get("t").asStringOrNull())
+        val coverExt = imageExtension(cover?.get("t").asStringOrNull())
         val previewUrl = "$NHENTAI_THUMBS_BASE/galleries/$mediaId/thumb.$thumbExt"
         val coverUrl = "$NHENTAI_THUMBS_BASE/galleries/$mediaId/cover.$coverExt"
 
         val pageRefs = pages.mapIndexedNotNull { index, pageElement ->
             val page = pageElement.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@mapIndexedNotNull null
-            val ext = imageExtension(page.get("t")?.asString)
+            val ext = imageExtension(page.get("t").asStringOrNull())
             ImageRef(
                 url = "$NHENTAI_IMAGES_BASE/galleries/$mediaId/${index + 1}.$ext",
                 localPath = null,
@@ -256,11 +256,11 @@ class NhentaiSourceAdapter(
 
         val tags = raw.optionalJsonArray("tags").orEmpty().mapNotNull { tagElement ->
             val tag = tagElement.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@mapNotNull null
-            val name = tag.get("name")?.asString?.trim().orEmpty()
+            val name = tag.get("name").asStringOrNull()?.trim().orEmpty()
             if (name.isBlank()) return@mapNotNull null
             ParsedNhentaiTag(
                 name = name,
-                type = tag.get("type")?.asString?.trim(),
+                type = tag.get("type").asStringOrNull()?.trim(),
             )
         }
 
@@ -268,12 +268,12 @@ class NhentaiSourceAdapter(
         val rawTags = canonicalTags
         val titleObject = raw.optionalJsonObject("title")
         val title = listOf(
-            titleObject?.get("pretty")?.asString,
-            titleObject?.get("english")?.asString,
-            titleObject?.get("japanese")?.asString,
+            titleObject?.get("pretty").asStringOrNull(),
+            titleObject?.get("english").asStringOrNull(),
+            titleObject?.get("japanese").asStringOrNull(),
         ).firstOrNull { !it.isNullOrBlank() }
 
-        val scanlator = raw.get("scanlator")?.asString?.trim().orEmpty()
+        val scanlator = raw.get("scanlator").asStringOrNull()?.trim().orEmpty()
         val artist = tags.firstOrNull { it.type.equals("artist", ignoreCase = true) }?.name
         val authorName = scanlator.ifBlank { artist }
         val createdAtEpochMs = raw.get("upload_date").asLongOrNull()?.times(1000L)
@@ -308,7 +308,7 @@ class NhentaiSourceAdapter(
             val tags = gallery.optionalJsonArray("tags").orEmpty()
             tags.forEach tagLoop@{ tagElement ->
                 val tag = tagElement.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@tagLoop
-                val name = tag.get("name")?.asString?.trim().orEmpty()
+                val name = tag.get("name").asStringOrNull()?.trim().orEmpty()
                 if (name.isBlank()) return@tagLoop
                 if (normalizedPrefix.isNotBlank() && !name.lowercase().contains(normalizedPrefix)) {
                     return@tagLoop
@@ -316,7 +316,7 @@ class NhentaiSourceAdapter(
 
                 val key = name.lowercase()
                 val count = tag.get("count").asIntOrNull()
-                val type = tag.get("type")?.asString?.trim()?.takeIf { it.isNotBlank() }
+                val type = tag.get("type").asStringOrNull()?.trim()?.takeIf { it.isNotBlank() }
                 val existing = byName[key]
                 val existingCount = existing?.count ?: Int.MIN_VALUE
                 val candidateCount = count ?: Int.MIN_VALUE
@@ -386,6 +386,7 @@ private fun imageExtension(type: String?): String {
     return when (type?.trim()?.lowercase()) {
         "p", "png" -> "png"
         "g", "gif" -> "gif"
+        "w", "webp" -> "webp"
         else -> "jpg"
     }
 }
@@ -424,6 +425,13 @@ private fun JsonElement?.asLongOrNull(): Long? {
             else -> null
         }
     }.getOrNull()
+}
+
+private fun JsonElement?.asStringOrNull(): String? {
+    if (this == null || this.isJsonNull) return null
+    val primitive = this.asJsonPrimitive
+    if (!primitive.isString && !primitive.isNumber && !primitive.isBoolean) return null
+    return runCatching { primitive.asString }.getOrNull()
 }
 
 private fun String.isDigitsOnly(): Boolean {
