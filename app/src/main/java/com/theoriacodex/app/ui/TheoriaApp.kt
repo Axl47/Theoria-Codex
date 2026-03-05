@@ -17,9 +17,9 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,13 +28,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Collections
@@ -65,24 +62,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.IntOffset
 import com.theoriacodex.app.R
 import com.theoriacodex.app.BuildConfig
-import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -160,8 +149,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import kotlin.math.abs
-import kotlin.math.roundToInt
 
 enum class TopLevelDestination(val route: String, val label: String) {
     Search("search", "Search"),
@@ -172,6 +159,7 @@ enum class TopLevelDestination(val route: String, val label: String) {
 }
 
 private object AppRoute {
+    const val Home = "home"
     const val Viewer = "viewer"
     const val CodexDetail = "codex/detail/{codexId}"
 
@@ -343,7 +331,7 @@ fun TheoriaApp(
     var viewerSession by remember { mutableStateOf<ViewerSession?>(null) }
     var showSaveSheet by remember { mutableStateOf(false) }
     var pendingSavePost by remember { mutableStateOf<Post?>(null) }
-    var startDestination by rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
+    var homeTabRoute by rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
     var navReady by remember { mutableStateOf(false) }
     var startupUpdateState by remember { mutableStateOf<StartupUpdateState>(StartupUpdateState.Checking) }
     var startupStatusMessage by remember { mutableStateOf("Checking for updates...") }
@@ -526,7 +514,8 @@ fun TheoriaApp(
         }
 
         searchCoordinator.applyDraft()
-        navController.navigate(TopLevelDestination.Search.route) {
+        homeTabRoute = TopLevelDestination.Search.route
+        navController.navigate(AppRoute.Home) {
             popUpTo(navController.graph.findStartDestination().id) {
                 saveState = true
             }
@@ -705,8 +694,11 @@ fun TheoriaApp(
         forYouCoordinator.initialize()
         ensureLikesCodexId(activeRecommendationProfile)
         refreshSourceAccountState()
-        startDestination = uiRestoreRepository.getLastTab()
+        homeTabRoute = uiRestoreRepository.getLastTab()
+            ?.takeIf { route -> TopLevelDestination.entries.any { destination -> destination.route == route } }
             ?: settingsRepository.observeSettings().first().lastSelectedTabRoute
+                .takeIf { route -> TopLevelDestination.entries.any { destination -> destination.route == route } }
+            ?: TopLevelDestination.Search.route
         navReady = true
         scope.launch {
             searchCoordinator.restoreLastAppliedSearchIfNeeded()
@@ -992,15 +984,18 @@ fun TheoriaApp(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val currentRoute = currentDestination?.route
-    val topLevelRoutes = remember { TopLevelDestination.entries.map { it.route }.toSet() }
-    val showBottomBar = currentRoute in topLevelRoutes
-    val latestCurrentRoute = rememberUpdatedState(currentRoute)
+    val showBottomBar = currentRoute == AppRoute.Home
     val currentContext = LocalContext.current
-    val density = LocalDensity.current
     val configuration = LocalConfiguration.current
     val installedVersionCode = remember(appContext) { installedAppVersionCode(appContext) }
     val hostActivity = remember(currentContext) { currentContext.findActivity() }
     val lifecycleOwner = LocalLifecycleOwner.current
+    val topLevelPagerState = rememberPagerState(
+        pageCount = { TopLevelDestination.entries.size },
+    )
+    val selectedTopLevelIndex = topLevelPagerState.currentPage
+        .coerceIn(0, TopLevelDestination.entries.lastIndex)
+    var persistedHomeTabRoute by rememberSaveable { mutableStateOf<String?>(null) }
     val bottomBarHeightDp = remember(configuration.screenHeightDp) {
         (configuration.screenHeightDp * BOTTOM_BAR_HEIGHT_RATIO)
             .toInt()
@@ -1013,46 +1008,28 @@ fun TheoriaApp(
     }
     val bottomBarHeight = bottomBarHeightDp.dp
     val bottomBarIconSize = bottomBarIconSizeDp.dp
-    val tabSwipeThresholdPx = with(density) { TAB_SWIPE_THRESHOLD_DP.dp.toPx() }
-    val tabSwipeTrackStartPx = with(density) { TAB_SWIPE_TRACK_START_DP.dp.toPx() }
-    var navHostWidthPx by remember { mutableStateOf(0f) }
-    var tabSwipeOffsetTargetPx by remember { mutableStateOf(0f) }
-    var tabSwipeAnimationDurationMs by remember { mutableStateOf(0) }
-    var pendingSwipeDestination by remember { mutableStateOf<TopLevelDestination?>(null) }
-    val animatedTabSwipeOffsetPx by animateFloatAsState(
-        targetValue = tabSwipeOffsetTargetPx,
-        animationSpec = tween(durationMillis = tabSwipeAnimationDurationMs),
-        label = "tabSwipeOffset",
-    )
 
-    LaunchedEffect(showBottomBar) {
-        if (!showBottomBar) {
-            pendingSwipeDestination = null
-            tabSwipeAnimationDurationMs = 0
-            tabSwipeOffsetTargetPx = 0f
+    LaunchedEffect(navReady, currentRoute) {
+        if (!navReady || currentRoute != AppRoute.Home) return@LaunchedEffect
+        val targetIndex = TopLevelDestination.entries.indexOfFirst { destination ->
+            destination.route == homeTabRoute
+        }.coerceAtLeast(0)
+        if (targetIndex != topLevelPagerState.currentPage) {
+            topLevelPagerState.scrollToPage(targetIndex)
         }
     }
 
-    LaunchedEffect(pendingSwipeDestination) {
-        val destination = pendingSwipeDestination ?: return@LaunchedEffect
-        kotlinx.coroutines.delay(TAB_SWIPE_COMMIT_DURATION_MS.toLong())
-        navController.navigate(destination.route) {
-            popUpTo(navController.graph.findStartDestination().id) {
-                saveState = true
-            }
-            launchSingleTop = true
-            restoreState = true
+    LaunchedEffect(navReady, currentRoute, topLevelPagerState.currentPage, topLevelPagerState.isScrollInProgress) {
+        if (!navReady || currentRoute != AppRoute.Home) return@LaunchedEffect
+        if (topLevelPagerState.isScrollInProgress) return@LaunchedEffect
+        val route = TopLevelDestination.entries[selectedTopLevelIndex].route
+        if (homeTabRoute != route) {
+            homeTabRoute = route
         }
-        pendingSwipeDestination = null
-        tabSwipeAnimationDurationMs = TAB_SWIPE_SETTLE_DURATION_MS
-        tabSwipeOffsetTargetPx = 0f
-    }
-
-    LaunchedEffect(currentRoute) {
-        if (currentRoute in TopLevelDestination.entries.map { it.route }) {
-            val route = requireNotNull(currentRoute)
+        if (persistedHomeTabRoute != route) {
             settingsRepository.setLastTab(route)
             uiRestoreRepository.setLastTab(route)
+            persistedHomeTabRoute = route
         }
     }
 
@@ -1288,16 +1265,25 @@ fun TheoriaApp(
                             modifier = Modifier.height(bottomBarHeight),
                         ) {
                             TopLevelDestination.entries.forEach { destination ->
-                                val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
+                                val selected = selectedTopLevelIndex == TopLevelDestination.entries.indexOf(destination)
                                 NavigationBarItem(
                                     selected = selected,
                                     onClick = {
-                                        navController.navigate(destination.route) {
-                                            popUpTo(navController.graph.findStartDestination().id) {
-                                                saveState = true
+                                        homeTabRoute = destination.route
+                                        val targetIndex = TopLevelDestination.entries.indexOf(destination)
+                                        scope.launch {
+                                            if (currentRoute != AppRoute.Home) {
+                                                navController.navigate(AppRoute.Home) {
+                                                    popUpTo(navController.graph.findStartDestination().id) {
+                                                        saveState = true
+                                                    }
+                                                    launchSingleTop = true
+                                                    restoreState = true
+                                                }
+                                                topLevelPagerState.scrollToPage(targetIndex)
+                                            } else if (topLevelPagerState.currentPage != targetIndex) {
+                                                topLevelPagerState.animateScrollToPage(targetIndex)
                                             }
-                                            launchSingleTop = true
-                                            restoreState = true
                                         }
                                     },
                                     icon = {
@@ -1324,265 +1310,313 @@ fun TheoriaApp(
             ) { innerPadding ->
                 NavHost(
                     navController = navController,
-                    startDestination = startDestination,
-                    modifier = Modifier
-                        .padding(innerPadding)
-                        .onSizeChanged { size ->
-                            navHostWidthPx = size.width.toFloat()
-                        }
-                        .offset {
-                            IntOffset(
-                                x = animatedTabSwipeOffsetPx.roundToInt(),
-                                y = 0,
-                            )
-                        }
-                        .pointerInput(showBottomBar, tabSwipeThresholdPx, tabSwipeTrackStartPx, navHostWidthPx) {
-                            if (!showBottomBar) return@pointerInput
-                            awaitEachGesture {
-                                if (pendingSwipeDestination != null) {
-                                    return@awaitEachGesture
-                                }
-                                val firstDown = awaitFirstDown(
-                                    requireUnconsumed = false,
-                                    pass = PointerEventPass.Initial,
-                                )
-                                val pointerId = firstDown.id
-                                val activeRoute = latestCurrentRoute.value ?: return@awaitEachGesture
-                                val currentTabIndex = TopLevelDestination.entries.indexOfFirst { tab ->
-                                    tab.route == activeRoute
-                                }
-                                if (currentTabIndex == -1) return@awaitEachGesture
-
-                                var totalHorizontalDrag = 0f
-                                var totalVerticalDrag = 0f
-                                var trackingHorizontal = false
-
-                                while (true) {
-                                    val event = awaitPointerEvent(pass = PointerEventPass.Initial)
-                                    val change = event.changes.firstOrNull { it.id == pointerId }
-                                        ?: event.changes.firstOrNull()
-                                        ?: break
-                                    val delta = change.positionChangeIgnoreConsumed()
-                                    totalHorizontalDrag += delta.x
-                                    totalVerticalDrag += delta.y
-
-                                    if (!trackingHorizontal && abs(totalHorizontalDrag) >= tabSwipeTrackStartPx) {
-                                        if (abs(totalHorizontalDrag) > abs(totalVerticalDrag) * TAB_SWIPE_HORIZONTAL_BIAS) {
-                                            trackingHorizontal = true
-                                        } else {
-                                            break
-                                        }
-                                    }
-
-                                    if (trackingHorizontal) {
-                                        val dragOffset = when {
-                                            totalHorizontalDrag > 0f && currentTabIndex == 0 -> {
-                                                totalHorizontalDrag * TAB_SWIPE_EDGE_DAMPING
-                                            }
-
-                                            totalHorizontalDrag < 0f && currentTabIndex == TopLevelDestination.entries.lastIndex -> {
-                                                totalHorizontalDrag * TAB_SWIPE_EDGE_DAMPING
-                                            }
-
-                                            else -> totalHorizontalDrag
-                                        }
-                                        tabSwipeAnimationDurationMs = 0
-                                        tabSwipeOffsetTargetPx = dragOffset
-                                    }
-
-                                    if (!change.pressed) break
-                                }
-
-                                if (!trackingHorizontal || abs(totalHorizontalDrag) < tabSwipeThresholdPx) {
-                                    tabSwipeAnimationDurationMs = TAB_SWIPE_SETTLE_DURATION_MS
-                                    tabSwipeOffsetTargetPx = 0f
-                                    return@awaitEachGesture
-                                }
-                                if (abs(totalHorizontalDrag) <= abs(totalVerticalDrag) * TAB_SWIPE_HORIZONTAL_BIAS) {
-                                    tabSwipeAnimationDurationMs = TAB_SWIPE_SETTLE_DURATION_MS
-                                    tabSwipeOffsetTargetPx = 0f
-                                    return@awaitEachGesture
-                                }
-
-                                val targetTabIndex = if (totalHorizontalDrag < 0f) {
-                                    currentTabIndex + 1
-                                } else {
-                                    currentTabIndex - 1
-                                }
-                                val destination = TopLevelDestination.entries.getOrNull(targetTabIndex)
-                                if (destination == null) {
-                                    tabSwipeAnimationDurationMs = TAB_SWIPE_SETTLE_DURATION_MS
-                                    tabSwipeOffsetTargetPx = 0f
-                                    return@awaitEachGesture
-                                }
-
-                                val containerWidth = navHostWidthPx.takeIf { it > 0f }
-                                    ?: (tabSwipeThresholdPx * TAB_SWIPE_FALLBACK_WIDTH_MULTIPLIER)
-                                val targetOffset = if (totalHorizontalDrag < 0f) {
-                                    -containerWidth
-                                } else {
-                                    containerWidth
-                                }
-                                tabSwipeAnimationDurationMs = TAB_SWIPE_COMMIT_DURATION_MS
-                                tabSwipeOffsetTargetPx = targetOffset
-                                pendingSwipeDestination = destination
-                            }
-                        },
+                    startDestination = AppRoute.Home,
+                    modifier = Modifier.padding(innerPadding),
                 ) {
-                    composable(TopLevelDestination.Search.route) {
-                        SearchScreen(
-                            coordinator = searchCoordinator,
-                            pixivUgoiraClient = pixivUgoiraClient,
-                            likedPostIds = likedPostIds,
-                            onToggleLike = { post ->
-                                scope.launch {
-                                    toggleLikeAndSyncCodex(post)
-                                }
-                            },
-                            onOpenViewer = { posts, context, animatedOnly ->
-                                viewerSession = ViewerSession(
-                                    posts = posts,
-                                    context = context,
-                                    liveSearchBinding = true,
-                                    searchAnimatedOnly = animatedOnly,
-                                )
-                                scope.launch { searchCoordinator.setViewerLaunchContext(context) }
-                                navController.navigate(AppRoute.Viewer)
-                            },
-                            onRequestSaveToCodex = { post ->
-                                pendingSavePost = post
-                                showSaveSheet = true
-                            },
-                            onSaveToDevice = { post ->
-                                requestSaveToDevice(post)
-                            },
-                            onApplySearch = {
-                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                    searchCoordinator.applyDraft()
-                                }
-                            },
-                            onRetrySearch = {
-                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                    searchCoordinator.retry()
-                                }
-                            },
-                        )
-                    }
-                    composable(TopLevelDestination.ForYou.route) {
-                        ForYouScreen(
-                            coordinator = forYouCoordinator,
-                            activeProfileId = activeRecommendationProfile.profileId,
-                            activeProfileName = activeRecommendationProfile.name,
-                            likesCount = activeProfileLikes.size,
-                            likedPostIds = likedPostIds,
-                            pixivUgoiraClient = pixivUgoiraClient,
-                            onToggleLike = { post ->
-                                scope.launch {
-                                    toggleLikeAndSyncCodex(post)
-                                }
-                            },
-                            onBlacklistCurrentSeed = {
-                                scope.launch {
-                                    if (forYouCoordinator.loading) return@launch
-                                    val added = forYouCoordinator.blacklistCurrentSeedAndRefresh()
-                                    if (added > 0) {
-                                        Toast.makeText(
-                                            appContext,
-                                            "Blacklisted $added recommendation tag set${if (added > 1) "s" else ""}",
-                                            Toast.LENGTH_SHORT,
-                                        ).show()
-                                    } else {
-                                        Toast.makeText(
-                                            appContext,
-                                            "Current recommendation is already blacklisted",
-                                            Toast.LENGTH_SHORT,
-                                        ).show()
-                                    }
-                                }
-                            },
-                            onOpenViewer = { posts, context ->
-                                viewerSession = ViewerSession(
-                                    posts = posts,
-                                    context = context,
-                                    liveSearchBinding = true,
-                                )
-                                scope.launch { searchCoordinator.setViewerLaunchContext(context) }
-                                navController.navigate(AppRoute.Viewer)
-                            },
-                            onGoToSearch = {
-                                navController.navigate(TopLevelDestination.Search.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                        )
-                    }
-                    composable(TopLevelDestination.Explore.route) {
-                        ExploreScreen(
-                            coordinator = searchCoordinator,
-                            onApplyDraftAndNavigateToSearch = {
-                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                    searchCoordinator.applyDraft()
-                                }
-                                navController.navigate(TopLevelDestination.Search.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                        )
-                    }
-                    composable(TopLevelDestination.Codex.route) {
-                        CodexListScreen(
-                            codices = visibleCodices,
-                            itemCounts = codexItemCounts,
-                            codexCoverModels = codexCoverModels,
-                            onOpenCodex = { codexId ->
-                                navController.navigate(AppRoute.codexDetail(codexId))
-                            },
-                            onImportCodex = {
-                                importCodexLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
-                            },
-                            onDownloadCodex = { codexId ->
-                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                    downloadCodex(codexId)
-                                }
-                            },
-                            onShareCodex = { codexId ->
-                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                    shareCodex(codexId)
-                                }
-                            },
-                            onSearchFromCodex = { codexId ->
-                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                    searchFromCodex(codexId)
-                                }
-                            },
-                            onCommitReorder = { orderedVisibleIds ->
-                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                    commitVisibleCodexOrder(orderedVisibleIds)
-                                }
-                            },
-                            onCreateCodex = { name ->
-                                scope.launch {
-                                    codexRepository.ensureCodex(
-                                        codexId = profileScopedCodexId(activeRecommendationProfile.profileId),
-                                        name = name,
+                    composable(AppRoute.Home) {
+                        HorizontalPager(
+                            state = topLevelPagerState,
+                            modifier = Modifier.fillMaxSize(),
+                        ) { page ->
+                            when (TopLevelDestination.entries[page]) {
+                                TopLevelDestination.Search -> {
+                                    SearchScreen(
+                                        coordinator = searchCoordinator,
+                                        pixivUgoiraClient = pixivUgoiraClient,
+                                        likedPostIds = likedPostIds,
+                                        onToggleLike = { post ->
+                                            scope.launch {
+                                                toggleLikeAndSyncCodex(post)
+                                            }
+                                        },
+                                        onOpenViewer = { posts, context, animatedOnly ->
+                                            viewerSession = ViewerSession(
+                                                posts = posts,
+                                                context = context,
+                                                liveSearchBinding = true,
+                                                searchAnimatedOnly = animatedOnly,
+                                            )
+                                            scope.launch { searchCoordinator.setViewerLaunchContext(context) }
+                                            navController.navigate(AppRoute.Viewer)
+                                        },
+                                        onRequestSaveToCodex = { post ->
+                                            pendingSavePost = post
+                                            showSaveSheet = true
+                                        },
+                                        onSaveToDevice = { post ->
+                                            requestSaveToDevice(post)
+                                        },
+                                        onApplySearch = {
+                                            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                                searchCoordinator.applyDraft()
+                                            }
+                                        },
+                                        onRetrySearch = {
+                                            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                                searchCoordinator.retry()
+                                            }
+                                        },
                                     )
                                 }
-                            },
-                            onRenameCodex = { codexId, name ->
-                                scope.launch { codexRepository.renameCodex(codexId, name) }
-                            },
-                            onDeleteCodex = { codexId ->
-                                scope.launch { codexRepository.deleteCodex(codexId) }
-                            },
-                        )
+
+                                TopLevelDestination.ForYou -> {
+                                    ForYouScreen(
+                                        coordinator = forYouCoordinator,
+                                        activeProfileId = activeRecommendationProfile.profileId,
+                                        activeProfileName = activeRecommendationProfile.name,
+                                        likesCount = activeProfileLikes.size,
+                                        likedPostIds = likedPostIds,
+                                        pixivUgoiraClient = pixivUgoiraClient,
+                                        onToggleLike = { post ->
+                                            scope.launch {
+                                                toggleLikeAndSyncCodex(post)
+                                            }
+                                        },
+                                        onBlacklistCurrentSeed = {
+                                            scope.launch {
+                                                if (forYouCoordinator.loading) return@launch
+                                                val added = forYouCoordinator.blacklistCurrentSeedAndRefresh()
+                                                if (added > 0) {
+                                                    Toast.makeText(
+                                                        appContext,
+                                                        "Blacklisted $added recommendation tag set${if (added > 1) "s" else ""}",
+                                                        Toast.LENGTH_SHORT,
+                                                    ).show()
+                                                } else {
+                                                    Toast.makeText(
+                                                        appContext,
+                                                        "Current recommendation is already blacklisted",
+                                                        Toast.LENGTH_SHORT,
+                                                    ).show()
+                                                }
+                                            }
+                                        },
+                                        onOpenViewer = { posts, context ->
+                                            viewerSession = ViewerSession(
+                                                posts = posts,
+                                                context = context,
+                                                liveSearchBinding = true,
+                                            )
+                                            scope.launch { searchCoordinator.setViewerLaunchContext(context) }
+                                            navController.navigate(AppRoute.Viewer)
+                                        },
+                                        onGoToSearch = {
+                                            val targetIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.Search)
+                                            homeTabRoute = TopLevelDestination.Search.route
+                                            scope.launch {
+                                                if (topLevelPagerState.currentPage != targetIndex) {
+                                                    topLevelPagerState.animateScrollToPage(targetIndex)
+                                                }
+                                            }
+                                        },
+                                    )
+                                }
+
+                                TopLevelDestination.Explore -> {
+                                    ExploreScreen(
+                                        coordinator = searchCoordinator,
+                                        onApplyDraftAndNavigateToSearch = {
+                                            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                                searchCoordinator.applyDraft()
+                                            }
+                                            val targetIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.Search)
+                                            homeTabRoute = TopLevelDestination.Search.route
+                                            scope.launch {
+                                                if (topLevelPagerState.currentPage != targetIndex) {
+                                                    topLevelPagerState.animateScrollToPage(targetIndex)
+                                                }
+                                            }
+                                        },
+                                    )
+                                }
+
+                                TopLevelDestination.Codex -> {
+                                    CodexListScreen(
+                                        codices = visibleCodices,
+                                        itemCounts = codexItemCounts,
+                                        codexCoverModels = codexCoverModels,
+                                        onOpenCodex = { codexId ->
+                                            navController.navigate(AppRoute.codexDetail(codexId))
+                                        },
+                                        onImportCodex = {
+                                            importCodexLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
+                                        },
+                                        onDownloadCodex = { codexId ->
+                                            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                                downloadCodex(codexId)
+                                            }
+                                        },
+                                        onShareCodex = { codexId ->
+                                            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                                shareCodex(codexId)
+                                            }
+                                        },
+                                        onSearchFromCodex = { codexId ->
+                                            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                                searchFromCodex(codexId)
+                                            }
+                                        },
+                                        onCommitReorder = { orderedVisibleIds ->
+                                            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                                commitVisibleCodexOrder(orderedVisibleIds)
+                                            }
+                                        },
+                                        onCreateCodex = { name ->
+                                            scope.launch {
+                                                codexRepository.ensureCodex(
+                                                    codexId = profileScopedCodexId(activeRecommendationProfile.profileId),
+                                                    name = name,
+                                                )
+                                            }
+                                        },
+                                        onRenameCodex = { codexId, name ->
+                                            scope.launch { codexRepository.renameCodex(codexId, name) }
+                                        },
+                                        onDeleteCodex = { codexId ->
+                                            scope.launch { codexRepository.deleteCodex(codexId) }
+                                        },
+                                    )
+                                }
+
+                                TopLevelDestination.Settings -> {
+                                    SettingsScreen(
+                                        settings = settings,
+                                        recommendationProfiles = settings.recommendationProfiles,
+                                        activeProfileId = activeRecommendationProfile.profileId,
+                                        activeProfileName = activeRecommendationProfile.name,
+                                        likesCount = activeProfileLikes.size,
+                                        forYouBlacklistEntries = activeProfileForYouBlacklist,
+                                        availableSources = searchCoordinator.availableSources,
+                                        cacheSnapshot = cacheSnapshot,
+                                        showDeveloperScenarios = false,
+                                        pixivStatusLabel = pixivStatusLabel,
+                                        pixivConnectEnabled = !pixivConnected &&
+                                            !pixivStatusLabel.startsWith("Awaiting authorization callback"),
+                                        onPixivConnect = {
+                                            val authUrl = pixivAuthController.startAuthorizationUri().toString()
+                                            pixivStatusLabel = "Awaiting authorization callback..."
+                                            pixivConnected = false
+                                            openInBrowser(appContext, authUrl)
+                                        },
+                                        onPixivDisconnect = {
+                                            scope.launch {
+                                                credentialsStore.clearPixivTokens()
+                                                refreshSourceAccountState()
+                                            }
+                                        },
+                                        gelbooruUserId = gelbooruUserIdInput,
+                                        gelbooruApiKey = gelbooruApiKeyInput,
+                                        gelbooruStatusLabel = gelbooruStatusLabel,
+                                        onGelbooruUserIdChange = { gelbooruUserIdInput = it.trim() },
+                                        onGelbooruApiKeyChange = { input ->
+                                            val parsed = parseGelbooruCredentialInput(input)
+                                            if (parsed != null) {
+                                                gelbooruApiKeyInput = parsed.apiKey
+                                                gelbooruUserIdInput = parsed.userId
+                                            } else {
+                                                gelbooruApiKeyInput = input.trim()
+                                            }
+                                        },
+                                        onSaveGelbooruCredentials = {
+                                            scope.launch {
+                                                if (gelbooruUserIdInput.isBlank() || gelbooruApiKeyInput.isBlank()) {
+                                                    gelbooruStatusLabel = "Missing user ID or API key"
+                                                } else {
+                                                    credentialsStore.saveGelbooruCredentials(
+                                                        GelbooruCredentials(
+                                                            userId = gelbooruUserIdInput,
+                                                            apiKey = gelbooruApiKeyInput,
+                                                        )
+                                                    )
+                                                    refreshSourceAccountState()
+                                                    gelbooruStatusLabel = "Configured"
+                                                }
+                                            }
+                                        },
+                                        onClearGelbooruCredentials = {
+                                            scope.launch {
+                                                credentialsStore.clearGelbooruCredentials()
+                                                refreshSourceAccountState()
+                                            }
+                                        },
+                                        onSetEnabledSources = { enabled ->
+                                            scope.launch {
+                                                settingsRepository.setEnabledSources(
+                                                    enabled.intersect(searchCoordinator.availableSources.toSet())
+                                                )
+                                            }
+                                        },
+                                        onSetSourceWeights = { weights ->
+                                            scope.launch { settingsRepository.setSourceWeights(weights) }
+                                        },
+                                        onSetActiveProfile = { profileId ->
+                                            scope.launch { settingsRepository.setActiveProfile(profileId) }
+                                        },
+                                        onAddProfile = { name ->
+                                            scope.launch { settingsRepository.addRecommendationProfile(name) }
+                                        },
+                                        onRemoveProfile = { profileId ->
+                                            scope.launch {
+                                                val canRemove = settings.recommendationProfiles.size > 1 &&
+                                                    settings.recommendationProfiles.any { profile -> profile.profileId == profileId }
+                                                if (!canRemove) return@launch
+                                                clearProfileLikesAndSyncCodex(profileId)
+                                                removeProfileLikesCodex(profileId)
+                                                removeProfileScopedCodices(profileId)
+                                                settingsRepository.removeRecommendationProfile(profileId)
+                                            }
+                                        },
+                                        onClearLikesForActiveProfile = {
+                                            scope.launch { clearProfileLikesAndSyncCodex(activeRecommendationProfile.profileId) }
+                                        },
+                                        onRemoveForYouBlacklistEntry = { source, tags ->
+                                            scope.launch {
+                                                settingsRepository.removeForYouBlacklistEntry(
+                                                    profileId = activeRecommendationProfile.profileId,
+                                                    source = source,
+                                                    tags = tags,
+                                                )
+                                            }
+                                        },
+                                        onSetCacheFullImageOnSave = { enabled ->
+                                            scope.launch { settingsRepository.setCacheFullImageOnSave(enabled) }
+                                        },
+                                        onSetScenarioPreset = { preset ->
+                                            scope.launch { settingsRepository.setScenarioPreset(preset) }
+                                        },
+                                        onClearThumbnailCache = {
+                                            scope.launch { cacheRepository.clearThumbnailCache() }
+                                        },
+                                        onClearFullImageCache = {
+                                            scope.launch { cacheRepository.clearFullImageCache() }
+                                        },
+                                        changelogLoading = releaseHistoryLoading,
+                                        onOpenChangelog = {
+                                            if (releaseHistoryLoading) return@SettingsScreen
+                                            scope.launch {
+                                                releaseHistoryLoading = true
+                                                val remoteHistory = updateFeedClient.mainPrereleaseHistory(limit = 50)
+                                                    .getOrElse { emptyList() }
+                                                val merged = mergeReleaseHistory(
+                                                    remoteHistory = remoteHistory,
+                                                    localCurrent = latestInstalledChangelog,
+                                                )
+                                                if (merged.isEmpty()) {
+                                                    Toast.makeText(
+                                                        appContext,
+                                                        "No changelog available yet",
+                                                        Toast.LENGTH_SHORT,
+                                                    ).show()
+                                                } else {
+                                                    releaseHistoryEntries = merged
+                                                }
+                                                releaseHistoryLoading = false
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                        }
                     }
                     composable(
                         route = AppRoute.CodexDetail,
@@ -1628,144 +1662,8 @@ fun TheoriaApp(
                             onDeleteCodex = {
                                 scope.launch {
                                     codexRepository.deleteCodex(codexId)
-                                    navController.popBackStack(TopLevelDestination.Codex.route, inclusive = false)
-                                }
-                            },
-                        )
-                    }
-                    composable(TopLevelDestination.Settings.route) {
-                        SettingsScreen(
-                            settings = settings,
-                            recommendationProfiles = settings.recommendationProfiles,
-                            activeProfileId = activeRecommendationProfile.profileId,
-                            activeProfileName = activeRecommendationProfile.name,
-                            likesCount = activeProfileLikes.size,
-                            forYouBlacklistEntries = activeProfileForYouBlacklist,
-                            availableSources = searchCoordinator.availableSources,
-                            cacheSnapshot = cacheSnapshot,
-                            showDeveloperScenarios = false,
-                            pixivStatusLabel = pixivStatusLabel,
-                            pixivConnectEnabled = !pixivConnected &&
-                                !pixivStatusLabel.startsWith("Awaiting authorization callback"),
-                            onPixivConnect = {
-                                val authUrl = pixivAuthController.startAuthorizationUri().toString()
-                                pixivStatusLabel = "Awaiting authorization callback..."
-                                pixivConnected = false
-                                openInBrowser(appContext, authUrl)
-                            },
-                            onPixivDisconnect = {
-                                scope.launch {
-                                    credentialsStore.clearPixivTokens()
-                                    refreshSourceAccountState()
-                                }
-                            },
-                            gelbooruUserId = gelbooruUserIdInput,
-                            gelbooruApiKey = gelbooruApiKeyInput,
-                            gelbooruStatusLabel = gelbooruStatusLabel,
-                            onGelbooruUserIdChange = { gelbooruUserIdInput = it.trim() },
-                            onGelbooruApiKeyChange = { input ->
-                                val parsed = parseGelbooruCredentialInput(input)
-                                if (parsed != null) {
-                                    gelbooruApiKeyInput = parsed.apiKey
-                                    gelbooruUserIdInput = parsed.userId
-                                } else {
-                                    gelbooruApiKeyInput = input.trim()
-                                }
-                            },
-                            onSaveGelbooruCredentials = {
-                                scope.launch {
-                                    if (gelbooruUserIdInput.isBlank() || gelbooruApiKeyInput.isBlank()) {
-                                        gelbooruStatusLabel = "Missing user ID or API key"
-                                    } else {
-                                        credentialsStore.saveGelbooruCredentials(
-                                            GelbooruCredentials(
-                                                userId = gelbooruUserIdInput,
-                                                apiKey = gelbooruApiKeyInput,
-                                            )
-                                        )
-                                        refreshSourceAccountState()
-                                        gelbooruStatusLabel = "Configured"
-                                    }
-                                }
-                            },
-                            onClearGelbooruCredentials = {
-                                scope.launch {
-                                    credentialsStore.clearGelbooruCredentials()
-                                    refreshSourceAccountState()
-                                }
-                            },
-                            onSetEnabledSources = { enabled ->
-                                scope.launch {
-                                    settingsRepository.setEnabledSources(
-                                        enabled.intersect(searchCoordinator.availableSources.toSet())
-                                    )
-                                }
-                            },
-                            onSetSourceWeights = { weights ->
-                                scope.launch { settingsRepository.setSourceWeights(weights) }
-                            },
-                            onSetActiveProfile = { profileId ->
-                                scope.launch { settingsRepository.setActiveProfile(profileId) }
-                            },
-                            onAddProfile = { name ->
-                                scope.launch { settingsRepository.addRecommendationProfile(name) }
-                            },
-                            onRemoveProfile = { profileId ->
-                                scope.launch {
-                                    val canRemove = settings.recommendationProfiles.size > 1 &&
-                                        settings.recommendationProfiles.any { profile -> profile.profileId == profileId }
-                                    if (!canRemove) return@launch
-                                    clearProfileLikesAndSyncCodex(profileId)
-                                    removeProfileLikesCodex(profileId)
-                                    removeProfileScopedCodices(profileId)
-                                    settingsRepository.removeRecommendationProfile(profileId)
-                                }
-                            },
-                            onClearLikesForActiveProfile = {
-                                scope.launch { clearProfileLikesAndSyncCodex(activeRecommendationProfile.profileId) }
-                            },
-                            onRemoveForYouBlacklistEntry = { source, tags ->
-                                scope.launch {
-                                    settingsRepository.removeForYouBlacklistEntry(
-                                        profileId = activeRecommendationProfile.profileId,
-                                        source = source,
-                                        tags = tags,
-                                    )
-                                }
-                            },
-                            onSetCacheFullImageOnSave = { enabled ->
-                                scope.launch { settingsRepository.setCacheFullImageOnSave(enabled) }
-                            },
-                            onSetScenarioPreset = { preset ->
-                                scope.launch { settingsRepository.setScenarioPreset(preset) }
-                            },
-                            onClearThumbnailCache = {
-                                scope.launch { cacheRepository.clearThumbnailCache() }
-                            },
-                            onClearFullImageCache = {
-                                scope.launch { cacheRepository.clearFullImageCache() }
-                            },
-                            changelogLoading = releaseHistoryLoading,
-                            onOpenChangelog = {
-                                if (releaseHistoryLoading) return@SettingsScreen
-                                scope.launch {
-                                    releaseHistoryLoading = true
-                                    val remoteHistory = updateFeedClient.mainPrereleaseHistory(limit = 50)
-                                        .getOrElse { emptyList() }
-                                    val merged = mergeReleaseHistory(
-                                        remoteHistory = remoteHistory,
-                                        localCurrent = latestInstalledChangelog,
-                                    )
-                                    if (merged.isEmpty()) {
-                                        Toast.makeText(
-                                            appContext,
-                                            "No changelog available yet",
-                                            Toast.LENGTH_SHORT,
-                                        ).show()
-                                    } else {
-                                        releaseHistoryEntries = merged
-                                    }
-                                    releaseHistoryLoading = false
+                                    homeTabRoute = TopLevelDestination.Codex.route
+                                    navController.popBackStack(AppRoute.Home, inclusive = false)
                                 }
                             },
                         )
@@ -1863,14 +1761,19 @@ fun TheoriaApp(
                                 },
                                 onGoToSearch = {
                                     viewerSession = null
+                                    homeTabRoute = TopLevelDestination.Search.route
                                     scope.launch { searchCoordinator.setViewerLaunchContext(null) }
                                     navController.popBackStack(AppRoute.Viewer, inclusive = true)
-                                    navController.navigate(TopLevelDestination.Search.route) {
+                                    navController.navigate(AppRoute.Home) {
                                         popUpTo(navController.graph.findStartDestination().id) {
                                             saveState = true
                                         }
                                         launchSingleTop = true
                                         restoreState = true
+                                    }
+                                    scope.launch {
+                                        val searchIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.Search)
+                                        topLevelPagerState.scrollToPage(searchIndex)
                                     }
                                 },
                             )
@@ -2624,13 +2527,6 @@ private const val MIN_BOTTOM_BAR_HEIGHT_DP = 68
 private const val MAX_BOTTOM_BAR_HEIGHT_DP = 88
 private const val MIN_BOTTOM_BAR_ICON_DP = 24
 private const val MAX_BOTTOM_BAR_ICON_DP = 30
-private const val TAB_SWIPE_TRACK_START_DP = 12
-private const val TAB_SWIPE_THRESHOLD_DP = 72
-private const val TAB_SWIPE_HORIZONTAL_BIAS = 1.2f
-private const val TAB_SWIPE_EDGE_DAMPING = 0.35f
-private const val TAB_SWIPE_FALLBACK_WIDTH_MULTIPLIER = 3f
-private const val TAB_SWIPE_SETTLE_DURATION_MS = 180
-private const val TAB_SWIPE_COMMIT_DURATION_MS = 120
 private const val DEFAULT_MAIN_PROFILE_ID = "profile-main"
 private const val DEFAULT_PROFILE_NAME = "Main"
 private const val LIKES_CODEX_ID_PREFIX = "system_likes_codex"

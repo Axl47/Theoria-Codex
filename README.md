@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-03-02T23:05
+updated_at: 2026-03-05T18:10
 ---
 # Theoria Codex
 
@@ -14,7 +14,7 @@ Recent updates:
 - Codex import now accepts provider-backed JSON URIs (including chat/file-share `content://` streams) in addition to public-folder files.
 - Codex names now auto-deduplicate on create/rename/import by appending numeric suffixes (` 2`, ` 3`, ...).
 - `For You` now supports profile-scoped blacklist controls: trash the current recommendation seed to hide it and refresh immediately, then manage/remove blacklisted tag sets from Settings.
-- Top-level tab swipe navigation now tracks finger movement with horizontal slide motion before completing the tab change.
+- Top-level tab swipe navigation now uses a pager-based host so horizontal drags reveal adjacent tabs while preserving vertical scroll behavior.
 
 - The project includes five top-level tabs:
   - Search
