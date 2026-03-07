@@ -5,6 +5,10 @@ enum class SourceKey {
     GELBOORU,
     AIBOORU,
     NHENTAI,
+    RULE34XXX,
+    RULE34PAHEAL,
+    RULE34VIDEO,
+    RULE34GEN,
 }
 
 data class PostId(

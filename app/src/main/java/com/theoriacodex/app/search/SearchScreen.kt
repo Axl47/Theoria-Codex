@@ -107,6 +107,8 @@ import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.recommend.associatedDisplayTag
 import com.theoriacodex.app.recommend.buildSourceTagAffinity
 import com.theoriacodex.app.R
+import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
 import com.theoriacodex.app.viewer.createLoopingExoPlayer
@@ -1409,6 +1411,23 @@ private fun SourceChipLogo(
     size: Dp,
     modifier: Modifier = Modifier,
 ) {
+    @Composable
+    fun svgLogo(rawResId: Int, contentDescription: String) {
+        val context = LocalContext.current
+        val model = remember(context, rawResId) {
+            ImageRequest.Builder(context)
+                .data(Uri.parse("android.resource://${context.packageName}/$rawResId"))
+                .decoderFactory(SvgDecoder.Factory())
+                .build()
+        }
+        AsyncImage(
+            model = model,
+            contentDescription = contentDescription,
+            modifier = modifier.height(size),
+            contentScale = ContentScale.Fit,
+        )
+    }
+
     when (source) {
         SourceKey.PIXIV -> {
             Image(
@@ -1420,38 +1439,30 @@ private fun SourceChipLogo(
         }
 
         SourceKey.GELBOORU -> {
-            val context = LocalContext.current
-            val model = remember(context) {
-                ImageRequest.Builder(context)
-                    .data(Uri.parse("android.resource://${context.packageName}/${R.raw.gelbooru_logo}"))
-                    .decoderFactory(SvgDecoder.Factory())
-                    .build()
-            }
-            AsyncImage(
-                model = model,
-                contentDescription = "Gelbooru",
-                modifier = modifier.size(size),
-                contentScale = ContentScale.Fit,
-            )
+            svgLogo(R.raw.gelbooru_logo, "Gelbooru")
         }
 
         SourceKey.NHENTAI -> {
-            val context = LocalContext.current
-            val model = remember(context) {
-                ImageRequest.Builder(context)
-                    .data(Uri.parse("android.resource://${context.packageName}/${R.raw.nhentai_logo}"))
-                    .decoderFactory(SvgDecoder.Factory())
-                    .build()
-            }
-            AsyncImage(
-                model = model,
-                contentDescription = "NHentai",
-                modifier = modifier.height(size),
-                contentScale = ContentScale.Fit,
-            )
+            svgLogo(R.raw.nhentai_logo, "NHentai")
         }
 
-        else -> Text(source.name)
+        SourceKey.RULE34XXX -> {
+            svgLogo(R.raw.rule34xxx_logo, "rule34.xxx")
+        }
+
+        SourceKey.RULE34PAHEAL -> {
+            svgLogo(R.raw.rule34paheal_logo, "rule34.paheal.net")
+        }
+
+        SourceKey.RULE34VIDEO -> {
+            svgLogo(R.raw.rule34video_logo, "rule34video.com")
+        }
+
+        SourceKey.RULE34GEN -> {
+            svgLogo(R.raw.rule34gen_logo, "rule34gen.com")
+        }
+
+        else -> Text(source.displayName())
     }
 }
 
@@ -1509,12 +1520,12 @@ private fun StatusRow(coordinator: SearchCoordinator) {
         items(filtered.size) { index ->
             val status = filtered[index]
             val text = when (status.state) {
-                SourceRunState.EXCLUDED -> "${status.source.name} excluded"
+                SourceRunState.EXCLUDED -> "${status.source.displayName()} excluded"
                 SourceRunState.FAILED -> {
                     val reason = status.failureReason?.name ?: "UNKNOWN"
-                    "${status.source.name} failed ($reason)"
+                    "${status.source.displayName()} failed ($reason)"
                 }
-                SourceRunState.SUCCESS -> "${status.source.name} OK"
+                SourceRunState.SUCCESS -> "${status.source.displayName()} OK"
             }
             AssistChip(onClick = {}, label = { Text(text) })
         }
@@ -1528,7 +1539,7 @@ private fun buildSourceAuthErrorMessage(statuses: List<com.theoriacodex.domain.o
                 (status.failureReason == SourceFailureReason.AUTH_REQUIRED ||
                     status.failureReason == SourceFailureReason.AUTH_EXPIRED)
         }
-        .map { it.source.name }
+        .map { it.source.displayName() }
         .distinct()
     if (authSources.isEmpty()) return null
 
@@ -1553,9 +1564,9 @@ private fun buildSourceFailureMessage(statuses: List<com.theoriacodex.domain.orc
             ?.replaceFirstChar { it.uppercase() }
         val rawMessage = status.errorMessage?.trim().orEmpty()
         when {
-            rawMessage.isNotBlank() -> "${status.source.name}: $rawMessage"
-            reason != null -> "${status.source.name}: $reason"
-            else -> "${status.source.name}: Request failed"
+            rawMessage.isNotBlank() -> "${status.source.displayName()}: $rawMessage"
+            reason != null -> "${status.source.displayName()}: $reason"
+            else -> "${status.source.displayName()}: Request failed"
         }
     }
     val suffix = if (failures.size > 3) "\n+${failures.size - 3} more source errors" else ""
@@ -1644,27 +1655,7 @@ private fun buildImageRequest(
 }
 
 private fun searchRequestHeaders(sourceKey: SourceKey): Map<String, String> {
-    return when (sourceKey) {
-        SourceKey.PIXIV -> mapOf(
-            "Referer" to "https://www.pixiv.net/",
-            "User-Agent" to "Mozilla/5.0",
-        )
-
-        SourceKey.GELBOORU -> mapOf(
-            "Referer" to "https://gelbooru.com/",
-            "User-Agent" to "Mozilla/5.0",
-        )
-
-        SourceKey.AIBOORU -> mapOf(
-            "Referer" to "https://aibooru.online/",
-            "User-Agent" to "Mozilla/5.0",
-        )
-
-        SourceKey.NHENTAI -> mapOf(
-            "Referer" to "https://nhentai.net/",
-            "User-Agent" to "Mozilla/5.0",
-        )
-    }
+    return sourceKey.requestHeaders()
 }
 
 private fun String.isDigitsOnly(): Boolean {

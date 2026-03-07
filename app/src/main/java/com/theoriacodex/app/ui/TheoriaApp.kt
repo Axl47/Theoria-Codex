@@ -95,9 +95,15 @@ import com.theoriacodex.app.recommend.trainingTagsFor
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.SearchScreen
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
+import com.theoriacodex.app.source.ExternalPostDeepLink
 import com.theoriacodex.app.settings.SettingsScreen
+import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.source.exposedRealSources
+import com.theoriacodex.app.source.parseExternalPostDeepLink
+import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.sourceauth.AndroidSecureSourceCredentialsStore
 import com.theoriacodex.app.sourceauth.parseGelbooruCredentialInput
+import com.theoriacodex.app.sourceauth.parseRule34XxxCredentialInput
 import com.theoriacodex.app.sourceauth.PixivPkceController
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
 import com.theoriacodex.app.update.AndroidApkInstaller
@@ -136,6 +142,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.RealAdapterRegistry
 import com.theoriacodex.sources.credentials.GelbooruCredentials
+import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import com.theoriacodex.sources.pixiv.PixivAuthApi
 import java.io.File
@@ -175,6 +182,13 @@ private data class ViewerSession(
     val searchAnimatedOnly: Boolean = false,
 )
 
+private fun requiresRule34VideoResolution(post: Post): Boolean {
+    if (post.id.source != SourceKey.RULE34VIDEO && post.id.source != SourceKey.RULE34GEN) {
+        return false
+    }
+    return post.full?.url.isNullOrBlank() && post.full?.localPath.isNullOrBlank()
+}
+
 private data class ReleaseChangelogEntry(
     val releaseId: Long?,
     val versionCode: Int,
@@ -193,6 +207,7 @@ fun TheoriaApp(
     val navController = rememberNavController()
     val appContext = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
+    var rule34XxxConfigured by remember { mutableStateOf(false) }
 
     val storageDirectory = remember(appContext) { File(appContext.filesDir, "theoria_codex") }
     val seedTagSuggestions = remember(appContext) {
@@ -219,11 +234,14 @@ fun TheoriaApp(
             httpClient = sourceHttpClient,
         )
     }
-    val realRegistry = remember(credentialsStore, sourceHttpClient) {
+    val availableRealSources = remember(rule34XxxConfigured) {
+        exposedRealSources(rule34XxxConfigured)
+    }
+    val realRegistry = remember(credentialsStore, sourceHttpClient, availableRealSources) {
         RealAdapterRegistry(
             credentialsProvider = credentialsStore,
             httpClient = sourceHttpClient,
-            exposedSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.NHENTAI),
+            exposedSources = availableRealSources,
         )
     }
     val updateStateStore = remember(storageDirectory) {
@@ -272,7 +290,7 @@ fun TheoriaApp(
     val settingsRepository = remember(storageDirectory) { FileBackedSettingsRepository(storageDirectory) }
     val cacheRepository = remember(storageDirectory) { FileBackedCacheRepository(storageDirectory) }
     val uiRestoreRepository = remember(storageDirectory) { FileBackedUiRestoreRepository(storageDirectory) }
-    val searchCoordinator = remember {
+    val searchCoordinator = remember(realRegistry) {
         SearchCoordinator(
             registry = realRegistry,
             queryRepository = queryRepository,
@@ -281,7 +299,7 @@ fun TheoriaApp(
             tagSuggestionStore = tagSuggestionStore,
         )
     }
-    val forYouCoordinator = remember {
+    val forYouCoordinator = remember(realRegistry) {
         ForYouCoordinator(
             registry = realRegistry,
             settingsRepository = settingsRepository,
@@ -356,6 +374,9 @@ fun TheoriaApp(
     var gelbooruStatusLabel by remember { mutableStateOf("Not configured") }
     var gelbooruUserIdInput by rememberSaveable { mutableStateOf("") }
     var gelbooruApiKeyInput by rememberSaveable { mutableStateOf("") }
+    var rule34XxxStatusLabel by remember { mutableStateOf("Not configured") }
+    var rule34XxxUserIdInput by rememberSaveable { mutableStateOf("") }
+    var rule34XxxApiKeyInput by rememberSaveable { mutableStateOf("") }
 
     suspend fun refreshSourceAccountState() {
         val pixivTokens = credentialsStore.getPixivTokens()
@@ -411,6 +432,18 @@ fun TheoriaApp(
             gelbooruStatusLabel = "Configured"
             gelbooruUserIdInput = gelbooruCredentials.userId
             gelbooruApiKeyInput = gelbooruCredentials.apiKey
+        }
+
+        val rule34XxxCredentials = credentialsStore.getRule34XxxCredentials()
+        rule34XxxConfigured = rule34XxxCredentials != null
+        if (rule34XxxCredentials == null) {
+            rule34XxxStatusLabel = "Not configured"
+            rule34XxxUserIdInput = ""
+            rule34XxxApiKeyInput = ""
+        } else {
+            rule34XxxStatusLabel = "Configured"
+            rule34XxxUserIdInput = rule34XxxCredentials.userId
+            rule34XxxApiKeyInput = rule34XxxCredentials.apiKey
         }
     }
 
@@ -731,6 +764,25 @@ fun TheoriaApp(
         }
     }
 
+    fun requestViewerPostResolution(post: Post) {
+        if (!requiresRule34VideoResolution(post)) return
+        scope.launch {
+            val adapter = realRegistry.adapterFor(post.id.source) ?: return@launch
+            val resolved = runCatching { adapter.resolvePost(post.id) }.getOrNull() ?: return@launch
+            viewerSession = viewerSession?.let { session ->
+                val index = session.posts.indexOfFirst { current -> current.id == post.id }
+                if (index < 0) return@let session
+                val current = session.posts[index]
+                if (!requiresRule34VideoResolution(current)) return@let session
+                session.copy(
+                    posts = session.posts.toMutableList().apply {
+                        this[index] = resolved
+                    },
+                )
+            }
+        }
+    }
+
     suspend fun continueAfterUpdateFailure(message: String) {
         updateChoiceRemote = null
         startupUpdateReleaseHistory = emptyList()
@@ -826,6 +878,12 @@ fun TheoriaApp(
 
     LaunchedEffect(Unit) {
         beginStartupUpdateFlow()
+    }
+
+    LaunchedEffect(searchCoordinator, forYouCoordinator, navReady) {
+        if (!navReady) return@LaunchedEffect
+        searchCoordinator.initialize()
+        forYouCoordinator.initialize()
     }
 
     LaunchedEffect(incomingUri) {
@@ -1566,6 +1624,41 @@ fun TheoriaApp(
                                                 refreshSourceAccountState()
                                             }
                                         },
+                                        rule34XxxUserId = rule34XxxUserIdInput,
+                                        rule34XxxApiKey = rule34XxxApiKeyInput,
+                                        rule34XxxStatusLabel = rule34XxxStatusLabel,
+                                        onRule34XxxUserIdChange = { rule34XxxUserIdInput = it.trim() },
+                                        onRule34XxxApiKeyChange = { input ->
+                                            val parsed = parseRule34XxxCredentialInput(input)
+                                            if (parsed != null) {
+                                                rule34XxxApiKeyInput = parsed.apiKey
+                                                rule34XxxUserIdInput = parsed.userId
+                                            } else {
+                                                rule34XxxApiKeyInput = input.trim()
+                                            }
+                                        },
+                                        onSaveRule34XxxCredentials = {
+                                            scope.launch {
+                                                if (rule34XxxUserIdInput.isBlank() || rule34XxxApiKeyInput.isBlank()) {
+                                                    rule34XxxStatusLabel = "Missing user ID or API key"
+                                                } else {
+                                                    credentialsStore.saveRule34XxxCredentials(
+                                                        Rule34XxxCredentials(
+                                                            userId = rule34XxxUserIdInput,
+                                                            apiKey = rule34XxxApiKeyInput,
+                                                        )
+                                                    )
+                                                    refreshSourceAccountState()
+                                                    rule34XxxStatusLabel = "Configured"
+                                                }
+                                            }
+                                        },
+                                        onClearRule34XxxCredentials = {
+                                            scope.launch {
+                                                credentialsStore.clearRule34XxxCredentials()
+                                                refreshSourceAccountState()
+                                            }
+                                        },
                                         onSetEnabledSources = { enabled ->
                                             scope.launch {
                                                 settingsRepository.setEnabledSources(
@@ -1760,6 +1853,7 @@ fun TheoriaApp(
                                         toggleLikeAndSyncCodex(post)
                                     }
                                 },
+                                onRequestPostResolution = ::requestViewerPostResolution,
                                 onDismiss = {
                                     viewerSession = null
                                     scope.launch { searchCoordinator.setViewerLaunchContext(null) }
@@ -2135,16 +2229,6 @@ private fun openInBrowser(context: Context, url: String) {
     }
 }
 
-private fun parsePixivPostIdFromUri(uri: Uri): String? {
-    val scheme = uri.scheme?.lowercase().orEmpty()
-    val host = uri.host?.lowercase().orEmpty()
-    if (scheme != "https" && scheme != "http") return null
-    if (host != "www.pixiv.com" && host != "pixiv.com" && host != "www.pixiv.net" && host != "pixiv.net") return null
-    val path = uri.encodedPath.orEmpty()
-    val match = Regex("^/([A-Za-z]{2})/artworks/(\\d+)(?:/)?$").matchEntire(path) ?: return null
-    return match.groupValues.getOrNull(2)?.takeIf(String::isDigitsOnly)
-}
-
 private fun isCodexImportUri(context: Context, uri: Uri): Boolean {
     val scheme = uri.scheme?.lowercase().orEmpty()
     if (scheme != "content" && scheme != "file") return false
@@ -2162,68 +2246,6 @@ private fun isCodexImportUri(context: Context, uri: Uri): Boolean {
         return true
     }
     return false
-}
-
-private fun parseGelbooruPostIdFromUri(uri: Uri): String? {
-    val scheme = uri.scheme?.lowercase().orEmpty()
-    val host = uri.host?.lowercase().orEmpty()
-    if (scheme != "https" && scheme != "http") return null
-    if (host != "www.gelbooru.com" && host != "gelbooru.com") return null
-
-    val path = uri.encodedPath.orEmpty().lowercase()
-    if (path.isNotBlank() && path != "/" && path != "/index.php") return null
-
-    val page = uri.getQueryParameter("page")?.lowercase()
-    val section = uri.getQueryParameter("s")?.lowercase()
-    val postId = uri.getQueryParameter("id")
-    if (page != "post" || section != "view") return null
-    return postId?.takeIf(String::isDigitsOnly)
-}
-
-private fun parseNhentaiGalleryIdFromUri(uri: Uri): String? {
-    val scheme = uri.scheme?.lowercase().orEmpty()
-    val host = uri.host?.lowercase().orEmpty()
-    if (scheme != "https" && scheme != "http") return null
-    if (host != "nhentai.net" && host != "www.nhentai.net") return null
-
-    val path = uri.encodedPath.orEmpty()
-    val match = Regex("^/g/(\\d+)(?:/)?$").matchEntire(path) ?: return null
-    return match.groupValues.getOrNull(1)?.takeIf(String::isDigitsOnly)
-}
-
-private fun parseExternalPostDeepLink(uri: Uri): ExternalPostDeepLink? {
-    parsePixivPostIdFromUri(uri)?.let { postId ->
-        return ExternalPostDeepLink(
-            source = SourceKey.PIXIV,
-            sourceLabel = "Pixiv",
-            postId = postId,
-        )
-    }
-    parseNhentaiGalleryIdFromUri(uri)?.let { postId ->
-        return ExternalPostDeepLink(
-            source = SourceKey.NHENTAI,
-            sourceLabel = "NHentai",
-            postId = postId,
-        )
-    }
-    parseGelbooruPostIdFromUri(uri)?.let { postId ->
-        return ExternalPostDeepLink(
-            source = SourceKey.GELBOORU,
-            sourceLabel = "Gelbooru",
-            postId = postId,
-        )
-    }
-    return null
-}
-
-private data class ExternalPostDeepLink(
-    val source: SourceKey,
-    val sourceLabel: String,
-    val postId: String,
-)
-
-private fun String.isDigitsOnly(): Boolean {
-    return isNotBlank() && all { it.isDigit() }
 }
 
 @Composable
@@ -2364,30 +2386,8 @@ private fun enqueuePostDownload(context: Context, post: Post): Boolean {
         .setAllowedOverRoaming(true)
         .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
         .setMimeType(media.mime)
-    when (post.id.source) {
-        SourceKey.PIXIV -> {
-            request
-                .addRequestHeader("Referer", "https://www.pixiv.net/")
-                .addRequestHeader("User-Agent", "Mozilla/5.0")
-        }
-
-        SourceKey.GELBOORU -> {
-            request
-                .addRequestHeader("Referer", "https://gelbooru.com/")
-                .addRequestHeader("User-Agent", "Mozilla/5.0")
-        }
-
-        SourceKey.AIBOORU -> {
-            request
-                .addRequestHeader("Referer", "https://aibooru.online/")
-                .addRequestHeader("User-Agent", "Mozilla/5.0")
-        }
-
-        SourceKey.NHENTAI -> {
-            request
-                .addRequestHeader("Referer", "https://nhentai.net/")
-                .addRequestHeader("User-Agent", "Mozilla/5.0")
-        }
+    post.id.source.requestHeaders().forEach { (name, value) ->
+        request.addRequestHeader(name, value)
     }
 
     val guessedName = URLUtil.guessFileName(url, null, media.mime)

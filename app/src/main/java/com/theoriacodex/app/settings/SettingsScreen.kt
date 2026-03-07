@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.source.displayName
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
@@ -56,6 +57,13 @@ fun SettingsScreen(
     onGelbooruApiKeyChange: (String) -> Unit,
     onSaveGelbooruCredentials: () -> Unit,
     onClearGelbooruCredentials: () -> Unit,
+    rule34XxxUserId: String,
+    rule34XxxApiKey: String,
+    rule34XxxStatusLabel: String,
+    onRule34XxxUserIdChange: (String) -> Unit,
+    onRule34XxxApiKeyChange: (String) -> Unit,
+    onSaveRule34XxxCredentials: () -> Unit,
+    onClearRule34XxxCredentials: () -> Unit,
     onSetEnabledSources: (Set<SourceKey>) -> Unit,
     onSetSourceWeights: (Map<SourceKey, Double>) -> Unit,
     onSetActiveProfile: (String) -> Unit,
@@ -175,7 +183,7 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = "${entry.source.name}: ${entry.tags.joinToString(" + ")}",
+                                text = "${entry.source.displayName()}: ${entry.tags.joinToString(" + ")}",
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.bodySmall,
                             )
@@ -205,7 +213,7 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(source.name)
+                        Text(source.displayName())
                         Switch(
                             checked = isEnabled,
                             onCheckedChange = { checked ->
@@ -284,6 +292,35 @@ fun SettingsScreen(
                         Text("Save")
                     }
                     TextButton(onClick = onClearGelbooruCredentials) {
+                        Text("Clear")
+                    }
+                }
+
+                Text("rule34.xxx", style = MaterialTheme.typography.titleSmall)
+                Text(rule34XxxStatusLabel, style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = rule34XxxUserId,
+                    onValueChange = onRule34XxxUserIdChange,
+                    label = { Text("User ID") },
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = rule34XxxApiKey,
+                    onValueChange = onRule34XxxApiKeyChange,
+                    label = { Text("API Key") },
+                    supportingText = {
+                        Text("Paste key or &api_key=<key>&user_id=<id> to auto-fill.")
+                    },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onSaveRule34XxxCredentials) {
+                        Text("Save")
+                    }
+                    TextButton(onClick = onClearRule34XxxCredentials) {
                         Text("Clear")
                     }
                 }

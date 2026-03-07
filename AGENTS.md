@@ -1,3 +1,7 @@
+---
+created_at: 2026-02-24T17:48
+updated_at: 2026-03-07T12:10
+---
 # THEORIA CODEX AGENTS DOCUMENT
 
 ## ExecPlans
@@ -30,11 +34,16 @@ Whenever new updates are made, this file (`AGENTS.md`) should be updated with an
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/execplans/for-you-blacklist-execplan.md`: living ExecPlan for profile-scoped For You blacklist behavior, feed trash action, and Settings blacklist management.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/execplans/top-level-tab-swipe-pager-refactor-execplan.md`: living ExecPlan for replacing fragile NavHost swipe emulation with pager-based top-level interactive tab navigation.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/execplans/nhentai-source-integration-execplan.md`: living ExecPlan for NHentai source rollout (adapter, registry exposure, headers, deep links, stubs, and validation).
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/execplans/rule34-family-source-integration-execplan.md`: living ExecPlan for the phased Rule34 family rollout covering `rule34.xxx`, `rule34.paheal.net`, `rule34video.com`, and `rule34gen.com`.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/recommend/`: recommendation runtime package containing `ForYouCoordinator`, `ForYouScreen`, and post training-tag extraction helpers.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-domain/src/main/kotlin/com/theoriacodex/domain/recommendation/`: source-aware tag affinity and recommendation tag-set generator used by the app `For You` feed.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-data/src/main/kotlin/com/theoriacodex/data/repository/FileBackedRepositories.kt` (`likes_store.json`, `settings_store.json`): local file-backed likes repository with per-profile/per-post tag memory used by recommendation training, plus profile-scoped For You blacklist persistence in settings.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-sources/src/main/kotlin/com/theoriacodex/sources/nhentai/NhentaiSourceAdapter.kt`: NHentai JSON integration (`/api/galleries/all`, `/api/galleries/search`, `/api/gallery/<id>`) with fixed browser-style headers, gallery-page media URL construction, and tag suggestion extraction.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-stubs/src/main/resources/stubs/nhentai/`: fixture-backed NHentai stub data (`search_page_1.json`, `search_page_2.json`, `trending_tags.json`) used by `:core-stubs:test` and app/unit test scenarios.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-sources/src/main/kotlin/com/theoriacodex/sources/rule34/`: shared Rule34 parsing helpers plus the real adapters for `rule34.xxx`, `rule34.paheal.net`, `rule34video.com`, and `rule34gen.com`.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/source/SourceMetadata.kt` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/source/ExternalPostDeepLinks.kt`: centralized source display/header metadata and external post URL parsing for supported hosts.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/sourceauth/Rule34XxxCredentialInputParser.kt`: parser for pasted `rule34.xxx` credential strings (`user_id` / `api_key`) used by Settings.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/res/raw/rule34xxx_logo.svg`, `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/res/raw/rule34paheal_logo.svg`, `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/res/raw/rule34video_logo.svg`, and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/res/raw/rule34gen_logo.svg`: Rule34 family source-logo assets used by Search chips and source badges.
 
 ## Final Output
 

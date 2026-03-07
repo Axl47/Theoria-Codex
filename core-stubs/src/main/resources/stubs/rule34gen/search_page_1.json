@@ -1,0 +1,31 @@
+{
+  "nextPageToken": "page_2",
+  "items": [
+    {
+      "sourcePostId": "81001",
+      "title": "rule34gen sample 1",
+      "previewUrl": "https://rule34gen.com/contents/videos_screenshots/81000/81001/preview.jpg",
+      "fullUrl": "https://rule34gen.com/contents/videos/81000/81001/720p.mp4",
+      "pageUrl": "https://rule34gen.com/video/81001/sample-gen-video/",
+      "width": 1280,
+      "height": 720,
+      "canonicalTags": ["elf", "animation"],
+      "rawTags": ["elf", "animation"],
+      "authorName": "gen_model_1",
+      "createdAtEpochMs": 1705300000000
+    },
+    {
+      "sourcePostId": "81002",
+      "title": "rule34gen sample 2",
+      "previewUrl": "https://rule34gen.com/contents/videos_screenshots/81000/81002/preview.jpg",
+      "fullUrl": "https://rule34gen.com/contents/videos/81000/81002/1080p.mp4",
+      "pageUrl": "https://rule34gen.com/video/81002/sample-gen-video-two/",
+      "width": 1920,
+      "height": 1080,
+      "canonicalTags": ["demon_girl", "animation"],
+      "rawTags": ["demon_girl", "animation"],
+      "authorName": "gen_model_2",
+      "createdAtEpochMs": 1705300100000
+    }
+  ]
+}

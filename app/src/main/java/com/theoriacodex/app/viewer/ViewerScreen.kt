@@ -94,6 +94,8 @@ import coil.request.ImageRequest
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraMedia
 import com.theoriacodex.app.media.isVideoMediaRef
+import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -124,6 +126,7 @@ fun ViewerScreen(
     onLoadMoreFromSource: (() -> Unit)? = null,
     likedPostIds: Set<PostId> = emptySet(),
     onToggleLike: ((Post) -> Unit)? = null,
+    onRequestPostResolution: ((Post) -> Unit)? = null,
     onDismiss: () -> Unit,
     onSave: (Post) -> Unit,
     onOpenInBrowser: (Post) -> Unit,
@@ -167,6 +170,7 @@ fun ViewerScreen(
     val prefetchInFlightVideoUrls = remember { mutableSetOf<String>() }
     var pendingDismiss by remember { mutableStateOf(false) }
     var mediaPlaybackEnabled by remember { mutableStateOf(true) }
+    val resolutionRequestedByPostId = remember { mutableStateMapOf<PostId, Boolean>() }
     val currentPostIndex = postPagerState.currentPage.coerceIn(0, posts.lastIndex)
     val selectedPost = posts[currentPostIndex]
     val selectedPostLiked = selectedPost.id in likedPostIds
@@ -185,6 +189,19 @@ fun ViewerScreen(
     LaunchedEffect(posts, launchContext.queryHash, launchContext.startIndex) {
         pendingDismiss = false
         mediaPlaybackEnabled = true
+    }
+
+    LaunchedEffect(
+        selectedPost.id.source,
+        selectedPost.id.sourcePostId,
+        selectedPost.full?.url,
+        selectedPost.full?.localPath,
+        onRequestPostResolution,
+    ) {
+        if (onRequestPostResolution == null) return@LaunchedEffect
+        if (!requiresResolvedViewerPost(selectedPost)) return@LaunchedEffect
+        if (resolutionRequestedByPostId.put(selectedPost.id, true) == true) return@LaunchedEffect
+        onRequestPostResolution(selectedPost)
     }
 
     LaunchedEffect(pendingDismiss) {
@@ -592,7 +609,7 @@ fun ViewerScreen(
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 Text(
-                                    text = post.id.source.name,
+                                    text = post.id.source.displayName(),
                                     color = MaterialTheme.colorScheme.onBackground,
                                     style = MaterialTheme.typography.titleLarge,
                                 )
@@ -637,7 +654,7 @@ fun ViewerScreen(
         if (viewerState.chromeVisible) {
             ViewerChrome(
                 modifier = Modifier.align(Alignment.TopCenter),
-                source = selectedPost.id.source.name,
+                source = selectedPost.id.source.displayName(),
                 indexLabel = "${selectedMediaIndex + 1} / ${selectedPostMedia.size}",
                 onBack = ::requestDismissViewer,
                 liked = selectedPostLiked,
@@ -1560,27 +1577,7 @@ private fun buildViewerImageRequest(
 }
 
 private fun viewerRequestHeaders(sourceKey: SourceKey): Map<String, String> {
-    return when (sourceKey) {
-        SourceKey.PIXIV -> mapOf(
-            "Referer" to "https://www.pixiv.net/",
-            "User-Agent" to "Mozilla/5.0",
-        )
-
-        SourceKey.GELBOORU -> mapOf(
-            "Referer" to "https://gelbooru.com/",
-            "User-Agent" to "Mozilla/5.0",
-        )
-
-        SourceKey.AIBOORU -> mapOf(
-            "Referer" to "https://aibooru.online/",
-            "User-Agent" to "Mozilla/5.0",
-        )
-
-        SourceKey.NHENTAI -> mapOf(
-            "Referer" to "https://nhentai.net/",
-            "User-Agent" to "Mozilla/5.0",
-        )
-    }
+    return sourceKey.requestHeaders()
 }
 
 private data class PrefetchCandidate(
@@ -1639,6 +1636,13 @@ private fun viewerMediaItems(post: Post): List<ImageRef> {
         return explicitMedia
     }
     return listOfNotNull(post.full).ifEmpty { listOf(post.preview) }
+}
+
+private fun requiresResolvedViewerPost(post: Post): Boolean {
+    if (post.id.source != SourceKey.RULE34VIDEO && post.id.source != SourceKey.RULE34GEN) {
+        return false
+    }
+    return post.full?.url.isNullOrBlank() && post.full?.localPath.isNullOrBlank()
 }
 
 private fun viewerImageCandidates(post: Post, media: ImageRef): List<String> {

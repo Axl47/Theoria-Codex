@@ -20,6 +20,7 @@ class RealAdapterRegistryTest {
         assertNull(registry.adapterFor(SourceKey.AIBOORU))
         assertNull(registry.adapterFor(SourceKey.GELBOORU))
         assertNull(registry.adapterFor(SourceKey.NHENTAI))
+        assertNull(registry.adapterFor(SourceKey.RULE34PAHEAL))
     }
 
     @Test
@@ -27,11 +28,21 @@ class RealAdapterRegistryTest {
         val registry = RealAdapterRegistry(
             credentialsProvider = FakeCredentialsProvider(),
             httpClient = FakeHttpClient(),
-            exposedSources = setOf(SourceKey.PIXIV, SourceKey.AIBOORU, SourceKey.NHENTAI),
+            exposedSources = setOf(
+                SourceKey.PIXIV,
+                SourceKey.AIBOORU,
+                SourceKey.NHENTAI,
+                SourceKey.RULE34PAHEAL,
+                SourceKey.RULE34VIDEO,
+                SourceKey.RULE34GEN,
+            ),
         )
 
         assertTrue(SourceKey.PIXIV in registry.availableSources())
         assertTrue(SourceKey.AIBOORU in registry.availableSources())
         assertTrue(SourceKey.NHENTAI in registry.availableSources())
+        assertTrue(SourceKey.RULE34PAHEAL in registry.availableSources())
+        assertTrue(SourceKey.RULE34VIDEO in registry.availableSources())
+        assertTrue(SourceKey.RULE34GEN in registry.availableSources())
     }
 }

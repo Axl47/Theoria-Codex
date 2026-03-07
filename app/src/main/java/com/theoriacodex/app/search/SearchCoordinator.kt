@@ -1035,7 +1035,7 @@ class SearchCoordinator(
     private fun autocompletePrefixForSource(source: SourceKey, input: String): String {
         val normalized = normalizeTypedTag(input)
         return when (source) {
-            SourceKey.GELBOORU -> normalizeGelbooruToken(normalized)
+            SourceKey.GELBOORU, SourceKey.RULE34XXX -> normalizeGelbooruToken(normalized)
             else -> normalized
         }
     }
@@ -1061,8 +1061,14 @@ class SearchCoordinator(
         val right = typedTag.trim()
         if (left.isBlank() || right.isBlank()) return false
         return when (source) {
-            SourceKey.GELBOORU -> normalizeGelbooruToken(left) == normalizeGelbooruToken(right)
-            SourceKey.PIXIV, SourceKey.NHENTAI -> normalizeMatchToken(left) == normalizeMatchToken(right)
+            SourceKey.GELBOORU, SourceKey.RULE34XXX ->
+                normalizeGelbooruToken(left) == normalizeGelbooruToken(right)
+            SourceKey.PIXIV,
+            SourceKey.NHENTAI,
+            SourceKey.RULE34PAHEAL,
+            SourceKey.RULE34VIDEO,
+            SourceKey.RULE34GEN,
+            -> normalizeMatchToken(left) == normalizeMatchToken(right)
             else -> left.equals(right, ignoreCase = true)
         }
     }
@@ -1078,15 +1084,20 @@ class SearchCoordinator(
         val normalized = value.trim()
         if (normalized.isBlank()) return ""
         return when (source) {
-            SourceKey.GELBOORU -> normalizeGelbooruToken(normalized)
+            SourceKey.GELBOORU, SourceKey.RULE34XXX -> normalizeGelbooruToken(normalized)
             else -> normalized
         }
     }
 
     private fun sourceTagKey(source: SourceKey, tag: String): String {
         return when (source) {
-            SourceKey.GELBOORU -> normalizeGelbooruToken(tag)
-            SourceKey.PIXIV, SourceKey.NHENTAI -> normalizeMatchToken(tag)
+            SourceKey.GELBOORU, SourceKey.RULE34XXX -> normalizeGelbooruToken(tag)
+            SourceKey.PIXIV,
+            SourceKey.NHENTAI,
+            SourceKey.RULE34PAHEAL,
+            SourceKey.RULE34VIDEO,
+            SourceKey.RULE34GEN,
+            -> normalizeMatchToken(tag)
             else -> tag.trim().lowercase()
         }
     }
@@ -1188,8 +1199,12 @@ private const val SEEN_TAGS_PER_SOURCE_INGEST_LIMIT = 240
 private const val LAST_ACTIVE_QUERY_KEY = "last_active"
 private val SOURCE_DISPLAY_ORDER = listOf(
     SourceKey.GELBOORU,
+    SourceKey.RULE34XXX,
+    SourceKey.RULE34PAHEAL,
     SourceKey.PIXIV,
     SourceKey.NHENTAI,
+    SourceKey.RULE34VIDEO,
+    SourceKey.RULE34GEN,
     SourceKey.AIBOORU,
 )
 private val NHENTAI_LANGUAGE_TAG_BY_FILTER = mapOf(
@@ -1198,7 +1213,15 @@ private val NHENTAI_LANGUAGE_TAG_BY_FILTER = mapOf(
     NhentaiLanguageFilter.JAPANESE to "japanese",
 )
 private val NHENTAI_LANGUAGE_FILTER_TAGS = NHENTAI_LANGUAGE_TAG_BY_FILTER.values.toSet()
-private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.NHENTAI)
+private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(
+    SourceKey.PIXIV,
+    SourceKey.GELBOORU,
+    SourceKey.NHENTAI,
+    SourceKey.RULE34XXX,
+    SourceKey.RULE34PAHEAL,
+    SourceKey.RULE34VIDEO,
+    SourceKey.RULE34GEN,
+)
 private val WHITESPACE_REGEX = Regex("\\s+")
 private val PIXIV_TRAILING_PARENTHESIS_REGEX = Regex("\\s*\\([^)]*\\)\\s*$")
 

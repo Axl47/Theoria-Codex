@@ -7,6 +7,7 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -58,6 +59,31 @@ class JsonStubSourceAdapterTest {
 
         assertEquals(SortMode.RANDOM, query.sort)
         assertEquals(QueryMode.Source(SourceKey.AIBOORU), query.mode)
+    }
+
+    @Test
+    fun `rule34 family fixtures load search trending and resolve`() = runBlocking {
+        val runtime = StubRuntime(StubScenarioPreset.NORMAL)
+        val fixtureLoader = StubFixtureLoader()
+        val sources = listOf(
+            SourceKey.RULE34XXX,
+            SourceKey.RULE34PAHEAL,
+            SourceKey.RULE34VIDEO,
+            SourceKey.RULE34GEN,
+        )
+
+        sources.forEach { source ->
+            val adapter = JsonStubSourceAdapter(
+                sourceKey = source,
+                fixtureLoader = fixtureLoader,
+                runtime = runtime,
+            )
+
+            val firstPage = adapter.search(sampleQuery(), pageToken = null)
+            assertTrue("Expected stub search results for $source", firstPage.items.isNotEmpty())
+            assertTrue("Expected stub trending tags for $source", adapter.trendingTags(limit = 2).isNotEmpty())
+            assertNotNull(adapter.resolvePost(firstPage.items.first().id))
+        }
     }
 
     private fun sampleQuery(): Query {

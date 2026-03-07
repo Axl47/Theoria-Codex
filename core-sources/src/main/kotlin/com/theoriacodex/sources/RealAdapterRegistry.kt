@@ -11,6 +11,10 @@ import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.nhentai.NhentaiSourceAdapter
 import com.theoriacodex.sources.pixiv.PixivSourceAdapter
+import com.theoriacodex.sources.rule34.Rule34GenSourceAdapter
+import com.theoriacodex.sources.rule34.Rule34PahealSourceAdapter
+import com.theoriacodex.sources.rule34.Rule34VideoSourceAdapter
+import com.theoriacodex.sources.rule34.Rule34XxxSourceAdapter
 
 class RealAdapterRegistry(
     credentialsProvider: SourceCredentialsProvider,
@@ -28,6 +32,19 @@ class RealAdapterRegistry(
             credentialsProvider = credentialsProvider,
         ),
         SourceKey.NHENTAI to NhentaiSourceAdapter(
+            httpClient = httpClient,
+        ),
+        SourceKey.RULE34XXX to Rule34XxxSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = credentialsProvider,
+        ),
+        SourceKey.RULE34PAHEAL to Rule34PahealSourceAdapter(
+            httpClient = httpClient,
+        ),
+        SourceKey.RULE34VIDEO to Rule34VideoSourceAdapter(
+            httpClient = httpClient,
+        ),
+        SourceKey.RULE34GEN to Rule34GenSourceAdapter(
             httpClient = httpClient,
         ),
     )

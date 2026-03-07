@@ -16,43 +16,38 @@ class StubAdapterRegistryTest {
     fun `unified orchestrator returns merged results from all sources`() = runBlocking {
         val registry = StubAdapterRegistry()
         registry.runtime.preset = StubScenarioPreset.NORMAL
+        val enabledSources = SourceKey.entries.toSet()
+        val equalWeight = 1.0 / enabledSources.size.toDouble()
 
         val result = registry.unifiedOrchestrator().search(
             query = sampleQuery(),
-            enabledSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.NHENTAI),
+            enabledSources = enabledSources,
             pageTokens = emptyMap(),
-            weights = mapOf(
-                SourceKey.PIXIV to 0.45,
-                SourceKey.GELBOORU to 0.25,
-                SourceKey.AIBOORU to 0.15,
-                SourceKey.NHENTAI to 0.15,
-            ),
+            weights = enabledSources.associateWith { equalWeight },
         )
 
         assertTrue(result.items.isNotEmpty())
-        assertEquals(4, result.statuses.count { it.state == SourceRunState.SUCCESS })
+        assertEquals(SourceKey.entries.size, result.statuses.count { it.state == SourceRunState.SUCCESS })
     }
 
     @Test
     fun `unified orchestrator reports partial failure scenario`() = runBlocking {
         val registry = StubAdapterRegistry()
         registry.runtime.preset = StubScenarioPreset.PARTIAL_FAILURE
+        val enabledSources = SourceKey.entries.toSet()
+        val equalWeight = 1.0 / enabledSources.size.toDouble()
 
         val result = registry.unifiedOrchestrator().search(
             query = sampleQuery(),
-            enabledSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.NHENTAI),
+            enabledSources = enabledSources,
             pageTokens = emptyMap(),
-            weights = mapOf(
-                SourceKey.PIXIV to 0.45,
-                SourceKey.GELBOORU to 0.25,
-                SourceKey.AIBOORU to 0.15,
-                SourceKey.NHENTAI to 0.15,
-            ),
+            weights = enabledSources.associateWith { equalWeight },
         )
 
         val failed = result.statuses.first { it.source == SourceKey.GELBOORU }
         assertEquals(SourceRunState.FAILED, failed.state)
         assertEquals(SourceFailureReason.NETWORK, failed.failureReason)
+        assertEquals(SourceKey.entries.size - 1, result.statuses.count { it.state == SourceRunState.SUCCESS })
     }
 
     private fun sampleQuery(): Query {

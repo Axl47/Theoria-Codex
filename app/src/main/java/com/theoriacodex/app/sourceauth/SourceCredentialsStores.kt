@@ -5,6 +5,7 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
+import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -76,11 +77,36 @@ class AndroidSecureSourceCredentialsStore(
             .remove(KEY_GELBOORU_API_KEY)
             .apply()
     }
+
+    override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? = withContext(Dispatchers.IO) {
+        val userId = prefs.getString(KEY_RULE34XXX_USER_ID, null)
+        val apiKey = prefs.getString(KEY_RULE34XXX_API_KEY, null)
+        if (userId.isNullOrBlank() || apiKey.isNullOrBlank()) {
+            null
+        } else {
+            Rule34XxxCredentials(userId = userId, apiKey = apiKey)
+        }
+    }
+
+    override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) = withContext(Dispatchers.IO) {
+        prefs.edit()
+            .putString(KEY_RULE34XXX_USER_ID, credentials.userId)
+            .putString(KEY_RULE34XXX_API_KEY, credentials.apiKey)
+            .apply()
+    }
+
+    override suspend fun clearRule34XxxCredentials() = withContext(Dispatchers.IO) {
+        prefs.edit()
+            .remove(KEY_RULE34XXX_USER_ID)
+            .remove(KEY_RULE34XXX_API_KEY)
+            .apply()
+    }
 }
 
 class InMemorySourceCredentialsStore : SourceCredentialsProvider {
     private var pixivTokens: PixivAuthTokens? = null
     private var gelbooruCredentials: GelbooruCredentials? = null
+    private var rule34XxxCredentials: Rule34XxxCredentials? = null
 
     override suspend fun getPixivTokens(): PixivAuthTokens? = pixivTokens
 
@@ -101,6 +127,16 @@ class InMemorySourceCredentialsStore : SourceCredentialsProvider {
     override suspend fun clearGelbooruCredentials() {
         gelbooruCredentials = null
     }
+
+    override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? = rule34XxxCredentials
+
+    override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) {
+        rule34XxxCredentials = credentials
+    }
+
+    override suspend fun clearRule34XxxCredentials() {
+        rule34XxxCredentials = null
+    }
 }
 
 private const val PREFS_NAME = "theoria_source_credentials"
@@ -109,3 +145,5 @@ private const val KEY_PIXIV_REFRESH_TOKEN = "pixiv_refresh_token"
 private const val KEY_PIXIV_EXPIRES_AT = "pixiv_expires_at"
 private const val KEY_GELBOORU_USER_ID = "gelbooru_user_id"
 private const val KEY_GELBOORU_API_KEY = "gelbooru_api_key"
+private const val KEY_RULE34XXX_USER_ID = "rule34xxx_user_id"
+private const val KEY_RULE34XXX_API_KEY = "rule34xxx_api_key"

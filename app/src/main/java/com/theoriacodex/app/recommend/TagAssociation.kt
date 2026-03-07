@@ -96,8 +96,13 @@ fun normalizeTagForSource(
     }
 
     return when (source) {
-        SourceKey.GELBOORU, SourceKey.AIBOORU -> cleaned.replace(' ', '_')
-        SourceKey.PIXIV, SourceKey.NHENTAI -> cleaned
+        SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.RULE34XXX -> cleaned.replace(' ', '_')
+        SourceKey.PIXIV,
+        SourceKey.NHENTAI,
+        SourceKey.RULE34PAHEAL,
+        SourceKey.RULE34VIDEO,
+        SourceKey.RULE34GEN,
+        -> cleaned
     }.takeIf { it.isNotBlank() }
 }
 

@@ -49,6 +49,10 @@ class StubFixtureLoader(
             SourceKey.GELBOORU -> "gelbooru"
             SourceKey.AIBOORU -> "aibooru"
             SourceKey.NHENTAI -> "nhentai"
+            SourceKey.RULE34XXX -> "rule34xxx"
+            SourceKey.RULE34PAHEAL -> "rule34paheal"
+            SourceKey.RULE34VIDEO -> "rule34video"
+            SourceKey.RULE34GEN -> "rule34gen"
         }
     }
 }

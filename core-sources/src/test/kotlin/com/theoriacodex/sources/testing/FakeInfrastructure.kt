@@ -2,6 +2,7 @@ package com.theoriacodex.sources.testing
 
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
+import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
@@ -47,6 +48,7 @@ data class RecordedPost(
 class FakeCredentialsProvider : SourceCredentialsProvider {
     var pixivTokens: PixivAuthTokens? = null
     var gelbooruCredentials: GelbooruCredentials? = null
+    var rule34XxxCredentials: Rule34XxxCredentials? = null
 
     override suspend fun getPixivTokens(): PixivAuthTokens? = pixivTokens
     override suspend fun savePixivTokens(tokens: PixivAuthTokens) {
@@ -64,5 +66,14 @@ class FakeCredentialsProvider : SourceCredentialsProvider {
 
     override suspend fun clearGelbooruCredentials() {
         gelbooruCredentials = null
+    }
+
+    override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? = rule34XxxCredentials
+    override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) {
+        rule34XxxCredentials = credentials
+    }
+
+    override suspend fun clearRule34XxxCredentials() {
+        rule34XxxCredentials = null
     }
 }

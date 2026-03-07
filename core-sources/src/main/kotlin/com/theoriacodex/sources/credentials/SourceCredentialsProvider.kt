@@ -11,6 +11,11 @@ data class GelbooruCredentials(
     val apiKey: String,
 )
 
+data class Rule34XxxCredentials(
+    val userId: String,
+    val apiKey: String,
+)
+
 interface SourceCredentialsProvider {
     suspend fun getPixivTokens(): PixivAuthTokens?
     suspend fun savePixivTokens(tokens: PixivAuthTokens)
@@ -19,4 +24,8 @@ interface SourceCredentialsProvider {
     suspend fun getGelbooruCredentials(): GelbooruCredentials?
     suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials)
     suspend fun clearGelbooruCredentials()
+
+    suspend fun getRule34XxxCredentials(): Rule34XxxCredentials?
+    suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials)
+    suspend fun clearRule34XxxCredentials()
 }

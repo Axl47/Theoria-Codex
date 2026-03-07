@@ -58,10 +58,14 @@ interface LikesRepository {
 data class SourceRuntimeSettings(
     val enabledSources: Set<SourceKey> = SourceKey.entries.toSet(),
     val sourceWeights: Map<SourceKey, Double> = mapOf(
-        SourceKey.PIXIV to 0.45,
-        SourceKey.GELBOORU to 0.25,
-        SourceKey.AIBOORU to 0.15,
-        SourceKey.NHENTAI to 0.15,
+        SourceKey.PIXIV to 0.25,
+        SourceKey.GELBOORU to 0.18,
+        SourceKey.RULE34XXX to 0.15,
+        SourceKey.RULE34PAHEAL to 0.12,
+        SourceKey.NHENTAI to 0.10,
+        SourceKey.RULE34VIDEO to 0.08,
+        SourceKey.RULE34GEN to 0.07,
+        SourceKey.AIBOORU to 0.05,
     ),
 )
 
