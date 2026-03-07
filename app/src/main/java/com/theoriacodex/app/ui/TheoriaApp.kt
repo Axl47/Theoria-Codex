@@ -783,6 +783,21 @@ fun TheoriaApp(
         }
     }
 
+    suspend fun prepareViewerPostsForLaunch(
+        posts: List<Post>,
+        context: ViewerLaunchContext,
+    ): List<Post> {
+        if (posts.isEmpty()) return posts
+        val startIndex = context.startIndex.coerceIn(0, posts.lastIndex)
+        val selectedPost = posts[startIndex]
+        if (!requiresRule34VideoResolution(selectedPost)) return posts
+        val adapter = realRegistry.adapterFor(selectedPost.id.source) ?: return posts
+        val resolved = runCatching { adapter.resolvePost(selectedPost.id) }.getOrNull() ?: return posts
+        return posts.toMutableList().apply {
+            this[startIndex] = resolved
+        }
+    }
+
     suspend fun continueAfterUpdateFailure(message: String) {
         updateChoiceRemote = null
         startupUpdateReleaseHistory = emptyList()
@@ -1388,14 +1403,17 @@ fun TheoriaApp(
                                             }
                                         },
                                         onOpenViewer = { posts, context, animatedOnly ->
-                                            viewerSession = ViewerSession(
-                                                posts = posts,
-                                                context = context,
-                                                liveSearchBinding = true,
-                                                searchAnimatedOnly = animatedOnly,
-                                            )
-                                            scope.launch { searchCoordinator.setViewerLaunchContext(context) }
-                                            navController.navigate(AppRoute.Viewer)
+                                            scope.launch {
+                                                val preparedPosts = prepareViewerPostsForLaunch(posts, context)
+                                                viewerSession = ViewerSession(
+                                                    posts = preparedPosts,
+                                                    context = context,
+                                                    liveSearchBinding = true,
+                                                    searchAnimatedOnly = animatedOnly,
+                                                )
+                                                searchCoordinator.setViewerLaunchContext(context)
+                                                navController.navigate(AppRoute.Viewer)
+                                            }
                                         },
                                         onRequestSaveToCodex = { post ->
                                             pendingSavePost = post
@@ -1477,13 +1495,16 @@ fun TheoriaApp(
                                             }
                                         },
                                         onOpenViewer = { posts, context ->
-                                            viewerSession = ViewerSession(
-                                                posts = posts,
-                                                context = context,
-                                                liveSearchBinding = true,
-                                            )
-                                            scope.launch { searchCoordinator.setViewerLaunchContext(context) }
-                                            navController.navigate(AppRoute.Viewer)
+                                            scope.launch {
+                                                val preparedPosts = prepareViewerPostsForLaunch(posts, context)
+                                                viewerSession = ViewerSession(
+                                                    posts = preparedPosts,
+                                                    context = context,
+                                                    liveSearchBinding = true,
+                                                )
+                                                searchCoordinator.setViewerLaunchContext(context)
+                                                navController.navigate(AppRoute.Viewer)
+                                            }
                                         },
                                         onGoToSearch = {
                                             val targetIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.Search)
@@ -1760,9 +1781,16 @@ fun TheoriaApp(
                                     streamSource = ViewerStreamSource.CODEX,
                                     scrollOffsetHint = 0,
                                 )
-                                viewerSession = ViewerSession(posts = posts, context = context, liveSearchBinding = false)
-                                scope.launch { uiRestoreRepository.setViewerLaunchContext(context) }
-                                navController.navigate(AppRoute.Viewer)
+                                scope.launch {
+                                    val preparedPosts = prepareViewerPostsForLaunch(posts, context)
+                                    viewerSession = ViewerSession(
+                                        posts = preparedPosts,
+                                        context = context,
+                                        liveSearchBinding = false,
+                                    )
+                                    uiRestoreRepository.setViewerLaunchContext(context)
+                                    navController.navigate(AppRoute.Viewer)
+                                }
                             },
                             onRemovePost = { post ->
                                 scope.launch {

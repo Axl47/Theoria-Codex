@@ -1120,6 +1120,9 @@ private fun resolveCardPreviewUrl(post: Post): String? {
 }
 
 private fun resolveCardVideoRef(post: Post): ImageRef? {
+    if ((post.id.source == SourceKey.RULE34VIDEO || post.id.source == SourceKey.RULE34GEN) && post.full == null) {
+        return null
+    }
     val refs = buildList {
         addAll(post.media)
         post.full?.let { add(it) }

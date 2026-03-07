@@ -85,6 +85,9 @@ fun isPixivUgoiraMedia(post: Post, media: ImageRef): Boolean {
 }
 
 fun isAnimatedPost(post: Post): Boolean {
+    if (post.id.source == SourceKey.RULE34VIDEO || post.id.source == SourceKey.RULE34GEN) {
+        return true
+    }
     if (isPixivUgoiraPost(post)) return true
     val refs = buildList {
         add(post.preview)
