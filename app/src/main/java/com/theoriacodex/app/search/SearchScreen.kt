@@ -603,6 +603,7 @@ fun SearchScreen(
                                     onToggleLike = onToggleLike?.let { toggle ->
                                         { toggle(post) }
                                     },
+                                    resolvePostById = { postId -> coordinator.resolvePost(postId) },
                                     onClick = {
                                         focusManager.clearFocus()
                                         val context = coordinator.buildViewerLaunchContext(
@@ -789,10 +790,26 @@ fun SearchResultCard(
     displayTag: String? = null,
     liked: Boolean = false,
     onToggleLike: (() -> Unit)? = null,
+    resolvePostById: (suspend (PostId) -> Post?)? = null,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var resolvedPostOverride by remember(post.id) { mutableStateOf<Post?>(null) }
+    var resolutionAttempted by remember(post.id) { mutableStateOf(false) }
+    val effectivePost = resolvedPostOverride ?: post
+
+    fun requestResolvedRule34CardPreview() {
+        if (resolutionAttempted) return
+        val resolver = resolvePostById ?: return
+        if (post.id.source != SourceKey.RULE34VIDEO && post.id.source != SourceKey.RULE34GEN) return
+        resolutionAttempted = true
+        scope.launch {
+            val resolved = runCatching { resolver(post.id) }.getOrNull() ?: return@launch
+            resolvedPostOverride = resolved
+        }
+    }
 
     ElevatedCard(
         modifier = Modifier
@@ -802,29 +819,46 @@ fun SearchResultCard(
                 onLongClick = onLongPress,
             ),
     ) {
-        val title = post.title?.takeIf { it.isNotBlank() } ?: post.id.sourcePostId
-        val videoRef = remember(post.id.source, post.id.sourcePostId, post.media, post.full, post.preview) {
-            resolveCardVideoRef(post)
+        val title = effectivePost.title?.takeIf { it.isNotBlank() } ?: effectivePost.id.sourcePostId
+        val videoRef = remember(
+            effectivePost.id.source,
+            effectivePost.id.sourcePostId,
+            effectivePost.media,
+            effectivePost.full,
+            effectivePost.preview,
+        ) {
+            resolveCardVideoRef(effectivePost)
         }
-        var videoPlaybackFailed by remember(post.id.source, post.id.sourcePostId, videoRef?.url, videoRef?.localPath) {
+        var videoPlaybackFailed by remember(
+            effectivePost.id.source,
+            effectivePost.id.sourcePostId,
+            videoRef?.url,
+            videoRef?.localPath,
+        ) {
             mutableStateOf(false)
         }
-        val previewUrl = resolveCardPreviewUrl(post)
-        val ratio = previewAspectRatio(post)
-        val imageModel = remember(context, previewUrl, post.id.source) {
-            previewUrl?.let { buildImageRequest(context, it, post.id.source) }
+        val previewUrl = resolveCardPreviewUrl(effectivePost)
+        val ratio = previewAspectRatio(effectivePost)
+        val imageModel = remember(context, previewUrl, effectivePost.id.source) {
+            previewUrl?.let { buildImageRequest(context, it, effectivePost.id.source) }
         }
-        val mediaCount = postMediaCount(post)
+        val mediaCount = postMediaCount(effectivePost)
+
+        LaunchedEffect(effectivePost.id, videoRef?.url, videoRef?.localPath, resolvePostById) {
+            if (videoRef == null && resolvedPostOverride == null) {
+                requestResolvedRule34CardPreview()
+            }
+        }
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(ratio),
         ) {
-            val showUgoira = isPixivUgoiraPost(post) && pixivUgoiraClient != null
+            val showUgoira = isPixivUgoiraPost(effectivePost) && pixivUgoiraClient != null
             if (showUgoira) {
                 PixivUgoiraPlayer(
-                    postId = post.id.sourcePostId,
+                    postId = effectivePost.id.sourcePostId,
                     client = requireNotNull(pixivUgoiraClient),
                     modifier = Modifier.fillMaxSize(),
                     contentDescription = title,
@@ -833,10 +867,15 @@ fun SearchResultCard(
             } else if (videoRef != null && !videoPlaybackFailed) {
                 SearchVideoPreview(
                     media = videoRef,
-                    sourceKey = post.id.source,
+                    sourceKey = effectivePost.id.source,
                     previewModel = imageModel,
                     modifier = Modifier.fillMaxSize(),
-                    onPlaybackError = { videoPlaybackFailed = true },
+                    onPlaybackError = {
+                        videoPlaybackFailed = true
+                        if (resolvedPostOverride == null) {
+                            requestResolvedRule34CardPreview()
+                        }
+                    },
                 )
             } else if (imageModel != null) {
                 AsyncImage(
@@ -908,7 +947,7 @@ fun SearchResultCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            val firstTag = displayTag ?: post.canonicalTags.firstOrNull()
+            val firstTag = displayTag ?: effectivePost.canonicalTags.firstOrNull()
             if (firstTag != null || showSourceBadge) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -927,7 +966,7 @@ fun SearchResultCard(
                     }
                     if (showSourceBadge) {
                         SourceBadge(
-                            source = post.id.source,
+                            source = effectivePost.id.source,
                         )
                     }
                 }

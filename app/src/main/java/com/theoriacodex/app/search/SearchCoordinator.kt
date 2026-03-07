@@ -735,6 +735,11 @@ class SearchCoordinator(
         uiRestoreRepository.setViewerLaunchContext(context)
     }
 
+    suspend fun resolvePost(postId: PostId): Post? {
+        val adapter = registry.adapterFor(postId.source) ?: return null
+        return adapter.resolvePost(postId)
+    }
+
     private suspend fun executeSearch() {
         val previousResults = results
         val previousStatuses = statuses
