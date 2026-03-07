@@ -1639,10 +1639,7 @@ private fun viewerMediaItems(post: Post): List<ImageRef> {
 }
 
 private fun requiresResolvedViewerPost(post: Post): Boolean {
-    if (post.id.source != SourceKey.RULE34VIDEO && post.id.source != SourceKey.RULE34GEN) {
-        return false
-    }
-    return post.full?.url.isNullOrBlank() && post.full?.localPath.isNullOrBlank()
+    return post.id.source == SourceKey.RULE34VIDEO || post.id.source == SourceKey.RULE34GEN
 }
 
 private fun viewerImageCandidates(post: Post, media: ImageRef): List<String> {

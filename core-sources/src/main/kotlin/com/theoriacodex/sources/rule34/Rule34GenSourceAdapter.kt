@@ -34,6 +34,7 @@ class Rule34GenSourceAdapter(
                 sourcePostId = sourcePostId,
                 title = anchor.attr("title").trim().ifBlank { null },
                 previewUrl = image?.attr("data-original")?.ifBlank { image.attr("src") },
+                previewVideoUrl = image?.attr("data-preview")?.ifBlank { null },
                 includeTags = includeTags,
             )
         }

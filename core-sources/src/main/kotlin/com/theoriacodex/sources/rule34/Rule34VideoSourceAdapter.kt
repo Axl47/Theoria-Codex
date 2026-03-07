@@ -32,11 +32,13 @@ class Rule34VideoSourceAdapter(
             val pageUrl = anchor.attr("abs:href").ifBlank { anchor.attr("href") }
             val sourcePostId = RULE34VIDEO_ID_REGEX.find(pageUrl)?.groupValues?.getOrNull(1) ?: return@mapNotNull null
             val image = anchor.selectFirst("img")
+            val previewVideoUrl = anchor.selectFirst("div[data-preview]")?.attr("data-preview")?.trim()?.ifBlank { null }
             searchPost(
                 pageUrl = pageUrl,
                 sourcePostId = sourcePostId,
                 title = anchor.attr("title").trim().ifBlank { null },
                 previewUrl = image?.attr("data-original")?.ifBlank { image.attr("src") },
+                previewVideoUrl = previewVideoUrl,
                 includeTags = includeTags,
             )
         }

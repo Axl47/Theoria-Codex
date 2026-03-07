@@ -164,13 +164,16 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
         sourcePostId: String,
         title: String?,
         previewUrl: String?,
+        previewVideoUrl: String?,
         includeTags: List<String>,
     ): Post {
         return Post(
             id = PostId(source = sourceKey, sourcePostId = sourcePostId),
             preview = ImageRef(url = previewUrl, localPath = null, mime = "image/jpeg"),
             full = null,
-            media = emptyList(),
+            media = previewVideoUrl?.let { url ->
+                listOf(ImageRef(url = url, localPath = null, mime = "video/mp4"))
+            }.orEmpty(),
             pageUrl = pageUrl,
             width = null,
             height = null,

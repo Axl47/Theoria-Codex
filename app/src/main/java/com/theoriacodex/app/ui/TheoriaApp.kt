@@ -182,11 +182,12 @@ private data class ViewerSession(
     val searchAnimatedOnly: Boolean = false,
 )
 
-private fun requiresRule34VideoResolution(post: Post): Boolean {
-    if (post.id.source != SourceKey.RULE34VIDEO && post.id.source != SourceKey.RULE34GEN) {
-        return false
-    }
-    return post.full?.url.isNullOrBlank() && post.full?.localPath.isNullOrBlank()
+private fun isRule34VideoSource(source: SourceKey): Boolean {
+    return source == SourceKey.RULE34VIDEO || source == SourceKey.RULE34GEN
+}
+
+private fun requiresRule34VideoRefresh(post: Post): Boolean {
+    return isRule34VideoSource(post.id.source)
 }
 
 private data class ReleaseChangelogEntry(
@@ -765,15 +766,13 @@ fun TheoriaApp(
     }
 
     fun requestViewerPostResolution(post: Post) {
-        if (!requiresRule34VideoResolution(post)) return
+        if (!requiresRule34VideoRefresh(post)) return
         scope.launch {
             val adapter = realRegistry.adapterFor(post.id.source) ?: return@launch
             val resolved = runCatching { adapter.resolvePost(post.id) }.getOrNull() ?: return@launch
             viewerSession = viewerSession?.let { session ->
                 val index = session.posts.indexOfFirst { current -> current.id == post.id }
                 if (index < 0) return@let session
-                val current = session.posts[index]
-                if (!requiresRule34VideoResolution(current)) return@let session
                 session.copy(
                     posts = session.posts.toMutableList().apply {
                         this[index] = resolved
@@ -790,7 +789,7 @@ fun TheoriaApp(
         if (posts.isEmpty()) return posts
         val startIndex = context.startIndex.coerceIn(0, posts.lastIndex)
         val selectedPost = posts[startIndex]
-        if (!requiresRule34VideoResolution(selectedPost)) return posts
+        if (!requiresRule34VideoRefresh(selectedPost)) return posts
         val adapter = realRegistry.adapterFor(selectedPost.id.source) ?: return posts
         val resolved = runCatching { adapter.resolvePost(selectedPost.id) }.getOrNull() ?: return posts
         return posts.toMutableList().apply {

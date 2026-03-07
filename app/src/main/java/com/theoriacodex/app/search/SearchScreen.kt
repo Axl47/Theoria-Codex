@@ -1120,9 +1120,6 @@ private fun resolveCardPreviewUrl(post: Post): String? {
 }
 
 private fun resolveCardVideoRef(post: Post): ImageRef? {
-    if ((post.id.source == SourceKey.RULE34VIDEO || post.id.source == SourceKey.RULE34GEN) && post.full == null) {
-        return null
-    }
     val refs = buildList {
         addAll(post.media)
         post.full?.let { add(it) }
@@ -1450,19 +1447,43 @@ private fun SourceChipLogo(
         }
 
         SourceKey.RULE34XXX -> {
-            svgLogo(R.raw.rule34xxx_logo, "rule34.xxx")
+            Text(
+                text = source.displayName(),
+                modifier = modifier,
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White,
+                maxLines = 1,
+            )
         }
 
         SourceKey.RULE34PAHEAL -> {
-            svgLogo(R.raw.rule34paheal_logo, "rule34.paheal.net")
+            Text(
+                text = source.displayName(),
+                modifier = modifier,
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White,
+                maxLines = 1,
+            )
         }
 
         SourceKey.RULE34VIDEO -> {
-            svgLogo(R.raw.rule34video_logo, "rule34video.com")
+            Text(
+                text = source.displayName(),
+                modifier = modifier,
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White,
+                maxLines = 1,
+            )
         }
 
         SourceKey.RULE34GEN -> {
-            svgLogo(R.raw.rule34gen_logo, "rule34gen.com")
+            Text(
+                text = source.displayName(),
+                modifier = modifier,
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White,
+                maxLines = 1,
+            )
         }
 
         else -> Text(source.displayName())
@@ -1476,8 +1497,14 @@ private fun SourceBadge(
 ) {
     Surface(
         modifier = modifier,
-        color = Color.Black.copy(alpha = 0.55f),
+        color = if (isRule34FamilySource(source)) {
+            Color.Transparent
+        } else {
+            Color.Black.copy(alpha = 0.55f)
+        },
         shape = RoundedCornerShape(6.dp),
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
     ) {
         Box(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
@@ -1485,10 +1512,17 @@ private fun SourceBadge(
         ) {
             SourceChipLogo(
                 source = source,
-                size = 12.dp,
+                size = if (isRule34FamilySource(source)) 0.dp else 12.dp,
             )
         }
     }
+}
+
+private fun isRule34FamilySource(source: SourceKey): Boolean {
+    return source == SourceKey.RULE34XXX ||
+        source == SourceKey.RULE34PAHEAL ||
+        source == SourceKey.RULE34VIDEO ||
+        source == SourceKey.RULE34GEN
 }
 
 @Composable

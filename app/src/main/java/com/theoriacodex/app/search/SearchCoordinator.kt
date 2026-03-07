@@ -1199,10 +1199,10 @@ private const val SEEN_TAGS_PER_SOURCE_INGEST_LIMIT = 240
 private const val LAST_ACTIVE_QUERY_KEY = "last_active"
 private val SOURCE_DISPLAY_ORDER = listOf(
     SourceKey.GELBOORU,
-    SourceKey.RULE34XXX,
-    SourceKey.RULE34PAHEAL,
     SourceKey.PIXIV,
     SourceKey.NHENTAI,
+    SourceKey.RULE34XXX,
+    SourceKey.RULE34PAHEAL,
     SourceKey.RULE34VIDEO,
     SourceKey.RULE34GEN,
     SourceKey.AIBOORU,

@@ -8,10 +8,10 @@ fun SourceKey.displayName(): String {
         SourceKey.GELBOORU -> "Gelbooru"
         SourceKey.AIBOORU -> "AIBooru"
         SourceKey.NHENTAI -> "NHentai"
-        SourceKey.RULE34XXX -> "rule34.xxx"
-        SourceKey.RULE34PAHEAL -> "rule34.paheal.net"
-        SourceKey.RULE34VIDEO -> "rule34video.com"
-        SourceKey.RULE34GEN -> "rule34gen.com"
+        SourceKey.RULE34XXX -> "R34X"
+        SourceKey.RULE34PAHEAL -> "R34P"
+        SourceKey.RULE34VIDEO -> "R34V"
+        SourceKey.RULE34GEN -> "R34G"
     }
 }
 
