@@ -55,6 +55,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -83,7 +84,6 @@ import androidx.core.content.pm.PackageInfoCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexListScreen
@@ -95,6 +95,8 @@ import com.theoriacodex.app.recommend.trainingTagsFor
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.SearchScreen
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
+import com.theoriacodex.app.search.SearchVisibilityFilters
+import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.source.ExternalPostDeepLink
 import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.source.displayName
@@ -179,7 +181,7 @@ private data class ViewerSession(
     val posts: List<Post>,
     val context: ViewerLaunchContext,
     val liveSearchBinding: Boolean = false,
-    val searchAnimatedOnly: Boolean = false,
+    val searchVisibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
 )
 
 private fun isRule34VideoSource(source: SourceKey): Boolean {
@@ -369,6 +371,15 @@ fun TheoriaApp(
     var pendingCodexImportUri by remember { mutableStateOf<Uri?>(null) }
     val codexItemCounts = remember { mutableStateMapOf<String, Int>() }
     val codexCoverModels = remember { mutableStateMapOf<String, Any?>() }
+    val savedPostIdsByCodex = remember { mutableStateMapOf<String, Set<PostId>>() }
+    val savedPostIds by remember {
+        derivedStateOf {
+            savedPostIdsByCodex.values
+                .asSequence()
+                .flatten()
+                .toSet()
+        }
+    }
 
     var pixivStatusLabel by remember { mutableStateOf("Not connected") }
     var pixivConnected by remember { mutableStateOf(false) }
@@ -1026,12 +1037,20 @@ fun TheoriaApp(
             .filterNot { it in activeIds }
             .toList()
             .forEach { codexCoverModels.remove(it) }
+        savedPostIdsByCodex.keys
+            .filterNot { it in activeIds }
+            .toList()
+            .forEach { savedPostIdsByCodex.remove(it) }
 
         coroutineScope {
             codices.forEach { codex ->
                 launch {
                     codexRepository.observeCodexItems(codex.codexId).collect { items ->
                         codexItemCounts[codex.codexId] = items.size
+                        savedPostIdsByCodex[codex.codexId] = items
+                            .asSequence()
+                            .map { item -> item.postId }
+                            .toSet()
                     }
                 }
                 launch {
@@ -1217,18 +1236,21 @@ fun TheoriaApp(
         searchCoordinator.appliedQueryHash,
         viewerSession?.context?.streamSource,
         viewerSession?.liveSearchBinding,
-        viewerSession?.searchAnimatedOnly,
+        viewerSession?.searchVisibilityFilters,
+        likedPostIds,
+        savedPostIds,
     ) {
         val session = viewerSession ?: return@LaunchedEffect
         if (!session.liveSearchBinding) return@LaunchedEffect
         val incomingForViewer = when (session.context.streamSource) {
             ViewerStreamSource.SEARCH -> {
                 if (session.context.queryHash != searchCoordinator.appliedQueryHash) return@LaunchedEffect
-                if (session.searchAnimatedOnly) {
-                    searchCoordinator.results.filter(::isAnimatedPost)
-                } else {
-                    searchCoordinator.results
-                }
+                filterSearchResults(
+                    results = searchCoordinator.results,
+                    filters = session.searchVisibilityFilters,
+                    likedPostIds = likedPostIds,
+                    savedPostIds = savedPostIds,
+                )
             }
 
             ViewerStreamSource.FOR_YOU -> {
@@ -1396,19 +1418,20 @@ fun TheoriaApp(
                                         coordinator = searchCoordinator,
                                         pixivUgoiraClient = pixivUgoiraClient,
                                         likedPostIds = likedPostIds,
+                                        savedPostIds = savedPostIds,
                                         onToggleLike = { post ->
                                             scope.launch {
                                                 toggleLikeAndSyncCodex(post)
                                             }
                                         },
-                                        onOpenViewer = { posts, context, animatedOnly ->
+                                        onOpenViewer = { posts, context, visibilityFilters ->
                                             scope.launch {
                                                 val preparedPosts = prepareViewerPostsForLaunch(posts, context)
                                                 viewerSession = ViewerSession(
                                                     posts = preparedPosts,
                                                     context = context,
                                                     liveSearchBinding = true,
-                                                    searchAnimatedOnly = animatedOnly,
+                                                    searchVisibilityFilters = visibilityFilters,
                                                 )
                                                 searchCoordinator.setViewerLaunchContext(context)
                                                 navController.navigate(AppRoute.Viewer)

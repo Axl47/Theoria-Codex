@@ -138,8 +138,9 @@ fun SearchScreen(
     coordinator: SearchCoordinator,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     likedPostIds: Set<PostId> = emptySet(),
+    savedPostIds: Set<PostId> = emptySet(),
     onToggleLike: ((Post) -> Unit)? = null,
-    onOpenViewer: (List<Post>, ViewerLaunchContext, Boolean) -> Unit,
+    onOpenViewer: (List<Post>, ViewerLaunchContext, SearchVisibilityFilters) -> Unit,
     onApplySearch: () -> Unit,
     onRetrySearch: () -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
@@ -147,6 +148,8 @@ fun SearchScreen(
 ) {
     var input by rememberSaveable { mutableStateOf("") }
     var animatedOnly by rememberSaveable { mutableStateOf(false) }
+    var hideLiked by rememberSaveable { mutableStateOf(false) }
+    var hideSaved by rememberSaveable { mutableStateOf(false) }
     var searchFieldFocused by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
@@ -163,12 +166,20 @@ fun SearchScreen(
             animatedOnly = false
         }
     }
-    val visibleResults = remember(coordinator.results, animatedFilterActive) {
-        if (animatedFilterActive) {
-            coordinator.results.filter(::isAnimatedPost)
-        } else {
-            coordinator.results
-        }
+    val visibilityFilters = remember(animatedFilterActive, hideLiked, hideSaved) {
+        SearchVisibilityFilters(
+            animatedOnly = animatedFilterActive,
+            hideLiked = hideLiked,
+            hideSaved = hideSaved,
+        )
+    }
+    val visibleResults = remember(coordinator.results, visibilityFilters, likedPostIds, savedPostIds) {
+        filterSearchResults(
+            results = coordinator.results,
+            filters = visibilityFilters,
+            likedPostIds = likedPostIds,
+            savedPostIds = savedPostIds,
+        )
     }
     val displayTagSeedBySource = remember(
         coordinator.appliedQuery.mode,
@@ -549,19 +560,12 @@ fun SearchScreen(
                             } else {
                                 EmptyBlock(
                                     hasPendingChanges = coordinator.hasPendingChanges,
-                                    messageOverride = when {
-                                        animatedFilterActive &&
-                                            coordinator.results.isNotEmpty() &&
-                                            (coordinator.loadingMore || coordinator.canLoadMore) -> {
-                                            "No animated media yet. Retrying with more pages..."
-                                        }
-
-                                        animatedFilterActive && coordinator.results.isNotEmpty() -> {
-                                            "No animated media found for the current results."
-                                        }
-
-                                        else -> null
-                                    },
+                                    messageOverride = buildEmptySearchMessage(
+                                        sourceResults = coordinator.results,
+                                        visibilityFilters = visibilityFilters,
+                                        loadingMore = coordinator.loadingMore,
+                                        canLoadMore = coordinator.canLoadMore,
+                                    ),
                                 )
                             }
                         }
@@ -611,7 +615,7 @@ fun SearchScreen(
                                             scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
                                         )
                                         scope.launch { coordinator.setViewerLaunchContext(context) }
-                                        onOpenViewer(visibleResults, context, animatedFilterActive)
+                                        onOpenViewer(visibleResults, context, visibilityFilters)
                                     },
                                     onLongPress = {
                                         focusManager.clearFocus()
@@ -740,6 +744,10 @@ fun SearchScreen(
             animatedOnly = animatedOnly,
             onAnimatedOnlyChange = { animatedOnly = it },
             showAnimatedOnlyFilter = !isNhentaiSourceMode,
+            hideLiked = hideLiked,
+            onHideLikedChange = { hideLiked = it },
+            hideSaved = hideSaved,
+            onHideSavedChange = { hideSaved = it },
             nhentaiLanguageFilter = coordinator.selectedNhentaiLanguageFilter(),
             onNhentaiLanguageFilterChange = { filter -> coordinator.setNhentaiLanguageFilter(filter) },
             onSortChanged = { applyDraftAndResetScroll() },
@@ -1208,6 +1216,10 @@ private fun FilterSheet(
     animatedOnly: Boolean,
     onAnimatedOnlyChange: (Boolean) -> Unit,
     showAnimatedOnlyFilter: Boolean,
+    hideLiked: Boolean,
+    onHideLikedChange: (Boolean) -> Unit,
+    hideSaved: Boolean,
+    onHideSavedChange: (Boolean) -> Unit,
     nhentaiLanguageFilter: NhentaiLanguageFilter,
     onNhentaiLanguageFilterChange: (NhentaiLanguageFilter) -> Unit,
     onSortChanged: () -> Unit,
@@ -1232,9 +1244,9 @@ private fun FilterSheet(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (showAnimatedOnlyFilter) {
-                Text("Media Types", style = MaterialTheme.typography.titleMedium)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Visibility", style = MaterialTheme.typography.titleMedium)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (showAnimatedOnlyFilter) {
                     item {
                         FilterChip(
                             selected = animatedOnly,
@@ -1243,7 +1255,24 @@ private fun FilterSheet(
                         )
                     }
                 }
-            } else {
+                item {
+                    FilterChip(
+                        selected = hideLiked,
+                        onClick = { onHideLikedChange(!hideLiked) },
+                        label = { Text("Hide liked") },
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = hideSaved,
+                        onClick = { onHideSavedChange(!hideSaved) },
+                        label = { Text("Hide saved") },
+                    )
+                }
+            }
+
+            if (!showAnimatedOnlyFilter) {
+                HorizontalDivider()
                 Text("Language", style = MaterialTheme.typography.titleMedium)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(NhentaiLanguageFilter.entries.size) { index ->
@@ -1691,6 +1720,58 @@ private fun ErrorBlock(
                 )
             }
         }
+    }
+}
+
+data class SearchVisibilityFilters(
+    val animatedOnly: Boolean = false,
+    val hideLiked: Boolean = false,
+    val hideSaved: Boolean = false,
+)
+
+internal fun filterSearchResults(
+    results: List<Post>,
+    filters: SearchVisibilityFilters,
+    likedPostIds: Set<PostId>,
+    savedPostIds: Set<PostId>,
+): List<Post> {
+    return results.filter { post ->
+        (!filters.animatedOnly || isAnimatedPost(post)) &&
+            (!filters.hideLiked || post.id !in likedPostIds) &&
+            (!filters.hideSaved || post.id !in savedPostIds)
+    }
+}
+
+private fun buildEmptySearchMessage(
+    sourceResults: List<Post>,
+    visibilityFilters: SearchVisibilityFilters,
+    loadingMore: Boolean,
+    canLoadMore: Boolean,
+): String? {
+    if (visibilityFilters.animatedOnly && sourceResults.isNotEmpty() && (loadingMore || canLoadMore)) {
+        return "No animated media yet. Retrying with more pages..."
+    }
+    if (!visibilityFilters.animatedOnly && !visibilityFilters.hideLiked && !visibilityFilters.hideSaved) {
+        return null
+    }
+    if (sourceResults.isEmpty()) {
+        return null
+    }
+    return when {
+        visibilityFilters.animatedOnly && !visibilityFilters.hideLiked && !visibilityFilters.hideSaved ->
+            "No animated media found for the current results."
+
+        visibilityFilters.hideLiked && visibilityFilters.hideSaved ->
+            "No results remain after hiding liked and saved posts."
+
+        visibilityFilters.hideLiked ->
+            "No results remain after hiding liked posts."
+
+        visibilityFilters.hideSaved ->
+            "No results remain after hiding saved posts."
+
+        else ->
+            "No results remain after applying the current visibility filters."
     }
 }
 
