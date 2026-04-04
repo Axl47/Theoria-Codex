@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -22,6 +24,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -160,6 +163,7 @@ fun CodexDetailScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = actionSheetHorizontalPadding, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -229,6 +233,8 @@ fun CodexDetailScreen(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                HorizontalDivider()
+                PostActionSheetTags(post = post)
                 TextButton(
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { selectedActionPost = null },
@@ -265,6 +271,31 @@ fun CodexDetailScreen(
     }
 }
 
+@Composable
+private fun PostActionSheetTags(
+    post: Post,
+) {
+    val tags = remember(post.canonicalTags, post.rawTags) {
+        displayPostTags(post)
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Tags", style = MaterialTheme.typography.titleSmall)
+        if (tags.isEmpty()) {
+            Text(
+                text = "No tags",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(
+                text = tags.joinToString(", "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
 private fun formatPostTagsForClipboard(post: Post): String {
     val canonicalPositives = post.canonicalTags.filterNot { it.startsWith("-") }
     val canonicalNegatives = post.canonicalTags
@@ -295,4 +326,18 @@ private fun copyPostUrlToClipboard(context: Context, post: Post): Boolean {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
     clipboard?.setPrimaryClip(ClipData.newPlainText("post_url", pageUrl))
     return true
+}
+
+private fun displayPostTags(post: Post): List<String> {
+    val canonical = post.canonicalTags
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+    if (canonical.isNotEmpty()) {
+        return canonical
+    }
+    return post.rawTags
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
 }

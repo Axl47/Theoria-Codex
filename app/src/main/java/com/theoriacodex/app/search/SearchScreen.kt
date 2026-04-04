@@ -32,6 +32,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
@@ -659,6 +661,7 @@ fun SearchScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = actionSheetHorizontalPadding, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -728,6 +731,8 @@ fun SearchScreen(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                HorizontalDivider()
+                PostActionSheetTags(post = post)
                 TextButton(
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { selectedActionPost = null },
@@ -1723,6 +1728,31 @@ private fun ErrorBlock(
     }
 }
 
+@Composable
+private fun PostActionSheetTags(
+    post: Post,
+) {
+    val tags = remember(post.canonicalTags, post.rawTags) {
+        displayPostTags(post)
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Tags", style = MaterialTheme.typography.titleSmall)
+        if (tags.isEmpty()) {
+            Text(
+                text = "No tags",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(
+                text = tags.joinToString(", "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
 data class SearchVisibilityFilters(
     val animatedOnly: Boolean = false,
     val hideLiked: Boolean = false,
@@ -1773,6 +1803,20 @@ private fun buildEmptySearchMessage(
         else ->
             "No results remain after applying the current visibility filters."
     }
+}
+
+private fun displayPostTags(post: Post): List<String> {
+    val canonical = post.canonicalTags
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+    if (canonical.isNotEmpty()) {
+        return canonical
+    }
+    return post.rawTags
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
 }
 
 private fun inferPreset(fromEpochMs: Long?, toEpochMs: Long?): DateRangePreset {
