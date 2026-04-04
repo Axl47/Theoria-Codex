@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T17:48
-updated_at: 2026-03-07T12:10
+updated_at: 2026-04-04T00:00
 ---
 # THEORIA CODEX AGENTS DOCUMENT
 
@@ -44,6 +44,7 @@ Whenever new updates are made, this file (`AGENTS.md`) should be updated with an
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/source/SourceMetadata.kt` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/source/ExternalPostDeepLinks.kt`: centralized source display/header metadata and external post URL parsing for supported hosts.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/sourceauth/Rule34XxxCredentialInputParser.kt`: parser for pasted `rule34.xxx` credential strings (`user_id` / `api_key`) used by Settings.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/res/raw/rule34xxx_logo.svg`, `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/res/raw/rule34paheal_logo.svg`, `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/res/raw/rule34video_logo.svg`, and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/res/raw/rule34gen_logo.svg`: Rule34 family source-logo assets used by Search chips and source badges.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/tags/PostTagActionSection.kt`: shared interactive tag action section reused by Viewer, Search long-press, and Codex long-press sheets, including include/exclude toggles and source video-count lookups.
 
 ## Final Output
 

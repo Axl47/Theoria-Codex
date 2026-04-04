@@ -111,6 +111,7 @@ import com.theoriacodex.app.recommend.buildSourceTagAffinity
 import com.theoriacodex.app.R
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.requestHeaders
+import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
 import com.theoriacodex.app.viewer.createLoopingExoPlayer
@@ -732,7 +733,15 @@ fun SearchScreen(
                     overflow = TextOverflow.Ellipsis,
                 )
                 HorizontalDivider()
-                PostActionSheetTags(post = post)
+                PostTagActionSection(
+                    post = post,
+                    tagVideoCountProvider = coordinator::tagVideoCount,
+                    fetchTagVideoCounts = coordinator::fetchTagVideoCounts,
+                    onAddIncludeTag = coordinator::addIncludeTag,
+                    onAddExcludeTag = coordinator::addExcludeTag,
+                    onRemoveIncludeTag = coordinator::removeIncludeTag,
+                    onRemoveExcludeTag = coordinator::removeExcludeTag,
+                )
                 TextButton(
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { selectedActionPost = null },
@@ -1728,31 +1737,6 @@ private fun ErrorBlock(
     }
 }
 
-@Composable
-private fun PostActionSheetTags(
-    post: Post,
-) {
-    val tags = remember(post.canonicalTags, post.rawTags) {
-        displayPostTags(post)
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("Tags", style = MaterialTheme.typography.titleSmall)
-        if (tags.isEmpty()) {
-            Text(
-                text = "No tags",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            Text(
-                text = tags.joinToString(", "),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
 data class SearchVisibilityFilters(
     val animatedOnly: Boolean = false,
     val hideLiked: Boolean = false,
@@ -1803,20 +1787,6 @@ private fun buildEmptySearchMessage(
         else ->
             "No results remain after applying the current visibility filters."
     }
-}
-
-private fun displayPostTags(post: Post): List<String> {
-    val canonical = post.canonicalTags
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
-    if (canonical.isNotEmpty()) {
-        return canonical
-    }
-    return post.rawTags
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
 }
 
 private fun inferPreset(fromEpochMs: Long?, toEpochMs: Long?): DateRangePreset {

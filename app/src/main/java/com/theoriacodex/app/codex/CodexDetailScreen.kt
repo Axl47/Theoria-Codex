@@ -42,9 +42,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.search.SearchResultCard
+import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.SourceKey
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,6 +59,13 @@ fun CodexDetailScreen(
     onOpenViewer: (Int) -> Unit,
     onRemovePost: (Post) -> Unit,
     onSavePostToDevice: (Post) -> Unit,
+    tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
+    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
+    onAddIncludeTag: (String) -> Unit = {},
+    onAddExcludeTag: (String) -> Unit = {},
+    onRemoveIncludeTag: (String) -> Unit = {},
+    onRemoveExcludeTag: (String) -> Unit = {},
+    onGoToSearch: (() -> Unit)? = null,
     onBack: () -> Unit,
     onDeleteCodex: () -> Unit,
 ) {
@@ -234,7 +243,26 @@ fun CodexDetailScreen(
                     overflow = TextOverflow.Ellipsis,
                 )
                 HorizontalDivider()
-                PostActionSheetTags(post = post)
+                PostTagActionSection(
+                    post = post,
+                    tagVideoCountProvider = tagVideoCountProvider,
+                    fetchTagVideoCounts = fetchTagVideoCounts,
+                    onAddIncludeTag = onAddIncludeTag,
+                    onAddExcludeTag = onAddExcludeTag,
+                    onRemoveIncludeTag = onRemoveIncludeTag,
+                    onRemoveExcludeTag = onRemoveExcludeTag,
+                )
+                onGoToSearch?.let { goToSearch ->
+                    TextButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            selectedActionPost = null
+                            goToSearch()
+                        },
+                    ) {
+                        Text("Go to Search")
+                    }
+                }
                 TextButton(
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { selectedActionPost = null },
@@ -271,31 +299,6 @@ fun CodexDetailScreen(
     }
 }
 
-@Composable
-private fun PostActionSheetTags(
-    post: Post,
-) {
-    val tags = remember(post.canonicalTags, post.rawTags) {
-        displayPostTags(post)
-    }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("Tags", style = MaterialTheme.typography.titleSmall)
-        if (tags.isEmpty()) {
-            Text(
-                text = "No tags",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            Text(
-                text = tags.joinToString(", "),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
 private fun formatPostTagsForClipboard(post: Post): String {
     val canonicalPositives = post.canonicalTags.filterNot { it.startsWith("-") }
     val canonicalNegatives = post.canonicalTags
@@ -326,18 +329,4 @@ private fun copyPostUrlToClipboard(context: Context, post: Post): Boolean {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
     clipboard?.setPrimaryClip(ClipData.newPlainText("post_url", pageUrl))
     return true
-}
-
-private fun displayPostTags(post: Post): List<String> {
-    val canonical = post.canonicalTags
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
-    if (canonical.isNotEmpty()) {
-        return canonical
-    }
-    return post.rawTags
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
 }

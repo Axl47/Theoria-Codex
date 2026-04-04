@@ -1795,6 +1795,12 @@ fun TheoriaApp(
                             posts = posts,
                             sortMode = sortMode,
                             pixivUgoiraClient = pixivUgoiraClient,
+                            tagVideoCountProvider = { source, tag ->
+                                searchCoordinator.tagVideoCount(source, tag)
+                            },
+                            fetchTagVideoCounts = { source, tags ->
+                                searchCoordinator.fetchTagVideoCounts(source, tags)
+                            },
                             onSortChange = { sortMode = it },
                             onOpenViewer = { index ->
                                 val context = ViewerLaunchContext(
@@ -1825,6 +1831,22 @@ fun TheoriaApp(
                             },
                             onSavePostToDevice = { post ->
                                 requestSaveToDevice(post)
+                            },
+                            onAddIncludeTag = { tag ->
+                                searchCoordinator.addIncludeTag(tag)
+                            },
+                            onAddExcludeTag = { tag ->
+                                searchCoordinator.addExcludeTag(tag)
+                            },
+                            onRemoveIncludeTag = { tag ->
+                                searchCoordinator.removeIncludeTag(tag)
+                            },
+                            onRemoveExcludeTag = { tag ->
+                                searchCoordinator.removeExcludeTag(tag)
+                            },
+                            onGoToSearch = {
+                                homeTabRoute = TopLevelDestination.Search.route
+                                navController.popBackStack(AppRoute.Home, inclusive = false)
                             },
                             onBack = {
                                 navController.popBackStack()
