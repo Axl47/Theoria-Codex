@@ -78,6 +78,7 @@ class IwaraSourceAdapterTest {
                           "id": "KH2f7fca2MCgZ8",
                           "slug": "wuthering-waves-cartethyiafleurdelys-sex",
                           "title": "Wuwa",
+                          "fileUrl": "https://filesq.iwara.tv/file/08ce55ca-b105-4d53-9fd8-56da7de98cf6?expires=123",
                           "file": {
                             "id": "08ce55ca-b105-4d53-9fd8-56da7de98cf6",
                             "name": "08ce55ca-b105-4d53-9fd8-56da7de98cf6.mp4",
@@ -112,6 +113,7 @@ class IwaraSourceAdapterTest {
         assertEquals("https://www.iwara.tv/video/KH2f7fca2MCgZ8/wuthering-waves-cartethyiafleurdelys-sex", post.pageUrl)
         assertEquals("https://i.iwara.tv/image/thumbnail/08ce55ca-b105-4d53-9fd8-56da7de98cf6/08ce55ca-b105-4d53-9fd8-56da7de98cf6.jpg", post.preview.url)
         assertNull(post.full)
+        assertTrue(post.media.isEmpty())
         assertEquals("Fearess", post.authorName)
         assertEquals("Fearess", post.creatorProfile?.displayName)
         assertEquals("d7678ba5-6039-442b-8ee8-6d8f0cf0398f", post.creatorProfile?.uploadsQuery)
@@ -121,45 +123,89 @@ class IwaraSourceAdapterTest {
 
     @Test
     fun `resolve post returns fileUrl backed video post`() = runTest {
-        val httpClient = FakeHttpClient().apply {
-            nextGetResponse = SourceHttpResponse(
-                statusCode = 200,
-                body = """
-                    {
-                      "id": "KH2f7fca2MCgZ8",
-                      "slug": "wuthering-waves-cartethyiafleurdelys-sex",
-                      "title": "Wuwa",
-                      "fileUrl": "https://filesq.iwara.tv/file/08ce55ca-b105-4d53-9fd8-56da7de98cf6?expires=123",
-                      "file": {
-                        "id": "08ce55ca-b105-4d53-9fd8-56da7de98cf6",
-                        "name": "08ce55ca-b105-4d53-9fd8-56da7de98cf6.mp4",
-                        "mime": "video/mp4"
-                      },
-                      "customThumbnail": {
-                        "id": "4fb7b3db-44a4-4854-a7b1-1cee5eefb5d8",
-                        "name": "4fb7b3db-44a4-4854-a7b1-1cee5eefb5d8.jpeg",
-                        "mime": "image/jpeg"
-                      },
-                      "tags": [],
-                      "user": {
-                        "id": "d7678ba5-6039-442b-8ee8-6d8f0cf0398f",
-                        "name": "Fearess",
-                        "username": "fearess"
-                      },
-                      "createdAt": "2025-05-02T11:36:03.000Z"
-                    }
-                """.trimIndent(),
-            )
+        val httpClient = object : com.theoriacodex.sources.http.SourceHttpClient {
+            var callCount = 0
+            var lastUrl: String? = null
+
+            override suspend fun get(
+                url: String,
+                query: Map<String, String>,
+                headers: Map<String, String>,
+            ): SourceHttpResponse {
+                callCount += 1
+                lastUrl = url
+                return when (callCount) {
+                    1 -> SourceHttpResponse(
+                        statusCode = 200,
+                        body = """
+                            {
+                              "id": "KH2f7fca2MCgZ8",
+                              "slug": "wuthering-waves-cartethyiafleurdelys-sex",
+                              "title": "Wuwa",
+                              "fileUrl": "https://filesq.iwara.tv/file/08ce55ca-b105-4d53-9fd8-56da7de98cf6?expires=123",
+                              "file": {
+                                "id": "08ce55ca-b105-4d53-9fd8-56da7de98cf6",
+                                "name": "08ce55ca-b105-4d53-9fd8-56da7de98cf6.mp4",
+                                "mime": "video/mp4"
+                              },
+                              "customThumbnail": {
+                                "id": "4fb7b3db-44a4-4854-a7b1-1cee5eefb5d8",
+                                "name": "4fb7b3db-44a4-4854-a7b1-1cee5eefb5d8.jpeg",
+                                "mime": "image/jpeg"
+                              },
+                              "tags": [],
+                              "user": {
+                                "id": "d7678ba5-6039-442b-8ee8-6d8f0cf0398f",
+                                "name": "Fearess",
+                                "username": "fearess"
+                              },
+                              "createdAt": "2025-05-02T11:36:03.000Z"
+                            }
+                        """.trimIndent(),
+                    )
+                    else -> SourceHttpResponse(
+                        statusCode = 200,
+                        body = """
+                            [
+                              {
+                                "name": "preview",
+                                "type": "video/mp4",
+                                "src": {
+                                  "view": "//bronya.iwara.tv/view?filename=preview.mp4",
+                                  "download": "//bronya.iwara.tv/download?filename=preview.mp4"
+                                }
+                              },
+                              {
+                                "name": "720",
+                                "type": "video/mp4",
+                                "src": {
+                                  "view": "//mikoto.iwara.tv/view?filename=video_720.mp4",
+                                  "download": "//mikoto.iwara.tv/download?filename=video_720.mp4"
+                                }
+                              }
+                            ]
+                        """.trimIndent(),
+                    )
+                }
+            }
+
+            override suspend fun postForm(
+                url: String,
+                form: Map<String, String>,
+                headers: Map<String, String>,
+            ): SourceHttpResponse {
+                error("unused")
+            }
         }
         val adapter = IwaraSourceAdapter(httpClient = httpClient)
 
         val post = adapter.resolvePost(PostId(source = SourceKey.IWARA, sourcePostId = "KH2f7fca2MCgZ8"))
 
         assertNotNull(post)
-        assertEquals("https://filesq.iwara.tv/file/08ce55ca-b105-4d53-9fd8-56da7de98cf6?expires=123", post?.full?.url)
+        assertEquals("https://mikoto.iwara.tv/view?filename=video_720.mp4", post?.full?.url)
         assertEquals("video/mp4", post?.full?.mime)
         assertEquals(1, post?.media?.size)
-        assertEquals("https://api.iwara.tv/video/KH2f7fca2MCgZ8", httpClient.lastGet?.url)
+        assertEquals("https://filesq.iwara.tv/file/08ce55ca-b105-4d53-9fd8-56da7de98cf6?expires=123", httpClient.lastUrl)
     }
 
     @Test
@@ -310,6 +356,59 @@ class IwaraSourceAdapterTest {
         require(failure is SourceAdapterException)
         assertEquals(SourceFailureReason.RATE_LIMITED, failure.reason)
         assertTrue(failure.message?.contains("429") == true)
+    }
+
+    @Test
+    fun `cloudflare challenge falls back to jina mirror`() = runTest {
+        val httpClient = object : com.theoriacodex.sources.http.SourceHttpClient {
+            val requests = mutableListOf<Pair<String, Map<String, String>>>()
+
+            override suspend fun get(
+                url: String,
+                query: Map<String, String>,
+                headers: Map<String, String>,
+            ): SourceHttpResponse {
+                requests += url to query
+                return when (requests.size) {
+                    1 -> SourceHttpResponse(
+                        statusCode = 403,
+                        body = "<html>cloudflare challenge</html>",
+                        headers = mapOf("cf-mitigated" to listOf("challenge")),
+                    )
+                    else -> SourceHttpResponse(
+                        statusCode = 200,
+                        body = """
+                            Title:
+
+                            URL Source: https://api.iwara.tv/search?type=videos&page=0&query=wuthering_waves&sort=views
+
+                            Markdown Content:
+                            {"page":0,"count":0,"limit":32,"results":[],"type":"videos"}
+                        """.trimIndent(),
+                    )
+                }
+            }
+
+            override suspend fun postForm(
+                url: String,
+                form: Map<String, String>,
+                headers: Map<String, String>,
+            ): SourceHttpResponse {
+                error("unused")
+            }
+        }
+        val adapter = IwaraSourceAdapter(httpClient = httpClient)
+
+        val page = adapter.search(sampleQuery(sort = SortMode.POPULAR), pageToken = null)
+
+        assertTrue(page.items.isEmpty())
+        assertEquals(2, httpClient.requests.size)
+        assertEquals("https://api.iwara.tv/search", httpClient.requests.first().first)
+        assertTrue(
+            httpClient.requests.last().first.startsWith(
+                "https://r.jina.ai/http://https://api.iwara.tv/search?",
+            ),
+        )
     }
 
     private fun sampleQuery(sort: SortMode): Query {

@@ -20,9 +20,11 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SourceHttpClient
+import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.media.inferMimeFromUrl
 import com.theoriacodex.sources.media.mimeFromFileExt
 import java.io.IOException
+import java.net.URLEncoder
 import java.time.Instant
 
 class IwaraSourceAdapter(
@@ -135,7 +137,26 @@ class IwaraSourceAdapter(
         )
         if (response.statusCode == 404) return null
         val root = parseJsonObject(response.body)
-        return parseVideoPost(root)
+        val parsed = parseVideoPost(root) ?: return null
+        val resolvedMedia = root.string("fileUrl")
+            ?.trim()
+            ?.takeIf(String::isNotBlank)
+            ?.let { fileUrl ->
+                resolvePlayableVideoRef(
+                    fileUrl = fileUrl,
+                    fallbackMime = root.objectOrNull("file")?.string("mime"),
+                )
+            }
+        if (resolvedMedia == null) {
+            return parsed.copy(
+                full = null,
+                media = emptyList(),
+            )
+        }
+        return parsed.copy(
+            full = resolvedMedia,
+            media = listOf(resolvedMedia),
+        )
     }
 
     override suspend fun searchCreatorPosts(
@@ -187,33 +208,160 @@ class IwaraSourceAdapter(
     private suspend fun request(
         url: String,
         query: Map<String, String>,
-    ) = try {
-        httpClient.get(
-            url = url,
-            query = query,
-            headers = IWARA_REQUEST_HEADERS,
-        )
-    } catch (error: IOException) {
-        throw SourceAdapterException(
-            reason = SourceFailureReason.NETWORK,
-            message = "Iwara request failed",
-            cause = error,
-        )
-    }.also { response ->
-        if (response.statusCode !in 200..299 && response.statusCode != 404) {
-            throw SourceAdapterException(
-                reason = classifyFailure(response.statusCode),
-                message = "Iwara request failed (${response.statusCode})",
+    ): SourceHttpResponse {
+        val response = try {
+            httpClient.get(
+                url = url,
+                query = query,
+                headers = IWARA_REQUEST_HEADERS,
             )
+        } catch (error: IOException) {
+            throw SourceAdapterException(
+                reason = SourceFailureReason.NETWORK,
+                message = "Iwara request failed",
+                cause = error,
+            )
+        }
+        val effectiveResponse = if (shouldUseMirrorFallback(response)) {
+            requestMirror(url = url, query = query)
+        } else {
+            response
+        }
+        if (effectiveResponse.statusCode !in 200..299 && effectiveResponse.statusCode != 404) {
+            throw SourceAdapterException(
+                reason = classifyFailure(effectiveResponse.statusCode),
+                message = "Iwara request failed (${effectiveResponse.statusCode})",
+            )
+        }
+        return effectiveResponse
+    }
+
+    private suspend fun requestMirror(
+        url: String,
+        query: Map<String, String>,
+    ): SourceHttpResponse {
+        val mirrorUrl = JINA_MIRROR_BASE + buildAbsoluteUrl(url, query)
+        val mirrored = try {
+            httpClient.get(
+                url = mirrorUrl,
+                query = emptyMap(),
+                headers = JINA_REQUEST_HEADERS,
+            )
+        } catch (error: IOException) {
+            throw SourceAdapterException(
+                reason = SourceFailureReason.NETWORK,
+                message = "Iwara mirror request failed",
+                cause = error,
+            )
+        }
+        return mirrored.copy(body = extractJsonBody(mirrored.body))
+    }
+
+    private fun shouldUseMirrorFallback(response: SourceHttpResponse): Boolean {
+        if (response.statusCode != 403) return false
+        val challengeHeader = response.headers.entries.any { (name, values) ->
+            name.equals("cf-mitigated", ignoreCase = true) &&
+                values.any { value -> value.contains("challenge", ignoreCase = true) }
+        }
+        if (challengeHeader) return true
+        val body = response.body.lowercase()
+        return "cloudflare" in body || "cf-mitigated" in body
+    }
+
+    private fun extractJsonBody(body: String): String {
+        val trimmed = body.trim()
+        if (trimmed.startsWith("{")) return trimmed
+        val markdownIndex = trimmed.indexOf("Markdown Content:")
+        val candidate = if (markdownIndex >= 0) {
+            trimmed.substring(markdownIndex + "Markdown Content:".length).trim()
+        } else {
+            trimmed
+        }
+        val jsonIndex = candidate.indexOf('{')
+        if (jsonIndex >= 0) {
+            return candidate.substring(jsonIndex).trim()
+        }
+        throw SourceAdapterException(
+            reason = SourceFailureReason.PARSE,
+            message = "Iwara mirror returned non-JSON content",
+        )
+    }
+
+    private fun buildAbsoluteUrl(
+        baseUrl: String,
+        query: Map<String, String>,
+    ): String {
+        if (query.isEmpty()) return baseUrl
+        val separator = if ("?" in baseUrl) "&" else "?"
+        val encoded = query.entries.joinToString("&") { (key, value) ->
+            "${key.urlEncode()}=${value.urlEncode()}"
+        }
+        return baseUrl + separator + encoded
+    }
+
+    private fun String.urlEncode(): String {
+        return URLEncoder.encode(this, Charsets.UTF_8.name()).replace("+", "%20")
+    }
+
+    private suspend fun resolvePlayableVideoRef(
+        fileUrl: String,
+        fallbackMime: String?,
+    ): ImageRef? {
+        val response = request(url = fileUrl, query = emptyMap())
+        val root = parseJsonElement(response.body)
+        if (!root.isJsonArray) return null
+        val variants = root.asJsonArray.mapNotNull { element ->
+            val variant = element.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@mapNotNull null
+            val src = variant.objectOrNull("src")
+            val resolvedUrl = src?.string("view")
+                ?.trim()
+                ?.takeIf(String::isNotBlank)
+                ?.let(::normalizeVariantUrl)
+                ?: src?.string("download")
+                    ?.trim()
+                    ?.takeIf(String::isNotBlank)
+                    ?.let(::normalizeVariantUrl)
+                ?: return@mapNotNull null
+            ResolvedVariant(
+                name = variant.string("name")?.trim(),
+                mime = variant.string("type")?.trim(),
+                url = resolvedUrl,
+            )
+        }
+        val selected = variants.maxByOrNull(::variantPriority) ?: return null
+        return ImageRef(
+            url = selected.url,
+            localPath = null,
+            mime = selected.mime ?: fallbackMime ?: inferMimeFromUrl(selected.url),
+        )
+    }
+
+    private fun normalizeVariantUrl(rawUrl: String): String {
+        return if (rawUrl.startsWith("//")) {
+            "https:$rawUrl"
+        } else {
+            rawUrl
         }
     }
 
-    private fun parseJsonObject(body: String): JsonObject {
-        val root = runCatching { gson.fromJson(body, JsonElement::class.java) }.getOrNull()
+    private fun variantPriority(variant: ResolvedVariant): Int {
+        val normalized = variant.name?.lowercase().orEmpty()
+        if (normalized == "preview") return -1
+        if (normalized == "source" || normalized == "original") return Int.MAX_VALUE
+        val digits = normalized.filter(Char::isDigit)
+        return digits.toIntOrNull() ?: 0
+    }
+
+    private fun parseJsonElement(body: String): JsonElement {
+        return runCatching { gson.fromJson(body, JsonElement::class.java) }.getOrNull()
             ?: throw SourceAdapterException(
                 reason = SourceFailureReason.PARSE,
                 message = "Iwara returned malformed JSON",
             )
+    }
+
+    private fun parseJsonObject(body: String): JsonObject {
+        val root = parseJsonElement(body)
         return root.takeIf(JsonElement::isJsonObject)?.asJsonObject
             ?: throw SourceAdapterException(
                 reason = SourceFailureReason.PARSE,
@@ -244,15 +392,6 @@ class IwaraSourceAdapter(
         val slug = raw.string("slug")?.trim().orEmpty()
         val file = raw.objectOrNull("file")
         val customThumbnail = raw.objectOrNull("customThumbnail")
-        val fileUrl = raw.string("fileUrl")?.trim().takeUnless { it.isNullOrBlank() }
-        val fullMime = file?.string("mime") ?: mimeFromFileExt(file?.string("name")?.substringAfterLast('.'))
-        val full = fileUrl?.let { url ->
-            ImageRef(
-                url = url,
-                localPath = null,
-                mime = fullMime ?: inferMimeFromUrl(url),
-            )
-        }
         val preview = ImageRef(
             url = customThumbnail?.let(::buildAssetUrl) ?: file?.string("id")?.let(::buildVideoThumbnailUrl),
             localPath = null,
@@ -263,8 +402,8 @@ class IwaraSourceAdapter(
         return Post(
             id = PostId(source = SourceKey.IWARA, sourcePostId = sourcePostId),
             preview = preview,
-            full = full,
-            media = full?.let(::listOf).orEmpty(),
+            full = null,
+            media = emptyList(),
             pageUrl = buildVideoPageUrl(sourcePostId = sourcePostId, slug = slug),
             width = file?.int("width") ?: customThumbnail?.int("width"),
             height = file?.int("height") ?: customThumbnail?.int("height"),
@@ -352,8 +491,20 @@ private fun JsonObject.objectOrNull(name: String): JsonObject? {
     return get(name)?.takeIf(JsonElement::isJsonObject)?.asJsonObject
 }
 
+private data class ResolvedVariant(
+    val name: String?,
+    val mime: String?,
+    val url: String,
+)
+
 private const val IWARA_API_BASE = "https://api.iwara.tv"
+private const val JINA_MIRROR_BASE = "https://r.jina.ai/http://"
 private val IWARA_REQUEST_HEADERS = mapOf(
     "Referer" to "https://www.iwara.tv/",
     "User-Agent" to "Mozilla/5.0",
+    "Accept" to "application/json, text/plain, */*",
+)
+private val JINA_REQUEST_HEADERS = mapOf(
+    "User-Agent" to "Mozilla/5.0",
+    "Accept" to "application/json, text/plain, */*",
 )
