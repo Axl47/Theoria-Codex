@@ -24,6 +24,7 @@ import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.media.inferMimeFromUrl
 import com.theoriacodex.sources.media.mimeFromFileExt
 import java.io.IOException
+import java.net.URI
 import java.net.URLEncoder
 import java.time.Instant
 
@@ -392,8 +393,16 @@ class IwaraSourceAdapter(
         val slug = raw.string("slug")?.trim().orEmpty()
         val file = raw.objectOrNull("file")
         val customThumbnail = raw.objectOrNull("customThumbnail")
+        val embedUrl = raw.string("embedUrl")?.trim().takeUnless { it.isNullOrBlank() }
         val preview = ImageRef(
-            url = customThumbnail?.let(::buildAssetUrl) ?: file?.string("id")?.let(::buildVideoThumbnailUrl),
+            url = customThumbnail?.let(::buildAssetUrl)
+                ?: file?.string("id")?.let { fileId ->
+                    buildVideoThumbnailUrl(
+                        fileId = fileId,
+                        thumbnailIndex = raw.int("thumbnail"),
+                    )
+                }
+                ?: embedUrl?.let(::buildEmbedThumbnailUrl),
             localPath = null,
             mime = customThumbnail?.string("mime") ?: "image/jpeg",
         )
@@ -453,8 +462,33 @@ class IwaraSourceAdapter(
         return "https://i.iwara.tv/image/original/$assetId/$assetId.$fileExt"
     }
 
-    private fun buildVideoThumbnailUrl(fileId: String): String {
-        return "https://i.iwara.tv/image/thumbnail/$fileId/$fileId.jpg"
+    private fun buildVideoThumbnailUrl(
+        fileId: String,
+        thumbnailIndex: Int?,
+    ): String {
+        val normalizedIndex = (thumbnailIndex ?: 0).coerceAtLeast(0)
+        return "https://i.iwara.tv/image/thumbnail/$fileId/thumbnail-${normalizedIndex.toString().padStart(2, '0')}.jpg"
+    }
+
+    private fun buildEmbedThumbnailUrl(embedUrl: String): String? {
+        val uri = runCatching { URI(embedUrl) }.getOrNull() ?: return null
+        val host = uri.host?.lowercase().orEmpty().removePrefix("www.")
+        val videoId = when {
+            host == "youtube.com" || host == "m.youtube.com" || host == "music.youtube.com" -> {
+                uri.rawQuery
+                    ?.split('&')
+                    ?.mapNotNull { pair ->
+                        val parts = pair.split('=', limit = 2)
+                        val key = parts.getOrNull(0)?.trim()
+                        val value = parts.getOrNull(1)?.trim()
+                        if (key == "v" && !value.isNullOrBlank()) value else null
+                    }
+                    ?.firstOrNull()
+            }
+            host == "youtu.be" -> uri.path?.trim('/')?.takeIf(String::isNotBlank)
+            else -> null
+        } ?: return null
+        return "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
     }
 
     private fun buildVideoPageUrl(sourcePostId: String, slug: String): String {

@@ -64,7 +64,7 @@ class IwaraSourceAdapterTest {
     }
 
     @Test
-    fun `search maps creator metadata preview fallback and next page token`() = runTest {
+    fun `search maps creator metadata indexed thumbnail fallback and next page token`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
                 statusCode = 200,
@@ -111,7 +111,7 @@ class IwaraSourceAdapterTest {
         val post = page.items.single()
         assertEquals(SourceKey.IWARA, post.id.source)
         assertEquals("https://www.iwara.tv/video/KH2f7fca2MCgZ8/wuthering-waves-cartethyiafleurdelys-sex", post.pageUrl)
-        assertEquals("https://i.iwara.tv/image/thumbnail/08ce55ca-b105-4d53-9fd8-56da7de98cf6/08ce55ca-b105-4d53-9fd8-56da7de98cf6.jpg", post.preview.url)
+        assertEquals("https://i.iwara.tv/image/thumbnail/08ce55ca-b105-4d53-9fd8-56da7de98cf6/thumbnail-09.jpg", post.preview.url)
         assertNull(post.full)
         assertTrue(post.media.isEmpty())
         assertEquals("Fearess", post.authorName)
@@ -342,6 +342,7 @@ class IwaraSourceAdapterTest {
         assertNotNull(post)
         assertNull(post?.full)
         assertEquals("https://www.iwara.tv/video/5ak7ohralkswrykwa/mmd-genshin-impact-xinyan-sings-god-knows", post?.pageUrl)
+        assertEquals("https://i.ytimg.com/vi/-RvuwgrPDhI/hqdefault.jpg", post?.preview?.url)
     }
 
     @Test
