@@ -13,6 +13,7 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -171,6 +172,180 @@ class SearchCoordinatorTest {
     }
 
     @Test
+    fun `available source ordering inserts iwara after nhentai`() = runTest {
+        val coordinator = SearchCoordinator(
+            registry = LimitedStubRegistry(
+                setOf(
+                    SourceKey.RULE34VIDEO,
+                    SourceKey.IWARA,
+                    SourceKey.NHENTAI,
+                    SourceKey.PIXIV,
+                ),
+            ),
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+
+        assertEquals(
+            listOf(SourceKey.PIXIV, SourceKey.NHENTAI, SourceKey.IWARA, SourceKey.RULE34VIDEO),
+            coordinator.availableSources,
+        )
+    }
+
+    @Test
+    fun `display results overlays remembered resolved posts for current query`() = runTest {
+        val raw = samplePost()
+        val resolved = raw.copy(
+            full = ImageRef(url = "https://cdn.iwara.tv/video.mp4", localPath = null, mime = "video/mp4"),
+            media = listOf(ImageRef(url = "https://cdn.iwara.tv/video.mp4", localPath = null, mime = "video/mp4")),
+        )
+        val adapter = SearchResolveAdapter(
+            sourceKey = SourceKey.IWARA,
+            searchResults = listOf(raw),
+        ) { resolved }
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(mapOf(SourceKey.IWARA to adapter)),
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.IWARA))
+        coordinator.applyDraft()
+
+        coordinator.rememberResolvedPost(resolved)
+
+        assertEquals("https://cdn.iwara.tv/video.mp4", coordinator.displayResults().single().full?.url)
+    }
+
+    @Test
+    fun `resolved post overlay is query scoped`() = runTest {
+        val raw = samplePost()
+        val resolved = raw.copy(
+            full = ImageRef(url = "https://cdn.iwara.tv/video.mp4", localPath = null, mime = "video/mp4"),
+            media = listOf(ImageRef(url = "https://cdn.iwara.tv/video.mp4", localPath = null, mime = "video/mp4")),
+        )
+        val adapter = SearchResolveAdapter(
+            sourceKey = SourceKey.IWARA,
+            searchResults = listOf(raw),
+        ) { resolved }
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(mapOf(SourceKey.IWARA to adapter)),
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.IWARA))
+        coordinator.addIncludeTag("alpha")
+        coordinator.applyDraft()
+        coordinator.rememberResolvedPost(resolved)
+
+        coordinator.clearDraft()
+        coordinator.addIncludeTag("beta")
+        coordinator.applyDraft()
+
+        assertNull(coordinator.displayResults().single().full)
+    }
+
+    @Test
+    fun `resolve post for search stores successful resolved post and reuses it`() = runTest {
+        val raw = samplePost()
+        val resolved = raw.copy(
+            full = ImageRef(url = "https://cdn.iwara.tv/video.mp4", localPath = null, mime = "video/mp4"),
+            media = listOf(ImageRef(url = "https://cdn.iwara.tv/video.mp4", localPath = null, mime = "video/mp4")),
+        )
+        val adapter = SearchResolveAdapter(
+            sourceKey = SourceKey.IWARA,
+            searchResults = listOf(raw),
+        ) { resolved }
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(mapOf(SourceKey.IWARA to adapter)),
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.IWARA))
+        coordinator.applyDraft()
+
+        val first = coordinator.resolvePostForSearch(raw.id)
+        val second = coordinator.resolvePostForSearch(raw.id)
+
+        assertEquals("https://cdn.iwara.tv/video.mp4", first?.full?.url)
+        assertEquals("https://cdn.iwara.tv/video.mp4", second?.full?.url)
+        assertEquals("https://cdn.iwara.tv/video.mp4", coordinator.displayResults().single().full?.url)
+        assertEquals(1, adapter.resolveCallCount)
+    }
+
+    @Test
+    fun `resolve post for search defers immediate retry after rate limit`() = runTest {
+        var now = 1_000L
+        val raw = samplePost()
+        val adapter = SearchResolveAdapter(
+            sourceKey = SourceKey.IWARA,
+            searchResults = listOf(raw),
+        ) {
+            throw SourceAdapterException(
+                reason = SourceFailureReason.RATE_LIMITED,
+                message = "429",
+            )
+        }
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(mapOf(SourceKey.IWARA to adapter)),
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+            clock = { now },
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.IWARA))
+        coordinator.applyDraft()
+
+        assertNull(coordinator.resolvePostForSearch(raw.id))
+        assertTrue(coordinator.shouldDeferResolve(raw.id))
+        assertEquals(1, adapter.resolveCallCount)
+
+        assertNull(coordinator.resolvePostForSearch(raw.id))
+        assertEquals(1, adapter.resolveCallCount)
+
+        now += 31_000L
+        assertFalse(coordinator.shouldDeferResolve(raw.id))
+        assertNull(coordinator.resolvePostForSearch(raw.id))
+        assertEquals(2, adapter.resolveCallCount)
+        assertTrue(coordinator.shouldDeferResolve(raw.id))
+    }
+
+    @Test
+    fun `display results stay resolved after retry refresh for same query`() = runTest {
+        val raw = samplePost()
+        val resolved = raw.copy(
+            full = ImageRef(url = "https://cdn.iwara.tv/video.mp4", localPath = null, mime = "video/mp4"),
+            media = listOf(ImageRef(url = "https://cdn.iwara.tv/video.mp4", localPath = null, mime = "video/mp4")),
+        )
+        val adapter = SearchResolveAdapter(
+            sourceKey = SourceKey.IWARA,
+            searchResults = listOf(raw),
+        ) { resolved }
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(mapOf(SourceKey.IWARA to adapter)),
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.IWARA))
+        coordinator.applyDraft()
+        coordinator.rememberResolvedPost(resolved)
+
+        coordinator.retry()
+
+        assertEquals("https://cdn.iwara.tv/video.mp4", coordinator.displayResults().single().full?.url)
+    }
+
+    @Test
     fun `clear draft resets to default query for current mode`() = runTest {
         val coordinator = coordinator()
         coordinator.initialize()
@@ -304,6 +479,36 @@ class SearchCoordinatorTest {
         coordinator.refreshAutocompleteSuggestions("blue hair")
 
         assertEquals("blue_hair", gelbooruAdapter.lastAutocompletePrefix)
+        assertEquals(listOf("blue_hair"), coordinator.autocompleteSuggestions.map { it.text })
+        assertTrue(coordinator.canCommitTagInput("blue hair"))
+        assertTrue(coordinator.commitTagInput("blue hair"))
+        assertTrue("blue_hair" in coordinator.draftQuery.includeTags)
+    }
+
+    @Test
+    fun `iwara autocomplete treats spaces as underscores`() = runTest {
+        val iwaraAdapter = RecordingAdapter(
+            sourceKey = SourceKey.IWARA,
+            autocompleteByPrefix = mapOf(
+                "blue_hair" to listOf("blue_hair"),
+            ),
+        )
+        val registry = CompatibilityRegistry(
+            adapters = mapOf(SourceKey.IWARA to iwaraAdapter),
+        )
+        val coordinator = SearchCoordinator(
+            registry = registry,
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+            tagSuggestionStore = InMemoryTagSuggestionStore(),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.IWARA))
+
+        coordinator.refreshAutocompleteSuggestions("blue hair")
+
+        assertEquals("blue_hair", iwaraAdapter.lastAutocompletePrefix)
         assertEquals(listOf("blue_hair"), coordinator.autocompleteSuggestions.map { it.text })
         assertTrue(coordinator.canCommitTagInput("blue hair"))
         assertTrue(coordinator.commitTagInput("blue hair"))
@@ -680,6 +885,49 @@ private class RecordingAdapter(
     override suspend fun resolvePost(id: PostId): Post? = null
 }
 
+private class SearchResolveAdapter(
+    override val sourceKey: SourceKey,
+    private val searchResults: List<Post>,
+    private val resolveBlock: suspend (PostId) -> Post?,
+) : SourceAdapter {
+    var resolveCallCount: Int = 0
+
+    override val capabilities: SourceCapabilities = SourceCapabilities(
+        supportsSortNewest = true,
+        supportsSortPopular = true,
+        supportsSortTop = true,
+        supportsSortRandom = true,
+        supportsExcludeTagsServerSide = true,
+        supportsDateRangeServerSide = true,
+        supportsMinScoreServerSide = true,
+        requiresCredentials = false,
+    )
+
+    override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+        return Page(items = searchResults, nextPageToken = null)
+    }
+
+    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
+
+    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = emptyList()
+
+    override suspend fun quickQuery(kind: QuickQueryKind): Query {
+        return Query(
+            mode = QueryMode.Source(sourceKey),
+            includeTags = emptyList(),
+            excludeTags = emptyList(),
+            sort = SortMode.NEWEST,
+            dateRange = null,
+            minScore = null,
+        )
+    }
+
+    override suspend fun resolvePost(id: PostId): Post? {
+        resolveCallCount += 1
+        return resolveBlock(id)
+    }
+}
+
 private class InMemoryTagSuggestionStore : TagSuggestionStore {
     private val bySource = mutableMapOf<SourceKey, LinkedHashMap<String, TagSuggestion>>()
 
@@ -697,4 +945,24 @@ private class InMemoryTagSuggestionStore : TagSuggestionStore {
             bucket[text.lowercase()] = suggestion.copy(text = text)
         }
     }
+}
+
+private fun samplePost(
+    source: SourceKey = SourceKey.IWARA,
+    sourcePostId: String = "1",
+): Post {
+    return Post(
+        id = PostId(source = source, sourcePostId = sourcePostId),
+        preview = ImageRef(url = "https://i.iwara.tv/image/thumbnail/$sourcePostId/$sourcePostId.jpg", localPath = null, mime = "image/jpeg"),
+        full = null,
+        media = emptyList(),
+        pageUrl = "https://www.iwara.tv/video/$sourcePostId",
+        width = null,
+        height = null,
+        canonicalTags = emptyList(),
+        rawTags = emptyList(),
+        authorName = null,
+        createdAtEpochMs = null,
+        title = "Sample",
+    )
 }

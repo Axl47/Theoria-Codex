@@ -113,7 +113,7 @@ object ForYouTagSetGenerator {
         }
 
         return when (source) {
-            SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.RULE34XXX -> cleaned.replace(' ', '_')
+            SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.IWARA, SourceKey.RULE34XXX -> cleaned.replace(' ', '_')
             SourceKey.PIXIV,
             SourceKey.NHENTAI,
             SourceKey.RULE34PAHEAL,

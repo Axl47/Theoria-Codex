@@ -142,9 +142,9 @@ fun MediaTimelineBar(
                             while (true) {
                                 val event = awaitPointerEvent()
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                                updateScrubTarget(change.position.x)
                                 change.consume()
                                 if (!change.pressed) break
+                                updateScrubTarget(change.position.x)
                             }
                         } finally {
                             if (startedScrubbing || isScrubbing) {

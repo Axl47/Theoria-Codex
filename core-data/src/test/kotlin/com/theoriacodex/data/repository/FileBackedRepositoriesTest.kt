@@ -3,6 +3,7 @@ package com.theoriacodex.data.repository
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
@@ -33,6 +34,73 @@ class FileBackedRepositoriesTest {
         assertEquals(2, second.observeCodexItems(created.codexId).first().size)
         assertEquals(SourceKey.AIBOORU, bySource.first().id.source)
         assertNotNull(second.getPost(PostId(SourceKey.PIXIV, "1")))
+    }
+
+    @Test
+    fun `codex repository persists creator profiles across instances`() = runTest {
+        val dir = Files.createTempDirectory("codex-creator-profile-").toFile()
+        val first = FileBackedCodexRepository(dir)
+        val created = first.createCodex("Saved")
+        val post = samplePost("1", localPath = null, source = SourceKey.PIXIV).copy(
+            creatorProfile = CreatorProfile(
+                source = SourceKey.PIXIV,
+                displayName = "artist",
+                profileId = "201823",
+                profileUrl = "https://www.pixiv.net/en/users/201823",
+                uploadsQuery = "201823",
+            ),
+        )
+
+        first.addItem(created.codexId, post)
+
+        val second = FileBackedCodexRepository(dir)
+        val loaded = second.getPost(post.id)
+
+        assertEquals("artist", loaded?.creatorProfile?.displayName)
+        assertEquals("201823", loaded?.creatorProfile?.profileId)
+        assertEquals("201823", loaded?.creatorProfile?.uploadsQuery)
+    }
+
+    @Test
+    fun `codex repository reads legacy post records without creator profile`() = runTest {
+        val dir = Files.createTempDirectory("codex-legacy-post-record-").toFile()
+        val storageFile = dir.resolve("codex_store.json")
+        storageFile.writeText(
+            """
+            {
+              "codices": [],
+              "items": {},
+              "posts": [
+                {
+                  "source": "PIXIV",
+                  "sourcePostId": "1",
+                  "previewUrl": "https://example.com/1.jpg",
+                  "previewLocalPath": null,
+                  "previewMime": "image/jpeg",
+                  "fullUrl": "https://example.com/full/1.jpg",
+                  "fullLocalPath": null,
+                  "fullMime": "image/jpeg",
+                  "pageUrl": "https://example.com/post/1",
+                  "width": 100,
+                  "height": 100,
+                  "canonicalTags": ["landscape"],
+                  "rawTags": ["landscape"],
+                  "authorName": "artist",
+                  "createdAtEpochMs": 1,
+                  "media": [],
+                  "title": "Legacy"
+                }
+              ]
+            }
+            """.trimIndent(),
+        )
+
+        val repository = FileBackedCodexRepository(dir)
+        val loaded = repository.getPost(PostId(SourceKey.PIXIV, "1"))
+
+        assertNotNull(loaded)
+        assertEquals(null, loaded?.creatorProfile)
+        assertEquals("Legacy", loaded?.title)
     }
 
     @Test
@@ -139,6 +207,13 @@ class FileBackedRepositoriesTest {
                 tags = listOf("portrait", "artist"),
             )
         )
+        assertTrue(
+            first.addFavoriteTag(
+                profileId = created.profileId,
+                source = SourceKey.GELBOORU,
+                tag = "Blue Hair",
+            )
+        )
         first.setActiveProfile(created.profileId)
 
         val second = FileBackedSettingsRepository(dir)
@@ -147,10 +222,12 @@ class FileBackedRepositoriesTest {
         assertEquals(created.profileId, loaded.activeProfileId)
         assertTrue(loaded.recommendationProfiles.any { it.profileId == created.profileId && it.name == "Anime Mood" })
         assertEquals(1, loaded.forYouBlacklistByProfile[created.profileId].orEmpty().size)
+        assertEquals(listOf("blue_hair"), loaded.favoriteTagsByProfile[created.profileId].orEmpty().map { it.tag })
         assertTrue(second.removeRecommendationProfile(created.profileId))
         val third = FileBackedSettingsRepository(dir)
         assertTrue(third.observeSettings().first().recommendationProfiles.none { it.profileId == created.profileId })
         assertTrue(third.observeSettings().first().forYouBlacklistByProfile[created.profileId].isNullOrEmpty())
+        assertTrue(third.observeSettings().first().favoriteTagsByProfile[created.profileId].isNullOrEmpty())
     }
 
     @Test
@@ -187,6 +264,54 @@ class FileBackedRepositoriesTest {
         )
         val third = FileBackedSettingsRepository(dir)
         assertTrue(third.observeSettings().first().forYouBlacklistByProfile[profileId].isNullOrEmpty())
+    }
+
+    @Test
+    fun `settings repository persists source-aware favorite tags`() = runTest {
+        val dir = Files.createTempDirectory("settings-favorite-tags-").toFile()
+        val first = FileBackedSettingsRepository(dir)
+        val profileId = first.observeSettings().first().activeProfileId
+
+        assertTrue(
+            first.addFavoriteTag(
+                profileId = profileId,
+                source = SourceKey.GELBOORU,
+                tag = "Blue Hair",
+            )
+        )
+        assertFalse(
+            first.addFavoriteTag(
+                profileId = profileId,
+                source = SourceKey.GELBOORU,
+                tag = "blue_hair",
+            )
+        )
+        assertTrue(
+            first.addFavoriteTag(
+                profileId = profileId,
+                source = SourceKey.PIXIV,
+                tag = "Blue Hair",
+            )
+        )
+
+        val second = FileBackedSettingsRepository(dir)
+        val loaded = second.observeSettings().first()
+        assertEquals(listOf("blue_hair"), loaded.favoriteTagsByProfile[profileId].orEmpty().filter { it.source == SourceKey.GELBOORU }.map { it.tag })
+        assertEquals(listOf("Blue Hair"), loaded.favoriteTagsByProfile[profileId].orEmpty().filter { it.source == SourceKey.PIXIV }.map { it.tag })
+
+        assertTrue(
+            second.removeFavoriteTag(
+                profileId = profileId,
+                source = SourceKey.GELBOORU,
+                tag = "blue_hair",
+            )
+        )
+        val third = FileBackedSettingsRepository(dir)
+        assertEquals(1, third.observeSettings().first().favoriteTagsByProfile[profileId].orEmpty().size)
+        assertEquals(
+            SourceKey.PIXIV,
+            third.observeSettings().first().favoriteTagsByProfile[profileId].orEmpty().first().source,
+        )
     }
 
     @Test
@@ -273,6 +398,13 @@ class FileBackedRepositoriesTest {
             rawTags = listOf("landscape"),
             authorName = "artist",
             createdAtEpochMs = 1L,
+            creatorProfile = CreatorProfile(
+                source = source,
+                displayName = "artist",
+                profileId = "profile-$id",
+                profileUrl = "https://example.com/creator/$id",
+                uploadsQuery = "uploads-$id",
+            ),
         )
     }
 }

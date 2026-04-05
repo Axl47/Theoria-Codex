@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-03-07T12:10
+updated_at: 2026-04-05T03:01
 ---
 # Theoria Codex
 
@@ -9,6 +9,11 @@ Theoria Codex is an Android-first, local-first, tag-driven art browser.
 The product spec lives at `./docs/TheoriaSpec.md`.
 
 Recent updates:
+- Iwara is now available as a real videos-first source in Search and Unified mode, including public API-backed video search, tag autocomplete, best-effort trending tags, creator upload browsing, `iwara.tv/video/<id>` deep links, and lazy resolve before Viewer playback or device downloads.
+- Tags can now be favorited per recommendation profile and per source by long-pressing a tag inside the shared Viewer/Search/Codex tag menu. Search also adds a `List` button beside `Add` that opens a favorite-tag sheet, scoped to the current source or grouped by source in Unified mode, with `Add` and `Remove` actions that keep the sheet open.
+- Pixiv and Gelbooru posts now expose creator-profile browsing from Search, Codex, and Viewer action sheets. Tapping the creator name opens a dedicated creator page with upload pagination, browser-open support, and local `Animated only` / `Hide liked` / `Hide saved` filters, without replacing or mutating the current Search tab tag query.
+- Search and Codex long-press post menus now reuse the Viewer's interactive tag action grid, including include/exclude tag toggles and source tag-count chips, instead of a plain text tag list.
+- Search filters now include `Hide liked` and `Hide saved` visibility chips alongside `Animated only`, so result grids can locally exclude liked posts and any post already saved in any Codex without changing the underlying query.
 - Rule34 family sources are now available as real integrations: `rule34.paheal.net`, `rule34video.com`, and `rule34gen.com` are exposed directly, while `rule34.xxx` is available after adding a `user_id` and `api_key` in Settings. The rollout includes source logos, request headers, deep-link opening, and viewer-time full-video resolution for Rule34 video posts.
 - NHentai is now available as a real source in Search and Unified mode, including gallery-page parsing, tag suggestions, fixed browser-style request headers, language filter chips (English/Chinese/Japanese), direct ID-open search (`634609`), and gallery deep-link opening via `nhentai.net/g/<id>/` URLs.
 - Codex long-press actions now include share/export to `.json` (title + source/post IDs), and Codex tab has an Import action to reconstruct codices from exported files.

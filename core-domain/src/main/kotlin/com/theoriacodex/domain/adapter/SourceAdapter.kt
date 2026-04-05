@@ -4,6 +4,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.CreatorProfile
 
 interface SourceAdapter {
     val sourceKey: SourceKey
@@ -14,6 +15,13 @@ interface SourceAdapter {
     suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion>
     suspend fun quickQuery(kind: QuickQueryKind): Query
     suspend fun resolvePost(id: PostId): Post?
+}
+
+interface CreatorPostsSourceAdapter {
+    suspend fun searchCreatorPosts(
+        creator: CreatorProfile,
+        pageToken: String?,
+    ): Page<Post>
 }
 
 interface TagCountLookupSourceAdapter {

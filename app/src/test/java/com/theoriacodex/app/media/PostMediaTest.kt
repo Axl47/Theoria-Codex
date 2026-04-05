@@ -59,6 +59,17 @@ class PostMediaTest {
         assertFalse(isPixivUgoiraPost(nonPixiv))
     }
 
+    @Test
+    fun `iwara posts are treated as animated even before resolve`() {
+        val unresolved = samplePost(
+            source = SourceKey.IWARA,
+            preview = ImageRef(url = "https://i.iwara.tv/thumb.jpg", localPath = null, mime = "image/jpeg"),
+            full = null,
+        )
+
+        assertTrue(isAnimatedPost(unresolved))
+    }
+
     private fun samplePost(
         source: SourceKey,
         preview: ImageRef,

@@ -8,6 +8,7 @@ fun trainingTagsFor(post: Post): List<String> {
         SourceKey.PIXIV -> post.rawTags.takeIf { it.isNotEmpty() } ?: post.canonicalTags
         SourceKey.GELBOORU,
         SourceKey.AIBOORU,
+        SourceKey.IWARA,
         SourceKey.NHENTAI,
         SourceKey.RULE34XXX,
         SourceKey.RULE34PAHEAL,

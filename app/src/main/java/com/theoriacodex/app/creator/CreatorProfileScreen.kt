@@ -1,0 +1,455 @@
+package com.theoriacodex.app.creator
+
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.OpenInBrowser
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.search.SearchResultCard
+import com.theoriacodex.app.search.SearchVisibilityFilters
+import com.theoriacodex.app.search.filterSearchResults
+import com.theoriacodex.app.tags.PostTagActionSection
+import com.theoriacodex.app.viewer.PixivUgoiraClient
+import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
+import kotlinx.coroutines.launch
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CreatorProfileScreen(
+    coordinator: CreatorProfileCoordinator,
+    likedPostIds: Set<PostId>,
+    savedPostIds: Set<PostId>,
+    pixivUgoiraClient: PixivUgoiraClient? = null,
+    onToggleLike: (Post) -> Unit,
+    onOpenViewer: (List<Post>, ViewerLaunchContext, SearchVisibilityFilters) -> Unit,
+    onRequestSaveToCodex: (Post) -> Unit,
+    onSaveToDevice: (Post) -> Unit,
+    onOpenUrl: (String) -> Unit,
+    onBack: () -> Unit,
+) {
+    val creator = coordinator.activeCreator
+    var selectedActionPost by remember { mutableStateOf<Post?>(null) }
+    var showFilterSheet by remember { mutableStateOf(false) }
+    var animatedOnly by rememberSaveable { mutableStateOf(false) }
+    var hideLiked by rememberSaveable { mutableStateOf(false) }
+    var hideSaved by rememberSaveable { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val gridState = rememberLazyStaggeredGridState()
+    val visibilityFilters = remember(animatedOnly, hideLiked, hideSaved) {
+        SearchVisibilityFilters(
+            animatedOnly = animatedOnly,
+            hideLiked = hideLiked,
+            hideSaved = hideSaved,
+        )
+    }
+    val visibleResults = remember(coordinator.results, visibilityFilters, likedPostIds, savedPostIds) {
+        filterSearchResults(
+            results = coordinator.results,
+            filters = visibilityFilters,
+            likedPostIds = likedPostIds,
+            savedPostIds = savedPostIds,
+        )
+    }
+
+    LaunchedEffect(
+        visibleResults.size,
+        coordinator.results.size,
+        coordinator.loading,
+        coordinator.loadingMore,
+        coordinator.canLoadMore,
+        animatedOnly,
+    ) {
+        snapshotFlow {
+            (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to coordinator.loadingMore
+        }.collect { (lastVisibleIndex, loadingMoreState) ->
+            if (loadingMoreState) return@collect
+            if (coordinator.loading || coordinator.loadingMore || !coordinator.canLoadMore) return@collect
+
+            val totalVisible = visibleResults.size
+            val shouldTriggerByThreshold = if (totalVisible > 0 && lastVisibleIndex >= 0) {
+                val triggerIndex = ((totalVisible - 1) * CREATOR_PROFILE_PREFETCH_RATIO)
+                    .toInt()
+                    .coerceAtLeast(0)
+                lastVisibleIndex >= triggerIndex
+            } else {
+                false
+            }
+
+            val shouldTriggerForAnimatedBuffer =
+                animatedOnly &&
+                    totalVisible < CREATOR_PROFILE_ANIMATED_PREFETCH_MIN_VISIBLE &&
+                    coordinator.results.isNotEmpty()
+
+            if (shouldTriggerByThreshold || shouldTriggerForAnimatedBuffer) {
+                coordinator.loadNextPage()
+            }
+        }
+    }
+
+    if (creator == null) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("No creator selected")
+        }
+        return
+    }
+
+    Scaffold(
+        contentWindowInsets = WindowInsets(0),
+        floatingActionButton = {
+            FloatingActionButton(
+                modifier = Modifier.padding(bottom = 8.dp),
+                onClick = { showFilterSheet = true },
+            ) {
+                Icon(Icons.Default.FilterList, contentDescription = "Filter creator uploads")
+            }
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                        )
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = creator.displayName,
+                            style = MaterialTheme.typography.titleLarge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = creator.source.name,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                creator.profileUrl?.takeIf { it.isNotBlank() }?.let { profileUrl ->
+                    IconButton(onClick = { onOpenUrl(profileUrl) }) {
+                        Icon(
+                            imageVector = Icons.Default.OpenInBrowser,
+                            contentDescription = "Open creator profile in browser",
+                        )
+                    }
+                }
+            }
+
+            when {
+                coordinator.loading && visibleResults.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+
+                coordinator.errorMessage != null && visibleResults.isEmpty() -> {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(coordinator.errorMessage.orEmpty())
+                            TextButton(
+                                onClick = {
+                                    scope.launch { coordinator.refresh() }
+                                },
+                            ) {
+                                Text("Retry")
+                            }
+                        }
+                    }
+                }
+
+                visibleResults.isEmpty() -> {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "No uploads found for this creator.",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+
+                else -> {
+                    LazyVerticalStaggeredGrid(
+                        columns = StaggeredGridCells.Fixed(2),
+                        modifier = Modifier.fillMaxSize(),
+                        state = gridState,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalItemSpacing = 6.dp,
+                    ) {
+                        itemsIndexed(
+                            items = visibleResults,
+                            key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" },
+                        ) { index, post ->
+                            SearchResultCard(
+                                post = post,
+                                pixivUgoiraClient = pixivUgoiraClient,
+                                liked = post.id in likedPostIds,
+                                onToggleLike = { onToggleLike(post) },
+                                onClick = {
+                                    onOpenViewer(
+                                        visibleResults,
+                                        coordinator.buildViewerLaunchContext(
+                                            startIndex = index,
+                                            scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
+                                        ),
+                                        visibilityFilters,
+                                    )
+                                },
+                                onLongPress = { selectedActionPost = post },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showFilterSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showFilterSheet = false },
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("Visibility", style = MaterialTheme.typography.titleMedium)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(
+                        selected = animatedOnly,
+                        onClick = { animatedOnly = !animatedOnly },
+                        label = { Text("Animated only") },
+                    )
+                    FilterChip(
+                        selected = hideLiked,
+                        onClick = { hideLiked = !hideLiked },
+                        label = { Text("Hide liked") },
+                    )
+                    FilterChip(
+                        selected = hideSaved,
+                        onClick = { hideSaved = !hideSaved },
+                        label = { Text("Hide saved") },
+                    )
+                }
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { showFilterSheet = false },
+                ) {
+                    Text("Done")
+                }
+            }
+        }
+    }
+
+    if (selectedActionPost != null) {
+        val post = requireNotNull(selectedActionPost)
+        val context = LocalContext.current
+        ModalBottomSheet(
+            onDismissRequest = { selectedActionPost = null },
+            dragHandle = null,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    IconButton(
+                        onClick = {
+                            selectedActionPost = null
+                            onSaveToDevice(post)
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Download,
+                            contentDescription = "Save to device",
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            selectedActionPost = null
+                            onRequestSaveToCodex(post)
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.BookmarkAdd,
+                            contentDescription = "Save to Codex",
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                            val formatted = formatPostTagsForClipboard(post)
+                            clipboard?.setPrimaryClip(ClipData.newPlainText("tags", formatted))
+                            Toast.makeText(context, "Tags copied", Toast.LENGTH_SHORT).show()
+                            selectedActionPost = null
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy tags",
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            val copied = copyPostUrlToClipboard(context, post)
+                            val message = if (copied) "Post URL copied" else "No post URL available"
+                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            selectedActionPost = null
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share",
+                        )
+                    }
+                }
+                Text(
+                    text = post.title?.takeIf { it.isNotBlank() } ?: post.id.sourcePostId,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                HorizontalDivider()
+                PostTagActionSection(
+                    post = post,
+                    onAddIncludeTag = {},
+                    onAddExcludeTag = {},
+                    onRemoveIncludeTag = {},
+                    onRemoveExcludeTag = {},
+                )
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { selectedActionPost = null },
+                ) {
+                    Text("Cancel")
+                }
+            }
+        }
+    }
+}
+
+private fun formatPostTagsForClipboard(post: Post): String {
+    val canonicalPositives = post.canonicalTags.filterNot { it.startsWith("-") }
+    val canonicalNegatives = post.canonicalTags
+        .filter { it.startsWith("-") }
+        .map { it.removePrefix("-") }
+    val rawPositives = post.rawTags.filterNot { it.startsWith("-") }
+    val rawNegatives = post.rawTags
+        .filter { it.startsWith("-") }
+        .map { it.removePrefix("-") }
+    val positives = (canonicalPositives + rawPositives)
+        .map { it.trim() }
+        .filter { it.isNotBlank() && !it.startsWith("-") }
+        .distinct()
+    val negatives = (canonicalNegatives + rawNegatives)
+        .map { it.trim().removePrefix("-") }
+        .filter { it.isNotBlank() }
+        .distinct()
+    return buildString {
+        append(positives.joinToString(separator = " "))
+        if (negatives.isNotEmpty()) {
+            if (isNotBlank()) append(' ')
+            append(negatives.joinToString(separator = " ") { tag -> "-$tag" })
+        }
+    }
+}
+
+private fun copyPostUrlToClipboard(context: Context, post: Post): Boolean {
+    val pageUrl = post.pageUrl?.trim().takeIf { !it.isNullOrBlank() } ?: return false
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+    clipboard?.setPrimaryClip(ClipData.newPlainText("post_url", pageUrl))
+    return true
+}
+
+private const val CREATOR_PROFILE_PREFETCH_RATIO = 0.7f
+private const val CREATOR_PROFILE_ANIMATED_PREFETCH_MIN_VISIBLE = 6

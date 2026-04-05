@@ -1,0 +1,18 @@
+{
+  "nextPageToken": null,
+  "items": [
+    {
+      "sourcePostId": "iw_3002",
+      "title": "Iwara Video Two",
+      "previewUrl": "https://example.com/iwara/thumb/3002.jpg",
+      "fullUrl": "https://example.com/iwara/file/3002.mp4",
+      "pageUrl": "https://www.iwara.tv/video/iw_3002/iwara-video-two",
+      "width": 1280,
+      "height": 720,
+      "canonicalTags": ["magic", "dance"],
+      "rawTags": ["magic", "dance"],
+      "authorName": "iwara_creator_2",
+      "createdAtEpochMs": 1712361600000
+    }
+  ]
+}

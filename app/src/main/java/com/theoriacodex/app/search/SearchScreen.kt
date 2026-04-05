@@ -32,6 +32,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
@@ -104,11 +106,14 @@ import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.isVideoMediaRef
+import com.theoriacodex.app.creator.CreatorProfileActionButton
 import com.theoriacodex.app.recommend.associatedDisplayTag
 import com.theoriacodex.app.recommend.buildSourceTagAffinity
 import com.theoriacodex.app.R
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.requestHeaders
+import com.theoriacodex.app.tags.FavoriteTagActionGrid
+import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
 import com.theoriacodex.app.viewer.createLoopingExoPlayer
@@ -138,17 +143,25 @@ fun SearchScreen(
     coordinator: SearchCoordinator,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     likedPostIds: Set<PostId> = emptySet(),
+    savedPostIds: Set<PostId> = emptySet(),
+    favoriteTags: Map<SourceKey, List<String>> = emptyMap(),
     onToggleLike: ((Post) -> Unit)? = null,
-    onOpenViewer: (List<Post>, ViewerLaunchContext, Boolean) -> Unit,
+    onOpenViewer: (List<Post>, ViewerLaunchContext, SearchVisibilityFilters) -> Unit,
     onApplySearch: () -> Unit,
     onRetrySearch: () -> Unit,
+    onOpenCreatorProfile: (Post) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
+    onAddFavoriteTag: (SourceKey, String) -> Unit = { _, _ -> },
+    onRemoveFavoriteTag: (SourceKey, String) -> Unit = { _, _ -> },
 ) {
     var input by rememberSaveable { mutableStateOf("") }
     var animatedOnly by rememberSaveable { mutableStateOf(false) }
+    var hideLiked by rememberSaveable { mutableStateOf(false) }
+    var hideSaved by rememberSaveable { mutableStateOf(false) }
     var searchFieldFocused by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
+    var showFavoriteTagSheet by remember { mutableStateOf(false) }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -163,12 +176,23 @@ fun SearchScreen(
             animatedOnly = false
         }
     }
-    val visibleResults = remember(coordinator.results, animatedFilterActive) {
-        if (animatedFilterActive) {
-            coordinator.results.filter(::isAnimatedPost)
-        } else {
-            coordinator.results
-        }
+    val visibilityFilters = remember(animatedFilterActive, hideLiked, hideSaved) {
+        SearchVisibilityFilters(
+            animatedOnly = animatedFilterActive,
+            hideLiked = hideLiked,
+            hideSaved = hideSaved,
+        )
+    }
+    val displayResults = remember(coordinator.results, coordinator.displayResultsVersion, queryHash) {
+        coordinator.displayResults()
+    }
+    val visibleResults = remember(displayResults, visibilityFilters, likedPostIds, savedPostIds) {
+        filterSearchResults(
+            results = displayResults,
+            filters = visibilityFilters,
+            likedPostIds = likedPostIds,
+            savedPostIds = savedPostIds,
+        )
     }
     val displayTagSeedBySource = remember(
         coordinator.appliedQuery.mode,
@@ -205,6 +229,23 @@ fun SearchScreen(
                 seedTagsBySource = displayTagSeedBySource,
                 affinityBySource = displayTagAffinityBySource,
             )
+        }
+    }
+    val sourceDisplayOrder = remember(coordinator.modeOptions) {
+        coordinator.modeOptions
+            .mapNotNull { mode -> (mode as? QueryMode.Source)?.source }
+    }
+    val favoriteSections = remember(coordinator.draftQuery.mode, favoriteTags, sourceDisplayOrder) {
+        favoriteTagSections(
+            mode = coordinator.draftQuery.mode,
+            favoriteTags = favoriteTags,
+            sourceDisplayOrder = sourceDisplayOrder,
+        )
+    }
+    val favoriteTagEmptyMessage = remember(coordinator.draftQuery.mode) {
+        when (val mode = coordinator.draftQuery.mode) {
+            is QueryMode.Source -> "No favorite tags saved for ${mode.source.displayName()} yet."
+            QueryMode.Unified -> "No favorite tags saved yet."
         }
     }
     suspend fun resetScrollToTop() {
@@ -407,11 +448,19 @@ fun SearchScreen(
                     onDone = { commitTagInput() },
                 ),
                 trailingIcon = {
-                    TextButton(
-                        onClick = { commitTagInput() },
-                        enabled = coordinator.canCommitTagInput(input),
-                    ) {
-                        Text("Add")
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = {
+                            focusManager.clearFocus()
+                            showFavoriteTagSheet = true
+                        }) {
+                            Text("List")
+                        }
+                        TextButton(
+                            onClick = { commitTagInput() },
+                            enabled = coordinator.canCommitTagInput(input),
+                        ) {
+                            Text("Add")
+                        }
                     }
                 }
             )
@@ -549,19 +598,12 @@ fun SearchScreen(
                             } else {
                                 EmptyBlock(
                                     hasPendingChanges = coordinator.hasPendingChanges,
-                                    messageOverride = when {
-                                        animatedFilterActive &&
-                                            coordinator.results.isNotEmpty() &&
-                                            (coordinator.loadingMore || coordinator.canLoadMore) -> {
-                                            "No animated media yet. Retrying with more pages..."
-                                        }
-
-                                        animatedFilterActive && coordinator.results.isNotEmpty() -> {
-                                            "No animated media found for the current results."
-                                        }
-
-                                        else -> null
-                                    },
+                                    messageOverride = buildEmptySearchMessage(
+                                        sourceResults = coordinator.results,
+                                        visibilityFilters = visibilityFilters,
+                                        loadingMore = coordinator.loadingMore,
+                                        canLoadMore = coordinator.canLoadMore,
+                                    ),
                                 )
                             }
                         }
@@ -603,7 +645,7 @@ fun SearchScreen(
                                     onToggleLike = onToggleLike?.let { toggle ->
                                         { toggle(post) }
                                     },
-                                    resolvePostById = { postId -> coordinator.resolvePost(postId) },
+                                    resolvePostById = { postId -> coordinator.resolvePostForSearch(postId) },
                                     onClick = {
                                         focusManager.clearFocus()
                                         val context = coordinator.buildViewerLaunchContext(
@@ -611,7 +653,7 @@ fun SearchScreen(
                                             scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
                                         )
                                         scope.launch { coordinator.setViewerLaunchContext(context) }
-                                        onOpenViewer(visibleResults, context, animatedFilterActive)
+                                        onOpenViewer(visibleResults, context, visibilityFilters)
                                     },
                                     onLongPress = {
                                         focusManager.clearFocus()
@@ -655,6 +697,7 @@ fun SearchScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = actionSheetHorizontalPadding, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -724,6 +767,24 @@ fun SearchScreen(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                CreatorProfileActionButton(
+                    post = post,
+                    onClick = {
+                        selectedActionPost = null
+                        onOpenCreatorProfile(post)
+                    },
+                )
+                HorizontalDivider()
+                PostTagActionSection(
+                    post = post,
+                    tagVideoCountProvider = coordinator::tagVideoCount,
+                    fetchTagVideoCounts = coordinator::fetchTagVideoCounts,
+                    onAddIncludeTag = coordinator::addIncludeTag,
+                    onAddExcludeTag = coordinator::addExcludeTag,
+                    onRemoveIncludeTag = coordinator::removeIncludeTag,
+                    onRemoveExcludeTag = coordinator::removeExcludeTag,
+                    onFavoriteTagLongPress = onAddFavoriteTag,
+                )
                 TextButton(
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { selectedActionPost = null },
@@ -734,12 +795,32 @@ fun SearchScreen(
         }
     }
 
+    if (showFavoriteTagSheet) {
+        FavoriteTagSheet(
+            sections = favoriteSections,
+            tagVideoCountProvider = coordinator::tagVideoCount,
+            fetchTagVideoCounts = coordinator::fetchTagVideoCounts,
+            emptyMessage = favoriteTagEmptyMessage,
+            onAddTag = { tag ->
+                coordinator.addIncludeTag(tag)
+            },
+            onRemoveTag = { source, tag ->
+                onRemoveFavoriteTag(source, tag)
+            },
+            onDismiss = { showFavoriteTagSheet = false },
+        )
+    }
+
     if (showFilterSheet) {
         FilterSheet(
             coordinator = coordinator,
             animatedOnly = animatedOnly,
             onAnimatedOnlyChange = { animatedOnly = it },
             showAnimatedOnlyFilter = !isNhentaiSourceMode,
+            hideLiked = hideLiked,
+            onHideLikedChange = { hideLiked = it },
+            hideSaved = hideSaved,
+            onHideSavedChange = { hideSaved = it },
             nhentaiLanguageFilter = coordinator.selectedNhentaiLanguageFilter(),
             onNhentaiLanguageFilterChange = { filter -> coordinator.setNhentaiLanguageFilter(filter) },
             onSortChanged = { applyDraftAndResetScroll() },
@@ -827,7 +908,11 @@ fun SearchResultCard(
             effectivePost.full,
             effectivePost.preview,
         ) {
-            resolveCardVideoRef(effectivePost)
+            if (allowsInlineAutoplayInSearch(effectivePost)) {
+                resolveCardVideoRef(effectivePost)
+            } else {
+                null
+            }
         }
         var videoPlaybackFailed by remember(
             effectivePost.id.source,
@@ -1169,6 +1254,10 @@ private fun resolveCardVideoRef(post: Post): ImageRef? {
     }
 }
 
+internal fun allowsInlineAutoplayInSearch(post: Post): Boolean {
+    return post.id.source == SourceKey.RULE34VIDEO || post.id.source == SourceKey.RULE34GEN
+}
+
 private fun formatPostTagsForClipboard(post: Post): String {
     val canonicalPositives = post.canonicalTags.filterNot { it.startsWith("-") }
     val canonicalNegatives = post.canonicalTags
@@ -1208,6 +1297,10 @@ private fun FilterSheet(
     animatedOnly: Boolean,
     onAnimatedOnlyChange: (Boolean) -> Unit,
     showAnimatedOnlyFilter: Boolean,
+    hideLiked: Boolean,
+    onHideLikedChange: (Boolean) -> Unit,
+    hideSaved: Boolean,
+    onHideSavedChange: (Boolean) -> Unit,
     nhentaiLanguageFilter: NhentaiLanguageFilter,
     onNhentaiLanguageFilterChange: (NhentaiLanguageFilter) -> Unit,
     onSortChanged: () -> Unit,
@@ -1232,9 +1325,9 @@ private fun FilterSheet(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (showAnimatedOnlyFilter) {
-                Text("Media Types", style = MaterialTheme.typography.titleMedium)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Visibility", style = MaterialTheme.typography.titleMedium)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (showAnimatedOnlyFilter) {
                     item {
                         FilterChip(
                             selected = animatedOnly,
@@ -1243,7 +1336,24 @@ private fun FilterSheet(
                         )
                     }
                 }
-            } else {
+                item {
+                    FilterChip(
+                        selected = hideLiked,
+                        onClick = { onHideLikedChange(!hideLiked) },
+                        label = { Text("Hide liked") },
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = hideSaved,
+                        onClick = { onHideSavedChange(!hideSaved) },
+                        label = { Text("Hide saved") },
+                    )
+                }
+            }
+
+            if (!showAnimatedOnlyFilter) {
+                HorizontalDivider()
                 Text("Language", style = MaterialTheme.typography.titleMedium)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(NhentaiLanguageFilter.entries.size) { index ->
@@ -1340,6 +1450,65 @@ private fun FilterSheet(
                 TextButton(onClick = onDismiss) {
                     Text("Done")
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FavoriteTagSheet(
+    sections: List<FavoriteTagSection>,
+    tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
+    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
+    emptyMessage: String,
+    onAddTag: (String) -> Unit,
+    onRemoveTag: (SourceKey, String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Favorite Tags", style = MaterialTheme.typography.titleMedium)
+            if (sections.isEmpty()) {
+                Text(
+                    text = emptyMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                sections.forEachIndexed { index, section ->
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = section.source.displayName(),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        FavoriteTagActionGrid(
+                            source = section.source,
+                            tags = section.tags,
+                            tagVideoCountProvider = tagVideoCountProvider,
+                            fetchTagVideoCounts = fetchTagVideoCounts,
+                            onAddTag = onAddTag,
+                            onRemoveTag = { tag ->
+                                onRemoveTag(section.source, tag)
+                            },
+                        )
+                    }
+                    if (index != sections.lastIndex) {
+                        HorizontalDivider()
+                    }
+                }
+            }
+            TextButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onDismiss,
+            ) {
+                Text("Done")
             }
         }
     }
@@ -1691,6 +1860,92 @@ private fun ErrorBlock(
                 )
             }
         }
+    }
+}
+
+data class SearchVisibilityFilters(
+    val animatedOnly: Boolean = false,
+    val hideLiked: Boolean = false,
+    val hideSaved: Boolean = false,
+)
+
+internal data class FavoriteTagSection(
+    val source: SourceKey,
+    val tags: List<String>,
+)
+
+internal fun filterSearchResults(
+    results: List<Post>,
+    filters: SearchVisibilityFilters,
+    likedPostIds: Set<PostId>,
+    savedPostIds: Set<PostId>,
+): List<Post> {
+    return results.filter { post ->
+        (!filters.animatedOnly || isAnimatedPost(post)) &&
+            (!filters.hideLiked || post.id !in likedPostIds) &&
+            (!filters.hideSaved || post.id !in savedPostIds)
+    }
+}
+
+internal fun favoriteTagSections(
+    mode: QueryMode,
+    favoriteTags: Map<SourceKey, List<String>>,
+    sourceDisplayOrder: List<SourceKey>,
+): List<FavoriteTagSection> {
+    val orderedSources = (sourceDisplayOrder + favoriteTags.keys)
+        .distinct()
+    return when (mode) {
+        is QueryMode.Source -> {
+            favoriteTags[mode.source]
+                .orEmpty()
+                .takeIf { tags -> tags.isNotEmpty() }
+                ?.let { tags ->
+                    listOf(FavoriteTagSection(source = mode.source, tags = tags))
+                }
+                .orEmpty()
+        }
+
+        QueryMode.Unified -> {
+            orderedSources.mapNotNull { source ->
+                favoriteTags[source]
+                    .orEmpty()
+                    .takeIf { tags -> tags.isNotEmpty() }
+                    ?.let { tags -> FavoriteTagSection(source = source, tags = tags) }
+            }
+        }
+    }
+}
+
+private fun buildEmptySearchMessage(
+    sourceResults: List<Post>,
+    visibilityFilters: SearchVisibilityFilters,
+    loadingMore: Boolean,
+    canLoadMore: Boolean,
+): String? {
+    if (visibilityFilters.animatedOnly && sourceResults.isNotEmpty() && (loadingMore || canLoadMore)) {
+        return "No animated media yet. Retrying with more pages..."
+    }
+    if (!visibilityFilters.animatedOnly && !visibilityFilters.hideLiked && !visibilityFilters.hideSaved) {
+        return null
+    }
+    if (sourceResults.isEmpty()) {
+        return null
+    }
+    return when {
+        visibilityFilters.animatedOnly && !visibilityFilters.hideLiked && !visibilityFilters.hideSaved ->
+            "No animated media found for the current results."
+
+        visibilityFilters.hideLiked && visibilityFilters.hideSaved ->
+            "No results remain after hiding liked and saved posts."
+
+        visibilityFilters.hideLiked ->
+            "No results remain after hiding liked posts."
+
+        visibilityFilters.hideSaved ->
+            "No results remain after hiding saved posts."
+
+        else ->
+            "No results remain after applying the current visibility filters."
     }
 }
 

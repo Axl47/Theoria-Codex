@@ -63,9 +63,10 @@ data class SourceRuntimeSettings(
         SourceKey.RULE34XXX to 0.15,
         SourceKey.RULE34PAHEAL to 0.12,
         SourceKey.NHENTAI to 0.10,
-        SourceKey.RULE34VIDEO to 0.08,
+        SourceKey.IWARA to 0.08,
+        SourceKey.RULE34VIDEO to 0.07,
         SourceKey.RULE34GEN to 0.07,
-        SourceKey.AIBOORU to 0.05,
+        SourceKey.AIBOORU to 0.03,
     ),
 )
 
@@ -81,6 +82,11 @@ data class RecommendationProfile(
 data class ForYouBlacklistEntry(
     val source: SourceKey,
     val tags: List<String>,
+)
+
+data class FavoriteTagEntry(
+    val source: SourceKey,
+    val tag: String,
 )
 
 private val DEFAULT_RECOMMENDATION_PROFILES = listOf(
@@ -100,6 +106,7 @@ data class AppSettings(
     val recommendationProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
     val activeProfileId: String = defaultRecommendationProfiles().first().profileId,
     val forYouBlacklistByProfile: Map<String, List<ForYouBlacklistEntry>> = emptyMap(),
+    val favoriteTagsByProfile: Map<String, List<FavoriteTagEntry>> = emptyMap(),
 )
 
 enum class ScenarioPreset {
@@ -122,6 +129,8 @@ interface SettingsRepository {
     suspend fun removeRecommendationProfile(profileId: String): Boolean
     suspend fun addForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean
     suspend fun removeForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean
+    suspend fun addFavoriteTag(profileId: String, source: SourceKey, tag: String): Boolean
+    suspend fun removeFavoriteTag(profileId: String, source: SourceKey, tag: String): Boolean
 }
 
 data class CacheSnapshot(
@@ -141,6 +150,7 @@ enum class ViewerStreamSource {
     SEARCH,
     FOR_YOU,
     CODEX,
+    CREATOR_PROFILE,
 }
 
 data class ViewerLaunchContext(

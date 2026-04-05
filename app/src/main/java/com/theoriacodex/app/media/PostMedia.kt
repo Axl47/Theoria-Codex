@@ -85,7 +85,11 @@ fun isPixivUgoiraMedia(post: Post, media: ImageRef): Boolean {
 }
 
 fun isAnimatedPost(post: Post): Boolean {
-    if (post.id.source == SourceKey.RULE34VIDEO || post.id.source == SourceKey.RULE34GEN) {
+    if (
+        post.id.source == SourceKey.RULE34VIDEO ||
+        post.id.source == SourceKey.RULE34GEN ||
+        post.id.source == SourceKey.IWARA
+    ) {
         return true
     }
     if (isPixivUgoiraPost(post)) return true

@@ -5,6 +5,7 @@ enum class SourceKey {
     GELBOORU,
     AIBOORU,
     NHENTAI,
+    IWARA,
     RULE34XXX,
     RULE34PAHEAL,
     RULE34VIDEO,
@@ -14,6 +15,14 @@ enum class SourceKey {
 data class PostId(
     val source: SourceKey,
     val sourcePostId: String,
+)
+
+data class CreatorProfile(
+    val source: SourceKey,
+    val displayName: String,
+    val profileId: String? = null,
+    val profileUrl: String? = null,
+    val uploadsQuery: String? = null,
 )
 
 data class ImageRef(
@@ -35,4 +44,5 @@ data class Post(
     val authorName: String?,
     val createdAtEpochMs: Long?,
     val title: String? = null,
+    val creatorProfile: CreatorProfile? = null,
 )

@@ -1,0 +1,18 @@
+{
+  "nextPageToken": "page_2",
+  "items": [
+    {
+      "sourcePostId": "iw_3001",
+      "title": "Iwara Video One",
+      "previewUrl": "https://example.com/iwara/thumb/3001.jpg",
+      "fullUrl": "https://example.com/iwara/file/3001.mp4",
+      "pageUrl": "https://www.iwara.tv/video/iw_3001/iwara-video-one",
+      "width": 1920,
+      "height": 1080,
+      "canonicalTags": ["wuthering_waves", "koikatsu"],
+      "rawTags": ["wuthering_waves", "koikatsu"],
+      "authorName": "iwara_creator_1",
+      "createdAtEpochMs": 1712275200000
+    }
+  ]
+}

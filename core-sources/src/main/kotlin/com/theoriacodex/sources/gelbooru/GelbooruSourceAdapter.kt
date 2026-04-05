@@ -3,6 +3,7 @@ package com.theoriacodex.sources.gelbooru
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -11,6 +12,7 @@ import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -29,7 +31,7 @@ class GelbooruSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val credentialsProvider: SourceCredentialsProvider,
     private val gson: Gson = Gson(),
-) : SourceAdapter, TagCountLookupSourceAdapter {
+) : SourceAdapter, TagCountLookupSourceAdapter, CreatorPostsSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.GELBOORU
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -156,6 +158,29 @@ class GelbooruSourceAdapter(
         return parsePostItems(response).firstOrNull()?.let(::parsePost)
     }
 
+    override suspend fun searchCreatorPosts(
+        creator: CreatorProfile,
+        pageToken: String?,
+    ): Page<Post> {
+        if (creator.source != SourceKey.GELBOORU) return Page(items = emptyList(), nextPageToken = null)
+        val uploadsQuery = creator.uploadsQuery?.trim().takeIf { !it.isNullOrBlank() }
+            ?: return Page(items = emptyList(), nextPageToken = null)
+        val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+        val limit = 40
+        val response = request(
+            query = baseQuery(
+                "s" to "post",
+                "q" to "index",
+                "pid" to pageIndex.toString(),
+                "limit" to limit.toString(),
+                "tags" to uploadsQuery,
+            ),
+        )
+        val posts = parsePostItems(response).mapNotNull(::parsePost)
+        val next = if (posts.size >= limit) (pageIndex + 1).toString() else null
+        return Page(items = posts, nextPageToken = next)
+    }
+
     private suspend fun request(query: Map<String, String>): String {
         val response = try {
             httpClient.get(
@@ -254,6 +279,10 @@ class GelbooruSourceAdapter(
         val previewMime = inferMimeFromUrl(previewUrl) ?: fullMime
         val createdAt = raw.get("created_at")?.asString?.toLongOrNull()?.times(1000L)
             ?: raw.get("change")?.asString?.toLongOrNull()?.times(1000L)
+        val owner = raw.get("owner")?.asString?.trim().orEmpty()
+        val creatorId = raw.get("creator_id")?.asString?.trim().orEmpty()
+        val creatorDisplayName = owner.ifBlank { creatorId }.ifBlank { null }
+        val uploadsQuery = owner.takeIf { it.isNotBlank() }?.let { "user:$it" }
 
         return Post(
             id = PostId(SourceKey.GELBOORU, id),
@@ -264,8 +293,18 @@ class GelbooruSourceAdapter(
             height = raw.get("height")?.asInt,
             canonicalTags = tags,
             rawTags = tags,
-            authorName = raw.get("owner")?.asString ?: raw.get("creator_id")?.asString,
+            authorName = creatorDisplayName,
             createdAtEpochMs = createdAt,
+            creatorProfile = creatorDisplayName?.let { displayName ->
+                CreatorProfile(
+                    source = SourceKey.GELBOORU,
+                    displayName = displayName,
+                    profileId = creatorId.ifBlank { null },
+                    profileUrl = creatorId.ifBlank { null }
+                        ?.let { "https://gelbooru.com/index.php?page=account&s=profile&id=$it" },
+                    uploadsQuery = uploadsQuery,
+                )
+            },
         )
     }
 

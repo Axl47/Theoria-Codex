@@ -13,16 +13,18 @@ class DefaultSourceHttpClient(
     private val readTimeoutMs: Int = 20_000,
     private val maxRetries: Int = 2,
     private val retryBaseDelayMs: Long = 300L,
+    private val shouldRetryStatus: (url: String, statusCode: Int) -> Boolean = ::defaultShouldRetryStatus,
 ) : SourceHttpClient {
     override suspend fun get(
         url: String,
         query: Map<String, String>,
         headers: Map<String, String>,
     ): SourceHttpResponse {
-        return executeWithRetry {
+        val requestUrl = buildUrl(url, query)
+        return executeWithRetry(requestUrl) {
             executeRequest(
                 method = "GET",
-                url = buildUrl(url, query),
+                url = requestUrl,
                 headers = headers,
                 body = null,
             )
@@ -40,7 +42,7 @@ class DefaultSourceHttpClient(
         } else {
             headers + ("Content-Type" to "application/x-www-form-urlencoded")
         }
-        return executeWithRetry {
+        return executeWithRetry(url) {
             executeRequest(
                 method = "POST",
                 url = url,
@@ -50,22 +52,26 @@ class DefaultSourceHttpClient(
         }
     }
 
-    private suspend fun executeWithRetry(block: suspend () -> SourceHttpResponse): SourceHttpResponse {
+    private suspend fun executeWithRetry(
+        requestUrl: String,
+        block: suspend () -> SourceHttpResponse,
+    ): SourceHttpResponse {
         var attempt = 0
         var lastError: Throwable? = null
         while (attempt <= maxRetries) {
             try {
                 val response = block()
-                if (!shouldRetry(response.statusCode) || attempt == maxRetries) {
+                if (!shouldRetryStatus(requestUrl, response.statusCode) || attempt == maxRetries) {
                     return response
                 }
+                attempt += 1
+                delay(resolveRetryDelayMs(response, attempt, retryBaseDelayMs))
             } catch (error: IOException) {
                 lastError = error
                 if (attempt == maxRetries) throw error
+                attempt += 1
+                delay(retryBaseDelayMs * attempt)
             }
-
-            attempt += 1
-            delay(retryBaseDelayMs * attempt)
         }
         throw IllegalStateException("Unexpected HTTP retry state", lastError)
     }
@@ -110,10 +116,6 @@ class DefaultSourceHttpClient(
             headers = headersMap,
         )
     }
-
-    private fun shouldRetry(statusCode: Int): Boolean {
-        return statusCode == 429 || statusCode in 500..599
-    }
 }
 
 private fun buildUrl(base: String, query: Map<String, String>): String {
@@ -132,4 +134,32 @@ private fun String.urlEncode(): String {
     return URLEncoder.encode(this, Charsets.UTF_8.name())
         // Query-component spaces should be encoded as %20 for broader API compatibility.
         .replace("+", "%20")
+}
+
+internal fun defaultShouldRetryStatus(requestUrl: String, statusCode: Int): Boolean {
+    if (statusCode in 500..599) return true
+    if (statusCode != 429) return false
+    return !isIwaraRequestUrl(requestUrl)
+}
+
+internal fun resolveRetryDelayMs(
+    response: SourceHttpResponse,
+    attempt: Int,
+    retryBaseDelayMs: Long,
+): Long {
+    val retryAfterSeconds = response.headers.entries
+        .firstOrNull { (name, _) -> name.equals("Retry-After", ignoreCase = true) }
+        ?.value
+        ?.firstOrNull()
+        ?.trim()
+        ?.toLongOrNull()
+    if (retryAfterSeconds != null && retryAfterSeconds > 0L) {
+        return retryAfterSeconds * 1_000L
+    }
+    return retryBaseDelayMs * attempt
+}
+
+private fun isIwaraRequestUrl(requestUrl: String): Boolean {
+    val host = runCatching { URL(requestUrl).host.lowercase() }.getOrNull() ?: return false
+    return host == "iwara.tv" || host.endsWith(".iwara.tv")
 }

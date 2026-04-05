@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexItem
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -12,6 +13,8 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
+import com.theoriacodex.domain.tags.sourceTagKey
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -344,6 +347,7 @@ class FileBackedSettingsRepository(
                 recommendationProfiles = remaining,
                 activeProfileId = nextActiveId,
                 forYouBlacklistByProfile = current.forYouBlacklistByProfile - profileId,
+                favoriteTagsByProfile = current.favoriteTagsByProfile - profileId,
             )
         }
         return true
@@ -390,6 +394,51 @@ class FileBackedSettingsRepository(
         }
         updateSettings {
             it.copy(forYouBlacklistByProfile = updatedMap)
+        }
+        return true
+    }
+
+    override suspend fun addFavoriteTag(profileId: String, source: SourceKey, tag: String): Boolean {
+        val normalizedTag = normalizeFavoriteTagForStorage(source, tag)
+        if (normalizedTag.isBlank()) return false
+        val current = settingsFlow.value
+        val existing = current.favoriteTagsByProfile[profileId].orEmpty()
+        val alreadyPresent = existing.any { entry ->
+            entry.source == source && sourceTagKey(source, entry.tag) == sourceTagKey(source, normalizedTag)
+        }
+        if (alreadyPresent) return false
+
+        val updated = existing + FavoriteTagEntry(
+            source = source,
+            tag = normalizedTag,
+        )
+        updateSettings {
+            it.copy(
+                favoriteTagsByProfile = it.favoriteTagsByProfile + (profileId to updated),
+            )
+        }
+        return true
+    }
+
+    override suspend fun removeFavoriteTag(profileId: String, source: SourceKey, tag: String): Boolean {
+        val normalizedKey = sourceTagKey(source, tag)
+        if (normalizedKey.isBlank()) return false
+        val current = settingsFlow.value
+        val existing = current.favoriteTagsByProfile[profileId].orEmpty()
+        if (existing.isEmpty()) return false
+        val updated = existing.filterNot { entry ->
+            entry.source == source && sourceTagKey(source, entry.tag) == normalizedKey
+        }
+        if (updated.size == existing.size) return false
+
+        val updatedMap = current.favoriteTagsByProfile.toMutableMap()
+        if (updated.isEmpty()) {
+            updatedMap.remove(profileId)
+        } else {
+            updatedMap[profileId] = updated
+        }
+        updateSettings {
+            it.copy(favoriteTagsByProfile = updatedMap)
         }
         return true
     }
@@ -721,6 +770,7 @@ private data class PostRecord(
     val createdAtEpochMs: Long?,
     val media: List<ImageRefRecord>? = null,
     val title: String? = null,
+    val creatorProfile: CreatorProfileRecord? = null,
 ) {
     fun toDomain(): Post {
         return Post(
@@ -751,6 +801,7 @@ private data class PostRecord(
             createdAtEpochMs = createdAtEpochMs,
             media = media.orEmpty().map { it.toDomain() },
             title = title,
+            creatorProfile = creatorProfile?.toDomain(),
         )
     }
 
@@ -774,6 +825,37 @@ private data class PostRecord(
                 createdAtEpochMs = post.createdAtEpochMs,
                 media = post.media.map(ImageRefRecord::fromDomain),
                 title = post.title,
+                creatorProfile = post.creatorProfile?.let(CreatorProfileRecord::fromDomain),
+            )
+        }
+    }
+}
+
+private data class CreatorProfileRecord(
+    val source: String,
+    val displayName: String,
+    val profileId: String? = null,
+    val profileUrl: String? = null,
+    val uploadsQuery: String? = null,
+) {
+    fun toDomain(): CreatorProfile {
+        return CreatorProfile(
+            source = SourceKey.valueOf(source),
+            displayName = displayName,
+            profileId = profileId,
+            profileUrl = profileUrl,
+            uploadsQuery = uploadsQuery,
+        )
+    }
+
+    companion object {
+        fun fromDomain(profile: CreatorProfile): CreatorProfileRecord {
+            return CreatorProfileRecord(
+                source = profile.source.name,
+                displayName = profile.displayName,
+                profileId = profile.profileId,
+                profileUrl = profile.profileUrl,
+                uploadsQuery = profile.uploadsQuery,
             )
         }
     }
@@ -872,6 +954,7 @@ private data class SettingsStoreFile(
     val activeProfileId: String? = null,
     val activeProfile: String? = null,
     val forYouBlacklistByProfile: Map<String, List<ForYouBlacklistEntryRecord>>? = null,
+    val favoriteTagsByProfile: Map<String, List<FavoriteTagEntryRecord>>? = null,
 ) {
     fun toDomain(): AppSettings {
         val runtime = SourceRuntimeSettings(
@@ -905,6 +988,11 @@ private data class SettingsStoreFile(
                     .mapValues { (_, entries) ->
                         entries.mapNotNull { entry -> entry.toDomainOrNull() }
                     },
+                favoriteTagsByProfile = favoriteTagsByProfile
+                    .orEmpty()
+                    .mapValues { (_, entries) ->
+                        entries.mapNotNull { entry -> entry.toDomainOrNull() }
+                    },
             )
         )
     }
@@ -926,6 +1014,38 @@ private data class SettingsStoreFile(
                     .mapValues { (_, entries) ->
                         entries.map { entry -> ForYouBlacklistEntryRecord.fromDomain(entry) }
                     },
+                favoriteTagsByProfile = settings.favoriteTagsByProfile
+                    .mapValues { (_, entries) ->
+                        entries.map { entry -> FavoriteTagEntryRecord.fromDomain(entry) }
+                    },
+            )
+        }
+    }
+}
+
+private data class FavoriteTagEntryRecord(
+    val source: String? = null,
+    val tag: String? = null,
+) {
+    fun toDomainOrNull(): FavoriteTagEntry? {
+        val resolvedSource = source
+            ?.trim()
+            ?.takeIf { value -> value.isNotEmpty() }
+            ?.let { value -> runCatching { SourceKey.valueOf(value) }.getOrNull() }
+            ?: return null
+        val normalizedTag = normalizeFavoriteTagForStorage(resolvedSource, tag.orEmpty())
+        if (normalizedTag.isBlank()) return null
+        return FavoriteTagEntry(
+            source = resolvedSource,
+            tag = normalizedTag,
+        )
+    }
+
+    companion object {
+        fun fromDomain(entry: FavoriteTagEntry): FavoriteTagEntryRecord {
+            return FavoriteTagEntryRecord(
+                source = entry.source.name,
+                tag = normalizeFavoriteTagForStorage(entry.source, entry.tag),
             )
         }
     }
@@ -1085,11 +1205,32 @@ private fun normalizeSettings(settings: AppSettings): AppSettings {
         }
         .toMap()
         .filterValues { entries -> entries.isNotEmpty() }
+    val normalizedFavoriteTags = settings.favoriteTagsByProfile
+        .mapNotNull { (profileId, entries) ->
+            val normalizedProfileId = profileId.trim()
+            if (normalizedProfileId !in profileIds) return@mapNotNull null
+            val normalizedEntries = entries
+                .asSequence()
+                .mapNotNull { entry ->
+                    val normalizedTag = normalizeFavoriteTagForStorage(entry.source, entry.tag)
+                    if (normalizedTag.isBlank()) {
+                        null
+                    } else {
+                        FavoriteTagEntry(source = entry.source, tag = normalizedTag)
+                    }
+                }
+                .distinctBy { entry -> "${entry.source.name}:${sourceTagKey(entry.source, entry.tag)}" }
+                .toList()
+            normalizedProfileId to normalizedEntries
+        }
+        .toMap()
+        .filterValues { entries -> entries.isNotEmpty() }
     return settings.copy(
         runtime = settings.runtime.copy(sourceWeights = normalizedWeights),
         recommendationProfiles = normalizedProfiles,
         activeProfileId = activeProfileId,
         forYouBlacklistByProfile = normalizedBlacklist,
+        favoriteTagsByProfile = normalizedFavoriteTags,
     )
 }
 

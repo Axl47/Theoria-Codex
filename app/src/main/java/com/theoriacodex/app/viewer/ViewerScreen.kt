@@ -15,7 +15,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
@@ -33,7 +32,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -94,8 +92,10 @@ import coil.request.ImageRequest
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraMedia
 import com.theoriacodex.app.media.isVideoMediaRef
+import com.theoriacodex.app.creator.CreatorProfileActionButton
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.requestHeaders
+import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -134,7 +134,9 @@ fun ViewerScreen(
     onAddExcludeTag: (String) -> Unit,
     onRemoveIncludeTag: (String) -> Unit,
     onRemoveExcludeTag: (String) -> Unit,
+    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     onGoToSearch: () -> Unit,
+    onOpenCreatorProfile: ((Post) -> Unit)? = null,
 ) {
     if (posts.isEmpty()) {
         Box(
@@ -676,9 +678,6 @@ fun ViewerScreen(
 
     if (showInfoSheet) {
         val post = selectedPost
-        var tagSelections by remember(post.id.source, post.id.sourcePostId) {
-            mutableStateOf<Map<String, ViewerTagSelection>>(emptyMap())
-        }
         ModalBottomSheet(
             onDismissRequest = { showInfoSheet = false },
             dragHandle = null,
@@ -745,61 +744,43 @@ fun ViewerScreen(
                     }
                 }
 
-                Text("Tags", style = MaterialTheme.typography.titleSmall)
-                val distinctTags = remember(post.canonicalTags) { post.canonicalTags.distinct() }
-                var tagVideoCounts by remember(post.id.source, distinctTags) {
-                    mutableStateOf(
-                        distinctTags.associateWith { tag ->
-                            tagVideoCountProvider(post.id.source, tag)
-                        }
+                Text(
+                    text = post.title?.takeIf { it.isNotBlank() } ?: post.id.sourcePostId,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "${post.id.source.displayName()} • ${post.id.sourcePostId}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (onOpenCreatorProfile != null) {
+                    CreatorProfileActionButton(
+                        post = post,
+                        onClick = {
+                            mediaPlaybackEnabled = false
+                            onOpenCreatorProfile(post)
+                            showInfoSheet = false
+                        },
                     )
                 }
-                LaunchedEffect(post.id.source, distinctTags) {
-                    val missingTags = distinctTags.filter { tag -> tagVideoCounts[tag] == null }
-                    if (missingTags.isEmpty()) return@LaunchedEffect
-                    val fetchedCounts = fetchTagVideoCounts(post.id.source, missingTags)
-                    if (fetchedCounts.isNotEmpty()) {
-                        tagVideoCounts = tagVideoCounts + fetchedCounts
-                    }
-                }
-                ViewerTagSelectionGrid(
-                    tags = distinctTags,
-                    videoCounts = tagVideoCounts,
-                    selections = tagSelections,
-                    onIncludeTag = { tag ->
-                        when (tagSelections[tag]) {
-                            ViewerTagSelection.INCLUDE -> {
-                                onRemoveIncludeTag(tag)
-                                tagSelections = tagSelections - tag
-                            }
-                            ViewerTagSelection.EXCLUDE -> {
-                                onRemoveExcludeTag(tag)
-                                onAddIncludeTag(tag)
-                                tagSelections = tagSelections + (tag to ViewerTagSelection.INCLUDE)
-                            }
-                            null -> {
-                                onAddIncludeTag(tag)
-                                tagSelections = tagSelections + (tag to ViewerTagSelection.INCLUDE)
-                            }
-                        }
-                    },
-                    onExcludeTag = { tag ->
-                        when (tagSelections[tag]) {
-                            ViewerTagSelection.EXCLUDE -> {
-                                onRemoveExcludeTag(tag)
-                                tagSelections = tagSelections - tag
-                            }
-                            ViewerTagSelection.INCLUDE -> {
-                                onRemoveIncludeTag(tag)
-                                onAddExcludeTag(tag)
-                                tagSelections = tagSelections + (tag to ViewerTagSelection.EXCLUDE)
-                            }
-                            null -> {
-                                onAddExcludeTag(tag)
-                                tagSelections = tagSelections + (tag to ViewerTagSelection.EXCLUDE)
-                            }
-                        }
-                    },
+
+                PostTagActionSection(
+                    post = post,
+                    tagVideoCountProvider = tagVideoCountProvider,
+                    fetchTagVideoCounts = fetchTagVideoCounts,
+                    onAddIncludeTag = onAddIncludeTag,
+                    onAddExcludeTag = onAddExcludeTag,
+                    onRemoveIncludeTag = onRemoveIncludeTag,
+                    onRemoveExcludeTag = onRemoveExcludeTag,
+                    onFavoriteTagLongPress = onFavoriteTagLongPress,
                 )
 
                 TextButton(
@@ -823,142 +804,6 @@ private fun copyPostUrlToClipboard(context: Context, post: Post): Boolean {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
     clipboard?.setPrimaryClip(ClipData.newPlainText("post_url", pageUrl))
     return true
-}
-
-private enum class ViewerTagSelection {
-    INCLUDE,
-    EXCLUDE,
-}
-
-@Composable
-private fun ViewerTagSelectionGrid(
-    tags: List<String>,
-    videoCounts: Map<String, Int?>,
-    selections: Map<String, ViewerTagSelection>,
-    onIncludeTag: (String) -> Unit,
-    onExcludeTag: (String) -> Unit,
-) {
-    if (tags.isEmpty()) {
-        Text(
-            text = "No tags",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        return
-    }
-
-    tags.chunked(3).forEach { rowTags ->
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            rowTags.forEach { tag ->
-                ViewerTagActionCell(
-                    tag = tag,
-                    videoCount = videoCounts[tag],
-                    selection = selections[tag],
-                    onInclude = { onIncludeTag(tag) },
-                    onExclude = { onExcludeTag(tag) },
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            repeat(3 - rowTags.size) {
-                Spacer(modifier = Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun ViewerTagActionCell(
-    tag: String,
-    videoCount: Int?,
-    selection: ViewerTagSelection?,
-    onInclude: () -> Unit,
-    onExclude: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val accent = MaterialTheme.colorScheme.primary
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(999.dp),
-            color = if (selection == null) {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-            } else {
-                accent.copy(alpha = 0.16f)
-            },
-        ) {
-            Text(
-                text = tag,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.labelMedium,
-            )
-        }
-        if (videoCount != null) {
-            Text(
-                text = videoCount.toString(),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            ViewerTagActionPill(
-                label = "+",
-                selected = selection == ViewerTagSelection.INCLUDE,
-                onClick = onInclude,
-                modifier = Modifier.weight(1f),
-            )
-            ViewerTagActionPill(
-                label = "-",
-                selected = selection == ViewerTagSelection.EXCLUDE,
-                onClick = onExclude,
-                modifier = Modifier.weight(1f),
-            )
-        }
-    }
-}
-
-@Composable
-private fun ViewerTagActionPill(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val accent = MaterialTheme.colorScheme.primary
-    Surface(
-        modifier = modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(999.dp),
-        color = if (selected) {
-            accent.copy(alpha = 0.24f)
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-        },
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
 }
 
 @Composable
