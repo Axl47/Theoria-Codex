@@ -1,6 +1,8 @@
 package com.theoriacodex.app.tags
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +36,7 @@ fun PostTagActionSection(
     onAddExcludeTag: (String) -> Unit,
     onRemoveIncludeTag: (String) -> Unit,
     onRemoveExcludeTag: (String) -> Unit,
+    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
 ) {
     Text("Tags", style = MaterialTheme.typography.titleSmall)
     val distinctTags = remember(post.canonicalTags, post.rawTags) {
@@ -63,6 +66,11 @@ fun PostTagActionSection(
         videoCounts = tagVideoCounts,
         includedTags = tagSelections[TagActionSelection.INCLUDE].orEmpty(),
         excludedTags = tagSelections[TagActionSelection.EXCLUDE].orEmpty(),
+        onFavoriteTagLongPress = if (onFavoriteTagLongPress != null) {
+            { tag -> onFavoriteTagLongPress(post.id.source, tag) }
+        } else {
+            null
+        },
         onIncludeTag = { tag ->
             val included = tagSelections[TagActionSelection.INCLUDE].orEmpty()
             val excluded = tagSelections[TagActionSelection.EXCLUDE].orEmpty()
@@ -108,6 +116,63 @@ fun PostTagActionSection(
     )
 }
 
+@Composable
+fun FavoriteTagActionGrid(
+    source: SourceKey,
+    tags: List<String>,
+    tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
+    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
+    emptyText: String = "No favorite tags",
+    onAddTag: (String) -> Unit,
+    onRemoveTag: (String) -> Unit,
+) {
+    var tagVideoCounts by remember(source, tags) {
+        mutableStateOf(
+            tags.associateWith { tag ->
+                tagVideoCountProvider(source, tag)
+            }
+        )
+    }
+    LaunchedEffect(source, tags) {
+        val missingTags = tags.filter { tag -> tagVideoCounts[tag] == null }
+        if (missingTags.isEmpty()) return@LaunchedEffect
+        val fetchedCounts = fetchTagVideoCounts(source, missingTags)
+        if (fetchedCounts.isNotEmpty()) {
+            tagVideoCounts = tagVideoCounts + fetchedCounts
+        }
+    }
+
+    if (tags.isEmpty()) {
+        Text(
+            text = emptyText,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+
+    tags.chunked(3).forEach { rowTags ->
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            rowTags.forEach { tag ->
+                FavoriteTagActionCell(
+                    tag = tag,
+                    videoCount = tagVideoCounts[tag],
+                    onAdd = { onAddTag(tag) },
+                    onRemove = { onRemoveTag(tag) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            repeat(3 - rowTags.size) {
+                Spacer(modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
+
 private enum class TagActionSelection {
     INCLUDE,
     EXCLUDE,
@@ -119,6 +184,7 @@ private fun TagActionGrid(
     videoCounts: Map<String, Int?>,
     includedTags: Set<String>,
     excludedTags: Set<String>,
+    onFavoriteTagLongPress: ((String) -> Unit)?,
     onIncludeTag: (String) -> Unit,
     onExcludeTag: (String) -> Unit,
 ) {
@@ -143,6 +209,11 @@ private fun TagActionGrid(
                     videoCount = videoCounts[tag],
                     includeSelected = tag in includedTags,
                     excludeSelected = tag in excludedTags,
+                    onTagLongPress = if (onFavoriteTagLongPress != null) {
+                        { onFavoriteTagLongPress(tag) }
+                    } else {
+                        null
+                    },
                     onInclude = { onIncludeTag(tag) },
                     onExclude = { onExcludeTag(tag) },
                     modifier = Modifier.weight(1f),
@@ -155,39 +226,36 @@ private fun TagActionGrid(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TagActionCell(
     tag: String,
     videoCount: Int?,
     includeSelected: Boolean,
     excludeSelected: Boolean,
+    onTagLongPress: (() -> Unit)?,
     onInclude: () -> Unit,
     onExclude: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val accent = MaterialTheme.colorScheme.primary
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Surface(
+        TagLabelSurface(
+            tag = tag,
+            active = includeSelected || excludeSelected,
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(999.dp),
-            color = if (!includeSelected && !excludeSelected) {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+            longPressModifier = if (onTagLongPress != null) {
+                Modifier.combinedClickable(
+                    onClick = {},
+                    onLongClick = onTagLongPress,
+                )
             } else {
-                accent.copy(alpha = 0.16f)
+                Modifier
             },
-        ) {
-            Text(
-                text = tag,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.labelMedium,
-            )
-        }
+        )
         if (videoCount != null) {
             Text(
                 text = videoCount.toString(),
@@ -212,6 +280,78 @@ private fun TagActionCell(
                 modifier = Modifier.weight(1f),
             )
         }
+    }
+}
+
+@Composable
+private fun FavoriteTagActionCell(
+    tag: String,
+    videoCount: Int?,
+    onAdd: () -> Unit,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        TagLabelSurface(
+            tag = tag,
+            active = false,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (videoCount != null) {
+            Text(
+                text = videoCount.toString(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            TagActionPill(
+                label = "Add",
+                selected = false,
+                onClick = onAdd,
+                modifier = Modifier.weight(1f),
+            )
+            TagActionPill(
+                label = "Remove",
+                selected = false,
+                onClick = onRemove,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun TagLabelSurface(
+    tag: String,
+    active: Boolean,
+    modifier: Modifier = Modifier,
+    longPressModifier: Modifier = Modifier,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    Surface(
+        modifier = modifier.then(longPressModifier),
+        shape = RoundedCornerShape(999.dp),
+        color = if (active) {
+            accent.copy(alpha = 0.16f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+        },
+    ) {
+        Text(
+            text = tag,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.labelMedium,
+        )
     }
 }
 

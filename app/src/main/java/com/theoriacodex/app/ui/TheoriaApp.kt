@@ -339,6 +339,12 @@ fun TheoriaApp(
                     .thenBy { entry -> entry.tags.joinToString(separator = "+") }
             )
     }
+    val activeProfileFavoriteTags = remember(settings.favoriteTagsByProfile, activeRecommendationProfile.profileId) {
+        settings.favoriteTagsByProfile[activeRecommendationProfile.profileId]
+            .orEmpty()
+            .groupBy { entry -> entry.source }
+            .mapValues { (_, entries) -> entries.map { entry -> entry.tag } }
+    }
     val cacheSnapshot by cacheRepository.observeSnapshot().collectAsState(
         initial = CacheSnapshot(thumbnailCount = 0, fullImageCount = 0),
     )
@@ -385,6 +391,43 @@ fun TheoriaApp(
                 .asSequence()
                 .flatten()
                 .toSet()
+        }
+    }
+    val addFavoriteTag: (SourceKey, String) -> Unit = remember(
+        scope,
+        settingsRepository,
+        activeRecommendationProfile.profileId,
+        appContext,
+    ) {
+        { source, tag ->
+            scope.launch {
+                val added = settingsRepository.addFavoriteTag(
+                    profileId = activeRecommendationProfile.profileId,
+                    source = source,
+                    tag = tag,
+                )
+                val message = if (added) {
+                    "Added to favorite tags"
+                } else {
+                    "Already in favorite tags"
+                }
+                Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    val removeFavoriteTag: (SourceKey, String) -> Unit = remember(
+        scope,
+        settingsRepository,
+        activeRecommendationProfile.profileId,
+    ) {
+        { source, tag ->
+            scope.launch {
+                settingsRepository.removeFavoriteTag(
+                    profileId = activeRecommendationProfile.profileId,
+                    source = source,
+                    tag = tag,
+                )
+            }
         }
     }
 
@@ -1476,6 +1519,7 @@ fun TheoriaApp(
                                         pixivUgoiraClient = pixivUgoiraClient,
                                         likedPostIds = likedPostIds,
                                         savedPostIds = savedPostIds,
+                                        favoriteTags = activeProfileFavoriteTags,
                                         onToggleLike = { post ->
                                             scope.launch {
                                                 toggleLikeAndSyncCodex(post)
@@ -1501,6 +1545,8 @@ fun TheoriaApp(
                                         onSaveToDevice = { post ->
                                             requestSaveToDevice(post)
                                         },
+                                        onAddFavoriteTag = addFavoriteTag,
+                                        onRemoveFavoriteTag = removeFavoriteTag,
                                         onOpenCreatorProfile = { post ->
                                             scope.launch { openCreatorProfile(post) }
                                         },
@@ -1907,6 +1953,7 @@ fun TheoriaApp(
                             onRemoveExcludeTag = { tag ->
                                 searchCoordinator.removeExcludeTag(tag)
                             },
+                            onFavoriteTagLongPress = addFavoriteTag,
                             onGoToSearch = {
                                 homeTabRoute = TopLevelDestination.Search.route
                                 navController.popBackStack(AppRoute.Home, inclusive = false)
@@ -2064,6 +2111,7 @@ fun TheoriaApp(
                                 onRemoveExcludeTag = { tag ->
                                     searchCoordinator.removeExcludeTag(tag)
                                 },
+                                onFavoriteTagLongPress = addFavoriteTag,
                                 onGoToSearch = {
                                     viewerSession = null
                                     homeTabRoute = TopLevelDestination.Search.route

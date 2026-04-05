@@ -207,6 +207,13 @@ class FileBackedRepositoriesTest {
                 tags = listOf("portrait", "artist"),
             )
         )
+        assertTrue(
+            first.addFavoriteTag(
+                profileId = created.profileId,
+                source = SourceKey.GELBOORU,
+                tag = "Blue Hair",
+            )
+        )
         first.setActiveProfile(created.profileId)
 
         val second = FileBackedSettingsRepository(dir)
@@ -215,10 +222,12 @@ class FileBackedRepositoriesTest {
         assertEquals(created.profileId, loaded.activeProfileId)
         assertTrue(loaded.recommendationProfiles.any { it.profileId == created.profileId && it.name == "Anime Mood" })
         assertEquals(1, loaded.forYouBlacklistByProfile[created.profileId].orEmpty().size)
+        assertEquals(listOf("blue_hair"), loaded.favoriteTagsByProfile[created.profileId].orEmpty().map { it.tag })
         assertTrue(second.removeRecommendationProfile(created.profileId))
         val third = FileBackedSettingsRepository(dir)
         assertTrue(third.observeSettings().first().recommendationProfiles.none { it.profileId == created.profileId })
         assertTrue(third.observeSettings().first().forYouBlacklistByProfile[created.profileId].isNullOrEmpty())
+        assertTrue(third.observeSettings().first().favoriteTagsByProfile[created.profileId].isNullOrEmpty())
     }
 
     @Test
@@ -255,6 +264,54 @@ class FileBackedRepositoriesTest {
         )
         val third = FileBackedSettingsRepository(dir)
         assertTrue(third.observeSettings().first().forYouBlacklistByProfile[profileId].isNullOrEmpty())
+    }
+
+    @Test
+    fun `settings repository persists source-aware favorite tags`() = runTest {
+        val dir = Files.createTempDirectory("settings-favorite-tags-").toFile()
+        val first = FileBackedSettingsRepository(dir)
+        val profileId = first.observeSettings().first().activeProfileId
+
+        assertTrue(
+            first.addFavoriteTag(
+                profileId = profileId,
+                source = SourceKey.GELBOORU,
+                tag = "Blue Hair",
+            )
+        )
+        assertFalse(
+            first.addFavoriteTag(
+                profileId = profileId,
+                source = SourceKey.GELBOORU,
+                tag = "blue_hair",
+            )
+        )
+        assertTrue(
+            first.addFavoriteTag(
+                profileId = profileId,
+                source = SourceKey.PIXIV,
+                tag = "Blue Hair",
+            )
+        )
+
+        val second = FileBackedSettingsRepository(dir)
+        val loaded = second.observeSettings().first()
+        assertEquals(listOf("blue_hair"), loaded.favoriteTagsByProfile[profileId].orEmpty().filter { it.source == SourceKey.GELBOORU }.map { it.tag })
+        assertEquals(listOf("Blue Hair"), loaded.favoriteTagsByProfile[profileId].orEmpty().filter { it.source == SourceKey.PIXIV }.map { it.tag })
+
+        assertTrue(
+            second.removeFavoriteTag(
+                profileId = profileId,
+                source = SourceKey.GELBOORU,
+                tag = "blue_hair",
+            )
+        )
+        val third = FileBackedSettingsRepository(dir)
+        assertEquals(1, third.observeSettings().first().favoriteTagsByProfile[profileId].orEmpty().size)
+        assertEquals(
+            SourceKey.PIXIV,
+            third.observeSettings().first().favoriteTagsByProfile[profileId].orEmpty().first().source,
+        )
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.theoriacodex.app.search
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -65,6 +66,56 @@ class SearchVisibilityFiltersTest {
         )
 
         assertEquals(listOf(animatedVisible.id), visible.map { it.id })
+    }
+
+    @Test
+    fun `favoriteTagSections limits source mode to the active source`() {
+        val sections = favoriteTagSections(
+            mode = QueryMode.Source(SourceKey.GELBOORU),
+            favoriteTags = mapOf(
+                SourceKey.PIXIV to listOf("sky"),
+                SourceKey.GELBOORU to listOf("blue_hair", "cat_ears"),
+            ),
+            sourceDisplayOrder = listOf(SourceKey.PIXIV, SourceKey.GELBOORU),
+        )
+
+        assertEquals(
+            listOf(
+                FavoriteTagSection(
+                    source = SourceKey.GELBOORU,
+                    tags = listOf("blue_hair", "cat_ears"),
+                )
+            ),
+            sections,
+        )
+    }
+
+    @Test
+    fun `favoriteTagSections groups unified favorites by search source order`() {
+        val sections = favoriteTagSections(
+            mode = QueryMode.Unified,
+            favoriteTags = mapOf(
+                SourceKey.RULE34VIDEO to listOf("dance"),
+                SourceKey.PIXIV to listOf("sky"),
+                SourceKey.GELBOORU to emptyList(),
+                SourceKey.NHENTAI to listOf("english"),
+            ),
+            sourceDisplayOrder = listOf(
+                SourceKey.GELBOORU,
+                SourceKey.PIXIV,
+                SourceKey.NHENTAI,
+                SourceKey.RULE34VIDEO,
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                FavoriteTagSection(source = SourceKey.PIXIV, tags = listOf("sky")),
+                FavoriteTagSection(source = SourceKey.NHENTAI, tags = listOf("english")),
+                FavoriteTagSection(source = SourceKey.RULE34VIDEO, tags = listOf("dance")),
+            ),
+            sections,
+        )
     }
 
     private fun samplePost(

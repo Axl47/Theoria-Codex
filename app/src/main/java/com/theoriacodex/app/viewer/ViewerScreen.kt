@@ -134,6 +134,7 @@ fun ViewerScreen(
     onAddExcludeTag: (String) -> Unit,
     onRemoveIncludeTag: (String) -> Unit,
     onRemoveExcludeTag: (String) -> Unit,
+    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     onGoToSearch: () -> Unit,
     onOpenCreatorProfile: ((Post) -> Unit)? = null,
 ) {
@@ -779,6 +780,7 @@ fun ViewerScreen(
                     onAddExcludeTag = onAddExcludeTag,
                     onRemoveIncludeTag = onRemoveIncludeTag,
                     onRemoveExcludeTag = onRemoveExcludeTag,
+                    onFavoriteTagLongPress = onFavoriteTagLongPress,
                 )
 
                 TextButton(

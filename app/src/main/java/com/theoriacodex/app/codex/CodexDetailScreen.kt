@@ -67,6 +67,7 @@ fun CodexDetailScreen(
     onAddExcludeTag: (String) -> Unit = {},
     onRemoveIncludeTag: (String) -> Unit = {},
     onRemoveExcludeTag: (String) -> Unit = {},
+    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     onGoToSearch: (() -> Unit)? = null,
     onBack: () -> Unit,
     onDeleteCodex: () -> Unit,
@@ -260,6 +261,7 @@ fun CodexDetailScreen(
                     onAddExcludeTag = onAddExcludeTag,
                     onRemoveIncludeTag = onRemoveIncludeTag,
                     onRemoveExcludeTag = onRemoveExcludeTag,
+                    onFavoriteTagLongPress = onFavoriteTagLongPress,
                 )
                 onGoToSearch?.let { goToSearch ->
                     TextButton(

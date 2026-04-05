@@ -30,6 +30,11 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.query.QueryHash
+import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
+import com.theoriacodex.domain.tags.normalizeGelbooruToken
+import com.theoriacodex.domain.tags.normalizeMatchToken
+import com.theoriacodex.domain.tags.sourceTagKey
+import com.theoriacodex.domain.tags.sourceTagsMatch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
@@ -1062,49 +1067,11 @@ class SearchCoordinator(
     }
 
     private fun tagsMatchForSource(source: SourceKey, suggestionText: String, typedTag: String): Boolean {
-        val left = suggestionText.trim()
-        val right = typedTag.trim()
-        if (left.isBlank() || right.isBlank()) return false
-        return when (source) {
-            SourceKey.GELBOORU, SourceKey.RULE34XXX ->
-                normalizeGelbooruToken(left) == normalizeGelbooruToken(right)
-            SourceKey.PIXIV,
-            SourceKey.NHENTAI,
-            SourceKey.RULE34PAHEAL,
-            SourceKey.RULE34VIDEO,
-            SourceKey.RULE34GEN,
-            -> normalizeMatchToken(left) == normalizeMatchToken(right)
-            else -> left.equals(right, ignoreCase = true)
-        }
-    }
-
-    private fun normalizeGelbooruToken(value: String): String {
-        return value
-            .trim()
-            .lowercase()
-            .replace(WHITESPACE_REGEX, "_")
+        return sourceTagsMatch(source, suggestionText, typedTag)
     }
 
     private fun normalizeStoredTagForSource(source: SourceKey, value: String): String {
-        val normalized = value.trim()
-        if (normalized.isBlank()) return ""
-        return when (source) {
-            SourceKey.GELBOORU, SourceKey.RULE34XXX -> normalizeGelbooruToken(normalized)
-            else -> normalized
-        }
-    }
-
-    private fun sourceTagKey(source: SourceKey, tag: String): String {
-        return when (source) {
-            SourceKey.GELBOORU, SourceKey.RULE34XXX -> normalizeGelbooruToken(tag)
-            SourceKey.PIXIV,
-            SourceKey.NHENTAI,
-            SourceKey.RULE34PAHEAL,
-            SourceKey.RULE34VIDEO,
-            SourceKey.RULE34GEN,
-            -> normalizeMatchToken(tag)
-            else -> tag.trim().lowercase()
-        }
+        return normalizeFavoriteTagForStorage(source, value)
     }
 
     private fun isSuggestedTag(tag: String): Boolean {
@@ -1140,14 +1107,6 @@ class SearchCoordinator(
             )
             .take(limit)
             .toList()
-    }
-
-    private fun normalizeMatchToken(value: String): String {
-        return value
-            .trim()
-            .lowercase()
-            .replace('_', ' ')
-            .replace(WHITESPACE_REGEX, " ")
     }
 
     private fun effectiveWeights(enabledSources: Set<SourceKey>): Map<SourceKey, Double> {

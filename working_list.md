@@ -1,21 +1,20 @@
 ---
-created_at: 2026-04-04T00:00
-updated_at: 2026-04-04T00:00
+created_at: 2026-04-04T14:35:00Z
+updated_at: 2026-04-04T15:10:00Z
 ---
 # Working List
 
 ## Pending
-- [ ] Manual on-device smoke validation by developer checklist
+- [ ] Manual on-device validation against the Favorite Tags checklist
 
 ## In Progress
-- [~] Manual on-device smoke validation by developer checklist
+- [~] Developer verification and final review
 
 ## Done
-- [x] Refresh `working_list.md` for this task-orchestrated implementation
-- [x] Review current source adapter architecture, app wiring, and testing patterns
-- [x] Create and maintain `docs/execplans/creator-profile-browsing-execplan.md`
-- [x] Implement domain, adapter, and persistence support for creator profiles
-- [x] Implement creator browsing coordinator, route, UI, and viewer integration
-- [x] Add creator entry points to Search, Codex, and Viewer action sheets
-- [x] Add and update unit tests for adapters, persistence, coordinator, and app behavior
-- [x] Update docs (`README.md`, `AGENTS.md`) and run Gradle validation
+- [x] Refresh `working_list.md` for the Favorite Tags implementation
+- [x] Review current settings persistence, Search wiring, and shared tag action UI
+- [x] Add profile-scoped favorite-tag settings contracts, normalization, and persistence
+- [x] Wire long-press favorite-tag creation through shared Search/Codex/Viewer tag menus
+- [x] Add Search `List` favorite-tag sheet with source grouping and tag-count lookups
+- [x] Add/update repository and Search unit tests for favorite-tag behavior
+- [x] Update docs and run Gradle validation (`:core-data:test`, `:app:testDebugUnitTest`, `:app:assembleDebug`)

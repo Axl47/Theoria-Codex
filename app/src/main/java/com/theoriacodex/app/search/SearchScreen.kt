@@ -112,6 +112,7 @@ import com.theoriacodex.app.recommend.buildSourceTagAffinity
 import com.theoriacodex.app.R
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.requestHeaders
+import com.theoriacodex.app.tags.FavoriteTagActionGrid
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
@@ -143,6 +144,7 @@ fun SearchScreen(
     pixivUgoiraClient: PixivUgoiraClient? = null,
     likedPostIds: Set<PostId> = emptySet(),
     savedPostIds: Set<PostId> = emptySet(),
+    favoriteTags: Map<SourceKey, List<String>> = emptyMap(),
     onToggleLike: ((Post) -> Unit)? = null,
     onOpenViewer: (List<Post>, ViewerLaunchContext, SearchVisibilityFilters) -> Unit,
     onApplySearch: () -> Unit,
@@ -150,6 +152,8 @@ fun SearchScreen(
     onOpenCreatorProfile: (Post) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
+    onAddFavoriteTag: (SourceKey, String) -> Unit = { _, _ -> },
+    onRemoveFavoriteTag: (SourceKey, String) -> Unit = { _, _ -> },
 ) {
     var input by rememberSaveable { mutableStateOf("") }
     var animatedOnly by rememberSaveable { mutableStateOf(false) }
@@ -157,6 +161,7 @@ fun SearchScreen(
     var hideSaved by rememberSaveable { mutableStateOf(false) }
     var searchFieldFocused by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
+    var showFavoriteTagSheet by remember { mutableStateOf(false) }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -221,6 +226,23 @@ fun SearchScreen(
                 seedTagsBySource = displayTagSeedBySource,
                 affinityBySource = displayTagAffinityBySource,
             )
+        }
+    }
+    val sourceDisplayOrder = remember(coordinator.modeOptions) {
+        coordinator.modeOptions
+            .mapNotNull { mode -> (mode as? QueryMode.Source)?.source }
+    }
+    val favoriteSections = remember(coordinator.draftQuery.mode, favoriteTags, sourceDisplayOrder) {
+        favoriteTagSections(
+            mode = coordinator.draftQuery.mode,
+            favoriteTags = favoriteTags,
+            sourceDisplayOrder = sourceDisplayOrder,
+        )
+    }
+    val favoriteTagEmptyMessage = remember(coordinator.draftQuery.mode) {
+        when (val mode = coordinator.draftQuery.mode) {
+            is QueryMode.Source -> "No favorite tags saved for ${mode.source.displayName()} yet."
+            QueryMode.Unified -> "No favorite tags saved yet."
         }
     }
     suspend fun resetScrollToTop() {
@@ -423,11 +445,19 @@ fun SearchScreen(
                     onDone = { commitTagInput() },
                 ),
                 trailingIcon = {
-                    TextButton(
-                        onClick = { commitTagInput() },
-                        enabled = coordinator.canCommitTagInput(input),
-                    ) {
-                        Text("Add")
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = {
+                            focusManager.clearFocus()
+                            showFavoriteTagSheet = true
+                        }) {
+                            Text("List")
+                        }
+                        TextButton(
+                            onClick = { commitTagInput() },
+                            enabled = coordinator.canCommitTagInput(input),
+                        ) {
+                            Text("Add")
+                        }
                     }
                 }
             )
@@ -750,6 +780,7 @@ fun SearchScreen(
                     onAddExcludeTag = coordinator::addExcludeTag,
                     onRemoveIncludeTag = coordinator::removeIncludeTag,
                     onRemoveExcludeTag = coordinator::removeExcludeTag,
+                    onFavoriteTagLongPress = onAddFavoriteTag,
                 )
                 TextButton(
                     modifier = Modifier.fillMaxWidth(),
@@ -759,6 +790,22 @@ fun SearchScreen(
                 }
             }
         }
+    }
+
+    if (showFavoriteTagSheet) {
+        FavoriteTagSheet(
+            sections = favoriteSections,
+            tagVideoCountProvider = coordinator::tagVideoCount,
+            fetchTagVideoCounts = coordinator::fetchTagVideoCounts,
+            emptyMessage = favoriteTagEmptyMessage,
+            onAddTag = { tag ->
+                coordinator.addIncludeTag(tag)
+            },
+            onRemoveTag = { source, tag ->
+                onRemoveFavoriteTag(source, tag)
+            },
+            onDismiss = { showFavoriteTagSheet = false },
+        )
     }
 
     if (showFilterSheet) {
@@ -1397,6 +1444,65 @@ private fun FilterSheet(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FavoriteTagSheet(
+    sections: List<FavoriteTagSection>,
+    tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
+    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
+    emptyMessage: String,
+    onAddTag: (String) -> Unit,
+    onRemoveTag: (SourceKey, String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Favorite Tags", style = MaterialTheme.typography.titleMedium)
+            if (sections.isEmpty()) {
+                Text(
+                    text = emptyMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                sections.forEachIndexed { index, section ->
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = section.source.displayName(),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        FavoriteTagActionGrid(
+                            source = section.source,
+                            tags = section.tags,
+                            tagVideoCountProvider = tagVideoCountProvider,
+                            fetchTagVideoCounts = fetchTagVideoCounts,
+                            onAddTag = onAddTag,
+                            onRemoveTag = { tag ->
+                                onRemoveTag(section.source, tag)
+                            },
+                        )
+                    }
+                    if (index != sections.lastIndex) {
+                        HorizontalDivider()
+                    }
+                }
+            }
+            TextButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onDismiss,
+            ) {
+                Text("Done")
+            }
+        }
+    }
+}
+
 @Composable
 private fun AutocompletePanel(
     suggestions: List<TagSuggestion>,
@@ -1752,6 +1858,11 @@ data class SearchVisibilityFilters(
     val hideSaved: Boolean = false,
 )
 
+internal data class FavoriteTagSection(
+    val source: SourceKey,
+    val tags: List<String>,
+)
+
 internal fun filterSearchResults(
     results: List<Post>,
     filters: SearchVisibilityFilters,
@@ -1762,6 +1873,35 @@ internal fun filterSearchResults(
         (!filters.animatedOnly || isAnimatedPost(post)) &&
             (!filters.hideLiked || post.id !in likedPostIds) &&
             (!filters.hideSaved || post.id !in savedPostIds)
+    }
+}
+
+internal fun favoriteTagSections(
+    mode: QueryMode,
+    favoriteTags: Map<SourceKey, List<String>>,
+    sourceDisplayOrder: List<SourceKey>,
+): List<FavoriteTagSection> {
+    val orderedSources = (sourceDisplayOrder + favoriteTags.keys)
+        .distinct()
+    return when (mode) {
+        is QueryMode.Source -> {
+            favoriteTags[mode.source]
+                .orEmpty()
+                .takeIf { tags -> tags.isNotEmpty() }
+                ?.let { tags ->
+                    listOf(FavoriteTagSection(source = mode.source, tags = tags))
+                }
+                .orEmpty()
+        }
+
+        QueryMode.Unified -> {
+            orderedSources.mapNotNull { source ->
+                favoriteTags[source]
+                    .orEmpty()
+                    .takeIf { tags -> tags.isNotEmpty() }
+                    ?.let { tags -> FavoriteTagSection(source = source, tags = tags) }
+            }
+        }
     }
 }
 

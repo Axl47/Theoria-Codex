@@ -6,6 +6,8 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
+import com.theoriacodex.domain.tags.sourceTagKey
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -260,6 +262,7 @@ class InMemorySettingsRepository : SettingsRepository {
                 recommendationProfiles = remaining,
                 activeProfileId = nextActive,
                 forYouBlacklistByProfile = current.forYouBlacklistByProfile - profileId,
+                favoriteTagsByProfile = current.favoriteTagsByProfile - profileId,
             )
         )
         return true
@@ -305,6 +308,54 @@ class InMemorySettingsRepository : SettingsRepository {
         settings.value = normalizeSettings(
             current.copy(
                 forYouBlacklistByProfile = updatedMap,
+            )
+        )
+        return true
+    }
+
+    override suspend fun addFavoriteTag(profileId: String, source: SourceKey, tag: String): Boolean {
+        val normalizedTag = normalizeFavoriteTagForStorage(source, tag)
+        if (normalizedTag.isBlank()) return false
+        val current = settings.value
+        val existing = current.favoriteTagsByProfile[profileId].orEmpty()
+        val alreadyPresent = existing.any { entry ->
+            entry.source == source && sourceTagKey(source, entry.tag) == sourceTagKey(source, normalizedTag)
+        }
+        if (alreadyPresent) return false
+
+        val updated = existing + FavoriteTagEntry(
+            source = source,
+            tag = normalizedTag,
+        )
+        settings.value = normalizeSettings(
+            current.copy(
+                favoriteTagsByProfile = current.favoriteTagsByProfile + (profileId to updated),
+            )
+        )
+        return true
+    }
+
+    override suspend fun removeFavoriteTag(profileId: String, source: SourceKey, tag: String): Boolean {
+        val normalizedKey = sourceTagKey(source, tag)
+        if (normalizedKey.isBlank()) return false
+        val current = settings.value
+        val existing = current.favoriteTagsByProfile[profileId].orEmpty()
+        if (existing.isEmpty()) return false
+
+        val updated = existing.filterNot { entry ->
+            entry.source == source && sourceTagKey(source, entry.tag) == normalizedKey
+        }
+        if (updated.size == existing.size) return false
+
+        val updatedMap = current.favoriteTagsByProfile.toMutableMap()
+        if (updated.isEmpty()) {
+            updatedMap.remove(profileId)
+        } else {
+            updatedMap[profileId] = updated
+        }
+        settings.value = normalizeSettings(
+            current.copy(
+                favoriteTagsByProfile = updatedMap,
             )
         )
         return true
@@ -516,11 +567,32 @@ private fun normalizeSettings(settings: AppSettings): AppSettings {
         }
         .toMap()
         .filterValues { entries -> entries.isNotEmpty() }
+    val normalizedFavoriteTags = settings.favoriteTagsByProfile
+        .mapNotNull { (profileId, entries) ->
+            val normalizedProfileId = profileId.trim()
+            if (normalizedProfileId !in profileIds) return@mapNotNull null
+            val normalizedEntries = entries
+                .asSequence()
+                .mapNotNull { entry ->
+                    val normalizedTag = normalizeFavoriteTagForStorage(entry.source, entry.tag)
+                    if (normalizedTag.isBlank()) {
+                        null
+                    } else {
+                        FavoriteTagEntry(source = entry.source, tag = normalizedTag)
+                    }
+                }
+                .distinctBy { entry -> "${entry.source.name}:${sourceTagKey(entry.source, entry.tag)}" }
+                .toList()
+            normalizedProfileId to normalizedEntries
+        }
+        .toMap()
+        .filterValues { entries -> entries.isNotEmpty() }
     return settings.copy(
         runtime = settings.runtime.copy(sourceWeights = normalizedWeights),
         recommendationProfiles = normalizedProfiles,
         activeProfileId = activeProfileId,
         forYouBlacklistByProfile = normalizedBlacklist,
+        favoriteTagsByProfile = normalizedFavoriteTags,
     )
 }
 
