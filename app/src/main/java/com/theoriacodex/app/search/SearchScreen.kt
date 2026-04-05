@@ -106,6 +106,7 @@ import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.isVideoMediaRef
+import com.theoriacodex.app.creator.CreatorProfileActionButton
 import com.theoriacodex.app.recommend.associatedDisplayTag
 import com.theoriacodex.app.recommend.buildSourceTagAffinity
 import com.theoriacodex.app.R
@@ -146,6 +147,7 @@ fun SearchScreen(
     onOpenViewer: (List<Post>, ViewerLaunchContext, SearchVisibilityFilters) -> Unit,
     onApplySearch: () -> Unit,
     onRetrySearch: () -> Unit,
+    onOpenCreatorProfile: (Post) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
 ) {
@@ -731,6 +733,13 @@ fun SearchScreen(
                     textAlign = TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+                CreatorProfileActionButton(
+                    post = post,
+                    onClick = {
+                        selectedActionPost = null
+                        onOpenCreatorProfile(post)
+                    },
                 )
                 HorizontalDivider()
                 PostTagActionSection(

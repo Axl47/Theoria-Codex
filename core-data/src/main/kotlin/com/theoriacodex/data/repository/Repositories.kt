@@ -141,6 +141,7 @@ enum class ViewerStreamSource {
     SEARCH,
     FOR_YOU,
     CODEX,
+    CREATOR_PROFILE,
 }
 
 data class ViewerLaunchContext(

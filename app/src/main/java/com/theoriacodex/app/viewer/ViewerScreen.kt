@@ -92,6 +92,7 @@ import coil.request.ImageRequest
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraMedia
 import com.theoriacodex.app.media.isVideoMediaRef
+import com.theoriacodex.app.creator.CreatorProfileActionButton
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.tags.PostTagActionSection
@@ -134,6 +135,7 @@ fun ViewerScreen(
     onRemoveIncludeTag: (String) -> Unit,
     onRemoveExcludeTag: (String) -> Unit,
     onGoToSearch: () -> Unit,
+    onOpenCreatorProfile: ((Post) -> Unit)? = null,
 ) {
     if (posts.isEmpty()) {
         Box(
@@ -739,6 +741,34 @@ fun ViewerScreen(
                             }
                         }
                     }
+                }
+
+                Text(
+                    text = post.title?.takeIf { it.isNotBlank() } ?: post.id.sourcePostId,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "${post.id.source.displayName()} • ${post.id.sourcePostId}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (onOpenCreatorProfile != null) {
+                    CreatorProfileActionButton(
+                        post = post,
+                        onClick = {
+                            mediaPlaybackEnabled = false
+                            onOpenCreatorProfile(post)
+                            showInfoSheet = false
+                        },
+                    )
                 }
 
                 PostTagActionSection(

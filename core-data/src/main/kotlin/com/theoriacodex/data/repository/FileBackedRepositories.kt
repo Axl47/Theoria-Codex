@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexItem
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -721,6 +722,7 @@ private data class PostRecord(
     val createdAtEpochMs: Long?,
     val media: List<ImageRefRecord>? = null,
     val title: String? = null,
+    val creatorProfile: CreatorProfileRecord? = null,
 ) {
     fun toDomain(): Post {
         return Post(
@@ -751,6 +753,7 @@ private data class PostRecord(
             createdAtEpochMs = createdAtEpochMs,
             media = media.orEmpty().map { it.toDomain() },
             title = title,
+            creatorProfile = creatorProfile?.toDomain(),
         )
     }
 
@@ -774,6 +777,37 @@ private data class PostRecord(
                 createdAtEpochMs = post.createdAtEpochMs,
                 media = post.media.map(ImageRefRecord::fromDomain),
                 title = post.title,
+                creatorProfile = post.creatorProfile?.let(CreatorProfileRecord::fromDomain),
+            )
+        }
+    }
+}
+
+private data class CreatorProfileRecord(
+    val source: String,
+    val displayName: String,
+    val profileId: String? = null,
+    val profileUrl: String? = null,
+    val uploadsQuery: String? = null,
+) {
+    fun toDomain(): CreatorProfile {
+        return CreatorProfile(
+            source = SourceKey.valueOf(source),
+            displayName = displayName,
+            profileId = profileId,
+            profileUrl = profileUrl,
+            uploadsQuery = uploadsQuery,
+        )
+    }
+
+    companion object {
+        fun fromDomain(profile: CreatorProfile): CreatorProfileRecord {
+            return CreatorProfileRecord(
+                source = profile.source.name,
+                displayName = profile.displayName,
+                profileId = profile.profileId,
+                profileUrl = profile.profileUrl,
+                uploadsQuery = profile.uploadsQuery,
             )
         }
     }

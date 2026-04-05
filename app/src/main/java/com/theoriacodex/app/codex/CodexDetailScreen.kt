@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.creator.CreatorProfileActionButton
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
@@ -59,6 +60,7 @@ fun CodexDetailScreen(
     onOpenViewer: (Int) -> Unit,
     onRemovePost: (Post) -> Unit,
     onSavePostToDevice: (Post) -> Unit,
+    onOpenCreatorProfile: (Post) -> Unit,
     tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
     onAddIncludeTag: (String) -> Unit = {},
@@ -241,6 +243,13 @@ fun CodexDetailScreen(
                     textAlign = TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+                CreatorProfileActionButton(
+                    post = post,
+                    onClick = {
+                        selectedActionPost = null
+                        onOpenCreatorProfile(post)
+                    },
                 )
                 HorizontalDivider()
                 PostTagActionSection(

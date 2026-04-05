@@ -88,6 +88,9 @@ import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.SaveToCodexSheet
+import com.theoriacodex.app.creator.CreatorProfileCoordinator
+import com.theoriacodex.app.creator.CreatorProfileScreen
+import com.theoriacodex.app.creator.browseableCreatorProfile
 import com.theoriacodex.app.explore.ExploreScreen
 import com.theoriacodex.app.recommend.ForYouCoordinator
 import com.theoriacodex.app.recommend.ForYouScreen
@@ -169,6 +172,7 @@ enum class TopLevelDestination(val route: String, val label: String) {
 
 private object AppRoute {
     const val Home = "home"
+    const val CreatorProfile = "creator-profile"
     const val Viewer = "viewer"
     const val CodexDetail = "codex/detail/{codexId}"
 
@@ -309,6 +313,9 @@ fun TheoriaApp(
             likesRepository = likesRepository,
             tagSuggestionStore = tagSuggestionStore,
         )
+    }
+    val creatorProfileCoordinator = remember(realRegistry) {
+        CreatorProfileCoordinator(registry = realRegistry)
     }
 
     val settings by settingsRepository.observeSettings().collectAsState(initial = AppSettings())
@@ -478,6 +485,44 @@ fun TheoriaApp(
                 }
             }
             Toast.makeText(appContext, resultLabel, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    suspend fun openCreatorProfile(post: Post) {
+        var resolvedPost = post
+        var creator = browseableCreatorProfile(post.creatorProfile)
+        if (creator == null) {
+            val adapter = realRegistry.adapterFor(post.id.source)
+            val resolved = runCatching { adapter?.resolvePost(post.id) }.getOrNull()
+            if (resolved != null) {
+                resolvedPost = resolved
+                creator = browseableCreatorProfile(resolved.creatorProfile)
+            }
+        }
+        if (creator == null) {
+            Toast.makeText(appContext, "Creator profile unavailable", Toast.LENGTH_SHORT).show()
+            return
+        }
+        creatorProfileCoordinator.open(creator)
+        if (navController.currentBackStackEntry?.destination?.route == AppRoute.Viewer) {
+            viewerSession = null
+            searchCoordinator.setViewerLaunchContext(null)
+            navController.popBackStack(AppRoute.Viewer, inclusive = true)
+        }
+        viewerSession = viewerSession?.let { session ->
+            val index = session.posts.indexOfFirst { current -> current.id == resolvedPost.id }
+            if (index < 0) {
+                session
+            } else {
+                session.copy(
+                    posts = session.posts.toMutableList().apply {
+                        this[index] = resolvedPost
+                    },
+                )
+            }
+        }
+        navController.navigate(AppRoute.CreatorProfile) {
+            launchSingleTop = true
         }
     }
 
@@ -1233,6 +1278,8 @@ fun TheoriaApp(
     LaunchedEffect(
         searchCoordinator.results,
         forYouCoordinator.results,
+        creatorProfileCoordinator.results,
+        creatorProfileCoordinator.activeQueryHash,
         searchCoordinator.appliedQueryHash,
         viewerSession?.context?.streamSource,
         viewerSession?.liveSearchBinding,
@@ -1256,6 +1303,16 @@ fun TheoriaApp(
             ViewerStreamSource.FOR_YOU -> {
                 if (!session.context.queryHash.startsWith("for_you:")) return@LaunchedEffect
                 forYouCoordinator.results
+            }
+
+            ViewerStreamSource.CREATOR_PROFILE -> {
+                if (session.context.queryHash != creatorProfileCoordinator.activeQueryHash) return@LaunchedEffect
+                filterSearchResults(
+                    results = creatorProfileCoordinator.results,
+                    filters = session.searchVisibilityFilters,
+                    likedPostIds = likedPostIds,
+                    savedPostIds = savedPostIds,
+                )
             }
 
             ViewerStreamSource.CODEX -> return@LaunchedEffect
@@ -1443,6 +1500,9 @@ fun TheoriaApp(
                                         },
                                         onSaveToDevice = { post ->
                                             requestSaveToDevice(post)
+                                        },
+                                        onOpenCreatorProfile = { post ->
+                                            scope.launch { openCreatorProfile(post) }
                                         },
                                         onApplySearch = {
                                             scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -1832,6 +1892,9 @@ fun TheoriaApp(
                             onSavePostToDevice = { post ->
                                 requestSaveToDevice(post)
                             },
+                            onOpenCreatorProfile = { post ->
+                                scope.launch { openCreatorProfile(post) }
+                            },
                             onAddIncludeTag = { tag ->
                                 searchCoordinator.addIncludeTag(tag)
                             },
@@ -1860,6 +1923,42 @@ fun TheoriaApp(
                             },
                         )
                     }
+                    composable(AppRoute.CreatorProfile) {
+                        CreatorProfileScreen(
+                            coordinator = creatorProfileCoordinator,
+                            likedPostIds = likedPostIds,
+                            savedPostIds = savedPostIds,
+                            pixivUgoiraClient = pixivUgoiraClient,
+                            onToggleLike = { post ->
+                                scope.launch { toggleLikeAndSyncCodex(post) }
+                            },
+                            onOpenViewer = { posts, context, visibilityFilters ->
+                                scope.launch {
+                                    val preparedPosts = prepareViewerPostsForLaunch(posts, context)
+                                    viewerSession = ViewerSession(
+                                        posts = preparedPosts,
+                                        context = context,
+                                        liveSearchBinding = true,
+                                        searchVisibilityFilters = visibilityFilters,
+                                    )
+                                    navController.navigate(AppRoute.Viewer)
+                                }
+                            },
+                            onRequestSaveToCodex = { post ->
+                                pendingSavePost = post
+                                showSaveSheet = true
+                            },
+                            onSaveToDevice = { post ->
+                                requestSaveToDevice(post)
+                            },
+                            onOpenUrl = { url ->
+                                openInBrowser(appContext, url)
+                            },
+                            onBack = {
+                                navController.popBackStack()
+                            },
+                        )
+                    }
                     composable(AppRoute.Viewer) {
                         val session = viewerSession
                         if (session == null) {
@@ -1873,11 +1972,13 @@ fun TheoriaApp(
                             val canLoadMoreFromSource = when (session.context.streamSource) {
                                 ViewerStreamSource.SEARCH -> session.liveSearchBinding && searchCoordinator.canLoadMore
                                 ViewerStreamSource.FOR_YOU -> session.liveSearchBinding && forYouCoordinator.canLoadMore
+                                ViewerStreamSource.CREATOR_PROFILE -> session.liveSearchBinding && creatorProfileCoordinator.canLoadMore
                                 ViewerStreamSource.CODEX -> false
                             }
                             val loadingMoreFromSource = when (session.context.streamSource) {
                                 ViewerStreamSource.SEARCH -> searchCoordinator.loadingMore
                                 ViewerStreamSource.FOR_YOU -> forYouCoordinator.loadingMore
+                                ViewerStreamSource.CREATOR_PROFILE -> creatorProfileCoordinator.loadingMore
                                 ViewerStreamSource.CODEX -> false
                             }
                             val onLoadMoreFromSource = when (session.context.streamSource) {
@@ -1896,6 +1997,17 @@ fun TheoriaApp(
                                     if (session.liveSearchBinding) {
                                         {
                                             scope.launch { forYouCoordinator.loadNextPage() }
+                                            Unit
+                                        }
+                                    } else {
+                                        null
+                                    }
+                                }
+
+                                ViewerStreamSource.CREATOR_PROFILE -> {
+                                    if (session.liveSearchBinding) {
+                                        {
+                                            scope.launch { creatorProfileCoordinator.loadNextPage() }
                                             Unit
                                         }
                                     } else {
@@ -1968,6 +2080,9 @@ fun TheoriaApp(
                                         val searchIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.Search)
                                         topLevelPagerState.scrollToPage(searchIndex)
                                     }
+                                },
+                                onOpenCreatorProfile = { post ->
+                                    scope.launch { openCreatorProfile(post) }
                                 },
                             )
                         }

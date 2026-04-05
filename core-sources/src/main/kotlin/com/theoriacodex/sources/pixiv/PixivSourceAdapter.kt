@@ -3,6 +3,7 @@ package com.theoriacodex.sources.pixiv
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -10,6 +11,7 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -37,7 +39,7 @@ class PixivSourceAdapter(
     private val gson: Gson = Gson(),
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val minRequestIntervalMs: Long = 350L,
-) : SourceAdapter {
+) : SourceAdapter, CreatorPostsSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.PIXIV
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -152,6 +154,37 @@ class PixivSourceAdapter(
         val root = parseJsonObject(response)
         val illust = root.optionalJsonObject("illust") ?: return null
         return parseIllust(illust)
+    }
+
+    override suspend fun searchCreatorPosts(
+        creator: CreatorProfile,
+        pageToken: String?,
+    ): Page<Post> {
+        if (creator.source != SourceKey.PIXIV) return Page(items = emptyList(), nextPageToken = null)
+        val userId = creator.uploadsQuery?.trim().takeIf { !it.isNullOrBlank() }
+            ?: creator.profileId?.trim().takeIf { !it.isNullOrBlank() }
+            ?: return Page(items = emptyList(), nextPageToken = null)
+        val offset = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+        val params = linkedMapOf(
+            "user_id" to userId,
+            "type" to "illust",
+            "filter" to "for_android",
+        )
+        if (offset > 0) {
+            params["offset"] = offset.toString()
+        }
+        val response = authorizedGet(
+            url = "$PIXIV_API_BASE/v1/user/illusts",
+            query = params,
+        )
+        val root = parseJsonObject(response)
+        val posts = root.optionalJsonArray("illusts")
+            ?.mapNotNull { parseIllust(it.asJsonObject) }
+            .orEmpty()
+        return Page(
+            items = posts,
+            nextPageToken = parseNextOffset(root.get("next_url")?.asString),
+        )
     }
 
     private suspend fun authorizedGet(
@@ -298,7 +331,9 @@ class PixivSourceAdapter(
             }
         }
         val createdAt = parseIsoInstant(raw.get("create_date")?.asString)
-        val userName = raw.optionalJsonObject("user")?.get("name")?.asString
+        val user = raw.optionalJsonObject("user")
+        val userName = user?.get("name")?.asString?.trim().orEmpty().ifBlank { null }
+        val userId = user?.get("id")?.asLong?.toString()
         val title = raw.get("title")?.asString
 
         return Post(
@@ -314,6 +349,15 @@ class PixivSourceAdapter(
             authorName = userName,
             createdAtEpochMs = createdAt,
             title = title,
+            creatorProfile = userName?.let { displayName ->
+                CreatorProfile(
+                    source = SourceKey.PIXIV,
+                    displayName = displayName,
+                    profileId = userId,
+                    profileUrl = userId?.let { "https://www.pixiv.net/en/users/$it" },
+                    uploadsQuery = userId,
+                )
+            },
         )
     }
 
