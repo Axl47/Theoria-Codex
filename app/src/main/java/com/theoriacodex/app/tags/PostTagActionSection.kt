@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -313,13 +316,18 @@ private fun FavoriteTagActionCell(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             TagActionPill(
-                label = "Add",
+                label = "+",
                 selected = false,
                 onClick = onAdd,
                 modifier = Modifier.weight(1f),
             )
             TagActionPill(
-                label = "Remove",
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Remove favorite tag",
+                    )
+                },
                 selected = false,
                 onClick = onRemove,
                 modifier = Modifier.weight(1f),
@@ -357,10 +365,11 @@ private fun TagLabelSurface(
 
 @Composable
 private fun TagActionPill(
-    label: String,
+    label: String? = null,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    icon: (@Composable () -> Unit)? = null,
 ) {
     val accent = MaterialTheme.colorScheme.primary
     Surface(
@@ -378,11 +387,15 @@ private fun TagActionPill(
                 .padding(vertical = 4.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (icon != null) {
+                icon()
+            } else if (label != null) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

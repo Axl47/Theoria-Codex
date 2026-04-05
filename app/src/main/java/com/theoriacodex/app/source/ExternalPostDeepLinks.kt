@@ -12,6 +12,13 @@ data class ExternalPostDeepLink(
     val postId: String,
 )
 
+data class ExternalCreatorDeepLink(
+    val source: SourceKey,
+    val sourceLabel: String,
+    val creatorId: String,
+    val profileUrl: String,
+)
+
 fun parseExternalPostDeepLink(uri: Uri): ExternalPostDeepLink? {
     return parseExternalPostDeepLink(uri.toString())
 }
@@ -77,6 +84,31 @@ fun parseExternalPostDeepLink(rawUrl: String): ExternalPostDeepLink? {
     return null
 }
 
+fun parseExternalCreatorDeepLink(uri: Uri): ExternalCreatorDeepLink? {
+    return parseExternalCreatorDeepLink(uri.toString())
+}
+
+fun parseExternalCreatorDeepLink(rawUrl: String): ExternalCreatorDeepLink? {
+    val uri = parseExternalUri(rawUrl) ?: return null
+    parsePixivCreatorIdFromUri(uri)?.let { creatorId ->
+        return ExternalCreatorDeepLink(
+            source = SourceKey.PIXIV,
+            sourceLabel = SourceKey.PIXIV.displayName(),
+            creatorId = creatorId,
+            profileUrl = "https://www.pixiv.net/en/users/$creatorId",
+        )
+    }
+    parseGelbooruCreatorIdFromUri(uri)?.let { creatorId ->
+        return ExternalCreatorDeepLink(
+            source = SourceKey.GELBOORU,
+            sourceLabel = SourceKey.GELBOORU.displayName(),
+            creatorId = creatorId,
+            profileUrl = "https://gelbooru.com/index.php?page=account&s=profile&id=$creatorId",
+        )
+    }
+    return null
+}
+
 private fun parsePixivPostIdFromUri(uri: ParsedExternalUri): String? {
     val scheme = uri.scheme
     val host = uri.host
@@ -84,6 +116,16 @@ private fun parsePixivPostIdFromUri(uri: ParsedExternalUri): String? {
     if (host != "www.pixiv.com" && host != "pixiv.com" && host != "www.pixiv.net" && host != "pixiv.net") return null
     val path = uri.encodedPath
     val match = Regex("^/([A-Za-z]{2})/artworks/(\\d+)(?:/)?$").matchEntire(path) ?: return null
+    return match.groupValues.getOrNull(2)?.takeIf(String::isDigitsOnly)
+}
+
+private fun parsePixivCreatorIdFromUri(uri: ParsedExternalUri): String? {
+    val scheme = uri.scheme
+    val host = uri.host
+    if (scheme != "https" && scheme != "http") return null
+    if (host != "www.pixiv.com" && host != "pixiv.com" && host != "www.pixiv.net" && host != "pixiv.net") return null
+    val path = uri.encodedPath
+    val match = Regex("^/(?:([A-Za-z]{2})/)?users/(\\d+)(?:/[^?#]*)?/?$").matchEntire(path) ?: return null
     return match.groupValues.getOrNull(2)?.takeIf(String::isDigitsOnly)
 }
 
@@ -101,6 +143,22 @@ private fun parseGelbooruPostIdFromUri(uri: ParsedExternalUri): String? {
     val postId = uri.queryParameters["id"]
     if (page != "post" || section != "view") return null
     return postId?.takeIf(String::isDigitsOnly)
+}
+
+private fun parseGelbooruCreatorIdFromUri(uri: ParsedExternalUri): String? {
+    val scheme = uri.scheme
+    val host = uri.host
+    if (scheme != "https" && scheme != "http") return null
+    if (host != "www.gelbooru.com" && host != "gelbooru.com") return null
+
+    val path = uri.encodedPath.lowercase()
+    if (path.isNotBlank() && path != "/" && path != "/index.php") return null
+
+    val page = uri.queryParameters["page"]?.lowercase()
+    val section = uri.queryParameters["s"]?.lowercase()
+    val creatorId = uri.queryParameters["id"]
+    if (page != "account" || section != "profile") return null
+    return creatorId?.takeIf(String::isDigitsOnly)
 }
 
 private fun parseRule34XxxPostIdFromUri(uri: ParsedExternalUri): String? {

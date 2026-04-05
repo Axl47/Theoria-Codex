@@ -100,10 +100,12 @@ import com.theoriacodex.app.search.SearchScreen
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.filterSearchResults
+import com.theoriacodex.app.source.ExternalCreatorDeepLink
 import com.theoriacodex.app.source.ExternalPostDeepLink
 import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.exposedRealSources
+import com.theoriacodex.app.source.parseExternalCreatorDeepLink
 import com.theoriacodex.app.source.parseExternalPostDeepLink
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.sourceauth.AndroidSecureSourceCredentialsStore
@@ -142,6 +144,7 @@ import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -548,6 +551,18 @@ fun TheoriaApp(
         }
     }
 
+    suspend fun openCreatorProfile(creator: CreatorProfile) {
+        creatorProfileCoordinator.open(creator)
+        if (navController.currentBackStackEntry?.destination?.route == AppRoute.Viewer) {
+            viewerSession = null
+            searchCoordinator.setViewerLaunchContext(null)
+            navController.popBackStack(AppRoute.Viewer, inclusive = true)
+        }
+        navController.navigate(AppRoute.CreatorProfile) {
+            launchSingleTop = true
+        }
+    }
+
     suspend fun openCreatorProfile(post: Post) {
         var resolvedPost = post
         var creator = browseableCreatorProfile(post.creatorProfile)
@@ -564,12 +579,7 @@ fun TheoriaApp(
             Toast.makeText(appContext, "Creator profile unavailable", Toast.LENGTH_SHORT).show()
             return
         }
-        creatorProfileCoordinator.open(creator)
-        if (navController.currentBackStackEntry?.destination?.route == AppRoute.Viewer) {
-            viewerSession = null
-            searchCoordinator.setViewerLaunchContext(null)
-            navController.popBackStack(AppRoute.Viewer, inclusive = true)
-        }
+        openCreatorProfile(creator)
         viewerSession = viewerSession?.let { session ->
             val index = session.posts.indexOfFirst { current -> current.id == resolvedPost.id }
             if (index < 0) {
@@ -582,8 +592,44 @@ fun TheoriaApp(
                 )
             }
         }
-        navController.navigate(AppRoute.CreatorProfile) {
-            launchSingleTop = true
+    }
+
+    suspend fun resolveExternalCreatorDeepLink(deepLink: ExternalCreatorDeepLink): CreatorProfile? {
+        return when (deepLink.source) {
+            SourceKey.PIXIV -> CreatorProfile(
+                source = SourceKey.PIXIV,
+                displayName = "User ${deepLink.creatorId}",
+                profileId = deepLink.creatorId,
+                profileUrl = deepLink.profileUrl,
+                uploadsQuery = deepLink.creatorId,
+            )
+
+            SourceKey.GELBOORU -> {
+                val response = runCatching {
+                    sourceHttpClient.get(
+                        url = "https://gelbooru.com/index.php",
+                        query = mapOf(
+                            "page" to "account",
+                            "s" to "profile",
+                            "id" to deepLink.creatorId,
+                        ),
+                        headers = SourceKey.GELBOORU.requestHeaders(),
+                    )
+                }.getOrNull() ?: return null
+                if (response.statusCode !in 200..299) return null
+                val owner = parseGelbooruProfileOwner(response.body)
+                browseableCreatorProfile(
+                    CreatorProfile(
+                        source = SourceKey.GELBOORU,
+                        displayName = owner ?: deepLink.creatorId,
+                        profileId = deepLink.creatorId,
+                        profileUrl = deepLink.profileUrl,
+                        uploadsQuery = owner?.let { "user:$it" },
+                    ),
+                )
+            }
+
+            else -> null
         }
     }
 
@@ -1074,37 +1120,54 @@ fun TheoriaApp(
         }
 
         val deepLink = parseExternalPostDeepLink(uri)
-        if (deepLink == null) {
-            Toast.makeText(appContext, "Unsupported post URL format", Toast.LENGTH_SHORT).show()
+        val creatorDeepLink = if (deepLink == null) parseExternalCreatorDeepLink(uri) else null
+        if (deepLink == null && creatorDeepLink == null) {
+            Toast.makeText(appContext, "Unsupported URL format", Toast.LENGTH_SHORT).show()
             consumePendingUriIfCurrent()
             return@LaunchedEffect
         }
-        val adapter = realRegistry.adapterFor(deepLink.source)
+        if (creatorDeepLink != null) {
+            val creator = resolveExternalCreatorDeepLink(creatorDeepLink)
+            if (creator == null) {
+                Toast.makeText(
+                    appContext,
+                    "Could not open ${creatorDeepLink.sourceLabel} creator URL",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                consumePendingUriIfCurrent()
+                return@LaunchedEffect
+            }
+            openCreatorProfile(creator)
+            consumePendingUriIfCurrent()
+            return@LaunchedEffect
+        }
+        val requiredDeepLink = requireNotNull(deepLink)
+        val adapter = realRegistry.adapterFor(requiredDeepLink.source)
         if (adapter == null) {
-            Toast.makeText(appContext, "${deepLink.sourceLabel} source is unavailable", Toast.LENGTH_SHORT).show()
+            Toast.makeText(appContext, "${requiredDeepLink.sourceLabel} source is unavailable", Toast.LENGTH_SHORT).show()
             consumePendingUriIfCurrent()
             return@LaunchedEffect
         }
 
         val resolved = try {
-            adapter.resolvePost(PostId(source = deepLink.source, sourcePostId = deepLink.postId))
+            adapter.resolvePost(PostId(source = requiredDeepLink.source, sourcePostId = requiredDeepLink.postId))
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
-            val message = error.message ?: "Could not open ${deepLink.sourceLabel} URL"
+            val message = error.message ?: "Could not open ${requiredDeepLink.sourceLabel} URL"
             Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
             consumePendingUriIfCurrent()
             return@LaunchedEffect
         }
 
         if (resolved == null) {
-            Toast.makeText(appContext, "${deepLink.sourceLabel} post was not found", Toast.LENGTH_SHORT).show()
+            Toast.makeText(appContext, "${requiredDeepLink.sourceLabel} post was not found", Toast.LENGTH_SHORT).show()
             consumePendingUriIfCurrent()
             return@LaunchedEffect
         }
 
         val context = ViewerLaunchContext(
-            queryHash = "${deepLink.source.name.lowercase()}-deeplink:${deepLink.postId}",
+            queryHash = "${requiredDeepLink.source.name.lowercase()}-deeplink:${requiredDeepLink.postId}",
             startIndex = 0,
             streamSource = ViewerStreamSource.SEARCH,
             scrollOffsetHint = 0,
@@ -2818,6 +2881,11 @@ private fun sanitizeCodexExportName(name: String): String {
     return normalized.ifBlank { "codex" }
 }
 
+private fun parseGelbooruProfileOwner(html: String): String? {
+    val owner = GELBOORU_PROFILE_OWNER_REGEX.find(html)?.groupValues?.getOrNull(1)
+    return owner?.trim()?.takeIf(String::isNotBlank)
+}
+
 private data class CodexShareFile(
     val version: Int = 1,
     val title: String,
@@ -2843,3 +2911,4 @@ private const val PROFILE_CODEX_ID_PREFIX = "profile_codex"
 private const val LIKES_CODEX_NAME = "Likes"
 private const val CODEX_SEARCH_TAG_LIMIT = 3
 private val CODEX_IMPORT_MIME_TYPES = setOf("application/json", "text/json")
+private val GELBOORU_PROFILE_OWNER_REGEX = Regex("""user:([A-Za-z0-9_:-]+)""", RegexOption.IGNORE_CASE)
