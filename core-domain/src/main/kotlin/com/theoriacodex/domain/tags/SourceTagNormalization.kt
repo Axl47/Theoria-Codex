@@ -23,14 +23,14 @@ fun normalizeFavoriteTagForStorage(source: SourceKey, tag: String): String {
     val normalized = tag.trim()
     if (normalized.isBlank()) return ""
     return when (source) {
-        SourceKey.GELBOORU, SourceKey.RULE34XXX -> normalizeGelbooruToken(normalized)
+        SourceKey.GELBOORU, SourceKey.IWARA, SourceKey.RULE34XXX -> normalizeGelbooruToken(normalized)
         else -> normalized
     }
 }
 
 fun sourceTagKey(source: SourceKey, tag: String): String {
     return when (source) {
-        SourceKey.GELBOORU, SourceKey.RULE34XXX -> normalizeGelbooruToken(tag)
+        SourceKey.GELBOORU, SourceKey.IWARA, SourceKey.RULE34XXX -> normalizeGelbooruToken(tag)
         SourceKey.PIXIV,
         SourceKey.NHENTAI,
         SourceKey.RULE34PAHEAL,
@@ -46,7 +46,7 @@ fun sourceTagsMatch(source: SourceKey, left: String, right: String): Boolean {
     val normalizedRight = right.trim()
     if (normalizedLeft.isBlank() || normalizedRight.isBlank()) return false
     return when (source) {
-        SourceKey.GELBOORU, SourceKey.RULE34XXX ->
+        SourceKey.GELBOORU, SourceKey.IWARA, SourceKey.RULE34XXX ->
             normalizeGelbooruToken(normalizedLeft) == normalizeGelbooruToken(normalizedRight)
         SourceKey.PIXIV,
         SourceKey.NHENTAI,

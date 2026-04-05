@@ -18,7 +18,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 
 fun supportsCreatorBrowsing(source: SourceKey): Boolean {
-    return source == SourceKey.PIXIV || source == SourceKey.GELBOORU
+    return source == SourceKey.PIXIV || source == SourceKey.GELBOORU || source == SourceKey.IWARA
 }
 
 fun browseableCreatorProfile(profile: CreatorProfile?): CreatorProfile? {

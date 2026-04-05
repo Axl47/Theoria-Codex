@@ -171,6 +171,29 @@ class SearchCoordinatorTest {
     }
 
     @Test
+    fun `available source ordering inserts iwara after nhentai`() = runTest {
+        val coordinator = SearchCoordinator(
+            registry = LimitedStubRegistry(
+                setOf(
+                    SourceKey.RULE34VIDEO,
+                    SourceKey.IWARA,
+                    SourceKey.NHENTAI,
+                    SourceKey.PIXIV,
+                ),
+            ),
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+
+        assertEquals(
+            listOf(SourceKey.PIXIV, SourceKey.NHENTAI, SourceKey.IWARA, SourceKey.RULE34VIDEO),
+            coordinator.availableSources,
+        )
+    }
+
+    @Test
     fun `clear draft resets to default query for current mode`() = runTest {
         val coordinator = coordinator()
         coordinator.initialize()
@@ -304,6 +327,36 @@ class SearchCoordinatorTest {
         coordinator.refreshAutocompleteSuggestions("blue hair")
 
         assertEquals("blue_hair", gelbooruAdapter.lastAutocompletePrefix)
+        assertEquals(listOf("blue_hair"), coordinator.autocompleteSuggestions.map { it.text })
+        assertTrue(coordinator.canCommitTagInput("blue hair"))
+        assertTrue(coordinator.commitTagInput("blue hair"))
+        assertTrue("blue_hair" in coordinator.draftQuery.includeTags)
+    }
+
+    @Test
+    fun `iwara autocomplete treats spaces as underscores`() = runTest {
+        val iwaraAdapter = RecordingAdapter(
+            sourceKey = SourceKey.IWARA,
+            autocompleteByPrefix = mapOf(
+                "blue_hair" to listOf("blue_hair"),
+            ),
+        )
+        val registry = CompatibilityRegistry(
+            adapters = mapOf(SourceKey.IWARA to iwaraAdapter),
+        )
+        val coordinator = SearchCoordinator(
+            registry = registry,
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+            tagSuggestionStore = InMemoryTagSuggestionStore(),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.IWARA))
+
+        coordinator.refreshAutocompleteSuggestions("blue hair")
+
+        assertEquals("blue_hair", iwaraAdapter.lastAutocompletePrefix)
         assertEquals(listOf("blue_hair"), coordinator.autocompleteSuggestions.map { it.text })
         assertTrue(coordinator.canCommitTagInput("blue hair"))
         assertTrue(coordinator.commitTagInput("blue hair"))

@@ -29,7 +29,7 @@ class CreatorProfileUiTest {
     @Test
     fun `creatorButtonLabel falls back to author name for supported sources`() {
         val post = samplePost(
-            source = SourceKey.GELBOORU,
+            source = SourceKey.IWARA,
             authorName = "saved_author",
             creatorProfile = null,
         )
@@ -58,6 +58,19 @@ class CreatorProfileUiTest {
         )
 
         assertNull(browseableCreatorProfile(profile))
+    }
+
+    @Test
+    fun `browseableCreatorProfile accepts iwara creators with uploads query`() {
+        val profile = CreatorProfile(
+            source = SourceKey.IWARA,
+            displayName = "mmdparadaise",
+            profileId = "2f2a6a22-0000-4000-8000-111111111111",
+            profileUrl = "https://www.iwara.tv/profile/mmdparadaise/videos",
+            uploadsQuery = "2f2a6a22-0000-4000-8000-111111111111",
+        )
+
+        assertEquals(profile, browseableCreatorProfile(profile))
     }
 
     private fun samplePost(

@@ -32,6 +32,13 @@ fun parseExternalPostDeepLink(rawUrl: String): ExternalPostDeepLink? {
             postId = postId,
         )
     }
+    parseIwaraVideoIdFromUri(uri)?.let { postId ->
+        return ExternalPostDeepLink(
+            source = SourceKey.IWARA,
+            sourceLabel = SourceKey.IWARA.displayName(),
+            postId = postId,
+        )
+    }
     parseRule34XxxPostIdFromUri(uri)?.let { postId ->
         return ExternalPostDeepLink(
             source = SourceKey.RULE34XXX,
@@ -110,6 +117,17 @@ private fun parseRule34XxxPostIdFromUri(uri: ParsedExternalUri): String? {
     val postId = uri.queryParameters["id"]
     if (page != "post" || section != "view") return null
     return postId?.takeIf(String::isDigitsOnly)
+}
+
+private fun parseIwaraVideoIdFromUri(uri: ParsedExternalUri): String? {
+    val scheme = uri.scheme
+    val host = uri.host
+    if (scheme != "https" && scheme != "http") return null
+    if (host != "www.iwara.tv" && host != "iwara.tv") return null
+
+    val path = uri.encodedPath
+    val match = Regex("^/video/([^/?#]+)(?:/[^/?#]+)?/?$").matchEntire(path) ?: return null
+    return match.groupValues.getOrNull(1)?.takeIf(String::isNotBlank)
 }
 
 private fun parseRule34PahealPostIdFromUri(uri: ParsedExternalUri): String? {

@@ -27,8 +27,15 @@ class CreatorProfileCoordinatorTest {
     @Test
     fun `open loads first page and buildViewerLaunchContext uses creator stream`() = runTest {
         val adapter = FakeCreatorAdapter(
+            adapterSourceKey = SourceKey.PIXIV,
             pages = mapOf(
-                null to Page(items = listOf(samplePost("1"), samplePost("2")), nextPageToken = "next"),
+                null to Page(
+                    items = listOf(
+                        samplePost("1", sampleCreator()),
+                        samplePost("2", sampleCreator()),
+                    ),
+                    nextPageToken = "next",
+                ),
             ),
         )
         val coordinator = CreatorProfileCoordinator(registry = singleAdapterRegistry(adapter))
@@ -46,9 +53,10 @@ class CreatorProfileCoordinatorTest {
     @Test
     fun `loadNextPage appends results and updates load more state`() = runTest {
         val adapter = FakeCreatorAdapter(
+            adapterSourceKey = SourceKey.PIXIV,
             pages = mapOf(
-                null to Page(items = listOf(samplePost("1")), nextPageToken = "page-2"),
-                "page-2" to Page(items = listOf(samplePost("2")), nextPageToken = null),
+                null to Page(items = listOf(samplePost("1", sampleCreator())), nextPageToken = "page-2"),
+                "page-2" to Page(items = listOf(samplePost("2", sampleCreator())), nextPageToken = null),
             ),
         )
         val coordinator = CreatorProfileCoordinator(registry = singleAdapterRegistry(adapter))
@@ -64,9 +72,10 @@ class CreatorProfileCoordinatorTest {
     @Test
     fun `refresh resets pagination back to first page`() = runTest {
         val adapter = FakeCreatorAdapter(
+            adapterSourceKey = SourceKey.PIXIV,
             pages = mapOf(
-                null to Page(items = listOf(samplePost("1")), nextPageToken = "page-2"),
-                "page-2" to Page(items = listOf(samplePost("2")), nextPageToken = null),
+                null to Page(items = listOf(samplePost("1", sampleCreator())), nextPageToken = "page-2"),
+                "page-2" to Page(items = listOf(samplePost("2", sampleCreator())), nextPageToken = null),
             ),
         )
         val coordinator = CreatorProfileCoordinator(registry = singleAdapterRegistry(adapter))
@@ -94,8 +103,9 @@ class CreatorProfileCoordinatorTest {
     @Test
     fun `coordinator results remain unfiltered and local visibility filtering is external`() = runTest {
         val adapter = FakeCreatorAdapter(
+            adapterSourceKey = SourceKey.PIXIV,
             pages = mapOf(
-                null to Page(items = listOf(samplePost("1"), samplePost("2")), nextPageToken = null),
+                null to Page(items = listOf(samplePost("1", sampleCreator()), samplePost("2", sampleCreator())), nextPageToken = null),
             ),
         )
         val coordinator = CreatorProfileCoordinator(registry = singleAdapterRegistry(adapter))
@@ -112,19 +122,46 @@ class CreatorProfileCoordinatorTest {
         assertEquals(1, filtered.size)
     }
 
-    private fun sampleCreator(): CreatorProfile {
+    @Test
+    fun `iwara creator profile loads paged videos`() = runTest {
+        val creator = sampleCreator(source = SourceKey.IWARA, profileId = "iwara-user-id")
+        val adapter = FakeCreatorAdapter(
+            adapterSourceKey = SourceKey.IWARA,
+            pages = mapOf(
+                null to Page(items = listOf(samplePost("i1", creator)), nextPageToken = "1"),
+                "1" to Page(items = listOf(samplePost("i2", creator)), nextPageToken = null),
+            ),
+        )
+        val coordinator = CreatorProfileCoordinator(registry = singleAdapterRegistry(adapter))
+
+        coordinator.open(creator)
+        coordinator.loadNextPage()
+
+        assertEquals(listOf("i1", "i2"), coordinator.results.map { it.id.sourcePostId })
+        assertEquals(listOf(null, "1"), adapter.requestedTokens)
+        assertEquals(SourceKey.IWARA, coordinator.activeCreator?.source)
+    }
+
+    private fun sampleCreator(
+        source: SourceKey = SourceKey.PIXIV,
+        profileId: String = "201823",
+    ): CreatorProfile {
         return CreatorProfile(
-            source = SourceKey.PIXIV,
+            source = source,
             displayName = "creator_name",
-            profileId = "201823",
-            profileUrl = "https://www.pixiv.net/en/users/201823",
-            uploadsQuery = "201823",
+            profileId = profileId,
+            profileUrl = if (source == SourceKey.IWARA) {
+                "https://www.iwara.tv/profile/creator_name/videos"
+            } else {
+                "https://www.pixiv.net/en/users/$profileId"
+            },
+            uploadsQuery = profileId,
         )
     }
 
-    private fun samplePost(id: String): Post {
+    private fun samplePost(id: String, creator: CreatorProfile): Post {
         return Post(
-            id = PostId(source = SourceKey.PIXIV, sourcePostId = id),
+            id = PostId(source = creator.source, sourcePostId = id),
             preview = ImageRef(url = "https://example.com/$id.jpg", localPath = null, mime = "image/jpeg"),
             full = ImageRef(url = "https://example.com/full/$id.jpg", localPath = null, mime = "image/jpeg"),
             pageUrl = "https://example.com/post/$id",
@@ -134,7 +171,7 @@ class CreatorProfileCoordinatorTest {
             rawTags = listOf("landscape"),
             authorName = "artist",
             createdAtEpochMs = 1L,
-            creatorProfile = sampleCreator(),
+            creatorProfile = creator,
         )
     }
 
@@ -188,11 +225,12 @@ class CreatorProfileCoordinatorTest {
 }
 
 private class FakeCreatorAdapter(
+    adapterSourceKey: SourceKey,
     val pages: Map<String?, Page<Post>>,
 ) : SourceAdapter, CreatorPostsSourceAdapter {
     val requestedTokens = mutableListOf<String?>()
 
-    override val sourceKey: SourceKey = SourceKey.PIXIV
+    override val sourceKey: SourceKey = adapterSourceKey
     override val capabilities: SourceCapabilities = SourceCapabilities(
         supportsSortNewest = true,
         supportsSortPopular = true,
@@ -209,7 +247,7 @@ private class FakeCreatorAdapter(
     override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = emptyList()
     override suspend fun quickQuery(kind: QuickQueryKind): Query {
         return Query(
-            mode = QueryMode.Source(SourceKey.PIXIV),
+            mode = QueryMode.Source(sourceKey),
             includeTags = emptyList(),
             excludeTags = emptyList(),
             sort = SortMode.NEWEST,

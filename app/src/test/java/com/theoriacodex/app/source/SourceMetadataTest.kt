@@ -12,6 +12,8 @@ class SourceMetadataTest {
         val hidden = exposedRealSources(rule34XxxConfigured = false)
         val visible = exposedRealSources(rule34XxxConfigured = true)
 
+        assertTrue(SourceKey.IWARA in hidden)
+        assertTrue(SourceKey.IWARA in visible)
         assertFalse(SourceKey.RULE34XXX in hidden)
         assertTrue(SourceKey.RULE34XXX in visible)
         assertTrue(SourceKey.RULE34PAHEAL in hidden)
@@ -24,5 +26,7 @@ class SourceMetadataTest {
         assertEquals("https://rule34video.com/", SourceKey.RULE34VIDEO.requestHeaders()["Referer"])
         assertEquals("Mozilla/5.0", SourceKey.RULE34VIDEO.requestHeaders()["User-Agent"])
         assertEquals("https://rule34.paheal.net/", SourceKey.RULE34PAHEAL.referer())
+        assertEquals("https://www.iwara.tv/", SourceKey.IWARA.referer())
+        assertEquals("Iwara", SourceKey.IWARA.displayName())
     }
 }

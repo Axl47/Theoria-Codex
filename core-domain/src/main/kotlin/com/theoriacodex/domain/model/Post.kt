@@ -5,6 +5,7 @@ enum class SourceKey {
     GELBOORU,
     AIBOORU,
     NHENTAI,
+    IWARA,
     RULE34XXX,
     RULE34PAHEAL,
     RULE34VIDEO,

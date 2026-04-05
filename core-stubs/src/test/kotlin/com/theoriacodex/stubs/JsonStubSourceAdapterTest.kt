@@ -86,6 +86,22 @@ class JsonStubSourceAdapterTest {
         }
     }
 
+    @Test
+    fun `iwara fixtures load search trending and resolve`() = runBlocking {
+        val runtime = StubRuntime(StubScenarioPreset.NORMAL)
+        val adapter = JsonStubSourceAdapter(
+            sourceKey = SourceKey.IWARA,
+            fixtureLoader = StubFixtureLoader(),
+            runtime = runtime,
+        )
+
+        val firstPage = adapter.search(sampleQuery(), pageToken = null)
+
+        assertTrue(firstPage.items.isNotEmpty())
+        assertTrue(adapter.trendingTags(limit = 2).isNotEmpty())
+        assertNotNull(adapter.resolvePost(firstPage.items.first().id))
+    }
+
     private fun sampleQuery(): Query {
         return Query(
             mode = QueryMode.Unified,

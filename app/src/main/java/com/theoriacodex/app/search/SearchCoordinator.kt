@@ -1045,7 +1045,7 @@ class SearchCoordinator(
     private fun autocompletePrefixForSource(source: SourceKey, input: String): String {
         val normalized = normalizeTypedTag(input)
         return when (source) {
-            SourceKey.GELBOORU, SourceKey.RULE34XXX -> normalizeGelbooruToken(normalized)
+            SourceKey.GELBOORU, SourceKey.IWARA, SourceKey.RULE34XXX -> normalizeGelbooruToken(normalized)
             else -> normalized
         }
     }
@@ -1165,6 +1165,7 @@ private val SOURCE_DISPLAY_ORDER = listOf(
     SourceKey.GELBOORU,
     SourceKey.PIXIV,
     SourceKey.NHENTAI,
+    SourceKey.IWARA,
     SourceKey.RULE34XXX,
     SourceKey.RULE34PAHEAL,
     SourceKey.RULE34VIDEO,
@@ -1181,6 +1182,7 @@ private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(
     SourceKey.PIXIV,
     SourceKey.GELBOORU,
     SourceKey.NHENTAI,
+    SourceKey.IWARA,
     SourceKey.RULE34XXX,
     SourceKey.RULE34PAHEAL,
     SourceKey.RULE34VIDEO,

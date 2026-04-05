@@ -8,6 +8,7 @@ fun SourceKey.displayName(): String {
         SourceKey.GELBOORU -> "Gelbooru"
         SourceKey.AIBOORU -> "AIBooru"
         SourceKey.NHENTAI -> "NHentai"
+        SourceKey.IWARA -> "Iwara"
         SourceKey.RULE34XXX -> "R34X"
         SourceKey.RULE34PAHEAL -> "R34P"
         SourceKey.RULE34VIDEO -> "R34V"
@@ -28,6 +29,7 @@ fun SourceKey.referer(): String {
         SourceKey.GELBOORU -> "https://gelbooru.com/"
         SourceKey.AIBOORU -> "https://aibooru.online/"
         SourceKey.NHENTAI -> "https://nhentai.net/"
+        SourceKey.IWARA -> "https://www.iwara.tv/"
         SourceKey.RULE34XXX -> "https://rule34.xxx/"
         SourceKey.RULE34PAHEAL -> "https://rule34.paheal.net/"
         SourceKey.RULE34VIDEO -> "https://rule34video.com/"
@@ -40,6 +42,7 @@ fun exposedRealSources(rule34XxxConfigured: Boolean): Set<SourceKey> {
         add(SourceKey.PIXIV)
         add(SourceKey.GELBOORU)
         add(SourceKey.NHENTAI)
+        add(SourceKey.IWARA)
         add(SourceKey.RULE34PAHEAL)
         add(SourceKey.RULE34VIDEO)
         add(SourceKey.RULE34GEN)

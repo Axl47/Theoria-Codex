@@ -188,12 +188,20 @@ private data class ViewerSession(
     val searchVisibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
 )
 
-private fun isRule34VideoSource(source: SourceKey): Boolean {
-    return source == SourceKey.RULE34VIDEO || source == SourceKey.RULE34GEN
-}
+private val LAZY_MEDIA_RESOLUTION_SOURCES = setOf(
+    SourceKey.RULE34VIDEO,
+    SourceKey.RULE34GEN,
+    SourceKey.IWARA,
+)
 
-private fun requiresRule34VideoRefresh(post: Post): Boolean {
-    return isRule34VideoSource(post.id.source)
+internal fun requiresLazyMediaResolution(post: Post): Boolean {
+    if (post.id.source !in LAZY_MEDIA_RESOLUTION_SOURCES) return false
+    return buildList {
+        addAll(post.media)
+        post.full?.let { add(it) }
+    }.none { ref ->
+        !ref.url.isNullOrBlank()
+    }
 }
 
 private data class ReleaseChangelogEntry(
@@ -521,7 +529,14 @@ fun TheoriaApp(
                     onFailure = { "Could not save video" },
                 )
             } else {
-                if (enqueuePostDownload(appContext, post)) {
+                val postToDownload = when {
+                    !requiresLazyMediaResolution(post) -> post
+                    else -> {
+                        val adapter = realRegistry.adapterFor(post.id.source)
+                        runCatching { adapter?.resolvePost(post.id) }.getOrNull()
+                    }
+                }
+                if (postToDownload != null && enqueuePostDownload(appContext, postToDownload)) {
                     "Download queued"
                 } else {
                     "Could not queue download"
@@ -865,7 +880,7 @@ fun TheoriaApp(
     }
 
     fun requestViewerPostResolution(post: Post) {
-        if (!requiresRule34VideoRefresh(post)) return
+        if (!requiresLazyMediaResolution(post)) return
         scope.launch {
             val adapter = realRegistry.adapterFor(post.id.source) ?: return@launch
             val resolved = runCatching { adapter.resolvePost(post.id) }.getOrNull() ?: return@launch
@@ -888,7 +903,7 @@ fun TheoriaApp(
         if (posts.isEmpty()) return posts
         val startIndex = context.startIndex.coerceIn(0, posts.lastIndex)
         val selectedPost = posts[startIndex]
-        if (!requiresRule34VideoRefresh(selectedPost)) return posts
+        if (!requiresLazyMediaResolution(selectedPost)) return posts
         val adapter = realRegistry.adapterFor(selectedPost.id.source) ?: return posts
         val resolved = runCatching { adapter.resolvePost(selectedPost.id) }.getOrNull() ?: return posts
         return posts.toMutableList().apply {

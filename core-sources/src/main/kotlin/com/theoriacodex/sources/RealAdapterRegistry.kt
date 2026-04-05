@@ -9,6 +9,7 @@ import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.gelbooru.GelbooruSourceAdapter
 import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpClient
+import com.theoriacodex.sources.iwara.IwaraSourceAdapter
 import com.theoriacodex.sources.nhentai.NhentaiSourceAdapter
 import com.theoriacodex.sources.pixiv.PixivSourceAdapter
 import com.theoriacodex.sources.rule34.Rule34GenSourceAdapter
@@ -32,6 +33,9 @@ class RealAdapterRegistry(
             credentialsProvider = credentialsProvider,
         ),
         SourceKey.NHENTAI to NhentaiSourceAdapter(
+            httpClient = httpClient,
+        ),
+        SourceKey.IWARA to IwaraSourceAdapter(
             httpClient = httpClient,
         ),
         SourceKey.RULE34XXX to Rule34XxxSourceAdapter(

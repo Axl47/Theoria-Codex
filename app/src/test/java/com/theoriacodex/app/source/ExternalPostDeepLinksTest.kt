@@ -31,6 +31,25 @@ class ExternalPostDeepLinksTest {
     }
 
     @Test
+    fun `parses iwara video deep links`() {
+        assertDeepLink(
+            url = "https://www.iwara.tv/video/KH2f7fca2MCgZ8/example-slug",
+            source = SourceKey.IWARA,
+            postId = "KH2f7fca2MCgZ8",
+        )
+        assertDeepLink(
+            url = "https://iwara.tv/video/5ak7ohralkswrykwa",
+            source = SourceKey.IWARA,
+            postId = "5ak7ohralkswrykwa",
+        )
+    }
+
+    @Test
+    fun `rejects unsupported iwara profile urls`() {
+        assertNull(parseExternalPostDeepLink("https://www.iwara.tv/profile/mmdparadaise/videos"))
+    }
+
+    @Test
     fun `returns null for unsupported host`() {
         assertNull(parseExternalPostDeepLink("https://example.com/video/8255/foo/"))
     }

@@ -16,8 +16,8 @@ android {
         applicationId = "com.theoriacodex"
         minSdk = 26
         targetSdk = 35
-        versionCode = 31
-        versionName = "0.3.1"
+        versionCode = 32
+        versionName = "0.4.0"
         if (versionCodeOverride != null) {
             versionCode = versionCodeOverride
         }

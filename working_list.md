@@ -1,20 +1,21 @@
 ---
-created_at: 2026-04-04T14:35:00Z
-updated_at: 2026-04-04T15:10:00Z
+created_at: 2026-04-05T02:20:00Z
+updated_at: 2026-04-05T03:01:00Z
 ---
 # Working List
 
 ## Pending
-- [ ] Manual on-device validation against the Favorite Tags checklist
 
 ## In Progress
-- [~] Developer verification and final review
 
 ## Done
-- [x] Refresh `working_list.md` for the Favorite Tags implementation
-- [x] Review current settings persistence, Search wiring, and shared tag action UI
-- [x] Add profile-scoped favorite-tag settings contracts, normalization, and persistence
-- [x] Wire long-press favorite-tag creation through shared Search/Codex/Viewer tag menus
-- [x] Add Search `List` favorite-tag sheet with source grouping and tag-count lookups
-- [x] Add/update repository and Search unit tests for favorite-tag behavior
-- [x] Update docs and run Gradle validation (`:core-data:test`, `:app:testDebugUnitTest`, `:app:assembleDebug`)
+- [x] Review the existing source, viewer, creator-profile, and deep-link architecture
+- [x] Verify Iwara public API endpoints for search, resolve, tags, and creator videos
+- [x] Create the Iwara ExecPlan and refresh implementation tracking
+- [x] Implement `SourceKey.IWARA` enum wiring and cross-cutting source metadata updates
+- [x] Add `IwaraSourceAdapter` and source-layer tests
+- [x] Wire real/stub registries and add Iwara stub fixtures
+- [x] Integrate Iwara into creator browsing, viewer lazy resolution, and download resolution
+- [x] Add Iwara post deep links and app-level tests
+- [x] Update README.md and AGENTS.md for the new source
+- [x] Run Gradle validation and prepare manual verification checklist
