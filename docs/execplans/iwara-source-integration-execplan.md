@@ -17,6 +17,8 @@ After this change, users can search Iwara videos directly in Theoria Codex, open
 - [x] (2026-04-05 02:43Z) Implemented `IwaraSourceAdapter`, stub fixtures, and source-layer tests.
 - [x] (2026-04-05 02:56Z) Wired app creator browsing, lazy viewer/download resolution, and post deep links.
 - [x] (2026-04-05 03:01Z) Updated docs and passed Gradle validation.
+- [x] (2026-04-05 04:15Z) Switched Iwara Search cards to static-first rendering with query-scoped resolved-post overlays.
+- [x] (2026-04-05 04:15Z) Added Iwara-aware `429` retry suppression and Search/session regression coverage.
 
 ## Surprises & Discoveries
 
@@ -30,6 +32,10 @@ After this change, users can search Iwara videos directly in Theoria Codex, open
   Evidence: direct HTTP checks against sample Iwara file IDs on 2026-04-05.
 - Observation: As of 2026-04-05, direct anonymous requests to both `www.iwara.tv` and `api.iwara.tv` can return Cloudflare challenge `403` responses from the app/runtime environment even when the same JSON remains retrievable through `r.jina.ai/http://...`.
   Evidence: `curl` checks from the implementation environment returned `cf-mitigated: challenge` on direct requests and valid mirrored JSON through `r.jina.ai`.
+- Observation: Allowing visible Iwara search cards to auto-resolve into playable media quickly exhausts the public rate budget and causes subsequent search requests to return `429`.
+  Evidence: on-device behavior after the initial rollout plus inspection of the Search card lazy-resolution path showed repeated `resolvePost()` calls on recomposition and after returning from Viewer.
+- Observation: Search had no query-scoped resolved-post overlay, so Viewer-resolved Iwara posts reverted to raw unresolved Search results when the user navigated back.
+  Evidence: `SearchCoordinator` stored only raw `results`, while Search UI and live viewer binding both read directly from that raw list.
 - Observation: `RTK.md` was referenced by repo instructions but was not present in the working tree during implementation.
   Evidence: repository root lookup on 2026-04-05; implementation followed `AGENTS.md` and `PLANS.md`.
 
@@ -47,10 +53,16 @@ After this change, users can search Iwara videos directly in Theoria Codex, open
 - Decision: Keep direct Iwara requests as the primary path, but fall back to `r.jina.ai/http://...` only when a request fails with a Cloudflare challenge `403`.
   Rationale: Direct anonymous API access became challenge-blocked during implementation validation; the mirror preserves the shipped videos-first functionality without proxying successful direct traffic.
   Date/Author: 2026-04-05 / Codex
+- Decision: Make Iwara Search `static first` and reserve playback resolution for Viewer/on-demand flows instead of inline Search autoplay.
+  Rationale: The inline autoplay path was generating too many public Iwara resolve requests, leading to `429` responses and broken Search cards.
+  Date/Author: 2026-04-05 / Codex
+- Decision: Disable automatic HTTP retries for `429` responses on `*.iwara.tv` URLs while preserving retry behavior for `5xx` and non-Iwara `429` responses.
+  Rationale: The shared HTTP retry client was amplifying Iwara rate-limit responses instead of backing off.
+  Date/Author: 2026-04-05 / Codex
 
 ## Outcomes & Retrospective
 
-Iwara is now integrated as a real videos-first source. Search mode can query Iwara videos with `Newest`, `Popular`, and `Top`, creator action sheets can open Iwara upload pages, deep links for `iwara.tv/video/<id>` route into the app, and unresolved Iwara posts lazily resolve before Viewer playback or device download. The rollout also extended source-aware tag normalization and recommendation training so Iwara tags behave like the other underscore-oriented booru-style sources.
+Iwara is now integrated as a real videos-first source. Search mode can query Iwara videos with `Newest`, `Popular`, and `Top`, creator action sheets can open Iwara upload pages, deep links for `iwara.tv/video/<id>` route into the app, and unresolved Iwara posts lazily resolve before Viewer playback or device download. After rate-limit stabilization, Iwara Search cards now stay image-based in the grid, remembered resolved posts persist for the active query session after returning from Viewer, and the HTTP layer no longer retries Iwara `429` responses. The rollout also extended source-aware tag normalization and recommendation training so Iwara tags behave like the other underscore-oriented booru-style sources.
 
 Validation completed with:
 
@@ -60,6 +72,11 @@ Validation completed with:
 - `./gradlew :core-sources:test`
 - `./gradlew :app:testDebugUnitTest`
 - `./gradlew :app:assembleDebug`
+
+Rate-limit stabilization follow-up validated with:
+
+- `./gradlew :core-sources:test`
+- `./gradlew :app:testDebugUnitTest`
 
 ## Context and Orientation
 

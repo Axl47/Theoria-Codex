@@ -183,9 +183,12 @@ fun SearchScreen(
             hideSaved = hideSaved,
         )
     }
-    val visibleResults = remember(coordinator.results, visibilityFilters, likedPostIds, savedPostIds) {
+    val displayResults = remember(coordinator.results, coordinator.displayResultsVersion, queryHash) {
+        coordinator.displayResults()
+    }
+    val visibleResults = remember(displayResults, visibilityFilters, likedPostIds, savedPostIds) {
         filterSearchResults(
-            results = coordinator.results,
+            results = displayResults,
             filters = visibilityFilters,
             likedPostIds = likedPostIds,
             savedPostIds = savedPostIds,
@@ -642,7 +645,7 @@ fun SearchScreen(
                                     onToggleLike = onToggleLike?.let { toggle ->
                                         { toggle(post) }
                                     },
-                                    resolvePostById = { postId -> coordinator.resolvePost(postId) },
+                                    resolvePostById = { postId -> coordinator.resolvePostForSearch(postId) },
                                     onClick = {
                                         focusManager.clearFocus()
                                         val context = coordinator.buildViewerLaunchContext(
@@ -905,7 +908,11 @@ fun SearchResultCard(
             effectivePost.full,
             effectivePost.preview,
         ) {
-            resolveCardVideoRef(effectivePost)
+            if (allowsInlineAutoplayInSearch(effectivePost)) {
+                resolveCardVideoRef(effectivePost)
+            } else {
+                null
+            }
         }
         var videoPlaybackFailed by remember(
             effectivePost.id.source,
@@ -1245,6 +1252,10 @@ private fun resolveCardVideoRef(post: Post): ImageRef? {
     return refs.firstOrNull { ref ->
         (!ref.url.isNullOrBlank() || !ref.localPath.isNullOrBlank()) && isVideoMediaRef(ref)
     }
+}
+
+internal fun allowsInlineAutoplayInSearch(post: Post): Boolean {
+    return post.id.source == SourceKey.RULE34VIDEO || post.id.source == SourceKey.RULE34GEN
 }
 
 private fun formatPostTagsForClipboard(post: Post): String {

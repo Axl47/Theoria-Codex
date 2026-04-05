@@ -53,6 +53,8 @@ class SearchCoordinator(
     private var unifiedQueryOverrides: Map<SourceKey, Query> = emptyMap()
     private var sourceNextPageToken: String? = null
     private val lastTrendingRefreshAtBySource = mutableMapOf<SourceKey, Long>()
+    private val resolvedPostOverridesByQueryHash = linkedMapOf<String, LinkedHashMap<PostId, Post>>()
+    private val recentResolveFailuresByQueryHash = mutableMapOf<String, MutableMap<PostId, ResolveFailureRecord>>()
 
     var draftQuery by mutableStateOf(defaultQuery())
         private set
@@ -85,6 +87,9 @@ class SearchCoordinator(
         private set
 
     var errorMessage by mutableStateOf<String?>(null)
+        private set
+
+    var displayResultsVersion by mutableStateOf(0)
         private set
 
     val availableSources: List<SourceKey>
@@ -740,9 +745,53 @@ class SearchCoordinator(
         uiRestoreRepository.setViewerLaunchContext(context)
     }
 
+    fun displayResults(): List<Post> {
+        return results.map(::displayPost)
+    }
+
+    fun displayPost(post: Post): Post {
+        return resolvedPostOverridesByQueryHash[appliedQueryHash]?.get(post.id) ?: post
+    }
+
     suspend fun resolvePost(postId: PostId): Post? {
         val adapter = registry.adapterFor(postId.source) ?: return null
         return adapter.resolvePost(postId)
+    }
+
+    suspend fun resolvePostForSearch(postId: PostId): Post? {
+        val existing = resolvedPostOverridesByQueryHash[appliedQueryHash]?.get(postId)
+        if (existing != null) return existing
+        if (shouldDeferResolve(postId)) return null
+
+        val adapter = registry.adapterFor(postId.source) ?: return null
+        return try {
+            val resolved = adapter.resolvePost(postId) ?: return null
+            rememberResolvedPost(resolved)
+            resolved
+        } catch (error: SourceAdapterException) {
+            if (error.reason == SourceFailureReason.RATE_LIMITED) {
+                rememberResolveFailure(postId, error.reason)
+                null
+            } else {
+                throw error
+            }
+        }
+    }
+
+    fun rememberResolvedPost(post: Post) {
+        val queryHash = appliedQueryHash
+        val bucket = resolvedPostOverridesByQueryHash.getOrPut(queryHash) { linkedMapOf() }
+        bucket.remove(post.id)
+        bucket[post.id] = post
+        trimResolvedOverrides(bucket)
+        recentResolveFailuresByQueryHash[queryHash]?.remove(post.id)
+        displayResultsVersion += 1
+    }
+
+    fun shouldDeferResolve(postId: PostId): Boolean {
+        val now = clock()
+        val record = recentResolveFailuresByQueryHash[appliedQueryHash]?.get(postId) ?: return false
+        return record.reason == SourceFailureReason.RATE_LIMITED && now < record.backoffUntilMs
     }
 
     private suspend fun executeSearch() {
@@ -1034,6 +1083,51 @@ class SearchCoordinator(
         return runtimeSettings.runtime.enabledSources.intersect(registry.availableSources())
     }
 
+    private fun rememberResolveFailure(postId: PostId, reason: SourceFailureReason) {
+        val now = clock()
+        val queryHash = appliedQueryHash
+        val bucket = recentResolveFailuresByQueryHash.getOrPut(queryHash) { linkedMapOf() }
+        val previous = bucket[postId]
+        val backoffMs = if (
+            previous != null &&
+            previous.reason == SourceFailureReason.RATE_LIMITED &&
+            reason == SourceFailureReason.RATE_LIMITED &&
+            now - previous.lastFailureAtMs <= RATE_LIMIT_REPEAT_WINDOW_MS
+        ) {
+            RATE_LIMIT_BACKOFF_REPEAT_MS
+        } else {
+            RATE_LIMIT_BACKOFF_FIRST_MS
+        }
+        bucket[postId] = ResolveFailureRecord(
+            lastFailureAtMs = now,
+            backoffUntilMs = now + backoffMs,
+            reason = reason,
+        )
+        trimResolveFailures(bucket)
+    }
+
+    private fun trimResolvedOverrides(bucket: LinkedHashMap<PostId, Post>) {
+        val maxEntries = results.size
+            .takeIf { it > 0 }
+            ?.coerceAtMost(MAX_RESOLVED_POST_OVERRIDES_PER_QUERY)
+            ?: MAX_RESOLVED_POST_OVERRIDES_PER_QUERY
+        while (bucket.size > maxEntries) {
+            val eldest = bucket.entries.firstOrNull()?.key ?: break
+            bucket.remove(eldest)
+        }
+        while (resolvedPostOverridesByQueryHash.size > MAX_REMEMBERED_QUERY_OVERRIDES) {
+            val eldestQuery = resolvedPostOverridesByQueryHash.entries.firstOrNull()?.key ?: break
+            resolvedPostOverridesByQueryHash.remove(eldestQuery)
+        }
+    }
+
+    private fun trimResolveFailures(bucket: MutableMap<PostId, ResolveFailureRecord>) {
+        while (bucket.size > MAX_RESOLVED_POST_OVERRIDES_PER_QUERY) {
+            val eldest = bucket.entries.firstOrNull()?.key ?: break
+            bucket.remove(eldest)
+        }
+    }
+
     private fun requiresGelbooruSuggestionSelection(): Boolean {
         return draftQuery.mode == QueryMode.Source(SourceKey.GELBOORU)
     }
@@ -1160,6 +1254,11 @@ private const val TRENDING_PER_SOURCE_CACHE_LIMIT = 40
 private const val SOURCE_TRENDING_LIMIT = 20
 private const val UNIFIED_TRENDING_LIMIT = 20
 private const val SEEN_TAGS_PER_SOURCE_INGEST_LIMIT = 240
+private const val MAX_RESOLVED_POST_OVERRIDES_PER_QUERY = 200
+private const val MAX_REMEMBERED_QUERY_OVERRIDES = 8
+private const val RATE_LIMIT_BACKOFF_FIRST_MS = 30_000L
+private const val RATE_LIMIT_BACKOFF_REPEAT_MS = 2L * 60L * 1000L
+private const val RATE_LIMIT_REPEAT_WINDOW_MS = 2L * 60L * 1000L
 private const val LAST_ACTIVE_QUERY_KEY = "last_active"
 private val SOURCE_DISPLAY_ORDER = listOf(
     SourceKey.GELBOORU,
@@ -1229,3 +1328,9 @@ private fun Query.directNhentaiGalleryIdCandidate(): String? {
 private fun String.isDigitsOnly(): Boolean {
     return isNotBlank() && all { ch -> ch.isDigit() }
 }
+
+private data class ResolveFailureRecord(
+    val lastFailureAtMs: Long,
+    val backoffUntilMs: Long,
+    val reason: SourceFailureReason,
+)

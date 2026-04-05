@@ -533,7 +533,9 @@ fun TheoriaApp(
                     !requiresLazyMediaResolution(post) -> post
                     else -> {
                         val adapter = realRegistry.adapterFor(post.id.source)
-                        runCatching { adapter?.resolvePost(post.id) }.getOrNull()
+                        runCatching { adapter?.resolvePost(post.id) }.getOrNull()?.also { resolved ->
+                            searchCoordinator.rememberResolvedPost(resolved)
+                        }
                     }
                 }
                 if (postToDownload != null && enqueuePostDownload(appContext, postToDownload)) {
@@ -553,6 +555,7 @@ fun TheoriaApp(
             val adapter = realRegistry.adapterFor(post.id.source)
             val resolved = runCatching { adapter?.resolvePost(post.id) }.getOrNull()
             if (resolved != null) {
+                searchCoordinator.rememberResolvedPost(resolved)
                 resolvedPost = resolved
                 creator = browseableCreatorProfile(resolved.creatorProfile)
             }
@@ -884,6 +887,7 @@ fun TheoriaApp(
         scope.launch {
             val adapter = realRegistry.adapterFor(post.id.source) ?: return@launch
             val resolved = runCatching { adapter.resolvePost(post.id) }.getOrNull() ?: return@launch
+            searchCoordinator.rememberResolvedPost(resolved)
             viewerSession = viewerSession?.let { session ->
                 val index = session.posts.indexOfFirst { current -> current.id == post.id }
                 if (index < 0) return@let session
@@ -906,6 +910,9 @@ fun TheoriaApp(
         if (!requiresLazyMediaResolution(selectedPost)) return posts
         val adapter = realRegistry.adapterFor(selectedPost.id.source) ?: return posts
         val resolved = runCatching { adapter.resolvePost(selectedPost.id) }.getOrNull() ?: return posts
+        if (context.streamSource == ViewerStreamSource.SEARCH) {
+            searchCoordinator.rememberResolvedPost(resolved)
+        }
         return posts.toMutableList().apply {
             this[startIndex] = resolved
         }
@@ -1335,6 +1342,7 @@ fun TheoriaApp(
 
     LaunchedEffect(
         searchCoordinator.results,
+        searchCoordinator.displayResultsVersion,
         forYouCoordinator.results,
         creatorProfileCoordinator.results,
         creatorProfileCoordinator.activeQueryHash,
@@ -1351,7 +1359,7 @@ fun TheoriaApp(
             ViewerStreamSource.SEARCH -> {
                 if (session.context.queryHash != searchCoordinator.appliedQueryHash) return@LaunchedEffect
                 filterSearchResults(
-                    results = searchCoordinator.results,
+                    results = searchCoordinator.displayResults(),
                     filters = session.searchVisibilityFilters,
                     likedPostIds = likedPostIds,
                     savedPostIds = savedPostIds,

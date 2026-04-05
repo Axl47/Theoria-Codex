@@ -1,6 +1,6 @@
 ---
 created_at: 2026-04-05T02:20:00Z
-updated_at: 2026-04-05T03:01:00Z
+updated_at: 2026-04-05T04:32:00Z
 ---
 # Working List
 
@@ -19,3 +19,9 @@ updated_at: 2026-04-05T03:01:00Z
 - [x] Add Iwara post deep links and app-level tests
 - [x] Update README.md and AGENTS.md for the new source
 - [x] Run Gradle validation and prepare manual verification checklist
+- [x] Add query-scoped Iwara search resolve overlay and rate-limit backoff in `SearchCoordinator`
+- [x] Restrict Iwara search cards to static thumbnails and overlay-driven display in `SearchScreen`
+- [x] Feed Search-originated resolved posts back into coordinator state from `TheoriaApp`
+- [x] Make HTTP retry policy avoid amplifying Iwara `429` responses
+- [x] Add regression coverage for overlay/backoff and HTTP retry policy
+- [x] Refresh Iwara ExecPlan notes and validate with Gradle
