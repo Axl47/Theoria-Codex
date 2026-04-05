@@ -394,6 +394,7 @@ class IwaraSourceAdapter(
         val file = raw.objectOrNull("file")
         val customThumbnail = raw.objectOrNull("customThumbnail")
         val embedUrl = raw.string("embedUrl")?.trim().takeUnless { it.isNullOrBlank() }
+        if (file == null && embedUrl != null) return null
         val preview = ImageRef(
             url = customThumbnail?.let(::buildAssetUrl)
                 ?: file?.string("id")?.let { fileId ->

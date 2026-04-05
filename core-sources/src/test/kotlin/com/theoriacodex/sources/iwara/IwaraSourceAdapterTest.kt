@@ -122,6 +122,62 @@ class IwaraSourceAdapterTest {
     }
 
     @Test
+    fun `search excludes embed only posts without native iwara media`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "page": 0,
+                      "count": 2,
+                      "limit": 32,
+                      "results": [
+                        {
+                          "id": "keep-me",
+                          "slug": "native-video",
+                          "title": "Native",
+                          "thumbnail": 3,
+                          "file": {
+                            "id": "3c30efe5-744d-47e7-b691-b963af08a792",
+                            "name": "3c30efe5-744d-47e7-b691-b963af08a792.mp4",
+                            "mime": "video/mp4"
+                          },
+                          "user": {
+                            "id": "user-1",
+                            "name": "Uploader",
+                            "username": "uploader"
+                          },
+                          "tags": []
+                        },
+                        {
+                          "id": "drop-me",
+                          "slug": "youtube-embed",
+                          "title": "Embed",
+                          "embedUrl": "https://www.youtube.com/watch?v=-RvuwgrPDhI",
+                          "file": null,
+                          "customThumbnail": null,
+                          "user": {
+                            "id": "user-2",
+                            "name": "Embedder",
+                            "username": "embedder"
+                          },
+                          "tags": []
+                        }
+                      ],
+                      "type": "videos"
+                    }
+                """.trimIndent(),
+            )
+        }
+        val adapter = IwaraSourceAdapter(httpClient = httpClient)
+
+        val page = adapter.search(sampleQuery(sort = SortMode.NEWEST), pageToken = null)
+
+        assertEquals(1, page.items.size)
+        assertEquals("keep-me", page.items.single().id.sourcePostId)
+    }
+
+    @Test
     fun `resolve post returns fileUrl backed video post`() = runTest {
         val httpClient = object : com.theoriacodex.sources.http.SourceHttpClient {
             var callCount = 0
@@ -313,7 +369,7 @@ class IwaraSourceAdapterTest {
     }
 
     @Test
-    fun `resolve post preserves embed only entries without crashing`() = runTest {
+    fun `resolve post returns null for embed only entries without native iwara media`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
                 statusCode = 200,
@@ -339,10 +395,7 @@ class IwaraSourceAdapterTest {
 
         val post = adapter.resolvePost(PostId(source = SourceKey.IWARA, sourcePostId = "5ak7ohralkswrykwa"))
 
-        assertNotNull(post)
-        assertNull(post?.full)
-        assertEquals("https://www.iwara.tv/video/5ak7ohralkswrykwa/mmd-genshin-impact-xinyan-sings-god-knows", post?.pageUrl)
-        assertEquals("https://i.ytimg.com/vi/-RvuwgrPDhI/hqdefault.jpg", post?.preview?.url)
+        assertNull(post)
     }
 
     @Test
