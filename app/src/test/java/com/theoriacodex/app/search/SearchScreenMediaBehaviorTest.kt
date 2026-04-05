@@ -20,6 +20,13 @@ class SearchScreenMediaBehaviorTest {
         assertTrue(allowsInlineAutoplayInSearch(samplePost(SourceKey.RULE34GEN)))
     }
 
+    @Test
+    fun `non iwara sources keep inline autoplay enabled in search`() {
+        assertTrue(allowsInlineAutoplayInSearch(samplePost(SourceKey.PIXIV)))
+        assertTrue(allowsInlineAutoplayInSearch(samplePost(SourceKey.GELBOORU)))
+        assertTrue(allowsInlineAutoplayInSearch(samplePost(SourceKey.NHENTAI)))
+    }
+
     private fun samplePost(source: SourceKey): Post {
         return Post(
             id = PostId(source = source, sourcePostId = "1"),

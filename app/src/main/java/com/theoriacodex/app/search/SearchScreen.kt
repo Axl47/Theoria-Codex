@@ -1255,7 +1255,7 @@ private fun resolveCardVideoRef(post: Post): ImageRef? {
 }
 
 internal fun allowsInlineAutoplayInSearch(post: Post): Boolean {
-    return post.id.source == SourceKey.RULE34VIDEO || post.id.source == SourceKey.RULE34GEN
+    return post.id.source != SourceKey.IWARA
 }
 
 private fun formatPostTagsForClipboard(post: Post): String {
