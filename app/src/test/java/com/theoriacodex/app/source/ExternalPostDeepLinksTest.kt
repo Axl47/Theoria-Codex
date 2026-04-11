@@ -45,6 +45,20 @@ class ExternalPostDeepLinksTest {
     }
 
     @Test
+    fun `parses pixiv posts with and without locale`() {
+        assertDeepLink(
+            url = "https://www.pixiv.net/en/artworks/111111111",
+            source = SourceKey.PIXIV,
+            postId = "111111111",
+        )
+        assertDeepLink(
+            url = "https://www.pixiv.net/artworks/111111111",
+            source = SourceKey.PIXIV,
+            postId = "111111111",
+        )
+    }
+
+    @Test
     fun `rejects unsupported iwara profile urls`() {
         assertNull(parseExternalPostDeepLink("https://www.iwara.tv/profile/mmdparadaise/videos"))
     }

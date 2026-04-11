@@ -115,7 +115,7 @@ private fun parsePixivPostIdFromUri(uri: ParsedExternalUri): String? {
     if (scheme != "https" && scheme != "http") return null
     if (host != "www.pixiv.com" && host != "pixiv.com" && host != "www.pixiv.net" && host != "pixiv.net") return null
     val path = uri.encodedPath
-    val match = Regex("^/([A-Za-z]{2})/artworks/(\\d+)(?:/)?$").matchEntire(path) ?: return null
+    val match = Regex("^/(?:([A-Za-z]{2})/)?artworks/(\\d+)(?:/)?$").matchEntire(path) ?: return null
     return match.groupValues.getOrNull(2)?.takeIf(String::isDigitsOnly)
 }
 
