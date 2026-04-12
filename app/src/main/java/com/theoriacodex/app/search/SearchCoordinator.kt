@@ -633,9 +633,9 @@ class SearchCoordinator(
         loadingMore = true
         errorMessage = null
         try {
-            val enabledSources = effectiveEnabledSources()
             when (val mode = appliedQuery.mode) {
                 QueryMode.Unified -> {
+                    val enabledSources = effectiveEnabledSources()
                     val disabledStatuses = availableSources
                         .filterNot { it in enabledSources }
                         .map { source ->
@@ -807,9 +807,9 @@ class SearchCoordinator(
         statuses = emptyList()
 
         try {
-            val enabledSources = effectiveEnabledSources()
             when (val mode = appliedQuery.mode) {
                 QueryMode.Unified -> {
+                    val enabledSources = effectiveEnabledSources()
                     val disabledStatuses = availableSources
                         .filterNot { it in enabledSources }
                         .map { source ->
@@ -854,17 +854,6 @@ class SearchCoordinator(
                                 source = mode.source,
                                 state = SourceRunState.EXCLUDED,
                                 errorMessage = "Source not available in this build",
-                            )
-                        )
-                        return
-                    }
-                    if (mode.source !in enabledSources) {
-                        results = emptyList()
-                        statuses = listOf(
-                            SourceRunStatus(
-                                source = mode.source,
-                                state = SourceRunState.EXCLUDED,
-                                errorMessage = "Disabled in settings",
                             )
                         )
                         return

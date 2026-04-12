@@ -20,6 +20,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import com.theoriacodex.stubs.StubAdapterRegistry
 import kotlinx.coroutines.test.runTest
@@ -169,6 +170,62 @@ class SearchCoordinatorTest {
 
         coordinator.setMode(QueryMode.Source(SourceKey.GELBOORU))
         assertEquals(QueryMode.Unified, coordinator.draftQuery.mode)
+    }
+
+    @Test
+    fun `source mode search ignores unified enabled-source toggles`() = runTest {
+        val gelbooruAdapter = RecordingAdapter(sourceKey = SourceKey.GELBOORU)
+        val settingsRepository = InMemorySettingsRepository()
+        settingsRepository.setEnabledSources(setOf(SourceKey.PIXIV))
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(
+                adapters = mapOf(SourceKey.GELBOORU to gelbooruAdapter),
+            ),
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = settingsRepository,
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.GELBOORU))
+        coordinator.addIncludeTag("landscape")
+
+        coordinator.applyDraft()
+
+        assertEquals(listOf("landscape"), gelbooruAdapter.lastSearchQuery?.includeTags)
+        assertEquals(1, coordinator.statuses.size)
+        assertEquals(SourceKey.GELBOORU, coordinator.statuses.single().source)
+        assertEquals(SourceRunState.SUCCESS, coordinator.statuses.single().state)
+    }
+
+    @Test
+    fun `unified search still excludes disabled sources from settings`() = runTest {
+        val pixivAdapter = RecordingAdapter(sourceKey = SourceKey.PIXIV)
+        val gelbooruAdapter = RecordingAdapter(sourceKey = SourceKey.GELBOORU)
+        val settingsRepository = InMemorySettingsRepository()
+        settingsRepository.setEnabledSources(setOf(SourceKey.PIXIV))
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(
+                adapters = mapOf(
+                    SourceKey.PIXIV to pixivAdapter,
+                    SourceKey.GELBOORU to gelbooruAdapter,
+                ),
+            ),
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = settingsRepository,
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+        coordinator.addIncludeTag("landscape")
+
+        coordinator.applyDraft()
+
+        assertEquals(listOf("landscape"), pixivAdapter.lastSearchQuery?.includeTags)
+        assertNull(gelbooruAdapter.lastSearchQuery)
+        assertTrue(
+            coordinator.statuses.any { status ->
+                status.source == SourceKey.GELBOORU && status.state == SourceRunState.EXCLUDED
+            }
+        )
     }
 
     @Test
