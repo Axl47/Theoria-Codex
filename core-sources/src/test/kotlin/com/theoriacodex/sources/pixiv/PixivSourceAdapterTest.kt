@@ -214,6 +214,130 @@ class PixivSourceAdapterTest {
         assertEquals("this is a tag -nsfw", httpClient.lastGet?.query?.get("word"))
     }
 
+    @Test
+    fun `search maps single page pixiv progressive urls`() = runTest {
+        val credentials = FakeCredentialsProvider().apply {
+            pixivTokens = PixivAuthTokens(
+                accessToken = "access",
+                refreshToken = "refresh",
+                expiresAtEpochMs = Long.MAX_VALUE,
+            )
+        }
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "illusts": [
+                        {
+                          "id": 12345,
+                          "image_urls": {
+                            "square_medium": "https://i.pximg.net/square.jpg",
+                            "medium": "https://i.pximg.net/medium.jpg",
+                            "large": "https://i.pximg.net/large.jpg"
+                          },
+                          "meta_single_page": {
+                            "original_image_url": "https://i.pximg.net/original.jpg"
+                          },
+                          "tags": [{"name": "landscape"}],
+                          "user": {"id": 77, "name": "artist"}
+                        }
+                      ]
+                    }
+                """.trimIndent(),
+            )
+        }
+        val adapter = PixivSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = credentials,
+        )
+
+        val post = adapter.search(sampleQuery(), pageToken = null).items.first()
+        val media = post.media.first()
+
+        assertEquals("https://i.pximg.net/square.jpg", post.preview.url)
+        assertEquals("https://i.pximg.net/original.jpg", post.full?.url)
+        assertEquals(
+            listOf(
+                "https://i.pximg.net/medium.jpg",
+                "https://i.pximg.net/large.jpg",
+            ),
+            media.progressiveUrls,
+        )
+    }
+
+    @Test
+    fun `search maps multipage pixiv progressive urls per page`() = runTest {
+        val credentials = FakeCredentialsProvider().apply {
+            pixivTokens = PixivAuthTokens(
+                accessToken = "access",
+                refreshToken = "refresh",
+                expiresAtEpochMs = Long.MAX_VALUE,
+            )
+        }
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "illusts": [
+                        {
+                          "id": 67890,
+                          "image_urls": {
+                            "square_medium": "https://i.pximg.net/cover_square.jpg",
+                            "medium": "https://i.pximg.net/cover_medium.jpg",
+                            "large": "https://i.pximg.net/cover_large.jpg"
+                          },
+                          "meta_pages": [
+                            {
+                              "image_urls": {
+                                "medium": "https://i.pximg.net/page1_medium.jpg",
+                                "large": "https://i.pximg.net/page1_large.jpg",
+                                "original": "https://i.pximg.net/page1_original.jpg"
+                              }
+                            },
+                            {
+                              "image_urls": {
+                                "medium": "https://i.pximg.net/page2_medium.jpg",
+                                "large": "https://i.pximg.net/page2_large.jpg",
+                                "original": "https://i.pximg.net/page2_original.jpg"
+                              }
+                            }
+                          ],
+                          "tags": [{"name": "landscape"}],
+                          "user": {"id": 77, "name": "artist"}
+                        }
+                      ]
+                    }
+                """.trimIndent(),
+            )
+        }
+        val adapter = PixivSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = credentials,
+        )
+
+        val post = adapter.search(sampleQuery(), pageToken = null).items.first()
+
+        assertEquals(2, post.media.size)
+        assertEquals("https://i.pximg.net/page1_original.jpg", post.media[0].url)
+        assertEquals(
+            listOf(
+                "https://i.pximg.net/page1_medium.jpg",
+                "https://i.pximg.net/page1_large.jpg",
+            ),
+            post.media[0].progressiveUrls,
+        )
+        assertEquals("https://i.pximg.net/page2_original.jpg", post.media[1].url)
+        assertEquals(
+            listOf(
+                "https://i.pximg.net/page2_medium.jpg",
+                "https://i.pximg.net/page2_large.jpg",
+            ),
+            post.media[1].progressiveUrls,
+        )
+    }
+
     private fun sampleQuery(): Query {
         return Query(
             mode = QueryMode.Source(SourceKey.PIXIV),

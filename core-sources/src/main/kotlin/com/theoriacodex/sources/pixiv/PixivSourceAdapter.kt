@@ -284,27 +284,54 @@ class PixivSourceAdapter(
         val id = raw.get("id")?.asLong?.toString() ?: return null
         val isUgoira = raw.get("type")?.asString == "ugoira"
         val imageUrls = raw.optionalJsonObject("image_urls")
-        val previewUrl = imageUrls?.get("square_medium")?.asString ?: imageUrls?.get("medium")?.asString
-        val fullUrl = raw.optionalJsonObject("meta_single_page")
-            ?.get("original_image_url")
-            ?.asString
-            ?: imageUrls?.get("large")?.asString
+        val previewUrl = normalizedUrl(
+            imageUrls?.get("square_medium")?.asString ?: imageUrls?.get("medium")?.asString,
+        )
+        val singlePageMediumUrl = normalizedUrl(imageUrls?.get("medium")?.asString)
+        val singlePageLargeUrl = normalizedUrl(imageUrls?.get("large")?.asString)
+        val singlePageOriginalUrl = normalizedUrl(
+            raw.optionalJsonObject("meta_single_page")
+                ?.get("original_image_url")
+                ?.asString,
+        )
+        val fullUrl = singlePageOriginalUrl ?: singlePageLargeUrl ?: singlePageMediumUrl
         val fullMime = if (isUgoira) PIXIV_UGOIRA_MIME else inferMimeFromUrl(fullUrl)
         val previewMime = inferMimeFromUrl(previewUrl) ?: fullMime
         val previewRef = ImageRef(url = previewUrl, localPath = null, mime = previewMime)
+        val singlePageRef = fullUrl?.let { canonicalUrl ->
+            ImageRef(
+                url = canonicalUrl,
+                localPath = null,
+                mime = fullMime,
+                progressiveUrls = if (isUgoira) {
+                    emptyList()
+                } else {
+                    buildPixivProgressiveUrls(
+                        singlePageMediumUrl,
+                        singlePageLargeUrl,
+                        canonicalUrl = canonicalUrl,
+                    )
+                },
+            )
+        }
         val multiPageRefs = raw.optionalJsonArray("meta_pages").orEmpty().mapNotNull { page ->
             val pageUrls = page.asJsonObject.optionalJsonObject("image_urls") ?: return@mapNotNull null
-            val pageUrl = pageUrls.get("original")?.asString
-                ?: pageUrls.get("large")?.asString
-                ?: pageUrls.get("medium")?.asString
-                ?: return@mapNotNull null
+            val mediumUrl = normalizedUrl(pageUrls.get("medium")?.asString)
+            val largeUrl = normalizedUrl(pageUrls.get("large")?.asString)
+            val originalUrl = normalizedUrl(pageUrls.get("original")?.asString)
+            val pageUrl = originalUrl ?: largeUrl ?: mediumUrl ?: return@mapNotNull null
             ImageRef(
                 url = pageUrl,
                 localPath = null,
                 mime = inferMimeFromUrl(pageUrl),
+                progressiveUrls = buildPixivProgressiveUrls(
+                    mediumUrl,
+                    largeUrl,
+                    canonicalUrl = pageUrl,
+                ),
             )
         }
-        val fallbackFullRef = fullUrl?.let { ImageRef(url = it, localPath = null, mime = fullMime) }
+        val fallbackFullRef = singlePageRef
         val mediaRefs = when {
             multiPageRefs.isNotEmpty() -> multiPageRefs
             fallbackFullRef != null -> listOf(fallbackFullRef)
@@ -369,6 +396,20 @@ class PixivSourceAdapter(
             SortMode.RANDOM -> "date_desc"
         }
     }
+}
+
+private fun buildPixivProgressiveUrls(
+    vararg candidateUrls: String?,
+    canonicalUrl: String?,
+): List<String> {
+    return candidateUrls
+        .mapNotNull(::normalizedUrl)
+        .filter { it != canonicalUrl }
+        .distinct()
+}
+
+private fun normalizedUrl(url: String?): String? {
+    return url?.trim()?.takeIf(String::isNotBlank)
 }
 
 private fun parseNextOffset(nextUrl: String?): String? {

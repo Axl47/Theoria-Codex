@@ -1,3 +1,7 @@
+---
+created_at: 2026-03-05T01:16
+updated_at: 2026-04-10T16:28
+---
 # Top-Level Tab Swipe Pager Refactor
 
 This ExecPlan is a living document. Keep `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` updated as implementation proceeds.

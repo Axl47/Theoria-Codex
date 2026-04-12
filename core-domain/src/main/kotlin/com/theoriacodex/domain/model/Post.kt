@@ -29,6 +29,7 @@ data class ImageRef(
     val url: String?,
     val localPath: String?,
     val mime: String?,
+    val progressiveUrls: List<String> = emptyList(),
 )
 
 data class Post(

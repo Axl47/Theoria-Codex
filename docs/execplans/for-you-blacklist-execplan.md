@@ -1,3 +1,7 @@
+---
+created_at: 2026-03-02T22:11
+updated_at: 2026-04-10T16:28
+---
 # For You Blacklist and Profile-Scoped Controls
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.

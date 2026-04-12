@@ -89,6 +89,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
+import coil.request.SuccessResult
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraMedia
 import com.theoriacodex.app.media.isVideoMediaRef
@@ -243,13 +244,6 @@ fun ViewerScreen(
         }
         val imageLoader = context.imageLoader
         queue.forEach { candidate ->
-            val data = candidate.media.localPath
-                ?: candidate.media.url
-                ?: candidate.post.full?.localPath
-                ?: candidate.post.full?.url
-                ?: candidate.post.preview.localPath
-                ?: candidate.post.preview.url
-                ?: return@forEach
             if (isVideoMediaRef(candidate.media)) {
                 val videoLocation = candidate.media.localPath ?: candidate.media.url ?: return@forEach
                 if (prefetchedVideoUrls[videoLocation] == true) return@forEach
@@ -267,6 +261,7 @@ fun ViewerScreen(
                     prefetchedVideoUrls[videoLocation] = true
                 }
             } else {
+                val data = viewerPrefetchImageLocation(candidate.post, candidate.media) ?: return@forEach
                 val request = buildViewerImageRequest(
                     context = context,
                     url = data,
@@ -498,12 +493,49 @@ fun ViewerScreen(
                     val imageCandidates = remember(post, media, isVideoMedia) {
                         if (isVideoMedia) emptyList() else viewerImageCandidates(post, media)
                     }
-                    var imageCandidateIndex by remember(postPage, mediaPage) { mutableIntStateOf(0) }
+                    var displayedCandidateIndex by remember(postPage, mediaPage) { mutableIntStateOf(0) }
+                    var maxPreparedCandidateIndex by remember(postPage, mediaPage) { mutableIntStateOf(0) }
                     var imageLoading by remember(postPage, mediaPage) { mutableStateOf(false) }
                     var imageLoadFailed by remember(postPage, mediaPage) { mutableStateOf(false) }
-                    val activeImageUrl = imageCandidates.getOrNull(imageCandidateIndex)
+                    var hasVisibleImage by remember(postPage, mediaPage) { mutableStateOf(false) }
+                    val activeImageUrl = imageCandidates.getOrNull(displayedCandidateIndex)
                     val imageModel = remember(context, activeImageUrl, post.id.source) {
                         activeImageUrl?.let { buildViewerImageRequest(context, it, post.id.source) }
+                    }
+                    LaunchedEffect(
+                        imageCandidates,
+                        displayedCandidateIndex,
+                        maxPreparedCandidateIndex,
+                        hasVisibleImage,
+                        post.id.source,
+                    ) {
+                        if (post.id.source != SourceKey.PIXIV) return@LaunchedEffect
+                        if (!hasVisibleImage) return@LaunchedEffect
+                        if (displayedCandidateIndex != maxPreparedCandidateIndex) return@LaunchedEffect
+                        val nextIndex = displayedCandidateIndex + 1
+                        if (nextIndex > imageCandidates.lastIndex) return@LaunchedEffect
+                        val nextUrl = imageCandidates[nextIndex]
+                        if (loadedMediaUrls[nextUrl] == true) {
+                            maxPreparedCandidateIndex = nextIndex
+                            displayedCandidateIndex = nextIndex
+                            imageLoadFailed = false
+                            return@LaunchedEffect
+                        }
+                        val result = runCatching {
+                            context.imageLoader.execute(
+                                buildViewerImageRequest(
+                                    context = context,
+                                    url = nextUrl,
+                                    sourceKey = post.id.source,
+                                ),
+                            )
+                        }.getOrNull()
+                        if (result is SuccessResult) {
+                            loadedMediaUrls[nextUrl] = true
+                            maxPreparedCandidateIndex = nextIndex
+                            displayedCandidateIndex = nextIndex
+                            imageLoadFailed = false
+                        }
                     }
                     Box(
                         modifier = Modifier
@@ -568,21 +600,25 @@ fun ViewerScreen(
                                 onSuccess = {
                                     imageLoading = false
                                     imageLoadFailed = false
+                                    hasVisibleImage = true
                                     activeImageUrl?.let { loadedMediaUrls[it] = true }
                                 },
                                 onError = {
-                                    if (imageCandidateIndex < imageCandidates.lastIndex) {
-                                        imageCandidateIndex += 1
+                                    val canAdvance = displayedCandidateIndex < imageCandidates.lastIndex &&
+                                        (!hasVisibleImage || post.id.source != SourceKey.PIXIV)
+                                    if (canAdvance) {
+                                        val nextIndex = displayedCandidateIndex + 1
+                                        displayedCandidateIndex = nextIndex
+                                        maxPreparedCandidateIndex = nextIndex
                                         imageLoading = false
                                         imageLoadFailed = false
                                     } else {
                                         imageLoading = false
-                                        imageLoadFailed = true
+                                        imageLoadFailed = !hasVisibleImage
                                     }
                                 },
                             )
-                            val alreadyLoaded = activeImageUrl?.let { loadedMediaUrls[it] == true } == true
-                            if (imageLoading && !alreadyLoaded) {
+                            if (imageLoading && !hasVisibleImage) {
                                 CircularProgressIndicator()
                             }
                             if (imageLoadFailed) {
@@ -596,7 +632,9 @@ fun ViewerScreen(
                                     )
                                     TextButton(
                                         onClick = {
-                                            imageCandidateIndex = 0
+                                            displayedCandidateIndex = 0
+                                            maxPreparedCandidateIndex = 0
+                                            hasVisibleImage = false
                                             imageLoading = imageCandidates.isNotEmpty()
                                             imageLoadFailed = false
                                         },
@@ -1487,7 +1525,17 @@ private fun requiresResolvedViewerPost(post: Post): Boolean {
     return post.id.source == SourceKey.RULE34VIDEO || post.id.source == SourceKey.RULE34GEN
 }
 
-private fun viewerImageCandidates(post: Post, media: ImageRef): List<String> {
+internal fun viewerImageCandidates(post: Post, media: ImageRef): List<String> {
+    if (post.id.source == SourceKey.PIXIV) {
+        val pixivCandidates = buildList {
+            media.localPath?.takeIf(String::isNotBlank)?.let(::add)
+            addAll(media.progressiveUrls.filter(String::isNotBlank))
+            media.url?.takeIf(String::isNotBlank)?.let(::add)
+        }.distinct()
+        if (pixivCandidates.isNotEmpty()) {
+            return pixivCandidates
+        }
+    }
     val refs = buildList {
         add(media)
         post.full?.let { add(it) }
@@ -1510,6 +1558,10 @@ private fun viewerImageCandidates(post: Post, media: ImageRef): List<String> {
         .mapNotNull { ref -> ref.localPath ?: ref.url }
         .filter { it.isNotBlank() }
         .distinct()
+}
+
+internal fun viewerPrefetchImageLocation(post: Post, media: ImageRef): String? {
+    return viewerImageCandidates(post, media).firstOrNull()
 }
 
 private fun viewerGifLocation(post: Post, media: ImageRef): String? {
