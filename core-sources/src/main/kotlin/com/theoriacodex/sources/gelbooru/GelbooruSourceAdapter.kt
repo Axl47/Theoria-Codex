@@ -274,7 +274,8 @@ class GelbooruSourceAdapter(
             ?.filter { it.isNotBlank() }
             .orEmpty()
         val fullUrl = raw.get("file_url")?.asString
-        val previewUrl = raw.get("preview_url")?.asString ?: raw.get("sample_url")?.asString ?: fullUrl
+        val sampleUrl = raw.get("sample_url")?.asString?.trim()?.takeIf(String::isNotBlank)
+        val previewUrl = raw.get("preview_url")?.asString ?: sampleUrl ?: fullUrl
         val fullMime = inferMimeFromUrl(fullUrl) ?: mimeFromFileExt(raw.get("file_ext")?.asString)
         val previewMime = inferMimeFromUrl(previewUrl) ?: fullMime
         val createdAt = raw.get("created_at")?.asString?.toLongOrNull()?.times(1000L)
@@ -287,7 +288,14 @@ class GelbooruSourceAdapter(
         return Post(
             id = PostId(SourceKey.GELBOORU, id),
             preview = ImageRef(url = previewUrl, localPath = null, mime = previewMime),
-            full = fullUrl?.let { ImageRef(url = it, localPath = null, mime = fullMime) },
+            full = fullUrl?.let {
+                ImageRef(
+                    url = it,
+                    localPath = null,
+                    mime = fullMime,
+                    progressiveUrls = listOfNotNull(sampleUrl).filter { candidate -> candidate != it },
+                )
+            },
             pageUrl = "https://gelbooru.com/index.php?page=post&s=view&id=$id",
             width = raw.get("width")?.asInt,
             height = raw.get("height")?.asInt,

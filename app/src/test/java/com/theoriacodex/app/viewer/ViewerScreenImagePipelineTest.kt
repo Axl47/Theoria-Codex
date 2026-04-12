@@ -47,22 +47,22 @@ class ViewerScreenImagePipelineTest {
     @Test
     fun `non pixiv viewer candidates preserve media full preview order`() {
         val media = ImageRef(
-            url = "https://gelbooru.com/media.jpg",
+            url = "https://example.com/media.jpg",
             localPath = null,
             mime = "image/jpeg",
         )
         val full = ImageRef(
-            url = "https://gelbooru.com/full.jpg",
+            url = "https://example.com/full.jpg",
             localPath = null,
             mime = "image/jpeg",
         )
         val preview = ImageRef(
-            url = "https://gelbooru.com/preview.jpg",
+            url = "https://example.com/preview.jpg",
             localPath = null,
             mime = "image/jpeg",
         )
         val post = samplePost(
-            sourceKey = SourceKey.GELBOORU,
+            sourceKey = SourceKey.NHENTAI,
             preview = preview,
             full = full,
             media = listOf(media),
@@ -70,14 +70,46 @@ class ViewerScreenImagePipelineTest {
 
         assertEquals(
             listOf(
-                "https://gelbooru.com/media.jpg",
-                "https://gelbooru.com/full.jpg",
-                "https://gelbooru.com/preview.jpg",
+                "https://example.com/media.jpg",
+                "https://example.com/full.jpg",
+                "https://example.com/preview.jpg",
             ),
             viewerImageCandidates(post, media),
         )
         assertEquals(
-            "https://gelbooru.com/media.jpg",
+            "https://example.com/media.jpg",
+            viewerPrefetchImageLocation(post, media),
+        )
+    }
+
+    @Test
+    fun `gelbooru viewer candidates prefer sample before canonical url`() {
+        val media = ImageRef(
+            url = "https://gelbooru.com/full.jpg",
+            localPath = null,
+            mime = "image/jpeg",
+            progressiveUrls = listOf("https://gelbooru.com/sample.jpg"),
+        )
+        val post = samplePost(
+            sourceKey = SourceKey.GELBOORU,
+            preview = ImageRef(
+                url = "https://gelbooru.com/preview.jpg",
+                localPath = null,
+                mime = "image/jpeg",
+            ),
+            full = media,
+            media = listOf(media),
+        )
+
+        assertEquals(
+            listOf(
+                "https://gelbooru.com/sample.jpg",
+                "https://gelbooru.com/full.jpg",
+            ),
+            viewerImageCandidates(post, media),
+        )
+        assertEquals(
+            "https://gelbooru.com/sample.jpg",
             viewerPrefetchImageLocation(post, media),
         )
     }

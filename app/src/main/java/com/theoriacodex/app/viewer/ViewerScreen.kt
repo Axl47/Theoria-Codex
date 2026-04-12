@@ -508,8 +508,9 @@ fun ViewerScreen(
                         maxPreparedCandidateIndex,
                         hasVisibleImage,
                         post.id.source,
+                        media.progressiveUrls,
                     ) {
-                        if (post.id.source != SourceKey.PIXIV) return@LaunchedEffect
+                        if (!supportsProgressiveImageUpgrade(post, media)) return@LaunchedEffect
                         if (!hasVisibleImage) return@LaunchedEffect
                         if (displayedCandidateIndex != maxPreparedCandidateIndex) return@LaunchedEffect
                         val nextIndex = displayedCandidateIndex + 1
@@ -605,7 +606,7 @@ fun ViewerScreen(
                                 },
                                 onError = {
                                     val canAdvance = displayedCandidateIndex < imageCandidates.lastIndex &&
-                                        (!hasVisibleImage || post.id.source != SourceKey.PIXIV)
+                                        (!hasVisibleImage || !supportsProgressiveImageUpgrade(post, media))
                                     if (canAdvance) {
                                         val nextIndex = displayedCandidateIndex + 1
                                         displayedCandidateIndex = nextIndex
@@ -1526,14 +1527,14 @@ private fun requiresResolvedViewerPost(post: Post): Boolean {
 }
 
 internal fun viewerImageCandidates(post: Post, media: ImageRef): List<String> {
-    if (post.id.source == SourceKey.PIXIV) {
-        val pixivCandidates = buildList {
+    if (supportsProgressiveImageCandidates(post, media)) {
+        val progressiveCandidates = buildList {
             media.localPath?.takeIf(String::isNotBlank)?.let(::add)
             addAll(media.progressiveUrls.filter(String::isNotBlank))
             media.url?.takeIf(String::isNotBlank)?.let(::add)
         }.distinct()
-        if (pixivCandidates.isNotEmpty()) {
-            return pixivCandidates
+        if (progressiveCandidates.isNotEmpty()) {
+            return progressiveCandidates
         }
     }
     val refs = buildList {
@@ -1562,6 +1563,15 @@ internal fun viewerImageCandidates(post: Post, media: ImageRef): List<String> {
 
 internal fun viewerPrefetchImageLocation(post: Post, media: ImageRef): String? {
     return viewerImageCandidates(post, media).firstOrNull()
+}
+
+private fun supportsProgressiveImageCandidates(post: Post, media: ImageRef): Boolean {
+    if (post.id.source != SourceKey.PIXIV && post.id.source != SourceKey.GELBOORU) return false
+    return media.progressiveUrls.isNotEmpty() || !media.localPath.isNullOrBlank()
+}
+
+private fun supportsProgressiveImageUpgrade(post: Post, media: ImageRef): Boolean {
+    return supportsProgressiveImageCandidates(post, media) && media.progressiveUrls.isNotEmpty()
 }
 
 private fun viewerGifLocation(post: Post, media: ImageRef): String? {

@@ -186,6 +186,28 @@ class GelbooruSourceAdapterTest {
     }
 
     @Test
+    fun `search maps gelbooru sample url as progressive viewer candidate`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {"post":[{"id":"888","preview_url":"https://gelbooru.com/preview.jpg","sample_url":"https://gelbooru.com/sample.jpg","file_url":"https://gelbooru.com/full.jpg","tags":"a b"}]}
+                """.trimIndent(),
+            )
+        }
+        val adapter = GelbooruSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = FakeCredentialsProvider(),
+        )
+
+        val post = adapter.search(sampleQuery(), pageToken = null).items.first()
+
+        assertEquals("https://gelbooru.com/preview.jpg", post.preview.url)
+        assertEquals("https://gelbooru.com/full.jpg", post.full?.url)
+        assertEquals(listOf("https://gelbooru.com/sample.jpg"), post.full?.progressiveUrls)
+    }
+
+    @Test
     fun `fetch tag counts batches names lookup and returns counts`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
