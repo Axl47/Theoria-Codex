@@ -45,6 +45,20 @@ class ExternalPostDeepLinksTest {
     }
 
     @Test
+    fun `parses nhentai gallery and page deep links`() {
+        assertDeepLink(
+            url = "https://nhentai.net/g/527662/",
+            source = SourceKey.NHENTAI,
+            postId = "527662",
+        )
+        assertDeepLink(
+            url = "https://nhentai.net/g/527662/1/",
+            source = SourceKey.NHENTAI,
+            postId = "527662",
+        )
+    }
+
+    @Test
     fun `parses pixiv posts with and without locale`() {
         assertDeepLink(
             url = "https://www.pixiv.net/en/artworks/111111111",

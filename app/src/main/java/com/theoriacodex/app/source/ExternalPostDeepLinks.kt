@@ -228,7 +228,7 @@ private fun parseNhentaiGalleryIdFromUri(uri: ParsedExternalUri): String? {
     if (host != "nhentai.net" && host != "www.nhentai.net") return null
 
     val path = uri.encodedPath
-    val match = Regex("^/g/(\\d+)(?:/)?$").matchEntire(path) ?: return null
+    val match = Regex("^/g/(\\d+)(?:/\\d+)?/?$").matchEntire(path) ?: return null
     return match.groupValues.getOrNull(1)?.takeIf(String::isDigitsOnly)
 }
 
