@@ -12,6 +12,8 @@ import android.os.SystemClock
 import android.webkit.URLUtil
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -20,14 +22,18 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -78,15 +84,19 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -457,10 +467,21 @@ fun ViewerScreen(
                 val hasBottomTimeline = viewerState.chromeVisible && (isVideoMedia || isGifMedia || showUgoira)
                 var seekJumpSerial by remember(postPage, mediaPage) { mutableIntStateOf(0) }
                 var seekJumpDeltaMs by remember(postPage, mediaPage) { mutableLongStateOf(0L) }
+                var seekFeedbackSerial by remember(postPage, mediaPage) { mutableIntStateOf(0) }
+                var seekFeedback by remember(postPage, mediaPage) { mutableStateOf<SeekJumpFeedback?>(null) }
                 val mediaContainerPadding = when {
                     isLandscape -> 0.dp
                     isVideoMedia || isGifMedia || showUgoira -> 0.dp
                     else -> 16.dp
+                }
+                val mediaAspectRatio = remember(post.width, post.height) {
+                    val width = post.width?.takeIf { it > 0 }
+                    val height = post.height?.takeIf { it > 0 }
+                    if (width != null && height != null) {
+                        width.toFloat() / height.toFloat()
+                    } else {
+                        null
+                    }
                 }
                 val gifLocation = remember(post, media) { viewerGifLocation(post, media) }
                 val mediaGestureModifier = Modifier.pointerInput(postPage, mediaPage) {
@@ -471,6 +492,7 @@ fun ViewerScreen(
                             } else {
                                 0.5f
                             }
+                            val isCenterTap = tapRatio > 0.35f && tapRatio < 0.65f
                             val seekDeltaMs = when {
                                 !isSeekableMedia -> 0L
                                 tapRatio <= 0.35f -> -10_000L
@@ -480,8 +502,15 @@ fun ViewerScreen(
                             if (seekDeltaMs != 0L) {
                                 seekJumpDeltaMs = seekDeltaMs
                                 seekJumpSerial += 1
+                                seekFeedbackSerial += 1
+                                seekFeedback = nextSeekJumpFeedback(
+                                    previous = seekFeedback,
+                                    deltaMs = seekDeltaMs,
+                                    nowElapsedMs = SystemClock.elapsedRealtime(),
+                                    nextSerial = seekFeedbackSerial,
+                                )
                                 markInteraction()
-                            } else {
+                            } else if (isCenterTap) {
                                 viewerState = viewerState.doubleTap()
                                 markInteraction()
                             }
@@ -692,6 +721,16 @@ fun ViewerScreen(
                                 }
                             }
                         }
+                        FittedSeekJumpFeedbackOverlay(
+                            feedback = seekFeedback,
+                            aspectRatio = mediaAspectRatio,
+                            onExpired = { expiredSerial ->
+                                if (seekFeedback?.serial == expiredSerial) {
+                                    seekFeedback = null
+                                }
+                            },
+                            modifier = Modifier.matchParentSize(),
+                        )
                     }
                     Box(
                         modifier = Modifier
@@ -893,6 +932,130 @@ private fun copyPostUrlToClipboard(context: Context, post: Post): Boolean {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
     clipboard?.setPrimaryClip(ClipData.newPlainText("post_url", pageUrl))
     return true
+}
+
+@Composable
+private fun FittedSeekJumpFeedbackOverlay(
+    feedback: SeekJumpFeedback?,
+    aspectRatio: Float?,
+    onExpired: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (feedback == null) return
+
+    BoxWithConstraints(
+        modifier = modifier,
+        contentAlignment = Alignment.Center,
+    ) {
+        val fittedModifier = if (aspectRatio != null) {
+            val containerRatio = if (maxHeight > 0.dp) {
+                maxWidth / maxHeight
+            } else {
+                aspectRatio
+            }
+            if (containerRatio > aspectRatio) {
+                Modifier
+                    .fillMaxHeight()
+                    .aspectRatio(aspectRatio)
+            } else {
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(aspectRatio)
+            }
+        } else {
+            Modifier.fillMaxSize()
+        }
+
+        SeekJumpFeedbackOverlay(
+            feedback = feedback,
+            onExpired = onExpired,
+            modifier = fittedModifier.clipToBounds(),
+        )
+    }
+}
+
+@Composable
+private fun SeekJumpFeedbackOverlay(
+    feedback: SeekJumpFeedback?,
+    onExpired: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (feedback == null) return
+
+    val alpha = remember { Animatable(0f) }
+    val scale = remember { Animatable(0.92f) }
+    val direction = feedback.direction
+    val label = remember(feedback.totalDeltaMs) {
+        formatSeekJumpFeedback(feedback.totalDeltaMs)
+    }
+
+    LaunchedEffect(feedback.serial) {
+        alpha.snapTo(0f)
+        scale.snapTo(0.92f)
+        launch {
+            alpha.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 90),
+            )
+        }
+        launch {
+            scale.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 140),
+            )
+        }
+        delay(750L)
+        alpha.animateTo(
+            targetValue = 0f,
+            animationSpec = tween(durationMillis = 180),
+        )
+        onExpired(feedback.serial)
+    }
+
+    Box(
+        modifier = modifier.graphicsLayer {
+            this.alpha = alpha.value
+            scaleX = scale.value
+            scaleY = scale.value
+        },
+    ) {
+        Canvas(modifier = Modifier.matchParentSize()) {
+            val horizontalRadius = (maxOf(size.height / 2f, size.width / 2f) * 0.30f)
+                .coerceAtLeast(96.dp.toPx())
+            val centerX = if (direction == SeekJumpDirection.Backward) {
+                0f
+            } else {
+                size.width
+            }
+            drawOval(
+                color = Color.Black.copy(alpha = 0.50f),
+                topLeft = Offset(centerX - horizontalRadius, 0f),
+                size = Size(horizontalRadius * 2f, size.height),
+            )
+        }
+        Box(
+            modifier = Modifier
+                .align(
+                    if (direction == SeekJumpDirection.Backward) {
+                        Alignment.CenterStart
+                    } else {
+                        Alignment.CenterEnd
+                    },
+                )
+                .fillMaxHeight()
+                .width(112.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = label,
+                color = Color.White,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+            )
+        }
+    }
 }
 
 @Composable

@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-05-30T22:51
+updated_at: 2026-05-30T23:10
 ---
 # Theoria Codex
 
@@ -10,6 +10,7 @@ The product spec lives at `./docs/TheoriaSpec.md`.
 
 Recent updates:
 - Viewer now groups Info and Download under a top-right action menu, and animated media has a session playback-rate menu for video, GIF, and Pixiv ugoira playback.
+- Viewer double-tap seeking now shows a left/right dim seek overlay and stacks repeated taps, such as `+ 30s`, before the feedback fades.
 - Search, Creator Profile, and For You filters now include a two-handle animated duration slider. The range runs from `<5s` through 5-second steps to `>2m`, affects animated media only, and Settings > Storage & caching includes an opt-in switch to resolve unknown animation durations in the background.
 - Gelbooru viewer image loading is now progressive too: image posts render `sample_url` first in Viewer, then upgrade in place to the full asset while keeping downloads on the canonical file URL.
 - Pixiv viewer image loading is now progressive: static image posts render a fast page-sized Pixiv asset first, then upgrade in place to larger/original quality while keeping downloads on the highest-quality source URL.
