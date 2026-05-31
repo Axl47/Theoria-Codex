@@ -1329,7 +1329,7 @@ fun TheoriaApp(
     val bottomBarHeight = bottomBarHeightDp.dp
     val bottomBarIconSize = bottomBarIconSizeDp.dp
 
-    LaunchedEffect(navReady, currentRoute) {
+    LaunchedEffect(navReady, currentRoute, homeTabRoute) {
         if (!navReady || currentRoute != AppRoute.Home) return@LaunchedEffect
         val targetIndex = TopLevelDestination.entries.indexOfFirst { destination ->
             destination.route == homeTabRoute
