@@ -47,12 +47,24 @@ class IwaraSourceAdapter(
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> {
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+        val compiledQuery = compileQueryText(query)
+        if (compiledQuery.isBlank()) {
+            val response = requestJsonObject(
+                url = "$IWARA_API_BASE/videos",
+                query = linkedMapOf(
+                    "rating" to "all",
+                    "sort" to mapSort(query.sort),
+                    "page" to pageIndex.toString(),
+                ),
+            )
+            return parsePagedPosts(response)
+        }
         val response = requestJsonObject(
             url = "$IWARA_API_BASE/search",
             query = linkedMapOf(
                 "type" to "videos",
                 "page" to pageIndex.toString(),
-                "query" to compileQueryText(query),
+                "query" to compiledQuery,
                 "sort" to mapSort(query.sort),
             ),
         )
@@ -241,7 +253,7 @@ class IwaraSourceAdapter(
         url: String,
         query: Map<String, String>,
     ): SourceHttpResponse {
-        val mirrorUrl = JINA_MIRROR_BASE + buildAbsoluteUrl(url, query)
+        val mirrorUrl = JINA_MIRROR_BASE + buildAbsoluteUrl(url, query).encodeJinaTargetUrl()
         val mirrored = try {
             httpClient.get(
                 url = mirrorUrl,
@@ -302,6 +314,12 @@ class IwaraSourceAdapter(
 
     private fun String.urlEncode(): String {
         return URLEncoder.encode(this, Charsets.UTF_8.name()).replace("+", "%20")
+    }
+
+    private fun String.encodeJinaTargetUrl(): String {
+        return replace("?", "%3F")
+            .replace("&", "%26")
+            .replace("=", "%3D")
     }
 
     private suspend fun resolvePlayableVideoRef(

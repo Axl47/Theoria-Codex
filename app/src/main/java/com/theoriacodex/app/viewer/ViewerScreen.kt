@@ -1792,7 +1792,13 @@ internal fun viewerPrefetchImageLocation(post: Post, media: ImageRef): String? {
 }
 
 private fun supportsProgressiveImageCandidates(post: Post, media: ImageRef): Boolean {
-    if (post.id.source != SourceKey.PIXIV && post.id.source != SourceKey.GELBOORU) return false
+    if (
+        post.id.source != SourceKey.PIXIV &&
+        post.id.source != SourceKey.GELBOORU &&
+        post.id.source != SourceKey.NHENTAI
+    ) {
+        return false
+    }
     return media.progressiveUrls.isNotEmpty() || !media.localPath.isNullOrBlank()
 }
 

@@ -1,27 +1,22 @@
 package com.theoriacodex.app.sourceauth
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
+import java.security.KeyStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class AndroidSecureSourceCredentialsStore(
     context: Context,
 ) : SourceCredentialsProvider {
-    private val prefs = EncryptedSharedPreferences.create(
-        context,
-        PREFS_NAME,
-        MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build(),
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-    )
+    private val appContext = context.applicationContext
+    private val prefs = createRecoveringEncryptedPrefs(appContext)
 
     override suspend fun getPixivTokens(): PixivAuthTokens? = withContext(Dispatchers.IO) {
         val accessToken = prefs.getString(KEY_PIXIV_ACCESS_TOKEN, null)
@@ -100,6 +95,50 @@ class AndroidSecureSourceCredentialsStore(
             .remove(KEY_RULE34XXX_USER_ID)
             .remove(KEY_RULE34XXX_API_KEY)
             .apply()
+    }
+}
+
+private fun createRecoveringEncryptedPrefs(context: Context): SharedPreferences {
+    return try {
+        createEncryptedPrefs(context)
+    } catch (error: Exception) {
+        if (!error.isRecoverableEncryptedPrefsFailure()) throw error
+        context.deleteSharedPreferences(PREFS_NAME)
+        deleteMasterKey()
+        createEncryptedPrefs(context)
+    }
+}
+
+private fun createEncryptedPrefs(context: Context): SharedPreferences {
+    return EncryptedSharedPreferences.create(
+        context,
+        PREFS_NAME,
+        MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build(),
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+    )
+}
+
+private fun Exception.isRecoverableEncryptedPrefsFailure(): Boolean {
+    return generateSequence(this as Throwable?) { error -> error.cause }
+        .any { error ->
+            val name = error::class.java.name
+            name == "javax.crypto.AEADBadTagException" ||
+                name == "android.security.KeyStoreException" ||
+                name == "com.google.crypto.tink.shaded.protobuf.InvalidProtocolBufferException"
+        }
+}
+
+private fun deleteMasterKey() {
+    runCatching {
+        KeyStore.getInstance("AndroidKeyStore").apply {
+            load(null)
+            if (containsAlias(MasterKey.DEFAULT_MASTER_KEY_ALIAS)) {
+                deleteEntry(MasterKey.DEFAULT_MASTER_KEY_ALIAS)
+            }
+        }
     }
 }
 

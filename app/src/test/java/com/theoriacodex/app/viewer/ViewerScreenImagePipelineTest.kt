@@ -114,6 +114,43 @@ class ViewerScreenImagePipelineTest {
         )
     }
 
+    @Test
+    fun `nhentai viewer candidates try mirrored extension fallbacks`() {
+        val media = ImageRef(
+            url = "https://i.nhentai.net/galleries/3821534/1.webp",
+            localPath = null,
+            mime = "image/webp",
+            progressiveUrls = listOf(
+                "https://i.nhentai.net/galleries/3821534/1.webp",
+                "https://i.nhentai.net/galleries/3821534/1.jpg",
+                "https://i.nhentai.net/galleries/3821534/1.png",
+            ),
+        )
+        val post = samplePost(
+            sourceKey = SourceKey.NHENTAI,
+            preview = ImageRef(
+                url = "https://t.nhentai.net/galleries/3821534/thumb.webp",
+                localPath = null,
+                mime = "image/webp",
+            ),
+            full = media,
+            media = listOf(media),
+        )
+
+        assertEquals(
+            listOf(
+                "https://i.nhentai.net/galleries/3821534/1.webp",
+                "https://i.nhentai.net/galleries/3821534/1.jpg",
+                "https://i.nhentai.net/galleries/3821534/1.png",
+            ),
+            viewerImageCandidates(post, media),
+        )
+        assertEquals(
+            "https://i.nhentai.net/galleries/3821534/1.webp",
+            viewerPrefetchImageLocation(post, media),
+        )
+    }
+
     private fun samplePost(
         sourceKey: SourceKey,
         preview: ImageRef,

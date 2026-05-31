@@ -198,6 +198,7 @@ private data class ViewerSession(
 )
 
 private val LAZY_MEDIA_RESOLUTION_SOURCES = setOf(
+    SourceKey.NHENTAI,
     SourceKey.RULE34VIDEO,
     SourceKey.RULE34GEN,
     SourceKey.IWARA,

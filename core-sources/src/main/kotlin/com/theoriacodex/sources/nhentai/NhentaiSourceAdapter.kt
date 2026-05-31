@@ -19,8 +19,10 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SourceHttpClient
+import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.media.mimeFromFileExt
 import java.io.IOException
+import java.net.URLEncoder
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -77,7 +79,14 @@ class NhentaiSourceAdapter(
             NHENTAI_GALLERIES_SEARCH_URL
         }
 
-        val root = requireNotNull(requestJsonObject(url = url, query = params))
+        val root = requestJsonObjectOrMirrorSearch(
+            url = url,
+            query = params,
+            compiledQuery = compiledQuery,
+            sort = query.sort,
+            pageIndex = pageIndex,
+            useAllEndpoint = useAllEndpoint,
+        )
         val galleries = root.optionalJsonArray("result").orEmpty()
         val posts = galleries.mapNotNull { element ->
             element.takeIf(JsonElement::isJsonObject)
@@ -153,11 +162,49 @@ class NhentaiSourceAdapter(
         if (id.source != SourceKey.NHENTAI) return null
         val galleryId = id.sourcePostId.trim().takeIf(String::isDigitsOnly) ?: return null
 
-        val root = requestJsonObject(
+        val response = requestDirect(
             url = "$NHENTAI_GALLERY_URL_PREFIX/$galleryId",
-            allowNotFound = true,
-        ) ?: return null
+            query = emptyMap(),
+        )
+        if (response.statusCode == 404) return null
+        if (shouldUseMirrorFallback(response)) {
+            return resolvePostFromMirrorPage(galleryId)
+        }
+        if (response.statusCode !in 200..299) {
+            throw SourceAdapterException(
+                reason = mapHttpFailure(response.statusCode),
+                message = "NHentai request failed (${response.statusCode})",
+            )
+        }
+
+        val root = parseJsonObject(response.body)
         return parseGallery(root)
+    }
+
+    private suspend fun requestJsonObjectOrMirrorSearch(
+        url: String,
+        query: Map<String, String>,
+        compiledQuery: String,
+        sort: SortMode,
+        pageIndex: Int,
+        useAllEndpoint: Boolean,
+    ): JsonObject {
+        val response = requestDirect(url = url, query = query)
+        if (shouldUseMirrorFallback(response)) {
+            return requestMirrorSearch(
+                compiledQuery = compiledQuery,
+                sort = sort,
+                pageIndex = pageIndex,
+                useAllEndpoint = useAllEndpoint,
+            )
+        }
+        if (response.statusCode !in 200..299) {
+            throw SourceAdapterException(
+                reason = mapHttpFailure(response.statusCode),
+                message = "NHentai request failed (${response.statusCode})",
+            )
+        }
+        return parseJsonObject(response.body)
     }
 
     private suspend fun requestJsonObject(
@@ -165,21 +212,7 @@ class NhentaiSourceAdapter(
         query: Map<String, String> = emptyMap(),
         allowNotFound: Boolean = false,
     ): JsonObject? {
-        throttle()
-
-        val response = try {
-            httpClient.get(
-                url = url,
-                query = query,
-                headers = NHENTAI_DEFAULT_HEADERS,
-            )
-        } catch (error: IOException) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.NETWORK,
-                message = "NHentai request failed",
-                cause = error,
-            )
-        }
+        val response = requestDirect(url = url, query = query)
 
         if (allowNotFound && response.statusCode == 404) {
             return null
@@ -193,6 +226,121 @@ class NhentaiSourceAdapter(
         }
 
         return parseJsonObject(response.body)
+    }
+
+    private suspend fun requestDirect(
+        url: String,
+        query: Map<String, String>,
+    ): SourceHttpResponse {
+        throttle()
+        return try {
+            httpClient.get(
+                url = url,
+                query = query,
+                headers = NHENTAI_DEFAULT_HEADERS,
+            )
+        } catch (error: IOException) {
+            throw SourceAdapterException(
+                reason = SourceFailureReason.NETWORK,
+                message = "NHentai request failed",
+                cause = error,
+            )
+        }
+    }
+
+    private suspend fun requestMirrorSearch(
+        compiledQuery: String,
+        sort: SortMode,
+        pageIndex: Int,
+        useAllEndpoint: Boolean,
+    ): JsonObject {
+        val pathAndQuery = if (useAllEndpoint) {
+            "/?page=$pageIndex"
+        } else {
+            val params = linkedMapOf(
+                "q" to compiledQuery,
+                "page" to pageIndex.toString(),
+            )
+            mapMirrorSortParam(sort)?.let { params["sort"] = it }
+            "/search/?" + params.entries.joinToString("&") { (key, value) ->
+                "${key.urlEncode()}=${value.urlEncode()}"
+            }
+        }
+        val body = requestMirror(pathAndQuery)
+        return parseMirrorSearchPage(body)
+    }
+
+    private suspend fun resolvePostFromMirrorPage(galleryId: String): Post? {
+        val body = requestMirror("/g/$galleryId/1/")
+        val mediaId = NHENTAI_MIRROR_PAGE_IMAGE_REGEX.find(body)?.groupValues?.getOrNull(1)
+            ?: return null
+        val firstPageExt = NHENTAI_MIRROR_PAGE_IMAGE_REGEX.find(body)?.groupValues?.getOrNull(2)
+            ?.lowercase()
+            ?: "webp"
+        val pageCount = NHENTAI_MIRROR_PAGE_COUNT_REGEX.find(body)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toIntOrNull()
+            ?.coerceAtLeast(1)
+            ?: 1
+        val title = parseMirrorTitle(body)
+            ?.removeSuffix(" - Page 1")
+            ?.removeSuffix(" » nhentai")
+            ?.trim()
+            ?.takeIf(String::isNotBlank)
+        val galleryBase = "$NHENTAI_IMAGES_BASE/galleries/$mediaId"
+        val mediaRefs = (1..pageCount).map { page ->
+            val primaryUrl = "$galleryBase/$page.$firstPageExt"
+            ImageRef(
+                url = primaryUrl,
+                localPath = null,
+                mime = mimeFromFileExt(firstPageExt),
+                progressiveUrls = imageUrlCandidates(galleryBase, page, firstPageExt),
+            )
+        }
+        val preview = ImageRef(
+            url = "$NHENTAI_THUMBS_BASE/galleries/$mediaId/thumb.$firstPageExt",
+            localPath = null,
+            mime = mimeFromFileExt(firstPageExt),
+        )
+        return Post(
+            id = PostId(SourceKey.NHENTAI, galleryId),
+            preview = preview,
+            full = mediaRefs.firstOrNull(),
+            media = mediaRefs,
+            pageUrl = "https://nhentai.net/g/$galleryId/",
+            width = null,
+            height = null,
+            canonicalTags = emptyList(),
+            rawTags = emptyList(),
+            authorName = null,
+            createdAtEpochMs = null,
+            title = title,
+        )
+    }
+
+    private suspend fun requestMirror(pathAndQuery: String): String {
+        val mirrorUrl = JINA_MIRROR_BASE + NHENTAI_WEB_BASE + pathAndQuery.removePrefix("/")
+        val response = try {
+            httpClient.get(
+                url = mirrorUrl,
+                query = emptyMap(),
+                headers = JINA_REQUEST_HEADERS,
+            )
+        } catch (error: IOException) {
+            throw SourceAdapterException(
+                reason = SourceFailureReason.NETWORK,
+                message = "NHentai mirror request failed",
+                cause = error,
+            )
+        }
+        if (response.statusCode !in 200..299) {
+            throw SourceAdapterException(
+                reason = mapHttpFailure(response.statusCode),
+                message = "NHentai mirror request failed (${response.statusCode})",
+            )
+        }
+        return response.body
     }
 
     private suspend fun throttle() {
@@ -255,7 +403,10 @@ class NhentaiSourceAdapter(
             mime = mimeFromFileExt(coverExt),
         )
 
-        val mediaRefs = if (pageRefs.isNotEmpty()) {
+        val mirrorSparse = raw.get("mirror_sparse").asBooleanOrFalse()
+        val mediaRefs = if (mirrorSparse) {
+            emptyList()
+        } else if (pageRefs.isNotEmpty()) {
             pageRefs
         } else {
             listOf(fallbackCoverRef)
@@ -352,6 +503,95 @@ class NhentaiSourceAdapter(
             )
             .take(limit)
     }
+
+    private fun parseMirrorSearchPage(body: String): JsonObject {
+        val posts = JsonArray()
+        body.lineSequence()
+            .mapNotNull(::parseMirrorSearchPost)
+            .forEach(posts::add)
+        val root = JsonObject()
+        root.add("result", posts)
+        root.addProperty("num_pages", parseMirrorPageCount(body))
+        root.addProperty("per_page", posts.size().coerceAtLeast(1))
+        return root
+    }
+
+    private fun parseMirrorSearchPost(line: String): JsonObject? {
+        val galleryId = NHENTAI_MIRROR_GALLERY_LINK_REGEX.find(line)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?: return null
+        val previewMatch = NHENTAI_MIRROR_THUMB_REGEX.find(line) ?: return null
+        val previewUrl = previewMatch.groupValues[1]
+        val mediaId = previewMatch.groupValues[2]
+        val thumbExt = imageExtension(previewUrl.substringAfterLast('.').substringBefore('?'))
+        val title = parseMirrorSearchTitle(line, previewUrl)
+
+        return JsonObject().apply {
+            addProperty("id", galleryId)
+            addProperty("media_id", mediaId)
+            add("title", JsonObject().apply {
+                addProperty("pretty", title)
+            })
+            add("images", JsonObject().apply {
+                add("thumbnail", JsonObject().apply {
+                    addProperty("t", thumbExt)
+                })
+                add("cover", JsonObject().apply {
+                    addProperty("t", thumbExt)
+                })
+                add("pages", JsonArray())
+            })
+            add("tags", JsonArray())
+            addProperty("mirror_sparse", true)
+        }
+    }
+
+    private fun parseMirrorSearchTitle(line: String, previewUrl: String): String? {
+        val beforePreview = line.substringBefore("]($previewUrl)", missingDelimiterValue = "")
+        val titleStart = beforePreview.indexOf(": ").takeIf { it >= 0 }?.plus(2) ?: return null
+        val titleEnd = beforePreview.lastIndexOf("](").takeIf { it > titleStart } ?: beforePreview.length
+        return beforePreview.substring(titleStart, titleEnd)
+            .trim()
+            .takeIf(String::isNotBlank)
+    }
+
+    private fun parseMirrorPageCount(body: String): Int {
+        val linkedMaxPage = NHENTAI_MIRROR_PAGE_LINK_REGEX.findAll(body)
+            .mapNotNull { match -> match.groupValues.getOrNull(1)?.toIntOrNull() }
+            .maxOrNull()
+        if (linkedMaxPage != null) return linkedMaxPage.coerceAtLeast(1)
+
+        val totalResults = NHENTAI_MIRROR_RESULT_COUNT_REGEX.find(body)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.replace(",", "")
+            ?.toIntOrNull()
+        return if (totalResults != null) {
+            ((totalResults + NHENTAI_SEARCH_PAGE_SIZE - 1) / NHENTAI_SEARCH_PAGE_SIZE).coerceAtLeast(1)
+        } else {
+            1
+        }
+    }
+
+    private fun parseMirrorTitle(body: String): String? {
+        return body.lineSequence()
+            .firstOrNull { line -> line.startsWith("Title: ") }
+            ?.removePrefix("Title: ")
+            ?.trim()
+            ?.takeIf(String::isNotBlank)
+    }
+
+    private fun shouldUseMirrorFallback(response: SourceHttpResponse): Boolean {
+        if (response.statusCode != 403) return false
+        val challengeHeader = response.headers.entries.any { (name, values) ->
+            name.equals("cf-mitigated", ignoreCase = true) &&
+                values.any { value -> value.contains("challenge", ignoreCase = true) }
+        }
+        if (challengeHeader) return true
+        val body = response.body.lowercase()
+        return "cloudflare" in body || "cf-mitigated" in body || "attention required" in body
+    }
 }
 
 private data class ParsedNhentaiTag(
@@ -410,6 +650,15 @@ private fun mapSortParam(sortMode: SortMode): String? {
     }
 }
 
+private fun mapMirrorSortParam(sortMode: SortMode): String? {
+    return when (sortMode) {
+        SortMode.NEWEST -> "date"
+        SortMode.POPULAR -> "popular-today"
+        SortMode.TOP -> "popular-week"
+        SortMode.RANDOM -> "date"
+    }
+}
+
 private fun mapHttpFailure(statusCode: Int): SourceFailureReason {
     return when (statusCode) {
         429 -> SourceFailureReason.RATE_LIMITED
@@ -423,8 +672,15 @@ private fun imageExtension(type: String?): String {
         "p", "png" -> "png"
         "g", "gif" -> "gif"
         "w", "webp" -> "webp"
+        "jpeg" -> "jpg"
         else -> "jpg"
     }
+}
+
+private fun imageUrlCandidates(baseUrl: String, page: Int, primaryExt: String): List<String> {
+    return (listOf(primaryExt) + NHENTAI_IMAGE_FALLBACK_EXTENSIONS)
+        .distinct()
+        .map { ext -> "$baseUrl/$page.$ext" }
 }
 
 private fun JsonObject.optionalJsonArray(name: String): JsonArray? {
@@ -470,18 +726,46 @@ private fun JsonElement?.asStringOrNull(): String? {
     return runCatching { primitive.asString }.getOrNull()
 }
 
+private fun JsonElement?.asBooleanOrFalse(): Boolean {
+    if (this == null || this.isJsonNull) return false
+    val primitive = this.asJsonPrimitive
+    if (!primitive.isBoolean && !primitive.isString) return false
+    return runCatching { primitive.asBoolean }.getOrDefault(false)
+}
+
 private fun String.isDigitsOnly(): Boolean {
     return isNotBlank() && all { ch -> ch.isDigit() }
 }
 
+private fun String.urlEncode(): String {
+    return URLEncoder.encode(this, Charsets.UTF_8.name()).replace("+", "%20")
+}
+
+private const val NHENTAI_WEB_BASE = "http://nhentai.net/"
 private const val NHENTAI_GALLERIES_ALL_URL = "https://nhentai.net/api/galleries/all"
 private const val NHENTAI_GALLERIES_SEARCH_URL = "https://nhentai.net/api/galleries/search"
 private const val NHENTAI_GALLERY_URL_PREFIX = "https://nhentai.net/api/gallery"
 private const val NHENTAI_IMAGES_BASE = "https://i.nhentai.net"
 private const val NHENTAI_THUMBS_BASE = "https://t.nhentai.net"
+private const val JINA_MIRROR_BASE = "https://r.jina.ai/http://"
+private const val NHENTAI_SEARCH_PAGE_SIZE = 25
 private val NHENTAI_DEFAULT_HEADERS = mapOf(
     "User-Agent" to "Mozilla/5.0",
     "Referer" to "https://nhentai.net/",
+    "Accept" to "application/json, text/plain, */*",
 )
+private val JINA_REQUEST_HEADERS = mapOf(
+    "User-Agent" to "Mozilla/5.0",
+    "Accept" to "text/plain, */*",
+)
+private val NHENTAI_IMAGE_FALLBACK_EXTENSIONS = listOf("webp", "jpg", "png", "gif")
 private val NHENTAI_LANGUAGE_FILTER_TAGS = setOf("english", "chinese", "japanese")
 private val NHENTAI_WHITESPACE_REGEX = Regex("\\s+")
+private val NHENTAI_MIRROR_THUMB_REGEX =
+    Regex("""(https://t\d*\.nhentai\.net/galleries/(\d+)/thumb[^\)]*)""")
+private val NHENTAI_MIRROR_GALLERY_LINK_REGEX = Regex("""https?://nhentai\.net/g/(\d+)/""")
+private val NHENTAI_MIRROR_PAGE_LINK_REGEX = Regex("""[?&]page=(\d+)""")
+private val NHENTAI_MIRROR_RESULT_COUNT_REGEX = Regex("""(?m)^#+\s*([\d,]+)\s+results\b""")
+private val NHENTAI_MIRROR_PAGE_IMAGE_REGEX =
+    Regex("""https://i\d*\.nhentai\.net/galleries/(\d+)/1\.(webp|jpg|jpeg|png|gif)""")
+private val NHENTAI_MIRROR_PAGE_COUNT_REGEX = Regex("""\b1\s+of\s+(\d+)\b""")

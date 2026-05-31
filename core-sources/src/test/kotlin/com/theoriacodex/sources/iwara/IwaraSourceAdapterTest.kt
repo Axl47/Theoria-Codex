@@ -49,6 +49,35 @@ class IwaraSourceAdapterTest {
     }
 
     @Test
+    fun `blank search uses videos feed endpoint`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """{"page":0,"count":0,"limit":32,"results":[]}""",
+            )
+        }
+        val adapter = IwaraSourceAdapter(httpClient = httpClient)
+
+        adapter.search(
+            query = Query(
+                mode = QueryMode.Source(SourceKey.IWARA),
+                includeTags = emptyList(),
+                excludeTags = emptyList(),
+                sort = SortMode.POPULAR,
+                dateRange = null,
+                minScore = null,
+            ),
+            pageToken = null,
+        )
+
+        assertEquals("https://api.iwara.tv/videos", httpClient.lastGet?.url)
+        assertEquals("all", httpClient.lastGet?.query?.get("rating"))
+        assertEquals("views", httpClient.lastGet?.query?.get("sort"))
+        assertEquals("0", httpClient.lastGet?.query?.get("page"))
+        assertNull(httpClient.lastGet?.query?.get("query"))
+    }
+
+    @Test
     fun `newest maps to date sort instead of recent`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
@@ -462,8 +491,12 @@ class IwaraSourceAdapterTest {
         assertEquals("https://api.iwara.tv/search", httpClient.requests.first().first)
         assertTrue(
             httpClient.requests.last().first.startsWith(
-                "https://r.jina.ai/http://https://api.iwara.tv/search?",
+                "https://r.jina.ai/http://https://api.iwara.tv/search%3F",
             ),
+        )
+        assertTrue(
+            "page=0 must be encoded so Jina does not treat it as its own page parameter",
+            "page%3D0" in httpClient.requests.last().first,
         )
     }
 
