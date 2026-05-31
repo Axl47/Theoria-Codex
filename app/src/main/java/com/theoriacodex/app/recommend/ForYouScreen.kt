@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
 import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.media.animatedDurationMs
+import com.theoriacodex.app.media.probeRemoteVideoDurationMs
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.SearchVisibilityFilters
@@ -86,6 +88,7 @@ fun ForYouScreen(
             maxBucket = durationMaxBucket,
         )
     }
+    val animatedDurationFilterActive = !animatedDurationRange.isFullRange
     val visibilityFilters = remember(animatedOnly, animatedDurationRange) {
         SearchVisibilityFilters(
             animatedOnly = animatedOnly,
@@ -117,7 +120,14 @@ fun ForYouScreen(
         ).filter { post -> durationResolutionRequests.add(post.id) }
             .take(FOR_YOU_DURATION_RESOLVE_BATCH_SIZE)
         candidates.forEach { post ->
-            runCatching { coordinator.resolvePostForFeed(post.id) }
+            val resolved = runCatching { coordinator.resolvePostForFeed(post.id) }.getOrNull()
+            val candidate = resolved ?: post
+            if (animatedDurationMs(candidate) == null) {
+                val probedDurationMs = probeRemoteVideoDurationMs(candidate)
+                if (probedDurationMs != null) {
+                    coordinator.rememberResolvedPost(candidate.copy(durationMs = probedDurationMs))
+                }
+            }
         }
     }
 
@@ -140,13 +150,19 @@ fun ForYouScreen(
         coordinator.loading,
         coordinator.loadingMore,
         coordinator.canLoadMore,
+        animatedDurationFilterActive,
     ) {
         snapshotFlow {
             (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to coordinator.loadingMore
         }.collect { (lastVisibleIndex, loadingMoreState) ->
             if (loadingMoreState) return@collect
             if (coordinator.loading || coordinator.loadingMore || !coordinator.canLoadMore) return@collect
-            if (visibleResults.isEmpty() || lastVisibleIndex < 0) return@collect
+            if (visibleResults.isEmpty() || lastVisibleIndex < 0) {
+                if (animatedDurationFilterActive && coordinator.results.isNotEmpty()) {
+                    coordinator.loadNextPage()
+                }
+                return@collect
+            }
 
             val triggerIndex = ((visibleResults.lastIndex.coerceAtLeast(0)) * FOR_YOU_PREFETCH_RATIO)
                 .toInt()
@@ -164,8 +180,9 @@ fun ForYouScreen(
         coordinator.loading,
         coordinator.loadingMore,
         coordinator.canLoadMore,
+        animatedDurationFilterActive,
     ) {
-        if (!animatedOnly) return@LaunchedEffect
+        if (!animatedOnly && !animatedDurationFilterActive) return@LaunchedEffect
         if (visibleResults.isNotEmpty()) return@LaunchedEffect
         if (coordinator.results.isEmpty()) return@LaunchedEffect
         if (coordinator.loading || coordinator.loadingMore || !coordinator.canLoadMore) return@LaunchedEffect

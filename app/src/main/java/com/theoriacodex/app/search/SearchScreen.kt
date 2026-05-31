@@ -113,6 +113,7 @@ import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.isVideoMediaRef
+import com.theoriacodex.app.media.probeRemoteVideoDurationMs
 import com.theoriacodex.app.creator.CreatorProfileActionButton
 import com.theoriacodex.app.recommend.associatedDisplayTag
 import com.theoriacodex.app.recommend.buildSourceTagAffinity
@@ -188,6 +189,7 @@ fun SearchScreen(
             maxBucket = durationMaxBucket,
         )
     }
+    val animatedDurationFilterActive = !animatedDurationRange.isFullRange && !isNhentaiSourceMode
     LaunchedEffect(isNhentaiSourceMode) {
         if (isNhentaiSourceMode) {
             animatedOnly = false
@@ -231,7 +233,14 @@ fun SearchScreen(
         ).filter { post -> durationResolutionRequests.add(post.id) }
             .take(ANIMATED_DURATION_RESOLVE_BATCH_SIZE)
         candidates.forEach { post ->
-            runCatching { coordinator.resolvePostForSearch(post.id) }
+            val resolved = runCatching { coordinator.resolvePostForSearch(post.id) }.getOrNull()
+            val candidate = resolved ?: post
+            if (animatedDurationMs(candidate) == null) {
+                val probedDurationMs = probeRemoteVideoDurationMs(candidate)
+                if (probedDurationMs != null) {
+                    coordinator.rememberResolvedPost(candidate.copy(durationMs = probedDurationMs))
+                }
+            }
         }
     }
     val displayTagSeedBySource = remember(
@@ -357,6 +366,7 @@ fun SearchScreen(
         coordinator.loading,
         coordinator.loadingMore,
         animatedFilterActive,
+        animatedDurationFilterActive,
     ) {
         snapshotFlow {
             (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to coordinator.loadingMore
@@ -376,7 +386,7 @@ fun SearchScreen(
 
             // Keep filling animated feed when the filtered set is still too small.
             val shouldTriggerForAnimatedBuffer =
-                animatedFilterActive &&
+                (animatedFilterActive || animatedDurationFilterActive) &&
                     totalVisible < ANIMATED_PREFETCH_MIN_VISIBLE &&
                     coordinator.results.isNotEmpty()
 
@@ -2030,7 +2040,7 @@ private fun matchesAnimatedDurationFilter(
     if (!isAnimatedPost(post)) return true
     val durationMs = animatedDurationMs(post) ?: return when (unknownAnimatedDurationPolicy) {
         UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS -> false
-        UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND -> false
+        UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND -> true
     }
     return range.contains(durationMs)
 }
@@ -2070,11 +2080,14 @@ private fun buildEmptySearchMessage(
     loadingMore: Boolean,
     canLoadMore: Boolean,
 ): String? {
+    if (!visibilityFilters.animatedDurationRange.isFullRange && sourceResults.isNotEmpty()) {
+        if (loadingMore || canLoadMore) {
+            return "No animated media in the selected duration range yet. Retrying with more pages..."
+        }
+        return "No animated media found in the selected duration range."
+    }
     if (visibilityFilters.animatedOnly && sourceResults.isNotEmpty() && (loadingMore || canLoadMore)) {
         return "No animated media yet. Retrying with more pages..."
-    }
-    if (!visibilityFilters.animatedDurationRange.isFullRange && sourceResults.isNotEmpty()) {
-        return "No animated media found in the selected duration range."
     }
     if (!visibilityFilters.animatedOnly && !visibilityFilters.hideLiked && !visibilityFilters.hideSaved) {
         return null

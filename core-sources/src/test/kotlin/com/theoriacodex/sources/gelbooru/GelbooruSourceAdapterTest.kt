@@ -170,7 +170,7 @@ class GelbooruSourceAdapterTest {
             nextGetResponse = SourceHttpResponse(
                 statusCode = 200,
                 body = """
-                    {"post":[{"id":"777","preview_url":"https://gelbooru.com/p.jpg","file_url":"https://gelbooru.com/f.mp4","file_ext":"mp4","tags":"a b"}]}
+                    {"post":[{"id":"777","preview_url":"https://gelbooru.com/p.jpg","file_url":"https://gelbooru.com/f.mp4","file_ext":"mp4","duration":"10","tags":"a b"}]}
                 """.trimIndent(),
             )
         }
@@ -183,6 +183,47 @@ class GelbooruSourceAdapterTest {
 
         assertEquals("image/jpeg", post.preview.mime)
         assertEquals("video/mp4", post.full?.mime)
+        assertEquals(10_000L, post.durationMs)
+    }
+
+    @Test
+    fun `search parses colon formatted gelbooru video duration`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {"post":[{"id":"778","preview_url":"https://gelbooru.com/p.jpg","file_url":"https://gelbooru.com/f.mp4","file_ext":"mp4","duration":"0:10","tags":"a b"}]}
+                """.trimIndent(),
+            )
+        }
+        val adapter = GelbooruSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = FakeCredentialsProvider(),
+        )
+
+        val post = adapter.search(sampleQuery(), pageToken = null).items.first()
+
+        assertEquals(10_000L, post.durationMs)
+    }
+
+    @Test
+    fun `search treats large numeric gelbooru video duration as milliseconds`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {"post":[{"id":"779","preview_url":"https://gelbooru.com/p.jpg","file_url":"https://gelbooru.com/f.mp4","file_ext":"mp4","duration":10000,"tags":"a b"}]}
+                """.trimIndent(),
+            )
+        }
+        val adapter = GelbooruSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = FakeCredentialsProvider(),
+        )
+
+        val post = adapter.search(sampleQuery(), pageToken = null).items.first()
+
+        assertEquals(10_000L, post.durationMs)
     }
 
     @Test

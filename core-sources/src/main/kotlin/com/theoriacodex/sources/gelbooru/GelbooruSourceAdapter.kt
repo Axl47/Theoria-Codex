@@ -303,6 +303,7 @@ class GelbooruSourceAdapter(
             rawTags = tags,
             authorName = creatorDisplayName,
             createdAtEpochMs = createdAt,
+            durationMs = parseGelbooruDurationMs(raw),
             creatorProfile = creatorDisplayName?.let { displayName ->
                 CreatorProfile(
                     source = SourceKey.GELBOORU,
@@ -326,6 +327,59 @@ class GelbooruSourceAdapter(
             count = count,
         )
     }
+}
+
+private fun parseGelbooruDurationMs(raw: JsonObject): Long? {
+    return sequenceOf(
+        raw.durationFieldMs("duration_ms", multiplier = 1L),
+        raw.durationFieldMs("durationMs", multiplier = 1L),
+        raw.durationFieldMs("duration_seconds", multiplier = 1_000L),
+        raw.durationFieldMs("durationSeconds", multiplier = 1_000L),
+        raw.ambiguousDurationFieldMs("duration"),
+        raw.ambiguousDurationFieldMs("video_duration"),
+        raw.durationFieldMs("length_seconds", multiplier = 1_000L),
+        raw.ambiguousDurationFieldMs("length"),
+    ).filterNotNull().firstOrNull { it > 0L }
+}
+
+private fun JsonObject.ambiguousDurationFieldMs(name: String): Long? {
+    val element = get(name)?.takeUnless { it.isJsonNull } ?: return null
+    if (element.isJsonPrimitive && element.asJsonPrimitive.isNumber) {
+        val numeric = runCatching { element.asDouble }.getOrNull() ?: return null
+        val multiplier = if (numeric >= 1_000.0) 1L else 1_000L
+        return (numeric * multiplier).toLong().takeIf { it > 0L }
+    }
+    return durationFieldMs(name = name, multiplier = 1_000L)
+}
+
+private fun JsonObject.durationFieldMs(name: String, multiplier: Long): Long? {
+    val element = get(name)?.takeUnless { it.isJsonNull } ?: return null
+    val parsed = when {
+        element.isJsonPrimitive && element.asJsonPrimitive.isNumber -> {
+            runCatching { (element.asDouble * multiplier).toLong() }.getOrNull()
+        }
+        element.isJsonPrimitive && element.asJsonPrimitive.isString -> {
+            parseFlexibleGelbooruDurationMs(element.asString, multiplier)
+        }
+        else -> null
+    }
+    return parsed?.takeIf { it > 0L }
+}
+
+private fun parseFlexibleGelbooruDurationMs(raw: String, numericMultiplier: Long): Long? {
+    val trimmed = raw.trim()
+    if (trimmed.isBlank()) return null
+    trimmed.toDoubleOrNull()?.let { return (it * numericMultiplier).toLong() }
+    val parts = trimmed.split(':').mapNotNull { part -> part.trim().toLongOrNull() }
+    if (parts.isEmpty() || parts.size != trimmed.count { it == ':' } + 1) return null
+    val seconds = when (parts.size) {
+        1 -> parts[0]
+        2 -> parts[0] * 60L + parts[1]
+        else -> parts.takeLast(3).let { (hours, minutes, seconds) ->
+            hours * 3600L + minutes * 60L + seconds
+        }
+    }
+    return seconds * 1_000L
 }
 
 private fun compileTags(query: Query): String {

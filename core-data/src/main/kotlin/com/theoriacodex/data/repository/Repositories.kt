@@ -75,7 +75,7 @@ data class CacheSettings(
 )
 
 data class ContentFilterSettings(
-    val resolveUnknownAnimatedDurations: Boolean = false,
+    val resolveUnknownAnimatedDurations: Boolean = true,
 )
 
 data class RecommendationProfile(

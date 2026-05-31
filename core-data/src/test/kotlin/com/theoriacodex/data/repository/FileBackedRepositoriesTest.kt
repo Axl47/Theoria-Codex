@@ -198,7 +198,7 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
-    fun `settings repository defaults unknown duration resolution off for old files`() = runTest {
+    fun `settings repository defaults unknown duration resolution on for old files`() = runTest {
         val dir = Files.createTempDirectory("settings-store-old-").toFile()
         dir.resolve("settings_store.json").writeText(
             """
@@ -212,7 +212,7 @@ class FileBackedRepositoriesTest {
         val loaded = FileBackedSettingsRepository(dir).observeSettings().first()
 
         assertTrue(loaded.cache.cacheFullImageOnSave)
-        assertEquals(false, loaded.contentFilters.resolveUnknownAnimatedDurations)
+        assertTrue(loaded.contentFilters.resolveUnknownAnimatedDurations)
     }
 
     @Test

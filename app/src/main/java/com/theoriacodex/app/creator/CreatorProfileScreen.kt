@@ -65,6 +65,8 @@ import com.theoriacodex.app.search.animatedDurationResolutionCandidates
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
+import com.theoriacodex.app.media.animatedDurationMs
+import com.theoriacodex.app.media.probeRemoteVideoDurationMs
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -101,6 +103,7 @@ fun CreatorProfileScreen(
             maxBucket = durationMaxBucket,
         )
     }
+    val animatedDurationFilterActive = !animatedDurationRange.isFullRange
     val visibilityFilters = remember(animatedOnly, hideLiked, hideSaved, animatedDurationRange) {
         SearchVisibilityFilters(
             animatedOnly = animatedOnly,
@@ -140,7 +143,14 @@ fun CreatorProfileScreen(
         ).filter { post -> durationResolutionRequests.add(post.id) }
             .take(CREATOR_PROFILE_DURATION_RESOLVE_BATCH_SIZE)
         candidates.forEach { post ->
-            runCatching { coordinator.resolvePostForCreator(post.id) }
+            val resolved = runCatching { coordinator.resolvePostForCreator(post.id) }.getOrNull()
+            val candidate = resolved ?: post
+            if (animatedDurationMs(candidate) == null) {
+                val probedDurationMs = probeRemoteVideoDurationMs(candidate)
+                if (probedDurationMs != null) {
+                    coordinator.rememberResolvedPost(candidate.copy(durationMs = probedDurationMs))
+                }
+            }
         }
     }
 
@@ -151,6 +161,7 @@ fun CreatorProfileScreen(
         coordinator.loadingMore,
         coordinator.canLoadMore,
         animatedOnly,
+        animatedDurationFilterActive,
     ) {
         snapshotFlow {
             (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to coordinator.loadingMore
@@ -169,7 +180,7 @@ fun CreatorProfileScreen(
             }
 
             val shouldTriggerForAnimatedBuffer =
-                animatedOnly &&
+                (animatedOnly || animatedDurationFilterActive) &&
                     totalVisible < CREATOR_PROFILE_ANIMATED_PREFETCH_MIN_VISIBLE &&
                     coordinator.results.isNotEmpty()
 

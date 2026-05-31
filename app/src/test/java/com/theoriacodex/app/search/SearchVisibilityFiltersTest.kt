@@ -100,7 +100,7 @@ class SearchVisibilityFiltersTest {
     }
 
     @Test
-    fun `filterSearchResults hides unknown animated durations when range is narrowed`() {
+    fun `filterSearchResults keeps unknown animated durations while background resolution is enabled`() {
         val unknownAnimated = samplePost(
             id = "unknown",
             source = SourceKey.RULE34VIDEO,
@@ -123,6 +123,35 @@ class SearchVisibilityFiltersTest {
             likedPostIds = emptySet(),
             savedPostIds = emptySet(),
             unknownAnimatedDurationPolicy = UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND,
+        )
+
+        assertEquals(listOf(unknownAnimated.id, knownAnimated.id), visible.map { it.id })
+    }
+
+    @Test
+    fun `filterSearchResults hides unknown animated durations in strict mode`() {
+        val unknownAnimated = samplePost(
+            id = "unknown",
+            source = SourceKey.RULE34VIDEO,
+            fullMime = "video/mp4",
+            fullUrl = "https://cdn.test/unknown.mp4",
+        )
+        val knownAnimated = samplePost(
+            id = "known",
+            source = SourceKey.RULE34VIDEO,
+            fullMime = "video/mp4",
+            fullUrl = "https://cdn.test/known.mp4",
+            durationMs = 15_000L,
+        )
+
+        val visible = filterSearchResults(
+            results = listOf(unknownAnimated, knownAnimated),
+            filters = SearchVisibilityFilters(
+                animatedDurationRange = AnimatedDurationRange(minBucket = 2, maxBucket = 4),
+            ),
+            likedPostIds = emptySet(),
+            savedPostIds = emptySet(),
+            unknownAnimatedDurationPolicy = UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
         )
 
         assertEquals(listOf(knownAnimated.id), visible.map { it.id })

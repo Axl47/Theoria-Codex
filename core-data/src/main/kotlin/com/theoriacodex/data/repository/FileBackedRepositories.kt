@@ -956,7 +956,7 @@ private data class SettingsStoreFile(
     val enabledSources: List<String> = SourceKey.entries.map { it.name },
     val sourceWeights: Map<String, Double> = SourceRuntimeSettings().sourceWeights.mapKeys { it.key.name },
     val cacheFullImageOnSave: Boolean = false,
-    val resolveUnknownAnimatedDurations: Boolean = false,
+    val resolveUnknownAnimatedDurations: Boolean = true,
     val scenarioPreset: String = ScenarioPreset.NORMAL.name,
     val lastSelectedTabRoute: String = "search",
     val recommendationProfiles: List<RecommendationProfileRecord>? = null,
