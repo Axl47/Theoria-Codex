@@ -297,6 +297,14 @@ class FileBackedSettingsRepository(
         }
     }
 
+    override suspend fun setResolveUnknownAnimatedDurations(enabled: Boolean) {
+        updateSettings {
+            it.copy(
+                contentFilters = it.contentFilters.copy(resolveUnknownAnimatedDurations = enabled),
+            )
+        }
+    }
+
     override suspend fun setScenarioPreset(preset: ScenarioPreset) {
         updateSettings {
             it.copy(scenarioPreset = preset)
@@ -948,6 +956,7 @@ private data class SettingsStoreFile(
     val enabledSources: List<String> = SourceKey.entries.map { it.name },
     val sourceWeights: Map<String, Double> = SourceRuntimeSettings().sourceWeights.mapKeys { it.key.name },
     val cacheFullImageOnSave: Boolean = false,
+    val resolveUnknownAnimatedDurations: Boolean = false,
     val scenarioPreset: String = ScenarioPreset.NORMAL.name,
     val lastSelectedTabRoute: String = "search",
     val recommendationProfiles: List<RecommendationProfileRecord>? = null,
@@ -979,6 +988,9 @@ private data class SettingsStoreFile(
             AppSettings(
                 runtime = runtime,
                 cache = CacheSettings(cacheFullImageOnSave = cacheFullImageOnSave),
+                contentFilters = ContentFilterSettings(
+                    resolveUnknownAnimatedDurations = resolveUnknownAnimatedDurations,
+                ),
                 scenarioPreset = runCatching { ScenarioPreset.valueOf(scenarioPreset) }.getOrDefault(ScenarioPreset.NORMAL),
                 lastSelectedTabRoute = lastSelectedTabRoute,
                 recommendationProfiles = profiles,
@@ -1003,6 +1015,7 @@ private data class SettingsStoreFile(
                 enabledSources = settings.runtime.enabledSources.map { it.name },
                 sourceWeights = settings.runtime.sourceWeights.mapKeys { it.key.name },
                 cacheFullImageOnSave = settings.cache.cacheFullImageOnSave,
+                resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
                 scenarioPreset = settings.scenarioPreset.name,
                 lastSelectedTabRoute = settings.lastSelectedTabRoute,
                 recommendationProfiles = settings.recommendationProfiles.map { profile ->

@@ -5,6 +5,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.app.media.AnimatedDurationRange
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -69,6 +70,84 @@ class SearchVisibilityFiltersTest {
     }
 
     @Test
+    fun `filterSearchResults applies duration range to animated posts only`() {
+        val static = samplePost(id = "static", source = SourceKey.GELBOORU)
+        val shortAnimated = samplePost(
+            id = "short",
+            source = SourceKey.PIXIV,
+            fullMime = "video/mp4",
+            fullUrl = "https://cdn.test/short.mp4",
+            durationMs = 7_000L,
+        )
+        val longAnimated = samplePost(
+            id = "long",
+            source = SourceKey.PIXIV,
+            fullMime = "video/mp4",
+            fullUrl = "https://cdn.test/long.mp4",
+            durationMs = 90_000L,
+        )
+
+        val visible = filterSearchResults(
+            results = listOf(static, shortAnimated, longAnimated),
+            filters = SearchVisibilityFilters(
+                animatedDurationRange = AnimatedDurationRange(minBucket = 1, maxBucket = 2),
+            ),
+            likedPostIds = emptySet(),
+            savedPostIds = emptySet(),
+        )
+
+        assertEquals(listOf(static.id, shortAnimated.id), visible.map { it.id })
+    }
+
+    @Test
+    fun `filterSearchResults hides unknown animated durations when range is narrowed`() {
+        val unknownAnimated = samplePost(
+            id = "unknown",
+            source = SourceKey.RULE34VIDEO,
+            fullMime = "video/mp4",
+            fullUrl = "https://cdn.test/unknown.mp4",
+        )
+        val knownAnimated = samplePost(
+            id = "known",
+            source = SourceKey.RULE34VIDEO,
+            fullMime = "video/mp4",
+            fullUrl = "https://cdn.test/known.mp4",
+            durationMs = 15_000L,
+        )
+
+        val visible = filterSearchResults(
+            results = listOf(unknownAnimated, knownAnimated),
+            filters = SearchVisibilityFilters(
+                animatedDurationRange = AnimatedDurationRange(minBucket = 2, maxBucket = 4),
+            ),
+            likedPostIds = emptySet(),
+            savedPostIds = emptySet(),
+            unknownAnimatedDurationPolicy = UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND,
+        )
+
+        assertEquals(listOf(knownAnimated.id), visible.map { it.id })
+    }
+
+    @Test
+    fun `filterSearchResults keeps unknown animated durations when range is full`() {
+        val unknownAnimated = samplePost(
+            id = "unknown",
+            source = SourceKey.RULE34VIDEO,
+            fullMime = "video/mp4",
+            fullUrl = "https://cdn.test/unknown.mp4",
+        )
+
+        val visible = filterSearchResults(
+            results = listOf(unknownAnimated),
+            filters = SearchVisibilityFilters(animatedDurationRange = AnimatedDurationRange.Full),
+            likedPostIds = emptySet(),
+            savedPostIds = emptySet(),
+        )
+
+        assertEquals(listOf(unknownAnimated.id), visible.map { it.id })
+    }
+
+    @Test
     fun `favoriteTagSections limits source mode to the active source`() {
         val sections = favoriteTagSections(
             mode = QueryMode.Source(SourceKey.GELBOORU),
@@ -123,6 +202,7 @@ class SearchVisibilityFiltersTest {
         source: SourceKey,
         fullMime: String = "image/jpeg",
         fullUrl: String = "https://cdn.test/$id.jpg",
+        durationMs: Long? = null,
     ): Post {
         val preview = ImageRef(
             url = "https://cdn.test/$id-preview.jpg",
@@ -147,6 +227,7 @@ class SearchVisibilityFiltersTest {
             authorName = null,
             createdAtEpochMs = null,
             title = null,
+            durationMs = durationMs,
         )
     }
 }

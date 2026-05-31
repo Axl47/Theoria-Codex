@@ -217,6 +217,12 @@ class InMemorySettingsRepository : SettingsRepository {
         settings.value = settings.value.copy(cache = settings.value.cache.copy(cacheFullImageOnSave = enabled))
     }
 
+    override suspend fun setResolveUnknownAnimatedDurations(enabled: Boolean) {
+        settings.value = settings.value.copy(
+            contentFilters = settings.value.contentFilters.copy(resolveUnknownAnimatedDurations = enabled),
+        )
+    }
+
     override suspend fun setScenarioPreset(preset: ScenarioPreset) {
         settings.value = settings.value.copy(scenarioPreset = preset)
     }

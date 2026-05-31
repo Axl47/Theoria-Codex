@@ -12,6 +12,36 @@ enum class PostMediaKind {
     UNKNOWN,
 }
 
+data class AnimatedDurationRange(
+    val minBucket: Int = ANIMATED_DURATION_MIN_BUCKET,
+    val maxBucket: Int = ANIMATED_DURATION_MAX_BUCKET,
+) {
+    val normalizedMinBucket: Int
+        get() = minBucket.coerceIn(ANIMATED_DURATION_MIN_BUCKET, ANIMATED_DURATION_MAX_BUCKET)
+
+    val normalizedMaxBucket: Int
+        get() = maxBucket.coerceIn(ANIMATED_DURATION_MIN_BUCKET, ANIMATED_DURATION_MAX_BUCKET)
+
+    val isFullRange: Boolean
+        get() = normalizedMinBucket == ANIMATED_DURATION_MIN_BUCKET &&
+            normalizedMaxBucket == ANIMATED_DURATION_MAX_BUCKET
+
+    fun contains(durationMs: Long): Boolean {
+        val lower = minOf(normalizedMinBucket, normalizedMaxBucket)
+        val upper = maxOf(normalizedMinBucket, normalizedMaxBucket)
+        return durationBucketFor(durationMs) in lower..upper
+    }
+
+    companion object {
+        val Full = AnimatedDurationRange()
+    }
+}
+
+const val ANIMATED_DURATION_MIN_BUCKET = 0
+const val ANIMATED_DURATION_MAX_BUCKET = 25
+private const val ANIMATED_DURATION_BUCKET_MS = 5_000L
+private const val ANIMATED_DURATION_LAST_EXACT_BUCKET = 24
+
 private val IMAGE_EXTENSIONS = setOf(
     "gif",
     "png",
@@ -104,5 +134,43 @@ fun isAnimatedPost(post: Post): Boolean {
             PostMediaKind.IMAGE -> isGifMediaRef(ref)
             PostMediaKind.UNKNOWN -> false
         }
+    }
+}
+
+fun animatedDurationMs(post: Post): Long? {
+    return post.durationMs?.takeIf { it > 0L }
+}
+
+fun durationBucketFor(durationMs: Long): Int {
+    if (durationMs < ANIMATED_DURATION_BUCKET_MS) return ANIMATED_DURATION_MIN_BUCKET
+    if (durationMs > ANIMATED_DURATION_LAST_EXACT_BUCKET * ANIMATED_DURATION_BUCKET_MS) {
+        return ANIMATED_DURATION_MAX_BUCKET
+    }
+    return (durationMs / ANIMATED_DURATION_BUCKET_MS)
+        .toInt()
+        .coerceIn(ANIMATED_DURATION_MIN_BUCKET, ANIMATED_DURATION_LAST_EXACT_BUCKET)
+}
+
+fun animatedDurationBucketLabel(bucket: Int): String {
+    val normalized = bucket.coerceIn(ANIMATED_DURATION_MIN_BUCKET, ANIMATED_DURATION_MAX_BUCKET)
+    return when (normalized) {
+        ANIMATED_DURATION_MIN_BUCKET -> "<5s"
+        ANIMATED_DURATION_MAX_BUCKET -> ">2m"
+        else -> formatDurationSeconds(normalized * 5)
+    }
+}
+
+fun animatedDurationRangeLabel(range: AnimatedDurationRange): String {
+    return "${animatedDurationBucketLabel(range.normalizedMinBucket)} - ${animatedDurationBucketLabel(range.normalizedMaxBucket)}"
+}
+
+private fun formatDurationSeconds(totalSeconds: Int): String {
+    if (totalSeconds < 60) return "${totalSeconds}s"
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return if (seconds == 0) {
+        "${minutes}m"
+    } else {
+        "${minutes}m ${seconds}s"
     }
 }

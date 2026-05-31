@@ -9,6 +9,7 @@ import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.CancellationException
 
 class CreatorProfileCoordinator(
@@ -108,6 +109,21 @@ class CreatorProfileCoordinator(
             streamSource = ViewerStreamSource.CREATOR_PROFILE,
             scrollOffsetHint = scrollOffsetHint,
         )
+    }
+
+    suspend fun resolvePostForCreator(postId: PostId): Post? {
+        val adapter = registry.adapterFor(postId.source) ?: return null
+        val resolved = adapter.resolvePost(postId) ?: return null
+        rememberResolvedPost(resolved)
+        return resolved
+    }
+
+    fun rememberResolvedPost(post: Post) {
+        val index = results.indexOfFirst { current -> current.id == post.id }
+        if (index < 0) return
+        results = results.toMutableList().apply {
+            this[index] = post
+        }
     }
 
     private fun adapterFor(creator: CreatorProfile): CreatorPostsSourceAdapter? {

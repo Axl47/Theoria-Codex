@@ -87,6 +87,7 @@ class IwaraSourceAdapterTest {
                           },
                           "customThumbnail": null,
                           "thumbnail": 9,
+                          "duration": 83,
                           "tags": [
                             {"id": "wuthering_waves", "type": "general", "sensitive": false}
                           ],
@@ -119,6 +120,7 @@ class IwaraSourceAdapterTest {
         assertEquals("d7678ba5-6039-442b-8ee8-6d8f0cf0398f", post.creatorProfile?.uploadsQuery)
         assertEquals("https://www.iwara.tv/profile/fearess/videos", post.creatorProfile?.profileUrl)
         assertEquals(listOf("wuthering_waves"), post.canonicalTags)
+        assertEquals(83_000L, post.durationMs)
     }
 
     @Test

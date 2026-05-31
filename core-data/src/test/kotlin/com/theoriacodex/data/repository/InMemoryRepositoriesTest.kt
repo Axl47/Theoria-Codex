@@ -128,6 +128,7 @@ class InMemoryRepositoriesTest {
 
         repo.setEnabledSources(setOf(SourceKey.PIXIV, SourceKey.GELBOORU))
         repo.setSourceWeights(mapOf(SourceKey.PIXIV to 3.0, SourceKey.GELBOORU to 1.0))
+        repo.setResolveUnknownAnimatedDurations(true)
         repo.setScenarioPreset(ScenarioPreset.PARTIAL_FAILURE)
         repo.setActiveProfile("profile-alt")
 
@@ -137,6 +138,7 @@ class InMemoryRepositoriesTest {
 
         assertEquals(1.0, pixivWeight + gelbooruWeight, 0.0001)
         assertTrue(pixivWeight > gelbooruWeight)
+        assertTrue(settings.contentFilters.resolveUnknownAnimatedDurations)
         assertEquals(ScenarioPreset.PARTIAL_FAILURE, settings.scenarioPreset)
         assertEquals("profile-alt", settings.activeProfileId)
     }

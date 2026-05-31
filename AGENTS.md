@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T17:48
-updated_at: 2026-04-04T15:10
+updated_at: 2026-05-30T20:35
 ---
 # THEORIA CODEX AGENTS DOCUMENT
 
@@ -52,6 +52,7 @@ Whenever new updates are made, this file (`AGENTS.md`) should be updated with an
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/execplans/favorite-tags-execplan.md`: living ExecPlan for profile-scoped, source-specific favorite tags and the Search `List` bottom sheet.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-stubs/src/main/resources/stubs/iwara/`: fixture-backed Iwara stub data (`search_page_1.json`, `search_page_2.json`, `trending_tags.json`) used by source/stub/app test coverage after the enum expansion.
 - `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/execplans/iwara-source-integration-execplan.md`: living ExecPlan for the videos-first Iwara rollout covering source wiring, lazy resolve, creator uploads, deep links, and validation.
+- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/execplans/animated-duration-filter-execplan.md`: living ExecPlan for animated duration filtering across Search, Creator Profile, and For You, plus the Settings toggle for background unknown-duration resolution.
 
 ## Final Output
 

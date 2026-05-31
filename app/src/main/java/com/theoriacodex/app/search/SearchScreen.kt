@@ -62,6 +62,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -102,6 +103,12 @@ import androidx.media3.ui.PlayerView
 import androidx.media3.ui.AspectRatioFrameLayout
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
+import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
+import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.media.animatedDurationBucketLabel
+import com.theoriacodex.app.media.animatedDurationMs
+import com.theoriacodex.app.media.animatedDurationRangeLabel
 import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraPost
@@ -136,6 +143,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -145,6 +153,7 @@ fun SearchScreen(
     likedPostIds: Set<PostId> = emptySet(),
     savedPostIds: Set<PostId> = emptySet(),
     favoriteTags: Map<SourceKey, List<String>> = emptyMap(),
+    resolveUnknownAnimatedDurations: Boolean = false,
     onToggleLike: ((Post) -> Unit)? = null,
     onOpenViewer: (List<Post>, ViewerLaunchContext, SearchVisibilityFilters) -> Unit,
     onApplySearch: () -> Unit,
@@ -159,6 +168,8 @@ fun SearchScreen(
     var animatedOnly by rememberSaveable { mutableStateOf(false) }
     var hideLiked by rememberSaveable { mutableStateOf(false) }
     var hideSaved by rememberSaveable { mutableStateOf(false) }
+    var durationMinBucket by rememberSaveable { mutableStateOf(ANIMATED_DURATION_MIN_BUCKET) }
+    var durationMaxBucket by rememberSaveable { mutableStateOf(ANIMATED_DURATION_MAX_BUCKET) }
     var searchFieldFocused by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var showFavoriteTagSheet by remember { mutableStateOf(false) }
@@ -171,28 +182,57 @@ fun SearchScreen(
     val queryHash = coordinator.appliedQueryHash
     val isNhentaiSourceMode = coordinator.draftQuery.mode == QueryMode.Source(SourceKey.NHENTAI)
     val animatedFilterActive = animatedOnly && !isNhentaiSourceMode
+    val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
+        AnimatedDurationRange(
+            minBucket = durationMinBucket,
+            maxBucket = durationMaxBucket,
+        )
+    }
     LaunchedEffect(isNhentaiSourceMode) {
         if (isNhentaiSourceMode) {
             animatedOnly = false
+            durationMinBucket = ANIMATED_DURATION_MIN_BUCKET
+            durationMaxBucket = ANIMATED_DURATION_MAX_BUCKET
         }
     }
-    val visibilityFilters = remember(animatedFilterActive, hideLiked, hideSaved) {
+    val visibilityFilters = remember(animatedFilterActive, hideLiked, hideSaved, animatedDurationRange) {
         SearchVisibilityFilters(
             animatedOnly = animatedFilterActive,
             hideLiked = hideLiked,
             hideSaved = hideSaved,
+            animatedDurationRange = animatedDurationRange,
         )
+    }
+    val unknownAnimatedDurationPolicy = remember(resolveUnknownAnimatedDurations) {
+        if (resolveUnknownAnimatedDurations) {
+            UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
+        } else {
+            UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
+        }
     }
     val displayResults = remember(coordinator.results, coordinator.displayResultsVersion, queryHash) {
         coordinator.displayResults()
     }
-    val visibleResults = remember(displayResults, visibilityFilters, likedPostIds, savedPostIds) {
+    val visibleResults = remember(displayResults, visibilityFilters, likedPostIds, savedPostIds, unknownAnimatedDurationPolicy) {
         filterSearchResults(
             results = displayResults,
             filters = visibilityFilters,
             likedPostIds = likedPostIds,
             savedPostIds = savedPostIds,
+            unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
         )
+    }
+    val durationResolutionRequests = remember(queryHash) { mutableSetOf<PostId>() }
+    LaunchedEffect(displayResults, visibilityFilters, unknownAnimatedDurationPolicy, queryHash) {
+        if (unknownAnimatedDurationPolicy != UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND) return@LaunchedEffect
+        val candidates = animatedDurationResolutionCandidates(
+            results = displayResults,
+            filters = visibilityFilters,
+        ).filter { post -> durationResolutionRequests.add(post.id) }
+            .take(ANIMATED_DURATION_RESOLVE_BATCH_SIZE)
+        candidates.forEach { post ->
+            runCatching { coordinator.resolvePostForSearch(post.id) }
+        }
     }
     val displayTagSeedBySource = remember(
         coordinator.appliedQuery.mode,
@@ -816,6 +856,11 @@ fun SearchScreen(
             coordinator = coordinator,
             animatedOnly = animatedOnly,
             onAnimatedOnlyChange = { animatedOnly = it },
+            animatedDurationRange = animatedDurationRange,
+            onAnimatedDurationRangeChange = { range ->
+                durationMinBucket = range.normalizedMinBucket
+                durationMaxBucket = range.normalizedMaxBucket
+            },
             showAnimatedOnlyFilter = !isNhentaiSourceMode,
             hideLiked = hideLiked,
             onHideLikedChange = { hideLiked = it },
@@ -1296,6 +1341,8 @@ private fun FilterSheet(
     coordinator: SearchCoordinator,
     animatedOnly: Boolean,
     onAnimatedOnlyChange: (Boolean) -> Unit,
+    animatedDurationRange: AnimatedDurationRange,
+    onAnimatedDurationRangeChange: (AnimatedDurationRange) -> Unit,
     showAnimatedOnlyFilter: Boolean,
     hideLiked: Boolean,
     onHideLikedChange: (Boolean) -> Unit,
@@ -1350,6 +1397,13 @@ private fun FilterSheet(
                         label = { Text("Hide saved") },
                     )
                 }
+            }
+
+            if (showAnimatedOnlyFilter) {
+                AnimatedDurationRangeControl(
+                    range = animatedDurationRange,
+                    onRangeChange = onAnimatedDurationRangeChange,
+                )
             }
 
             if (!showAnimatedOnlyFilter) {
@@ -1451,6 +1505,63 @@ private fun FilterSheet(
                     Text("Done")
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun AnimatedDurationRangeControl(
+    range: AnimatedDurationRange,
+    onRangeChange: (AnimatedDurationRange) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Animated duration", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = if (range.isFullRange) "Any" else animatedDurationRangeLabel(range),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        RangeSlider(
+            value = range.normalizedMinBucket.toFloat()..range.normalizedMaxBucket.toFloat(),
+            onValueChange = { values ->
+                val minBucket = values.start.roundToInt()
+                    .coerceIn(ANIMATED_DURATION_MIN_BUCKET, ANIMATED_DURATION_MAX_BUCKET)
+                val maxBucket = values.endInclusive.roundToInt()
+                    .coerceIn(ANIMATED_DURATION_MIN_BUCKET, ANIMATED_DURATION_MAX_BUCKET)
+                onRangeChange(
+                    AnimatedDurationRange(
+                        minBucket = minOf(minBucket, maxBucket),
+                        maxBucket = maxOf(minBucket, maxBucket),
+                    )
+                )
+            },
+            valueRange = ANIMATED_DURATION_MIN_BUCKET.toFloat()..ANIMATED_DURATION_MAX_BUCKET.toFloat(),
+            steps = (ANIMATED_DURATION_MAX_BUCKET - ANIMATED_DURATION_MIN_BUCKET - 1).coerceAtLeast(0),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = animatedDurationBucketLabel(ANIMATED_DURATION_MIN_BUCKET),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = animatedDurationBucketLabel(ANIMATED_DURATION_MAX_BUCKET),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -1867,7 +1978,13 @@ data class SearchVisibilityFilters(
     val animatedOnly: Boolean = false,
     val hideLiked: Boolean = false,
     val hideSaved: Boolean = false,
+    val animatedDurationRange: AnimatedDurationRange = AnimatedDurationRange.Full,
 )
+
+enum class UnknownAnimatedDurationPolicy {
+    HIDE_UNKNOWNS,
+    RESOLVE_IN_BACKGROUND,
+}
 
 internal data class FavoriteTagSection(
     val source: SourceKey,
@@ -1879,12 +1996,43 @@ internal fun filterSearchResults(
     filters: SearchVisibilityFilters,
     likedPostIds: Set<PostId>,
     savedPostIds: Set<PostId>,
+    unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy = UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
 ): List<Post> {
     return results.filter { post ->
         (!filters.animatedOnly || isAnimatedPost(post)) &&
+            matchesAnimatedDurationFilter(
+                post = post,
+                filters = filters,
+                unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
+            ) &&
             (!filters.hideLiked || post.id !in likedPostIds) &&
             (!filters.hideSaved || post.id !in savedPostIds)
     }
+}
+
+internal fun animatedDurationResolutionCandidates(
+    results: List<Post>,
+    filters: SearchVisibilityFilters,
+): List<Post> {
+    if (filters.animatedDurationRange.isFullRange) return emptyList()
+    return results.filter { post ->
+        isAnimatedPost(post) && animatedDurationMs(post) == null
+    }
+}
+
+private fun matchesAnimatedDurationFilter(
+    post: Post,
+    filters: SearchVisibilityFilters,
+    unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy,
+): Boolean {
+    val range = filters.animatedDurationRange
+    if (range.isFullRange) return true
+    if (!isAnimatedPost(post)) return true
+    val durationMs = animatedDurationMs(post) ?: return when (unknownAnimatedDurationPolicy) {
+        UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS -> false
+        UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND -> false
+    }
+    return range.contains(durationMs)
 }
 
 internal fun favoriteTagSections(
@@ -1924,6 +2072,9 @@ private fun buildEmptySearchMessage(
 ): String? {
     if (visibilityFilters.animatedOnly && sourceResults.isNotEmpty() && (loadingMore || canLoadMore)) {
         return "No animated media yet. Retrying with more pages..."
+    }
+    if (!visibilityFilters.animatedDurationRange.isFullRange && sourceResults.isNotEmpty()) {
+        return "No animated media found in the selected duration range."
     }
     if (!visibilityFilters.animatedOnly && !visibilityFilters.hideLiked && !visibilityFilters.hideSaved) {
         return null
@@ -1995,3 +2146,4 @@ private fun String.isDigitsOnly(): Boolean {
 
 private const val PAGINATION_PREFETCH_RATIO = 0.8f
 private const val ANIMATED_PREFETCH_MIN_VISIBLE = 12
+private const val ANIMATED_DURATION_RESOLVE_BATCH_SIZE = 8

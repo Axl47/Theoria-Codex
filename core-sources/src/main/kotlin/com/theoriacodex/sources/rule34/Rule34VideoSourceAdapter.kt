@@ -40,6 +40,11 @@ class Rule34VideoSourceAdapter(
                 previewUrl = image?.attr("data-original")?.ifBlank { image.attr("src") },
                 previewVideoUrl = previewVideoUrl,
                 includeTags = includeTags,
+                durationMs = parseRule34DurationMs(
+                    anchor.selectFirst(".duration, .time, time, [data-duration]")?.let { element ->
+                        element.attr("data-duration").ifBlank { element.text() }
+                    }
+                ),
             )
         }
 }

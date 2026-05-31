@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-04-11T00:00
+updated_at: 2026-05-30T20:35
 ---
 # Theoria Codex
 
@@ -9,6 +9,7 @@ Theoria Codex is an Android-first, local-first, tag-driven art browser.
 The product spec lives at `./docs/TheoriaSpec.md`.
 
 Recent updates:
+- Search, Creator Profile, and For You filters now include a two-handle animated duration slider. The range runs from `<5s` through 5-second steps to `>2m`, affects animated media only, and Settings > Storage & caching includes an opt-in switch to resolve unknown animation durations in the background.
 - Gelbooru viewer image loading is now progressive too: image posts render `sample_url` first in Viewer, then upgrade in place to the full asset while keeping downloads on the canonical file URL.
 - Pixiv viewer image loading is now progressive: static image posts render a fast page-sized Pixiv asset first, then upgrade in place to larger/original quality while keeping downloads on the highest-quality source URL.
 - Iwara is now available as a real videos-first source in Search and Unified mode, including public API-backed video search, tag autocomplete, best-effort trending tags, creator upload browsing, `iwara.tv/video/<id>` deep links, and lazy resolve before Viewer playback or device downloads.

@@ -72,6 +72,7 @@ fun SettingsScreen(
     onClearLikesForActiveProfile: () -> Unit,
     onRemoveForYouBlacklistEntry: (SourceKey, List<String>) -> Unit,
     onSetCacheFullImageOnSave: (Boolean) -> Unit,
+    onSetResolveUnknownAnimatedDurations: (Boolean) -> Unit,
     onSetScenarioPreset: (ScenarioPreset) -> Unit,
     onClearThumbnailCache: () -> Unit,
     onClearFullImageCache: () -> Unit,
@@ -344,6 +345,20 @@ fun SettingsScreen(
                     Switch(
                         checked = settings.cache.cacheFullImageOnSave,
                         onCheckedChange = onSetCacheFullImageOnSave,
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Resolve unknown animation durations",
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = settings.contentFilters.resolveUnknownAnimatedDurations,
+                        onCheckedChange = onSetResolveUnknownAnimatedDurations,
                     )
                 }
                 Text("Thumbnails: ${cacheSnapshot.thumbnailCount}")

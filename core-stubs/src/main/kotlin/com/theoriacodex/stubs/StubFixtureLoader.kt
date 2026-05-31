@@ -75,6 +75,7 @@ data class SearchPostFixture(
     val rawTags: List<String>,
     val authorName: String?,
     val createdAtEpochMs: Long?,
+    val durationMs: Long? = null,
 ) {
     fun toDomain(sourceKey: SourceKey): Post {
         return Post(
@@ -89,6 +90,7 @@ data class SearchPostFixture(
             authorName = authorName,
             createdAtEpochMs = createdAtEpochMs,
             title = title,
+            durationMs = durationMs,
         )
     }
 }

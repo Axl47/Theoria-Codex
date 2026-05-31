@@ -16,6 +16,7 @@ import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
@@ -190,6 +191,21 @@ class ForYouCoordinator(
             streamSource = ViewerStreamSource.FOR_YOU,
             scrollOffsetHint = scrollOffsetHint,
         )
+    }
+
+    suspend fun resolvePostForFeed(postId: PostId): Post? {
+        val adapter = registry.adapterFor(postId.source) ?: return null
+        val resolved = adapter.resolvePost(postId) ?: return null
+        rememberResolvedPost(resolved)
+        return resolved
+    }
+
+    fun rememberResolvedPost(post: Post) {
+        val index = results.indexOfFirst { current -> current.id == post.id }
+        if (index < 0) return
+        results = results.toMutableList().apply {
+            this[index] = post
+        }
     }
 
     private suspend fun executeFeed(shuffle: Boolean) {

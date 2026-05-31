@@ -84,6 +84,43 @@ internal fun Rule34KvsConfig.tags(): List<String> {
         .distinctBy(String::lowercase)
 }
 
+internal fun Rule34KvsConfig.durationMs(): Long? {
+    return sequenceOf(
+        string("video_duration"),
+        string("duration"),
+        string("length"),
+    ).mapNotNull(::parseRule34DurationMs)
+        .firstOrNull { it > 0L }
+}
+
+internal fun parseRule34DurationMs(raw: String?): Long? {
+    val trimmed = raw?.trim().orEmpty()
+    if (trimmed.isBlank()) return null
+    trimmed.toDoubleOrNull()?.let { seconds ->
+        return (seconds * 1_000L).toLong().takeIf { it > 0L }
+    }
+    val colonParts = trimmed.split(':').mapNotNull { part -> part.trim().toLongOrNull() }
+    if (colonParts.isNotEmpty() && colonParts.size == trimmed.count { it == ':' } + 1) {
+        val seconds = when (colonParts.size) {
+            1 -> colonParts[0]
+            2 -> colonParts[0] * 60L + colonParts[1]
+            else -> colonParts.takeLast(3).let { (hours, minutes, seconds) ->
+                hours * 3600L + minutes * 60L + seconds
+            }
+        }
+        return (seconds * 1_000L).takeIf { it > 0L }
+    }
+    val match = RULE34_DURATION_WORD_REGEX.find(trimmed.lowercase()) ?: return null
+    val value = match.groupValues.getOrNull(1)?.toLongOrNull() ?: return null
+    val unit = match.groupValues.getOrNull(2).orEmpty()
+    val seconds = when {
+        unit.startsWith("h") -> value * 3600L
+        unit.startsWith("m") -> value * 60L
+        else -> value
+    }
+    return (seconds * 1_000L).takeIf { it > 0L }
+}
+
 private fun inferVideoQualityScore(url: String, label: String?): Int {
     val fromLabel = RULE34_QUALITY_REGEX.find(label.orEmpty())
         ?.groupValues
@@ -119,3 +156,4 @@ private val RULE34_KVS_OBJECT_REGEX =
 private val RULE34_KVS_PAIR_REGEX = Regex("""([A-Za-z0-9_]+)\s*:\s*'((?:\\.|[^'])*)'""")
 private val RULE34_ALT_VIDEO_KEY_REGEX = Regex("""video_alt_url\d*""")
 private val RULE34_QUALITY_REGEX = Regex("""(\d{3,4})p?""")
+private val RULE34_DURATION_WORD_REGEX = Regex("""(\d+)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\b""")

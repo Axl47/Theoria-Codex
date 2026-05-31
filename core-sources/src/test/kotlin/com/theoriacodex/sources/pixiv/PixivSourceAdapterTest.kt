@@ -8,6 +8,7 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.PixivAuthTokens
+import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.testing.FakeCredentialsProvider
 import com.theoriacodex.sources.testing.FakeHttpClient
@@ -121,6 +122,62 @@ class PixivSourceAdapterTest {
         assertEquals("201823", post.creatorProfile?.uploadsQuery)
         assertEquals("https://www.pixiv.net/en/users/201823", post.creatorProfile?.profileUrl)
     }
+
+    @Test
+    fun `resolve ugoira sums metadata frame delays`() = runTest {
+        val credentials = FakeCredentialsProvider().apply {
+            pixivTokens = PixivAuthTokens(
+                accessToken = "access",
+                refreshToken = "refresh",
+                expiresAtEpochMs = Long.MAX_VALUE,
+            )
+        }
+        val httpClient = QueueHttpClient(
+            SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "illust": {
+                        "id": 12345,
+                        "type": "ugoira",
+                        "image_urls": {
+                          "square_medium": "https://i.pximg.net/sq.jpg",
+                          "large": "https://i.pximg.net/lg.jpg"
+                        },
+                        "meta_single_page": {
+                          "original_image_url": "https://i.pximg.net/ugoira.zip"
+                        },
+                        "tags": [{"name": "animation"}],
+                        "user": {"id": 77, "name": "artist"}
+                      }
+                    }
+                """.trimIndent(),
+            ),
+            SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "ugoira_metadata": {
+                        "frames": [
+                          {"file": "000000.jpg", "delay": 80},
+                          {"file": "000001.jpg", "delay": 120}
+                        ]
+                      }
+                    }
+                """.trimIndent(),
+            ),
+        )
+        val adapter = PixivSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = credentials,
+        )
+
+        val post = adapter.resolvePost(com.theoriacodex.domain.model.PostId(SourceKey.PIXIV, "12345"))
+
+        assertEquals(200L, post?.durationMs)
+        assertEquals("https://app-api.pixiv.net/v1/ugoira/metadata", httpClient.requests.last().url)
+    }
+
 
     @Test
     fun `creator search uses user illustrations endpoint and preserves pagination`() = runTest {
@@ -349,3 +406,32 @@ class PixivSourceAdapterTest {
         )
     }
 }
+
+private class QueueHttpClient(
+    vararg responses: SourceHttpResponse,
+) : SourceHttpClient {
+    private val queue = ArrayDeque(responses.toList())
+    val requests = mutableListOf<RecordedPixivRequest>()
+
+    override suspend fun get(
+        url: String,
+        query: Map<String, String>,
+        headers: Map<String, String>,
+    ): SourceHttpResponse {
+        requests += RecordedPixivRequest(url = url, query = query)
+        return queue.removeFirst()
+    }
+
+    override suspend fun postForm(
+        url: String,
+        form: Map<String, String>,
+        headers: Map<String, String>,
+    ): SourceHttpResponse {
+        error("unused")
+    }
+}
+
+private data class RecordedPixivRequest(
+    val url: String,
+    val query: Map<String, String>,
+)

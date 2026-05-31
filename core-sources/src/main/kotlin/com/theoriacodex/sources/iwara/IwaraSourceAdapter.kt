@@ -423,7 +423,21 @@ class IwaraSourceAdapter(
             createdAtEpochMs = raw.string("createdAt")?.let(::parseEpochMs),
             title = raw.string("title")?.trim().takeUnless { it.isNullOrBlank() },
             creatorProfile = creatorProfile,
+            durationMs = parseIwaraDurationMs(raw, file),
         )
+    }
+
+    private fun parseIwaraDurationMs(raw: JsonObject, file: JsonObject?): Long? {
+        return sequenceOf(
+            raw.durationFieldMs("durationMs", multiplier = 1L),
+            raw.durationFieldMs("duration", multiplier = 1_000L),
+            raw.durationFieldMs("durationSeconds", multiplier = 1_000L),
+            raw.durationFieldMs("length", multiplier = 1_000L),
+            file?.durationFieldMs("durationMs", multiplier = 1L),
+            file?.durationFieldMs("duration", multiplier = 1_000L),
+            file?.durationFieldMs("durationSeconds", multiplier = 1_000L),
+            file?.durationFieldMs("length", multiplier = 1_000L),
+        ).filterNotNull().firstOrNull { it > 0L }
     }
 
     private fun parseTags(raw: JsonObject): List<String> {
@@ -520,6 +534,38 @@ private fun JsonObject.string(name: String): String? {
 
 private fun JsonObject.int(name: String): Int? {
     return get(name)?.takeUnless { it.isJsonNull }?.asInt
+}
+
+private fun JsonObject.durationFieldMs(name: String, multiplier: Long): Long? {
+    val element = get(name)?.takeUnless { it.isJsonNull } ?: return null
+    val raw = when {
+        element.isJsonPrimitive && element.asJsonPrimitive.isNumber -> {
+            runCatching { element.asDouble }.getOrNull()?.let { number ->
+                (number * multiplier).toLong()
+            }
+        }
+        element.isJsonPrimitive && element.asJsonPrimitive.isString -> {
+            parseFlexibleDurationMs(element.asString, multiplier)
+        }
+        else -> null
+    }
+    return raw?.takeIf { it > 0L }
+}
+
+private fun parseFlexibleDurationMs(raw: String, numericMultiplier: Long): Long? {
+    val trimmed = raw.trim()
+    if (trimmed.isBlank()) return null
+    trimmed.toDoubleOrNull()?.let { return (it * numericMultiplier).toLong() }
+    val parts = trimmed.split(':').mapNotNull { part -> part.trim().toLongOrNull() }
+    if (parts.isEmpty()) return null
+    val seconds = when (parts.size) {
+        1 -> parts[0]
+        2 -> parts[0] * 60L + parts[1]
+        else -> parts.takeLast(3).let { (hours, minutes, seconds) ->
+            hours * 3600L + minutes * 60L + seconds
+        }
+    }
+    return seconds * 1_000L
 }
 
 private fun JsonObject.objectOrNull(name: String): JsonObject? {

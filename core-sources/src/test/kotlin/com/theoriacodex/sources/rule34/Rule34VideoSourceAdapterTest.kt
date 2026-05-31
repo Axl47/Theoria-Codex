@@ -25,6 +25,7 @@ class Rule34VideoSourceAdapterTest {
         assertEquals("https://rule34video.com/search/genshin/", httpClient.lastGet?.url)
         assertEquals("3089604", page.items.first().id.sourcePostId)
         assertEquals("https://rule34video.com/contents/videos_screenshots/3089000/3089604/320x180/1.jpg", page.items.first().preview.url)
+        assertEquals(65_000L, page.items.first().durationMs)
         assertTrue(page.nextPageToken?.contains("mode=async") == true)
         assertTrue(page.nextPageToken?.contains("from_videos=2") == true)
         assertTrue(page.nextPageToken?.contains("from_albums=2") == true)
@@ -43,6 +44,7 @@ class Rule34VideoSourceAdapterTest {
         assertEquals("https://rule34video.com/contents/videos_screenshots/3089000/3089604/preview.jpg", post?.preview?.url)
         assertEquals("https://rule34video.com/get_file/47/cb2f4505271f422a10a1244243bba9fa/3089000/3089604/3089604_1080p.mp4/", post?.full?.url)
         assertEquals("video/mp4", post?.media?.firstOrNull()?.mime)
+        assertEquals(92_000L, post?.durationMs)
         assertTrue(post?.canonicalTags?.contains("genshin impact") == true)
         assertTrue(post?.canonicalTags?.contains("HorizontalSlope") == true)
     }
@@ -65,6 +67,7 @@ private const val SAMPLE_RULE34VIDEO_SEARCH_HTML = """
     <div class="item thumb video_1">
       <a class="th" href="https://rule34video.com/video/3089604/gen-gen-gen-hmv-pmv-genshin-impact/" title="GEN GEN GEN! HMV/PMV Genshin Impact">
         <img class="thumb" data-original="https://rule34video.com/contents/videos_screenshots/3089000/3089604/320x180/1.jpg" data-preview="https://rule34video.com/get_file/47/preview.mp4/" />
+        <span class="duration">1:05</span>
       </a>
     </div>
     <div class="pager next">
@@ -87,6 +90,7 @@ private const val SAMPLE_RULE34VIDEO_POST_HTML = """
         video_categories: 'Genshin Impact, 3D',
         video_tags: 'lumine (genshin impact), pmv, genshin impact',
         video_models: 'HorizontalSlope, Bewyx',
+        video_duration: '1:32',
         video_url: 'https://rule34video.com/get_file/47/b192efbb159aca85ebc567507bad6926/3089000/3089604/3089604_360.mp4/',
         video_url_text: '360p',
         video_alt_url: 'https://rule34video.com/get_file/47/4d3b9bd4be4a22bd6e79fc2bc5b4220f/3089000/3089604/3089604_480p.mp4/',

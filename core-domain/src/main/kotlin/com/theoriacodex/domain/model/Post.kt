@@ -46,4 +46,5 @@ data class Post(
     val createdAtEpochMs: Long?,
     val title: String? = null,
     val creatorProfile: CreatorProfile? = null,
+    val durationMs: Long? = null,
 )

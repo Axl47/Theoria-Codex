@@ -70,6 +70,17 @@ class PostMediaTest {
         assertTrue(isAnimatedPost(unresolved))
     }
 
+    @Test
+    fun `duration buckets map animated duration boundaries`() {
+        assertEquals(0, durationBucketFor(4_999L))
+        assertEquals(1, durationBucketFor(5_000L))
+        assertEquals(1, durationBucketFor(9_999L))
+        assertEquals(24, durationBucketFor(120_000L))
+        assertEquals(25, durationBucketFor(120_001L))
+        assertTrue(AnimatedDurationRange(minBucket = 1, maxBucket = 2).contains(7_500L))
+        assertFalse(AnimatedDurationRange(minBucket = 1, maxBucket = 2).contains(15_000L))
+    }
+
     private fun samplePost(
         source: SourceKey,
         preview: ImageRef,

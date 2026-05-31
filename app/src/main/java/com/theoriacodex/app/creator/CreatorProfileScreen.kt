@@ -54,8 +54,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
+import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
+import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.SearchVisibilityFilters
+import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
+import com.theoriacodex.app.search.animatedDurationResolutionCandidates
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
@@ -71,6 +77,7 @@ fun CreatorProfileScreen(
     likedPostIds: Set<PostId>,
     savedPostIds: Set<PostId>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
+    resolveUnknownAnimatedDurations: Boolean = false,
     onToggleLike: (Post) -> Unit,
     onOpenViewer: (List<Post>, ViewerLaunchContext, SearchVisibilityFilters) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
@@ -84,22 +91,57 @@ fun CreatorProfileScreen(
     var animatedOnly by rememberSaveable { mutableStateOf(false) }
     var hideLiked by rememberSaveable { mutableStateOf(false) }
     var hideSaved by rememberSaveable { mutableStateOf(false) }
+    var durationMinBucket by rememberSaveable { mutableStateOf(ANIMATED_DURATION_MIN_BUCKET) }
+    var durationMaxBucket by rememberSaveable { mutableStateOf(ANIMATED_DURATION_MAX_BUCKET) }
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
-    val visibilityFilters = remember(animatedOnly, hideLiked, hideSaved) {
+    val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
+        AnimatedDurationRange(
+            minBucket = durationMinBucket,
+            maxBucket = durationMaxBucket,
+        )
+    }
+    val visibilityFilters = remember(animatedOnly, hideLiked, hideSaved, animatedDurationRange) {
         SearchVisibilityFilters(
             animatedOnly = animatedOnly,
             hideLiked = hideLiked,
             hideSaved = hideSaved,
+            animatedDurationRange = animatedDurationRange,
         )
     }
-    val visibleResults = remember(coordinator.results, visibilityFilters, likedPostIds, savedPostIds) {
+    val unknownAnimatedDurationPolicy = remember(resolveUnknownAnimatedDurations) {
+        if (resolveUnknownAnimatedDurations) {
+            UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
+        } else {
+            UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
+        }
+    }
+    val visibleResults = remember(
+        coordinator.results,
+        visibilityFilters,
+        likedPostIds,
+        savedPostIds,
+        unknownAnimatedDurationPolicy,
+    ) {
         filterSearchResults(
             results = coordinator.results,
             filters = visibilityFilters,
             likedPostIds = likedPostIds,
             savedPostIds = savedPostIds,
+            unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
         )
+    }
+    val durationResolutionRequests = remember(coordinator.activeQueryHash) { mutableSetOf<PostId>() }
+    LaunchedEffect(coordinator.results, visibilityFilters, unknownAnimatedDurationPolicy, coordinator.activeQueryHash) {
+        if (unknownAnimatedDurationPolicy != UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND) return@LaunchedEffect
+        val candidates = animatedDurationResolutionCandidates(
+            results = coordinator.results,
+            filters = visibilityFilters,
+        ).filter { post -> durationResolutionRequests.add(post.id) }
+            .take(CREATOR_PROFILE_DURATION_RESOLVE_BATCH_SIZE)
+        candidates.forEach { post ->
+            runCatching { coordinator.resolvePostForCreator(post.id) }
+        }
     }
 
     LaunchedEffect(
@@ -237,7 +279,14 @@ fun CreatorProfileScreen(
                 visibleResults.isEmpty() -> {
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = "No uploads found for this creator.",
+                            text = if (
+                                coordinator.results.isNotEmpty() &&
+                                !visibilityFilters.animatedDurationRange.isFullRange
+                            ) {
+                                "No animated media found in the selected duration range."
+                            } else {
+                                "No uploads found for this creator."
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(20.dp),
@@ -313,6 +362,13 @@ fun CreatorProfileScreen(
                         label = { Text("Hide saved") },
                     )
                 }
+                AnimatedDurationRangeControl(
+                    range = animatedDurationRange,
+                    onRangeChange = { range ->
+                        durationMinBucket = range.normalizedMinBucket
+                        durationMaxBucket = range.normalizedMaxBucket
+                    },
+                )
                 TextButton(
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { showFilterSheet = false },
@@ -453,3 +509,4 @@ private fun copyPostUrlToClipboard(context: Context, post: Post): Boolean {
 
 private const val CREATOR_PROFILE_PREFETCH_RATIO = 0.7f
 private const val CREATOR_PROFILE_ANIMATED_PREFETCH_MIN_VISIBLE = 6
+private const val CREATOR_PROFILE_DURATION_RESOLVE_BATCH_SIZE = 8

@@ -180,6 +180,7 @@ class FileBackedRepositoriesTest {
         first.setEnabledSources(setOf(SourceKey.PIXIV, SourceKey.GELBOORU))
         first.setSourceWeights(mapOf(SourceKey.PIXIV to 4.0, SourceKey.GELBOORU to 1.0))
         first.setCacheFullImageOnSave(true)
+        first.setResolveUnknownAnimatedDurations(true)
         first.setScenarioPreset(ScenarioPreset.EMPTY_RESULTS)
         first.setLastTab("codex")
         first.setActiveProfile("profile-alt")
@@ -188,11 +189,30 @@ class FileBackedRepositoriesTest {
         val loaded = second.observeSettings().first()
 
         assertTrue(loaded.cache.cacheFullImageOnSave)
+        assertTrue(loaded.contentFilters.resolveUnknownAnimatedDurations)
         assertEquals(ScenarioPreset.EMPTY_RESULTS, loaded.scenarioPreset)
         assertEquals("codex", loaded.lastSelectedTabRoute)
         assertEquals("profile-alt", loaded.activeProfileId)
         val total = loaded.runtime.sourceWeights.values.sum()
         assertEquals(1.0, total, 0.0001)
+    }
+
+    @Test
+    fun `settings repository defaults unknown duration resolution off for old files`() = runTest {
+        val dir = Files.createTempDirectory("settings-store-old-").toFile()
+        dir.resolve("settings_store.json").writeText(
+            """
+                {
+                  "enabledSources": ["PIXIV", "GELBOORU"],
+                  "cacheFullImageOnSave": true
+                }
+            """.trimIndent(),
+        )
+
+        val loaded = FileBackedSettingsRepository(dir).observeSettings().first()
+
+        assertTrue(loaded.cache.cacheFullImageOnSave)
+        assertEquals(false, loaded.contentFilters.resolveUnknownAnimatedDurations)
     }
 
     @Test

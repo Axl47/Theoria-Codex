@@ -43,8 +43,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.media.isAnimatedPost
+import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
+import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
+import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
+import com.theoriacodex.app.search.SearchVisibilityFilters
+import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
+import com.theoriacodex.app.search.animatedDurationResolutionCandidates
+import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.model.Post
@@ -61,20 +68,56 @@ fun ForYouScreen(
     likesCount: Int,
     likedPostIds: Set<PostId>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
+    resolveUnknownAnimatedDurations: Boolean = false,
     onToggleLike: (Post) -> Unit,
     onBlacklistCurrentSeed: () -> Unit,
-    onOpenViewer: (List<Post>, ViewerLaunchContext) -> Unit,
+    onOpenViewer: (List<Post>, ViewerLaunchContext, SearchVisibilityFilters) -> Unit,
     onGoToSearch: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
     var showSortSheet by remember { mutableStateOf(false) }
     var animatedOnly by rememberSaveable { mutableStateOf(false) }
-    val visibleResults = remember(coordinator.results, animatedOnly) {
-        if (animatedOnly) {
-            coordinator.results.filter(::isAnimatedPost)
+    var durationMinBucket by rememberSaveable { mutableStateOf(ANIMATED_DURATION_MIN_BUCKET) }
+    var durationMaxBucket by rememberSaveable { mutableStateOf(ANIMATED_DURATION_MAX_BUCKET) }
+    val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
+        AnimatedDurationRange(
+            minBucket = durationMinBucket,
+            maxBucket = durationMaxBucket,
+        )
+    }
+    val visibilityFilters = remember(animatedOnly, animatedDurationRange) {
+        SearchVisibilityFilters(
+            animatedOnly = animatedOnly,
+            animatedDurationRange = animatedDurationRange,
+        )
+    }
+    val unknownAnimatedDurationPolicy = remember(resolveUnknownAnimatedDurations) {
+        if (resolveUnknownAnimatedDurations) {
+            UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
         } else {
-            coordinator.results
+            UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
+        }
+    }
+    val visibleResults = remember(coordinator.results, visibilityFilters, unknownAnimatedDurationPolicy) {
+        filterSearchResults(
+            results = coordinator.results,
+            filters = visibilityFilters,
+            likedPostIds = emptySet(),
+            savedPostIds = emptySet(),
+            unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
+        )
+    }
+    val durationResolutionRequests = remember(coordinator.seedId) { mutableSetOf<PostId>() }
+    LaunchedEffect(coordinator.results, visibilityFilters, unknownAnimatedDurationPolicy, coordinator.seedId) {
+        if (unknownAnimatedDurationPolicy != UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND) return@LaunchedEffect
+        val candidates = animatedDurationResolutionCandidates(
+            results = coordinator.results,
+            filters = visibilityFilters,
+        ).filter { post -> durationResolutionRequests.add(post.id) }
+            .take(FOR_YOU_DURATION_RESOLVE_BATCH_SIZE)
+        candidates.forEach { post ->
+            runCatching { coordinator.resolvePostForFeed(post.id) }
         }
     }
 
@@ -259,7 +302,11 @@ fun ForYouScreen(
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = if (animatedOnly && coordinator.results.isNotEmpty()) {
-                            "No animated media found for this feed yet."
+                            if (!visibilityFilters.animatedDurationRange.isFullRange) {
+                                "No animated media found in the selected duration range."
+                            } else {
+                                "No animated media found for this feed yet."
+                            }
                         } else {
                             "No recommendations yet. Tap Refresh to try a broader seed."
                         },
@@ -295,7 +342,7 @@ fun ForYouScreen(
                                     startIndex = index,
                                     scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
                                 )
-                                onOpenViewer(visibleResults, context)
+                                onOpenViewer(visibleResults, context, visibilityFilters)
                             },
                         )
                     }
@@ -328,6 +375,7 @@ fun ForYouScreen(
         ForYouSortSheet(
             selectedSort = coordinator.sortMode,
             animatedOnly = animatedOnly,
+            animatedDurationRange = animatedDurationRange,
             onSelectSort = { sort ->
                 scope.launch {
                     coordinator.setSortMode(sort)
@@ -336,20 +384,27 @@ fun ForYouScreen(
             onAnimatedOnlyChange = { enabled ->
                 animatedOnly = enabled
             },
+            onAnimatedDurationRangeChange = { range ->
+                durationMinBucket = range.normalizedMinBucket
+                durationMaxBucket = range.normalizedMaxBucket
+            },
             onDismiss = { showSortSheet = false },
         )
     }
 }
 
 private const val FOR_YOU_PREFETCH_RATIO = 0.8f
+private const val FOR_YOU_DURATION_RESOLVE_BATCH_SIZE = 8
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ForYouSortSheet(
     selectedSort: SortMode,
     animatedOnly: Boolean,
+    animatedDurationRange: AnimatedDurationRange,
     onSelectSort: (SortMode) -> Unit,
     onAnimatedOnlyChange: (Boolean) -> Unit,
+    onAnimatedDurationRangeChange: (AnimatedDurationRange) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -369,6 +424,10 @@ private fun ForYouSortSheet(
                     )
                 }
             }
+            AnimatedDurationRangeControl(
+                range = animatedDurationRange,
+                onRangeChange = onAnimatedDurationRangeChange,
+            )
 
             Text("Sort", style = MaterialTheme.typography.titleMedium)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

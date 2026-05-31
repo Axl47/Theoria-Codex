@@ -24,6 +24,7 @@ class Rule34GenSourceAdapterTest {
 
         assertEquals("https://rule34gen.com/search/genshin/", httpClient.lastGet?.url)
         assertEquals("8255", page.items.first().id.sourcePostId)
+        assertEquals(125_000L, page.items.first().durationMs)
         assertEquals("https://rule34gen.com/search/genshin/2/", page.nextPageToken)
     }
 
@@ -39,6 +40,7 @@ class Rule34GenSourceAdapterTest {
         assertEquals("https://rule34gen.com/video/8255/claire-russell-futa-cumshot-kiyuxaai/", post?.pageUrl)
         assertEquals("https://rule34gen.com/contents/videos_screenshots/8000/8255/preview.jpg", post?.preview?.url)
         assertEquals("https://rule34gen.com/get_file/3/0e3f96a19803858eb0c8782ad84e8a60/8000/8255/8255_480p.mp4/", post?.full?.url)
+        assertEquals(30_000L, post?.durationMs)
         assertTrue(post?.canonicalTags?.contains("cumshot") == true)
         assertTrue(post?.canonicalTags?.contains("3d") == true)
     }
@@ -62,6 +64,7 @@ private const val SAMPLE_RULE34GEN_SEARCH_HTML = """
       <div class="cards__item" data-item-id="8255">
         <a href="https://rule34gen.com/video/8255/claire-russell-futa-cumshot-kiyuxaai/" data-ajax="video" class="card" title="Claire Russell Futa Cumshot - KiyuxaAI">
           <img data-original="https://rule34gen.com/contents/videos_screenshots/8000/8255/496x372/1.jpg" data-preview="https://rule34gen.com/get_file/3/preview.mp4/" class="card__image" />
+          <span class="duration">2:05</span>
         </a>
       </div>
     </div>
@@ -82,6 +85,7 @@ private const val SAMPLE_RULE34GEN_POST_HTML = """
         video_categories: '3d',
         video_tags: 'futanari, cum, cumshot',
         video_models: '',
+        video_duration: '30',
         video_url: 'https://rule34gen.com/get_file/3/1611ab6e92db2e00601411bb656ffd07/8000/8255/8255_360.mp4/',
         video_url_text: '360p',
         video_alt_url: 'https://rule34gen.com/get_file/3/0e3f96a19803858eb0c8782ad84e8a60/8000/8255/8255_480p.mp4/',

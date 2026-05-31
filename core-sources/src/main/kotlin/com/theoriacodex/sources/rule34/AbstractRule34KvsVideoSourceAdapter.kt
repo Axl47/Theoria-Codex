@@ -125,6 +125,7 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
                 ?.firstOrNull(String::isNotBlank),
             createdAtEpochMs = null,
             title = title,
+            durationMs = config.durationMs(),
         )
     }
 
@@ -166,6 +167,7 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
         previewUrl: String?,
         previewVideoUrl: String?,
         includeTags: List<String>,
+        durationMs: Long? = null,
     ): Post {
         return Post(
             id = PostId(source = sourceKey, sourcePostId = sourcePostId),
@@ -182,6 +184,7 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
             authorName = null,
             createdAtEpochMs = null,
             title = title,
+            durationMs = durationMs,
         )
     }
 

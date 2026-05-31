@@ -99,6 +99,7 @@ import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.SearchScreen
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
 import com.theoriacodex.app.search.SearchVisibilityFilters
+import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.source.ExternalCreatorDeepLink
 import com.theoriacodex.app.source.ExternalPostDeepLink
@@ -330,6 +331,13 @@ fun TheoriaApp(
     }
 
     val settings by settingsRepository.observeSettings().collectAsState(initial = AppSettings())
+    val unknownAnimatedDurationPolicy = remember(settings.contentFilters.resolveUnknownAnimatedDurations) {
+        if (settings.contentFilters.resolveUnknownAnimatedDurations) {
+            UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
+        } else {
+            UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
+        }
+    }
     val activeRecommendationProfile = remember(settings.recommendationProfiles, settings.activeProfileId) {
         settings.recommendationProfiles
             .firstOrNull { it.profileId == settings.activeProfileId }
@@ -933,7 +941,12 @@ fun TheoriaApp(
         scope.launch {
             val adapter = realRegistry.adapterFor(post.id.source) ?: return@launch
             val resolved = runCatching { adapter.resolvePost(post.id) }.getOrNull() ?: return@launch
-            searchCoordinator.rememberResolvedPost(resolved)
+            when (viewerSession?.context?.streamSource) {
+                ViewerStreamSource.SEARCH -> searchCoordinator.rememberResolvedPost(resolved)
+                ViewerStreamSource.FOR_YOU -> forYouCoordinator.rememberResolvedPost(resolved)
+                ViewerStreamSource.CREATOR_PROFILE -> creatorProfileCoordinator.rememberResolvedPost(resolved)
+                ViewerStreamSource.CODEX, null -> Unit
+            }
             viewerSession = viewerSession?.let { session ->
                 val index = session.posts.indexOfFirst { current -> current.id == post.id }
                 if (index < 0) return@let session
@@ -956,8 +969,11 @@ fun TheoriaApp(
         if (!requiresLazyMediaResolution(selectedPost)) return posts
         val adapter = realRegistry.adapterFor(selectedPost.id.source) ?: return posts
         val resolved = runCatching { adapter.resolvePost(selectedPost.id) }.getOrNull() ?: return posts
-        if (context.streamSource == ViewerStreamSource.SEARCH) {
-            searchCoordinator.rememberResolvedPost(resolved)
+        when (context.streamSource) {
+            ViewerStreamSource.SEARCH -> searchCoordinator.rememberResolvedPost(resolved)
+            ViewerStreamSource.FOR_YOU -> forYouCoordinator.rememberResolvedPost(resolved)
+            ViewerStreamSource.CREATOR_PROFILE -> creatorProfileCoordinator.rememberResolvedPost(resolved)
+            ViewerStreamSource.CODEX -> Unit
         }
         return posts.toMutableList().apply {
             this[startIndex] = resolved
@@ -1415,6 +1431,7 @@ fun TheoriaApp(
         viewerSession?.searchVisibilityFilters,
         likedPostIds,
         savedPostIds,
+        unknownAnimatedDurationPolicy,
     ) {
         val session = viewerSession ?: return@LaunchedEffect
         if (!session.liveSearchBinding) return@LaunchedEffect
@@ -1426,12 +1443,19 @@ fun TheoriaApp(
                     filters = session.searchVisibilityFilters,
                     likedPostIds = likedPostIds,
                     savedPostIds = savedPostIds,
+                    unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
                 )
             }
 
             ViewerStreamSource.FOR_YOU -> {
                 if (!session.context.queryHash.startsWith("for_you:")) return@LaunchedEffect
-                forYouCoordinator.results
+                filterSearchResults(
+                    results = forYouCoordinator.results,
+                    filters = session.searchVisibilityFilters,
+                    likedPostIds = emptySet(),
+                    savedPostIds = emptySet(),
+                    unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
+                )
             }
 
             ViewerStreamSource.CREATOR_PROFILE -> {
@@ -1441,6 +1465,7 @@ fun TheoriaApp(
                     filters = session.searchVisibilityFilters,
                     likedPostIds = likedPostIds,
                     savedPostIds = savedPostIds,
+                    unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
                 )
             }
 
@@ -1606,6 +1631,7 @@ fun TheoriaApp(
                                         likedPostIds = likedPostIds,
                                         savedPostIds = savedPostIds,
                                         favoriteTags = activeProfileFavoriteTags,
+                                        resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
                                         onToggleLike = { post ->
                                             scope.launch {
                                                 toggleLikeAndSyncCodex(post)
@@ -1684,6 +1710,7 @@ fun TheoriaApp(
                                         likesCount = activeProfileLikes.size,
                                         likedPostIds = likedPostIds,
                                         pixivUgoiraClient = pixivUgoiraClient,
+                                        resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
                                         onToggleLike = { post ->
                                             scope.launch {
                                                 toggleLikeAndSyncCodex(post)
@@ -1708,13 +1735,14 @@ fun TheoriaApp(
                                                 }
                                             }
                                         },
-                                        onOpenViewer = { posts, context ->
+                                        onOpenViewer = { posts, context, visibilityFilters ->
                                             scope.launch {
                                                 val preparedPosts = prepareViewerPostsForLaunch(posts, context)
                                                 viewerSession = ViewerSession(
                                                     posts = preparedPosts,
                                                     context = context,
                                                     liveSearchBinding = true,
+                                                    searchVisibilityFilters = visibilityFilters,
                                                 )
                                                 searchCoordinator.setViewerLaunchContext(context)
                                                 navController.navigate(AppRoute.Viewer)
@@ -1936,6 +1964,9 @@ fun TheoriaApp(
                                         onSetCacheFullImageOnSave = { enabled ->
                                             scope.launch { settingsRepository.setCacheFullImageOnSave(enabled) }
                                         },
+                                        onSetResolveUnknownAnimatedDurations = { enabled ->
+                                            scope.launch { settingsRepository.setResolveUnknownAnimatedDurations(enabled) }
+                                        },
                                         onSetScenarioPreset = { preset ->
                                             scope.launch { settingsRepository.setScenarioPreset(preset) }
                                         },
@@ -2062,6 +2093,7 @@ fun TheoriaApp(
                             likedPostIds = likedPostIds,
                             savedPostIds = savedPostIds,
                             pixivUgoiraClient = pixivUgoiraClient,
+                            resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
                             onToggleLike = { post ->
                                 scope.launch { toggleLikeAndSyncCodex(post) }
                             },

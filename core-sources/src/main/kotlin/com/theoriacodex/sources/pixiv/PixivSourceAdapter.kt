@@ -153,7 +153,12 @@ class PixivSourceAdapter(
         )
         val root = parseJsonObject(response)
         val illust = root.optionalJsonObject("illust") ?: return null
-        return parseIllust(illust)
+        val parsed = parseIllust(illust) ?: return null
+        return if (illust.get("type")?.asString == "ugoira" && parsed.durationMs == null) {
+            parsed.copy(durationMs = fetchUgoiraDurationMs(id.sourcePostId))
+        } else {
+            parsed
+        }
     }
 
     override suspend fun searchCreatorPosts(
@@ -385,7 +390,26 @@ class PixivSourceAdapter(
                     uploadsQuery = userId,
                 )
             },
+            durationMs = null,
         )
+    }
+
+    private suspend fun fetchUgoiraDurationMs(postId: String): Long? {
+        val response = authorizedGet(
+            url = "$PIXIV_API_BASE/v1/ugoira/metadata",
+            query = mapOf("illust_id" to postId),
+        )
+        val root = parseJsonObject(response)
+        val metadata = root.optionalJsonObject("ugoira_metadata") ?: return null
+        val frames = metadata.optionalJsonArray("frames").orEmpty()
+        return frames.sumOf { frame ->
+            frame.asJsonObject
+                .get("delay")
+                ?.takeUnless { it.isJsonNull }
+                ?.asLong
+                ?.coerceAtLeast(16L)
+                ?: 0L
+        }.takeIf { it > 0L }
     }
 
     private fun mapSort(sortMode: SortMode): String {

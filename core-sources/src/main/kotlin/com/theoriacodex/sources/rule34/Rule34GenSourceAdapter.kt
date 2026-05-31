@@ -36,6 +36,11 @@ class Rule34GenSourceAdapter(
                 previewUrl = image?.attr("data-original")?.ifBlank { image.attr("src") },
                 previewVideoUrl = image?.attr("data-preview")?.ifBlank { null },
                 includeTags = includeTags,
+                durationMs = parseRule34DurationMs(
+                    anchor.selectFirst(".duration, .time, time, [data-duration]")?.let { element ->
+                        element.attr("data-duration").ifBlank { element.text() }
+                    }
+                ),
             )
         }
 }
