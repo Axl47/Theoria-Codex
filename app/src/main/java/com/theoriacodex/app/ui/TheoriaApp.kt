@@ -87,7 +87,10 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexListScreen
+import com.theoriacodex.app.codex.CodexSearchSourceOption
 import com.theoriacodex.app.codex.SaveToCodexSheet
+import com.theoriacodex.app.codex.buildSourceScopedCodexSearchTags
+import com.theoriacodex.app.codex.codexSearchSourceOptions as buildCodexSearchSourceOptions
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.creator.CreatorProfileScreen
 import com.theoriacodex.app.creator.browseableCreatorProfile
@@ -148,6 +151,7 @@ import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.RealAdapterRegistry
 import com.theoriacodex.sources.credentials.GelbooruCredentials
@@ -403,6 +407,7 @@ fun TheoriaApp(
     var pendingCodexImportUri by remember { mutableStateOf<Uri?>(null) }
     val codexItemCounts = remember { mutableStateMapOf<String, Int>() }
     val codexCoverModels = remember { mutableStateMapOf<String, Any?>() }
+    val codexSearchSourceOptions = remember { mutableStateMapOf<String, List<CodexSearchSourceOption>>() }
     val savedPostIdsByCodex = remember { mutableStateMapOf<String, Set<PostId>>() }
     val savedPostIds by remember {
         derivedStateOf {
@@ -703,18 +708,36 @@ fun TheoriaApp(
             }
     }
 
-    suspend fun searchFromCodex(codexId: String) {
-        val posts = codexRepository
-            .observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED)
-            .first()
-        val includeTags = buildCodexSearchTags(posts)
-        if (includeTags.isEmpty()) {
-            Toast.makeText(appContext, "Codex has no searchable tags", Toast.LENGTH_SHORT).show()
+    suspend fun searchFromCodex(codexId: String, source: SourceKey) {
+        if (source !in realRegistry.availableSources()) {
+            Toast.makeText(appContext, "${source.displayName()} source is unavailable", Toast.LENGTH_SHORT).show()
             return
         }
 
-        if (!searchCoordinator.prepareExploreTagSearch(includeTags = includeTags)) {
-            Toast.makeText(appContext, "Could not prepare search", Toast.LENGTH_SHORT).show()
+        val posts = codexRepository
+            .observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED)
+            .first()
+        val includeTags = buildSourceScopedCodexSearchTags(
+            posts = posts,
+            source = source,
+            limit = CODEX_SEARCH_TAG_LIMIT,
+        )
+        if (includeTags.isEmpty()) {
+            Toast.makeText(
+                appContext,
+                "Codex has no searchable ${source.displayName()} tags",
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+
+        if (
+            !searchCoordinator.prepareExploreTagSearch(
+                includeTags = includeTags,
+                mode = QueryMode.Source(source),
+            )
+        ) {
+            Toast.makeText(appContext, "${source.displayName()} source is unavailable", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -729,7 +752,7 @@ fun TheoriaApp(
         }
         Toast.makeText(
             appContext,
-            "Searching codex tags: ${includeTags.joinToString(separator = ", ")}",
+            "Searching ${source.displayName()} codex tags: ${includeTags.joinToString(separator = ", ")}",
             Toast.LENGTH_SHORT,
         ).show()
     }
@@ -1216,7 +1239,7 @@ fun TheoriaApp(
         }
     }
 
-    LaunchedEffect(codices.map { it.codexId }) {
+    LaunchedEffect(codices.map { it.codexId }, availableRealSources) {
         val activeIds = codices.map { it.codexId }.toSet()
         codexItemCounts.keys
             .filterNot { it in activeIds }
@@ -1226,6 +1249,10 @@ fun TheoriaApp(
             .filterNot { it in activeIds }
             .toList()
             .forEach { codexCoverModels.remove(it) }
+        codexSearchSourceOptions.keys
+            .filterNot { it in activeIds }
+            .toList()
+            .forEach { codexSearchSourceOptions.remove(it) }
         savedPostIdsByCodex.keys
             .filterNot { it in activeIds }
             .toList()
@@ -1251,6 +1278,10 @@ fun TheoriaApp(
                             )
                         }
                         codexCoverModels[codex.codexId] = coverModel
+                        codexSearchSourceOptions[codex.codexId] = buildCodexSearchSourceOptions(
+                            posts = posts,
+                            availableSources = availableRealSources,
+                        )
                     }
                 }
             }
@@ -1783,6 +1814,7 @@ fun TheoriaApp(
                                         codices = visibleCodices,
                                         itemCounts = codexItemCounts,
                                         codexCoverModels = codexCoverModels,
+                                        codexSearchSourceOptions = codexSearchSourceOptions,
                                         onOpenCodex = { codexId ->
                                             navController.navigate(AppRoute.codexDetail(codexId))
                                         },
@@ -1799,9 +1831,9 @@ fun TheoriaApp(
                                                 shareCodex(codexId)
                                             }
                                         },
-                                        onSearchFromCodex = { codexId ->
+                                        onSearchFromCodex = { codexId, source ->
                                             scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                searchFromCodex(codexId)
+                                                searchFromCodex(codexId, source)
                                             }
                                         },
                                         onCommitReorder = { orderedVisibleIds ->
@@ -2820,32 +2852,6 @@ private fun loadSeedTagSuggestions(context: Context): Map<SourceKey, List<TagSug
             .orEmpty()
         source to tags
     }.toMap()
-}
-
-private fun buildCodexSearchTags(posts: List<Post>): List<String> {
-    if (posts.isEmpty()) return emptyList()
-
-    val frequency = mutableMapOf<String, Int>()
-    posts.forEach { post ->
-        val uniquePostTags = post.canonicalTags
-            .asSequence()
-            .map { it.trim() }
-            .filter { it.isNotBlank() && !it.startsWith("-") }
-            .distinctBy { it.lowercase() }
-            .toList()
-        uniquePostTags.forEach { tag ->
-            frequency[tag] = (frequency[tag] ?: 0) + 1
-        }
-    }
-
-    return frequency
-        .entries
-        .sortedWith(
-            compareByDescending<Map.Entry<String, Int>> { it.value }
-                .thenBy { it.key.lowercase() }
-        )
-        .take(CODEX_SEARCH_TAG_LIMIT)
-        .map { it.key }
 }
 
 private fun likesCodexIdForProfile(profileId: String): String {

@@ -62,7 +62,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.theoriacodex.app.source.displayName
 import com.theoriacodex.domain.model.Codex
+import com.theoriacodex.domain.model.SourceKey
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,11 +72,12 @@ fun CodexListScreen(
     codices: List<Codex>,
     itemCounts: Map<String, Int>,
     codexCoverModels: Map<String, Any?>,
+    codexSearchSourceOptions: Map<String, List<CodexSearchSourceOption>>,
     onOpenCodex: (String) -> Unit,
     onImportCodex: () -> Unit,
     onDownloadCodex: (String) -> Unit,
     onShareCodex: (String) -> Unit,
-    onSearchFromCodex: (String) -> Unit,
+    onSearchFromCodex: (String, SourceKey) -> Unit,
     onCommitReorder: (List<String>) -> Unit,
     onCreateCodex: (String) -> Unit,
     onRenameCodex: (String, String) -> Unit,
@@ -84,6 +87,7 @@ fun CodexListScreen(
     var renameTarget by remember { mutableStateOf<Codex?>(null) }
     var deleteTarget by remember { mutableStateOf<Codex?>(null) }
     var actionTarget by remember { mutableStateOf<Codex?>(null) }
+    var searchSourceTarget by remember { mutableStateOf<Codex?>(null) }
     var reorderMode by remember { mutableStateOf(false) }
 
     var reorderDraft by remember { mutableStateOf(codices) }
@@ -353,6 +357,7 @@ fun CodexListScreen(
 
     val actionCodex = actionTarget
     if (actionCodex != null) {
+        val searchOptions = codexSearchSourceOptions[actionCodex.codexId].orEmpty()
         ModalBottomSheet(
             onDismissRequest = { actionTarget = null },
             dragHandle = null,
@@ -390,9 +395,10 @@ fun CodexListScreen(
                         )
                     }
                     IconButton(
+                        enabled = searchOptions.isNotEmpty(),
                         onClick = {
+                            searchSourceTarget = actionCodex
                             actionTarget = null
-                            onSearchFromCodex(actionCodex.codexId)
                         },
                     ) {
                         Icon(
@@ -434,6 +440,79 @@ fun CodexListScreen(
                 TextButton(
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { actionTarget = null },
+                ) {
+                    Text("Cancel")
+                }
+            }
+        }
+    }
+
+    val searchCodex = searchSourceTarget
+    if (searchCodex != null) {
+        val sourceOptions = codexSearchSourceOptions[searchCodex.codexId].orEmpty()
+        ModalBottomSheet(
+            onDismissRequest = { searchSourceTarget = null },
+            dragHandle = null,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = searchCodex.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                )
+                Text(
+                    text = "Search source",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                if (sourceOptions.isEmpty()) {
+                    Text(
+                        text = "No searchable sources available",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                    )
+                } else {
+                    sourceOptions.forEach { option ->
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                searchSourceTarget = null
+                                onSearchFromCodex(searchCodex.codexId, option.source)
+                            },
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(option.source.displayName())
+                                Text(
+                                    text = "${option.postCount} ${if (option.postCount == 1) "post" else "posts"}",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { searchSourceTarget = null },
                 ) {
                     Text("Cancel")
                 }

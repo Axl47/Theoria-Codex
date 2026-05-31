@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-05-31T00:39:00Z
+updated_at: 2026-05-31T03:43:44Z
 ---
 # Working List
 
@@ -9,12 +9,9 @@ updated_at: 2026-05-31T00:39:00Z
 ## In Progress
 
 ## Done
-- [x] Create animated duration filter ExecPlan and refresh task tracking
-- [x] Add `durationMs` and persisted content-filter settings
-- [x] Add animated duration range helpers and filtering semantics
-- [x] Add duration sliders to Search, Creator Profile, and For You
-- [x] Add background resolution for unknown animated durations
-- [x] Parse known durations in source adapters and stubs
-- [x] Add/update tests for filtering, persistence, and adapters
-- [x] Update README, AGENTS, and ExecPlan progress
-- [x] Run Gradle verification: `./gradlew :app:testDebugUnitTest :core-data:test :core-sources:test :core-stubs:test` and `./gradlew :app:assembleDebug`
+- [x] Refresh task checklist
+- [x] Add source-scoped Codex search helper and coordinator mode support
+- [x] Wire Codex source picker UI and app navigation flow
+- [x] Add/update tests for source-scoped Codex search
+- [x] Update README recent updates
+- [x] Run Gradle verification and inspect diff

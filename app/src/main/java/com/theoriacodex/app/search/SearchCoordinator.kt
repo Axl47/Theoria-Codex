@@ -365,6 +365,7 @@ class SearchCoordinator(
     fun prepareExploreTagSearch(
         includeTags: List<String>,
         excludeTags: List<String> = emptyList(),
+        mode: QueryMode = QueryMode.Unified,
     ): Boolean {
         val normalizedInclude = includeTags
             .map(String::trim)
@@ -376,7 +377,8 @@ class SearchCoordinator(
             .filterNot { it in normalizedInclude }
             .distinct()
         if (normalizedInclude.isEmpty() && normalizedExclude.isEmpty()) return false
-        draftQuery = defaultQuery(QueryMode.Unified).copy(
+        if (!isModeAvailable(mode)) return false
+        draftQuery = defaultQuery(mode).copy(
             includeTags = normalizedInclude,
             excludeTags = normalizedExclude,
         )

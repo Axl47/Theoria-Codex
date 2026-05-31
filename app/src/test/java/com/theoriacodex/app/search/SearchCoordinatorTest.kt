@@ -446,6 +446,42 @@ class SearchCoordinatorTest {
     }
 
     @Test
+    fun `prepare explore tag search can target an available source mode`() = runTest {
+        val coordinator = coordinator()
+        coordinator.initialize()
+
+        val prepared = coordinator.prepareExploreTagSearch(
+            includeTags = listOf("fresh-tag"),
+            mode = QueryMode.Source(SourceKey.PIXIV),
+        )
+
+        assertTrue(prepared)
+        assertEquals(QueryMode.Source(SourceKey.PIXIV), coordinator.draftQuery.mode)
+        assertEquals(listOf("fresh-tag"), coordinator.draftQuery.includeTags)
+        assertEquals(SortMode.NEWEST, coordinator.draftQuery.sort)
+    }
+
+    @Test
+    fun `prepare explore tag search rejects unavailable source mode`() = runTest {
+        val coordinator = SearchCoordinator(
+            registry = LimitedStubRegistry(setOf(SourceKey.PIXIV)),
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+
+        val prepared = coordinator.prepareExploreTagSearch(
+            includeTags = listOf("fresh-tag"),
+            mode = QueryMode.Source(SourceKey.GELBOORU),
+        )
+
+        assertFalse(prepared)
+        assertEquals(QueryMode.Unified, coordinator.draftQuery.mode)
+        assertTrue(coordinator.draftQuery.includeTags.isEmpty())
+    }
+
+    @Test
     fun `prepare explore tag search rejects empty selections`() = runTest {
         val coordinator = coordinator()
         coordinator.initialize()
