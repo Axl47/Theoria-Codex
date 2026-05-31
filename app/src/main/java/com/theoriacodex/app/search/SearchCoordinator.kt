@@ -429,6 +429,24 @@ class SearchCoordinator(
         draftQuery = draftQuery.copy(includeTags = nextInclude)
     }
 
+    fun selectedNhentaiFullColorFilter(): Boolean {
+        return draftQuery.includeTags.any { tag ->
+            normalizeNhentaiTagFilter(tag) == NHENTAI_FULL_COLOR_TAG
+        }
+    }
+
+    fun setNhentaiFullColorFilter(enabled: Boolean) {
+        val cleaned = draftQuery.includeTags.filterNot { tag ->
+            normalizeNhentaiTagFilter(tag) == NHENTAI_FULL_COLOR_TAG
+        }
+        val nextInclude = if (enabled) {
+            cleaned + NHENTAI_FULL_COLOR_TAG
+        } else {
+            cleaned
+        }
+        draftQuery = draftQuery.copy(includeTags = nextInclude)
+    }
+
     fun directNhentaiGalleryIdCandidate(query: Query = draftQuery): String? {
         return query.directNhentaiGalleryIdCandidate()
     }
@@ -1267,7 +1285,9 @@ private val NHENTAI_LANGUAGE_TAG_BY_FILTER = mapOf(
     NhentaiLanguageFilter.CHINESE to "chinese",
     NhentaiLanguageFilter.JAPANESE to "japanese",
 )
+private const val NHENTAI_FULL_COLOR_TAG = "full color"
 private val NHENTAI_LANGUAGE_FILTER_TAGS = NHENTAI_LANGUAGE_TAG_BY_FILTER.values.toSet()
+private val NHENTAI_DIRECT_LOOKUP_FILTER_TAGS = NHENTAI_LANGUAGE_FILTER_TAGS + NHENTAI_FULL_COLOR_TAG
 private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(
     SourceKey.PIXIV,
     SourceKey.GELBOORU,
@@ -1282,7 +1302,7 @@ private val WHITESPACE_REGEX = Regex("\\s+")
 private val PIXIV_TRAILING_PARENTHESIS_REGEX = Regex("\\s*\\([^)]*\\)\\s*$")
 
 private fun nhentaiLanguageFilterForTag(tag: String): NhentaiLanguageFilter? {
-    return when (normalizeNhentaiLanguageTag(tag)) {
+    return when (normalizeNhentaiTagFilter(tag)) {
         "english" -> NhentaiLanguageFilter.ENGLISH
         "chinese" -> NhentaiLanguageFilter.CHINESE
         "japanese" -> NhentaiLanguageFilter.JAPANESE
@@ -1290,7 +1310,7 @@ private fun nhentaiLanguageFilterForTag(tag: String): NhentaiLanguageFilter? {
     }
 }
 
-private fun normalizeNhentaiLanguageTag(value: String): String {
+private fun normalizeNhentaiTagFilter(value: String): String {
     return value
         .trim()
         .lowercase()
@@ -1309,7 +1329,7 @@ private fun Query.directNhentaiGalleryIdCandidate(): String? {
         .filter(String::isNotBlank)
         .toList()
     val searchable = includes.filterNot { tag ->
-        normalizeNhentaiLanguageTag(tag) in NHENTAI_LANGUAGE_FILTER_TAGS
+        normalizeNhentaiTagFilter(tag) in NHENTAI_DIRECT_LOOKUP_FILTER_TAGS
     }
     if (searchable.size != 1) return null
 

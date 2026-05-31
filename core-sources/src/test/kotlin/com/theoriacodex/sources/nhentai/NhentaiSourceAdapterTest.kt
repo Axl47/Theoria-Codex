@@ -106,6 +106,7 @@ class NhentaiSourceAdapterTest {
         assertEquals("https://i.nhentai.net/galleries/9876/1.webp", post?.media?.get(0)?.url)
         assertEquals("https://i.nhentai.net/galleries/9876/2.gif", post?.media?.get(1)?.url)
         assertEquals("https://nhentai.net/g/123/", post?.pageUrl)
+        assertEquals(listOf("big breasts"), post?.canonicalTags)
     }
 
     @Test
@@ -183,6 +184,44 @@ class NhentaiSourceAdapterTest {
     }
 
     @Test
+    fun `direct gallery id lookup ignores nhentai filter tags`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "id": 634609,
+                      "media_id": 3822885,
+                      "title": {"pretty": "Direct ID"},
+                      "images": {
+                        "thumbnail": {"t": "w"},
+                        "cover": {"t": "w"},
+                        "pages": [{"t": "w"}]
+                      },
+                      "tags": []
+                    }
+                """.trimIndent(),
+            )
+        }
+        val adapter = NhentaiSourceAdapter(httpClient = httpClient)
+
+        val page = adapter.search(
+            query = Query(
+                mode = QueryMode.Source(SourceKey.NHENTAI),
+                includeTags = listOf("english", "full color", "634609"),
+                excludeTags = emptyList(),
+                sort = SortMode.NEWEST,
+                dateRange = null,
+                minScore = null,
+            ),
+            pageToken = null,
+        )
+
+        assertEquals("https://nhentai.net/api/gallery/634609", httpClient.lastGet?.url)
+        assertEquals(1, page.items.size)
+    }
+
+    @Test
     fun `search falls back to mirrored web page when api is cloudflare blocked`() = runTest {
         val httpClient = QueueHttpClient(
             SourceHttpResponse(
@@ -243,15 +282,30 @@ class NhentaiSourceAdapterTest {
                     [![Image 2: Page 1](https://i2.nhentai.net/galleries/3821534/1.webp)](http://nhentai.net/g/634609/2/)
                 """.trimIndent(),
             ),
+            SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    <html>
+                      <body>
+                        <section id="tags">
+                          <a href="/tag/big-breasts/" class="tag"><span class="name">big breasts</span></a>
+                          <a href="/artist/yomoda-yomo/" class="tag"><span class="name">yomoda yomo</span></a>
+                          <a href="/language/english/" class="tag"><span class="name">english</span></a>
+                        </section>
+                      </body>
+                    </html>
+                """.trimIndent(),
+            ),
         )
         val adapter = NhentaiSourceAdapter(httpClient = httpClient)
 
         val post = adapter.resolvePost(PostId(source = SourceKey.NHENTAI, sourcePostId = "634609"))
 
         assertNotNull(post)
-        assertEquals(2, httpClient.requests.size)
+        assertEquals(3, httpClient.requests.size)
         assertEquals("https://nhentai.net/api/gallery/634609", httpClient.requests[0].url)
         assertEquals("https://r.jina.ai/http://http://nhentai.net/g/634609/1/", httpClient.requests[1].url)
+        assertEquals("https://nhentai.to/g/634609/", httpClient.requests[2].url)
         assertEquals("Mirrored Gallery", post?.title)
         assertEquals(3, post?.media?.size)
         assertEquals("https://i.nhentai.net/galleries/3821534/1.webp", post?.media?.get(0)?.url)
@@ -265,6 +319,8 @@ class NhentaiSourceAdapterTest {
             post?.media?.get(0)?.progressiveUrls,
         )
         assertEquals("https://i.nhentai.net/galleries/3821534/3.webp", post?.media?.get(2)?.url)
+        assertEquals(listOf("big breasts", "yomoda yomo", "english"), post?.canonicalTags)
+        assertEquals("yomoda yomo", post?.authorName)
     }
 
     private fun sampleQuery(): Query {

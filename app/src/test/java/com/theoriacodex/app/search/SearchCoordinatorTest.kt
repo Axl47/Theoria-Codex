@@ -660,6 +660,23 @@ class SearchCoordinatorTest {
     }
 
     @Test
+    fun `nhentai full color filter toggles full color tag in include list`() = runTest {
+        val coordinator = coordinator()
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
+        coordinator.addIncludeTag("artist:example")
+
+        coordinator.setNhentaiFullColorFilter(true)
+        assertTrue(coordinator.selectedNhentaiFullColorFilter())
+        assertTrue("full color" in coordinator.draftQuery.includeTags)
+
+        coordinator.setNhentaiFullColorFilter(false)
+        assertFalse(coordinator.selectedNhentaiFullColorFilter())
+        assertFalse("full color" in coordinator.draftQuery.includeTags)
+        assertTrue("artist:example" in coordinator.draftQuery.includeTags)
+    }
+
+    @Test
     fun `direct nhentai gallery id candidate supports source and unified modes`() = runTest {
         val coordinator = coordinator()
         coordinator.initialize()
@@ -668,6 +685,8 @@ class SearchCoordinatorTest {
         coordinator.addIncludeTag("634609")
         assertEquals("634609", coordinator.directNhentaiGalleryIdCandidate())
         coordinator.setNhentaiLanguageFilter(NhentaiLanguageFilter.ENGLISH)
+        assertEquals("634609", coordinator.directNhentaiGalleryIdCandidate())
+        coordinator.setNhentaiFullColorFilter(true)
         assertEquals("634609", coordinator.directNhentaiGalleryIdCandidate())
 
         coordinator.setMode(QueryMode.Unified)

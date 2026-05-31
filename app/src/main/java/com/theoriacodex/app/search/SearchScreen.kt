@@ -175,6 +175,7 @@ fun SearchScreen(
     var showFilterSheet by remember { mutableStateOf(false) }
     var showFavoriteTagSheet by remember { mutableStateOf(false) }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
+    var selectedActionPostResolving by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -240,6 +241,22 @@ fun SearchScreen(
                 if (probedDurationMs != null) {
                     coordinator.rememberResolvedPost(candidate.copy(durationMs = probedDurationMs))
                 }
+            }
+        }
+    }
+    fun openPostActionSheet(post: Post) {
+        focusManager.clearFocus()
+        val displayPost = coordinator.displayPost(post)
+        selectedActionPost = displayPost
+        selectedActionPostResolving = false
+        if (displayPost.hasActionableTags()) return
+
+        selectedActionPostResolving = true
+        scope.launch {
+            val resolved = runCatching { coordinator.resolvePostForSearch(post.id) }.getOrNull()
+            if (selectedActionPost?.id == post.id) {
+                selectedActionPost = resolved ?: displayPost
+                selectedActionPostResolving = false
             }
         }
     }
@@ -706,8 +723,7 @@ fun SearchScreen(
                                         onOpenViewer(visibleResults, context, visibilityFilters)
                                     },
                                     onLongPress = {
-                                        focusManager.clearFocus()
-                                        selectedActionPost = post
+                                        openPostActionSheet(post)
                                     },
                                 )
                             }
@@ -741,7 +757,10 @@ fun SearchScreen(
         val context = LocalContext.current
         val actionSheetHorizontalPadding = 16.dp
         ModalBottomSheet(
-            onDismissRequest = { selectedActionPost = null },
+            onDismissRequest = {
+                selectedActionPost = null
+                selectedActionPostResolving = false
+            },
             dragHandle = null,
         ) {
             Column(
@@ -758,6 +777,7 @@ fun SearchScreen(
                     IconButton(
                         onClick = {
                             selectedActionPost = null
+                            selectedActionPostResolving = false
                             onSaveToDevice(post)
                         },
                     ) {
@@ -769,6 +789,7 @@ fun SearchScreen(
                     IconButton(
                         onClick = {
                             selectedActionPost = null
+                            selectedActionPostResolving = false
                             onRequestSaveToCodex(post)
                         },
                     ) {
@@ -784,6 +805,7 @@ fun SearchScreen(
                             clipboard?.setPrimaryClip(ClipData.newPlainText("tags", formatted))
                             Toast.makeText(context, "Tags copied", Toast.LENGTH_SHORT).show()
                             selectedActionPost = null
+                            selectedActionPostResolving = false
                         },
                     ) {
                         Icon(
@@ -801,6 +823,7 @@ fun SearchScreen(
                             }
                             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                             selectedActionPost = null
+                            selectedActionPostResolving = false
                         },
                     ) {
                         Icon(
@@ -821,23 +844,35 @@ fun SearchScreen(
                     post = post,
                     onClick = {
                         selectedActionPost = null
+                        selectedActionPostResolving = false
                         onOpenCreatorProfile(post)
                     },
                 )
                 HorizontalDivider()
-                PostTagActionSection(
-                    post = post,
-                    tagVideoCountProvider = coordinator::tagVideoCount,
-                    fetchTagVideoCounts = coordinator::fetchTagVideoCounts,
-                    onAddIncludeTag = coordinator::addIncludeTag,
-                    onAddExcludeTag = coordinator::addExcludeTag,
-                    onRemoveIncludeTag = coordinator::removeIncludeTag,
-                    onRemoveExcludeTag = coordinator::removeExcludeTag,
-                    onFavoriteTagLongPress = onAddFavoriteTag,
-                )
+                if (selectedActionPostResolving && !post.hasActionableTags()) {
+                    Text(
+                        text = "Loading tags...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    PostTagActionSection(
+                        post = post,
+                        tagVideoCountProvider = coordinator::tagVideoCount,
+                        fetchTagVideoCounts = coordinator::fetchTagVideoCounts,
+                        onAddIncludeTag = coordinator::addIncludeTag,
+                        onAddExcludeTag = coordinator::addExcludeTag,
+                        onRemoveIncludeTag = coordinator::removeIncludeTag,
+                        onRemoveExcludeTag = coordinator::removeExcludeTag,
+                        onFavoriteTagLongPress = onAddFavoriteTag,
+                    )
+                }
                 TextButton(
                     modifier = Modifier.fillMaxWidth(),
-                    onClick = { selectedActionPost = null },
+                    onClick = {
+                        selectedActionPost = null
+                        selectedActionPostResolving = false
+                    },
                 ) {
                     Text("Cancel")
                 }
@@ -876,6 +911,8 @@ fun SearchScreen(
             onHideLikedChange = { hideLiked = it },
             hideSaved = hideSaved,
             onHideSavedChange = { hideSaved = it },
+            nhentaiFullColorFilter = coordinator.selectedNhentaiFullColorFilter(),
+            onNhentaiFullColorFilterChange = { enabled -> coordinator.setNhentaiFullColorFilter(enabled) },
             nhentaiLanguageFilter = coordinator.selectedNhentaiLanguageFilter(),
             onNhentaiLanguageFilterChange = { filter -> coordinator.setNhentaiLanguageFilter(filter) },
             onSortChanged = { applyDraftAndResetScroll() },
@@ -1358,6 +1395,8 @@ private fun FilterSheet(
     onHideLikedChange: (Boolean) -> Unit,
     hideSaved: Boolean,
     onHideSavedChange: (Boolean) -> Unit,
+    nhentaiFullColorFilter: Boolean,
+    onNhentaiFullColorFilterChange: (Boolean) -> Unit,
     nhentaiLanguageFilter: NhentaiLanguageFilter,
     onNhentaiLanguageFilterChange: (NhentaiLanguageFilter) -> Unit,
     onSortChanged: () -> Unit,
@@ -1406,6 +1445,18 @@ private fun FilterSheet(
                         onClick = { onHideSavedChange(!hideSaved) },
                         label = { Text("Hide saved") },
                     )
+                }
+                if (!showAnimatedOnlyFilter) {
+                    item {
+                        FilterChip(
+                            selected = nhentaiFullColorFilter,
+                            onClick = {
+                                onNhentaiFullColorFilterChange(!nhentaiFullColorFilter)
+                                onSortChanged()
+                            },
+                            label = { Text("Full Color") },
+                        )
+                    }
                 }
             }
 
@@ -2155,6 +2206,11 @@ private fun searchRequestHeaders(sourceKey: SourceKey): Map<String, String> {
 
 private fun String.isDigitsOnly(): Boolean {
     return isNotBlank() && all { ch -> ch.isDigit() }
+}
+
+private fun Post.hasActionableTags(): Boolean {
+    return canonicalTags.any { tag -> tag.isNotBlank() } ||
+        rawTags.any { tag -> tag.isNotBlank() }
 }
 
 private const val PAGINATION_PREFETCH_RATIO = 0.8f

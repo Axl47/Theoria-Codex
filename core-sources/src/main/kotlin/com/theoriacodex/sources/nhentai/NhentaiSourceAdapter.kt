@@ -26,6 +26,7 @@ import java.net.URLEncoder
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.jsoup.Jsoup
 
 class NhentaiSourceAdapter(
     private val httpClient: SourceHttpClient,
@@ -303,7 +304,7 @@ class NhentaiSourceAdapter(
             localPath = null,
             mime = mimeFromFileExt(firstPageExt),
         )
-        return Post(
+        val post = Post(
             id = PostId(SourceKey.NHENTAI, galleryId),
             preview = preview,
             full = mediaRefs.firstOrNull(),
@@ -316,6 +317,68 @@ class NhentaiSourceAdapter(
             authorName = null,
             createdAtEpochMs = null,
             title = title,
+        )
+        val metadata = fetchMirrorGalleryMetadata(galleryId)
+        return if (metadata != null && metadata.canonicalTags.isNotEmpty()) {
+            post.copy(
+                canonicalTags = metadata.canonicalTags,
+                rawTags = metadata.canonicalTags,
+                authorName = metadata.authorName,
+            )
+        } else {
+            post
+        }
+    }
+
+    private suspend fun fetchMirrorGalleryMetadata(galleryId: String): NhentaiMirrorMetadata? {
+        NHENTAI_METADATA_MIRROR_BASES.forEach { baseUrl ->
+            val response = requestMetadataMirror("$baseUrl/g/$galleryId/")
+            if (response != null && response.statusCode in 200..299) {
+                parseMirrorGalleryMetadata(response.body)?.let { metadata ->
+                    if (metadata.canonicalTags.isNotEmpty()) return metadata
+                }
+            }
+        }
+        return null
+    }
+
+    private suspend fun requestMetadataMirror(url: String): SourceHttpResponse? {
+        throttle()
+        return runCatching {
+            httpClient.get(
+                url = url,
+                query = emptyMap(),
+                headers = NHENTAI_METADATA_MIRROR_HEADERS,
+            )
+        }.getOrNull()
+    }
+
+    private fun parseMirrorGalleryMetadata(body: String): NhentaiMirrorMetadata? {
+        val document = Jsoup.parse(body)
+        val tagLinks = document.select(
+            "section#tags a.tag, li.tags a.tag_btn"
+        )
+        val tags = tagLinks
+            .mapNotNull { link ->
+                val href = link.attr("href").trim()
+                if (!href.isNhentaiTaxonomyPath()) return@mapNotNull null
+                val name = link.selectFirst(".name")?.text()?.trim()
+                    ?: link.ownText().trim()
+                name.takeIf(String::isNotBlank)
+            }
+            .distinctBy { it.lowercase() }
+        if (tags.isEmpty()) return null
+
+        val authorName = tagLinks
+            .firstOrNull { link -> link.attr("href").trim().startsWith("/artist/") }
+            ?.let { link ->
+                link.selectFirst(".name")?.text()?.trim()
+                    ?: link.ownText().trim()
+            }
+            ?.takeIf(String::isNotBlank)
+        return NhentaiMirrorMetadata(
+            canonicalTags = tags,
+            authorName = authorName,
         )
     }
 
@@ -599,6 +662,11 @@ private data class ParsedNhentaiTag(
     val type: String?,
 )
 
+private data class NhentaiMirrorMetadata(
+    val canonicalTags: List<String>,
+    val authorName: String?,
+)
+
 private fun compileNhentaiQuery(query: Query): String {
     val include = query.includeTags
         .map(::normalizeNhentaiTag)
@@ -627,18 +695,28 @@ private fun Query.directNhentaiGalleryIdCandidate(): String? {
         .filter(String::isNotBlank)
         .toList()
     val searchable = includes.filterNot { tag ->
-        normalizeNhentaiLanguageTag(tag) in NHENTAI_LANGUAGE_FILTER_TAGS
+        normalizeNhentaiFilterTag(tag) in NHENTAI_DIRECT_LOOKUP_FILTER_TAGS
     }
     if (searchable.size != 1) return null
     return searchable.first().takeIf(String::isDigitsOnly)
 }
 
-private fun normalizeNhentaiLanguageTag(value: String): String {
+private fun normalizeNhentaiFilterTag(value: String): String {
     return value
         .trim()
         .lowercase()
         .replace('_', ' ')
         .replace(NHENTAI_WHITESPACE_REGEX, " ")
+}
+
+private fun String.isNhentaiTaxonomyPath(): Boolean {
+    return startsWith("/tag/") ||
+        startsWith("/artist/") ||
+        startsWith("/character/") ||
+        startsWith("/parody/") ||
+        startsWith("/group/") ||
+        startsWith("/language/") ||
+        startsWith("/category/")
 }
 
 private fun mapSortParam(sortMode: SortMode): String? {
@@ -748,6 +826,10 @@ private const val NHENTAI_GALLERY_URL_PREFIX = "https://nhentai.net/api/gallery"
 private const val NHENTAI_IMAGES_BASE = "https://i.nhentai.net"
 private const val NHENTAI_THUMBS_BASE = "https://t.nhentai.net"
 private const val JINA_MIRROR_BASE = "https://r.jina.ai/http://"
+private val NHENTAI_METADATA_MIRROR_BASES = listOf(
+    "https://nhentai.to",
+    "https://nhentai.website",
+)
 private const val NHENTAI_SEARCH_PAGE_SIZE = 25
 private val NHENTAI_DEFAULT_HEADERS = mapOf(
     "User-Agent" to "Mozilla/5.0",
@@ -758,8 +840,14 @@ private val JINA_REQUEST_HEADERS = mapOf(
     "User-Agent" to "Mozilla/5.0",
     "Accept" to "text/plain, */*",
 )
+private val NHENTAI_METADATA_MIRROR_HEADERS = mapOf(
+    "User-Agent" to "Mozilla/5.0",
+    "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+)
 private val NHENTAI_IMAGE_FALLBACK_EXTENSIONS = listOf("webp", "jpg", "png", "gif")
+private const val NHENTAI_FULL_COLOR_TAG = "full color"
 private val NHENTAI_LANGUAGE_FILTER_TAGS = setOf("english", "chinese", "japanese")
+private val NHENTAI_DIRECT_LOOKUP_FILTER_TAGS = NHENTAI_LANGUAGE_FILTER_TAGS + NHENTAI_FULL_COLOR_TAG
 private val NHENTAI_WHITESPACE_REGEX = Regex("\\s+")
 private val NHENTAI_MIRROR_THUMB_REGEX =
     Regex("""(https://t\d*\.nhentai\.net/galleries/(\d+)/thumb[^\)]*)""")
