@@ -17,6 +17,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
@@ -37,12 +39,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
@@ -193,6 +200,8 @@ fun ViewerScreen(
     var playbackRate by remember { mutableStateOf(ViewerPlaybackRate.Normal) }
     var actionsMenuExpanded by remember { mutableStateOf(false) }
     var playbackSettingsExpanded by remember { mutableStateOf(false) }
+    var galleryVisible by remember { mutableStateOf(false) }
+    val pendingMediaJumpByPost = remember { mutableStateMapOf<Int, Int>() }
     val resolutionRequestedByPostId = remember { mutableStateMapOf<PostId, Boolean>() }
     val currentPostIndex = postPagerState.currentPage.coerceIn(0, posts.lastIndex)
     val selectedPost = posts[currentPostIndex]
@@ -208,11 +217,14 @@ fun ViewerScreen(
     val canDownloadCurrentMedia = selectedCurrentMedia?.let { media ->
         (isPixivUgoira(selectedPost, media) && pixivUgoiraClient != null) || !media.url.isNullOrBlank()
     } == true
+    val selectedGalleryItems = remember(selectedPost) { viewerGalleryMediaItems(selectedPost) }
+    val galleryAvailable = selectedGalleryItems.size > 1 && !currentIsSeekableMedia
 
     LaunchedEffect(posts, launchContext.queryHash, launchContext.startIndex) {
         pendingDismiss = false
         mediaPlaybackEnabled = true
         playbackRate = ViewerPlaybackRate.Normal
+        galleryVisible = false
     }
 
     LaunchedEffect(currentIsSeekableMedia, viewerState.chromeVisible) {
@@ -222,6 +234,12 @@ fun ViewerScreen(
         if (!viewerState.chromeVisible) {
             actionsMenuExpanded = false
             playbackSettingsExpanded = false
+        }
+    }
+
+    LaunchedEffect(galleryAvailable) {
+        if (!galleryAvailable) {
+            galleryVisible = false
         }
     }
 
@@ -250,11 +268,24 @@ fun ViewerScreen(
         showInfoSheet = false
         actionsMenuExpanded = false
         playbackSettingsExpanded = false
+        galleryVisible = false
         pendingDismiss = true
     }
 
+    fun markInteraction() {
+        interactionSerial += 1
+        if (!viewerState.chromeVisible) {
+            viewerState = viewerState.copy(chromeVisible = true)
+        }
+    }
+
     BackHandler(enabled = !pendingDismiss) {
-        requestDismissViewer()
+        if (galleryVisible) {
+            galleryVisible = false
+            markInteraction()
+        } else {
+            requestDismissViewer()
+        }
     }
 
     LaunchedEffect(posts, currentPostIndex, selectedMediaIndex) {
@@ -337,13 +368,6 @@ fun ViewerScreen(
         }
     }
 
-    fun markInteraction() {
-        interactionSerial += 1
-        if (!viewerState.chromeVisible) {
-            viewerState = viewerState.copy(chromeVisible = true)
-        }
-    }
-
     fun onTimelineInteractionChanged(isActive: Boolean) {
         timelineInteractionActive = isActive
         if (isActive) {
@@ -392,14 +416,15 @@ fun ViewerScreen(
 
     LaunchedEffect(postPagerState.currentPage) {
         viewerState = viewerState.withIndex(postPagerState.currentPage)
+        galleryVisible = false
         markInteraction()
     }
 
-    LaunchedEffect(viewerState.chromeVisible, interactionSerial, timelineInteractionActive) {
-        if (viewerState.chromeVisible && !timelineInteractionActive) {
+    LaunchedEffect(viewerState.chromeVisible, interactionSerial, timelineInteractionActive, galleryVisible) {
+        if (viewerState.chromeVisible && !timelineInteractionActive && !galleryVisible) {
             val serial = interactionSerial
             delay(1500)
-            if (serial == interactionSerial && !timelineInteractionActive) {
+            if (serial == interactionSerial && !timelineInteractionActive && !galleryVisible) {
                 viewerState = viewerState.hideChrome()
             }
         }
@@ -416,11 +441,25 @@ fun ViewerScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        HorizontalPager(
-            state = postPagerState,
-            userScrollEnabled = viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f,
-            modifier = Modifier.fillMaxSize(),
-        ) { postPage ->
+        if (galleryVisible && galleryAvailable) {
+            ViewerGalleryGrid(
+                post = selectedPost,
+                items = selectedGalleryItems,
+                selectedMediaIndex = selectedMediaIndex,
+                onMediaSelected = { mediaIndex ->
+                    mediaIndexByPost[currentPostIndex] = mediaIndex
+                    pendingMediaJumpByPost[currentPostIndex] = mediaIndex
+                    galleryVisible = false
+                    markInteraction()
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            HorizontalPager(
+                state = postPagerState,
+                userScrollEnabled = viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f,
+                modifier = Modifier.fillMaxSize(),
+            ) { postPage ->
             val post = posts[postPage]
             val postMedia = remember(post) { viewerMediaItems(post) }
             val initialMediaPage = (mediaIndexByPost[postPage] ?: 0).coerceIn(0, postMedia.lastIndex)
@@ -428,6 +467,15 @@ fun ViewerScreen(
                 initialPage = initialMediaPage,
                 pageCount = { postMedia.size },
             )
+            val pendingMediaJump = pendingMediaJumpByPost[postPage]
+
+            LaunchedEffect(pendingMediaJump, postMedia.size) {
+                if (pendingMediaJump == null) return@LaunchedEffect
+                val targetPage = pendingMediaJump.coerceIn(0, postMedia.lastIndex)
+                mediaPagerState.scrollToPage(targetPage)
+                mediaIndexByPost[postPage] = targetPage
+                pendingMediaJumpByPost.remove(postPage)
+            }
 
             LaunchedEffect(mediaPagerState.currentPage) {
                 mediaIndexByPost[postPage] = mediaPagerState.currentPage
@@ -756,6 +804,7 @@ fun ViewerScreen(
                 }
             }
         }
+        }
 
         if (viewerState.chromeVisible) {
             ViewerChrome(
@@ -792,6 +841,16 @@ fun ViewerScreen(
                     playbackRate = selectedRate
                     playbackSettingsExpanded = false
                     markInteraction()
+                },
+                galleryAvailable = galleryAvailable,
+                galleryVisible = galleryVisible,
+                onToggleGallery = {
+                    if (galleryAvailable) {
+                        galleryVisible = !galleryVisible
+                        actionsMenuExpanded = false
+                        playbackSettingsExpanded = false
+                        markInteraction()
+                    }
                 },
                 onDownload = ::downloadCurrentMedia,
                 downloadEnabled = canDownloadCurrentMedia,
@@ -925,6 +984,93 @@ fun ViewerScreen(
         }
     }
 
+}
+
+@Composable
+private fun ViewerGalleryGrid(
+    post: Post,
+    items: List<ViewerGalleryMediaItem>,
+    selectedMediaIndex: Int,
+    onMediaSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val selectedGalleryIndex = remember(items, selectedMediaIndex) {
+        items.indexOfFirst { item -> item.mediaIndex == selectedMediaIndex }
+            .coerceAtLeast(0)
+    }
+    val gridState = rememberLazyGridState(
+        initialFirstVisibleItemIndex = selectedGalleryIndex,
+    )
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        state = gridState,
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 10.dp),
+        contentPadding = PaddingValues(top = 64.dp, bottom = 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(
+            items = items,
+            key = { item -> item.mediaIndex },
+        ) { item ->
+            val thumbnailUrl = remember(post, item.media) {
+                viewerPrefetchImageLocation(post, item.media)
+            }
+            val imageModel = remember(context, thumbnailUrl, post.id.source) {
+                thumbnailUrl?.let { url ->
+                    buildViewerImageRequest(
+                        context = context,
+                        url = url,
+                        sourceKey = post.id.source,
+                    )
+                }
+            }
+            val selected = item.mediaIndex == selectedMediaIndex
+            val borderColor = if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(0.72f)
+                    .border(width = if (selected) 2.dp else 1.dp, color = borderColor)
+                    .background(Color.Black)
+                    .clickable { onMediaSelected(item.mediaIndex) },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (imageModel != null) {
+                    AsyncImage(
+                        model = imageModel,
+                        contentDescription = "Page ${item.mediaIndex + 1}",
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(4.dp),
+                        contentScale = ContentScale.Fit,
+                    )
+                } else {
+                    Text(
+                        text = "Unavailable",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Text(
+                    text = "${item.mediaIndex + 1}",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .background(Color.Black.copy(alpha = 0.62f))
+                        .padding(horizontal = 6.dp, vertical = 3.dp),
+                )
+            }
+        }
+    }
 }
 
 private fun copyPostUrlToClipboard(context: Context, post: Post): Boolean {
@@ -1748,6 +1894,23 @@ private fun viewerMediaItems(post: Post): List<ImageRef> {
     return listOfNotNull(post.full).ifEmpty { listOf(post.preview) }
 }
 
+internal data class ViewerGalleryMediaItem(
+    val mediaIndex: Int,
+    val media: ImageRef,
+)
+
+internal fun viewerGalleryMediaItems(post: Post): List<ViewerGalleryMediaItem> {
+    return viewerMediaItems(post).mapIndexedNotNull { index, media ->
+        if (isVideoMediaRef(media) || isGifMediaRef(media) || isPixivUgoira(post, media)) {
+            null
+        } else if (viewerImageCandidates(post, media).isEmpty()) {
+            null
+        } else {
+            ViewerGalleryMediaItem(mediaIndex = index, media = media)
+        }
+    }
+}
+
 private fun requiresResolvedViewerPost(post: Post): Boolean {
     return post.id.source == SourceKey.RULE34VIDEO || post.id.source == SourceKey.RULE34GEN
 }
@@ -1942,6 +2105,9 @@ private fun ViewerChrome(
     playbackSettingsEnabled: Boolean,
     playbackRate: ViewerPlaybackRate,
     onPlaybackRateSelected: (ViewerPlaybackRate) -> Unit,
+    galleryAvailable: Boolean,
+    galleryVisible: Boolean,
+    onToggleGallery: () -> Unit,
     downloadEnabled: Boolean,
     onDownload: () -> Unit,
     onInfo: () -> Unit,
@@ -1996,50 +2162,64 @@ private fun ViewerChrome(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                Box {
-                    IconButton(
-                        onClick = {
-                            onPlaybackSettingsExpandedChange(!playbackSettingsExpanded)
-                        },
-                        enabled = playbackSettingsEnabled,
-                    ) {
-                        Icon(Icons.Default.Settings, contentDescription = "Playback settings")
+                if (galleryAvailable) {
+                    IconButton(onClick = onToggleGallery) {
+                        Icon(
+                            imageVector = Icons.Default.Collections,
+                            contentDescription = if (galleryVisible) "Close gallery" else "Open gallery",
+                            tint = if (galleryVisible) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
                     }
-                    DropdownMenu(
-                        expanded = playbackSettingsExpanded,
-                        onDismissRequest = { onPlaybackSettingsExpandedChange(false) },
-                    ) {
-                        ViewerPlaybackRate.entries.forEach { rate ->
-                            val selected = rate == playbackRate
-                            val selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer
-                            val selectedContentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            DropdownMenuItem(
-                                modifier = Modifier.background(
-                                    if (selected) selectedContainerColor else Color.Transparent,
-                                ),
-                                text = { Text(rate.menuLabel) },
-                                onClick = { onPlaybackRateSelected(rate) },
-                                colors = MenuDefaults.itemColors(
-                                    textColor = if (selected) {
-                                        selectedContentColor
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
+                } else {
+                    Box {
+                        IconButton(
+                            onClick = {
+                                onPlaybackSettingsExpandedChange(!playbackSettingsExpanded)
+                            },
+                            enabled = playbackSettingsEnabled,
+                        ) {
+                            Icon(Icons.Default.Settings, contentDescription = "Playback settings")
+                        }
+                        DropdownMenu(
+                            expanded = playbackSettingsExpanded,
+                            onDismissRequest = { onPlaybackSettingsExpandedChange(false) },
+                        ) {
+                            ViewerPlaybackRate.entries.forEach { rate ->
+                                val selected = rate == playbackRate
+                                val selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer
+                                val selectedContentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                DropdownMenuItem(
+                                    modifier = Modifier.background(
+                                        if (selected) selectedContainerColor else Color.Transparent,
+                                    ),
+                                    text = { Text(rate.menuLabel) },
+                                    onClick = { onPlaybackRateSelected(rate) },
+                                    colors = MenuDefaults.itemColors(
+                                        textColor = if (selected) {
+                                            selectedContentColor
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                        leadingIconColor = if (selected) {
+                                            selectedContentColor
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                    ),
+                                    leadingIcon = {
+                                        if (selected) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = rate.contentDescription,
+                                            )
+                                        }
                                     },
-                                    leadingIconColor = if (selected) {
-                                        selectedContentColor
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                ),
-                                leadingIcon = {
-                                    if (selected) {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = rate.contentDescription,
-                                        )
-                                    }
-                                },
-                            )
+                                )
+                            }
                         }
                     }
                 }

@@ -4,7 +4,10 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.pixiv.PIXIV_UGOIRA_MIME
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ViewerScreenImagePipelineTest {
@@ -148,6 +151,133 @@ class ViewerScreenImagePipelineTest {
         assertEquals(
             "https://i.nhentai.net/galleries/3821534/1.webp",
             viewerPrefetchImageLocation(post, media),
+        )
+    }
+
+    @Test
+    fun `viewer gallery media keeps image media indices`() {
+        val media = listOf(
+            imageRef("https://example.com/1.jpg"),
+            imageRef("https://example.com/2.jpg"),
+            imageRef("https://example.com/3.jpg"),
+        )
+        val post = samplePost(
+            sourceKey = SourceKey.NHENTAI,
+            preview = imageRef("https://example.com/preview.jpg"),
+            full = media.first(),
+            media = media,
+        )
+
+        assertEquals(
+            listOf(0, 1, 2),
+            viewerGalleryMediaItems(post).map { it.mediaIndex },
+        )
+    }
+
+    @Test
+    fun `viewer gallery excludes seekable media`() {
+        val staticOne = imageRef("https://example.com/1.jpg")
+        val gif = ImageRef(
+            url = "https://example.com/2.gif",
+            localPath = null,
+            mime = "image/gif",
+        )
+        val video = ImageRef(
+            url = "https://example.com/3.mp4",
+            localPath = null,
+            mime = "video/mp4",
+        )
+        val ugoira = ImageRef(
+            url = "https://example.com/4.zip",
+            localPath = null,
+            mime = PIXIV_UGOIRA_MIME,
+        )
+        val staticTwo = imageRef("https://example.com/5.jpg")
+        val post = samplePost(
+            sourceKey = SourceKey.PIXIV,
+            preview = imageRef("https://example.com/preview.jpg"),
+            full = null,
+            media = listOf(staticOne, gif, video, ugoira, staticTwo),
+        )
+
+        assertEquals(
+            listOf(0, 4),
+            viewerGalleryMediaItems(post).map { it.mediaIndex },
+        )
+    }
+
+    @Test
+    fun `viewer gallery requires more than one image`() {
+        val singleImagePost = samplePost(
+            sourceKey = SourceKey.NHENTAI,
+            preview = imageRef("https://example.com/preview.jpg"),
+            full = null,
+            media = listOf(imageRef("https://example.com/1.jpg")),
+        )
+        val twoImagePost = samplePost(
+            sourceKey = SourceKey.NHENTAI,
+            preview = imageRef("https://example.com/preview.jpg"),
+            full = null,
+            media = listOf(
+                imageRef("https://example.com/1.jpg"),
+                imageRef("https://example.com/2.jpg"),
+            ),
+        )
+
+        assertFalse(viewerGalleryMediaItems(singleImagePost).size > 1)
+        assertTrue(viewerGalleryMediaItems(twoImagePost).size > 1)
+    }
+
+    @Test
+    fun `viewer gallery tile candidates use fast prefetch location`() {
+        val pixivMedia = ImageRef(
+            url = "https://i.pximg.net/original.jpg",
+            localPath = null,
+            mime = "image/jpeg",
+            progressiveUrls = listOf("https://i.pximg.net/medium.jpg"),
+        )
+        val gelbooruMedia = ImageRef(
+            url = "https://gelbooru.com/full.jpg",
+            localPath = null,
+            mime = "image/jpeg",
+            progressiveUrls = listOf("https://gelbooru.com/sample.jpg"),
+        )
+        val nhentaiMedia = ImageRef(
+            url = "https://i.nhentai.net/galleries/3821534/1.webp",
+            localPath = null,
+            mime = "image/webp",
+            progressiveUrls = listOf(
+                "https://i.nhentai.net/galleries/3821534/1.webp",
+                "https://i.nhentai.net/galleries/3821534/1.jpg",
+            ),
+        )
+        val cases = listOf(
+            SourceKey.PIXIV to pixivMedia,
+            SourceKey.GELBOORU to gelbooruMedia,
+            SourceKey.NHENTAI to nhentaiMedia,
+        )
+
+        cases.forEach { (sourceKey, media) ->
+            val post = samplePost(
+                sourceKey = sourceKey,
+                preview = imageRef("https://example.com/preview.jpg"),
+                full = media,
+                media = listOf(media),
+            )
+            val galleryItem = viewerGalleryMediaItems(post).single()
+
+            assertEquals(
+                viewerPrefetchImageLocation(post, galleryItem.media),
+                media.progressiveUrls.first(),
+            )
+        }
+    }
+
+    private fun imageRef(url: String): ImageRef {
+        return ImageRef(
+            url = url,
+            localPath = null,
+            mime = "image/jpeg",
         )
     }
 
