@@ -391,6 +391,8 @@ fun TheoriaApp(
     var showSaveSheet by remember { mutableStateOf(false) }
     var pendingSavePost by remember { mutableStateOf<Post?>(null) }
     var homeTabRoute by rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
+    var pendingTopLevelRoute by remember { mutableStateOf<String?>(null) }
+    var homeTabRestoreComplete by remember { mutableStateOf(false) }
     var navReady by remember { mutableStateOf(false) }
     var startupUpdateState by remember { mutableStateOf<StartupUpdateState>(StartupUpdateState.Checking) }
     var startupStatusMessage by remember { mutableStateOf("Checking for updates...") }
@@ -742,6 +744,7 @@ fun TheoriaApp(
 
         searchCoordinator.applyDraft()
         homeTabRoute = TopLevelDestination.Search.route
+        pendingTopLevelRoute = TopLevelDestination.Search.route
         navController.navigate(AppRoute.Home) {
             popUpTo(navController.graph.findStartDestination().id) {
                 saveState = true
@@ -1330,7 +1333,7 @@ fun TheoriaApp(
     val bottomBarHeight = bottomBarHeightDp.dp
     val bottomBarIconSize = bottomBarIconSizeDp.dp
 
-    LaunchedEffect(navReady, currentRoute, homeTabRoute) {
+    LaunchedEffect(navReady, currentRoute) {
         if (!navReady || currentRoute != AppRoute.Home) return@LaunchedEffect
         val targetIndex = TopLevelDestination.entries.indexOfFirst { destination ->
             destination.route == homeTabRoute
@@ -1338,10 +1341,30 @@ fun TheoriaApp(
         if (targetIndex != topLevelPagerState.currentPage) {
             topLevelPagerState.scrollToPage(targetIndex)
         }
+        homeTabRestoreComplete = true
     }
 
-    LaunchedEffect(navReady, currentRoute, topLevelPagerState.currentPage, topLevelPagerState.isScrollInProgress) {
+    LaunchedEffect(navReady, currentRoute, pendingTopLevelRoute) {
+        val targetRoute = pendingTopLevelRoute ?: return@LaunchedEffect
         if (!navReady || currentRoute != AppRoute.Home) return@LaunchedEffect
+        val targetIndex = TopLevelDestination.entries.indexOfFirst { destination ->
+            destination.route == targetRoute
+        }.coerceAtLeast(0)
+        if (targetIndex != topLevelPagerState.currentPage) {
+            topLevelPagerState.scrollToPage(targetIndex)
+        }
+        pendingTopLevelRoute = null
+    }
+
+    LaunchedEffect(
+        navReady,
+        currentRoute,
+        homeTabRestoreComplete,
+        topLevelPagerState.currentPage,
+        topLevelPagerState.isScrollInProgress,
+    ) {
+        if (!navReady || currentRoute != AppRoute.Home) return@LaunchedEffect
+        if (!homeTabRestoreComplete) return@LaunchedEffect
         if (topLevelPagerState.isScrollInProgress) return@LaunchedEffect
         val route = TopLevelDestination.entries[selectedTopLevelIndex].route
         if (homeTabRoute != route) {
