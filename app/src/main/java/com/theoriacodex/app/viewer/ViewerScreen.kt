@@ -54,6 +54,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -1840,11 +1841,29 @@ private fun ViewerChrome(
                         onDismissRequest = { onPlaybackSettingsExpandedChange(false) },
                     ) {
                         ViewerPlaybackRate.entries.forEach { rate ->
+                            val selected = rate == playbackRate
+                            val selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer
+                            val selectedContentColor = MaterialTheme.colorScheme.onSecondaryContainer
                             DropdownMenuItem(
+                                modifier = Modifier.background(
+                                    if (selected) selectedContainerColor else Color.Transparent,
+                                ),
                                 text = { Text(rate.menuLabel) },
                                 onClick = { onPlaybackRateSelected(rate) },
+                                colors = MenuDefaults.itemColors(
+                                    textColor = if (selected) {
+                                        selectedContentColor
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    },
+                                    leadingIconColor = if (selected) {
+                                        selectedContentColor
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                ),
                                 leadingIcon = {
-                                    if (rate == playbackRate) {
+                                    if (selected) {
                                         Icon(
                                             imageVector = Icons.Default.Check,
                                             contentDescription = rate.contentDescription,
