@@ -32,36 +32,71 @@ class CodexSearchSourceOptionsTest {
     }
 
     @Test
-    fun `source scoped tags ignore other sources and rank by frequency then alphabetically`() {
+    fun `codex search tag options filters to selected source`() {
         val posts = listOf(
             post(
                 source = SourceKey.PIXIV,
                 sourcePostId = "p1",
-                tags = listOf("sky", "blue sky", "-blocked", ""),
+                tags = listOf("sky", "blue sky"),
             ),
             post(
                 source = SourceKey.GELBOORU,
                 sourcePostId = "g1",
-                tags = listOf("sky", "gelbooru only", "gelbooru only"),
+                tags = listOf("gelbooru only"),
+            ),
+        )
+
+        val options = codexSearchTagOptions(
+            posts = posts,
+            source = SourceKey.PIXIV,
+        )
+
+        assertEquals(
+            listOf(
+                CodexSearchTagOption(tag = "blue sky", count = 1),
+                CodexSearchTagOption(tag = "sky", count = 1),
+            ),
+            options,
+        )
+    }
+
+    @Test
+    fun `codex search tag options counts source tags by post frequency`() {
+        val posts = listOf(
+            post(
+                source = SourceKey.PIXIV,
+                sourcePostId = "p1",
+                tags = listOf("sky", "blue sky"),
             ),
             post(
                 source = SourceKey.PIXIV,
                 sourcePostId = "p2",
                 tags = listOf("sky", "portrait"),
             ),
+            post(
+                source = SourceKey.PIXIV,
+                sourcePostId = "p3",
+                tags = listOf("portrait"),
+            ),
         )
 
-        val tags = buildSourceScopedCodexSearchTags(
+        val options = codexSearchTagOptions(
             posts = posts,
             source = SourceKey.PIXIV,
-            limit = 3,
         )
 
-        assertEquals(listOf("sky", "blue sky", "portrait"), tags)
+        assertEquals(
+            listOf(
+                CodexSearchTagOption(tag = "portrait", count = 2),
+                CodexSearchTagOption(tag = "sky", count = 2),
+                CodexSearchTagOption(tag = "blue sky", count = 1),
+            ),
+            options,
+        )
     }
 
     @Test
-    fun `source scoped tags dedupe with source aware tag keys per post`() {
+    fun `codex search tag options dedupes source aware duplicate tags within one post`() {
         val posts = listOf(
             post(
                 source = SourceKey.GELBOORU,
@@ -75,28 +110,75 @@ class CodexSearchSourceOptionsTest {
             ),
         )
 
-        val tags = buildSourceScopedCodexSearchTags(
+        val options = codexSearchTagOptions(
             posts = posts,
             source = SourceKey.GELBOORU,
-            limit = 2,
         )
 
-        assertEquals(listOf("blue sky", "zeta"), tags)
+        assertEquals(
+            listOf(
+                CodexSearchTagOption(tag = "blue sky", count = 2),
+                CodexSearchTagOption(tag = "zeta", count = 1),
+            ),
+            options,
+        )
     }
 
     @Test
-    fun `source scoped tags return empty when no selected source tags exist`() {
+    fun `codex search tag options ignores blank and negative tags`() {
         val posts = listOf(
-            post(source = SourceKey.NHENTAI, sourcePostId = "n1", tags = listOf("english")),
+            post(
+                source = SourceKey.PIXIV,
+                sourcePostId = "p1",
+                tags = listOf("", "   ", "-blocked", "valid"),
+            ),
+        )
+
+        val options = codexSearchTagOptions(
+            posts = posts,
+            source = SourceKey.PIXIV,
+        )
+
+        assertEquals(listOf(CodexSearchTagOption(tag = "valid", count = 1)), options)
+    }
+
+    @Test
+    fun `codex search tag options sorts by count descending then alphabetically`() {
+        val posts = listOf(
+            post(source = SourceKey.PIXIV, sourcePostId = "p1", tags = listOf("zeta", "alpha", "beta")),
+            post(source = SourceKey.PIXIV, sourcePostId = "p2", tags = listOf("zeta", "alpha")),
+            post(source = SourceKey.PIXIV, sourcePostId = "p3", tags = listOf("beta")),
+        )
+
+        val options = codexSearchTagOptions(
+            posts = posts,
+            source = SourceKey.PIXIV,
+        )
+
+        assertEquals(
+            listOf(
+                CodexSearchTagOption(tag = "alpha", count = 2),
+                CodexSearchTagOption(tag = "beta", count = 2),
+                CodexSearchTagOption(tag = "zeta", count = 2),
+            ),
+            options,
+        )
+    }
+
+    @Test
+    fun `source scoped top tag helper delegates to codex search tag options`() {
+        val posts = listOf(
+            post(source = SourceKey.PIXIV, sourcePostId = "p1", tags = listOf("zeta", "alpha")),
+            post(source = SourceKey.PIXIV, sourcePostId = "p2", tags = listOf("zeta")),
         )
 
         val tags = buildSourceScopedCodexSearchTags(
             posts = posts,
             source = SourceKey.PIXIV,
-            limit = 3,
+            limit = 1,
         )
 
-        assertEquals(emptyList<String>(), tags)
+        assertEquals(listOf("zeta"), tags)
     }
 
     private fun post(

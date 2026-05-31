@@ -9,6 +9,11 @@ data class CodexSearchSourceOption(
     val postCount: Int,
 )
 
+data class CodexSearchTagOption(
+    val tag: String,
+    val count: Int,
+)
+
 fun codexSearchSourceOptions(
     posts: List<Post>,
     availableSources: Set<SourceKey>,
@@ -34,7 +39,17 @@ fun buildSourceScopedCodexSearchTags(
     source: SourceKey,
     limit: Int,
 ): List<String> {
-    if (posts.isEmpty() || limit <= 0) return emptyList()
+    if (limit <= 0) return emptyList()
+    return codexSearchTagOptions(posts = posts, source = source)
+        .take(limit)
+        .map { option -> option.tag }
+}
+
+fun codexSearchTagOptions(
+    posts: List<Post>,
+    source: SourceKey,
+): List<CodexSearchTagOption> {
+    if (posts.isEmpty()) return emptyList()
 
     val frequencies = linkedMapOf<String, CodexTagFrequency>()
     posts
@@ -66,8 +81,12 @@ fun buildSourceScopedCodexSearchTags(
             compareByDescending<CodexTagFrequency> { it.count }
                 .thenBy { it.tag.lowercase() }
         )
-        .take(limit)
-        .map { it.tag }
+        .map { frequency ->
+            CodexSearchTagOption(
+                tag = frequency.tag,
+                count = frequency.count,
+            )
+        }
 }
 
 private data class CodexTagFrequency(

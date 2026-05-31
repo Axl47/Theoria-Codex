@@ -88,9 +88,10 @@ import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.CodexSearchSourceOption
+import com.theoriacodex.app.codex.CodexSearchTagOption
 import com.theoriacodex.app.codex.SaveToCodexSheet
-import com.theoriacodex.app.codex.buildSourceScopedCodexSearchTags
 import com.theoriacodex.app.codex.codexSearchSourceOptions as buildCodexSearchSourceOptions
+import com.theoriacodex.app.codex.codexSearchTagOptions as buildCodexSearchTagOptions
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.creator.CreatorProfileScreen
 import com.theoriacodex.app.creator.browseableCreatorProfile
@@ -408,6 +409,7 @@ fun TheoriaApp(
     val codexItemCounts = remember { mutableStateMapOf<String, Int>() }
     val codexCoverModels = remember { mutableStateMapOf<String, Any?>() }
     val codexSearchSourceOptions = remember { mutableStateMapOf<String, List<CodexSearchSourceOption>>() }
+    val codexSearchTagOptions = remember { mutableStateMapOf<String, Map<SourceKey, List<CodexSearchTagOption>>>() }
     val savedPostIdsByCodex = remember { mutableStateMapOf<String, Set<PostId>>() }
     val savedPostIds by remember {
         derivedStateOf {
@@ -708,24 +710,20 @@ fun TheoriaApp(
             }
     }
 
-    suspend fun searchFromCodex(codexId: String, source: SourceKey) {
+    suspend fun searchFromCodex(source: SourceKey, includeTags: List<String>) {
         if (source !in realRegistry.availableSources()) {
             Toast.makeText(appContext, "${source.displayName()} source is unavailable", Toast.LENGTH_SHORT).show()
             return
         }
 
-        val posts = codexRepository
-            .observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED)
-            .first()
-        val includeTags = buildSourceScopedCodexSearchTags(
-            posts = posts,
-            source = source,
-            limit = CODEX_SEARCH_TAG_LIMIT,
-        )
-        if (includeTags.isEmpty()) {
+        val normalizedIncludeTags = includeTags
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .distinct()
+        if (normalizedIncludeTags.isEmpty()) {
             Toast.makeText(
                 appContext,
-                "Codex has no searchable ${source.displayName()} tags",
+                "Select at least one ${source.displayName()} tag",
                 Toast.LENGTH_SHORT,
             ).show()
             return
@@ -733,7 +731,7 @@ fun TheoriaApp(
 
         if (
             !searchCoordinator.prepareExploreTagSearch(
-                includeTags = includeTags,
+                includeTags = normalizedIncludeTags,
                 mode = QueryMode.Source(source),
             )
         ) {
@@ -752,7 +750,7 @@ fun TheoriaApp(
         }
         Toast.makeText(
             appContext,
-            "Searching ${source.displayName()} codex tags: ${includeTags.joinToString(separator = ", ")}",
+            "Searching ${source.displayName()} codex tags: ${normalizedIncludeTags.joinToString(separator = ", ")}",
             Toast.LENGTH_SHORT,
         ).show()
     }
@@ -1253,6 +1251,10 @@ fun TheoriaApp(
             .filterNot { it in activeIds }
             .toList()
             .forEach { codexSearchSourceOptions.remove(it) }
+        codexSearchTagOptions.keys
+            .filterNot { it in activeIds }
+            .toList()
+            .forEach { codexSearchTagOptions.remove(it) }
         savedPostIdsByCodex.keys
             .filterNot { it in activeIds }
             .toList()
@@ -1278,10 +1280,17 @@ fun TheoriaApp(
                             )
                         }
                         codexCoverModels[codex.codexId] = coverModel
-                        codexSearchSourceOptions[codex.codexId] = buildCodexSearchSourceOptions(
+                        val sourceOptions = buildCodexSearchSourceOptions(
                             posts = posts,
                             availableSources = availableRealSources,
                         )
+                        codexSearchSourceOptions[codex.codexId] = sourceOptions
+                        codexSearchTagOptions[codex.codexId] = sourceOptions.associate { option ->
+                            option.source to buildCodexSearchTagOptions(
+                                posts = posts,
+                                source = option.source,
+                            )
+                        }
                     }
                 }
             }
@@ -1815,6 +1824,7 @@ fun TheoriaApp(
                                         itemCounts = codexItemCounts,
                                         codexCoverModels = codexCoverModels,
                                         codexSearchSourceOptions = codexSearchSourceOptions,
+                                        codexSearchTagOptions = codexSearchTagOptions,
                                         onOpenCodex = { codexId ->
                                             navController.navigate(AppRoute.codexDetail(codexId))
                                         },
@@ -1831,9 +1841,9 @@ fun TheoriaApp(
                                                 shareCodex(codexId)
                                             }
                                         },
-                                        onSearchFromCodex = { codexId, source ->
+                                        onSearchFromCodex = { _, source, includeTags ->
                                             scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                searchFromCodex(codexId, source)
+                                                searchFromCodex(source, includeTags)
                                             }
                                         },
                                         onCommitReorder = { orderedVisibleIds ->
@@ -2947,6 +2957,5 @@ private const val DEFAULT_PROFILE_NAME = "Main"
 private const val LIKES_CODEX_ID_PREFIX = "system_likes_codex"
 private const val PROFILE_CODEX_ID_PREFIX = "profile_codex"
 private const val LIKES_CODEX_NAME = "Likes"
-private const val CODEX_SEARCH_TAG_LIMIT = 3
 private val CODEX_IMPORT_MIME_TYPES = setOf("application/json", "text/json")
 private val GELBOORU_PROFILE_OWNER_REGEX = Regex("""user:([A-Za-z0-9_:-]+)""", RegexOption.IGNORE_CASE)

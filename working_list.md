@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-05-31T03:43:44Z
+updated_at: 2026-05-31T04:03:42Z
 ---
 # Working List
 
@@ -9,9 +9,9 @@ updated_at: 2026-05-31T03:43:44Z
 ## In Progress
 
 ## Done
-- [x] Refresh task checklist
-- [x] Add source-scoped Codex search helper and coordinator mode support
-- [x] Wire Codex source picker UI and app navigation flow
-- [x] Add/update tests for source-scoped Codex search
+- [x] Refresh task checklist and inspect current code
+- [x] Add Codex tag option helper and helper tests
+- [x] Wire source tag options into TheoriaApp and apply behavior
+- [x] Build Codex tag picker UI with randomize and floating Apply
 - [x] Update README recent updates
 - [x] Run Gradle verification and inspect diff

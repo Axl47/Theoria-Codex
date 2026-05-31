@@ -246,7 +246,7 @@ private fun TagActionCell(
         verticalArrangement = Arrangement.spacedBy(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        TagLabelSurface(
+        TagSelectionSurface(
             tag = tag,
             active = includeSelected || excludeSelected,
             modifier = Modifier.fillMaxWidth(),
@@ -299,7 +299,7 @@ private fun FavoriteTagActionCell(
         verticalArrangement = Arrangement.spacedBy(6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        TagLabelSurface(
+        TagSelectionSurface(
             tag = tag,
             active = false,
             modifier = Modifier.fillMaxWidth(),
@@ -337,7 +337,7 @@ private fun FavoriteTagActionCell(
 }
 
 @Composable
-private fun TagLabelSurface(
+fun TagSelectionSurface(
     tag: String,
     active: Boolean,
     modifier: Modifier = Modifier,
