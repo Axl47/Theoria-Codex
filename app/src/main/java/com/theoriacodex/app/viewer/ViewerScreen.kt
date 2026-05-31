@@ -36,15 +36,20 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -66,6 +71,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
@@ -173,6 +179,9 @@ fun ViewerScreen(
     val prefetchInFlightVideoUrls = remember { mutableSetOf<String>() }
     var pendingDismiss by remember { mutableStateOf(false) }
     var mediaPlaybackEnabled by remember { mutableStateOf(true) }
+    var playbackRate by remember { mutableStateOf(ViewerPlaybackRate.Normal) }
+    var actionsMenuExpanded by remember { mutableStateOf(false) }
+    var playbackSettingsExpanded by remember { mutableStateOf(false) }
     val resolutionRequestedByPostId = remember { mutableStateMapOf<PostId, Boolean>() }
     val currentPostIndex = postPagerState.currentPage.coerceIn(0, posts.lastIndex)
     val selectedPost = posts[currentPostIndex]
@@ -192,6 +201,17 @@ fun ViewerScreen(
     LaunchedEffect(posts, launchContext.queryHash, launchContext.startIndex) {
         pendingDismiss = false
         mediaPlaybackEnabled = true
+        playbackRate = ViewerPlaybackRate.Normal
+    }
+
+    LaunchedEffect(currentIsSeekableMedia, viewerState.chromeVisible) {
+        if (!currentIsSeekableMedia) {
+            playbackSettingsExpanded = false
+        }
+        if (!viewerState.chromeVisible) {
+            actionsMenuExpanded = false
+            playbackSettingsExpanded = false
+        }
     }
 
     LaunchedEffect(
@@ -217,6 +237,8 @@ fun ViewerScreen(
         if (pendingDismiss) return
         mediaPlaybackEnabled = false
         showInfoSheet = false
+        actionsMenuExpanded = false
+        playbackSettingsExpanded = false
         pendingDismiss = true
     }
 
@@ -559,6 +581,7 @@ fun ViewerScreen(
                                     isActive = mediaPlaybackEnabled && isCurrentMediaPage,
                                     seekJumpSerial = seekJumpSerial,
                                     seekJumpDeltaMs = seekJumpDeltaMs,
+                                    playbackRate = playbackRate.speed,
                                     onTimelineInteractionActiveChanged = ::onTimelineInteractionChanged,
                                 )
                             }
@@ -572,6 +595,7 @@ fun ViewerScreen(
                                 isActive = mediaPlaybackEnabled && isCurrentMediaPage,
                                 seekJumpSerial = seekJumpSerial,
                                 seekJumpDeltaMs = seekJumpDeltaMs,
+                                playbackRate = playbackRate.speed,
                                 onTimelineInteractionActiveChanged = ::onTimelineInteractionChanged,
                             )
                         } else if (isGifMedia && !gifLocation.isNullOrBlank()) {
@@ -584,6 +608,7 @@ fun ViewerScreen(
                                 isActive = mediaPlaybackEnabled && isCurrentMediaPage,
                                 seekJumpSerial = seekJumpSerial,
                                 seekJumpDeltaMs = seekJumpDeltaMs,
+                                playbackRate = playbackRate.speed,
                                 onTimelineInteractionActiveChanged = ::onTimelineInteractionChanged,
                             )
                         } else if (imageModel != null) {
@@ -705,9 +730,33 @@ fun ViewerScreen(
                         markInteraction()
                     }
                 },
+                actionsMenuExpanded = actionsMenuExpanded,
+                onActionsMenuExpandedChange = { expanded ->
+                    actionsMenuExpanded = expanded
+                    if (expanded) {
+                        playbackSettingsExpanded = false
+                        markInteraction()
+                    }
+                },
+                playbackSettingsExpanded = playbackSettingsExpanded,
+                onPlaybackSettingsExpandedChange = { expanded ->
+                    playbackSettingsExpanded = expanded && currentIsSeekableMedia
+                    if (expanded && currentIsSeekableMedia) {
+                        actionsMenuExpanded = false
+                        markInteraction()
+                    }
+                },
+                playbackSettingsEnabled = currentIsSeekableMedia,
+                playbackRate = playbackRate,
+                onPlaybackRateSelected = { selectedRate ->
+                    playbackRate = selectedRate
+                    playbackSettingsExpanded = false
+                    markInteraction()
+                },
                 onDownload = ::downloadCurrentMedia,
                 downloadEnabled = canDownloadCurrentMedia,
                 onInfo = {
+                    actionsMenuExpanded = false
                     showInfoSheet = true
                     markInteraction()
                 },
@@ -855,6 +904,7 @@ private fun ViewerVideoPlayer(
     isActive: Boolean = true,
     seekJumpSerial: Int = 0,
     seekJumpDeltaMs: Long = 0L,
+    playbackRate: Float = 1f,
     onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -886,6 +936,7 @@ private fun ViewerVideoPlayer(
     var playbackPaused by remember(playbackLocation) { mutableStateOf(false) }
     var lastSeekDispatchAtMs by remember(playbackLocation) { mutableLongStateOf(0L) }
     var lastSeekDispatchTargetMs by remember(playbackLocation) { mutableLongStateOf(0L) }
+    val effectivePlaybackRate = playbackRate.coerceAtLeast(MIN_PLAYBACK_RATE)
 
     DisposableEffect(playbackLocation, sourceKey) {
         loading = true
@@ -902,6 +953,7 @@ private fun ViewerVideoPlayer(
             headers = viewerRequestHeaders(sourceKey),
             muted = false,
         )
+        player.playbackParameters = PlaybackParameters(effectivePlaybackRate)
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playerRef !== player) return
@@ -944,6 +996,13 @@ private fun ViewerVideoPlayer(
                 player.release()
             }
             playerViewRef = null
+        }
+    }
+
+    LaunchedEffect(playerRef, effectivePlaybackRate) {
+        val player = playerRef ?: return@LaunchedEffect
+        runCatching {
+            player.playbackParameters = PlaybackParameters(effectivePlaybackRate)
         }
     }
 
@@ -1135,6 +1194,7 @@ private fun ViewerGifPlayer(
     isActive: Boolean = true,
     seekJumpSerial: Int = 0,
     seekJumpDeltaMs: Long = 0L,
+    playbackRate: Float = 1f,
     onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -1144,6 +1204,7 @@ private fun ViewerGifPlayer(
     var positionMs by remember(location) { mutableLongStateOf(0L) }
     var isScrubbing by remember(location) { mutableStateOf(false) }
     var playbackPaused by remember(location) { mutableStateOf(false) }
+    val effectivePlaybackRate = playbackRate.coerceAtLeast(MIN_PLAYBACK_RATE)
 
     LaunchedEffect(location, sourceKey) {
         loading = true
@@ -1188,14 +1249,15 @@ private fun ViewerGifPlayer(
         positionMs = target
     }
 
-    LaunchedEffect(activeMovie, durationMs, isScrubbing, playbackPaused, isActive) {
+    LaunchedEffect(activeMovie, durationMs, isScrubbing, playbackPaused, isActive, effectivePlaybackRate) {
         if (isScrubbing || playbackPaused || !isActive) return@LaunchedEffect
         while (true) {
             delay(16L)
             positionMs = if (durationMs <= 0L) {
                 0L
             } else {
-                val next = positionMs + 16L
+                val frameDelayMs = 16L
+                val next = positionMs + (frameDelayMs * effectivePlaybackRate).toLong().coerceAtLeast(1L)
                 if (next >= durationMs) 0L else next
             }
         }
@@ -1681,6 +1743,19 @@ private const val VIEWER_PAGINATION_PREFETCH_RATIO = 0.8f
 private const val GIF_FALLBACK_DURATION_MS = 1000L
 private const val VIEWER_VIDEO_CACHE_MAX_FILES = 80
 private const val VIEWER_VIDEO_CACHE_MAX_BYTES = 750L * 1024L * 1024L
+private const val MIN_PLAYBACK_RATE = 0.1f
+
+private enum class ViewerPlaybackRate(
+    val speed: Float,
+    val menuLabel: String,
+    val contentDescription: String,
+) {
+    VerySlow(0.2f, "0.2x Very slow", "Playback rate 0.2x very slow"),
+    Slow(0.5f, "0.5x Slow", "Playback rate 0.5x slow"),
+    Normal(1f, "1x Normal", "Playback rate 1x normal"),
+    Fast(1.5f, "1.5x Fast", "Playback rate 1.5x fast"),
+    VeryFast(2f, "2x Very fast", "Playback rate 2x very fast"),
+}
 
 @Composable
 private fun ViewerChrome(
@@ -1690,8 +1765,15 @@ private fun ViewerChrome(
     onBack: () -> Unit,
     liked: Boolean,
     onToggleLike: (() -> Unit)? = null,
-    onDownload: () -> Unit,
+    actionsMenuExpanded: Boolean,
+    onActionsMenuExpandedChange: (Boolean) -> Unit,
+    playbackSettingsExpanded: Boolean,
+    onPlaybackSettingsExpandedChange: (Boolean) -> Unit,
+    playbackSettingsEnabled: Boolean,
+    playbackRate: ViewerPlaybackRate,
+    onPlaybackRateSelected: (ViewerPlaybackRate) -> Unit,
     downloadEnabled: Boolean,
+    onDownload: () -> Unit,
     onInfo: () -> Unit,
 ) {
     Surface(
@@ -1744,14 +1826,69 @@ private fun ViewerChrome(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                IconButton(
-                    onClick = onDownload,
-                    enabled = downloadEnabled,
-                ) {
-                    Icon(Icons.Default.Download, contentDescription = "Download")
+                Box {
+                    IconButton(
+                        onClick = {
+                            onPlaybackSettingsExpandedChange(!playbackSettingsExpanded)
+                        },
+                        enabled = playbackSettingsEnabled,
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = "Playback settings")
+                    }
+                    DropdownMenu(
+                        expanded = playbackSettingsExpanded,
+                        onDismissRequest = { onPlaybackSettingsExpandedChange(false) },
+                    ) {
+                        ViewerPlaybackRate.entries.forEach { rate ->
+                            DropdownMenuItem(
+                                text = { Text(rate.menuLabel) },
+                                onClick = { onPlaybackRateSelected(rate) },
+                                leadingIcon = {
+                                    if (rate == playbackRate) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = rate.contentDescription,
+                                        )
+                                    }
+                                },
+                            )
+                        }
+                    }
                 }
-                IconButton(onClick = onInfo) {
-                    Icon(Icons.Default.Info, contentDescription = "Info")
+                Box {
+                    IconButton(
+                        onClick = {
+                            onActionsMenuExpandedChange(!actionsMenuExpanded)
+                        },
+                    ) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "More actions")
+                    }
+                    DropdownMenu(
+                        expanded = actionsMenuExpanded,
+                        onDismissRequest = { onActionsMenuExpandedChange(false) },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Info") },
+                            onClick = {
+                                onActionsMenuExpandedChange(false)
+                                onInfo()
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Default.Info, contentDescription = null)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Download") },
+                            onClick = {
+                                onActionsMenuExpandedChange(false)
+                                onDownload()
+                            },
+                            enabled = downloadEnabled,
+                            leadingIcon = {
+                                Icon(Icons.Default.Download, contentDescription = null)
+                            },
+                        )
+                    }
                 }
             }
         }

@@ -641,6 +641,7 @@ fun PixivUgoiraPlayer(
     isActive: Boolean = true,
     seekJumpSerial: Int = 0,
     seekJumpDeltaMs: Long = 0L,
+    playbackRate: Float = 1f,
     onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
 ) {
     var playback by remember(postId, client) { mutableStateOf(client.cached(postId)) }
@@ -649,6 +650,7 @@ fun PixivUgoiraPlayer(
     var elapsedInLoopMs by remember(postId) { mutableLongStateOf(0L) }
     var isScrubbing by remember(postId) { mutableStateOf(false) }
     var playbackPaused by remember(postId) { mutableStateOf(false) }
+    val effectivePlaybackRate = playbackRate.coerceAtLeast(0.1f)
 
     LaunchedEffect(postId, client) {
         frameIndex = 0
@@ -717,10 +719,11 @@ fun PixivUgoiraPlayer(
         seekToPosition(elapsedInLoopMs + seekJumpDeltaMs)
     }
 
-    LaunchedEffect(activePlayback, frameIndex, isScrubbing, playbackPaused, isActive) {
+    LaunchedEffect(activePlayback, frameIndex, isScrubbing, playbackPaused, isActive, effectivePlaybackRate) {
         if (isScrubbing || playbackPaused || !isActive) return@LaunchedEffect
         val delayMs = activePlayback.frames[frameIndex].delayMs.toLong().coerceAtLeast(16L)
-        delay(delayMs)
+        val scaledDelayMs = (delayMs / effectivePlaybackRate).toLong().coerceAtLeast(1L)
+        delay(scaledDelayMs)
         val nextIndex = (frameIndex + 1) % activePlayback.frames.size
         frameIndex = nextIndex
         elapsedInLoopMs = if (nextIndex == 0) {
