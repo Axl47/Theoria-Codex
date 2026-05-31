@@ -2040,7 +2040,7 @@ private fun matchesAnimatedDurationFilter(
     if (!isAnimatedPost(post)) return true
     val durationMs = animatedDurationMs(post) ?: return when (unknownAnimatedDurationPolicy) {
         UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS -> false
-        UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND -> true
+        UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND -> false
     }
     return range.contains(durationMs)
 }

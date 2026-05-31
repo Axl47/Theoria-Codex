@@ -100,7 +100,7 @@ class SearchVisibilityFiltersTest {
     }
 
     @Test
-    fun `filterSearchResults keeps unknown animated durations while background resolution is enabled`() {
+    fun `filterSearchResults hides unknown animated durations while background resolution is enabled`() {
         val unknownAnimated = samplePost(
             id = "unknown",
             source = SourceKey.RULE34VIDEO,
@@ -125,7 +125,7 @@ class SearchVisibilityFiltersTest {
             unknownAnimatedDurationPolicy = UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND,
         )
 
-        assertEquals(listOf(unknownAnimated.id, knownAnimated.id), visible.map { it.id })
+        assertEquals(listOf(knownAnimated.id), visible.map { it.id })
     }
 
     @Test
