@@ -1,6 +1,6 @@
 ---
 created_at: 2026-06-25T08:56:51Z
-updated_at: 2026-06-25T08:56:51Z
+updated_at: 2026-06-25T09:35:00Z
 ---
 # Recents Tab Replacing Explore
 
@@ -15,13 +15,13 @@ After the change, a user can open the app, tap the second bottom navigation icon
 ## Progress
 
 - [x] (2026-06-25 08:56Z) Drafted initial Recents tab implementation plan from current app structure and user decisions.
-- [ ] Confirm remaining UX choices with the user before implementation: default filter, search-history inclusion in v1, and whether watched posts open a single-post session or a full recent-post session.
-- [ ] Implement persistent recents data model and repository tests.
-- [ ] Record applied searches and watched posts from existing Search and Viewer flows.
-- [ ] Replace `Explore` with `Recents` in top-level navigation and remove Explore quick-query UI/code.
-- [ ] Build the Recents UI and wire actions back to Search and Viewer.
-- [ ] Update `README.md`, `AGENTS.md` if needed, and this ExecPlan with implementation evidence.
-- [ ] Run focused Gradle verification and complete manual device acceptance.
+- [x] (2026-06-25 09:05Z) Confirmed Recents defaults to Watched, search history ships in v1, and watched posts open Viewer over the full recent-post list.
+- [x] (2026-06-25 09:15Z) Implemented persistent Recents repository models, in-memory/file-backed storage, dedupe/cap behavior, and repository tests. Validation: `./gradlew :core-data:test` passed.
+- [x] (2026-06-25 09:25Z) Recorded applied searches from `SearchCoordinator.applyDraft()` and watched posts from Viewer visible-post changes. Validation: `./gradlew :app:testDebugUnitTest --tests '*SearchCoordinatorTest*'` passed.
+- [x] (2026-06-25 09:32Z) Replaced `Explore` with `Recents` in top-level navigation, deleted the Explore UI, removed app-layer quick-query entry points, and updated Search empty-state copy.
+- [x] (2026-06-25 09:32Z) Built Recents UI with Watched/Searches/All filters, persistent clear actions, watched-grid Viewer launching, and search-history reapply.
+- [x] (2026-06-25 09:34Z) Updated `README.md`, `AGENTS.md`, `working_list.md`, and this ExecPlan.
+- [x] (2026-06-25 09:35Z) Ran focused verification: `./gradlew :core-data:test`, `./gradlew :app:testDebugUnitTest --tests '*SearchCoordinatorTest*'`, `./gradlew :app:testDebugUnitTest`, and `./gradlew :app:compileDebugKotlin :app:assembleDebug` all passed. Manual device acceptance is still pending user run-through.
 
 ## Surprises & Discoveries
 
@@ -33,6 +33,9 @@ After the change, a user can open the app, tap the second bottom navigation icon
 
 - Observation: Search, For You, Creator Profile, and Codex already share post-card and Viewer-launch patterns.
   Evidence: `SearchResultCard` is used from `SearchScreen`, `ForYouScreen`, `CreatorProfileScreen`, and `CodexDetailScreen`, and Viewer launch is coordinated through `ViewerSession` plus `ViewerLaunchContext`.
+
+- Observation: `QuickQueryKind` cannot be removed from the source-adapter layer even though Explore quick queries are gone from the app UI.
+  Evidence: provider health checks and source adapter contract tests still call `SourceAdapter.quickQuery(QuickQueryKind.NEWEST)` to build provider-native newest-search probes.
 
 ## Decision Log
 
@@ -52,9 +55,27 @@ After the change, a user can open the app, tap the second bottom navigation icon
   Rationale: This makes Recents feel like a real browsing surface and lets the user move backward and forward through recent items. It also matches Search/For You surfaces that pass a list of posts into Viewer.
   Date/Author: 2026-06-25 / Codex
 
+- Decision: Recents defaults to the `Watched` filter.
+  Rationale: The user confirmed watched posts should be the primary first impression, with searches available in v1 but not the default landing state.
+  Date/Author: 2026-06-25 / User and Codex
+
+- Decision: Include applied search history in the first implementation.
+  Rationale: The user explicitly asked to keep search history in v1, so the feature should not ship as watched-post-only.
+  Date/Author: 2026-06-25 / User and Codex
+
+- Decision: Watched post taps open Viewer over the full recent-post list.
+  Rationale: The user agreed with the recommended full-list behavior, which supports browsing across recent items from the selected starting post.
+  Date/Author: 2026-06-25 / User and Codex
+
+- Decision: Remove app-layer quick-query methods but keep adapter-level `QuickQueryKind` support.
+  Rationale: Explore quick queries were the user-facing feature to remove. Adapter quick queries still serve provider health and contract validation, so deleting them would create unrelated source-system churn.
+  Date/Author: 2026-06-25 / Codex
+
 ## Outcomes & Retrospective
 
-No implementation has started yet. The first outcome of this plan is an agreed, reviewable blueprint for replacing `Explore` with `Recents`, including persistence, navigation, UI behavior, and validation. Fill this section after each implementation milestone with what changed, what passed, and any remaining manual verification.
+Implementation is complete pending manual device acceptance. `Explore` has been removed as a top-level app surface and `Recents` now occupies the second bottom-nav position. Recents defaults to Watched, persists watched posts and applied searches in `recents_store.json`, opens watched posts over the full recent-post list through `ViewerStreamSource.RECENTS`, and can reapply search-history entries through Search. Automated verification passed for repository persistence, SearchCoordinator search-history recording, app unit tests, Kotlin compilation, and debug assembly.
+
+Remaining risk is manual UX validation on a device or emulator: users should confirm bottom-bar order, Watched/Searches/All behavior, Viewer launch from Recents, search-history reapply, clear actions, and persistence across restart.
 
 ## Context and Orientation
 
@@ -243,3 +264,7 @@ Expected final user-facing behavior summary:
     Explore quick queries are removed completely.
 
 Revision note, 2026-06-25 / Codex: Created the initial plan after the user confirmed Explore quick queries can be removed and accepted the recommended Recents architecture. This plan intentionally stops before implementation so the UX and engineering scope can be reviewed first.
+
+Revision note, 2026-06-25 / Codex: Updated the plan after the user confirmed Watched as the default Recents view, search history in v1, and full recent-post Viewer sessions for watched-post taps.
+
+Revision note, 2026-06-25 / Codex: Updated the plan after implementation to record completed milestones, validation evidence, and the decision to keep adapter-level quick-query support while removing Explore's user-facing quick-query UI.

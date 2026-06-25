@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-05-31T03:59
+updated_at: 2026-06-25T09:35
 ---
 # Theoria Codex
 
@@ -9,6 +9,7 @@ Theoria Codex is an Android-first, local-first, tag-driven art browser.
 The product spec lives at `./docs/TheoriaSpec.md`.
 
 Recent updates:
+- Recents replaces Explore as the second top-level tab, with persistent Watched history by default, applied Search history in v1, full-list Viewer reopening from watched posts, and independent clear actions.
 - Search provider status chips and empty-state errors now use clearer source-specific messages for missing account setup, expired auth, rate limits, blocked/unreachable providers, parser changes, and unknown failures.
 - Viewer session media-resolution policy and Codex import/export payload rules now live in focused app modules with unit tests, reducing the amount of workflow logic embedded directly in `TheoriaApp.kt`.
 - Settings can now show last-known provider health per source, and developers can run `./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true` to write a live JSON health report under `core-sources/build/reports/provider-health/`.
@@ -36,8 +37,8 @@ Recent updates:
 
 - The project includes five top-level tabs:
   - Search
+  - Recents
   - For You
-  - Explore
   - Codex
   - Settings
 

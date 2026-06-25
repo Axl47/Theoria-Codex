@@ -27,6 +27,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 private val json: Gson = GsonBuilder().setPrettyPrinting().create()
+private const val DEFAULT_RECENT_WATCHED_LIMIT = 200
+private const val DEFAULT_RECENT_SEARCH_LIMIT = 100
 
 class FileBackedCodexRepository(
     baseDirectory: File,
@@ -246,6 +248,113 @@ class FileBackedQueryRepository(
             scrollOffsets = offsetsFlow.value,
         )
         writeJson(storageFile, payload)
+    }
+}
+
+class FileBackedRecentsRepository(
+    baseDirectory: File,
+    private val watchedLimit: Int = DEFAULT_RECENT_WATCHED_LIMIT,
+    private val searchLimit: Int = DEFAULT_RECENT_SEARCH_LIMIT,
+    private val clock: () -> Long = System::currentTimeMillis,
+) : RecentsRepository {
+    private val mutex = Mutex()
+    private val storageFile = baseDirectory.resolve("recents_store.json")
+    private val watchedFlow = MutableStateFlow<List<RecentPostEntry>>(emptyList())
+    private val searchesFlow = MutableStateFlow<List<RecentSearchEntry>>(emptyList())
+
+    init {
+        storageFile.parentFile?.mkdirs()
+        val stored = readJson(storageFile, RecentsStoreFile())
+        watchedFlow.value = stored.watchedPosts
+            .orEmpty()
+            .mapNotNull { record -> record.toDomainOrNull() }
+            .dedupeRecentWatched()
+            .take(watchedLimit.coerceAtLeast(0))
+        searchesFlow.value = stored.searches
+            .orEmpty()
+            .mapNotNull { record -> record.toDomainOrNull() }
+            .dedupeRecentSearches()
+            .take(searchLimit.coerceAtLeast(0))
+    }
+
+    override fun observeWatchedPosts(): Flow<List<RecentPostEntry>> {
+        return watchedFlow
+    }
+
+    override fun observeSearches(): Flow<List<RecentSearchEntry>> {
+        return searchesFlow
+    }
+
+    override fun observeActivity(): Flow<List<RecentActivityEntry>> {
+        return combine(watchedFlow, searchesFlow) { watchedPosts, searchEntries ->
+            buildList {
+                watchedPosts.forEach { entry -> add(RecentActivityEntry.Watched(entry)) }
+                searchEntries.forEach { entry -> add(RecentActivityEntry.Search(entry)) }
+            }.sortedByDescending { entry -> entry.occurredAtEpochMs }
+        }
+    }
+
+    override suspend fun recordWatchedPost(post: Post, origin: ViewerStreamSource, originQueryHash: String?) {
+        mutex.withLock {
+            watchedFlow.value = (listOf(
+                RecentPostEntry(
+                    post = post,
+                    viewedAtEpochMs = clock(),
+                    origin = origin,
+                    originQueryHash = originQueryHash,
+                )
+            ) + watchedFlow.value.filterNot { entry -> entry.post.id == post.id })
+                .take(watchedLimit.coerceAtLeast(0))
+            persist()
+        }
+    }
+
+    override suspend fun recordSearch(query: Query, queryHash: String) {
+        val normalizedHash = queryHash.trim()
+        if (normalizedHash.isBlank()) return
+        mutex.withLock {
+            searchesFlow.value = (listOf(
+                RecentSearchEntry(
+                    query = query,
+                    queryHash = normalizedHash,
+                    searchedAtEpochMs = clock(),
+                )
+            ) + searchesFlow.value.filterNot { entry -> entry.queryHash == normalizedHash })
+                .take(searchLimit.coerceAtLeast(0))
+            persist()
+        }
+    }
+
+    override suspend fun clearWatchedPosts() {
+        mutex.withLock {
+            watchedFlow.value = emptyList()
+            persist()
+        }
+    }
+
+    override suspend fun clearSearches() {
+        mutex.withLock {
+            searchesFlow.value = emptyList()
+            persist()
+        }
+    }
+
+    override suspend fun clearAll() {
+        mutex.withLock {
+            watchedFlow.value = emptyList()
+            searchesFlow.value = emptyList()
+            persist()
+        }
+    }
+
+    private fun persist() {
+        writeJson(
+            storageFile,
+            RecentsStoreFile(
+                watchedPosts = watchedFlow.value.map(RecentPostRecord::fromDomain),
+                searches = searchesFlow.value.map(RecentSearchRecord::fromDomain),
+            ),
+        )
     }
 }
 
@@ -974,6 +1083,69 @@ private data class QueryRecord(
     }
 }
 
+private data class RecentsStoreFile(
+    val watchedPosts: List<RecentPostRecord>? = null,
+    val searches: List<RecentSearchRecord>? = null,
+)
+
+private data class RecentPostRecord(
+    val post: PostRecord? = null,
+    val viewedAtEpochMs: Long? = null,
+    val origin: String? = null,
+    val originQueryHash: String? = null,
+) {
+    fun toDomainOrNull(): RecentPostEntry? {
+        val loadedPost = runCatching { post?.toDomain() }.getOrNull() ?: return null
+        val loadedOrigin = origin
+            ?.let { value -> runCatching { ViewerStreamSource.valueOf(value) }.getOrNull() }
+            ?: ViewerStreamSource.SEARCH
+        return RecentPostEntry(
+            post = loadedPost,
+            viewedAtEpochMs = viewedAtEpochMs ?: 0L,
+            origin = loadedOrigin,
+            originQueryHash = originQueryHash?.takeIf(String::isNotBlank),
+        )
+    }
+
+    companion object {
+        fun fromDomain(entry: RecentPostEntry): RecentPostRecord {
+            return RecentPostRecord(
+                post = PostRecord.fromDomain(entry.post),
+                viewedAtEpochMs = entry.viewedAtEpochMs,
+                origin = entry.origin.name,
+                originQueryHash = entry.originQueryHash,
+            )
+        }
+    }
+}
+
+private data class RecentSearchRecord(
+    val query: QueryRecord? = null,
+    val queryHash: String? = null,
+    val searchedAtEpochMs: Long? = null,
+) {
+    fun toDomainOrNull(): RecentSearchEntry? {
+        val normalizedHash = queryHash?.trim().orEmpty()
+        if (normalizedHash.isBlank()) return null
+        val loadedQuery = runCatching { query?.toDomain() }.getOrNull() ?: return null
+        return RecentSearchEntry(
+            query = loadedQuery,
+            queryHash = normalizedHash,
+            searchedAtEpochMs = searchedAtEpochMs ?: 0L,
+        )
+    }
+
+    companion object {
+        fun fromDomain(entry: RecentSearchEntry): RecentSearchRecord {
+            return RecentSearchRecord(
+                query = QueryRecord.fromDomain(entry.query),
+                queryHash = entry.queryHash,
+                searchedAtEpochMs = entry.searchedAtEpochMs,
+            )
+        }
+    }
+}
+
 private data class SettingsStoreFile(
     val enabledSources: List<String> = SourceKey.entries.map { it.name },
     val sourceWeights: Map<String, Double> = SourceRuntimeSettings().sourceWeights.mapKeys { it.key.name },
@@ -1420,6 +1592,16 @@ private fun sortCodexPairs(
                 .thenBy { it.second.id.sourcePostId }
         )
     }
+}
+
+private fun List<RecentPostEntry>.dedupeRecentWatched(): List<RecentPostEntry> {
+    return sortedByDescending { entry -> entry.viewedAtEpochMs }
+        .distinctBy { entry -> entry.post.id }
+}
+
+private fun List<RecentSearchEntry>.dedupeRecentSearches(): List<RecentSearchEntry> {
+    return sortedByDescending { entry -> entry.searchedAtEpochMs }
+        .distinctBy { entry -> entry.queryHash }
 }
 
 private fun <T> readJson(file: File, fallback: T, clazz: Class<T>): T {

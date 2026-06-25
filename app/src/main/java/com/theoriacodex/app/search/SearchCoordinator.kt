@@ -5,9 +5,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.InMemoryQueryRepository
+import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.data.repository.QueryRepository
+import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
@@ -15,7 +17,6 @@ import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceAdapterException
-import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -43,6 +44,7 @@ class SearchCoordinator(
     private val queryRepository: QueryRepository = InMemoryQueryRepository(),
     private val settingsRepository: SettingsRepository = InMemorySettingsRepository(),
     private val uiRestoreRepository: UiRestoreRepository = InMemoryUiRestoreRepository(),
+    private val recentsRepository: RecentsRepository = InMemoryRecentsRepository(),
     private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
@@ -334,35 +336,7 @@ class SearchCoordinator(
         clearTagInputUiState()
     }
 
-    fun applyQuickQuery(kind: QuickQueryKind) {
-        val now = System.currentTimeMillis()
-        val dayMs = 24L * 60L * 60L * 1000L
-
-        val sort = when (kind) {
-            QuickQueryKind.POPULAR_TODAY -> SortMode.POPULAR
-            QuickQueryKind.TOP_7D -> SortMode.TOP
-            QuickQueryKind.TOP_30D -> SortMode.TOP
-            QuickQueryKind.NEWEST -> SortMode.NEWEST
-            QuickQueryKind.RANDOM -> SortMode.RANDOM
-        }
-        val dateRange = when (kind) {
-            QuickQueryKind.POPULAR_TODAY -> DateRange(fromEpochMs = now - dayMs, toEpochMs = now)
-            QuickQueryKind.TOP_7D -> DateRange(fromEpochMs = now - 7L * dayMs, toEpochMs = now)
-            QuickQueryKind.TOP_30D -> DateRange(fromEpochMs = now - 30L * dayMs, toEpochMs = now)
-            QuickQueryKind.NEWEST, QuickQueryKind.RANDOM -> null
-        }
-        draftQuery = defaultQuery(QueryMode.Unified).copy(
-            sort = sort,
-            dateRange = dateRange,
-        )
-        clearTagInputUiState()
-    }
-
-    fun addTrendingTag(tag: String) {
-        addIncludeTag(tag)
-    }
-
-    fun prepareExploreTagSearch(
+    fun prepareTagSearch(
         includeTags: List<String>,
         excludeTags: List<String> = emptyList(),
         mode: QueryMode = QueryMode.Unified,
@@ -389,8 +363,8 @@ class SearchCoordinator(
         return true
     }
 
-    fun prepareExploreTagSearch(tag: String): Boolean {
-        return prepareExploreTagSearch(includeTags = listOf(tag))
+    fun prepareTagSearch(tag: String): Boolean {
+        return prepareTagSearch(includeTags = listOf(tag))
     }
 
     fun setDateRangePreset(preset: DateRangePreset) {
@@ -633,7 +607,16 @@ class SearchCoordinator(
             ),
         )
         queryRepository.upsertScrollOffset(hash, 0)
+        recentsRepository.recordSearch(appliedQuery, hash)
         executeSearch()
+    }
+
+    suspend fun applyHistoricalQuery(query: Query): Boolean {
+        if (!isModeAvailable(query.mode)) return false
+        draftQuery = query
+        clearTagInputUiState()
+        applyDraft()
+        return true
     }
 
     suspend fun retry() {

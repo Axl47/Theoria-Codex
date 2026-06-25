@@ -3,6 +3,7 @@ package com.theoriacodex.data.repository
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
@@ -107,6 +108,72 @@ class InMemoryRepositoriesTest {
 
         assertNotNull(repo.observeAppliedQuery("unified").first())
         assertEquals(420, repo.getScrollOffset("hash-1"))
+    }
+
+    @Test
+    fun `recents repository dedupes watched posts and searches by newest activity`() = runTest {
+        var now = 1_000L
+        val repo = InMemoryRecentsRepository(
+            watchedLimit = 2,
+            searchLimit = 2,
+            clock = { now },
+        )
+        val firstPost = samplePost("1", source = SourceKey.PIXIV)
+        val secondPost = samplePost("2", source = SourceKey.GELBOORU)
+        val thirdPost = samplePost("3", source = SourceKey.AIBOORU)
+        val firstQuery = sampleQuery(includeTags = listOf("landscape"))
+        val secondQuery = sampleQuery(includeTags = listOf("portrait"))
+        val thirdQuery = sampleQuery(includeTags = listOf("city"))
+
+        repo.recordWatchedPost(firstPost, ViewerStreamSource.SEARCH, "hash-1")
+        now += 1
+        repo.recordWatchedPost(secondPost, ViewerStreamSource.FOR_YOU, "hash-2")
+        now += 1
+        repo.recordWatchedPost(firstPost.copy(title = "updated"), ViewerStreamSource.CODEX, "hash-3")
+        now += 1
+        repo.recordWatchedPost(thirdPost, ViewerStreamSource.CREATOR_PROFILE, "hash-4")
+        now += 1
+        repo.recordSearch(firstQuery, "query-1")
+        now += 1
+        repo.recordSearch(secondQuery, "query-2")
+        now += 1
+        repo.recordSearch(firstQuery.copy(excludeTags = listOf("sketch")), "query-1")
+        now += 1
+        repo.recordSearch(thirdQuery, "query-3")
+
+        val watched = repo.observeWatchedPosts().first()
+        val searches = repo.observeSearches().first()
+        val activity = repo.observeActivity().first()
+
+        assertEquals(listOf(thirdPost.id, firstPost.id), watched.map { entry -> entry.post.id })
+        assertEquals("updated", watched[1].post.title)
+        assertEquals(ViewerStreamSource.CODEX, watched[1].origin)
+        assertEquals(listOf("query-3", "query-1"), searches.map { entry -> entry.queryHash })
+        assertEquals(listOf("sketch"), searches[1].query.excludeTags)
+        assertEquals(searches.first().searchedAtEpochMs, activity.first().occurredAtEpochMs)
+    }
+
+    @Test
+    fun `recents repository clears watched and searches independently`() = runTest {
+        val repo = InMemoryRecentsRepository(clock = { 1L })
+
+        repo.recordWatchedPost(samplePost("1"), ViewerStreamSource.SEARCH, "hash")
+        repo.recordSearch(sampleQuery(), "query")
+        repo.clearWatchedPosts()
+
+        assertTrue(repo.observeWatchedPosts().first().isEmpty())
+        assertEquals(1, repo.observeSearches().first().size)
+
+        repo.clearSearches()
+
+        assertTrue(repo.observeSearches().first().isEmpty())
+
+        repo.recordWatchedPost(samplePost("2"), ViewerStreamSource.CODEX, null)
+        repo.recordSearch(sampleQuery(includeTags = listOf("city")), "query-2")
+        repo.clearAll()
+
+        assertTrue(repo.observeWatchedPosts().first().isEmpty())
+        assertTrue(repo.observeSearches().first().isEmpty())
     }
 
     @Test
@@ -327,6 +394,17 @@ class InMemoryRepositoriesTest {
         assertEquals("codex", repo.getLastTab())
         assertEquals(2, repo.getSearchScrollState("hash-1")?.firstVisibleItemIndex)
         assertEquals(context, repo.observeViewerLaunchContext().first())
+    }
+
+    private fun sampleQuery(includeTags: List<String> = listOf("landscape")): Query {
+        return Query(
+            mode = QueryMode.Source(SourceKey.PIXIV),
+            includeTags = includeTags,
+            excludeTags = emptyList(),
+            sort = SortMode.TOP,
+            dateRange = DateRange(fromEpochMs = 100L, toEpochMs = 200L),
+            minScore = 20,
+        )
     }
 
     private fun samplePost(id: String, source: SourceKey = SourceKey.PIXIV): Post {

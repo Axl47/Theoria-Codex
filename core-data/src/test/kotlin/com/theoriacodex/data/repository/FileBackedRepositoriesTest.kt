@@ -4,6 +4,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
@@ -216,6 +217,91 @@ class FileBackedRepositoriesTest {
 
         assertNotNull(second.observeAppliedQuery("source:PIXIV").first())
         assertEquals(320, second.getScrollOffset("qhash"))
+    }
+
+    @Test
+    fun `recents repository persists watched posts searches and activity order`() = runTest {
+        val dir = Files.createTempDirectory("recents-store-").toFile()
+        var now = 10_000L
+        val first = FileBackedRecentsRepository(
+            baseDirectory = dir,
+            watchedLimit = 2,
+            searchLimit = 2,
+            clock = { now },
+        )
+        val media = ImageRef(
+            url = "https://example.com/full-video.mp4",
+            localPath = null,
+            mime = "video/mp4",
+            progressiveUrls = listOf("https://example.com/sample-video.mp4"),
+        )
+        val pixivPost = samplePost("1", localPath = null, source = SourceKey.PIXIV).copy(
+            title = "First viewed",
+            media = listOf(media),
+            durationMs = 42_000L,
+        )
+        val gelbooruPost = samplePost("2", localPath = null, source = SourceKey.GELBOORU)
+        val aibooruPost = samplePost("3", localPath = null, source = SourceKey.AIBOORU)
+        val firstQuery = sampleQuery(includeTags = listOf("landscape"))
+        val secondQuery = sampleQuery(includeTags = listOf("portrait"))
+        val thirdQuery = sampleQuery(includeTags = listOf("city"))
+
+        first.recordWatchedPost(pixivPost, ViewerStreamSource.SEARCH, "query-1")
+        now += 1
+        first.recordWatchedPost(gelbooruPost, ViewerStreamSource.FOR_YOU, "query-2")
+        now += 1
+        first.recordWatchedPost(pixivPost.copy(title = "Viewed again"), ViewerStreamSource.CODEX, "query-3")
+        now += 1
+        first.recordWatchedPost(aibooruPost, ViewerStreamSource.CREATOR_PROFILE, "query-4")
+        now += 1
+        first.recordSearch(firstQuery, "search-1")
+        now += 1
+        first.recordSearch(secondQuery, "search-2")
+        now += 1
+        first.recordSearch(firstQuery.copy(excludeTags = listOf("comic")), "search-1")
+        now += 1
+        first.recordSearch(thirdQuery, "search-3")
+
+        val second = FileBackedRecentsRepository(dir)
+        val watched = second.observeWatchedPosts().first()
+        val searches = second.observeSearches().first()
+        val activity = second.observeActivity().first()
+
+        assertEquals(listOf(aibooruPost.id, pixivPost.id), watched.map { entry -> entry.post.id })
+        assertEquals("Viewed again", watched[1].post.title)
+        assertEquals(ViewerStreamSource.CODEX, watched[1].origin)
+        assertEquals("query-3", watched[1].originQueryHash)
+        assertEquals(listOf("https://example.com/sample-video.mp4"), watched[1].post.media.single().progressiveUrls)
+        assertEquals(42_000L, watched[1].post.durationMs)
+        assertEquals(listOf("search-3", "search-1"), searches.map { entry -> entry.queryHash })
+        assertEquals(listOf("comic"), searches[1].query.excludeTags)
+        assertEquals(searches.first().searchedAtEpochMs, activity.first().occurredAtEpochMs)
+    }
+
+    @Test
+    fun `recents repository clears watched and search history independently across restarts`() = runTest {
+        val dir = Files.createTempDirectory("recents-clear-store-").toFile()
+        val first = FileBackedRecentsRepository(dir, clock = { 1L })
+
+        first.recordWatchedPost(samplePost("1", localPath = null), ViewerStreamSource.SEARCH, "hash")
+        first.recordSearch(sampleQuery(), "query")
+        first.clearWatchedPosts()
+
+        val second = FileBackedRecentsRepository(dir)
+        assertTrue(second.observeWatchedPosts().first().isEmpty())
+        assertEquals(1, second.observeSearches().first().size)
+
+        second.clearSearches()
+        val third = FileBackedRecentsRepository(dir)
+        assertTrue(third.observeSearches().first().isEmpty())
+
+        third.recordWatchedPost(samplePost("2", localPath = null), ViewerStreamSource.CODEX, null)
+        third.recordSearch(sampleQuery(includeTags = listOf("city")), "query-2")
+        third.clearAll()
+
+        val fourth = FileBackedRecentsRepository(dir)
+        assertTrue(fourth.observeWatchedPosts().first().isEmpty())
+        assertTrue(fourth.observeSearches().first().isEmpty())
     }
 
     @Test
@@ -480,6 +566,17 @@ class FileBackedRepositoriesTest {
         assertEquals("settings", second.getLastTab())
         assertEquals(3, second.getSearchScrollState("qhash")?.firstVisibleItemIndex)
         assertEquals(context, second.observeViewerLaunchContext().first())
+    }
+
+    private fun sampleQuery(includeTags: List<String> = listOf("landscape")): Query {
+        return Query(
+            mode = QueryMode.Source(SourceKey.PIXIV),
+            includeTags = includeTags,
+            excludeTags = emptyList(),
+            sort = SortMode.TOP,
+            dateRange = DateRange(fromEpochMs = 100L, toEpochMs = 200L),
+            minScore = 20,
+        )
     }
 
     private fun samplePost(id: String, localPath: String?, source: SourceKey = SourceKey.PIXIV): Post {

@@ -1,16 +1,21 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-06-25T08:56:51Z
+updated_at: 2026-06-25T09:35:00Z
 ---
 # Working List
 
 ## Pending
-- [ ] Review Recents tab ExecPlan with user and confirm remaining UX choices
-- [ ] Implement Recents tab after plan approval
+- [ ] Manual device acceptance for Recents behavior
 
 ## In Progress
 
 ## Done
+- [x] Implement Recents tab after plan approval
+- [x] Replace Explore with Recents UI/navigation (`./gradlew :app:testDebugUnitTest`)
+- [x] Update docs and run focused verification (`./gradlew :app:compileDebugKotlin :app:assembleDebug`)
+- [x] Record applied searches and watched posts (`./gradlew :app:testDebugUnitTest --tests '*SearchCoordinatorTest*'`)
+- [x] Add Recents repository models, persistence, and tests (`./gradlew :core-data:test`)
+- [x] Confirm Recents UX decisions: Watched default, search history v1, full-list Viewer taps
 - [x] Draft Recents tab ExecPlan replacing Explore and removing quick queries
 - [x] Milestone 6: final provider-message polish, docs, plan evidence, and broad verification (`./gradlew :app:testDebugUnitTest`, `./gradlew test`)
 - [x] Milestone 5: split viewer session and Codex share policy out of `TheoriaApp.kt` (`./gradlew :app:testDebugUnitTest`)

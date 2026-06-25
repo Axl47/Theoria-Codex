@@ -2,6 +2,7 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.InMemoryQueryRepository
+import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.domain.adapter.Page
@@ -23,6 +24,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import com.theoriacodex.stubs.StubAdapterRegistry
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -50,6 +52,66 @@ class SearchCoordinatorTest {
         coordinator.applyDraft()
         assertFalse(coordinator.hasPendingChanges)
         assertTrue("landscape" in coordinator.appliedQuery.includeTags)
+    }
+
+    @Test
+    fun `apply draft records search history and retry does not duplicate it`() = runTest {
+        var now = 1_000L
+        val recentsRepository = InMemoryRecentsRepository(clock = { now })
+        val coordinator = SearchCoordinator(
+            registry = StubAdapterRegistry(),
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+            recentsRepository = recentsRepository,
+        )
+        coordinator.initialize()
+        coordinator.addIncludeTag("landscape")
+
+        coordinator.applyDraft()
+        val firstHistory = recentsRepository.observeSearches().first()
+        now += 1
+        coordinator.retry()
+        val afterRetryHistory = recentsRepository.observeSearches().first()
+        now += 1
+        coordinator.applyDraft()
+        val afterReapplyHistory = recentsRepository.observeSearches().first()
+
+        assertEquals(1, firstHistory.size)
+        assertEquals(listOf("landscape"), firstHistory.first().query.includeTags)
+        assertEquals(firstHistory, afterRetryHistory)
+        assertEquals(1, afterReapplyHistory.size)
+        assertEquals(now, afterReapplyHistory.first().searchedAtEpochMs)
+    }
+
+    @Test
+    fun `historical query apply restores query records search and executes`() = runTest {
+        val recentsRepository = InMemoryRecentsRepository(clock = { 2_000L })
+        val coordinator = SearchCoordinator(
+            registry = StubAdapterRegistry(),
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+            recentsRepository = recentsRepository,
+        )
+        coordinator.initialize()
+        val historicalQuery = Query(
+            mode = QueryMode.Source(SourceKey.PIXIV),
+            includeTags = listOf("portrait"),
+            excludeTags = listOf("sketch"),
+            sort = SortMode.TOP,
+            dateRange = null,
+            minScore = 25,
+        )
+
+        val applied = coordinator.applyHistoricalQuery(historicalQuery)
+
+        assertTrue(applied)
+        assertEquals(historicalQuery, coordinator.appliedQuery)
+        assertEquals(historicalQuery, coordinator.draftQuery)
+        assertFalse(coordinator.hasPendingChanges)
+        assertTrue(coordinator.hasAnySearchRun)
+        assertEquals(historicalQuery, recentsRepository.observeSearches().first().single().query)
     }
 
     @Test
@@ -419,7 +481,7 @@ class SearchCoordinatorTest {
     }
 
     @Test
-    fun `prepare explore tag search resets draft and clears prior runtime state`() = runTest {
+    fun `prepare tag search resets draft and clears prior runtime state`() = runTest {
         val coordinator = coordinator()
         coordinator.initialize()
         coordinator.addIncludeTag("before")
@@ -428,7 +490,7 @@ class SearchCoordinatorTest {
         coordinator.addExcludeTag("old-exclude")
         coordinator.setSort(SortMode.TOP)
 
-        val prepared = coordinator.prepareExploreTagSearch(
+        val prepared = coordinator.prepareTagSearch(
             includeTags = listOf("fresh-tag", "fresh-tag"),
             excludeTags = listOf("blocked", "fresh-tag"),
         )
@@ -446,11 +508,11 @@ class SearchCoordinatorTest {
     }
 
     @Test
-    fun `prepare explore tag search can target an available source mode`() = runTest {
+    fun `prepare tag search can target an available source mode`() = runTest {
         val coordinator = coordinator()
         coordinator.initialize()
 
-        val prepared = coordinator.prepareExploreTagSearch(
+        val prepared = coordinator.prepareTagSearch(
             includeTags = listOf("fresh-tag"),
             mode = QueryMode.Source(SourceKey.PIXIV),
         )
@@ -462,7 +524,7 @@ class SearchCoordinatorTest {
     }
 
     @Test
-    fun `prepare explore tag search rejects unavailable source mode`() = runTest {
+    fun `prepare tag search rejects unavailable source mode`() = runTest {
         val coordinator = SearchCoordinator(
             registry = LimitedStubRegistry(setOf(SourceKey.PIXIV)),
             queryRepository = InMemoryQueryRepository(),
@@ -471,7 +533,7 @@ class SearchCoordinatorTest {
         )
         coordinator.initialize()
 
-        val prepared = coordinator.prepareExploreTagSearch(
+        val prepared = coordinator.prepareTagSearch(
             includeTags = listOf("fresh-tag"),
             mode = QueryMode.Source(SourceKey.GELBOORU),
         )
@@ -482,33 +544,16 @@ class SearchCoordinatorTest {
     }
 
     @Test
-    fun `prepare explore tag search rejects empty selections`() = runTest {
+    fun `prepare tag search rejects empty selections`() = runTest {
         val coordinator = coordinator()
         coordinator.initialize()
 
-        val prepared = coordinator.prepareExploreTagSearch(
+        val prepared = coordinator.prepareTagSearch(
             includeTags = emptyList(),
             excludeTags = emptyList(),
         )
 
         assertFalse(prepared)
-    }
-
-    @Test
-    fun `quick query resets prior include and exclude tags`() = runTest {
-        val coordinator = coordinator()
-        coordinator.initialize()
-        coordinator.addIncludeTag("from-trending")
-        coordinator.addExcludeTag("old-exclude")
-        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
-
-        coordinator.applyQuickQuery(QuickQueryKind.TOP_7D)
-
-        assertEquals(QueryMode.Unified, coordinator.draftQuery.mode)
-        assertTrue(coordinator.draftQuery.includeTags.isEmpty())
-        assertTrue(coordinator.draftQuery.excludeTags.isEmpty())
-        assertEquals(SortMode.TOP, coordinator.draftQuery.sort)
-        assertTrue(coordinator.draftQuery.dateRange != null)
     }
 
     @Test

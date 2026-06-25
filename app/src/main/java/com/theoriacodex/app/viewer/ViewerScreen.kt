@@ -156,6 +156,7 @@ fun ViewerScreen(
     likedPostIds: Set<PostId> = emptySet(),
     onToggleLike: ((Post) -> Unit)? = null,
     onRequestPostResolution: ((Post) -> Unit)? = null,
+    onVisiblePostChanged: ((Post) -> Unit)? = null,
     onDismiss: () -> Unit,
     onSave: (Post) -> Unit,
     onOpenInBrowser: (Post) -> Unit,
@@ -422,6 +423,10 @@ fun ViewerScreen(
         viewerState = viewerState.withIndex(postPagerState.currentPage)
         galleryVisible = false
         markInteraction()
+    }
+
+    LaunchedEffect(selectedPost.id, currentPostIndex) {
+        onVisiblePostChanged?.invoke(selectedPost)
     }
 
     LaunchedEffect(viewerState.chromeVisible, interactionSerial, timelineInteractionActive, galleryVisible) {

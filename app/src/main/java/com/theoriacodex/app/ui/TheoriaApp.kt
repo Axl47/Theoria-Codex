@@ -35,8 +35,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Collections
-import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -100,10 +100,10 @@ import com.theoriacodex.app.codex.sanitizeCodexExportName
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.creator.CreatorProfileScreen
 import com.theoriacodex.app.creator.browseableCreatorProfile
-import com.theoriacodex.app.explore.ExploreScreen
 import com.theoriacodex.app.recommend.ForYouCoordinator
 import com.theoriacodex.app.recommend.ForYouScreen
 import com.theoriacodex.app.recommend.trainingTagsFor
+import com.theoriacodex.app.recents.RecentsScreen
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.SearchScreen
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
@@ -148,6 +148,7 @@ import com.theoriacodex.data.repository.FileBackedCacheRepository
 import com.theoriacodex.data.repository.FileBackedCodexRepository
 import com.theoriacodex.data.repository.FileBackedLikesRepository
 import com.theoriacodex.data.repository.FileBackedQueryRepository
+import com.theoriacodex.data.repository.FileBackedRecentsRepository
 import com.theoriacodex.data.repository.FileBackedSettingsRepository
 import com.theoriacodex.data.repository.FileBackedUiRestoreRepository
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
@@ -181,8 +182,8 @@ import androidx.lifecycle.LifecycleEventObserver
 
 enum class TopLevelDestination(val route: String, val label: String) {
     Search("search", "Search"),
+    Recents("recents", "Recents"),
     ForYou("for_you", "For You"),
-    Explore("explore", "Explore"),
     Codex("codex", "Codex"),
     Settings("settings", "Settings"),
 }
@@ -296,6 +297,7 @@ fun TheoriaApp(
     val codexRepository = remember(storageDirectory) { FileBackedCodexRepository(storageDirectory) }
     val likesRepository = remember(storageDirectory) { FileBackedLikesRepository(storageDirectory) }
     val queryRepository = remember(storageDirectory) { FileBackedQueryRepository(storageDirectory) }
+    val recentsRepository = remember(storageDirectory) { FileBackedRecentsRepository(storageDirectory) }
     val settingsRepository = remember(storageDirectory) { FileBackedSettingsRepository(storageDirectory) }
     val cacheRepository = remember(storageDirectory) { FileBackedCacheRepository(storageDirectory) }
     val uiRestoreRepository = remember(storageDirectory) { FileBackedUiRestoreRepository(storageDirectory) }
@@ -305,6 +307,7 @@ fun TheoriaApp(
             queryRepository = queryRepository,
             settingsRepository = settingsRepository,
             uiRestoreRepository = uiRestoreRepository,
+            recentsRepository = recentsRepository,
             tagSuggestionStore = tagSuggestionStore,
         )
     }
@@ -321,6 +324,9 @@ fun TheoriaApp(
     }
 
     val settings by settingsRepository.observeSettings().collectAsState(initial = AppSettings())
+    val recentWatchedPosts by recentsRepository.observeWatchedPosts().collectAsState(initial = emptyList())
+    val recentSearches by recentsRepository.observeSearches().collectAsState(initial = emptyList())
+    val recentActivity by recentsRepository.observeActivity().collectAsState(initial = emptyList())
     val unknownAnimatedDurationPolicy = remember(settings.contentFilters.resolveUnknownAnimatedDurations) {
         if (settings.contentFilters.resolveUnknownAnimatedDurations) {
             UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
@@ -717,7 +723,7 @@ fun TheoriaApp(
         }
 
         if (
-            !searchCoordinator.prepareExploreTagSearch(
+            !searchCoordinator.prepareTagSearch(
                 includeTags = normalizedIncludeTags,
                 mode = QueryMode.Source(source),
             )
@@ -937,7 +943,7 @@ fun TheoriaApp(
                 ViewerStreamSource.SEARCH -> searchCoordinator.rememberResolvedPost(resolved)
                 ViewerStreamSource.FOR_YOU -> forYouCoordinator.rememberResolvedPost(resolved)
                 ViewerStreamSource.CREATOR_PROFILE -> creatorProfileCoordinator.rememberResolvedPost(resolved)
-                ViewerStreamSource.CODEX, null -> Unit
+                ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS, null -> Unit
             }
             viewerSession = viewerSession?.let { session ->
                 val index = session.posts.indexOfFirst { current -> current.id == post.id }
@@ -965,11 +971,20 @@ fun TheoriaApp(
             ViewerStreamSource.SEARCH -> searchCoordinator.rememberResolvedPost(resolved)
             ViewerStreamSource.FOR_YOU -> forYouCoordinator.rememberResolvedPost(resolved)
             ViewerStreamSource.CREATOR_PROFILE -> creatorProfileCoordinator.rememberResolvedPost(resolved)
-            ViewerStreamSource.CODEX -> Unit
+            ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> Unit
         }
         return posts.toMutableList().apply {
             this[startIndex] = resolved
         }
+    }
+
+    suspend fun recordVisibleViewerPost(post: Post) {
+        val context = viewerSession?.context
+        recentsRepository.recordWatchedPost(
+            post = post,
+            origin = context?.streamSource ?: ViewerStreamSource.SEARCH,
+            originQueryHash = context?.queryHash,
+        )
     }
 
     suspend fun continueAfterUpdateFailure(message: String) {
@@ -1500,7 +1515,7 @@ fun TheoriaApp(
                 )
             }
 
-            ViewerStreamSource.CODEX -> return@LaunchedEffect
+            ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> return@LaunchedEffect
         }
         val merged = mergeViewerPosts(session.posts, incomingForViewer)
         if (merged.size != session.posts.size) {
@@ -1625,8 +1640,8 @@ fun TheoriaApp(
                                     icon = {
                                         val icon = when (destination) {
                                             TopLevelDestination.Search -> Icons.Default.Search
+                                            TopLevelDestination.Recents -> Icons.Default.History
                                             TopLevelDestination.ForYou -> Icons.Default.Favorite
-                                            TopLevelDestination.Explore -> Icons.Default.Explore
                                             TopLevelDestination.Codex -> Icons.Default.Collections
                                             TopLevelDestination.Settings -> Icons.Default.Settings
                                         }
@@ -1791,20 +1806,73 @@ fun TheoriaApp(
                                     )
                                 }
 
-                                TopLevelDestination.Explore -> {
-                                    ExploreScreen(
-                                        coordinator = searchCoordinator,
-                                        onApplyDraftAndNavigateToSearch = {
-                                            scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                searchCoordinator.applyDraft()
-                                            }
-                                            val targetIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.Search)
-                                            homeTabRoute = TopLevelDestination.Search.route
+                                TopLevelDestination.Recents -> {
+                                    RecentsScreen(
+                                        watchedPosts = recentWatchedPosts,
+                                        searches = recentSearches,
+                                        activity = recentActivity,
+                                        pixivUgoiraClient = pixivUgoiraClient,
+                                        likedPostIds = likedPostIds,
+                                        onToggleLike = { post ->
                                             scope.launch {
+                                                toggleLikeAndSyncCodex(post)
+                                            }
+                                        },
+                                        onOpenWatchedPost = { index ->
+                                            val posts = recentWatchedPosts.map { entry -> entry.post }
+                                            if (posts.isNotEmpty()) {
+                                                val context = ViewerLaunchContext(
+                                                    queryHash = "recents:watched",
+                                                    startIndex = index.coerceIn(0, posts.lastIndex),
+                                                    streamSource = ViewerStreamSource.RECENTS,
+                                                    scrollOffsetHint = 0,
+                                                )
+                                                scope.launch {
+                                                    val preparedPosts = prepareViewerPostsForLaunch(posts, context)
+                                                    viewerSession = ViewerSession(
+                                                        posts = preparedPosts,
+                                                        context = context,
+                                                        liveSearchBinding = false,
+                                                    )
+                                                    uiRestoreRepository.setViewerLaunchContext(context)
+                                                    navController.navigate(AppRoute.Viewer)
+                                                }
+                                            }
+                                        },
+                                        onOpenSearch = { entry ->
+                                            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                                val applied = searchCoordinator.applyHistoricalQuery(entry.query)
+                                                if (!applied) {
+                                                    Toast.makeText(
+                                                        appContext,
+                                                        "Search source is unavailable",
+                                                        Toast.LENGTH_SHORT,
+                                                    ).show()
+                                                    return@launch
+                                                }
+                                                val targetIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.Search)
+                                                homeTabRoute = TopLevelDestination.Search.route
+                                                pendingTopLevelRoute = TopLevelDestination.Search.route
+                                                navController.navigate(AppRoute.Home) {
+                                                    popUpTo(navController.graph.findStartDestination().id) {
+                                                        saveState = true
+                                                    }
+                                                    launchSingleTop = true
+                                                    restoreState = true
+                                                }
                                                 if (topLevelPagerState.currentPage != targetIndex) {
                                                     topLevelPagerState.animateScrollToPage(targetIndex)
                                                 }
                                             }
+                                        },
+                                        onClearWatched = {
+                                            scope.launch { recentsRepository.clearWatchedPosts() }
+                                        },
+                                        onClearSearches = {
+                                            scope.launch { recentsRepository.clearSearches() }
+                                        },
+                                        onClearAll = {
+                                            scope.launch { recentsRepository.clearAll() }
                                         },
                                     )
                                 }
@@ -2172,13 +2240,13 @@ fun TheoriaApp(
                                 ViewerStreamSource.SEARCH -> session.liveSearchBinding && searchCoordinator.canLoadMore
                                 ViewerStreamSource.FOR_YOU -> session.liveSearchBinding && forYouCoordinator.canLoadMore
                                 ViewerStreamSource.CREATOR_PROFILE -> session.liveSearchBinding && creatorProfileCoordinator.canLoadMore
-                                ViewerStreamSource.CODEX -> false
+                                ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> false
                             }
                             val loadingMoreFromSource = when (session.context.streamSource) {
                                 ViewerStreamSource.SEARCH -> searchCoordinator.loadingMore
                                 ViewerStreamSource.FOR_YOU -> forYouCoordinator.loadingMore
                                 ViewerStreamSource.CREATOR_PROFILE -> creatorProfileCoordinator.loadingMore
-                                ViewerStreamSource.CODEX -> false
+                                ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> false
                             }
                             val onLoadMoreFromSource = when (session.context.streamSource) {
                                 ViewerStreamSource.SEARCH -> {
@@ -2214,7 +2282,7 @@ fun TheoriaApp(
                                     }
                                 }
 
-                                ViewerStreamSource.CODEX -> null
+                                ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> null
                             }
 
                             ViewerScreen(
@@ -2237,6 +2305,9 @@ fun TheoriaApp(
                                     }
                                 },
                                 onRequestPostResolution = ::requestViewerPostResolution,
+                                onVisiblePostChanged = { post ->
+                                    scope.launch { recordVisibleViewerPost(post) }
+                                },
                                 onDismiss = {
                                     viewerSession = null
                                     scope.launch { searchCoordinator.setViewerLaunchContext(null) }

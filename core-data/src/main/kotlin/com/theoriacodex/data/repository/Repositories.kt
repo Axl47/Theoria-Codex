@@ -37,6 +37,44 @@ interface QueryRepository {
     suspend fun getScrollOffset(queryHash: String): Int?
 }
 
+data class RecentPostEntry(
+    val post: Post,
+    val viewedAtEpochMs: Long,
+    val origin: ViewerStreamSource,
+    val originQueryHash: String?,
+)
+
+data class RecentSearchEntry(
+    val query: Query,
+    val queryHash: String,
+    val searchedAtEpochMs: Long,
+)
+
+sealed interface RecentActivityEntry {
+    val occurredAtEpochMs: Long
+
+    data class Watched(val entry: RecentPostEntry) : RecentActivityEntry {
+        override val occurredAtEpochMs: Long
+            get() = entry.viewedAtEpochMs
+    }
+
+    data class Search(val entry: RecentSearchEntry) : RecentActivityEntry {
+        override val occurredAtEpochMs: Long
+            get() = entry.searchedAtEpochMs
+    }
+}
+
+interface RecentsRepository {
+    fun observeWatchedPosts(): Flow<List<RecentPostEntry>>
+    fun observeSearches(): Flow<List<RecentSearchEntry>>
+    fun observeActivity(): Flow<List<RecentActivityEntry>>
+    suspend fun recordWatchedPost(post: Post, origin: ViewerStreamSource, originQueryHash: String?)
+    suspend fun recordSearch(query: Query, queryHash: String)
+    suspend fun clearWatchedPosts()
+    suspend fun clearSearches()
+    suspend fun clearAll()
+}
+
 interface ExploreRepository {
     suspend fun trendingTags(limit: Int): List<TagSuggestion>
 }
@@ -176,6 +214,7 @@ enum class ViewerStreamSource {
     FOR_YOU,
     CODEX,
     CREATOR_PROFILE,
+    RECENTS,
 }
 
 data class ViewerLaunchContext(

@@ -16,6 +16,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+private const val DEFAULT_RECENT_WATCHED_LIMIT = 200
+private const val DEFAULT_RECENT_SEARCH_LIMIT = 100
+
 class InMemoryCodexRepository : CodexRepository {
     private val mutex = Mutex()
     private val codices = MutableStateFlow<List<Codex>>(emptyList())
@@ -183,6 +186,81 @@ class InMemoryQueryRepository : QueryRepository {
 
     override suspend fun getScrollOffset(queryHash: String): Int? {
         return scrollOffsets.value[queryHash]
+    }
+}
+
+class InMemoryRecentsRepository(
+    private val watchedLimit: Int = DEFAULT_RECENT_WATCHED_LIMIT,
+    private val searchLimit: Int = DEFAULT_RECENT_SEARCH_LIMIT,
+    private val clock: () -> Long = System::currentTimeMillis,
+) : RecentsRepository {
+    private val mutex = Mutex()
+    private val watched = MutableStateFlow<List<RecentPostEntry>>(emptyList())
+    private val searches = MutableStateFlow<List<RecentSearchEntry>>(emptyList())
+
+    override fun observeWatchedPosts(): Flow<List<RecentPostEntry>> {
+        return watched
+    }
+
+    override fun observeSearches(): Flow<List<RecentSearchEntry>> {
+        return searches
+    }
+
+    override fun observeActivity(): Flow<List<RecentActivityEntry>> {
+        return combine(watched, searches) { watchedPosts, searchEntries ->
+            buildList {
+                watchedPosts.forEach { entry -> add(RecentActivityEntry.Watched(entry)) }
+                searchEntries.forEach { entry -> add(RecentActivityEntry.Search(entry)) }
+            }.sortedByDescending { entry -> entry.occurredAtEpochMs }
+        }
+    }
+
+    override suspend fun recordWatchedPost(post: Post, origin: ViewerStreamSource, originQueryHash: String?) {
+        mutex.withLock {
+            watched.value = (listOf(
+                RecentPostEntry(
+                    post = post,
+                    viewedAtEpochMs = clock(),
+                    origin = origin,
+                    originQueryHash = originQueryHash,
+                )
+            ) + watched.value.filterNot { entry -> entry.post.id == post.id })
+                .take(watchedLimit.coerceAtLeast(0))
+        }
+    }
+
+    override suspend fun recordSearch(query: Query, queryHash: String) {
+        val normalizedHash = queryHash.trim()
+        if (normalizedHash.isBlank()) return
+        mutex.withLock {
+            searches.value = (listOf(
+                RecentSearchEntry(
+                    query = query,
+                    queryHash = normalizedHash,
+                    searchedAtEpochMs = clock(),
+                )
+            ) + searches.value.filterNot { entry -> entry.queryHash == normalizedHash })
+                .take(searchLimit.coerceAtLeast(0))
+        }
+    }
+
+    override suspend fun clearWatchedPosts() {
+        mutex.withLock {
+            watched.value = emptyList()
+        }
+    }
+
+    override suspend fun clearSearches() {
+        mutex.withLock {
+            searches.value = emptyList()
+        }
+    }
+
+    override suspend fun clearAll() {
+        mutex.withLock {
+            watched.value = emptyList()
+            searches.value = emptyList()
+        }
     }
 }
 

@@ -1904,7 +1904,7 @@ private fun EmptyBlock(
             text = messageOverride ?: if (hasPendingChanges) {
                 "Draft updated. Press Apply to refresh results."
             } else {
-                "No results yet. Add tags or use Explore quick queries."
+                "No results yet. Add tags and press Apply to start searching."
             },
             modifier = Modifier
                 .fillMaxWidth()
