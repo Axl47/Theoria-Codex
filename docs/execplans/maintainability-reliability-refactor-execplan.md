@@ -1,6 +1,6 @@
 ---
 created_at: 2026-06-25T00:00:00Z
-updated_at: 2026-06-25T00:00:00Z
+updated_at: 2026-06-25T01:45:00Z
 ---
 # Maintainability and Provider Reliability Refactor
 
@@ -21,7 +21,7 @@ The result should be observable in three ways: Gradle tests prove provider and p
 - [x] (2026-06-25 00:42Z) Extracted shared media, clipboard, and download policies used by Search, Viewer, Codex, and Creator Profile; candidate selection now lives in `PostMedia.kt` and post URL/tag clipboard writes live in `PostClipboard.kt`.
 - [x] (2026-06-25 01:02Z) Added provider contract tests and shared provider parsing/query helpers; fixture-backed stubs now run a cross-source contract suite, and AIBooru/Gelbooru use common source quick-query, JSON, duration, MIME, network, and HTTP failure helpers.
 - [x] (2026-06-25 01:25Z) Added opt-in live provider health reporting and Settings-facing health state; `:core-sources:providerHealthCheck` writes a skipped report by default and performs live checks only with `-Ptheoria.liveProviders=true`.
-- [ ] Split `TheoriaApp.kt` workflows into smaller coordinators after tests pin behavior.
+- [x] (2026-06-25 01:45Z) Split viewer session/lazy-media policy and Codex import/export payload policy out of `TheoriaApp.kt`; added focused tests for viewer merging/lazy resolution and Codex share-file parsing/naming.
 - [ ] Update README, AGENTS, and this ExecPlan with validation evidence after each milestone.
 
 ## Surprises & Discoveries
@@ -46,6 +46,9 @@ The result should be observable in three ways: Gradle tests prove provider and p
 
 - Observation: Live provider health should treat credential-gated providers as typed failures, not task failures.
   Evidence: `./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true` completed successfully with `ok=6, failed=3`; Pixiv, Gelbooru, and rule34.xxx reported `AUTH_REQUIRED` because no local credentials were supplied.
+
+- Observation: `TheoriaApp.kt` still owns Android side effects, but its viewer and Codex-share decisions were pure enough to extract without changing UI behavior.
+  Evidence: `ViewerSessionCoordinator.kt` now owns lazy-media resolution and viewer post merging; `CodexShareModels.kt` now owns share-file construction, import post-id parsing, and export filename sanitization.
 
 ## Decision Log
 
@@ -74,6 +77,8 @@ Milestone 2 is complete. Search cards, Viewer gallery/image candidate selection,
 Milestone 3 is complete. Provider contracts now run against deterministic fixture-backed adapters, and the first real adapter family migration moved repeated quick-query construction, JSON parsing, flexible duration parsing, MIME inference, network exception mapping, and HTTP status classification into `core-sources/src/main/kotlin/com/theoriacodex/sources/common/SourceAdapterCommon.kt`. AIBooru and Gelbooru were migrated first because their existing tests covered the behavior most directly.
 
 Milestone 4 is complete. `core-sources/src/main/kotlin/com/theoriacodex/sources/health/` defines provider health reports and an opt-in CLI; `core-sources/build.gradle.kts` exposes `providerHealthCheck`; settings persistence now stores last-known per-source health snapshots; and Settings displays a compact health line for each source without running live checks from the app.
+
+Milestone 5 is complete as a first structural split of the composition root. `TheoriaApp.kt` delegates viewer lazy media/session merging to `app/src/main/java/com/theoriacodex/app/viewer/ViewerSessionCoordinator.kt` and delegates Codex share-file construction, import post-id parsing, and filesystem-safe export naming to `app/src/main/java/com/theoriacodex/app/codex/CodexShareModels.kt`. The app shell still owns Android side effects such as FileProvider, Toasts, repository calls, and navigation.
 
 ## Context and Orientation
 
@@ -230,6 +235,9 @@ Update this section with concise terminal transcripts after each milestone. Keep
     ./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true
     Provider health: ok=6, degraded=0, failed=3, skipped=0
     BUILD SUCCESSFUL in 5s
+
+    ./gradlew :app:testDebugUnitTest
+    BUILD SUCCESSFUL in 6s
 
 ## Interfaces and Dependencies
 

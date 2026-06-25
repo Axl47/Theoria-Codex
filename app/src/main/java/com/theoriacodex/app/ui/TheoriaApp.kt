@@ -85,15 +85,18 @@ import androidx.core.content.FileProvider
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.media.isPixivUgoiraPost
-import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.media.postDownloadMediaCandidate
+import com.theoriacodex.app.codex.CodexShareFile
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.CodexSearchSourceOption
 import com.theoriacodex.app.codex.CodexSearchTagOption
 import com.theoriacodex.app.codex.SaveToCodexSheet
+import com.theoriacodex.app.codex.buildCodexShareFile
+import com.theoriacodex.app.codex.codexSharePostId
 import com.theoriacodex.app.codex.codexSearchSourceOptions as buildCodexSearchSourceOptions
 import com.theoriacodex.app.codex.codexSearchTagOptions as buildCodexSearchTagOptions
+import com.theoriacodex.app.codex.sanitizeCodexExportName
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.creator.CreatorProfileScreen
 import com.theoriacodex.app.creator.browseableCreatorProfile
@@ -135,6 +138,9 @@ import com.theoriacodex.app.update.UnknownSourcesPermissionRequiredException
 import com.theoriacodex.app.update.messageText
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.ViewerScreen
+import com.theoriacodex.app.viewer.ViewerSession
+import com.theoriacodex.app.viewer.mergeViewerPosts
+import com.theoriacodex.app.viewer.requiresLazyMediaResolution
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.CodexSortMode
@@ -189,47 +195,6 @@ private object AppRoute {
 
     fun codexDetail(codexId: String): String {
         return "codex/detail/$codexId"
-    }
-}
-
-private data class ViewerSession(
-    val posts: List<Post>,
-    val context: ViewerLaunchContext,
-    val liveSearchBinding: Boolean = false,
-    val searchVisibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
-)
-
-private val LAZY_MEDIA_RESOLUTION_SOURCES = setOf(
-    SourceKey.NHENTAI,
-    SourceKey.RULE34VIDEO,
-    SourceKey.RULE34GEN,
-    SourceKey.IWARA,
-)
-
-private val REFRESHABLE_REMOTE_VIDEO_SOURCES = setOf(
-    SourceKey.AIBOORU,
-    SourceKey.GELBOORU,
-    SourceKey.IWARA,
-    SourceKey.RULE34XXX,
-    SourceKey.RULE34PAHEAL,
-    SourceKey.RULE34VIDEO,
-    SourceKey.RULE34GEN,
-)
-
-internal fun requiresLazyMediaResolution(post: Post): Boolean {
-    val mediaRefs = buildList {
-        addAll(post.media)
-        post.full?.let { add(it) }
-    }
-    if (
-        post.id.source in REFRESHABLE_REMOTE_VIDEO_SOURCES &&
-        mediaRefs.any { ref -> isVideoMediaRef(ref) && ref.localPath.isNullOrBlank() && !ref.url.isNullOrBlank() }
-    ) {
-        return true
-    }
-    if (post.id.source !in LAZY_MEDIA_RESOLUTION_SOURCES) return false
-    return mediaRefs.none { ref ->
-        !ref.url.isNullOrBlank()
     }
 }
 
@@ -804,15 +769,7 @@ fun TheoriaApp(
             return
         }
         val posts = codexRepository.observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED).first()
-        val export = CodexShareFile(
-            title = codex.name,
-            posts = posts.map { post ->
-                CodexSharePost(
-                    source = post.id.source.name,
-                    sourcePostId = post.id.sourcePostId,
-                )
-            },
-        )
+        val export = buildCodexShareFile(title = codex.name, posts = posts)
 
         val exportsDirectory = storageDirectory.resolve("exports").apply { mkdirs() }
         val fileName = "${sanitizeCodexExportName(codex.name)}.json"
@@ -865,16 +822,7 @@ fun TheoriaApp(
         )
 
         val entries = parsed?.posts.orEmpty()
-            .mapNotNull { item ->
-                val source = item.source
-                    .trim()
-                    .uppercase()
-                    .let { value -> runCatching { SourceKey.valueOf(value) }.getOrNull() }
-                    ?: return@mapNotNull null
-                val sourcePostId = item.sourcePostId.trim()
-                if (sourcePostId.isBlank()) return@mapNotNull null
-                PostId(source = source, sourcePostId = sourcePostId)
-            }
+            .mapNotNull(::codexSharePostId)
             .distinctBy { postId -> "${postId.source.name}:${postId.sourcePostId}" }
 
         if (entries.isEmpty()) {
@@ -2854,21 +2802,6 @@ private fun enqueuePostDownload(context: Context, post: Post): Boolean {
     }.getOrElse { false }
 }
 
-private fun mergeViewerPosts(current: List<Post>, incoming: List<Post>): List<Post> {
-    if (incoming.isEmpty()) return current
-    if (current.isEmpty()) return incoming
-    val seen = current
-        .mapTo(mutableSetOf()) { post -> "${post.id.source.name}:${post.id.sourcePostId}" }
-    val merged = current.toMutableList()
-    incoming.forEach { post ->
-        val key = "${post.id.source.name}:${post.id.sourcePostId}"
-        if (seen.add(key)) {
-            merged += post
-        }
-    }
-    return merged
-}
-
 private fun loadSeedTagSuggestions(context: Context): Map<SourceKey, List<TagSuggestion>> {
     val body = runCatching {
         context.assets.open("tag_store.json").bufferedReader().use { it.readText() }
@@ -2958,30 +2891,10 @@ private fun resolveCodexCoverModel(
     return post.preview.url
 }
 
-private fun sanitizeCodexExportName(name: String): String {
-    val normalized = name
-        .trim()
-        .lowercase()
-        .replace(Regex("[^a-z0-9]+"), "_")
-        .trim('_')
-    return normalized.ifBlank { "codex" }
-}
-
 private fun parseGelbooruProfileOwner(html: String): String? {
     val owner = GELBOORU_PROFILE_OWNER_REGEX.find(html)?.groupValues?.getOrNull(1)
     return owner?.trim()?.takeIf(String::isNotBlank)
 }
-
-private data class CodexShareFile(
-    val version: Int = 1,
-    val title: String,
-    val posts: List<CodexSharePost>,
-)
-
-private data class CodexSharePost(
-    val source: String,
-    val sourcePostId: String,
-)
 
 private const val PIXIV_TOKEN_REFRESH_TIMEOUT_MS = 6_000L
 private const val BOTTOM_BAR_HEIGHT_RATIO = 0.085f
