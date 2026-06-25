@@ -17,7 +17,7 @@ The result should be observable in three ways: Gradle tests prove provider and p
 ## Progress
 
 - [x] (2026-06-25 00:00Z) Created this ExecPlan from the repository analysis and refreshed `working_list.md`.
-- [ ] Implement persistence integrity fixes for saved Codex posts.
+- [x] (2026-06-25 00:20Z) Implemented persistence integrity fixes for saved Codex posts; `Post.durationMs`, preview `ImageRef.progressiveUrls`, full-image progressive URLs, and media progressive URLs now round-trip through the file-backed Codex store.
 - [ ] Extract shared media, clipboard, and download policies used by Search, Viewer, Codex, and Creator Profile.
 - [ ] Add provider contract tests and shared provider parsing/query helpers.
 - [ ] Add opt-in live provider health reporting and Settings-facing health state.
@@ -34,6 +34,9 @@ The result should be observable in three ways: Gradle tests prove provider and p
 
 - Observation: Provider adapters repeat query construction and metadata parsing patterns that should be centralized only after contract tests exist.
   Evidence: AIBooru, Gelbooru, Pixiv, Iwara, and Rule34-family adapters each perform similar quick-query, duration, request, JSON, and error mapping work in separate files under `core-sources/src/main/kotlin/com/theoriacodex/sources/`.
+
+- Observation: Full-image and media progressive URLs were already partially protected, but preview progressive URLs and post duration were still dropped.
+  Evidence: `FileBackedRepositoriesTest` already covered `full.progressiveUrls` and `media.progressiveUrls`; the updated round-trip test now also asserts `preview.progressiveUrls` and `durationMs`.
 
 ## Decision Log
 
@@ -55,7 +58,7 @@ The result should be observable in three ways: Gradle tests prove provider and p
 
 ## Outcomes & Retrospective
 
-This plan has not yet been implemented. When milestones complete, record the concrete tests run, manual verification performed, any behavior changes, and any tradeoffs that remain.
+Milestone 1 is complete. Saved Codex posts now retain the duration and progressive preview/full/media URLs already present in the domain model, while legacy JSON files without those fields still load with `durationMs = null` and empty progressive URL lists. Broader milestones remain in progress.
 
 ## Context and Orientation
 
@@ -197,7 +200,7 @@ Initial baseline from the analysis that produced this plan:
 Update this section with concise terminal transcripts after each milestone. Keep examples short and focused on evidence, such as:
 
     ./gradlew :core-data:test
-    BUILD SUCCESSFUL in 2s
+    BUILD SUCCESSFUL in 18s
 
 ## Interfaces and Dependencies
 

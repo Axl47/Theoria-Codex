@@ -62,13 +62,17 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
-    fun `codex repository persists progressive media urls across instances`() = runTest {
+    fun `codex repository persists media metadata across instances`() = runTest {
         val dir = Files.createTempDirectory("codex-progressive-urls-").toFile()
         val first = FileBackedCodexRepository(dir)
         val created = first.createCodex("Saved")
         val progressiveUrls = listOf(
             "https://gelbooru.com/sample/1.jpg",
             "https://gelbooru.com/alternate/1.jpg",
+        )
+        val previewProgressiveUrls = listOf(
+            "https://gelbooru.com/thumb-small/1.jpg",
+            "https://gelbooru.com/thumb-large/1.jpg",
         )
         val media = ImageRef(
             url = "https://gelbooru.com/full/1.jpg",
@@ -77,8 +81,15 @@ class FileBackedRepositoriesTest {
             progressiveUrls = progressiveUrls,
         )
         val post = samplePost("1", localPath = null, source = SourceKey.GELBOORU).copy(
+            preview = ImageRef(
+                url = "https://gelbooru.com/preview/1.jpg",
+                localPath = null,
+                mime = "image/jpeg",
+                progressiveUrls = previewProgressiveUrls,
+            ),
             full = media,
             media = listOf(media),
+            durationMs = 12_345L,
         )
 
         first.addItem(created.codexId, post)
@@ -86,8 +97,10 @@ class FileBackedRepositoriesTest {
         val second = FileBackedCodexRepository(dir)
         val loaded = second.getPost(post.id)
 
+        assertEquals(previewProgressiveUrls, loaded?.preview?.progressiveUrls)
         assertEquals(progressiveUrls, loaded?.full?.progressiveUrls)
         assertEquals(progressiveUrls, loaded?.media?.single()?.progressiveUrls)
+        assertEquals(12_345L, loaded?.durationMs)
     }
 
     @Test
@@ -130,6 +143,9 @@ class FileBackedRepositoriesTest {
         assertNotNull(loaded)
         assertEquals(null, loaded?.creatorProfile)
         assertEquals("Legacy", loaded?.title)
+        assertEquals(emptyList<String>(), loaded?.preview?.progressiveUrls)
+        assertEquals(emptyList<String>(), loaded?.full?.progressiveUrls)
+        assertEquals(null, loaded?.durationMs)
     }
 
     @Test

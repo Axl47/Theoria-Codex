@@ -766,6 +766,7 @@ private data class PostRecord(
     val previewUrl: String?,
     val previewLocalPath: String?,
     val previewMime: String?,
+    val previewProgressiveUrls: List<String>? = null,
     val fullUrl: String?,
     val fullLocalPath: String?,
     val fullMime: String?,
@@ -780,6 +781,7 @@ private data class PostRecord(
     val media: List<ImageRefRecord>? = null,
     val title: String? = null,
     val creatorProfile: CreatorProfileRecord? = null,
+    val durationMs: Long? = null,
 ) {
     fun toDomain(): Post {
         return Post(
@@ -791,6 +793,7 @@ private data class PostRecord(
                 url = previewUrl,
                 localPath = previewLocalPath,
                 mime = previewMime,
+                progressiveUrls = previewProgressiveUrls.orEmpty(),
             ),
             full = if (fullUrl == null && fullLocalPath == null && fullMime == null) {
                 null
@@ -812,6 +815,7 @@ private data class PostRecord(
             media = media.orEmpty().map { it.toDomain() },
             title = title,
             creatorProfile = creatorProfile?.toDomain(),
+            durationMs = durationMs,
         )
     }
 
@@ -823,6 +827,7 @@ private data class PostRecord(
                 previewUrl = post.preview.url,
                 previewLocalPath = post.preview.localPath,
                 previewMime = post.preview.mime,
+                previewProgressiveUrls = post.preview.progressiveUrls,
                 fullUrl = post.full?.url,
                 fullLocalPath = post.full?.localPath,
                 fullMime = post.full?.mime,
@@ -837,6 +842,7 @@ private data class PostRecord(
                 media = post.media.map(ImageRefRecord::fromDomain),
                 title = post.title,
                 creatorProfile = post.creatorProfile?.let(CreatorProfileRecord::fromDomain),
+                durationMs = post.durationMs,
             )
         }
     }
