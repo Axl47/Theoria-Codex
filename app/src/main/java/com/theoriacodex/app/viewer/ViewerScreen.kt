@@ -474,6 +474,10 @@ fun ViewerScreen(
             ) { postPage ->
             val post = posts[postPage]
             val postMedia = remember(post) { viewerMediaItems(post) }
+            val mediaPagerReverseLayout = viewerMediaPagerReverseLayout(
+                mediaCount = postMedia.size,
+                invertMultiImageScrollDirection = invertMultiImageScrollDirection,
+            )
             val initialMediaPage = (mediaIndexByPost[postPage] ?: 0).coerceIn(0, postMedia.lastIndex)
             val mediaPagerState = rememberPagerState(
                 initialPage = initialMediaPage,
@@ -533,6 +537,7 @@ fun ViewerScreen(
             HorizontalPager(
                 state = mediaPagerState,
                 userScrollEnabled = false,
+                reverseLayout = mediaPagerReverseLayout,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = if (isLandscape) {
                     PaddingValues(0.dp)
@@ -2014,6 +2019,13 @@ internal fun viewerSwipeDirectionForSetting(
         ViewerHorizontalSwipeDirection.Previous -> ViewerHorizontalSwipeDirection.Next
         ViewerHorizontalSwipeDirection.Next -> ViewerHorizontalSwipeDirection.Previous
     }
+}
+
+internal fun viewerMediaPagerReverseLayout(
+    mediaCount: Int,
+    invertMultiImageScrollDirection: Boolean,
+): Boolean {
+    return invertMultiImageScrollDirection && mediaCount > 1
 }
 
 private fun buildPrefetchQueue(

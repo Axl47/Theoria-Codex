@@ -82,5 +82,17 @@ class ViewerStateTest {
                 invertMultiImageScrollDirection = false,
             ),
         )
+        assertTrue(
+            viewerMediaPagerReverseLayout(
+                mediaCount = 3,
+                invertMultiImageScrollDirection = true,
+            )
+        )
+        assertFalse(
+            viewerMediaPagerReverseLayout(
+                mediaCount = 1,
+                invertMultiImageScrollDirection = true,
+            )
+        )
     }
 }
