@@ -409,6 +409,7 @@ class NhentaiSourceAdapter(
             authorName = null,
             createdAtEpochMs = null,
             title = title,
+            mediaCount = pageCount,
         )
         val metadata = fetchMirrorGalleryMetadata(galleryId)
         return if (metadata != null && metadata.canonicalTags.isNotEmpty()) {
@@ -617,10 +618,10 @@ class NhentaiSourceAdapter(
         val rawTags = canonicalTags
         val titleObject = raw.optionalJsonObject("title")
         val title = listOf(
-            titleObject?.get("pretty").asStringOrNull(),
-            titleObject?.get("english").asStringOrNull(),
-            titleObject?.get("japanese").asStringOrNull(),
             raw.get("english_title").asStringOrNull(),
+            titleObject?.get("english").asStringOrNull(),
+            titleObject?.get("pretty").asStringOrNull(),
+            titleObject?.get("japanese").asStringOrNull(),
             raw.get("japanese_title").asStringOrNull(),
         ).firstOrNull { !it.isNullOrBlank() }
 
@@ -628,6 +629,13 @@ class NhentaiSourceAdapter(
         val artist = tags.firstOrNull { it.type.equals("artist", ignoreCase = true) }?.name
         val authorName = scanlator.ifBlank { artist }
         val createdAtEpochMs = raw.get("upload_date").asLongOrNull()?.times(1000L)
+        val declaredMediaCount = raw.get("num_pages").asIntOrNull()?.takeIf { it > 0 }
+        val mediaCount = when {
+            pageRefs.isNotEmpty() -> pageRefs.size
+            declaredMediaCount != null -> declaredMediaCount
+            mediaRefs.isNotEmpty() -> mediaRefs.size
+            else -> null
+        }
 
         return Post(
             id = PostId(SourceKey.NHENTAI, galleryId),
@@ -646,6 +654,7 @@ class NhentaiSourceAdapter(
             authorName = authorName,
             createdAtEpochMs = createdAtEpochMs,
             title = title?.trim()?.takeIf { it.isNotBlank() },
+            mediaCount = mediaCount,
         )
     }
 

@@ -47,4 +47,5 @@ data class Post(
     val title: String? = null,
     val creatorProfile: CreatorProfile? = null,
     val durationMs: Long? = null,
+    val mediaCount: Int? = null,
 )

@@ -1313,6 +1313,7 @@ private fun ImageCountBadge(
 }
 
 private fun postMediaCount(post: Post): Int {
+    post.mediaCount?.takeIf { it > 0 }?.let { return it }
     val explicitCount = post.media.count { !it.url.isNullOrBlank() || !it.localPath.isNullOrBlank() }
     return when {
         explicitCount > 0 -> explicitCount

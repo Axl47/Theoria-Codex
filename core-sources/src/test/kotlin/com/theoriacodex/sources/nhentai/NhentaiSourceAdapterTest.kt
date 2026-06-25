@@ -140,6 +140,7 @@ class NhentaiSourceAdapterTest {
         assertEquals("https://i.nhentai.net/galleries/9876/2.gif", post?.media?.get(1)?.url)
         assertEquals("https://nhentai.net/g/123/", post?.pageUrl)
         assertEquals(listOf("big breasts"), post?.canonicalTags)
+        assertEquals(2, post?.mediaCount)
     }
 
     @Test
@@ -182,6 +183,7 @@ class NhentaiSourceAdapterTest {
         assertEquals("image/webp", post.preview.mime)
         assertNull(post.full)
         assertTrue(post.media.isEmpty())
+        assertEquals(4, post.mediaCount)
     }
 
     @Test
@@ -411,10 +413,11 @@ class NhentaiSourceAdapterTest {
         val post = adapter.resolvePost(PostId(source = SourceKey.NHENTAI, sourcePostId = "634609"))
 
         assertEquals("https://nhentai.net/api/v2/galleries/634609", httpClient.lastGet?.url)
-        assertEquals("Pretty Detail", post?.title)
+        assertEquals("English Detail", post?.title)
         assertEquals("https://t.nhentai.net/galleries/3821534/thumb.webp", post?.preview?.url)
         assertEquals("https://i.nhentai.net/galleries/3821534/1.webp", post?.media?.get(0)?.url)
         assertEquals("https://i.nhentai.net/galleries/3821534/2.jpg", post?.media?.get(1)?.url)
+        assertEquals(2, post?.mediaCount)
         assertEquals(listOf("english", "kyaradain"), post?.canonicalTags)
         assertEquals("kyaradain", post?.authorName)
     }
