@@ -10,6 +10,7 @@ import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -32,7 +33,7 @@ class NhentaiSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val gson: Gson = Gson(),
     private val minRequestIntervalMs: Long = 350L,
-) : SourceAdapter {
+) : SourceAdapter, TagCountLookupSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.NHENTAI
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -48,6 +49,7 @@ class NhentaiSourceAdapter(
 
     private val throttleMutex = Mutex()
     private var lastRequestAtEpochMs: Long = 0L
+    private val tagInfoByKey = mutableMapOf<String, NhentaiTagInfo>()
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> {
         val directGalleryId = query.directNhentaiGalleryIdCandidate()
@@ -67,10 +69,23 @@ class NhentaiSourceAdapter(
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(1) ?: 1
         val compiledQuery = compileNhentaiQuery(query)
         val params = linkedMapOf("page" to pageIndex.toString())
+        val exactTag = if (query.sort != SortMode.RANDOM) {
+            query.singleIncludeTagCandidate()?.let { tag ->
+                runCatching { resolveNhentaiTag(tag) }.getOrNull()
+            }
+        } else {
+            null
+        }
         val useAllEndpoint = compiledQuery.isBlank() &&
             (query.sort == SortMode.NEWEST || query.sort == SortMode.RANDOM)
 
-        val url = if (useAllEndpoint) {
+        val url = if (exactTag != null) {
+            params["tag_id"] = exactTag.id.toString()
+            mapTaggedSortParam(query.sort)?.let { sort ->
+                params["sort"] = sort
+            }
+            NHENTAI_GALLERIES_TAGGED_URL
+        } else if (useAllEndpoint) {
             NHENTAI_GALLERIES_ALL_URL
         } else {
             params["query"] = compiledQuery.ifBlank { NHENTAI_V2_SEARCH_ALL_QUERY }
@@ -126,19 +141,28 @@ class NhentaiSourceAdapter(
         val normalizedPrefix = prefix.trim()
         if (normalizedPrefix.isBlank() || limit <= 0) return emptyList()
 
-        val root = requireNotNull(requestJsonObject(
-            url = NHENTAI_GALLERIES_SEARCH_URL,
-            query = mapOf(
-                "query" to normalizedPrefix,
-                "page" to "1",
-                "sort" to "popular",
-            ),
-        ))
-        return collectTagSuggestions(
-            galleries = root.optionalJsonArray("result").orEmpty(),
-            prefix = normalizedPrefix,
-            limit = limit,
-        )
+        return requestTagSearch(normalizedPrefix)
+            .map(::tagSuggestion)
+            .take(limit)
+    }
+
+    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> {
+        val requested = tags
+            .asSequence()
+            .map(::normalizeNhentaiTag)
+            .filter(String::isNotBlank)
+            .distinct()
+            .toList()
+        if (requested.isEmpty()) return emptyMap()
+
+        val counts = linkedMapOf<String, Int>()
+        requested.forEach { tag ->
+            val info = resolveNhentaiTag(tag)
+            if (info != null) {
+                counts[info.name] = info.count
+            }
+        }
+        return counts
     }
 
     override suspend fun quickQuery(kind: QuickQueryKind): Query {
@@ -229,6 +253,20 @@ class NhentaiSourceAdapter(
         return parseJsonObject(response.body)
     }
 
+    private suspend fun requestJsonArrayPost(
+        url: String,
+        body: String,
+    ): JsonArray {
+        val response = requestJsonPost(url = url, body = body)
+        if (response.statusCode !in 200..299) {
+            throw SourceAdapterException(
+                reason = mapHttpFailure(response.statusCode),
+                message = "NHentai request failed (${response.statusCode})",
+            )
+        }
+        return parseJsonArray(response.body)
+    }
+
     private suspend fun requestDirect(
         url: String,
         query: Map<String, String>,
@@ -247,6 +285,60 @@ class NhentaiSourceAdapter(
                 cause = error,
             )
         }
+    }
+
+    private suspend fun requestJsonPost(
+        url: String,
+        body: String,
+    ): SourceHttpResponse {
+        throttle()
+        return try {
+            httpClient.postJson(
+                url = url,
+                body = body,
+                headers = NHENTAI_JSON_POST_HEADERS,
+            )
+        } catch (error: IOException) {
+            throw SourceAdapterException(
+                reason = SourceFailureReason.NETWORK,
+                message = "NHentai request failed",
+                cause = error,
+            )
+        }
+    }
+
+    private suspend fun requestTagSearch(query: String): List<NhentaiTagInfo> {
+        val normalizedQuery = normalizeNhentaiTag(query)
+        if (normalizedQuery.isBlank()) return emptyList()
+        tagInfoByKey[tagCacheKey(normalizedQuery)]?.let { return listOf(it) }
+
+        val body = gson.toJson(
+            mapOf(
+                "query" to normalizedQuery,
+            )
+        )
+        return requestJsonArrayPost(
+            url = NHENTAI_TAGS_SEARCH_URL,
+            body = body,
+        ).mapNotNull { element ->
+            element.takeIf(JsonElement::isJsonObject)
+                ?.asJsonObject
+                ?.let(::parseTagInfo)
+        }.also { tags ->
+            tags.forEach(::cacheTagInfo)
+        }
+    }
+
+    private suspend fun resolveNhentaiTag(tag: String): NhentaiTagInfo? {
+        val normalized = normalizeNhentaiTag(tag)
+        if (normalized.isBlank()) return null
+        tagInfoByKey[tagCacheKey(normalized)]?.let { return it }
+        val normalizedSlug = normalized.toNhentaiSlug()
+        return requestTagSearch(normalized)
+            .firstOrNull { info ->
+                info.name.equals(normalized, ignoreCase = true) ||
+                    info.slug.equals(normalizedSlug, ignoreCase = true)
+            }
     }
 
     private suspend fun requestMirrorSearch(
@@ -433,6 +525,22 @@ class NhentaiSourceAdapter(
             )
     }
 
+    private fun parseJsonArray(body: String): JsonArray {
+        val trimmed = body.trimStart()
+        if (trimmed.startsWith("<")) {
+            throw SourceAdapterException(
+                reason = SourceFailureReason.NETWORK,
+                message = "NHentai returned non-JSON response (possibly blocked)",
+            )
+        }
+
+        return runCatching { gson.fromJson(trimmed, JsonArray::class.java) }.getOrNull()
+            ?: throw SourceAdapterException(
+                reason = SourceFailureReason.PARSE,
+                message = "NHentai returned malformed JSON",
+            )
+    }
+
     private fun parseGallery(raw: JsonObject): Post? {
         val galleryId = raw.get("id").asLongOrNull()?.toString()
             ?: raw.get("id").asStringOrNull()?.trim()?.takeIf { it.isNotBlank() }
@@ -586,6 +694,35 @@ class NhentaiSourceAdapter(
             .take(limit)
     }
 
+    private fun parseTagInfo(raw: JsonObject): NhentaiTagInfo? {
+        val id = raw.get("id").asIntOrNull() ?: return null
+        val name = raw.get("name").asStringOrNull()?.trim()?.takeIf(String::isNotBlank) ?: return null
+        val type = raw.get("type").asStringOrNull()?.trim()?.takeIf(String::isNotBlank)
+        val slug = raw.get("slug").asStringOrNull()?.trim()?.takeIf(String::isNotBlank)
+            ?: name.toNhentaiSlug()
+        val count = raw.get("count").asIntOrNull() ?: return null
+        return NhentaiTagInfo(
+            id = id,
+            name = name,
+            slug = slug,
+            type = type,
+            count = count,
+        )
+    }
+
+    private fun tagSuggestion(info: NhentaiTagInfo): TagSuggestion {
+        return TagSuggestion(
+            text = info.name,
+            type = info.type,
+            count = info.count,
+        )
+    }
+
+    private fun cacheTagInfo(info: NhentaiTagInfo) {
+        tagInfoByKey[tagCacheKey(info.name)] = info
+        tagInfoByKey[tagCacheKey(info.slug)] = info
+    }
+
     private fun parseMirrorSearchPage(body: String): JsonObject {
         val posts = JsonArray()
         body.lineSequence()
@@ -686,6 +823,14 @@ private data class NhentaiMirrorMetadata(
     val authorName: String?,
 )
 
+private data class NhentaiTagInfo(
+    val id: Int,
+    val name: String,
+    val slug: String,
+    val type: String?,
+    val count: Int,
+)
+
 private fun compileNhentaiQuery(query: Query): String {
     val include = query.includeTags
         .map(::normalizeNhentaiTag)
@@ -720,6 +865,17 @@ private fun Query.directNhentaiGalleryIdCandidate(): String? {
     return searchable.first().takeIf(String::isDigitsOnly)
 }
 
+private fun Query.singleIncludeTagCandidate(): String? {
+    if (excludeTags.isNotEmpty()) return null
+    val includes = includeTags
+        .asSequence()
+        .map(::normalizeNhentaiTag)
+        .filter(String::isNotBlank)
+        .toList()
+    if (includes.size != 1) return null
+    return includes.first()
+}
+
 private fun normalizeNhentaiFilterTag(value: String): String {
     return value
         .trim()
@@ -741,6 +897,15 @@ private fun String.isNhentaiTaxonomyPath(): Boolean {
 private fun mapSortParam(sortMode: SortMode): String? {
     return when (sortMode) {
         SortMode.NEWEST -> null
+        SortMode.POPULAR -> "popular-today"
+        SortMode.TOP -> "popular-week"
+        SortMode.RANDOM -> null
+    }
+}
+
+private fun mapTaggedSortParam(sortMode: SortMode): String? {
+    return when (sortMode) {
+        SortMode.NEWEST -> "date"
         SortMode.POPULAR -> "popular-today"
         SortMode.TOP -> "popular-week"
         SortMode.RANDOM -> null
@@ -857,14 +1022,26 @@ private fun String.isDigitsOnly(): Boolean {
     return isNotBlank() && all { ch -> ch.isDigit() }
 }
 
+private fun String.toNhentaiSlug(): String {
+    return normalizeNhentaiTag(this)
+        .lowercase()
+        .replace(NHENTAI_WHITESPACE_REGEX, "-")
+}
+
+private fun tagCacheKey(value: String): String {
+    return normalizeNhentaiTag(value).lowercase()
+}
+
 private fun String.urlEncode(): String {
     return URLEncoder.encode(this, Charsets.UTF_8.name()).replace("+", "%20")
 }
 
 private const val NHENTAI_WEB_BASE = "nhentai.net/"
 private const val NHENTAI_GALLERIES_ALL_URL = "https://nhentai.net/api/v2/galleries"
+private const val NHENTAI_GALLERIES_TAGGED_URL = "https://nhentai.net/api/v2/galleries/tagged"
 private const val NHENTAI_GALLERIES_SEARCH_URL = "https://nhentai.net/api/v2/search"
 private const val NHENTAI_GALLERY_URL_PREFIX = "https://nhentai.net/api/v2/galleries"
+private const val NHENTAI_TAGS_SEARCH_URL = "https://nhentai.net/api/v2/tags/search"
 private const val NHENTAI_IMAGES_BASE = "https://i.nhentai.net"
 private const val NHENTAI_THUMBS_BASE = "https://t.nhentai.net"
 private const val JINA_MIRROR_BASE = "https://r.jina.ai/http://"
@@ -878,6 +1055,9 @@ private val NHENTAI_DEFAULT_HEADERS = mapOf(
     "User-Agent" to "TheoriaCodex/1.0 (Android source adapter)",
     "Referer" to "https://nhentai.net/",
     "Accept" to "application/json, text/plain, */*",
+)
+private val NHENTAI_JSON_POST_HEADERS = NHENTAI_DEFAULT_HEADERS + (
+    "Content-Type" to "application/json"
 )
 private val JINA_REQUEST_HEADERS = mapOf(
     "User-Agent" to "Mozilla/5.0",

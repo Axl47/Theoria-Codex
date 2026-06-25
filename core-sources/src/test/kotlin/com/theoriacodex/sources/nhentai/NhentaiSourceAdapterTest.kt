@@ -128,7 +128,7 @@ class NhentaiSourceAdapterTest {
         }
         val adapter = NhentaiSourceAdapter(httpClient = httpClient)
 
-        val page = adapter.search(sampleQuery(), pageToken = null)
+        val page = adapter.search(multiTagQuery(), pageToken = null)
 
         assertEquals("2", page.nextPageToken)
         val post = page.items.firstOrNull()
@@ -172,7 +172,7 @@ class NhentaiSourceAdapterTest {
         }
         val adapter = NhentaiSourceAdapter(httpClient = httpClient)
 
-        val page = adapter.search(sampleQuery(), pageToken = null)
+        val page = adapter.search(multiTagQuery(), pageToken = null)
 
         assertEquals("2", page.nextPageToken)
         val post = page.items.single()
@@ -206,7 +206,7 @@ class NhentaiSourceAdapterTest {
         }
         val adapter = NhentaiSourceAdapter(httpClient = httpClient)
 
-        val failure = runCatching { adapter.search(sampleQuery(), pageToken = null) }.exceptionOrNull()
+        val failure = runCatching { adapter.search(multiTagQuery(), pageToken = null) }.exceptionOrNull()
 
         require(failure is SourceAdapterException)
         assertEquals(SourceFailureReason.NETWORK, failure.reason)
@@ -297,6 +297,84 @@ class NhentaiSourceAdapterTest {
     }
 
     @Test
+    fun `single tag search resolves tag id and uses tagged galleries endpoint`() = runTest {
+        val httpClient = QueueHttpClient(
+            SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    [
+                      {
+                        "id": 2937,
+                        "type": "tag",
+                        "name": "big breasts",
+                        "slug": "big-breasts",
+                        "url": "/tag/big-breasts/",
+                        "count": 224436
+                      }
+                    ]
+                """.trimIndent(),
+            ),
+            SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "result": [],
+                      "num_pages": 1,
+                      "per_page": 25
+                    }
+                """.trimIndent(),
+            ),
+        )
+        val adapter = NhentaiSourceAdapter(httpClient = httpClient)
+
+        adapter.search(sampleQuery(), pageToken = null)
+
+        assertEquals("https://nhentai.net/api/v2/tags/search", httpClient.postRequests.single().url)
+        assertEquals("""{"query":"big breasts"}""", httpClient.postRequests.single().body)
+        assertEquals("https://nhentai.net/api/v2/galleries/tagged", httpClient.requests.single().url)
+        assertEquals("2937", httpClient.requests.single().query["tag_id"])
+        assertEquals("date", httpClient.requests.single().query["sort"])
+    }
+
+    @Test
+    fun `autocomplete tags uses v2 tag search endpoint`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextPostResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    [
+                      {
+                        "id": 2937,
+                        "type": "tag",
+                        "name": "big breasts",
+                        "slug": "big-breasts",
+                        "url": "/tag/big-breasts/",
+                        "count": 224436
+                      },
+                      {
+                        "id": 30555,
+                        "type": "tag",
+                        "name": "big penis",
+                        "slug": "big-penis",
+                        "url": "/tag/big-penis/",
+                        "count": 32214
+                      }
+                    ]
+                """.trimIndent(),
+            )
+        }
+        val adapter = NhentaiSourceAdapter(httpClient = httpClient)
+
+        val suggestions = adapter.autocompleteTags(prefix = "big", limit = 1)
+
+        assertEquals("https://nhentai.net/api/v2/tags/search", httpClient.lastPost?.url)
+        assertEquals("""{"query":"big"}""", httpClient.lastPost?.body)
+        assertEquals("application/json", httpClient.lastPost?.headers?.get("Content-Type"))
+        assertEquals(listOf("big breasts"), suggestions.map { it.text })
+        assertEquals(listOf(224436), suggestions.map { it.count })
+    }
+
+    @Test
     fun `resolve post maps v2 gallery details with page paths`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
@@ -364,12 +442,12 @@ class NhentaiSourceAdapterTest {
         )
         val adapter = NhentaiSourceAdapter(httpClient = httpClient)
 
-        val page = adapter.search(sampleQuery(), pageToken = null)
+        val page = adapter.search(multiTagQuery(), pageToken = null)
 
         assertEquals(2, httpClient.requests.size)
         assertEquals("https://nhentai.net/api/v2/search", httpClient.requests[0].url)
         assertEquals(
-            "https://r.jina.ai/http://nhentai.net/search/?q=big%20breasts&page=1&sort=date",
+            "https://r.jina.ai/http://nhentai.net/search/?q=big%20breasts%20english&page=1&sort=date",
             httpClient.requests[1].url,
         )
         assertEquals("2", page.nextPageToken)
@@ -454,10 +532,22 @@ class NhentaiSourceAdapterTest {
         )
     }
 
+    private fun multiTagQuery(): Query {
+        return Query(
+            mode = QueryMode.Source(SourceKey.NHENTAI),
+            includeTags = listOf("big breasts", "english"),
+            excludeTags = emptyList(),
+            sort = SortMode.NEWEST,
+            dateRange = null,
+            minScore = null,
+        )
+    }
+
     private class QueueHttpClient(
         vararg responses: SourceHttpResponse,
     ) : com.theoriacodex.sources.http.SourceHttpClient {
         val requests = mutableListOf<com.theoriacodex.sources.testing.RecordedRequest>()
+        val postRequests = mutableListOf<com.theoriacodex.sources.testing.RecordedPost>()
         private val queue = ArrayDeque(responses.toList())
 
         override suspend fun get(
@@ -475,6 +565,20 @@ class NhentaiSourceAdapterTest {
             headers: Map<String, String>,
         ): SourceHttpResponse {
             error("POST is not used by NHentai tests")
+        }
+
+        override suspend fun postJson(
+            url: String,
+            body: String,
+            headers: Map<String, String>,
+        ): SourceHttpResponse {
+            postRequests += com.theoriacodex.sources.testing.RecordedPost(
+                url = url,
+                form = emptyMap(),
+                headers = headers,
+                body = body,
+            )
+            return queue.removeFirst()
         }
     }
 }

@@ -31,6 +31,15 @@ class FakeHttpClient : SourceHttpClient {
         lastPost = RecordedPost(url = url, form = form, headers = headers)
         return nextPostResponse
     }
+
+    override suspend fun postJson(
+        url: String,
+        body: String,
+        headers: Map<String, String>,
+    ): SourceHttpResponse {
+        lastPost = RecordedPost(url = url, form = emptyMap(), headers = headers, body = body)
+        return nextPostResponse
+    }
 }
 
 data class RecordedRequest(
@@ -43,6 +52,7 @@ data class RecordedPost(
     val url: String,
     val form: Map<String, String>,
     val headers: Map<String, String>,
+    val body: String? = null,
 )
 
 class FakeCredentialsProvider : SourceCredentialsProvider {

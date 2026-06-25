@@ -52,6 +52,26 @@ class DefaultSourceHttpClient(
         }
     }
 
+    override suspend fun postJson(
+        url: String,
+        body: String,
+        headers: Map<String, String>,
+    ): SourceHttpResponse {
+        val normalizedHeaders = if ("Content-Type" in headers) {
+            headers
+        } else {
+            headers + ("Content-Type" to "application/json")
+        }
+        return executeWithRetry(url) {
+            executeRequest(
+                method = "POST",
+                url = url,
+                headers = normalizedHeaders,
+                body = body.toByteArray(Charsets.UTF_8),
+            )
+        }
+    }
+
     private suspend fun executeWithRetry(
         requestUrl: String,
         block: suspend () -> SourceHttpResponse,
