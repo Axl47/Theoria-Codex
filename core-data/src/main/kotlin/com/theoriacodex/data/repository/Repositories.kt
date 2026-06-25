@@ -70,6 +70,23 @@ data class SourceRuntimeSettings(
     ),
 )
 
+enum class ProviderHealthSnapshotStatus {
+    OK,
+    DEGRADED,
+    FAILED,
+    SKIPPED,
+    UNKNOWN,
+}
+
+data class ProviderHealthSnapshot(
+    val source: SourceKey,
+    val status: ProviderHealthSnapshotStatus,
+    val checkedAtEpochMs: Long,
+    val latencyMs: Long? = null,
+    val failureReason: String? = null,
+    val message: String? = null,
+)
+
 data class CacheSettings(
     val cacheFullImageOnSave: Boolean = false,
 )
@@ -112,6 +129,7 @@ data class AppSettings(
     val activeProfileId: String = defaultRecommendationProfiles().first().profileId,
     val forYouBlacklistByProfile: Map<String, List<ForYouBlacklistEntry>> = emptyMap(),
     val favoriteTagsByProfile: Map<String, List<FavoriteTagEntry>> = emptyMap(),
+    val providerHealth: Map<SourceKey, ProviderHealthSnapshot> = emptyMap(),
 )
 
 enum class ScenarioPreset {
@@ -137,6 +155,7 @@ interface SettingsRepository {
     suspend fun removeForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean
     suspend fun addFavoriteTag(profileId: String, source: SourceKey, tag: String): Boolean
     suspend fun removeFavoriteTag(profileId: String, source: SourceKey, tag: String): Boolean
+    suspend fun setProviderHealthSnapshots(snapshots: List<ProviderHealthSnapshot>)
 }
 
 data class CacheSnapshot(

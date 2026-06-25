@@ -144,6 +144,28 @@ class InMemoryRepositoriesTest {
     }
 
     @Test
+    fun `settings repository records provider health snapshots`() = runTest {
+        val repo = InMemorySettingsRepository()
+
+        repo.setProviderHealthSnapshots(
+            listOf(
+                ProviderHealthSnapshot(
+                    source = SourceKey.IWARA,
+                    status = ProviderHealthSnapshotStatus.DEGRADED,
+                    checkedAtEpochMs = 22L,
+                    latencyMs = 11L,
+                    message = "Reachable but empty",
+                )
+            )
+        )
+
+        val snapshot = repo.observeSettings().first().providerHealth[SourceKey.IWARA]
+
+        assertEquals(ProviderHealthSnapshotStatus.DEGRADED, snapshot?.status)
+        assertEquals(11L, snapshot?.latencyMs)
+    }
+
+    @Test
     fun `settings repository supports dynamic recommendation profiles`() = runTest {
         val repo = InMemorySettingsRepository()
 

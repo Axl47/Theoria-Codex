@@ -243,6 +243,37 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
+    fun `settings repository persists provider health snapshots`() = runTest {
+        val dir = Files.createTempDirectory("settings-provider-health-").toFile()
+        val first = FileBackedSettingsRepository(dir)
+        first.setProviderHealthSnapshots(
+            listOf(
+                ProviderHealthSnapshot(
+                    source = SourceKey.GELBOORU,
+                    status = ProviderHealthSnapshotStatus.OK,
+                    checkedAtEpochMs = 123L,
+                    latencyMs = 45L,
+                    message = "Returned 2 posts",
+                ),
+                ProviderHealthSnapshot(
+                    source = SourceKey.PIXIV,
+                    status = ProviderHealthSnapshotStatus.FAILED,
+                    checkedAtEpochMs = 124L,
+                    failureReason = "AUTH_REQUIRED",
+                    message = "Missing credentials",
+                ),
+            )
+        )
+
+        val second = FileBackedSettingsRepository(dir)
+        val health = second.observeSettings().first().providerHealth
+
+        assertEquals(ProviderHealthSnapshotStatus.OK, health[SourceKey.GELBOORU]?.status)
+        assertEquals(45L, health[SourceKey.GELBOORU]?.latencyMs)
+        assertEquals("AUTH_REQUIRED", health[SourceKey.PIXIV]?.failureReason)
+    }
+
+    @Test
     fun `settings repository defaults unknown duration resolution on for old files`() = runTest {
         val dir = Files.createTempDirectory("settings-store-old-").toFile()
         dir.resolve("settings_store.json").writeText(

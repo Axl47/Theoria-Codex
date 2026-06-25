@@ -31,6 +31,7 @@ import com.theoriacodex.app.source.displayName
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
+import com.theoriacodex.data.repository.ProviderHealthSnapshot
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ScenarioPreset
 import com.theoriacodex.domain.model.SourceKey
@@ -44,6 +45,7 @@ fun SettingsScreen(
     likesCount: Int,
     forYouBlacklistEntries: List<ForYouBlacklistEntry>,
     availableSources: List<SourceKey>,
+    providerHealth: Map<SourceKey, ProviderHealthSnapshot> = emptyMap(),
     cacheSnapshot: CacheSnapshot,
     showDeveloperScenarios: Boolean,
     pixivStatusLabel: String,
@@ -209,6 +211,7 @@ fun SettingsScreen(
                 Text("Unified mode", style = MaterialTheme.typography.titleMedium)
                 availableSources.forEach { source ->
                     val isEnabled = source in settings.runtime.enabledSources
+                    val health = providerHealth[source]
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -241,6 +244,10 @@ fun SettingsScreen(
                         valueRange = 0f..1f,
                     )
                     Text("Weight: %.2f".format(weight), style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        text = formatProviderHealthLine(health),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
         }
@@ -475,5 +482,18 @@ fun SettingsScreen(
                 },
             )
         }
+    }
+}
+
+private fun formatProviderHealthLine(snapshot: ProviderHealthSnapshot?): String {
+    if (snapshot == null) return "Health: not checked"
+    val latency = snapshot.latencyMs?.let { "${it}ms" }
+    val detail = listOfNotNull(latency, snapshot.failureReason, snapshot.message)
+        .take(2)
+        .joinToString(" - ")
+    return if (detail.isBlank()) {
+        "Health: ${snapshot.status.name}"
+    } else {
+        "Health: ${snapshot.status.name} - $detail"
     }
 }

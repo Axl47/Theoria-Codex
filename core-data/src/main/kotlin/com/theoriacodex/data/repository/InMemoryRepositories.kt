@@ -366,6 +366,14 @@ class InMemorySettingsRepository : SettingsRepository {
         )
         return true
     }
+
+    override suspend fun setProviderHealthSnapshots(snapshots: List<ProviderHealthSnapshot>) {
+        val merged = settings.value.providerHealth.toMutableMap()
+        snapshots.forEach { snapshot ->
+            merged[snapshot.source] = snapshot
+        }
+        settings.value = normalizeSettings(settings.value.copy(providerHealth = merged))
+    }
 }
 
 class InMemoryLikesRepository : LikesRepository {
@@ -593,12 +601,18 @@ private fun normalizeSettings(settings: AppSettings): AppSettings {
         }
         .toMap()
         .filterValues { entries -> entries.isNotEmpty() }
+    val normalizedProviderHealth = settings.providerHealth
+        .mapValues { (source, snapshot) ->
+            snapshot.copy(source = source)
+        }
+        .filterValues { snapshot -> snapshot.checkedAtEpochMs >= 0L }
     return settings.copy(
         runtime = settings.runtime.copy(sourceWeights = normalizedWeights),
         recommendationProfiles = normalizedProfiles,
         activeProfileId = activeProfileId,
         forYouBlacklistByProfile = normalizedBlacklist,
         favoriteTagsByProfile = normalizedFavoriteTags,
+        providerHealth = normalizedProviderHealth,
     )
 }
 

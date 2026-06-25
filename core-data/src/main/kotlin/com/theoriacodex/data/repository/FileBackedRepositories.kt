@@ -451,6 +451,16 @@ class FileBackedSettingsRepository(
         return true
     }
 
+    override suspend fun setProviderHealthSnapshots(snapshots: List<ProviderHealthSnapshot>) {
+        updateSettings { current ->
+            val merged = current.providerHealth.toMutableMap()
+            snapshots.forEach { snapshot ->
+                merged[snapshot.source] = snapshot
+            }
+            current.copy(providerHealth = merged)
+        }
+    }
+
     private fun persist() {
         writeJson(storageFile, SettingsStoreFile.fromDomain(settingsFlow.value))
     }
@@ -976,6 +986,7 @@ private data class SettingsStoreFile(
     val activeProfile: String? = null,
     val forYouBlacklistByProfile: Map<String, List<ForYouBlacklistEntryRecord>>? = null,
     val favoriteTagsByProfile: Map<String, List<FavoriteTagEntryRecord>>? = null,
+    val providerHealth: List<ProviderHealthSnapshotRecord>? = null,
 ) {
     fun toDomain(): AppSettings {
         val runtime = SourceRuntimeSettings(
@@ -1017,6 +1028,10 @@ private data class SettingsStoreFile(
                     .mapValues { (_, entries) ->
                         entries.mapNotNull { entry -> entry.toDomainOrNull() }
                     },
+                providerHealth = providerHealth
+                    .orEmpty()
+                    .mapNotNull { record -> record.toDomainOrNull()?.let { snapshot -> snapshot.source to snapshot } }
+                    .toMap(),
             )
         )
     }
@@ -1043,6 +1058,52 @@ private data class SettingsStoreFile(
                     .mapValues { (_, entries) ->
                         entries.map { entry -> FavoriteTagEntryRecord.fromDomain(entry) }
                     },
+                providerHealth = settings.providerHealth.values
+                    .sortedBy { snapshot -> snapshot.source.name }
+                    .map(ProviderHealthSnapshotRecord::fromDomain),
+            )
+        }
+    }
+}
+
+private data class ProviderHealthSnapshotRecord(
+    val source: String? = null,
+    val status: String? = null,
+    val checkedAtEpochMs: Long? = null,
+    val latencyMs: Long? = null,
+    val failureReason: String? = null,
+    val message: String? = null,
+) {
+    fun toDomainOrNull(): ProviderHealthSnapshot? {
+        val resolvedSource = source
+            ?.trim()
+            ?.takeIf(String::isNotEmpty)
+            ?.let { value -> runCatching { SourceKey.valueOf(value) }.getOrNull() }
+            ?: return null
+        val resolvedStatus = status
+            ?.trim()
+            ?.takeIf(String::isNotEmpty)
+            ?.let { value -> runCatching { ProviderHealthSnapshotStatus.valueOf(value) }.getOrNull() }
+            ?: ProviderHealthSnapshotStatus.UNKNOWN
+        return ProviderHealthSnapshot(
+            source = resolvedSource,
+            status = resolvedStatus,
+            checkedAtEpochMs = checkedAtEpochMs ?: 0L,
+            latencyMs = latencyMs,
+            failureReason = failureReason?.takeIf(String::isNotBlank),
+            message = message?.takeIf(String::isNotBlank),
+        )
+    }
+
+    companion object {
+        fun fromDomain(snapshot: ProviderHealthSnapshot): ProviderHealthSnapshotRecord {
+            return ProviderHealthSnapshotRecord(
+                source = snapshot.source.name,
+                status = snapshot.status.name,
+                checkedAtEpochMs = snapshot.checkedAtEpochMs,
+                latencyMs = snapshot.latencyMs,
+                failureReason = snapshot.failureReason,
+                message = snapshot.message,
             )
         }
     }
@@ -1250,12 +1311,18 @@ private fun normalizeSettings(settings: AppSettings): AppSettings {
         }
         .toMap()
         .filterValues { entries -> entries.isNotEmpty() }
+    val normalizedProviderHealth = settings.providerHealth
+        .mapValues { (source, snapshot) ->
+            snapshot.copy(source = source)
+        }
+        .filterValues { snapshot -> snapshot.checkedAtEpochMs >= 0L }
     return settings.copy(
         runtime = settings.runtime.copy(sourceWeights = normalizedWeights),
         recommendationProfiles = normalizedProfiles,
         activeProfileId = activeProfileId,
         forYouBlacklistByProfile = normalizedBlacklist,
         favoriteTagsByProfile = normalizedFavoriteTags,
+        providerHealth = normalizedProviderHealth,
     )
 }
 

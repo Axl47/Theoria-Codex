@@ -20,7 +20,7 @@ The result should be observable in three ways: Gradle tests prove provider and p
 - [x] (2026-06-25 00:20Z) Implemented persistence integrity fixes for saved Codex posts; `Post.durationMs`, preview `ImageRef.progressiveUrls`, full-image progressive URLs, and media progressive URLs now round-trip through the file-backed Codex store.
 - [x] (2026-06-25 00:42Z) Extracted shared media, clipboard, and download policies used by Search, Viewer, Codex, and Creator Profile; candidate selection now lives in `PostMedia.kt` and post URL/tag clipboard writes live in `PostClipboard.kt`.
 - [x] (2026-06-25 01:02Z) Added provider contract tests and shared provider parsing/query helpers; fixture-backed stubs now run a cross-source contract suite, and AIBooru/Gelbooru use common source quick-query, JSON, duration, MIME, network, and HTTP failure helpers.
-- [ ] Add opt-in live provider health reporting and Settings-facing health state.
+- [x] (2026-06-25 01:25Z) Added opt-in live provider health reporting and Settings-facing health state; `:core-sources:providerHealthCheck` writes a skipped report by default and performs live checks only with `-Ptheoria.liveProviders=true`.
 - [ ] Split `TheoriaApp.kt` workflows into smaller coordinators after tests pin behavior.
 - [ ] Update README, AGENTS, and this ExecPlan with validation evidence after each milestone.
 
@@ -43,6 +43,9 @@ The result should be observable in three ways: Gradle tests prove provider and p
 
 - Observation: The fixture-backed stub registry already covers every `SourceKey`, making it the safest place to enforce provider contracts without introducing live network flakiness.
   Evidence: `StubAdapterRegistry` builds one `JsonStubSourceAdapter` for every `SourceKey`; `StubProviderContractTest` now checks search identity, media URL presence, tags, paging, autocomplete, quick queries, resolve behavior, and typed partial-failure errors across all sources.
+
+- Observation: Live provider health should treat credential-gated providers as typed failures, not task failures.
+  Evidence: `./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true` completed successfully with `ok=6, failed=3`; Pixiv, Gelbooru, and rule34.xxx reported `AUTH_REQUIRED` because no local credentials were supplied.
 
 ## Decision Log
 
@@ -69,6 +72,8 @@ Milestone 1 is complete. Saved Codex posts now retain the duration and progressi
 Milestone 2 is complete. Search cards, Viewer gallery/image candidate selection, non-viewer device downloads, and the Search/Codex/Creator/Viewer post URL copy actions now use shared app-layer policy. Creator Profile tag copying intentionally now matches Search and Codex formatting so all post action sheets produce the same clipboard text.
 
 Milestone 3 is complete. Provider contracts now run against deterministic fixture-backed adapters, and the first real adapter family migration moved repeated quick-query construction, JSON parsing, flexible duration parsing, MIME inference, network exception mapping, and HTTP status classification into `core-sources/src/main/kotlin/com/theoriacodex/sources/common/SourceAdapterCommon.kt`. AIBooru and Gelbooru were migrated first because their existing tests covered the behavior most directly.
+
+Milestone 4 is complete. `core-sources/src/main/kotlin/com/theoriacodex/sources/health/` defines provider health reports and an opt-in CLI; `core-sources/build.gradle.kts` exposes `providerHealthCheck`; settings persistence now stores last-known per-source health snapshots; and Settings displays a compact health line for each source without running live checks from the app.
 
 ## Context and Orientation
 
@@ -217,6 +222,14 @@ Update this section with concise terminal transcripts after each milestone. Keep
 
     ./gradlew :core-sources:test :core-stubs:test
     BUILD SUCCESSFUL in 4s
+
+    ./gradlew :core-sources:test :core-data:test :app:testDebugUnitTest :core-sources:providerHealthCheck
+    Provider health skipped. Re-run with -Ptheoria.liveProviders=true to perform live checks.
+    BUILD SUCCESSFUL in 12s
+
+    ./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true
+    Provider health: ok=6, degraded=0, failed=3, skipped=0
+    BUILD SUCCESSFUL in 5s
 
 ## Interfaces and Dependencies
 

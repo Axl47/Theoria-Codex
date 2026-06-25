@@ -1920,6 +1920,7 @@ fun TheoriaApp(
                                         likesCount = activeProfileLikes.size,
                                         forYouBlacklistEntries = activeProfileForYouBlacklist,
                                         availableSources = searchCoordinator.availableSources,
+                                        providerHealth = settings.providerHealth,
                                         cacheSnapshot = cacheSnapshot,
                                         showDeveloperScenarios = false,
                                         pixivStatusLabel = pixivStatusLabel,
