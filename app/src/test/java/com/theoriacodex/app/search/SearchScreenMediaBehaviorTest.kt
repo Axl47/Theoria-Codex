@@ -5,6 +5,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -25,6 +26,20 @@ class SearchScreenMediaBehaviorTest {
         assertTrue(allowsInlineAutoplayInSearch(samplePost(SourceKey.PIXIV)))
         assertTrue(allowsInlineAutoplayInSearch(samplePost(SourceKey.GELBOORU)))
         assertTrue(allowsInlineAutoplayInSearch(samplePost(SourceKey.NHENTAI)))
+    }
+
+    @Test
+    fun `search card media count uses declared lazy count`() {
+        val post = samplePost(SourceKey.NHENTAI).copy(mediaCount = 12)
+
+        assertEquals(12, postMediaCount(post))
+    }
+
+    @Test
+    fun `search card aspect ratio falls back to square without dimensions`() {
+        val post = samplePost(SourceKey.NHENTAI).copy(width = null, height = null)
+
+        assertEquals(1f, previewAspectRatio(post), 0.001f)
     }
 
     private fun samplePost(source: SourceKey): Post {

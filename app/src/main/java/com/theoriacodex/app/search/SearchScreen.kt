@@ -1016,7 +1016,9 @@ fun SearchResultCard(
             mutableStateOf(false)
         }
         val previewUrl = resolveCardPreviewUrl(effectivePost)
-        val ratio = previewAspectRatio(effectivePost)
+        val ratio = remember(post.id) {
+            previewAspectRatio(post)
+        }
         val imageModel = remember(context, previewUrl, effectivePost.id.source) {
             previewUrl?.let { buildImageRequest(context, it, effectivePost.id.source) }
         }
@@ -1312,7 +1314,7 @@ private fun ImageCountBadge(
     }
 }
 
-private fun postMediaCount(post: Post): Int {
+internal fun postMediaCount(post: Post): Int {
     post.mediaCount?.takeIf { it > 0 }?.let { return it }
     val explicitCount = post.media.count { !it.url.isNullOrBlank() || !it.localPath.isNullOrBlank() }
     return when {
@@ -2080,7 +2082,7 @@ private fun inferPreset(fromEpochMs: Long?, toEpochMs: Long?): DateRangePreset {
     }
 }
 
-private fun previewAspectRatio(post: Post): Float {
+internal fun previewAspectRatio(post: Post): Float {
     val width = post.width ?: return 1f
     val height = post.height ?: return 1f
     if (width <= 0 || height <= 0) return 1f
@@ -2094,7 +2096,7 @@ private fun buildImageRequest(
 ): ImageRequest {
     val builder = ImageRequest.Builder(context)
         .data(url)
-        .crossfade(true)
+        .crossfade(false)
         .allowHardware(false)
     searchRequestHeaders(sourceKey).forEach { (name, value) ->
         builder.addHeader(name, value)
