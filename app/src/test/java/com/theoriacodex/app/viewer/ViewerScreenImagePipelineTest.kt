@@ -273,6 +273,75 @@ class ViewerScreenImagePipelineTest {
         }
     }
 
+    @Test
+    fun `horizontal swipe advances media pages before moving to next post`() {
+        val nextMedia = viewerHorizontalSwipeTarget(
+            currentPostIndex = 0,
+            currentMediaIndex = 1,
+            currentMediaCount = 3,
+            postCount = 2,
+            targetPostMediaCount = 5,
+            direction = ViewerHorizontalSwipeDirection.Next,
+        )
+        val nextPost = viewerHorizontalSwipeTarget(
+            currentPostIndex = 0,
+            currentMediaIndex = 2,
+            currentMediaCount = 3,
+            postCount = 2,
+            targetPostMediaCount = 5,
+            direction = ViewerHorizontalSwipeDirection.Next,
+        )
+
+        assertEquals(ViewerHorizontalSwipeTarget(postIndex = 0, mediaIndex = 2), nextMedia)
+        assertEquals(ViewerHorizontalSwipeTarget(postIndex = 1, mediaIndex = 0), nextPost)
+    }
+
+    @Test
+    fun `horizontal swipe moves to previous post first page only from current first media page`() {
+        val previousMedia = viewerHorizontalSwipeTarget(
+            currentPostIndex = 1,
+            currentMediaIndex = 1,
+            currentMediaCount = 3,
+            postCount = 2,
+            targetPostMediaCount = 4,
+            direction = ViewerHorizontalSwipeDirection.Previous,
+        )
+        val previousPost = viewerHorizontalSwipeTarget(
+            currentPostIndex = 1,
+            currentMediaIndex = 0,
+            currentMediaCount = 3,
+            postCount = 2,
+            targetPostMediaCount = 4,
+            direction = ViewerHorizontalSwipeDirection.Previous,
+        )
+
+        assertEquals(ViewerHorizontalSwipeTarget(postIndex = 1, mediaIndex = 0), previousMedia)
+        assertEquals(ViewerHorizontalSwipeTarget(postIndex = 0, mediaIndex = 0), previousPost)
+    }
+
+    @Test
+    fun `horizontal swipe has no target beyond stream edges`() {
+        val beforeFirstPost = viewerHorizontalSwipeTarget(
+            currentPostIndex = 0,
+            currentMediaIndex = 0,
+            currentMediaCount = 3,
+            postCount = 2,
+            targetPostMediaCount = 0,
+            direction = ViewerHorizontalSwipeDirection.Previous,
+        )
+        val afterLastPost = viewerHorizontalSwipeTarget(
+            currentPostIndex = 1,
+            currentMediaIndex = 2,
+            currentMediaCount = 3,
+            postCount = 2,
+            targetPostMediaCount = 0,
+            direction = ViewerHorizontalSwipeDirection.Next,
+        )
+
+        assertEquals(null, beforeFirstPost)
+        assertEquals(null, afterLastPost)
+    }
+
     private fun imageRef(url: String): ImageRef {
         return ImageRef(
             url = url,

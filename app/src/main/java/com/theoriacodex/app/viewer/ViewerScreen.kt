@@ -18,6 +18,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
@@ -35,7 +37,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -96,6 +97,7 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -253,7 +255,7 @@ fun ViewerScreen(
         onRequestPostResolution,
     ) {
         if (onRequestPostResolution == null) return@LaunchedEffect
-        if (!requiresResolvedViewerPost(selectedPost)) return@LaunchedEffect
+        if (!requiresLazyMediaResolution(selectedPost)) return@LaunchedEffect
         if (resolutionRequestedByPostId.put(selectedPost.id, true) == true) return@LaunchedEffect
         onRequestPostResolution(selectedPost)
     }
@@ -459,7 +461,7 @@ fun ViewerScreen(
         } else {
             HorizontalPager(
                 state = postPagerState,
-                userScrollEnabled = viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f,
+                userScrollEnabled = false,
                 modifier = Modifier.fillMaxSize(),
             ) { postPage ->
             val post = posts[postPage]
@@ -487,9 +489,42 @@ fun ViewerScreen(
                 }
             }
 
-            VerticalPager(
+            fun navigateFromHorizontalSwipe(direction: ViewerHorizontalSwipeDirection) {
+                if (viewerState.zoom > ViewerState.FIT_SCALE + 0.01f) return
+                if (postPage != postPagerState.currentPage) return
+                val targetPostIndex = when (direction) {
+                    ViewerHorizontalSwipeDirection.Previous -> postPage - 1
+                    ViewerHorizontalSwipeDirection.Next -> postPage + 1
+                }
+                val targetPostMediaCount = posts.getOrNull(targetPostIndex)
+                    ?.let { viewerMediaItems(it).size }
+                    ?: 0
+                val target = viewerHorizontalSwipeTarget(
+                    currentPostIndex = postPage,
+                    currentMediaIndex = mediaPagerState.currentPage,
+                    currentMediaCount = postMedia.size,
+                    postCount = posts.size,
+                    targetPostMediaCount = targetPostMediaCount,
+                    direction = direction,
+                ) ?: return
+
+                markInteraction()
+                if (target.postIndex == postPage) {
+                    scope.launch {
+                        mediaPagerState.animateScrollToPage(target.mediaIndex)
+                    }
+                } else {
+                    mediaIndexByPost[target.postIndex] = target.mediaIndex
+                    pendingMediaJumpByPost[target.postIndex] = target.mediaIndex
+                    scope.launch {
+                        postPagerState.animateScrollToPage(target.postIndex)
+                    }
+                }
+            }
+
+            HorizontalPager(
                 state = mediaPagerState,
-                userScrollEnabled = viewerState.zoom <= ViewerState.FIT_SCALE + 0.01f,
+                userScrollEnabled = false,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = if (isLandscape) {
                     PaddingValues(0.dp)
@@ -587,6 +622,59 @@ fun ViewerScreen(
                         state = transformState,
                         canPan = { viewerState.zoom > ViewerState.FIT_SCALE + 0.01f },
                     )
+                val horizontalPageSwipeModifier = Modifier.pointerInput(
+                    postPage,
+                    mediaPage,
+                    postMedia.size,
+                    posts.size,
+                    viewerState.zoom,
+                ) {
+                    if (viewerState.zoom > ViewerState.FIT_SCALE + 0.01f) return@pointerInput
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        var totalX = 0f
+                        var totalY = 0f
+                        var consumingHorizontalSwipe = false
+                        val swipeThreshold = maxOf(
+                            VIEWER_HORIZONTAL_SWIPE_MIN_DISTANCE_PX,
+                            size.width * VIEWER_HORIZONTAL_SWIPE_WIDTH_RATIO,
+                        )
+                        while (true) {
+                            val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                            if (event.changes.size > 1) break
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            val delta = change.position - change.previousPosition
+                            totalX += delta.x
+                            totalY += delta.y
+                            val horizontalDistance = abs(totalX)
+                            val verticalDistance = abs(totalY)
+                            if (
+                                horizontalDistance > swipeThreshold * VIEWER_HORIZONTAL_SWIPE_SLOP_FRACTION &&
+                                horizontalDistance > verticalDistance * VIEWER_HORIZONTAL_SWIPE_AXIS_RATIO
+                            ) {
+                                consumingHorizontalSwipe = true
+                            }
+                            if (consumingHorizontalSwipe) {
+                                change.consume()
+                            }
+                            if (!change.pressed) break
+                        }
+                        val horizontalDistance = abs(totalX)
+                        val verticalDistance = abs(totalY)
+                        if (
+                            consumingHorizontalSwipe &&
+                            horizontalDistance >= swipeThreshold &&
+                            horizontalDistance > verticalDistance * VIEWER_HORIZONTAL_SWIPE_AXIS_RATIO
+                        ) {
+                            val direction = if (totalX < 0f) {
+                                ViewerHorizontalSwipeDirection.Next
+                            } else {
+                                ViewerHorizontalSwipeDirection.Previous
+                            }
+                            navigateFromHorizontalSwipe(direction)
+                        }
+                    }
+                }
 
                 Box(
                     modifier = Modifier
@@ -791,6 +879,7 @@ fun ViewerScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxWidth()
+                                    .then(horizontalPageSwipeModifier)
                                     .then(transformInputModifier)
                                     .then(mediaGestureModifier),
                             )
@@ -1836,6 +1925,69 @@ private data class PrefetchCandidate(
     val media: ImageRef,
 )
 
+internal data class ViewerHorizontalSwipeTarget(
+    val postIndex: Int,
+    val mediaIndex: Int,
+)
+
+internal enum class ViewerHorizontalSwipeDirection {
+    Previous,
+    Next,
+}
+
+internal fun viewerHorizontalSwipeTarget(
+    currentPostIndex: Int,
+    currentMediaIndex: Int,
+    currentMediaCount: Int,
+    postCount: Int,
+    targetPostMediaCount: Int,
+    direction: ViewerHorizontalSwipeDirection,
+): ViewerHorizontalSwipeTarget? {
+    if (currentPostIndex !in 0 until postCount) return null
+    if (currentMediaCount <= 0) return null
+
+    val safeMediaIndex = currentMediaIndex.coerceIn(0, currentMediaCount - 1)
+    return when (direction) {
+        ViewerHorizontalSwipeDirection.Previous -> {
+            if (safeMediaIndex > 0) {
+                ViewerHorizontalSwipeTarget(
+                    postIndex = currentPostIndex,
+                    mediaIndex = safeMediaIndex - 1,
+                )
+            } else {
+                val previousPostIndex = currentPostIndex - 1
+                if (previousPostIndex !in 0 until postCount || targetPostMediaCount <= 0) {
+                    null
+                } else {
+                    ViewerHorizontalSwipeTarget(
+                        postIndex = previousPostIndex,
+                        mediaIndex = 0,
+                    )
+                }
+            }
+        }
+
+        ViewerHorizontalSwipeDirection.Next -> {
+            if (safeMediaIndex < currentMediaCount - 1) {
+                ViewerHorizontalSwipeTarget(
+                    postIndex = currentPostIndex,
+                    mediaIndex = safeMediaIndex + 1,
+                )
+            } else {
+                val nextPostIndex = currentPostIndex + 1
+                if (nextPostIndex !in 0 until postCount || targetPostMediaCount <= 0) {
+                    null
+                } else {
+                    ViewerHorizontalSwipeTarget(
+                        postIndex = nextPostIndex,
+                        mediaIndex = 0,
+                    )
+                }
+            }
+        }
+    }
+}
+
 private fun buildPrefetchQueue(
     posts: List<Post>,
     currentPostIndex: Int,
@@ -1897,27 +2049,6 @@ internal fun viewerGalleryMediaItems(post: Post): List<ViewerGalleryMediaItem> {
         } else {
             ViewerGalleryMediaItem(mediaIndex = index, media = media)
         }
-    }
-}
-
-private fun requiresResolvedViewerPost(post: Post): Boolean {
-    val sourceSupportsRefresh = when (post.id.source) {
-        SourceKey.AIBOORU,
-        SourceKey.GELBOORU,
-        SourceKey.IWARA,
-        SourceKey.RULE34XXX,
-        SourceKey.RULE34PAHEAL,
-        SourceKey.RULE34VIDEO,
-        SourceKey.RULE34GEN
-        -> true
-
-        SourceKey.PIXIV,
-        SourceKey.NHENTAI
-        -> false
-    }
-    if (!sourceSupportsRefresh) return false
-    return viewerMediaItems(post).any { media ->
-        isVideoMediaRef(media) && media.localPath.isNullOrBlank() && !media.url.isNullOrBlank()
     }
 }
 
@@ -2017,6 +2148,10 @@ private fun String.sanitizeFileName(): String {
 private const val VIEWER_PREFETCH_LEFT_COUNT = 3
 private const val VIEWER_PREFETCH_RIGHT_COUNT = 3
 private const val VIEWER_PAGINATION_PREFETCH_RATIO = 0.8f
+private const val VIEWER_HORIZONTAL_SWIPE_MIN_DISTANCE_PX = 48f
+private const val VIEWER_HORIZONTAL_SWIPE_WIDTH_RATIO = 0.12f
+private const val VIEWER_HORIZONTAL_SWIPE_SLOP_FRACTION = 0.35f
+private const val VIEWER_HORIZONTAL_SWIPE_AXIS_RATIO = 1.25f
 private const val GIF_FALLBACK_DURATION_MS = 1000L
 private const val VIEWER_VIDEO_CACHE_MAX_FILES = 80
 private const val VIEWER_VIDEO_CACHE_MAX_BYTES = 750L * 1024L * 1024L
