@@ -86,6 +86,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.isVideoMediaRef
+import com.theoriacodex.app.media.postDownloadMediaCandidate
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.CodexSearchSourceOption
@@ -2809,21 +2810,15 @@ private fun firstChangelogLine(markdown: String): String? {
 }
 
 private fun enqueuePostDownload(context: Context, post: Post): Boolean {
-    val media = buildList {
-        addAll(post.media)
-        post.full?.let { add(it) }
-        add(post.preview)
-    }.firstOrNull { ref ->
-        !ref.url.isNullOrBlank()
-    } ?: return false
-
-    val url = media.url ?: return false
+    val candidate = postDownloadMediaCandidate(post) ?: return false
+    val media = candidate.ref
+    val url = candidate.url
     val request = DownloadManager.Request(Uri.parse(url))
         .setAllowedOverMetered(true)
         .setAllowedOverRoaming(true)
         .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
         .setMimeType(media.mime)
-    post.id.source.requestHeaders().forEach { (name, value) ->
+    candidate.requestHeaders.forEach { (name, value) ->
         request.addRequestHeader(name, value)
     }
 

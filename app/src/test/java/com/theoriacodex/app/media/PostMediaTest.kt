@@ -81,6 +81,67 @@ class PostMediaTest {
         assertFalse(AnimatedDurationRange(minBucket = 1, maxBucket = 2).contains(15_000L))
     }
 
+    @Test
+    fun `preview image candidate prefers animated full gifs before static preview`() {
+        val post = samplePost(
+            source = SourceKey.GELBOORU,
+            preview = ImageRef(url = "https://gelbooru.com/preview.jpg", localPath = null, mime = "image/jpeg"),
+            full = ImageRef(url = "https://gelbooru.com/file.gif", localPath = null, mime = "image/gif"),
+        )
+
+        val candidate = postPreviewImageCandidate(post)
+
+        assertEquals("https://gelbooru.com/file.gif", candidate?.url)
+        assertEquals(PostMediaSelectionReason.FULL_GIF, candidate?.reason)
+        assertEquals(PostMediaKind.IMAGE, candidate?.kind)
+    }
+
+    @Test
+    fun `playback and download candidates preserve shared ordering and source headers`() {
+        val video = ImageRef(url = "https://video-cdn.gelbooru.com/file.mp4", localPath = null, mime = "video/mp4")
+        val post = samplePost(
+            source = SourceKey.GELBOORU,
+            preview = ImageRef(url = "https://gelbooru.com/preview.jpg", localPath = null, mime = "image/jpeg"),
+            full = ImageRef(url = "https://gelbooru.com/full.jpg", localPath = null, mime = "image/jpeg"),
+        ).copy(media = listOf(video))
+
+        val playback = postPlaybackMediaCandidate(post)
+        val download = postDownloadMediaCandidate(post)
+
+        assertEquals(video, playback?.ref)
+        assertEquals(PostMediaKind.VIDEO, playback?.kind)
+        assertEquals("https://video-cdn.gelbooru.com/file.mp4", download?.url)
+        assertEquals("https://gelbooru.com/", download?.requestHeaders?.get("Referer"))
+    }
+
+    @Test
+    fun `post media items fall back to full then preview when explicit media is absent`() {
+        val full = ImageRef(url = "https://aibooru.online/full.jpg", localPath = null, mime = "image/jpeg")
+        val withFull = samplePost(
+            source = SourceKey.AIBOORU,
+            preview = ImageRef(url = "https://aibooru.online/preview.jpg", localPath = null, mime = "image/jpeg"),
+            full = full,
+        )
+        val previewOnly = withFull.copy(full = null, media = emptyList())
+
+        assertEquals(listOf(full), postMediaItems(withFull))
+        assertEquals(listOf(previewOnly.preview), postMediaItems(previewOnly))
+    }
+
+    @Test
+    fun `clipboard tag format deduplicates canonical and raw tags`() {
+        val post = samplePost(
+            source = SourceKey.PIXIV,
+            preview = ImageRef(url = "https://i.pximg.net/preview.jpg", localPath = null, mime = "image/jpeg"),
+            full = null,
+        ).copy(
+            canonicalTags = listOf("sky", "-lowres", " sky "),
+            rawTags = listOf("cloud", "-lowres", "-sample"),
+        )
+
+        assertEquals("sky, cloud\n\n-lowres, -sample", formatPostTagsForClipboard(post))
+    }
+
     private fun samplePost(
         source: SourceKey,
         preview: ImageRef,

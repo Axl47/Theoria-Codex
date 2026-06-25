@@ -18,7 +18,7 @@ The result should be observable in three ways: Gradle tests prove provider and p
 
 - [x] (2026-06-25 00:00Z) Created this ExecPlan from the repository analysis and refreshed `working_list.md`.
 - [x] (2026-06-25 00:20Z) Implemented persistence integrity fixes for saved Codex posts; `Post.durationMs`, preview `ImageRef.progressiveUrls`, full-image progressive URLs, and media progressive URLs now round-trip through the file-backed Codex store.
-- [ ] Extract shared media, clipboard, and download policies used by Search, Viewer, Codex, and Creator Profile.
+- [x] (2026-06-25 00:42Z) Extracted shared media, clipboard, and download policies used by Search, Viewer, Codex, and Creator Profile; candidate selection now lives in `PostMedia.kt` and post URL/tag clipboard writes live in `PostClipboard.kt`.
 - [ ] Add provider contract tests and shared provider parsing/query helpers.
 - [ ] Add opt-in live provider health reporting and Settings-facing health state.
 - [ ] Split `TheoriaApp.kt` workflows into smaller coordinators after tests pin behavior.
@@ -37,6 +37,9 @@ The result should be observable in three ways: Gradle tests prove provider and p
 
 - Observation: Full-image and media progressive URLs were already partially protected, but preview progressive URLs and post duration were still dropped.
   Evidence: `FileBackedRepositoriesTest` already covered `full.progressiveUrls` and `media.progressiveUrls`; the updated round-trip test now also asserts `preview.progressiveUrls` and `durationMs`.
+
+- Observation: Creator Profile copied tags as a single space-separated line while Search and Codex copied comma-separated positive and negative lines.
+  Evidence: `CreatorProfileScreen.kt` had a private formatter that joined positives and negatives with spaces; `PostClipboard.kt` now provides one shared formatter covered by `PostMediaTest`.
 
 ## Decision Log
 
@@ -59,6 +62,8 @@ The result should be observable in three ways: Gradle tests prove provider and p
 ## Outcomes & Retrospective
 
 Milestone 1 is complete. Saved Codex posts now retain the duration and progressive preview/full/media URLs already present in the domain model, while legacy JSON files without those fields still load with `durationMs = null` and empty progressive URL lists. Broader milestones remain in progress.
+
+Milestone 2 is complete. Search cards, Viewer gallery/image candidate selection, non-viewer device downloads, and the Search/Codex/Creator/Viewer post URL copy actions now use shared app-layer policy. Creator Profile tag copying intentionally now matches Search and Codex formatting so all post action sheets produce the same clipboard text.
 
 ## Context and Orientation
 
@@ -201,6 +206,9 @@ Update this section with concise terminal transcripts after each milestone. Keep
 
     ./gradlew :core-data:test
     BUILD SUCCESSFUL in 18s
+
+    ./gradlew :app:testDebugUnitTest
+    BUILD SUCCESSFUL in 17s
 
 ## Interfaces and Dependencies
 

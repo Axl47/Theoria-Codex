@@ -1,8 +1,6 @@
 package com.theoriacodex.app.viewer
 
 import android.app.DownloadManager
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.res.Configuration
 import android.content.Context
 import android.graphics.Movie
@@ -114,10 +112,14 @@ import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import com.theoriacodex.app.creator.CreatorProfileActionButton
+import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraMedia
 import com.theoriacodex.app.media.isVideoMediaRef
-import com.theoriacodex.app.creator.CreatorProfileActionButton
+import com.theoriacodex.app.media.postMediaItems
+import com.theoriacodex.app.media.progressiveImageCandidates
+import com.theoriacodex.app.media.supportsProgressiveImageCandidates
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.tags.PostTagActionSection
@@ -1073,13 +1075,6 @@ private fun ViewerGalleryGrid(
     }
 }
 
-private fun copyPostUrlToClipboard(context: Context, post: Post): Boolean {
-    val pageUrl = post.pageUrl?.trim().takeIf { !it.isNullOrBlank() } ?: return false
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-    clipboard?.setPrimaryClip(ClipData.newPlainText("post_url", pageUrl))
-    return true
-}
-
 @Composable
 private fun FittedSeekJumpFeedbackOverlay(
     feedback: SeekJumpFeedback?,
@@ -1885,13 +1880,7 @@ private fun buildPrefetchQueue(
 }
 
 private fun viewerMediaItems(post: Post): List<ImageRef> {
-    val explicitMedia = post.media.filter { ref ->
-        !ref.url.isNullOrBlank() || !ref.localPath.isNullOrBlank()
-    }
-    if (explicitMedia.isNotEmpty()) {
-        return explicitMedia
-    }
-    return listOfNotNull(post.full).ifEmpty { listOf(post.preview) }
+    return postMediaItems(post)
 }
 
 internal data class ViewerGalleryMediaItem(
@@ -1933,53 +1922,11 @@ private fun requiresResolvedViewerPost(post: Post): Boolean {
 }
 
 internal fun viewerImageCandidates(post: Post, media: ImageRef): List<String> {
-    if (supportsProgressiveImageCandidates(post, media)) {
-        val progressiveCandidates = buildList {
-            media.localPath?.takeIf(String::isNotBlank)?.let(::add)
-            addAll(media.progressiveUrls.filter(String::isNotBlank))
-            media.url?.takeIf(String::isNotBlank)?.let(::add)
-        }.distinct()
-        if (progressiveCandidates.isNotEmpty()) {
-            return progressiveCandidates
-        }
-    }
-    val refs = buildList {
-        add(media)
-        post.full?.let { add(it) }
-        add(post.preview)
-    }
-    val preferred = refs
-        .mapNotNull { ref ->
-            val location = ref.localPath ?: ref.url
-            if (location.isNullOrBlank()) {
-                null
-            } else if (isLikelyImageLocation(ref.mime, location)) {
-                location
-            } else {
-                null
-            }
-        }
-        .distinct()
-    if (preferred.isNotEmpty()) return preferred
-    return refs
-        .mapNotNull { ref -> ref.localPath ?: ref.url }
-        .filter { it.isNotBlank() }
-        .distinct()
+    return progressiveImageCandidates(post, media)
 }
 
 internal fun viewerPrefetchImageLocation(post: Post, media: ImageRef): String? {
     return viewerImageCandidates(post, media).firstOrNull()
-}
-
-private fun supportsProgressiveImageCandidates(post: Post, media: ImageRef): Boolean {
-    if (
-        post.id.source != SourceKey.PIXIV &&
-        post.id.source != SourceKey.GELBOORU &&
-        post.id.source != SourceKey.NHENTAI
-    ) {
-        return false
-    }
-    return media.progressiveUrls.isNotEmpty() || !media.localPath.isNullOrBlank()
 }
 
 private fun supportsProgressiveImageUpgrade(post: Post, media: ImageRef): Boolean {
@@ -1995,26 +1942,6 @@ private fun viewerGifLocation(post: Post, media: ImageRef): String? {
     return refs.firstOrNull(::isGifMediaRef)?.let { ref ->
         ref.localPath ?: ref.url
     }
-}
-
-private fun isLikelyImageLocation(mime: String?, location: String): Boolean {
-    val normalizedMime = mime?.trim()?.lowercase()
-    if (normalizedMime != null) {
-        if (normalizedMime.startsWith("image/")) return true
-        if (normalizedMime.startsWith("video/")) return false
-    }
-    val normalizedLocation = location
-        .substringBefore('?')
-        .lowercase()
-    return normalizedLocation.endsWith(".jpg") ||
-        normalizedLocation.endsWith(".jpeg") ||
-        normalizedLocation.endsWith(".png") ||
-        normalizedLocation.endsWith(".webp") ||
-        normalizedLocation.endsWith(".gif") ||
-        normalizedLocation.endsWith(".bmp") ||
-        normalizedLocation.endsWith(".heic") ||
-        normalizedLocation.endsWith(".heif") ||
-        normalizedLocation.endsWith(".avif")
 }
 
 private fun isPixivUgoira(post: Post, media: ImageRef): Boolean {

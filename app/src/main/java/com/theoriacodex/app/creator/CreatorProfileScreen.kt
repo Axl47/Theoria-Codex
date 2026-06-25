@@ -1,8 +1,5 @@
 package com.theoriacodex.app.creator
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -66,6 +63,8 @@ import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.media.animatedDurationMs
+import com.theoriacodex.app.media.copyPostTagsToClipboard
+import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.media.probeRemoteVideoDurationMs
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.model.Post
@@ -432,9 +431,7 @@ fun CreatorProfileScreen(
                     }
                     IconButton(
                         onClick = {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                            val formatted = formatPostTagsForClipboard(post)
-                            clipboard?.setPrimaryClip(ClipData.newPlainText("tags", formatted))
+                            copyPostTagsToClipboard(context, post)
                             Toast.makeText(context, "Tags copied", Toast.LENGTH_SHORT).show()
                             selectedActionPost = null
                         },
@@ -483,39 +480,6 @@ fun CreatorProfileScreen(
             }
         }
     }
-}
-
-private fun formatPostTagsForClipboard(post: Post): String {
-    val canonicalPositives = post.canonicalTags.filterNot { it.startsWith("-") }
-    val canonicalNegatives = post.canonicalTags
-        .filter { it.startsWith("-") }
-        .map { it.removePrefix("-") }
-    val rawPositives = post.rawTags.filterNot { it.startsWith("-") }
-    val rawNegatives = post.rawTags
-        .filter { it.startsWith("-") }
-        .map { it.removePrefix("-") }
-    val positives = (canonicalPositives + rawPositives)
-        .map { it.trim() }
-        .filter { it.isNotBlank() && !it.startsWith("-") }
-        .distinct()
-    val negatives = (canonicalNegatives + rawNegatives)
-        .map { it.trim().removePrefix("-") }
-        .filter { it.isNotBlank() }
-        .distinct()
-    return buildString {
-        append(positives.joinToString(separator = " "))
-        if (negatives.isNotEmpty()) {
-            if (isNotBlank()) append(' ')
-            append(negatives.joinToString(separator = " ") { tag -> "-$tag" })
-        }
-    }
-}
-
-private fun copyPostUrlToClipboard(context: Context, post: Post): Boolean {
-    val pageUrl = post.pageUrl?.trim().takeIf { !it.isNullOrBlank() } ?: return false
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-    clipboard?.setPrimaryClip(ClipData.newPlainText("post_url", pageUrl))
-    return true
 }
 
 private const val CREATOR_PROFILE_PREFETCH_RATIO = 0.7f

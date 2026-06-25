@@ -1,7 +1,9 @@
 package com.theoriacodex.app.media
 
+import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.pixiv.PIXIV_UGOIRA_MIME
 
@@ -11,6 +13,24 @@ enum class PostMediaKind {
     UGOIRA,
     UNKNOWN,
 }
+
+enum class PostMediaSelectionReason {
+    EXPLICIT_MEDIA,
+    FULL_MEDIA,
+    PREVIEW_MEDIA,
+    FULL_GIF,
+    PROGRESSIVE_IMAGE,
+}
+
+data class PostMediaCandidate(
+    val postId: PostId,
+    val source: SourceKey,
+    val ref: ImageRef,
+    val url: String,
+    val kind: PostMediaKind,
+    val requestHeaders: Map<String, String>,
+    val reason: PostMediaSelectionReason,
+)
 
 data class AnimatedDurationRange(
     val minBucket: Int = ANIMATED_DURATION_MIN_BUCKET,
@@ -141,6 +161,116 @@ fun animatedDurationMs(post: Post): Long? {
     return post.durationMs?.takeIf { it > 0L }
 }
 
+fun postMediaItems(post: Post): List<ImageRef> {
+    val explicitMedia = post.media.filter { ref -> ref.hasAnyLocation() }
+    if (explicitMedia.isNotEmpty()) return explicitMedia
+    return listOfNotNull(post.full).ifEmpty { listOf(post.preview) }
+}
+
+fun postPreviewImageCandidate(post: Post): PostMediaCandidate? {
+    val full = post.full
+    if (full != null && isGifMediaRef(full)) {
+        full.url?.takeIf(String::isNotBlank)?.let { url ->
+            return post.candidate(
+                ref = full,
+                url = url,
+                reason = PostMediaSelectionReason.FULL_GIF,
+            )
+        }
+    }
+    val refs = buildList {
+        add(post.preview to PostMediaSelectionReason.PREVIEW_MEDIA)
+        post.full?.let { add(it to PostMediaSelectionReason.FULL_MEDIA) }
+        post.media.forEach { add(it to PostMediaSelectionReason.EXPLICIT_MEDIA) }
+    }
+    return refs.firstNotNullOfOrNull { (ref, reason) ->
+        ref.url
+            ?.takeIf(String::isNotBlank)
+            ?.takeUnless { mediaKind(ref) == PostMediaKind.VIDEO }
+            ?.let { url -> post.candidate(ref = ref, url = url, reason = reason) }
+    }
+}
+
+fun postPlaybackMediaCandidate(post: Post): PostMediaCandidate? {
+    return orderedPlayableRefs(post).firstNotNullOfOrNull { (ref, reason) ->
+        ref.bestLocation()?.takeIf { mediaKind(ref) == PostMediaKind.VIDEO }?.let { url ->
+            post.candidate(ref = ref, url = url, reason = reason)
+        }
+    }
+}
+
+fun postDownloadMediaCandidate(post: Post): PostMediaCandidate? {
+    return orderedPlayableRefs(post).firstNotNullOfOrNull { (ref, reason) ->
+        ref.url?.takeIf(String::isNotBlank)?.let { url ->
+            post.candidate(ref = ref, url = url, reason = reason)
+        }
+    }
+}
+
+fun postShareMediaCandidate(post: Post): PostMediaCandidate? {
+    return postDownloadMediaCandidate(post)
+}
+
+fun progressiveImageCandidates(post: Post, media: ImageRef): List<String> {
+    if (supportsProgressiveImageCandidates(post, media)) {
+        val progressiveCandidates = buildList {
+            media.localPath?.takeIf(String::isNotBlank)?.let(::add)
+            addAll(media.progressiveUrls.filter(String::isNotBlank))
+            media.url?.takeIf(String::isNotBlank)?.let(::add)
+        }.distinct()
+        if (progressiveCandidates.isNotEmpty()) return progressiveCandidates
+    }
+
+    val refs = buildList {
+        add(media)
+        post.full?.let { add(it) }
+        add(post.preview)
+    }
+    val preferred = refs
+        .mapNotNull { ref ->
+            val location = ref.bestLocation()
+            if (location == null) {
+                null
+            } else if (isLikelyImageLocation(ref.mime, location)) {
+                location
+            } else {
+                null
+            }
+        }
+        .distinct()
+    if (preferred.isNotEmpty()) return preferred
+    return refs
+        .mapNotNull { ref -> ref.bestLocation() }
+        .filter { it.isNotBlank() }
+        .distinct()
+}
+
+fun supportsProgressiveImageCandidates(post: Post, media: ImageRef): Boolean {
+    if (
+        post.id.source != SourceKey.PIXIV &&
+        post.id.source != SourceKey.GELBOORU &&
+        post.id.source != SourceKey.NHENTAI
+    ) {
+        return false
+    }
+    return media.progressiveUrls.isNotEmpty() || !media.localPath.isNullOrBlank()
+}
+
+fun isLikelyImageLocation(mime: String?, location: String): Boolean {
+    val normalizedMime = mime?.trim()?.lowercase()
+    if (normalizedMime != null) {
+        if (normalizedMime.startsWith("image/")) return true
+        if (normalizedMime.startsWith("video/")) return false
+    }
+    val extension = location
+        .substringBefore('?')
+        .substringBefore('#')
+        .trim()
+        .lowercase()
+        .substringAfterLast('.', "")
+    return extension in IMAGE_EXTENSIONS
+}
+
 fun durationBucketFor(durationMs: Long): Int {
     if (durationMs < ANIMATED_DURATION_BUCKET_MS) return ANIMATED_DURATION_MIN_BUCKET
     if (durationMs > ANIMATED_DURATION_LAST_EXACT_BUCKET * ANIMATED_DURATION_BUCKET_MS) {
@@ -173,4 +303,36 @@ private fun formatDurationSeconds(totalSeconds: Int): String {
     } else {
         "${minutes}m ${seconds}s"
     }
+}
+
+private fun orderedPlayableRefs(post: Post): List<Pair<ImageRef, PostMediaSelectionReason>> {
+    return buildList {
+        post.media.forEach { add(it to PostMediaSelectionReason.EXPLICIT_MEDIA) }
+        post.full?.let { add(it to PostMediaSelectionReason.FULL_MEDIA) }
+        add(post.preview to PostMediaSelectionReason.PREVIEW_MEDIA)
+    }
+}
+
+private fun Post.candidate(
+    ref: ImageRef,
+    url: String,
+    reason: PostMediaSelectionReason,
+): PostMediaCandidate {
+    return PostMediaCandidate(
+        postId = id,
+        source = id.source,
+        ref = ref,
+        url = url,
+        kind = mediaKind(ref),
+        requestHeaders = id.source.requestHeaders(),
+        reason = reason,
+    )
+}
+
+private fun ImageRef.hasAnyLocation(): Boolean {
+    return !url.isNullOrBlank() || !localPath.isNullOrBlank()
+}
+
+private fun ImageRef.bestLocation(): String? {
+    return localPath?.takeIf(String::isNotBlank) ?: url?.takeIf(String::isNotBlank)
 }

@@ -1,7 +1,5 @@
 package com.theoriacodex.app.search
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.net.Uri
 import android.widget.Toast
@@ -109,10 +107,12 @@ import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.animatedDurationBucketLabel
 import com.theoriacodex.app.media.animatedDurationMs
 import com.theoriacodex.app.media.animatedDurationRangeLabel
+import com.theoriacodex.app.media.copyPostTagsToClipboard
+import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.media.isAnimatedPost
-import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraPost
-import com.theoriacodex.app.media.isVideoMediaRef
+import com.theoriacodex.app.media.postPlaybackMediaCandidate
+import com.theoriacodex.app.media.postPreviewImageCandidate
 import com.theoriacodex.app.media.probeRemoteVideoDurationMs
 import com.theoriacodex.app.creator.CreatorProfileActionButton
 import com.theoriacodex.app.recommend.associatedDisplayTag
@@ -800,9 +800,7 @@ fun SearchScreen(
                     }
                     IconButton(
                         onClick = {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                            val formatted = formatPostTagsForClipboard(post)
-                            clipboard?.setPrimaryClip(ClipData.newPlainText("tags", formatted))
+                            copyPostTagsToClipboard(context, post)
                             Toast.makeText(context, "Tags copied", Toast.LENGTH_SHORT).show()
                             selectedActionPost = null
                             selectedActionPostResolving = false
@@ -1327,65 +1325,15 @@ private fun postMediaCount(post: Post): Int {
 }
 
 private fun resolveCardPreviewUrl(post: Post): String? {
-    val full = post.full
-    if (full != null && isGifMediaRef(full) && !full.url.isNullOrBlank()) {
-        return full.url
-    }
-    val refs = buildList {
-        add(post.preview)
-        post.full?.let { add(it) }
-        addAll(post.media)
-    }
-    return refs.firstOrNull { ref ->
-        !ref.url.isNullOrBlank() && !isVideoMediaRef(ref)
-    }?.url
+    return postPreviewImageCandidate(post)?.url
 }
 
 private fun resolveCardVideoRef(post: Post): ImageRef? {
-    val refs = buildList {
-        addAll(post.media)
-        post.full?.let { add(it) }
-        add(post.preview)
-    }
-    return refs.firstOrNull { ref ->
-        (!ref.url.isNullOrBlank() || !ref.localPath.isNullOrBlank()) && isVideoMediaRef(ref)
-    }
+    return postPlaybackMediaCandidate(post)?.ref
 }
 
 internal fun allowsInlineAutoplayInSearch(post: Post): Boolean {
     return post.id.source != SourceKey.IWARA
-}
-
-private fun formatPostTagsForClipboard(post: Post): String {
-    val canonicalPositives = post.canonicalTags.filterNot { it.startsWith("-") }
-    val canonicalNegatives = post.canonicalTags
-        .filter { it.startsWith("-") }
-        .map { it.removePrefix("-") }
-
-    val rawPositives = post.rawTags.filterNot { it.startsWith("-") }
-    val rawNegatives = post.rawTags
-        .filter { it.startsWith("-") }
-        .map { it.removePrefix("-") }
-
-    val positives = (canonicalPositives + rawPositives)
-        .map { it.trim() }
-        .filter { it.isNotBlank() && !it.startsWith("-") }
-        .distinct()
-    val negatives = (canonicalNegatives + rawNegatives)
-        .map { it.trim().removePrefix("-") }
-        .filter { it.isNotBlank() }
-        .distinct()
-
-    val positiveLine = positives.joinToString(", ")
-    val negativeLine = negatives.joinToString(", ") { "-$it" }
-    return "$positiveLine\n\n$negativeLine"
-}
-
-private fun copyPostUrlToClipboard(context: Context, post: Post): Boolean {
-    val pageUrl = post.pageUrl?.trim().takeIf { !it.isNullOrBlank() } ?: return false
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-    clipboard?.setPrimaryClip(ClipData.newPlainText("post_url", pageUrl))
-    return true
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -9,6 +9,7 @@ Theoria Codex is an Android-first, local-first, tag-driven art browser.
 The product spec lives at `./docs/TheoriaSpec.md`.
 
 Recent updates:
+- Search, Viewer, Codex, and Creator Profile now share media and copy-action selection, so post URLs, tag-copy output, thumbnails, playback candidates, and device downloads use the same source-aware rules.
 - Viewer multi-image posts now include a Gallery toggle that opens a two-column page grid and jumps back to full-view mode when a page is selected.
 - Codex long-press Search now asks which represented source to search, then opens a source-specific tag picker with Codex-frequency counts, active tag toggles, and random selection before applying the Search query.
 - Viewer now groups Info and Download under a top-right action menu, and animated media has a session playback-rate menu for video, GIF, and Pixiv ugoira playback.
