@@ -73,7 +73,7 @@ class NhentaiSourceAdapter(
         val url = if (useAllEndpoint) {
             NHENTAI_GALLERIES_ALL_URL
         } else {
-            params["query"] = compiledQuery
+            params["query"] = compiledQuery.ifBlank { NHENTAI_V2_SEARCH_ALL_QUERY }
             mapSortParam(query.sort)?.let { sort ->
                 params["sort"] = sort
             }
@@ -440,21 +440,32 @@ class NhentaiSourceAdapter(
         val mediaId = raw.get("media_id").asLongOrNull()?.toString()
             ?: raw.get("media_id").asStringOrNull()?.trim()?.takeIf { it.isNotBlank() }
             ?: return null
-        val images = raw.optionalJsonObject("images") ?: return null
-        val thumbnail = images.optionalJsonObject("thumbnail")
-        val cover = images.optionalJsonObject("cover")
-        val pages = images.optionalJsonArray("pages").orEmpty()
+        val oldImages = raw.optionalJsonObject("images")
+        val oldThumbnail = oldImages?.optionalJsonObject("thumbnail")
+        val oldCover = oldImages?.optionalJsonObject("cover")
+        val oldPages = oldImages?.optionalJsonArray("pages").orEmpty()
+        val newPages = raw.optionalJsonArray("pages").orEmpty()
+        val pages = if (newPages.isNotEmpty()) newPages else oldPages
 
-        val thumbExt = imageExtension(thumbnail?.get("t").asStringOrNull())
-        val coverExt = imageExtension(cover?.get("t").asStringOrNull())
-        val previewUrl = "$NHENTAI_THUMBS_BASE/galleries/$mediaId/thumb.$thumbExt"
-        val coverUrl = "$NHENTAI_THUMBS_BASE/galleries/$mediaId/cover.$coverExt"
+        val oldThumbExt = imageExtension(oldThumbnail?.get("t").asStringOrNull())
+        val oldCoverExt = imageExtension(oldCover?.get("t").asStringOrNull())
+        val newThumbnailPath = raw.get("thumbnail").asStringOrNull()
+            ?: raw.optionalJsonObject("thumbnail")?.get("path").asStringOrNull()
+        val newCoverPath = raw.get("cover").asStringOrNull()
+            ?: raw.optionalJsonObject("cover")?.get("path").asStringOrNull()
+        val previewUrl = sourceImageUrl(NHENTAI_THUMBS_BASE, newThumbnailPath)
+            ?: "$NHENTAI_THUMBS_BASE/galleries/$mediaId/thumb.$oldThumbExt"
+        val coverUrl = sourceImageUrl(NHENTAI_THUMBS_BASE, newCoverPath)
+            ?: "$NHENTAI_THUMBS_BASE/galleries/$mediaId/cover.$oldCoverExt"
 
-        val pageRefs = pages.mapIndexedNotNull { index, pageElement ->
+        val pageRefs = pages.sortedWithPageNumber().mapIndexedNotNull { index, pageElement ->
             val page = pageElement.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@mapIndexedNotNull null
-            val ext = imageExtension(page.get("t").asStringOrNull())
+            val path = page.get("path").asStringOrNull()
+            val ext = imageExtension(path?.substringAfterLast('.') ?: page.get("t").asStringOrNull())
+            val url = sourceImageUrl(NHENTAI_IMAGES_BASE, path)
+                ?: "$NHENTAI_IMAGES_BASE/galleries/$mediaId/${index + 1}.$ext"
             ImageRef(
-                url = "$NHENTAI_IMAGES_BASE/galleries/$mediaId/${index + 1}.$ext",
+                url = url,
                 localPath = null,
                 mime = mimeFromFileExt(ext),
             )
@@ -463,7 +474,7 @@ class NhentaiSourceAdapter(
         val fallbackCoverRef = ImageRef(
             url = coverUrl,
             localPath = null,
-            mime = mimeFromFileExt(coverExt),
+            mime = mimeFromFileExt(newCoverPath?.substringAfterLast('.') ?: oldCoverExt),
         )
 
         val mirrorSparse = raw.get("mirror_sparse").asBooleanOrFalse()
@@ -471,15 +482,17 @@ class NhentaiSourceAdapter(
             emptyList()
         } else if (pageRefs.isNotEmpty()) {
             pageRefs
-        } else {
+        } else if (raw.has("cover") || oldCover != null) {
             listOf(fallbackCoverRef)
+        } else {
+            emptyList()
         }
 
         val fullRef = mediaRefs.firstOrNull()
         val previewRef = ImageRef(
             url = previewUrl,
             localPath = null,
-            mime = mimeFromFileExt(thumbExt) ?: fullRef?.mime,
+            mime = mimeFromFileExt(newThumbnailPath?.substringAfterLast('.') ?: oldThumbExt) ?: fullRef?.mime,
         )
 
         val tags = raw.optionalJsonArray("tags").orEmpty().mapNotNull { tagElement ->
@@ -499,6 +512,8 @@ class NhentaiSourceAdapter(
             titleObject?.get("pretty").asStringOrNull(),
             titleObject?.get("english").asStringOrNull(),
             titleObject?.get("japanese").asStringOrNull(),
+            raw.get("english_title").asStringOrNull(),
+            raw.get("japanese_title").asStringOrNull(),
         ).firstOrNull { !it.isNullOrBlank() }
 
         val scanlator = raw.get("scanlator").asStringOrNull()?.trim().orEmpty()
@@ -512,8 +527,12 @@ class NhentaiSourceAdapter(
             full = fullRef,
             media = mediaRefs,
             pageUrl = "https://nhentai.net/g/$galleryId/",
-            width = thumbnail?.get("w").asIntOrNull() ?: cover?.get("w").asIntOrNull(),
-            height = thumbnail?.get("h").asIntOrNull() ?: cover?.get("h").asIntOrNull(),
+            width = raw.get("thumbnail_width").asIntOrNull()
+                ?: oldThumbnail?.get("w").asIntOrNull()
+                ?: oldCover?.get("w").asIntOrNull(),
+            height = raw.get("thumbnail_height").asIntOrNull()
+                ?: oldThumbnail?.get("h").asIntOrNull()
+                ?: oldCover?.get("h").asIntOrNull(),
             canonicalTags = canonicalTags,
             rawTags = rawTags,
             authorName = authorName,
@@ -773,6 +792,28 @@ private fun JsonArray?.orEmpty(): List<JsonElement> {
     return this?.toList().orEmpty()
 }
 
+private fun List<JsonElement>.sortedWithPageNumber(): List<JsonElement> {
+    return sortedWith(compareBy { element ->
+        element.takeIf(JsonElement::isJsonObject)
+            ?.asJsonObject
+            ?.get("number")
+            .asIntOrNull()
+            ?: Int.MAX_VALUE
+    })
+}
+
+private fun sourceImageUrl(baseUrl: String, path: String?): String? {
+    val normalizedPath = path
+        ?.trim()
+        ?.trimStart('/')
+        ?.takeIf(String::isNotBlank)
+        ?: return null
+    if (normalizedPath.startsWith("http://") || normalizedPath.startsWith("https://")) {
+        return normalizedPath
+    }
+    return "${baseUrl.trimEnd('/')}/$normalizedPath"
+}
+
 private fun JsonElement?.asIntOrNull(): Int? {
     if (this == null || this.isJsonNull) return null
     val primitive = this.asJsonPrimitive
@@ -799,6 +840,7 @@ private fun JsonElement?.asLongOrNull(): Long? {
 
 private fun JsonElement?.asStringOrNull(): String? {
     if (this == null || this.isJsonNull) return null
+    if (!this.isJsonPrimitive) return null
     val primitive = this.asJsonPrimitive
     if (!primitive.isString && !primitive.isNumber && !primitive.isBoolean) return null
     return runCatching { primitive.asString }.getOrNull()
@@ -819,10 +861,10 @@ private fun String.urlEncode(): String {
     return URLEncoder.encode(this, Charsets.UTF_8.name()).replace("+", "%20")
 }
 
-private const val NHENTAI_WEB_BASE = "http://nhentai.net/"
-private const val NHENTAI_GALLERIES_ALL_URL = "https://nhentai.net/api/galleries/all"
-private const val NHENTAI_GALLERIES_SEARCH_URL = "https://nhentai.net/api/galleries/search"
-private const val NHENTAI_GALLERY_URL_PREFIX = "https://nhentai.net/api/gallery"
+private const val NHENTAI_WEB_BASE = "nhentai.net/"
+private const val NHENTAI_GALLERIES_ALL_URL = "https://nhentai.net/api/v2/galleries"
+private const val NHENTAI_GALLERIES_SEARCH_URL = "https://nhentai.net/api/v2/search"
+private const val NHENTAI_GALLERY_URL_PREFIX = "https://nhentai.net/api/v2/galleries"
 private const val NHENTAI_IMAGES_BASE = "https://i.nhentai.net"
 private const val NHENTAI_THUMBS_BASE = "https://t.nhentai.net"
 private const val JINA_MIRROR_BASE = "https://r.jina.ai/http://"
@@ -831,8 +873,9 @@ private val NHENTAI_METADATA_MIRROR_BASES = listOf(
     "https://nhentai.website",
 )
 private const val NHENTAI_SEARCH_PAGE_SIZE = 25
+private const val NHENTAI_V2_SEARCH_ALL_QUERY = "*"
 private val NHENTAI_DEFAULT_HEADERS = mapOf(
-    "User-Agent" to "Mozilla/5.0",
+    "User-Agent" to "TheoriaCodex/1.0 (Android source adapter)",
     "Referer" to "https://nhentai.net/",
     "Accept" to "application/json, text/plain, */*",
 )

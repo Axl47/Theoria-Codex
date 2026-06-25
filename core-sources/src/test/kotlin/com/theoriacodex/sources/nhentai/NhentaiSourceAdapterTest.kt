@@ -46,12 +46,45 @@ class NhentaiSourceAdapterTest {
             pageToken = null,
         )
 
-        assertEquals("https://nhentai.net/api/galleries/search", httpClient.lastGet?.url)
+        assertEquals("https://nhentai.net/api/v2/search", httpClient.lastGet?.url)
         assertEquals("1", httpClient.lastGet?.query?.get("page"))
         assertEquals("big breasts -loli", httpClient.lastGet?.query?.get("query"))
         assertEquals("popular-today", httpClient.lastGet?.query?.get("sort"))
-        assertEquals("Mozilla/5.0", httpClient.lastGet?.headers?.get("User-Agent"))
+        assertEquals("TheoriaCodex/1.0 (Android source adapter)", httpClient.lastGet?.headers?.get("User-Agent"))
         assertEquals("https://nhentai.net/", httpClient.lastGet?.headers?.get("Referer"))
+    }
+
+    @Test
+    fun `blank popular search uses v2 wildcard query`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "result": [],
+                      "num_pages": 1,
+                      "per_page": 25
+                    }
+                """.trimIndent(),
+            )
+        }
+        val adapter = NhentaiSourceAdapter(httpClient = httpClient)
+
+        adapter.search(
+            query = Query(
+                mode = QueryMode.Source(SourceKey.NHENTAI),
+                includeTags = emptyList(),
+                excludeTags = emptyList(),
+                sort = SortMode.POPULAR,
+                dateRange = null,
+                minScore = null,
+            ),
+            pageToken = null,
+        )
+
+        assertEquals("https://nhentai.net/api/v2/search", httpClient.lastGet?.url)
+        assertEquals("*", httpClient.lastGet?.query?.get("query"))
+        assertEquals("popular-today", httpClient.lastGet?.query?.get("sort"))
     }
 
     @Test
@@ -107,6 +140,48 @@ class NhentaiSourceAdapterTest {
         assertEquals("https://i.nhentai.net/galleries/9876/2.gif", post?.media?.get(1)?.url)
         assertEquals("https://nhentai.net/g/123/", post?.pageUrl)
         assertEquals(listOf("big breasts"), post?.canonicalTags)
+    }
+
+    @Test
+    fun `search maps v2 lightweight gallery cards as lazy posts`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "result": [
+                        {
+                          "id": 659203,
+                          "media_id": "4009462",
+                          "english_title": "[Osuwaani] Commission",
+                          "japanese_title": null,
+                          "thumbnail": "galleries/4009462/thumb.webp",
+                          "thumbnail_width": 250,
+                          "thumbnail_height": 348,
+                          "num_pages": 4,
+                          "num_favorites": 69,
+                          "tag_ids": []
+                        }
+                      ],
+                      "num_pages": 2,
+                      "per_page": 25,
+                      "total": 26
+                    }
+                """.trimIndent(),
+            )
+        }
+        val adapter = NhentaiSourceAdapter(httpClient = httpClient)
+
+        val page = adapter.search(sampleQuery(), pageToken = null)
+
+        assertEquals("2", page.nextPageToken)
+        val post = page.items.single()
+        assertEquals("659203", post.id.sourcePostId)
+        assertEquals("[Osuwaani] Commission", post.title)
+        assertEquals("https://t.nhentai.net/galleries/4009462/thumb.webp", post.preview.url)
+        assertEquals("image/webp", post.preview.mime)
+        assertNull(post.full)
+        assertTrue(post.media.isEmpty())
     }
 
     @Test
@@ -177,7 +252,7 @@ class NhentaiSourceAdapterTest {
             pageToken = null,
         )
 
-        assertEquals("https://nhentai.net/api/gallery/634609", httpClient.lastGet?.url)
+        assertEquals("https://nhentai.net/api/v2/galleries/634609", httpClient.lastGet?.url)
         assertTrue(httpClient.lastGet?.query?.isEmpty() == true)
         assertEquals(1, page.items.size)
         assertEquals("634609", page.items.first().id.sourcePostId)
@@ -217,8 +292,53 @@ class NhentaiSourceAdapterTest {
             pageToken = null,
         )
 
-        assertEquals("https://nhentai.net/api/gallery/634609", httpClient.lastGet?.url)
+        assertEquals("https://nhentai.net/api/v2/galleries/634609", httpClient.lastGet?.url)
         assertEquals(1, page.items.size)
+    }
+
+    @Test
+    fun `resolve post maps v2 gallery details with page paths`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "id": 634609,
+                      "media_id": "3821534",
+                      "title": {
+                        "english": "English Detail",
+                        "japanese": null,
+                        "pretty": "Pretty Detail"
+                      },
+                      "cover": {"path": "galleries/3821534/cover.webp.webp", "width": 350, "height": 494},
+                      "thumbnail": {"path": "galleries/3821534/thumb.webp", "width": 250, "height": 353},
+                      "scanlator": "",
+                      "upload_date": 1772669054,
+                      "tags": [
+                        {"id": 12227, "type": "language", "name": "english", "slug": "english", "url": "/language/english/", "count": 141113},
+                        {"id": 129314, "type": "artist", "name": "kyaradain", "slug": "kyaradain", "url": "/artist/kyaradain/", "count": 106}
+                      ],
+                      "num_pages": 2,
+                      "num_favorites": 100,
+                      "pages": [
+                        {"number": 2, "path": "galleries/3821534/2.jpg", "width": 1280, "height": 1807, "thumbnail": "galleries/3821534/2t.jpg.webp", "thumbnail_width": 200, "thumbnail_height": 282},
+                        {"number": 1, "path": "galleries/3821534/1.webp", "width": 1280, "height": 1807, "thumbnail": "galleries/3821534/1t.webp", "thumbnail_width": 200, "thumbnail_height": 282}
+                      ]
+                    }
+                """.trimIndent(),
+            )
+        }
+        val adapter = NhentaiSourceAdapter(httpClient = httpClient)
+
+        val post = adapter.resolvePost(PostId(source = SourceKey.NHENTAI, sourcePostId = "634609"))
+
+        assertEquals("https://nhentai.net/api/v2/galleries/634609", httpClient.lastGet?.url)
+        assertEquals("Pretty Detail", post?.title)
+        assertEquals("https://t.nhentai.net/galleries/3821534/thumb.webp", post?.preview?.url)
+        assertEquals("https://i.nhentai.net/galleries/3821534/1.webp", post?.media?.get(0)?.url)
+        assertEquals("https://i.nhentai.net/galleries/3821534/2.jpg", post?.media?.get(1)?.url)
+        assertEquals(listOf("english", "kyaradain"), post?.canonicalTags)
+        assertEquals("kyaradain", post?.authorName)
     }
 
     @Test
@@ -247,9 +367,9 @@ class NhentaiSourceAdapterTest {
         val page = adapter.search(sampleQuery(), pageToken = null)
 
         assertEquals(2, httpClient.requests.size)
-        assertEquals("https://nhentai.net/api/galleries/search", httpClient.requests[0].url)
+        assertEquals("https://nhentai.net/api/v2/search", httpClient.requests[0].url)
         assertEquals(
-            "https://r.jina.ai/http://http://nhentai.net/search/?q=big%20breasts&page=1&sort=date",
+            "https://r.jina.ai/http://nhentai.net/search/?q=big%20breasts&page=1&sort=date",
             httpClient.requests[1].url,
         )
         assertEquals("2", page.nextPageToken)
@@ -303,8 +423,8 @@ class NhentaiSourceAdapterTest {
 
         assertNotNull(post)
         assertEquals(3, httpClient.requests.size)
-        assertEquals("https://nhentai.net/api/gallery/634609", httpClient.requests[0].url)
-        assertEquals("https://r.jina.ai/http://http://nhentai.net/g/634609/1/", httpClient.requests[1].url)
+        assertEquals("https://nhentai.net/api/v2/galleries/634609", httpClient.requests[0].url)
+        assertEquals("https://r.jina.ai/http://nhentai.net/g/634609/1/", httpClient.requests[1].url)
         assertEquals("https://nhentai.to/g/634609/", httpClient.requests[2].url)
         assertEquals("Mirrored Gallery", post?.title)
         assertEquals(3, post?.media?.size)
