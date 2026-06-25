@@ -55,4 +55,32 @@ class ViewerStateTest {
         assertFalse(hidden.chromeVisible)
         assertTrue(state.chromeVisible)
     }
+
+    @Test
+    fun `multi-image scroll inversion flips only multi-image swipe direction`() {
+        assertEquals(
+            ViewerHorizontalSwipeDirection.Previous,
+            viewerSwipeDirectionForSetting(
+                rawDirection = ViewerHorizontalSwipeDirection.Next,
+                currentMediaCount = 3,
+                invertMultiImageScrollDirection = true,
+            ),
+        )
+        assertEquals(
+            ViewerHorizontalSwipeDirection.Next,
+            viewerSwipeDirectionForSetting(
+                rawDirection = ViewerHorizontalSwipeDirection.Next,
+                currentMediaCount = 1,
+                invertMultiImageScrollDirection = true,
+            ),
+        )
+        assertEquals(
+            ViewerHorizontalSwipeDirection.Next,
+            viewerSwipeDirectionForSetting(
+                rawDirection = ViewerHorizontalSwipeDirection.Next,
+                currentMediaCount = 3,
+                invertMultiImageScrollDirection = false,
+            ),
+        )
+    }
 }

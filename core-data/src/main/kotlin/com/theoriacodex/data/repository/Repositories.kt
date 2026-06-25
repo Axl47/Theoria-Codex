@@ -133,6 +133,10 @@ data class ContentFilterSettings(
     val resolveUnknownAnimatedDurations: Boolean = true,
 )
 
+data class ViewerSettings(
+    val invertMultiImageScrollDirection: Boolean = false,
+)
+
 data class RecommendationProfile(
     val profileId: String,
     val name: String,
@@ -161,6 +165,7 @@ data class AppSettings(
     val runtime: SourceRuntimeSettings = SourceRuntimeSettings(),
     val cache: CacheSettings = CacheSettings(),
     val contentFilters: ContentFilterSettings = ContentFilterSettings(),
+    val viewer: ViewerSettings = ViewerSettings(),
     val scenarioPreset: ScenarioPreset = ScenarioPreset.NORMAL,
     val lastSelectedTabRoute: String = "search",
     val recommendationProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
@@ -184,6 +189,7 @@ interface SettingsRepository {
     suspend fun setSourceWeights(sourceWeights: Map<SourceKey, Double>)
     suspend fun setCacheFullImageOnSave(enabled: Boolean)
     suspend fun setResolveUnknownAnimatedDurations(enabled: Boolean)
+    suspend fun setInvertMultiImageScrollDirection(enabled: Boolean)
     suspend fun setScenarioPreset(preset: ScenarioPreset)
     suspend fun setLastTab(route: String)
     suspend fun setActiveProfile(profileId: String)

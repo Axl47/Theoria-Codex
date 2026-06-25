@@ -301,6 +301,12 @@ class InMemorySettingsRepository : SettingsRepository {
         )
     }
 
+    override suspend fun setInvertMultiImageScrollDirection(enabled: Boolean) {
+        settings.value = settings.value.copy(
+            viewer = settings.value.viewer.copy(invertMultiImageScrollDirection = enabled),
+        )
+    }
+
     override suspend fun setScenarioPreset(preset: ScenarioPreset) {
         settings.value = settings.value.copy(scenarioPreset = preset)
     }

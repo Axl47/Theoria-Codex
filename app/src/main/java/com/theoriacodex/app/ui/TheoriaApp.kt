@@ -2298,6 +2298,12 @@ fun TheoriaApp(
                                 canLoadMoreFromSource = canLoadMoreFromSource,
                                 loadingMoreFromSource = loadingMoreFromSource,
                                 onLoadMoreFromSource = onLoadMoreFromSource,
+                                invertMultiImageScrollDirection = settings.viewer.invertMultiImageScrollDirection,
+                                onInvertMultiImageScrollDirectionChange = { enabled ->
+                                    scope.launch {
+                                        settingsRepository.setInvertMultiImageScrollDirection(enabled)
+                                    }
+                                },
                                 likedPostIds = likedPostIds,
                                 onToggleLike = { post ->
                                     scope.launch {

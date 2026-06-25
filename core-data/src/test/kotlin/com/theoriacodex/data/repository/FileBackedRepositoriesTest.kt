@@ -312,6 +312,7 @@ class FileBackedRepositoriesTest {
         first.setSourceWeights(mapOf(SourceKey.PIXIV to 4.0, SourceKey.GELBOORU to 1.0))
         first.setCacheFullImageOnSave(true)
         first.setResolveUnknownAnimatedDurations(true)
+        first.setInvertMultiImageScrollDirection(true)
         first.setScenarioPreset(ScenarioPreset.EMPTY_RESULTS)
         first.setLastTab("codex")
         first.setActiveProfile("profile-alt")
@@ -321,6 +322,7 @@ class FileBackedRepositoriesTest {
 
         assertTrue(loaded.cache.cacheFullImageOnSave)
         assertTrue(loaded.contentFilters.resolveUnknownAnimatedDurations)
+        assertTrue(loaded.viewer.invertMultiImageScrollDirection)
         assertEquals(ScenarioPreset.EMPTY_RESULTS, loaded.scenarioPreset)
         assertEquals("codex", loaded.lastSelectedTabRoute)
         assertEquals("profile-alt", loaded.activeProfileId)
@@ -375,6 +377,7 @@ class FileBackedRepositoriesTest {
 
         assertTrue(loaded.cache.cacheFullImageOnSave)
         assertTrue(loaded.contentFilters.resolveUnknownAnimatedDurations)
+        assertFalse(loaded.viewer.invertMultiImageScrollDirection)
     }
 
     @Test

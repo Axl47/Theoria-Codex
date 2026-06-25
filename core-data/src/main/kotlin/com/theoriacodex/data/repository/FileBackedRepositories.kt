@@ -414,6 +414,14 @@ class FileBackedSettingsRepository(
         }
     }
 
+    override suspend fun setInvertMultiImageScrollDirection(enabled: Boolean) {
+        updateSettings {
+            it.copy(
+                viewer = it.viewer.copy(invertMultiImageScrollDirection = enabled),
+            )
+        }
+    }
+
     override suspend fun setScenarioPreset(preset: ScenarioPreset) {
         updateSettings {
             it.copy(scenarioPreset = preset)
@@ -1151,6 +1159,7 @@ private data class SettingsStoreFile(
     val sourceWeights: Map<String, Double> = SourceRuntimeSettings().sourceWeights.mapKeys { it.key.name },
     val cacheFullImageOnSave: Boolean = false,
     val resolveUnknownAnimatedDurations: Boolean = true,
+    val invertMultiImageScrollDirection: Boolean = false,
     val scenarioPreset: String = ScenarioPreset.NORMAL.name,
     val lastSelectedTabRoute: String = "search",
     val recommendationProfiles: List<RecommendationProfileRecord>? = null,
@@ -1186,6 +1195,9 @@ private data class SettingsStoreFile(
                 contentFilters = ContentFilterSettings(
                     resolveUnknownAnimatedDurations = resolveUnknownAnimatedDurations,
                 ),
+                viewer = ViewerSettings(
+                    invertMultiImageScrollDirection = invertMultiImageScrollDirection,
+                ),
                 scenarioPreset = runCatching { ScenarioPreset.valueOf(scenarioPreset) }.getOrDefault(ScenarioPreset.NORMAL),
                 lastSelectedTabRoute = lastSelectedTabRoute,
                 recommendationProfiles = profiles,
@@ -1215,6 +1227,7 @@ private data class SettingsStoreFile(
                 sourceWeights = settings.runtime.sourceWeights.mapKeys { it.key.name },
                 cacheFullImageOnSave = settings.cache.cacheFullImageOnSave,
                 resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
+                invertMultiImageScrollDirection = settings.viewer.invertMultiImageScrollDirection,
                 scenarioPreset = settings.scenarioPreset.name,
                 lastSelectedTabRoute = settings.lastSelectedTabRoute,
                 recommendationProfiles = settings.recommendationProfiles.map { profile ->

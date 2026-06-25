@@ -69,6 +69,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -153,6 +154,8 @@ fun ViewerScreen(
     canLoadMoreFromSource: Boolean = false,
     loadingMoreFromSource: Boolean = false,
     onLoadMoreFromSource: (() -> Unit)? = null,
+    invertMultiImageScrollDirection: Boolean = false,
+    onInvertMultiImageScrollDirectionChange: (Boolean) -> Unit = {},
     likedPostIds: Set<PostId> = emptySet(),
     onToggleLike: ((Post) -> Unit)? = null,
     onRequestPostResolution: ((Post) -> Unit)? = null,
@@ -633,6 +636,7 @@ fun ViewerScreen(
                     postMedia.size,
                     posts.size,
                     viewerState.zoom,
+                    invertMultiImageScrollDirection,
                 ) {
                     if (viewerState.zoom > ViewerState.FIT_SCALE + 0.01f) return@pointerInput
                     awaitEachGesture {
@@ -676,7 +680,13 @@ fun ViewerScreen(
                             } else {
                                 ViewerHorizontalSwipeDirection.Previous
                             }
-                            navigateFromHorizontalSwipe(direction)
+                            navigateFromHorizontalSwipe(
+                                viewerSwipeDirectionForSetting(
+                                    rawDirection = direction,
+                                    currentMediaCount = postMedia.size,
+                                    invertMultiImageScrollDirection = invertMultiImageScrollDirection,
+                                )
+                            )
                         }
                     }
                 }
@@ -948,6 +958,9 @@ fun ViewerScreen(
                         markInteraction()
                     }
                 },
+                invertScrollOptionVisible = selectedPostMedia.size > 1,
+                invertMultiImageScrollDirection = invertMultiImageScrollDirection,
+                onInvertMultiImageScrollDirectionChange = onInvertMultiImageScrollDirectionChange,
                 onDownload = ::downloadCurrentMedia,
                 downloadEnabled = canDownloadCurrentMedia,
                 onInfo = {
@@ -1991,6 +2004,18 @@ internal fun viewerHorizontalSwipeTarget(
     }
 }
 
+internal fun viewerSwipeDirectionForSetting(
+    rawDirection: ViewerHorizontalSwipeDirection,
+    currentMediaCount: Int,
+    invertMultiImageScrollDirection: Boolean,
+): ViewerHorizontalSwipeDirection {
+    if (!invertMultiImageScrollDirection || currentMediaCount <= 1) return rawDirection
+    return when (rawDirection) {
+        ViewerHorizontalSwipeDirection.Previous -> ViewerHorizontalSwipeDirection.Next
+        ViewerHorizontalSwipeDirection.Next -> ViewerHorizontalSwipeDirection.Previous
+    }
+}
+
 private fun buildPrefetchQueue(
     posts: List<Post>,
     currentPostIndex: Int,
@@ -2190,6 +2215,9 @@ private fun ViewerChrome(
     galleryAvailable: Boolean,
     galleryVisible: Boolean,
     onToggleGallery: () -> Unit,
+    invertScrollOptionVisible: Boolean,
+    invertMultiImageScrollDirection: Boolean,
+    onInvertMultiImageScrollDirectionChange: (Boolean) -> Unit,
     downloadEnabled: Boolean,
     onDownload: () -> Unit,
     onInfo: () -> Unit,
@@ -2338,6 +2366,20 @@ private fun ViewerChrome(
                                 Icon(Icons.Default.Download, contentDescription = null)
                             },
                         )
+                        if (invertScrollOptionVisible) {
+                            DropdownMenuItem(
+                                text = { Text("Invert scroll direction") },
+                                onClick = {
+                                    onInvertMultiImageScrollDirectionChange(!invertMultiImageScrollDirection)
+                                },
+                                trailingIcon = {
+                                    Switch(
+                                        checked = invertMultiImageScrollDirection,
+                                        onCheckedChange = null,
+                                    )
+                                },
+                            )
+                        }
                     }
                 }
             }
