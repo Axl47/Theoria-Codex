@@ -1,6 +1,6 @@
 ---
 created_at: 2026-06-25T00:00:00Z
-updated_at: 2026-06-25T01:45:00Z
+updated_at: 2026-06-25T02:00:00Z
 ---
 # Maintainability and Provider Reliability Refactor
 
@@ -22,7 +22,7 @@ The result should be observable in three ways: Gradle tests prove provider and p
 - [x] (2026-06-25 01:02Z) Added provider contract tests and shared provider parsing/query helpers; fixture-backed stubs now run a cross-source contract suite, and AIBooru/Gelbooru use common source quick-query, JSON, duration, MIME, network, and HTTP failure helpers.
 - [x] (2026-06-25 01:25Z) Added opt-in live provider health reporting and Settings-facing health state; `:core-sources:providerHealthCheck` writes a skipped report by default and performs live checks only with `-Ptheoria.liveProviders=true`.
 - [x] (2026-06-25 01:45Z) Split viewer session/lazy-media policy and Codex import/export payload policy out of `TheoriaApp.kt`; added focused tests for viewer merging/lazy resolution and Codex share-file parsing/naming.
-- [ ] Update README, AGENTS, and this ExecPlan with validation evidence after each milestone.
+- [x] (2026-06-25 02:00Z) Completed final provider-message polish and documentation; Search now uses tested friendly provider failure text for status chips and empty-state banners.
 
 ## Surprises & Discoveries
 
@@ -49,6 +49,9 @@ The result should be observable in three ways: Gradle tests prove provider and p
 
 - Observation: `TheoriaApp.kt` still owns Android side effects, but its viewer and Codex-share decisions were pure enough to extract without changing UI behavior.
   Evidence: `ViewerSessionCoordinator.kt` now owns lazy-media resolution and viewer post merging; `CodexShareModels.kt` now owns share-file construction, import post-id parsing, and export filename sanitization.
+
+- Observation: Search already separated account-required banners from other source failures, so final UX polish could focus on replacing raw enum-style text with clearer user-facing labels.
+  Evidence: `SourceFailureUiText.kt` now formats missing account setup, expired sign-in, rate limits, unreachable/blocked providers, parser changes, and unknown failures with unit coverage.
 
 ## Decision Log
 
@@ -79,6 +82,8 @@ Milestone 3 is complete. Provider contracts now run against deterministic fixtur
 Milestone 4 is complete. `core-sources/src/main/kotlin/com/theoriacodex/sources/health/` defines provider health reports and an opt-in CLI; `core-sources/build.gradle.kts` exposes `providerHealthCheck`; settings persistence now stores last-known per-source health snapshots; and Settings displays a compact health line for each source without running live checks from the app.
 
 Milestone 5 is complete as a first structural split of the composition root. `TheoriaApp.kt` delegates viewer lazy media/session merging to `app/src/main/java/com/theoriacodex/app/viewer/ViewerSessionCoordinator.kt` and delegates Codex share-file construction, import post-id parsing, and filesystem-safe export naming to `app/src/main/java/com/theoriacodex/app/codex/CodexShareModels.kt`. The app shell still owns Android side effects such as FileProvider, Toasts, repository calls, and navigation.
+
+Milestone 6 is complete. Search provider status chips and empty-state errors now use `app/src/main/java/com/theoriacodex/app/search/SourceFailureUiText.kt` to distinguish disabled/excluded sources, account setup, expired auth, rate limiting, blocked/unreachable providers, parser-response changes, and unknown failures. README, AGENTS, this ExecPlan, and `working_list.md` were updated with the shipped behavior and validation evidence.
 
 ## Context and Orientation
 
@@ -238,6 +243,12 @@ Update this section with concise terminal transcripts after each milestone. Keep
 
     ./gradlew :app:testDebugUnitTest
     BUILD SUCCESSFUL in 6s
+
+    ./gradlew :app:testDebugUnitTest
+    BUILD SUCCESSFUL in 4s
+
+    ./gradlew test
+    BUILD SUCCESSFUL in 4s
 
 ## Interfaces and Dependencies
 

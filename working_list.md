@@ -1,15 +1,15 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-06-25T01:45:00Z
+updated_at: 2026-06-25T02:00:00Z
 ---
 # Working List
 
 ## Pending
-- [ ] Milestone 6: final docs, plan evidence, and broad verification
 
 ## In Progress
 
 ## Done
+- [x] Milestone 6: final provider-message polish, docs, plan evidence, and broad verification (`./gradlew :app:testDebugUnitTest`, `./gradlew test`)
 - [x] Milestone 5: split viewer session and Codex share policy out of `TheoriaApp.kt` (`./gradlew :app:testDebugUnitTest`)
 - [x] Milestone 4: add opt-in live provider health reporting and Settings state (`./gradlew :core-sources:test :core-data:test :app:testDebugUnitTest :core-sources:providerHealthCheck`, `./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true`)
 - [x] Milestone 3: add provider contracts and central provider helpers (`./gradlew :core-sources:test :core-stubs:test`)

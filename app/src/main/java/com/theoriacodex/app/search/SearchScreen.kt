@@ -127,7 +127,6 @@ import com.theoriacodex.app.viewer.PixivUgoiraPlayer
 import com.theoriacodex.app.viewer.createLoopingExoPlayer
 import com.theoriacodex.app.viewer.createTexturePlayerView
 import com.theoriacodex.data.repository.ViewerLaunchContext
-import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -1888,58 +1887,10 @@ private fun StatusRow(coordinator: SearchCoordinator) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(filtered.size) { index ->
             val status = filtered[index]
-            val text = when (status.state) {
-                SourceRunState.EXCLUDED -> "${status.source.displayName()} excluded"
-                SourceRunState.FAILED -> {
-                    val reason = status.failureReason?.name ?: "UNKNOWN"
-                    "${status.source.displayName()} failed ($reason)"
-                }
-                SourceRunState.SUCCESS -> "${status.source.displayName()} OK"
-            }
+            val text = sourceStatusChipText(status)
             AssistChip(onClick = {}, label = { Text(text) })
         }
     }
-}
-
-private fun buildSourceAuthErrorMessage(statuses: List<com.theoriacodex.domain.orchestration.SourceRunStatus>): String? {
-    val authSources = statuses
-        .filter { status ->
-            status.state == SourceRunState.FAILED &&
-                (status.failureReason == SourceFailureReason.AUTH_REQUIRED ||
-                    status.failureReason == SourceFailureReason.AUTH_EXPIRED)
-        }
-        .map { it.source.displayName() }
-        .distinct()
-    if (authSources.isEmpty()) return null
-
-    val names = authSources.joinToString(", ")
-    val verb = if (authSources.size == 1) "requires" else "require"
-    return "$names $verb authentication. Connect the account in Settings > Source Accounts."
-}
-
-private fun buildSourceFailureMessage(statuses: List<com.theoriacodex.domain.orchestration.SourceRunStatus>): String? {
-    val failures = statuses.filter { status ->
-        status.state == SourceRunState.FAILED &&
-            status.failureReason != SourceFailureReason.AUTH_REQUIRED &&
-            status.failureReason != SourceFailureReason.AUTH_EXPIRED
-    }
-    if (failures.isEmpty()) return null
-
-    val details = failures.take(3).map { status ->
-        val reason = status.failureReason
-            ?.name
-            ?.replace('_', ' ')
-            ?.lowercase()
-            ?.replaceFirstChar { it.uppercase() }
-        val rawMessage = status.errorMessage?.trim().orEmpty()
-        when {
-            rawMessage.isNotBlank() -> "${status.source.displayName()}: $rawMessage"
-            reason != null -> "${status.source.displayName()}: $reason"
-            else -> "${status.source.displayName()}: Request failed"
-        }
-    }
-    val suffix = if (failures.size > 3) "\n+${failures.size - 3} more source errors" else ""
-    return details.joinToString(separator = "\n") + suffix
 }
 
 @Composable
