@@ -85,6 +85,7 @@ import androidx.core.content.FileProvider
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.media.isPixivUgoiraPost
+import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.CodexSearchSourceOption
@@ -204,12 +205,29 @@ private val LAZY_MEDIA_RESOLUTION_SOURCES = setOf(
     SourceKey.IWARA,
 )
 
+private val REFRESHABLE_REMOTE_VIDEO_SOURCES = setOf(
+    SourceKey.AIBOORU,
+    SourceKey.GELBOORU,
+    SourceKey.IWARA,
+    SourceKey.RULE34XXX,
+    SourceKey.RULE34PAHEAL,
+    SourceKey.RULE34VIDEO,
+    SourceKey.RULE34GEN,
+)
+
 internal fun requiresLazyMediaResolution(post: Post): Boolean {
-    if (post.id.source !in LAZY_MEDIA_RESOLUTION_SOURCES) return false
-    return buildList {
+    val mediaRefs = buildList {
         addAll(post.media)
         post.full?.let { add(it) }
-    }.none { ref ->
+    }
+    if (
+        post.id.source in REFRESHABLE_REMOTE_VIDEO_SOURCES &&
+        mediaRefs.any { ref -> isVideoMediaRef(ref) && ref.localPath.isNullOrBlank() && !ref.url.isNullOrBlank() }
+    ) {
+        return true
+    }
+    if (post.id.source !in LAZY_MEDIA_RESOLUTION_SOURCES) return false
+    return mediaRefs.none { ref ->
         !ref.url.isNullOrBlank()
     }
 }

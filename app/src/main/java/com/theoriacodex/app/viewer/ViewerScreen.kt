@@ -1912,7 +1912,24 @@ internal fun viewerGalleryMediaItems(post: Post): List<ViewerGalleryMediaItem> {
 }
 
 private fun requiresResolvedViewerPost(post: Post): Boolean {
-    return post.id.source == SourceKey.RULE34VIDEO || post.id.source == SourceKey.RULE34GEN
+    val sourceSupportsRefresh = when (post.id.source) {
+        SourceKey.AIBOORU,
+        SourceKey.GELBOORU,
+        SourceKey.IWARA,
+        SourceKey.RULE34XXX,
+        SourceKey.RULE34PAHEAL,
+        SourceKey.RULE34VIDEO,
+        SourceKey.RULE34GEN
+        -> true
+
+        SourceKey.PIXIV,
+        SourceKey.NHENTAI
+        -> false
+    }
+    if (!sourceSupportsRefresh) return false
+    return viewerMediaItems(post).any { media ->
+        isVideoMediaRef(media) && media.localPath.isNullOrBlank() && !media.url.isNullOrBlank()
+    }
 }
 
 internal fun viewerImageCandidates(post: Post, media: ImageRef): List<String> {

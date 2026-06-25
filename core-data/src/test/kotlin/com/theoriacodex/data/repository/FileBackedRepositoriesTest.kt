@@ -62,6 +62,35 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
+    fun `codex repository persists progressive media urls across instances`() = runTest {
+        val dir = Files.createTempDirectory("codex-progressive-urls-").toFile()
+        val first = FileBackedCodexRepository(dir)
+        val created = first.createCodex("Saved")
+        val progressiveUrls = listOf(
+            "https://gelbooru.com/sample/1.jpg",
+            "https://gelbooru.com/alternate/1.jpg",
+        )
+        val media = ImageRef(
+            url = "https://gelbooru.com/full/1.jpg",
+            localPath = null,
+            mime = "image/jpeg",
+            progressiveUrls = progressiveUrls,
+        )
+        val post = samplePost("1", localPath = null, source = SourceKey.GELBOORU).copy(
+            full = media,
+            media = listOf(media),
+        )
+
+        first.addItem(created.codexId, post)
+
+        val second = FileBackedCodexRepository(dir)
+        val loaded = second.getPost(post.id)
+
+        assertEquals(progressiveUrls, loaded?.full?.progressiveUrls)
+        assertEquals(progressiveUrls, loaded?.media?.single()?.progressiveUrls)
+    }
+
+    @Test
     fun `codex repository reads legacy post records without creator profile`() = runTest {
         val dir = Files.createTempDirectory("codex-legacy-post-record-").toFile()
         val storageFile = dir.resolve("codex_store.json")

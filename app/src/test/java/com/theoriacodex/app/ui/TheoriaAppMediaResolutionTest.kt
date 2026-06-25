@@ -22,8 +22,8 @@ class TheoriaAppMediaResolutionTest {
         assertFalse(
             requiresLazyMediaResolution(
                 samplePost(
-                    source = SourceKey.IWARA,
-                    full = ImageRef(url = "https://cdn.iwara.tv/video.mp4", localPath = null, mime = "video/mp4"),
+                    source = SourceKey.NHENTAI,
+                    full = ImageRef(url = "https://i.nhentai.net/galleries/1/1.jpg", localPath = null, mime = "image/jpeg"),
                     media = emptyList(),
                 ),
             ),
@@ -33,6 +33,43 @@ class TheoriaAppMediaResolutionTest {
                 samplePost(
                     source = SourceKey.PIXIV,
                     full = null,
+                    media = emptyList(),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `requires lazy media resolution for refreshable remote video posts`() {
+        assertTrue(
+            requiresLazyMediaResolution(
+                samplePost(
+                    source = SourceKey.GELBOORU,
+                    full = ImageRef(url = "https://video-cdn.gelbooru.com/video.mp4", localPath = null, mime = "video/mp4"),
+                    media = emptyList(),
+                ),
+            ),
+        )
+        assertTrue(
+            requiresLazyMediaResolution(
+                samplePost(
+                    source = SourceKey.IWARA,
+                    full = null,
+                    media = listOf(
+                        ImageRef(url = "https://files.iwara.tv/video.mp4?expires=123", localPath = null, mime = "video/mp4"),
+                    ),
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `does not require lazy media resolution for cached local video posts`() {
+        assertFalse(
+            requiresLazyMediaResolution(
+                samplePost(
+                    source = SourceKey.GELBOORU,
+                    full = ImageRef(url = "https://video-cdn.gelbooru.com/video.mp4", localPath = "/cache/video.mp4", mime = "video/mp4"),
                     media = emptyList(),
                 ),
             ),

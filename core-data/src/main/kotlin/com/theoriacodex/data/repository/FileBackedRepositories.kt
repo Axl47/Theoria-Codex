@@ -769,6 +769,7 @@ private data class PostRecord(
     val fullUrl: String?,
     val fullLocalPath: String?,
     val fullMime: String?,
+    val fullProgressiveUrls: List<String>? = null,
     val pageUrl: String?,
     val width: Int?,
     val height: Int?,
@@ -798,6 +799,7 @@ private data class PostRecord(
                     url = fullUrl,
                     localPath = fullLocalPath,
                     mime = fullMime,
+                    progressiveUrls = fullProgressiveUrls.orEmpty(),
                 )
             },
             pageUrl = pageUrl,
@@ -824,6 +826,7 @@ private data class PostRecord(
                 fullUrl = post.full?.url,
                 fullLocalPath = post.full?.localPath,
                 fullMime = post.full?.mime,
+                fullProgressiveUrls = post.full?.progressiveUrls,
                 pageUrl = post.pageUrl,
                 width = post.width,
                 height = post.height,
@@ -873,12 +876,14 @@ private data class ImageRefRecord(
     val url: String?,
     val localPath: String?,
     val mime: String?,
+    val progressiveUrls: List<String>? = null,
 ) {
     fun toDomain(): ImageRef {
         return ImageRef(
             url = url,
             localPath = localPath,
             mime = mime,
+            progressiveUrls = progressiveUrls.orEmpty(),
         )
     }
 
@@ -888,6 +893,7 @@ private data class ImageRefRecord(
                 url = ref.url,
                 localPath = ref.localPath,
                 mime = ref.mime,
+                progressiveUrls = ref.progressiveUrls,
             )
         }
     }
