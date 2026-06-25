@@ -1027,8 +1027,6 @@ fun ViewerScreen(
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text = "${post.id.source.displayName()} • ${post.id.sourcePostId}",

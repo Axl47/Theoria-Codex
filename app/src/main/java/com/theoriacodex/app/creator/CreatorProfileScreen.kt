@@ -460,8 +460,6 @@ fun CreatorProfileScreen(
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
                 HorizontalDivider()
                 PostTagActionSection(
