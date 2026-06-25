@@ -912,9 +912,15 @@ fun SearchScreen(
             hideSaved = hideSaved,
             onHideSavedChange = { hideSaved = it },
             nhentaiFullColorFilter = coordinator.selectedNhentaiFullColorFilter(),
-            onNhentaiFullColorFilterChange = { enabled -> coordinator.setNhentaiFullColorFilter(enabled) },
+            onNhentaiFullColorFilterChange = { enabled ->
+                coordinator.setNhentaiFullColorFilter(enabled)
+                applyDraftAndResetScroll()
+            },
             nhentaiLanguageFilter = coordinator.selectedNhentaiLanguageFilter(),
-            onNhentaiLanguageFilterChange = { filter -> coordinator.setNhentaiLanguageFilter(filter) },
+            onNhentaiLanguageFilterChange = { filter ->
+                coordinator.setNhentaiLanguageFilter(filter)
+                applyDraftAndResetScroll()
+            },
             onSortChanged = { applyDraftAndResetScroll() },
             onDismiss = {
                 scope.launch {
@@ -1452,7 +1458,6 @@ private fun FilterSheet(
                             selected = nhentaiFullColorFilter,
                             onClick = {
                                 onNhentaiFullColorFilterChange(!nhentaiFullColorFilter)
-                                onSortChanged()
                             },
                             label = { Text("Full Color") },
                         )
@@ -1484,7 +1489,6 @@ private fun FilterSheet(
                             onClick = {
                                 if (nhentaiLanguageFilter == languageFilter) return@FilterChip
                                 onNhentaiLanguageFilterChange(languageFilter)
-                                onSortChanged()
                             },
                             label = { Text(label) },
                         )
