@@ -9,22 +9,25 @@ import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
-import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.model.CreatorProfile
-import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.common.ambiguousDurationFieldMs
+import com.theoriacodex.sources.common.classifyHttpFailure
+import com.theoriacodex.sources.common.durationFieldMs
+import com.theoriacodex.sources.common.firstDurationMs
+import com.theoriacodex.sources.common.mimeFromUrlOrExt
+import com.theoriacodex.sources.common.parseJsonElement
+import com.theoriacodex.sources.common.sourceNetworkFailure
+import com.theoriacodex.sources.common.sourceQuickQuery
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
-import com.theoriacodex.sources.media.inferMimeFromUrl
-import com.theoriacodex.sources.media.mimeFromFileExt
 import java.io.IOException
 
 class GelbooruSourceAdapter(
@@ -120,29 +123,7 @@ class GelbooruSourceAdapter(
     }
 
     override suspend fun quickQuery(kind: QuickQueryKind): Query {
-        val now = System.currentTimeMillis()
-        val dayMs = 24L * 60L * 60L * 1000L
-        val sort = when (kind) {
-            QuickQueryKind.POPULAR_TODAY -> SortMode.POPULAR
-            QuickQueryKind.TOP_7D -> SortMode.TOP
-            QuickQueryKind.TOP_30D -> SortMode.TOP
-            QuickQueryKind.NEWEST -> SortMode.NEWEST
-            QuickQueryKind.RANDOM -> SortMode.NEWEST
-        }
-        val dateRange = when (kind) {
-            QuickQueryKind.POPULAR_TODAY -> DateRange(now - dayMs, now)
-            QuickQueryKind.TOP_7D -> DateRange(now - 7L * dayMs, now)
-            QuickQueryKind.TOP_30D -> DateRange(now - 30L * dayMs, now)
-            QuickQueryKind.NEWEST, QuickQueryKind.RANDOM -> null
-        }
-        return Query(
-            mode = QueryMode.Source(SourceKey.GELBOORU),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = sort,
-            dateRange = dateRange,
-            minScore = null,
-        )
+        return sourceQuickQuery(source = SourceKey.GELBOORU, kind = kind)
     }
 
     override suspend fun resolvePost(id: PostId): Post? {
@@ -188,23 +169,27 @@ class GelbooruSourceAdapter(
                 query = query,
             )
         } catch (error: IOException) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.NETWORK,
-                message = "Gelbooru request failed",
-                cause = error,
-            )
+            sourceNetworkFailure("Gelbooru", error)
         }
 
         if (response.statusCode !in 200..299) {
             throw SourceAdapterException(
-                reason = classifyFailure(response.statusCode, response.body),
+                reason = classifyHttpFailure(
+                    statusCode = response.statusCode,
+                    body = response.body,
+                    authBlockedBody = ::looksLikeAuthBlocked,
+                ),
                 message = "Gelbooru request failed (${response.statusCode})",
             )
         }
 
         if (looksLikeAuthBlocked(response.body)) {
             throw SourceAdapterException(
-                reason = SourceFailureReason.AUTH_REQUIRED,
+                reason = classifyHttpFailure(
+                    statusCode = 200,
+                    body = response.body,
+                    authBlockedBody = ::looksLikeAuthBlocked,
+                ),
                 message = "Gelbooru rejected request without credentials",
             )
         }
@@ -225,11 +210,7 @@ class GelbooruSourceAdapter(
     }
 
     private fun parsePostItems(body: String): List<JsonObject> {
-        val element = runCatching { gson.fromJson(body, JsonElement::class.java) }.getOrNull()
-            ?: throw SourceAdapterException(
-                reason = SourceFailureReason.PARSE,
-                message = "Gelbooru returned malformed JSON",
-            )
+        val element = parseJsonElement(body = body, gson = gson, errorLabel = "Gelbooru")
 
         return when {
             element.isJsonArray -> element.asJsonArray.toList().mapNotNull { it.takeIf(JsonElement::isJsonObject)?.asJsonObject }
@@ -246,11 +227,7 @@ class GelbooruSourceAdapter(
     }
 
     private fun parseTagItems(body: String): List<JsonObject> {
-        val element = runCatching { gson.fromJson(body, JsonElement::class.java) }.getOrNull()
-            ?: throw SourceAdapterException(
-                reason = SourceFailureReason.PARSE,
-                message = "Gelbooru tags response malformed",
-            )
+        val element = parseJsonElement(body = body, gson = gson, errorLabel = "Gelbooru tags")
 
         return when {
             element.isJsonArray -> element.asJsonArray.toList().mapNotNull { it.takeIf(JsonElement::isJsonObject)?.asJsonObject }
@@ -276,8 +253,8 @@ class GelbooruSourceAdapter(
         val fullUrl = raw.get("file_url")?.asString
         val sampleUrl = raw.get("sample_url")?.asString?.trim()?.takeIf(String::isNotBlank)
         val previewUrl = raw.get("preview_url")?.asString ?: sampleUrl ?: fullUrl
-        val fullMime = inferMimeFromUrl(fullUrl) ?: mimeFromFileExt(raw.get("file_ext")?.asString)
-        val previewMime = inferMimeFromUrl(previewUrl) ?: fullMime
+        val fullMime = mimeFromUrlOrExt(fullUrl, raw.get("file_ext")?.asString)
+        val previewMime = mimeFromUrlOrExt(previewUrl, null) ?: fullMime
         val createdAt = raw.get("created_at")?.asString?.toLongOrNull()?.times(1000L)
             ?: raw.get("change")?.asString?.toLongOrNull()?.times(1000L)
         val owner = raw.get("owner")?.asString?.trim().orEmpty()
@@ -330,7 +307,7 @@ class GelbooruSourceAdapter(
 }
 
 private fun parseGelbooruDurationMs(raw: JsonObject): Long? {
-    return sequenceOf(
+    return firstDurationMs(
         raw.durationFieldMs("duration_ms", multiplier = 1L),
         raw.durationFieldMs("durationMs", multiplier = 1L),
         raw.durationFieldMs("duration_seconds", multiplier = 1_000L),
@@ -339,47 +316,7 @@ private fun parseGelbooruDurationMs(raw: JsonObject): Long? {
         raw.ambiguousDurationFieldMs("video_duration"),
         raw.durationFieldMs("length_seconds", multiplier = 1_000L),
         raw.ambiguousDurationFieldMs("length"),
-    ).filterNotNull().firstOrNull { it > 0L }
-}
-
-private fun JsonObject.ambiguousDurationFieldMs(name: String): Long? {
-    val element = get(name)?.takeUnless { it.isJsonNull } ?: return null
-    if (element.isJsonPrimitive && element.asJsonPrimitive.isNumber) {
-        val numeric = runCatching { element.asDouble }.getOrNull() ?: return null
-        val multiplier = if (numeric >= 1_000.0) 1L else 1_000L
-        return (numeric * multiplier).toLong().takeIf { it > 0L }
-    }
-    return durationFieldMs(name = name, multiplier = 1_000L)
-}
-
-private fun JsonObject.durationFieldMs(name: String, multiplier: Long): Long? {
-    val element = get(name)?.takeUnless { it.isJsonNull } ?: return null
-    val parsed = when {
-        element.isJsonPrimitive && element.asJsonPrimitive.isNumber -> {
-            runCatching { (element.asDouble * multiplier).toLong() }.getOrNull()
-        }
-        element.isJsonPrimitive && element.asJsonPrimitive.isString -> {
-            parseFlexibleGelbooruDurationMs(element.asString, multiplier)
-        }
-        else -> null
-    }
-    return parsed?.takeIf { it > 0L }
-}
-
-private fun parseFlexibleGelbooruDurationMs(raw: String, numericMultiplier: Long): Long? {
-    val trimmed = raw.trim()
-    if (trimmed.isBlank()) return null
-    trimmed.toDoubleOrNull()?.let { return (it * numericMultiplier).toLong() }
-    val parts = trimmed.split(':').mapNotNull { part -> part.trim().toLongOrNull() }
-    if (parts.isEmpty() || parts.size != trimmed.count { it == ':' } + 1) return null
-    val seconds = when (parts.size) {
-        1 -> parts[0]
-        2 -> parts[0] * 60L + parts[1]
-        else -> parts.takeLast(3).let { (hours, minutes, seconds) ->
-            hours * 3600L + minutes * 60L + seconds
-        }
-    }
-    return seconds * 1_000L
+    )
 }
 
 private fun compileTags(query: Query): String {
@@ -391,16 +328,6 @@ private fun compileTags(query: Query): String {
         SortMode.RANDOM -> "sort:id:desc"
     }
     return (include + exclude + order).take(40).joinToString(" ")
-}
-
-private fun classifyFailure(statusCode: Int, body: String): SourceFailureReason {
-    return when {
-        statusCode == 401 || statusCode == 403 -> SourceFailureReason.AUTH_REQUIRED
-        statusCode == 429 -> SourceFailureReason.RATE_LIMITED
-        statusCode in 500..599 -> SourceFailureReason.NETWORK
-        looksLikeAuthBlocked(body) -> SourceFailureReason.AUTH_REQUIRED
-        else -> SourceFailureReason.UNKNOWN
-    }
 }
 
 private fun looksLikeAuthBlocked(body: String): Boolean {

@@ -1,11 +1,10 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-06-25T00:42:00Z
+updated_at: 2026-06-25T01:02:00Z
 ---
 # Working List
 
 ## Pending
-- [ ] Milestone 3: add provider contracts and central provider helpers
 - [ ] Milestone 4: add opt-in live provider health reporting and Settings state
 - [ ] Milestone 5: split `TheoriaApp.kt` workflows into smaller coordinators
 - [ ] Milestone 6: final docs, plan evidence, and broad verification
@@ -13,6 +12,7 @@ updated_at: 2026-06-25T00:42:00Z
 ## In Progress
 
 ## Done
+- [x] Milestone 3: add provider contracts and central provider helpers (`./gradlew :core-sources:test :core-stubs:test`)
 - [x] Milestone 2: share media and clipboard selection policy across app surfaces (`./gradlew :app:testDebugUnitTest`)
 - [x] Milestone 1: preserve saved post duration and progressive image URLs (`./gradlew :core-data:test`)
 - [x] Refresh implementation checklist from maintainability/reliability ExecPlan

@@ -19,7 +19,7 @@ The result should be observable in three ways: Gradle tests prove provider and p
 - [x] (2026-06-25 00:00Z) Created this ExecPlan from the repository analysis and refreshed `working_list.md`.
 - [x] (2026-06-25 00:20Z) Implemented persistence integrity fixes for saved Codex posts; `Post.durationMs`, preview `ImageRef.progressiveUrls`, full-image progressive URLs, and media progressive URLs now round-trip through the file-backed Codex store.
 - [x] (2026-06-25 00:42Z) Extracted shared media, clipboard, and download policies used by Search, Viewer, Codex, and Creator Profile; candidate selection now lives in `PostMedia.kt` and post URL/tag clipboard writes live in `PostClipboard.kt`.
-- [ ] Add provider contract tests and shared provider parsing/query helpers.
+- [x] (2026-06-25 01:02Z) Added provider contract tests and shared provider parsing/query helpers; fixture-backed stubs now run a cross-source contract suite, and AIBooru/Gelbooru use common source quick-query, JSON, duration, MIME, network, and HTTP failure helpers.
 - [ ] Add opt-in live provider health reporting and Settings-facing health state.
 - [ ] Split `TheoriaApp.kt` workflows into smaller coordinators after tests pin behavior.
 - [ ] Update README, AGENTS, and this ExecPlan with validation evidence after each milestone.
@@ -40,6 +40,9 @@ The result should be observable in three ways: Gradle tests prove provider and p
 
 - Observation: Creator Profile copied tags as a single space-separated line while Search and Codex copied comma-separated positive and negative lines.
   Evidence: `CreatorProfileScreen.kt` had a private formatter that joined positives and negatives with spaces; `PostClipboard.kt` now provides one shared formatter covered by `PostMediaTest`.
+
+- Observation: The fixture-backed stub registry already covers every `SourceKey`, making it the safest place to enforce provider contracts without introducing live network flakiness.
+  Evidence: `StubAdapterRegistry` builds one `JsonStubSourceAdapter` for every `SourceKey`; `StubProviderContractTest` now checks search identity, media URL presence, tags, paging, autocomplete, quick queries, resolve behavior, and typed partial-failure errors across all sources.
 
 ## Decision Log
 
@@ -64,6 +67,8 @@ The result should be observable in three ways: Gradle tests prove provider and p
 Milestone 1 is complete. Saved Codex posts now retain the duration and progressive preview/full/media URLs already present in the domain model, while legacy JSON files without those fields still load with `durationMs = null` and empty progressive URL lists. Broader milestones remain in progress.
 
 Milestone 2 is complete. Search cards, Viewer gallery/image candidate selection, non-viewer device downloads, and the Search/Codex/Creator/Viewer post URL copy actions now use shared app-layer policy. Creator Profile tag copying intentionally now matches Search and Codex formatting so all post action sheets produce the same clipboard text.
+
+Milestone 3 is complete. Provider contracts now run against deterministic fixture-backed adapters, and the first real adapter family migration moved repeated quick-query construction, JSON parsing, flexible duration parsing, MIME inference, network exception mapping, and HTTP status classification into `core-sources/src/main/kotlin/com/theoriacodex/sources/common/SourceAdapterCommon.kt`. AIBooru and Gelbooru were migrated first because their existing tests covered the behavior most directly.
 
 ## Context and Orientation
 
@@ -209,6 +214,9 @@ Update this section with concise terminal transcripts after each milestone. Keep
 
     ./gradlew :app:testDebugUnitTest
     BUILD SUCCESSFUL in 17s
+
+    ./gradlew :core-sources:test :core-stubs:test
+    BUILD SUCCESSFUL in 4s
 
 ## Interfaces and Dependencies
 

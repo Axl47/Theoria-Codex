@@ -9,19 +9,20 @@ import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
-import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
-import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SourceHttpClient
-import com.theoriacodex.sources.media.inferMimeFromUrl
-import com.theoriacodex.sources.media.mimeFromFileExt
+import com.theoriacodex.sources.common.classifyHttpFailure
+import com.theoriacodex.sources.common.mimeFromUrlOrExt
+import com.theoriacodex.sources.common.parseJsonArray
+import com.theoriacodex.sources.common.parseJsonObject
+import com.theoriacodex.sources.common.sourceNetworkFailure
+import com.theoriacodex.sources.common.sourceQuickQuery
 import java.io.IOException
 
 class AibooruSourceAdapter(
@@ -86,29 +87,7 @@ class AibooruSourceAdapter(
     }
 
     override suspend fun quickQuery(kind: QuickQueryKind): Query {
-        val now = System.currentTimeMillis()
-        val dayMs = 24L * 60L * 60L * 1000L
-        val sort = when (kind) {
-            QuickQueryKind.POPULAR_TODAY -> SortMode.POPULAR
-            QuickQueryKind.TOP_7D -> SortMode.TOP
-            QuickQueryKind.TOP_30D -> SortMode.TOP
-            QuickQueryKind.NEWEST -> SortMode.NEWEST
-            QuickQueryKind.RANDOM -> SortMode.NEWEST
-        }
-        val dateRange = when (kind) {
-            QuickQueryKind.POPULAR_TODAY -> DateRange(now - dayMs, now)
-            QuickQueryKind.TOP_7D -> DateRange(now - 7L * dayMs, now)
-            QuickQueryKind.TOP_30D -> DateRange(now - 30L * dayMs, now)
-            QuickQueryKind.NEWEST, QuickQueryKind.RANDOM -> null
-        }
-        return Query(
-            mode = QueryMode.Source(SourceKey.AIBOORU),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = sort,
-            dateRange = dateRange,
-            minScore = null,
-        )
+        return sourceQuickQuery(source = SourceKey.AIBOORU, kind = kind)
     }
 
     override suspend fun resolvePost(id: PostId): Post? {
@@ -128,20 +107,12 @@ class AibooruSourceAdapter(
                 query = query,
             )
         } catch (error: IOException) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.NETWORK,
-                message = "AIBooru request failed",
-                cause = error,
-            )
+            sourceNetworkFailure("AIBooru", error)
         }
 
         if (response.statusCode !in 200..299) {
             throw SourceAdapterException(
-                reason = when (response.statusCode) {
-                    429 -> SourceFailureReason.RATE_LIMITED
-                    in 500..599 -> SourceFailureReason.NETWORK
-                    else -> SourceFailureReason.UNKNOWN
-                },
+                reason = classifyHttpFailure(response.statusCode),
                 message = "AIBooru request failed (${response.statusCode})",
             )
         }
@@ -153,19 +124,11 @@ class AibooruSourceAdapter(
     }
 
     private fun parseArray(body: String): JsonArray {
-        return runCatching { gson.fromJson(body, JsonArray::class.java) }.getOrNull()
-            ?: throw SourceAdapterException(
-                reason = SourceFailureReason.PARSE,
-                message = "AIBooru returned malformed JSON array",
-            )
+        return parseJsonArray(body = body, gson = gson, errorLabel = "AIBooru")
     }
 
     private fun parseObject(body: String): JsonObject {
-        return runCatching { gson.fromJson(body, JsonObject::class.java) }.getOrNull()
-            ?: throw SourceAdapterException(
-                reason = SourceFailureReason.PARSE,
-                message = "AIBooru returned malformed JSON object",
-            )
+        return parseJsonObject(body = body, gson = gson, errorLabel = "AIBooru")
     }
 
     private fun parsePost(raw: JsonObject): Post? {
@@ -177,8 +140,8 @@ class AibooruSourceAdapter(
             .orEmpty()
         val preview = raw.get("preview_file_url")?.asString
         val fullUrl = raw.get("file_url")?.asString ?: raw.get("large_file_url")?.asString
-        val fullMime = inferMimeFromUrl(fullUrl) ?: mimeFromFileExt(raw.get("file_ext")?.asString)
-        val previewMime = inferMimeFromUrl(preview) ?: fullMime
+        val fullMime = mimeFromUrlOrExt(fullUrl, raw.get("file_ext")?.asString)
+        val previewMime = mimeFromUrlOrExt(preview, null) ?: fullMime
         val created = raw.get("created_at")?.asString?.toLongOrNull()
             ?: raw.get("created_at")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asLong
 
