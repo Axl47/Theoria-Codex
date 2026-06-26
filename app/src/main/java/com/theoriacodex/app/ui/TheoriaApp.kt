@@ -141,6 +141,7 @@ import com.theoriacodex.app.viewer.ViewerScreen
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.mergeViewerPosts
 import com.theoriacodex.app.viewer.requiresLazyMediaResolution
+import com.theoriacodex.app.viewer.requiresViewerPostResolution
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.CodexSortMode
@@ -935,7 +936,8 @@ fun TheoriaApp(
     }
 
     fun requestViewerPostResolution(post: Post) {
-        if (!requiresLazyMediaResolution(post)) return
+        val streamSource = viewerSession?.context?.streamSource ?: ViewerStreamSource.SEARCH
+        if (!requiresViewerPostResolution(post, streamSource)) return
         scope.launch {
             val adapter = realRegistry.adapterFor(post.id.source) ?: return@launch
             val resolved = runCatching { adapter.resolvePost(post.id) }.getOrNull() ?: return@launch
@@ -964,7 +966,7 @@ fun TheoriaApp(
         if (posts.isEmpty()) return posts
         val startIndex = context.startIndex.coerceIn(0, posts.lastIndex)
         val selectedPost = posts[startIndex]
-        if (!requiresLazyMediaResolution(selectedPost)) return posts
+        if (!requiresViewerPostResolution(selectedPost, context.streamSource)) return posts
         val adapter = realRegistry.adapterFor(selectedPost.id.source) ?: return posts
         val resolved = runCatching { adapter.resolvePost(selectedPost.id) }.getOrNull() ?: return posts
         when (context.streamSource) {

@@ -256,10 +256,11 @@ fun ViewerScreen(
         selectedPost.id.sourcePostId,
         selectedPost.full?.url,
         selectedPost.full?.localPath,
+        launchContext.streamSource,
         onRequestPostResolution,
     ) {
         if (onRequestPostResolution == null) return@LaunchedEffect
-        if (!requiresLazyMediaResolution(selectedPost)) return@LaunchedEffect
+        if (!requiresViewerPostResolution(selectedPost, launchContext.streamSource)) return@LaunchedEffect
         if (resolutionRequestedByPostId.put(selectedPost.id, true) == true) return@LaunchedEffect
         onRequestPostResolution(selectedPost)
     }

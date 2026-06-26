@@ -1,6 +1,7 @@
 package com.theoriacodex.app.viewer
 
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -76,6 +77,30 @@ class ViewerSessionCoordinatorTest {
                 ),
             ),
         )
+    }
+
+    @Test
+    fun `codex remote source posts refresh without trusting stale media shape`() {
+        val staleGelbooruPost = samplePost(
+            source = SourceKey.GELBOORU,
+            full = ImageRef(url = "https://video-cdn.gelbooru.com/stale-media", localPath = null, mime = "image/jpeg"),
+            media = emptyList(),
+        )
+
+        assertTrue(requiresViewerPostResolution(staleGelbooruPost, ViewerStreamSource.CODEX))
+        assertTrue(requiresViewerPostResolution(staleGelbooruPost, ViewerStreamSource.RECENTS))
+        assertFalse(requiresViewerPostResolution(staleGelbooruPost, ViewerStreamSource.SEARCH))
+    }
+
+    @Test
+    fun `codex local cached posts do not refresh by source id`() {
+        val cachedGelbooruPost = samplePost(
+            source = SourceKey.GELBOORU,
+            full = ImageRef(url = "https://video-cdn.gelbooru.com/stale-media", localPath = "/cache/media", mime = "image/jpeg"),
+            media = emptyList(),
+        )
+
+        assertFalse(requiresViewerPostResolution(cachedGelbooruPost, ViewerStreamSource.CODEX))
     }
 
     @Test

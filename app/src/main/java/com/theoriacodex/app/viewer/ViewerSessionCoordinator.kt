@@ -3,6 +3,7 @@ package com.theoriacodex.app.viewer
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 
@@ -30,6 +31,17 @@ private val REFRESHABLE_REMOTE_VIDEO_SOURCES = setOf(
     SourceKey.RULE34GEN,
 )
 
+internal fun requiresViewerPostResolution(post: Post, streamSource: ViewerStreamSource): Boolean {
+    if (
+        streamSource == ViewerStreamSource.CODEX ||
+        streamSource == ViewerStreamSource.RECENTS
+    ) {
+        return post.id.source in REFRESHABLE_REMOTE_VIDEO_SOURCES &&
+            (hasRemotePrimaryMedia(post) || requiresLazyMediaResolution(post))
+    }
+    return requiresLazyMediaResolution(post)
+}
+
 internal fun requiresLazyMediaResolution(post: Post): Boolean {
     val mediaRefs = buildList {
         addAll(post.media)
@@ -44,6 +56,15 @@ internal fun requiresLazyMediaResolution(post: Post): Boolean {
     if (post.id.source !in LAZY_MEDIA_RESOLUTION_SOURCES) return false
     return mediaRefs.none { ref ->
         !ref.url.isNullOrBlank()
+    }
+}
+
+private fun hasRemotePrimaryMedia(post: Post): Boolean {
+    return buildList {
+        addAll(post.media)
+        post.full?.let { add(it) }
+    }.any { ref ->
+        !ref.url.isNullOrBlank() && ref.localPath.isNullOrBlank()
     }
 }
 
