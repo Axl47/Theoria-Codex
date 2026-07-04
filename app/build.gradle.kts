@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.testing.Test
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -109,4 +111,17 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+
+tasks.withType<Test>().configureEach {
+    systemProperty(
+        "theoria.liveSources",
+        providers.gradleProperty("theoria.liveSources").orElse("false").get(),
+    )
+    providers.gradleProperty("theoria.liveSources.sources").orNull?.let { sources ->
+        systemProperty("theoria.liveSources.sources", sources)
+    }
+    providers.gradleProperty("theoria.providerProbeCases").orNull?.let { caseFile ->
+        systemProperty("theoria.providerProbeCases", caseFile)
+    }
 }

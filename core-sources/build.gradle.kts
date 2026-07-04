@@ -25,5 +25,12 @@ tasks.register<JavaExec>("providerHealthCheck") {
         "theoria.liveProviders",
         providers.gradleProperty("theoria.liveProviders").orElse("false").get(),
     )
+    systemProperty(
+        "theoria.liveSources.strict",
+        providers.gradleProperty("theoria.liveSources.strict").orElse("false").get(),
+    )
+    providers.gradleProperty("theoria.providerProbeCases").orNull?.let { caseFile ->
+        systemProperty("theoria.providerProbeCases", caseFile)
+    }
     args(layout.buildDirectory.file("reports/provider-health/provider-health.json").get().asFile.absolutePath)
 }

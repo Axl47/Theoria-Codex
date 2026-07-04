@@ -1,6 +1,6 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-06-25T09:35
+updated_at: 2026-07-04T20:33
 ---
 # Theoria Codex
 
@@ -13,6 +13,7 @@ Recent updates:
 - Recents replaces Explore as the second top-level tab, with persistent Watched history by default, applied Search history in v1, full-list Viewer reopening from watched posts, and independent clear actions.
 - Search provider status chips and empty-state errors now use clearer source-specific messages for missing account setup, expired auth, rate limits, blocked/unreachable providers, parser changes, and unknown failures.
 - Viewer session media-resolution policy and Codex import/export payload rules now live in focused app modules with unit tests, reducing the amount of workflow logic embedded directly in `TheoriaApp.kt`.
+- Live source health checks now cover seeded searches, tag autocomplete/trending, resolve behavior, and media metadata per source. An opt-in app smoke also runs real SearchCoordinator routes and media URL header checks before releases.
 - Settings can now show last-known provider health per source, and developers can run `./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true` to write a live JSON health report under `core-sources/build/reports/provider-health/`.
 - Search, Viewer, Codex, and Creator Profile now share media and copy-action selection, so post URLs, tag-copy output, thumbnails, playback candidates, and device downloads use the same source-aware rules.
 - Viewer multi-image posts now include a Gallery toggle that opens a two-column page grid and jumps back to full-view mode when a page is selected.
@@ -69,6 +70,16 @@ Debug builds now use `applicationIdSuffix ".debug"` and `versionNameSuffix "-deb
 
 Opt-in live provider health report:
     ./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true
+
+Opt-in live app source-route smoke:
+    ./gradlew :app:testDebugUnitTest -Ptheoria.liveSources=true --tests '*LiveSearchCoordinatorRouteTest*'
+
+Credential-gated live checks use these environment variables when available:
+    THEORIA_PIXIV_ACCESS_TOKEN
+    THEORIA_GELBOORU_USER_ID
+    THEORIA_GELBOORU_API_KEY
+    THEORIA_RULE34XXX_USER_ID
+    THEORIA_RULE34XXX_API_KEY
 
 Tag store update helper:
     python3 scripts/update_tag_store.py --source PIXIV --input /path/to/tags.txt

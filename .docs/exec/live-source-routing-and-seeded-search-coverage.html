@@ -176,14 +176,14 @@
     <h1>ExecPlan: Live Source Routing and Seeded Search Coverage</h1>
     <p>This plan adds opt-in tests and reports that prove Theoria Codex sources still work against the live web: seeded searches return posts, tag autocomplete/trending paths behave by source, media URLs are reachable with app request headers, and the app-level Search workflow routes through <code>RealAdapterRegistry</code> and <code>SearchCoordinator</code> instead of only direct adapter tests.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Proposed</span>
+      <span class="pill">Status: Implemented</span>
       <span class="pill">Owner: Codex</span>
       <span class="pill">Created: 2026-07-04</span>
       <span class="pill">Updated: 2026-07-04</span>
       <span class="pill">Plan file: .docs/exec/live-source-routing-and-seeded-search-coverage.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Implement Phase 1: define source probe cases and extend the live provider health model.</div>
+      <div class="card"><strong>Next Action</strong>Use the opt-in live commands before releases; keep source seeds current when provider drift is reported.</div>
       <div class="card"><strong>Main Risk</strong>Live provider checks are inherently flaky. Keep them opt-in, time-bounded, report-rich, and separate from default JVM tests.</div>
       <div class="card"><strong>Validation</strong>Default Gradle tests stay green offline; live checks run only with <code>-Ptheoria.liveSources=true</code> or existing <code>-Ptheoria.liveProviders=true</code>.</div>
       <div class="card"><strong>Affected Areas</strong><code>core-sources</code> health tooling, app Search coordinator tests, app media header policy, Gradle task wiring, docs.</div>
@@ -222,11 +222,11 @@
           <tr><th>File or module</th><th>Current role</th><th>Coverage gap</th></tr>
         </thead>
         <tbody>
-          <tr><td><code>core-sources/src/main/kotlin/com/theoriacodex/sources/health/ProviderHealth.kt</code></td><td>Opt-in live health model and checker.</td><td>Only runs a <code>QuickQueryKind.NEWEST</code> search and records item count.</td></tr>
-          <tr><td><code>core-sources/src/main/kotlin/com/theoriacodex/sources/health/ProviderHealthCheckCli.kt</code></td><td>CLI entry point for <code>:core-sources:providerHealthCheck</code>.</td><td>No seeded cases, no per-step report, no strict failure mode, and no app-route checks.</td></tr>
-          <tr><td><code>core-sources/src/test/kotlin/com/theoriacodex/sources/health/ProviderHealthCheckerTest.kt</code></td><td>Deterministic tests for OK/degraded/failed/skipped statuses.</td><td>Needs new tests for step-level outcomes, seeded cases, and typed HTTP/status messages.</td></tr>
-          <tr><td><code>app/src/main/java/com/theoriacodex/app/search/SearchCoordinator.kt</code></td><td>Actual app search workflow: source mode, unified mode, autocomplete, trending tags, result merge, status reporting.</td><td>No opt-in live test runs this coordinator with <code>RealAdapterRegistry</code>.</td></tr>
-          <tr><td><code>app/src/main/java/com/theoriacodex/app/source/SourceMetadata.kt</code></td><td>App media request header policy: referer and user agent by <code>SourceKey</code>.</td><td>Live media URL checks should use these headers so a false 403 from missing referer does not misdiagnose a source.</td></tr>
+          <tr><td><code>core-sources/src/main/kotlin/com/theoriacodex/sources/health/ProviderHealth.kt</code></td><td>Opt-in live health model, seeded probe cases, and step runner.</td><td>Now reports newest search, seeded search, autocomplete, trending, resolve, and media metadata per source.</td></tr>
+          <tr><td><code>core-sources/src/main/kotlin/com/theoriacodex/sources/health/ProviderHealthCheckCli.kt</code></td><td>CLI entry point for <code>:core-sources:providerHealthCheck</code>.</td><td>Now writes aggregate and step-level JSON, supports custom case files, and can fail in strict mode.</td></tr>
+          <tr><td><code>core-sources/src/test/kotlin/com/theoriacodex/sources/health/ProviderHealthCheckerTest.kt</code></td><td>Deterministic tests for OK/degraded/failed/skipped statuses and probe routing.</td><td>Protects probe case parsing, credential skips, and seeded/autocomplete/trending/resolve/media step mapping without network access.</td></tr>
+          <tr><td><code>app/src/test/java/com/theoriacodex/app/search/LiveSearchCoordinatorRouteTest.kt</code></td><td>Opt-in app live smoke for the real Search workflow.</td><td>Runs <code>SearchCoordinator</code> through <code>RealAdapterRegistry</code>, source-mode seeded searches, autocomplete/trending, and media URL byte-range checks.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/source/SourceMetadata.kt</code></td><td>App media request header policy: referer and user agent by <code>SourceKey</code>.</td><td>The live media probe uses these headers so 403/404 results map to app behavior.</td></tr>
           <tr><td><code>app/src/main/assets/tag_store.json</code></td><td>Seed tag data used by app autocomplete cache.</td><td>Can inform probe seeds, but live probe cases should live in versioned test/health config so source-specific expectations are explicit.</td></tr>
         </tbody>
       </table>
@@ -244,7 +244,7 @@
         <table class="status-table">
           <tbody>
             <tr><td>Goal</td><td>A future source check reports exact step outcomes instead of one generic provider status.</td></tr>
-            <tr><td>Specific edits</td><td>Add <code>ProviderProbeCase</code>, <code>ProviderProbeStepResult</code>, and <code>ProviderProbeReport</code> under <code>core-sources/src/main/kotlin/com/theoriacodex/sources/health/</code>. Add default cases under <code>core-sources/src/main/resources/provider-probes/source-probe-cases.json</code> or a Kotlin object if resources are not already wired. Keep source cases overrideable via a Gradle property such as <code>-Ptheoria.providerProbeCases=/absolute/path.json</code>.</td></tr>
+          <tr><td>Specific edits</td><td>Added <code>ProviderProbeCase</code> and <code>ProviderProbeStepResult</code> under <code>core-sources/src/main/kotlin/com/theoriacodex/sources/health/</code>. Default cases live in a Kotlin object and remain overrideable via <code>-Ptheoria.providerProbeCases=/absolute/path.json</code>.</td></tr>
             <tr><td>Seed shape</td><td>Each case should define <code>source</code>, <code>mode</code>, <code>includeTags</code>, <code>autocompletePrefix</code>, <code>strictTagEcho</code>, <code>requiresCredentials</code>, and <code>mediaProbe</code>. Use stable, broad tags from existing source tests and <code>tag_store.json</code>; avoid brittle trend-only tags.</td></tr>
             <tr><td>Commands</td><td><code>./gradlew :core-sources:test</code></td></tr>
             <tr><td>Acceptance</td><td>Deterministic unit tests prove case parsing, missing/invalid case handling, and result status mapping without network access.</td></tr>
@@ -286,7 +286,7 @@
         <table class="status-table">
           <tbody>
             <tr><td>Goal</td><td>Detect media URLs that search successfully but fail when the app tries to load or download them.</td></tr>
-            <tr><td>Specific edits</td><td>Add an app-side live media probe helper under <code>app/src/test/java/com/theoriacodex/app/media/</code> or include it in the live route test. Use <code>postDownloadMediaCandidate(post)</code> to select media and <code>SourceKey.requestHeaders()</code> with <code>DefaultSourceHttpClient.get()</code>. Include <code>Range: bytes=0-0</code> where safe to avoid large downloads.</td></tr>
+            <tr><td>Specific edits</td><td>Added the app-side live media probe inside <code>LiveSearchCoordinatorRouteTest</code>. It uses <code>postDownloadMediaCandidate(post)</code> to select media and applies the candidate's app request headers to a bounded <code>Range: bytes=0-0</code> request to avoid large downloads.</td></tr>
             <tr><td>Commands</td><td><code>./gradlew :app:testDebugUnitTest -Ptheoria.liveSources=true --tests '*Live*'</code></td></tr>
             <tr><td>Acceptance</td><td>For each source with a media candidate, the probe reports HTTP 2xx/3xx as OK, HTTP 403/404 as failed, and unsupported/credential-gated media as skipped with a clear reason. The failure message includes the sanitized URL host/path and source, not just "Unknown error".</td></tr>
           </tbody>
@@ -350,11 +350,11 @@
       <ul>
         <li>[x] 2026-07-04 - Inspected existing source tests, <code>ProviderHealthChecker</code>, <code>ProviderHealthCheckCli</code>, <code>RealAdapterRegistry</code>, <code>SearchCoordinator</code>, <code>SourceMetadata</code>, and <code>tag_store.json</code>.</li>
         <li>[x] 2026-07-04 - Created this ExecPlan for opt-in live source routing, seeded search, tag behavior, and media reachability coverage.</li>
-        <li>[ ] Phase 1 - Define probe cases and result model.</li>
-        <li>[ ] Phase 2 - Expand opt-in source-level live health.</li>
-        <li>[ ] Phase 3 - Add app-level live SearchCoordinator route smoke.</li>
-        <li>[ ] Phase 4 - Probe media URL reachability with app headers.</li>
-        <li>[ ] Phase 5 - Update reporting, docs, and release workflow.</li>
+        <li>[x] Phase 1 - Defined probe cases and result model. Evidence: <code>./gradlew :core-sources:test :core-sources:providerHealthCheck</code>.</li>
+        <li>[x] Phase 2 - Expanded opt-in source-level live health. Evidence: <code>./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true</code>.</li>
+        <li>[x] Phase 3 - Added app-level live SearchCoordinator route smoke. Evidence: <code>./gradlew :app:testDebugUnitTest -Ptheoria.liveSources=true --tests '*LiveSearchCoordinatorRouteTest*'</code>.</li>
+        <li>[x] Phase 4 - Probed media URL reachability with app headers. Evidence: <code>./gradlew :app:testDebugUnitTest -Ptheoria.liveSources=true --tests '*LiveSearchCoordinatorRouteTest*'</code>.</li>
+        <li>[x] Phase 5 - Updated reporting, docs, and release workflow. Evidence: <code>./gradlew lint test :app:compileDebugAndroidTestKotlin</code>.</li>
       </ul>
 
       <h3>Surprises And Discoveries</h3>
@@ -363,6 +363,8 @@
         <li>Observation: app exposure differs from adapter availability. Evidence: <code>RealAdapterRegistry</code> supports AIBooru, but <code>SourceMetadata.exposedRealSources()</code> does not expose AIBooru and gates Rule34XXX behind configuration.</li>
         <li>Observation: app media reachability needs app-module header policy. Evidence: <code>SourceMetadata.requestHeaders()</code> lives in the app module, while source adapters live in <code>core-sources</code>.</li>
         <li>Observation: there is already broad deterministic tag/contract coverage through <code>core-stubs/src/test/kotlin/com/theoriacodex/stubs/StubProviderContractTest.kt</code> and source adapter fixture tests. The missing coverage is live drift and app-route integration, not basic domain contracts.</li>
+        <li>Observation: the first full app live smoke found real provider drift. Evidence: Gelbooru returned 401 without credentials, and Rule34Gen seeded search returned no posts because its search markup now uses <code>div.item.thumb a.th[href]</code>. Follow-up: Gelbooru is now credential-gated in default probe cases, and <code>Rule34GenSourceAdapter</code> now supports the current thumbnail selector.</li>
+        <li>Observation: the final live report had no hard failures without credentials. Evidence: <code>Provider health: ok=3, degraded=3, failed=0, skipped=3</code>, with AIBooru, Rule34Gen, and Rule34Paheal OK; Iwara, NHentai, and Rule34Video degraded only on autocomplete/trending softness; Pixiv, Gelbooru, and Rule34XXX skipped for missing credentials.</li>
       </ul>
 
       <h3>Decision Log</h3>
@@ -370,10 +372,12 @@
         <li>Decision: keep all live work opt-in. Rationale: live providers can rate limit, block, change domains, or require credentials, so normal CI must remain deterministic. Date/Author: 2026-07-04 / Codex.</li>
         <li>Decision: add app-level route smoke in <code>app/src/test</code> rather than only expanding <code>core-sources</code>. Rationale: the user specifically wants real app routing paths, and <code>SearchCoordinator</code> is where tags, settings, history, statuses, and source-mode routing meet. Date/Author: 2026-07-04 / Codex.</li>
         <li>Decision: use strict mode as a separate flag. Rationale: source drift should be visible in reports by default, while release verification can opt into failing the command when required checks break. Date/Author: 2026-07-04 / Codex.</li>
+        <li>Decision: treat Gelbooru as credential-gated in default live probes. Rationale: live API calls currently return 401 without <code>THEORIA_GELBOORU_USER_ID</code> and <code>THEORIA_GELBOORU_API_KEY</code>, so no-credential smoke runs should skip it while credentialed release checks can still exercise it. Date/Author: 2026-07-04 / Codex.</li>
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>Planning only. Implementation has not started. The plan identifies four useful additions: richer live source probes, app-level SearchCoordinator live routing, media URL reachability with app headers, and release-friendly reporting.</p>
+      <p>Implemented. The default lane remains offline and deterministic, while the live lane now has two useful layers: a source-level JSON report for adapter drift and an app-level strict smoke that proves public app-exposed routes can search, resolve tag suggestions, and reach media URLs with app headers.</p>
+      <p>The implementation also fixed one real drift bug discovered by the new tests: Rule34Gen search parsing now accepts its current thumbnail markup. Current no-credential live status is: AIBooru OK at source level but not app-exposed, Rule34Gen OK, Rule34Paheal OK, Iwara/NHentai/Rule34Video degraded only on soft tag routes, and Pixiv/Gelbooru/Rule34XXX skipped until credentials are supplied.</p>
     </section>
 
     <section id="recovery">

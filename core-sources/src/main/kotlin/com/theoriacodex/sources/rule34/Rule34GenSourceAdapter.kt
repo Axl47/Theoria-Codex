@@ -24,17 +24,21 @@ class Rule34GenSourceAdapter(
     }
 
     override fun parseSearchPage(document: Document, includeTags: List<String>) = document
-        .select("div.cards__item a.card[href]")
+        .select("div.item.thumb a.th[href], div.cards__item a.card[href]")
         .mapNotNull { anchor ->
             val pageUrl = anchor.attr("abs:href").ifBlank { anchor.attr("href") }
             val sourcePostId = RULE34GEN_ID_REGEX.find(pageUrl)?.groupValues?.getOrNull(1) ?: return@mapNotNull null
             val image = anchor.selectFirst("img")
+            val previewVideoUrl = anchor.selectFirst("div[data-preview]")
+                ?.attr("data-preview")
+                ?.trim()
+                ?.ifBlank { null }
             searchPost(
                 pageUrl = pageUrl,
                 sourcePostId = sourcePostId,
                 title = anchor.attr("title").trim().ifBlank { null },
                 previewUrl = image?.attr("data-original")?.ifBlank { image.attr("src") },
-                previewVideoUrl = image?.attr("data-preview")?.ifBlank { null },
+                previewVideoUrl = previewVideoUrl ?: image?.attr("data-preview")?.ifBlank { null },
                 includeTags = includeTags,
                 durationMs = parseRule34DurationMs(
                     anchor.selectFirst(".duration, .time, time, [data-duration]")?.let { element ->

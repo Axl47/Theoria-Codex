@@ -16,6 +16,7 @@ fun main(args: Array<String>) = runBlocking {
         ?.let(::File)
         ?: File("build/reports/provider-health/provider-health.json")
     val liveEnabled = System.getProperty("theoria.liveProviders") == "true"
+    val strictMode = System.getProperty("theoria.liveSources.strict") == "true"
     val gson = GsonBuilder().setPrettyPrinting().create()
     val report = if (liveEnabled) {
         val registry = RealAdapterRegistry(
@@ -23,10 +24,16 @@ fun main(args: Array<String>) = runBlocking {
             httpClient = DefaultSourceHttpClient(connectTimeoutMs = 8_000, readTimeoutMs = 12_000, maxRetries = 0),
             exposedSources = SourceKey.entries.toSet(),
         )
+        val probeCases = loadProbeCases()
+        val probeResults = ProviderProbeRunner(
+            registry = registry,
+            credentialedSources = credentialedSourcesFromEnvironment(),
+        ).runAll(probeCases)
         ProviderHealthReport(
             liveProvidersEnabled = true,
             generatedAtEpochMs = System.currentTimeMillis(),
-            results = ProviderHealthChecker(registry).checkAll(SourceKey.entries),
+            results = aggregateProbeResults(probeResults),
+            probeResults = probeResults,
         )
     } else {
         ProviderHealthReport(
@@ -39,6 +46,68 @@ fun main(args: Array<String>) = runBlocking {
     outputFile.parentFile?.mkdirs()
     outputFile.writeText(gson.toJson(report))
     printSummary(report, outputFile)
+    if (strictMode && report.probeResults.any { it.status == ProviderHealthStatus.FAILED }) {
+        error("Strict live source health failed. See report: ${outputFile.absolutePath}")
+    }
+}
+
+private fun loadProbeCases(): List<ProviderProbeCase> {
+    val caseFile = System.getProperty("theoria.providerProbeCases")
+        ?.takeIf(String::isNotBlank)
+        ?.let(::File)
+    if (caseFile == null) return ProviderProbeCases.defaults
+    return ProviderProbeCases.fromJson(caseFile.readText())
+}
+
+private fun credentialedSourcesFromEnvironment(): Set<SourceKey> {
+    return buildSet {
+        if (!System.getenv("THEORIA_PIXIV_ACCESS_TOKEN").isNullOrBlank()) {
+            add(SourceKey.PIXIV)
+        }
+        if (
+            !System.getenv("THEORIA_RULE34XXX_USER_ID").isNullOrBlank() &&
+            !System.getenv("THEORIA_RULE34XXX_API_KEY").isNullOrBlank()
+        ) {
+            add(SourceKey.RULE34XXX)
+        }
+        if (
+            !System.getenv("THEORIA_GELBOORU_USER_ID").isNullOrBlank() &&
+            !System.getenv("THEORIA_GELBOORU_API_KEY").isNullOrBlank()
+        ) {
+            add(SourceKey.GELBOORU)
+        }
+    }
+}
+
+private fun aggregateProbeResults(probeResults: List<ProviderProbeStepResult>): List<ProviderHealthCheckResult> {
+    return probeResults
+        .groupBy { it.source }
+        .toSortedMap(compareBy { it.name })
+        .map { (source, sourceResults) ->
+            val status = when {
+                sourceResults.any { it.status == ProviderHealthStatus.FAILED } -> ProviderHealthStatus.FAILED
+                sourceResults.any { it.status == ProviderHealthStatus.DEGRADED } -> ProviderHealthStatus.DEGRADED
+                sourceResults.all { it.status == ProviderHealthStatus.SKIPPED } -> ProviderHealthStatus.SKIPPED
+                else -> ProviderHealthStatus.OK
+            }
+            val firstProblem = sourceResults.firstOrNull {
+                it.status == ProviderHealthStatus.FAILED || it.status == ProviderHealthStatus.DEGRADED
+            } ?: sourceResults.firstOrNull()
+            ProviderHealthCheckResult(
+                source = source,
+                checkName = "source-probe",
+                status = status,
+                latencyMs = sourceResults.sumOf { it.latencyMs },
+                failureReason = firstProblem?.failureReason,
+                message = sourceResults
+                    .groupingBy { it.status }
+                    .eachCount()
+                    .entries
+                    .joinToString(", ") { (stepStatus, count) -> "${stepStatus.name.lowercase()}=$count" }
+                    .ifBlank { firstProblem?.message.orEmpty() },
+                checkedAtEpochMs = firstProblem?.checkedAtEpochMs ?: System.currentTimeMillis(),
+            )
+        }
 }
 
 private fun printSummary(report: ProviderHealthReport, outputFile: File) {
@@ -59,6 +128,17 @@ private fun printSummary(report: ProviderHealthReport, outputFile: File) {
             result.message,
         ).joinToString(" | ")
         println("${result.source.name}: ${result.status.name}${if (suffix.isBlank()) "" else " ($suffix)"}")
+    }
+    if (report.probeResults.isNotEmpty()) {
+        println("Provider probe steps:")
+        report.probeResults.forEach { result ->
+            val suffix = listOfNotNull(
+                "${result.latencyMs}ms",
+                result.failureReason?.name,
+                result.message,
+            ).joinToString(" | ")
+            println("${result.source.name}/${result.checkName}: ${result.status.name}${if (suffix.isBlank()) "" else " ($suffix)"}")
+        }
     }
     println("Report: ${outputFile.absolutePath}")
 }
