@@ -130,8 +130,28 @@ class NhentaiSourceAdapter(
             url = NHENTAI_GALLERIES_ALL_URL,
             query = mapOf("page" to "1"),
         ))
+        val galleryIds = root.optionalJsonArray("result")
+            .orEmpty()
+            .asSequence()
+            .mapNotNull { element ->
+                element
+                    .takeIf(JsonElement::isJsonObject)
+                    ?.asJsonObject
+                    ?.get("id")
+                    .asIntOrNull()
+            }
+            .distinct()
+            .take(NHENTAI_TRENDING_GALLERY_SAMPLE_SIZE)
+            .toList()
+        val detailedGalleries = galleryIds.mapNotNull { galleryId ->
+            requestJsonObject(
+                url = "$NHENTAI_GALLERY_URL_PREFIX/$galleryId",
+                query = emptyMap(),
+                allowNotFound = true,
+            )
+        }
         return collectTagSuggestions(
-            galleries = root.optionalJsonArray("result").orEmpty(),
+            galleries = detailedGalleries,
             prefix = null,
             limit = limit,
         )
@@ -1053,6 +1073,7 @@ private const val NHENTAI_GALLERY_URL_PREFIX = "https://nhentai.net/api/v2/galle
 private const val NHENTAI_TAGS_SEARCH_URL = "https://nhentai.net/api/v2/tags/search"
 private const val NHENTAI_IMAGES_BASE = "https://i.nhentai.net"
 private const val NHENTAI_THUMBS_BASE = "https://t.nhentai.net"
+private const val NHENTAI_TRENDING_GALLERY_SAMPLE_SIZE = 6
 private const val JINA_MIRROR_BASE = "https://r.jina.ai/http://"
 private val NHENTAI_METADATA_MIRROR_BASES = listOf(
     "https://nhentai.to",

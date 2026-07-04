@@ -363,6 +363,33 @@ class IwaraSourceAdapterTest {
     }
 
     @Test
+    fun `autocomplete tags filters provider response before limiting`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "count": 4,
+                      "limit": 32,
+                      "page": 0,
+                      "results": [
+                        {"id": "1080p", "type": "general", "sensitive": false},
+                        {"id": "120fps", "type": "general", "sensitive": false},
+                        {"id": "3ds_max", "type": "general", "sensitive": false},
+                        {"id": "3d_custom_girl", "type": "source", "sensitive": false}
+                      ]
+                    }
+                """.trimIndent(),
+            )
+        }
+        val adapter = IwaraSourceAdapter(httpClient = httpClient)
+
+        val suggestions = adapter.autocompleteTags(prefix = "3d", limit = 2)
+
+        assertEquals(listOf("3ds_max", "3d_custom_girl"), suggestions.map { it.text })
+    }
+
+    @Test
     fun `trending tags aggregates recent feed tag frequencies`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(

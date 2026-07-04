@@ -364,7 +364,7 @@
         <li>Observation: app media reachability needs app-module header policy. Evidence: <code>SourceMetadata.requestHeaders()</code> lives in the app module, while source adapters live in <code>core-sources</code>.</li>
         <li>Observation: there is already broad deterministic tag/contract coverage through <code>core-stubs/src/test/kotlin/com/theoriacodex/stubs/StubProviderContractTest.kt</code> and source adapter fixture tests. The missing coverage is live drift and app-route integration, not basic domain contracts.</li>
         <li>Observation: the first full app live smoke found real provider drift. Evidence: Gelbooru returned 401 without credentials, and Rule34Gen seeded search returned no posts because its search markup now uses <code>div.item.thumb a.th[href]</code>. Follow-up: Gelbooru is now credential-gated in default probe cases, and <code>Rule34GenSourceAdapter</code> now supports the current thumbnail selector.</li>
-        <li>Observation: the final live report had no hard failures without credentials. Evidence: <code>Provider health: ok=3, degraded=3, failed=0, skipped=3</code>, with AIBooru, Rule34Gen, and Rule34Paheal OK; Iwara, NHentai, and Rule34Video degraded only on autocomplete/trending softness; Pixiv, Gelbooru, and Rule34XXX skipped for missing credentials.</li>
+        <li>Observation: the first final live report had no hard failures but still had soft tag-route degradation. Follow-up fixes made Iwara autocomplete filter the provider response before limiting, NHentai trending sample detail-backed gallery tags, and Rule34Video trending fall back to prefixed tag lookup when the default tag endpoint is empty. Evidence after fixes: <code>Provider health: ok=6, degraded=0, failed=0, skipped=3</code>.</li>
       </ul>
 
       <h3>Decision Log</h3>
@@ -377,7 +377,7 @@
 
       <h3>Outcomes And Retrospective</h3>
       <p>Implemented. The default lane remains offline and deterministic, while the live lane now has two useful layers: a source-level JSON report for adapter drift and an app-level strict smoke that proves public app-exposed routes can search, resolve tag suggestions, and reach media URLs with app headers.</p>
-      <p>The implementation also fixed one real drift bug discovered by the new tests: Rule34Gen search parsing now accepts its current thumbnail markup. Current no-credential live status is: AIBooru OK at source level but not app-exposed, Rule34Gen OK, Rule34Paheal OK, Iwara/NHentai/Rule34Video degraded only on soft tag routes, and Pixiv/Gelbooru/Rule34XXX skipped until credentials are supplied.</p>
+      <p>The implementation also fixed real drift and soft route issues discovered by the new tests: Rule34Gen search parsing now accepts its current thumbnail markup, Iwara autocomplete filters unhelpful provider results, NHentai trending resolves latest gallery details to real tag objects, and Rule34Video trending falls back to prefixed tag lookup when the default endpoint is empty. Current no-credential live status is: six sources OK and Pixiv/Gelbooru/Rule34XXX skipped until credentials are supplied.</p>
     </section>
 
     <section id="recovery">

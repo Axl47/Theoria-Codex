@@ -377,6 +377,61 @@ class NhentaiSourceAdapterTest {
     }
 
     @Test
+    fun `trending tags samples gallery details to rank tag objects`() = runTest {
+        val httpClient = QueueHttpClient(
+            SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "result": [
+                        {"id": 101, "tag_ids": [1, 2]},
+                        {"id": 102, "tag_ids": [1, 3]}
+                      ],
+                      "num_pages": 1
+                    }
+                """.trimIndent(),
+            ),
+            SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "id": 101,
+                      "tags": [
+                        {"id": 1, "type": "language", "name": "english", "slug": "english", "count": 141927},
+                        {"id": 2, "type": "tag", "name": "big breasts", "slug": "big-breasts", "count": 224436}
+                      ]
+                    }
+                """.trimIndent(),
+            ),
+            SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "id": 102,
+                      "tags": [
+                        {"id": 1, "type": "language", "name": "english", "slug": "english", "count": 141927},
+                        {"id": 3, "type": "category", "name": "doujinshi", "slug": "doujinshi", "count": 490863}
+                      ]
+                    }
+                """.trimIndent(),
+            ),
+        )
+        val adapter = NhentaiSourceAdapter(httpClient = httpClient, minRequestIntervalMs = 0L)
+
+        val suggestions = adapter.trendingTags(limit = 3)
+
+        assertEquals(
+            listOf(
+                "https://nhentai.net/api/v2/galleries",
+                "https://nhentai.net/api/v2/galleries/101",
+                "https://nhentai.net/api/v2/galleries/102",
+            ),
+            httpClient.requests.map { it.url },
+        )
+        assertEquals(listOf("doujinshi", "big breasts", "english"), suggestions.map { it.text })
+    }
+
+    @Test
     fun `resolve post maps v2 gallery details with page paths`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(

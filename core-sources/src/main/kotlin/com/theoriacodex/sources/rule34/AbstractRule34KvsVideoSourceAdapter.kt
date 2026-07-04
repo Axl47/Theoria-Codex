@@ -60,8 +60,28 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
         return runCatching {
             request("$baseUrl/tags_json.php?id=true&advanced_search=true")
         }.map { body ->
-            parseTagSuggestionsFromSelect2(body, gson, "trending").take(limit)
+            parseTagSuggestionsFromSelect2(body, gson, "trending").take(limit).ifEmpty {
+                fallbackTrendingTags(limit)
+            }
         }.getOrDefault(emptyList())
+    }
+
+    private suspend fun fallbackTrendingTags(limit: Int): List<TagSuggestion> {
+        val prefixes = listOf("anim", "anime", "large", "girl")
+        val suggestions = linkedMapOf<String, TagSuggestion>()
+        prefixes.forEach { prefix ->
+            if (suggestions.size >= limit) return@forEach
+            runCatching {
+                request("$baseUrl/tags_json.php?id=true&advanced_search=true&q=${encodePathSegment(prefix)}")
+            }.getOrNull()
+                ?.let { body -> parseTagSuggestionsFromSelect2(body, gson, "trending") }
+                ?.forEach { suggestion ->
+                    if (suggestions.size < limit) {
+                        suggestions.putIfAbsent(suggestion.text.lowercase(), suggestion.copy(type = "trending"))
+                    }
+                }
+        }
+        return suggestions.values.take(limit)
     }
 
     override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {

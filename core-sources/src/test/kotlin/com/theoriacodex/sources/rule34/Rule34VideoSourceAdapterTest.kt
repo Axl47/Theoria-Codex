@@ -49,6 +49,27 @@ class Rule34VideoSourceAdapterTest {
         assertTrue(post?.canonicalTags?.contains("HorizontalSlope") == true)
     }
 
+    @Test
+    fun `trending tags falls back to prefixed tag lookup when provider returns empty default`() = runTest {
+        val httpClient = QueueHttpClient(
+            SourceHttpResponse(statusCode = 200, body = """{"total_count":0,"items":"","pagination":{"more":0}}"""),
+            SourceHttpResponse(statusCode = 200, body = SAMPLE_RULE34VIDEO_TAGS_JSON),
+        )
+        val adapter = Rule34VideoSourceAdapter(httpClient = httpClient)
+
+        val tags = adapter.trendingTags(limit = 2)
+
+        assertEquals(
+            listOf(
+                "https://rule34video.com/tags_json.php?id=true&advanced_search=true",
+                "https://rule34video.com/tags_json.php?id=true&advanced_search=true&q=anim",
+            ),
+            httpClient.requests.map { it.url },
+        )
+        assertEquals(listOf("animation", "anime"), tags.map { it.text })
+        assertEquals(listOf("trending", "trending"), tags.map { it.type })
+    }
+
     private fun sampleQuery(): Query {
         return Query(
             mode = QueryMode.Source(SourceKey.RULE34VIDEO),
@@ -58,6 +79,30 @@ class Rule34VideoSourceAdapterTest {
             dateRange = null,
             minScore = null,
         )
+    }
+
+    private class QueueHttpClient(
+        vararg responses: SourceHttpResponse,
+    ) : com.theoriacodex.sources.http.SourceHttpClient {
+        val requests = mutableListOf<com.theoriacodex.sources.testing.RecordedRequest>()
+        private val queue = ArrayDeque(responses.toList())
+
+        override suspend fun get(
+            url: String,
+            query: Map<String, String>,
+            headers: Map<String, String>,
+        ): SourceHttpResponse {
+            requests += com.theoriacodex.sources.testing.RecordedRequest(url, query, headers)
+            return queue.removeFirst()
+        }
+
+        override suspend fun postForm(
+            url: String,
+            form: Map<String, String>,
+            headers: Map<String, String>,
+        ): SourceHttpResponse {
+            error("POST is not used by Rule34Video tests")
+        }
     }
 }
 
@@ -105,4 +150,15 @@ private const val SAMPLE_RULE34VIDEO_POST_HTML = """
     </script>
   </body>
 </html>
+"""
+
+private const val SAMPLE_RULE34VIDEO_TAGS_JSON = """
+{
+  "total_count": 2,
+  "items": [
+    {"id": "1144", "title": "animation", "total": "19538"},
+    {"id": "1203", "title": "anime", "total": "4229"}
+  ],
+  "pagination": {"more": 0}
+}
 """

@@ -120,6 +120,9 @@ class IwaraSourceAdapter(
                     count = null,
                 )
             }
+            ?.filter { suggestion ->
+                suggestion.text.contains(normalized, ignoreCase = true)
+            }
             ?.take(limit)
             .orEmpty()
     }
