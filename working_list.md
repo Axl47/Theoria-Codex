@@ -1,15 +1,22 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-06-25T09:35:00Z
+updated_at: 2026-07-04T19:07:35Z
 ---
 # Working List
 
 ## Pending
 - [ ] Manual device acceptance for Recents behavior
+- [ ] Implement code quality Phase 1: restore green lint
+- [ ] Implement code quality Phase 2: harden file-backed persistence
+- [ ] Implement code quality Phase 3: consolidate media request and download policy
+- [ ] Implement code quality Phase 4: split `TheoriaApp.kt` workflows
+- [ ] Implement code quality Phase 5: modernize tests and add UI smoke coverage
 
 ## In Progress
 
 ## Done
+- [x] Create code quality hardening and modularization ExecPlan
+- [x] Register code quality hardening ExecPlan in `AGENTS.md`
 - [x] Implement Recents tab after plan approval
 - [x] Replace Explore with Recents UI/navigation (`./gradlew :app:testDebugUnitTest`)
 - [x] Update docs and run focused verification (`./gradlew :app:compileDebugKotlin :app:assembleDebug`)

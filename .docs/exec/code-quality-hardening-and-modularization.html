@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Code Quality Hardening and Modularization</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f4;
+      --surface: #ffffff;
+      --text: #202124;
+      --muted: #5f6368;
+      --border: #d7d7d0;
+      --accent: #0f766e;
+      --accent-soft: #dff3ef;
+      --risk: #9a3412;
+      --risk-soft: #ffedd5;
+      --code: #111827;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151716;
+        --surface: #202321;
+        --text: #f0f2ef;
+        --muted: #b8beb7;
+        --border: #3a403c;
+        --accent: #5eead4;
+        --accent-soft: #123b37;
+        --risk: #fdba74;
+        --risk-soft: #43230f;
+        --code: #0b0f0d;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header, main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    header { padding-top: 36px; }
+    h1, h2, h3 { line-height: 1.15; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+    h2 { margin-top: 36px; font-size: 1.55rem; }
+    h3 { margin-top: 24px; font-size: 1.1rem; }
+    p { margin: 0 0 14px; }
+    a { color: var(--accent); }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-block: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(10px);
+    }
+    nav ul {
+      display: flex;
+      gap: 6px;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 8px 24px;
+      list-style: none;
+      overflow-x: auto;
+    }
+    nav a {
+      display: block;
+      padding: 6px 10px;
+      border-radius: 6px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    nav a:hover { background: var(--accent-soft); }
+    section {
+      padding: 22px;
+      margin: 18px 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 650; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      overflow-x: auto;
+      padding: 14px;
+      border-radius: 8px;
+      background: var(--code);
+      color: #f8fafc;
+    }
+    details {
+      margin: 12px 0;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+    }
+    summary { cursor: pointer; font-weight: 700; }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0;
+      color: var(--muted);
+    }
+    .pill {
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+    }
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin: 18px 0 0;
+    }
+    .card {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    .card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .callout {
+      margin: 14px 0;
+      padding: 12px 14px;
+      border-left: 4px solid var(--accent);
+      background: var(--accent-soft);
+      border-radius: 6px;
+    }
+    .risk {
+      border-left-color: var(--risk);
+      background: var(--risk-soft);
+    }
+    .status-table td:first-child {
+      width: 180px;
+      color: var(--muted);
+      font-weight: 650;
+    }
+    .nowrap { white-space: nowrap; }
+    @media print {
+      nav { position: static; }
+      section, .card { break-inside: avoid; }
+      body { background: #fff; color: #000; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ExecPlan: Code Quality Hardening and Modularization</h1>
+    <p>This plan turns the current quality audit into an implementation path: make lint green, make persisted user state resilient to partial writes and future enum changes, move duplicated media/download policy into shared services, reduce <code>TheoriaApp.kt</code> into a composition surface, and add the missing test lanes that make those changes safe.</p>
+    <div class="meta" aria-label="Plan metadata">
+      <span class="pill">Status: Proposed</span>
+      <span class="pill">Owner: Codex</span>
+      <span class="pill">Created: 2026-07-04</span>
+      <span class="pill">Updated: 2026-07-04</span>
+      <span class="pill">Plan file: .docs/exec/code-quality-hardening-and-modularization.html</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next Action</strong>Start Phase 1 and make <code>./gradlew lint</code> pass without changing user-visible behavior.</div>
+      <div class="card"><strong>Main Risk</strong>Large structural movement could mask behavior changes in Search, Viewer, update, deep-link, and Codex flows. Each phase adds tests before moving code.</div>
+      <div class="card"><strong>Validation</strong><code>./gradlew lint</code>, focused unit suites, <code>./gradlew test</code>, <code>:app:assembleDebug</code>, and a small Compose instrumentation smoke lane.</div>
+      <div class="card"><strong>Affected Areas</strong><code>app</code>, <code>core-data</code>, <code>core-domain</code>, <code>core-stubs</code>, <code>core-sources</code>, docs, and Gradle test wiring.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#work-plan">Work Plan</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#living-log">Living Log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+      <li><a href="#appendix">Appendix</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>Theoria Codex is now large enough that the main risk is not one bad function. The risk is drift: duplicated download behavior, one huge app junction box, and persistence code that assumes every saved enum value will stay valid forever. This plan keeps the app's behavior stable while improving how the system is divided.</p>
+      <p>When complete, a developer should be able to make media, persistence, update, deep-link, or navigation changes without re-reading a 3,000-line composition file. Users should keep their saved state even if the app is killed during a write, and future source or sort renames should drop only the invalid persisted record instead of crashing startup. The app should also have a repeatable lint and test gate that catches these regressions before release.</p>
+      <div class="callout">
+        <strong>System framing:</strong> treat this as a reliability refactor, not a redesign. The visible app should feel the same at the end of each phase; the internal flow becomes easier to reason about.
+      </div>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <p>The project is a multi-module Android/Kotlin app. <code>app</code> owns Compose UI and Android integration. <code>core-domain</code> owns shared models and orchestration. <code>core-data</code> owns in-memory and file-backed repositories. <code>core-sources</code> owns live source adapters. <code>core-stubs</code> owns fixture-backed providers for deterministic tests.</p>
+      <p>A <em>composition root</em> is the place where dependencies and workflows are assembled. In this app that role is mostly <code>app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt</code>. A <em>file-backed repository</em> stores app state as JSON files on disk. A <em>media request policy</em> is the set of rules that decide the URL, request headers, filename, MIME type, and Android <code>DownloadManager</code> request used for images, videos, and saved post downloads.</p>
+      <table>
+        <thead>
+          <tr><th>File or module</th><th>Current role and why it matters</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt</code></td><td>About 2,991 lines. It builds dependencies, handles startup updates, deep links, account refresh, Codex import/export, likes-Codex sync, viewer session merging, navigation, and top-level UI.</td></tr>
+          <tr><td><code>core-data/src/main/kotlin/com/theoriacodex/data/repository/FileBackedRepositories.kt</code></td><td>About 1,636 lines. It owns JSON records and disk writes for Codex, queries, settings, recents, likes, cache, and UI restore state.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt</code></td><td>About 2,401 lines. It owns viewer rendering, playback, prefetch, GIF handling, and viewer download logic.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt</code></td><td>About 2,122 lines. It owns Search UI and builds source-header-aware image requests locally.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/media/PostMedia.kt</code></td><td>Existing shared media selection helper. Extend this seam before inventing a separate competing policy layer.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/source/SourceMetadata.kt</code></td><td>Existing source metadata and request-header policy. This should feed shared media requests and downloads instead of each screen asking separately.</td></tr>
+          <tr><td><code>app/src/test</code>, <code>core-*/src/test</code></td><td>There are 47 Kotlin test files under <code>src/test</code> and 279 <code>@Test</code> cases. There is no <code>app/src/androidTest</code> source directory yet, although app Gradle dependencies for Compose UI tests already exist.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout risk">
+        <strong>Current baseline from the audit:</strong> <code>./gradlew test</code> passed, but <code>./gradlew lint</code> failed because of minSdk/API usage and missing Media3 unstable API opt-ins. Re-run both commands before implementation and paste current evidence into this plan.
+      </div>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+
+      <article>
+        <h3>Phase 1: Restore a Green Lint Gate</h3>
+        <p>Fix the known lint failures and low-risk warnings first. This creates a clean signal before deeper refactors.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td><code>./gradlew lint</code> passes on minSdk 26 without suppressing real compatibility problems.</td></tr>
+            <tr><td>Specific edits</td><td>Replace API 33-only URL decoding in <code>ExternalPostDeepLinks.kt</code>; replace <code>MediaMetadataRetriever().use</code> in <code>MediaDurationProbe.kt</code> with explicit release; add Media3 <code>@OptIn(UnstableApi::class)</code> around player APIs in <code>ExoVideoComponents.kt</code> and any Search/Viewer usage lint names; migrate <code>LocalLifecycleOwner</code> imports after adding <code>androidx.lifecycle:lifecycle-runtime-compose</code> to the version catalog; remove ambiguous nested <code>return@forEach</code> in <code>Rule34XxxSourceAdapter.kt</code>.</td></tr>
+            <tr><td>Commands</td><td><code>./gradlew lint</code>, then <code>./gradlew :app:testDebugUnitTest :core-sources:test</code>.</td></tr>
+            <tr><td>Acceptance</td><td>Lint has zero errors. Any remaining warnings are either fixed, intentionally deferred with a plan note, or linked to platform deprecations that need a broader replacement.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 2: Harden File-Backed Persistence</h3>
+        <p>Make disk writes atomic and make decode paths tolerant of older or future enum values. The user-visible behavior is that one bad persisted record should not prevent the app from starting or loading the rest of the library.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>JSON state writes no longer leave truncated files on crash, and unknown persisted enum values are dropped or defaulted at the smallest safe boundary.</td></tr>
+            <tr><td>Specific edits</td><td>Add a shared atomic JSON writer in <code>core-data</code> that writes to a sibling temp file and moves it into place; keep parent directory creation centralized. Convert direct enum parsing in <code>CodexItemRecord.toDomain()</code>, <code>PostRecord.toDomain()</code>, and <code>QueryRecord.toDomain()</code> to tolerant parsing. Split persistence helper code only where it reduces risk, such as <code>JsonFileStore</code>, <code>PersistenceCodecs</code>, or per-store record files.</td></tr>
+            <tr><td>Commands</td><td><code>./gradlew :core-data:test</code>, then <code>./gradlew test</code> after the phase settles.</td></tr>
+            <tr><td>Acceptance</td><td>Tests prove atomic writes leave either the old valid file or the new valid file, unknown post/source/query values do not crash repository initialization, and valid legacy JSON still loads.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 3: Consolidate Media Requests and Downloads</h3>
+        <p>Search, Viewer, and app-level downloads currently repeat request-header, filename, MIME, and <code>DownloadManager</code> setup. This phase creates one app-owned policy so future provider header changes do not drift across screens.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>Search image loading, Viewer image loading, Viewer downloads, and app-level post downloads use the same source-header and filename policy.</td></tr>
+            <tr><td>Specific edits</td><td>Add <code>MediaRequestFactory</code> for Coil <code>ImageRequest</code> creation and <code>PostDownloadService</code> or <code>DownloadRequestFactory</code> for Android downloads under <code>app/src/main/java/com/theoriacodex/app/media/</code>. Reuse existing <code>PostMedia.kt</code> candidate selection and <code>SourceMetadata.kt</code> request headers. Replace <code>buildImageRequest()</code> in Search, <code>buildViewerImageRequest()</code> and <code>enqueueViewerDownload()</code> in Viewer, and <code>enqueuePostDownload()</code> in TheoriaApp.</td></tr>
+            <tr><td>Commands</td><td><code>./gradlew :app:testDebugUnitTest</code>, then <code>./gradlew lint</code>.</td></tr>
+            <tr><td>Acceptance</td><td>Tests prove headers are attached for protected sources, file names are stable and sanitized, missing media returns a typed failure instead of a silent false where practical, and Search/Viewer behavior remains visually unchanged.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 4: Split <code>TheoriaApp.kt</code> into Workflow Coordinators</h3>
+        <p>After lint, persistence, and media policy are guarded, move workflow ownership out of the app shell. The app shell should connect state to screens; it should not implement every workflow.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td><code>TheoriaApp.kt</code> becomes a readable composition surface with named collaborators for update, deep link, app graph, Codex transfer, likes sync, and viewer launch/session work.</td></tr>
+            <tr><td>Specific edits</td><td>Create <code>TheoriaAppGraph</code> or <code>rememberTheoriaAppGraph</code> for dependency construction; extract startup update prompt and install orchestration to an update-facing coordinator; extract external URI classification/opening to a deep-link coordinator; extract Codex import/export/share/download orchestration to a transfer service; extract likes-Codex sync; keep navigation calls at the app shell boundary.</td></tr>
+            <tr><td>Commands</td><td><code>./gradlew :app:testDebugUnitTest :app:assembleDebug</code> after each workflow extraction; full <code>./gradlew test</code> before moving to the next workflow group if behavior was touched.</td></tr>
+            <tr><td>Acceptance</td><td>Each coordinator has focused tests for policy decisions. Manual smoke checks prove startup, update prompt eligibility, external post deep links, Codex import/export, likes sync, Search navigation, and Viewer launch still work.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 5: Modernize Test Setup and Add UI Smoke Coverage</h3>
+        <p>Unit coverage is broad, but the current test lane does not launch Compose UI, some temp directories are not cleaned up, and several coroutine tests still use <code>runBlocking</code>. This phase raises the floor.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>Test infrastructure gives reliable cleanup, consistent coroutine scheduling, and at least one device/emulator-backed Compose smoke path for top-level app wiring.</td></tr>
+            <tr><td>Specific edits</td><td>Add a temp-directory helper or JUnit rule for file-backed repository tests; migrate coroutine tests in <code>core-domain</code> and <code>core-stubs</code> from <code>runBlocking</code> to <code>runTest</code>; add <code>app/src/androidTest</code> with a minimal Compose smoke that can open the app shell and assert stable top-level UI/navigation labels using stubbed or deterministic state where possible.</td></tr>
+            <tr><td>Commands</td><td><code>./gradlew :core-data:test :core-domain:test :core-stubs:test</code>; <code>./gradlew :app:connectedDebugAndroidTest</code> when an emulator or device is attached.</td></tr>
+            <tr><td>Acceptance</td><td>Temp files are cleaned up, coroutine tests use test dispatchers where practical, and the instrumentation lane is documented as device-required rather than silently part of every local JVM run.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 6: Final Regression Audit and Documentation</h3>
+        <p>Close by proving the refactor reduced drift and did not create user-visible regressions.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>Repository docs and validation evidence match the shipped internal architecture.</td></tr>
+            <tr><td>Specific edits</td><td>Update this plan's progress, decisions, surprises, and outcomes. Update <code>AGENTS.md</code> for new surprising files. Update <code>README.md</code> only if user-visible behavior changes, not for pure internal cleanup.</td></tr>
+            <tr><td>Commands</td><td><code>./gradlew lint</code>, <code>./gradlew test</code>, <code>./gradlew :app:assembleDebug</code>, optional <code>npx -y jscpd --min-lines 12 --min-tokens 80 --reporters console --pattern "**/*.kt" --ignore "**/build/**,**/.gradle/**,**/src/test/**" .</code>.</td></tr>
+            <tr><td>Acceptance</td><td>Validation is green or any unrelated failure is recorded with exact scope. Duplicated media/download setup is removed. <code>TheoriaApp.kt</code> owns orchestration wiring, not every workflow implementation.</td></tr>
+          </tbody>
+        </table>
+      </article>
+    </section>
+
+    <section id="work-plan">
+      <h2>Work Plan</h2>
+      <ol>
+        <li>From the repository root, run <code>git status --short</code>, <code>./gradlew test</code>, and <code>./gradlew lint</code>. Paste concise output into the appendix. If lint output differs from this plan, update the Phase 1 task list before editing.</li>
+        <li>Fix lint in the smallest possible commits. Use <code>URLDecoder.decode(value, StandardCharsets.UTF_8.name())</code> for minSdk 26 compatibility, explicit <code>MediaMetadataRetriever.release()</code> in a <code>finally</code> block, and targeted Media3 <code>@OptIn(UnstableApi::class)</code> annotations near the APIs that require them.</li>
+        <li>Add <code>androidx-lifecycle-runtime-compose</code> to <code>gradle/libs.versions.toml</code> and <code>app/build.gradle.kts</code>, then migrate <code>LocalLifecycleOwner</code> imports in <code>TheoriaApp.kt</code>, <code>SearchScreen.kt</code>, and <code>ViewerScreen.kt</code>.</li>
+        <li>In <code>core-data</code>, introduce a single write path for JSON files. Prefer a small internal helper such as <code>JsonFileStore</code> or <code>writeJsonAtomically()</code> that handles parent directory creation, temp writes, and replacement. Do not change public repository interfaces unless a test proves the interface itself is the problem.</li>
+        <li>Convert risky enum parsing into local tolerant decoders. For Codex posts and items, an unknown <code>SourceKey</code> should drop the invalid item/post while preserving the rest. For queries, unknown <code>SortMode</code> should fall back to the current default sort, and unknown source mode should fall back to unified mode unless a better local default is already established.</li>
+        <li>Extract media request and download construction under <code>app/src/main/java/com/theoriacodex/app/media/</code>. Keep Android-only calls in the app module. Keep pure candidate selection in existing testable helpers where possible.</li>
+        <li>Replace call sites one at a time: Search image requests, Viewer image requests, Viewer downloads, then app-level post downloads. Run focused app tests after each replacement.</li>
+        <li>Split <code>TheoriaApp.kt</code> by workflow only after the previous phases are green. Start with dependency construction because it is easiest to test through object creation, then move update, deep link, Codex transfer, likes sync, and viewer launch/session workflows.</li>
+        <li>Add or modernize tests alongside every move. Use coordinator tests for workflow policy, repository tests for persistence survival, and app instrumentation only for UI wiring that cannot be proven on the JVM.</li>
+        <li>Finish by updating this plan, <code>working_list.md</code>, and <code>AGENTS.md</code>. Update <code>README.md</code> only if behavior visible to users changed.</li>
+      </ol>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <table>
+        <thead>
+          <tr><th>Check</th><th>Command or action</th><th>Expected result</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Lint gate</td><td><code>./gradlew lint</code></td><td>Build succeeds with zero lint errors. Remaining warnings are recorded or fixed.</td></tr>
+          <tr><td>Broad JVM tests</td><td><code>./gradlew test</code></td><td>All JVM test tasks pass. Provider health remains opt-in and does not perform live network work by default.</td></tr>
+          <tr><td>Focused persistence tests</td><td><code>./gradlew :core-data:test</code></td><td>Atomic write, tolerant decode, legacy JSON, and repository round-trip tests pass.</td></tr>
+          <tr><td>Focused app tests</td><td><code>./gradlew :app:testDebugUnitTest</code></td><td>Media, viewer, search, update, and coordinator tests pass.</td></tr>
+          <tr><td>Build artifact</td><td><code>./gradlew :app:assembleDebug</code></td><td>Debug APK builds after workflow extraction and Gradle dependency changes.</td></tr>
+          <tr><td>Compose smoke</td><td><code>./gradlew :app:connectedDebugAndroidTest</code></td><td>Runs on an attached emulator/device and proves the app shell can render and navigate at least one top-level path. If no device is attached, record that as skipped.</td></tr>
+          <tr><td>Duplication scan</td><td><code>npx -y jscpd --min-lines 12 --min-tokens 80 --reporters console --pattern "**/*.kt" --ignore "**/build/**,**/.gradle/**,**/src/test/**" .</code></td><td>Media/download duplication decreases or any remaining duplicate is intentional and recorded.</td></tr>
+          <tr><td>Manual smoke</td><td>Install/run debug app and check Search, Viewer, Codex import/export, update prompt path when eligible, external post deep links, Recents, and Settings.</td><td>Behavior matches pre-refactor expectations. Any intentional visible change is documented in <code>README.md</code>.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <strong>Acceptance summary:</strong> lint is green, persisted user state survives crashes and unknown enum values, duplicate request/download setup is gone, <code>TheoriaApp.kt</code> is smaller by real workflow extraction, and tests cover the new boundaries.
+      </div>
+    </section>
+
+    <section id="living-log">
+      <h2>Living Log</h2>
+
+      <h3>Progress</h3>
+      <ul>
+        <li>[x] 2026-07-04 - Created this ExecPlan from the code quality audit and current repository inspection.</li>
+        <li>[ ] 2026-07-04 - Re-run baseline <code>./gradlew test</code> and <code>./gradlew lint</code> immediately before implementation.</li>
+        <li>[ ] Phase 1 - Restore green lint.</li>
+        <li>[ ] Phase 2 - Harden file-backed persistence.</li>
+        <li>[ ] Phase 3 - Consolidate media request and download policy.</li>
+        <li>[ ] Phase 4 - Split <code>TheoriaApp.kt</code> workflows.</li>
+        <li>[ ] Phase 5 - Modernize test setup and add UI smoke coverage.</li>
+        <li>[ ] Phase 6 - Run final regression audit and update docs.</li>
+      </ul>
+
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li>Observation: Current <code>.docs/PLANS.md</code> asks for standalone HTML ExecPlans in <code>.docs/exec/</code>, while older Theoria plans are Markdown under <code>.docs/exec/execplans/</code>. Evidence: <code>.docs/PLANS.md</code> and existing file listing. This plan follows the current HTML contract.</li>
+        <li>Observation: <code>FileBackedRepositories.kt</code> already has some tolerant enum parsing, but direct parsing still exists in Codex item/post and query records. Evidence: <code>SourceKey.valueOf(source)</code> in <code>CodexItemRecord.toDomain()</code> and <code>PostRecord.toDomain()</code>; <code>SourceKey.valueOf(requireNotNull(modeSource))</code> and <code>SortMode.valueOf(sort)</code> in <code>QueryRecord.toDomain()</code>.</li>
+        <li>Observation: App Gradle already declares Android test dependencies, but there is no <code>app/src/androidTest</code> directory. Evidence: <code>app/build.gradle.kts</code> includes <code>androidTestImplementation</code> entries and <code>find app/src -maxdepth 2 -type d</code> shows only <code>main</code> and <code>test</code>.</li>
+        <li>Observation: Test count is strong for JVM logic but not UI wiring. Evidence: 47 Kotlin files under <code>src/test</code> and 279 <code>@Test</code> cases across app/core modules.</li>
+      </ul>
+
+      <h3>Decision Log</h3>
+      <ul>
+        <li>Decision: Fix lint before large movement. Rationale: lint is the current broken quality gate and identifies platform compatibility issues that are cheap to fix before refactors. Date/Author: 2026-07-04 / Codex.</li>
+        <li>Decision: Treat persistence as the first reliability refactor after lint. Rationale: corrupt or invalid persisted state can affect every app startup and user library load. Date/Author: 2026-07-04 / Codex.</li>
+        <li>Decision: Use the existing <code>app/media</code> and <code>app/source</code> seams for media/download consolidation. Rationale: <code>PostMedia.kt</code> and <code>SourceMetadata.kt</code> already encode shared policy, so extending them is lower risk than creating parallel abstractions. Date/Author: 2026-07-04 / Codex.</li>
+        <li>Decision: Split <code>TheoriaApp.kt</code> after guardrails are in place, not as Phase 1. Rationale: it touches too many workflows to move safely before lint, persistence, media policy, and tests are stable. Date/Author: 2026-07-04 / Codex.</li>
+      </ul>
+
+      <h3>Outcomes And Retrospective</h3>
+      <p>No implementation outcome yet. Update this section at the end of each phase with what changed, what validation proved, and what a future agent should remember before continuing.</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <p>All planned work should be additive and safe to stage in small pieces. The Gradle commands are safe to rerun. The duplication scan is read-only except for temporary package download/cache behavior from <code>npx</code>. Do not run destructive git commands to recover; inspect <code>git diff</code> and revert only the files changed by the current phase if a local experiment needs to be abandoned.</p>
+      <p>For atomic write work, preserve the previous file until the new file is fully written. If a temp file remains from a failed run, the read path should ignore it. If replacement fails on a filesystem, report the write failure rather than deleting the original state. Tests should simulate at least the visible recovery guarantee: after a failed replacement, the repository can still read valid old state.</p>
+      <p>For <code>TheoriaApp.kt</code> extraction, move one workflow at a time and keep adapter functions at the old call site until tests prove the new collaborator owns the behavior. If a workflow extraction becomes noisy, stop after compiling, update this plan with the actual boundary, and continue with the next smallest seam.</p>
+    </section>
+
+    <section id="appendix">
+      <h2>Appendix: Evidence And Notes</h2>
+      <details open>
+        <summary>Known lint findings to verify before implementation</summary>
+        <ul>
+          <li><code>app/src/main/java/com/theoriacodex/app/source/ExternalPostDeepLinks.kt</code>: <code>URLDecoder.decode(value, StandardCharsets.UTF_8)</code> requires API 33; minSdk is 26.</li>
+          <li><code>app/src/main/java/com/theoriacodex/app/media/MediaDurationProbe.kt</code>: <code>MediaMetadataRetriever().use</code> relies on API 29 <code>AutoCloseable</code>.</li>
+          <li><code>app/src/main/java/com/theoriacodex/app/viewer/ExoVideoComponents.kt</code>: Media3 player APIs require <code>@OptIn(UnstableApi::class)</code> where lint reports them.</li>
+          <li><code>app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt</code>: Media3/Android lifecycle import warnings may require targeted opt-in and <code>LocalLifecycleOwner</code> import migration.</li>
+          <li><code>core-sources/src/main/kotlin/com/theoriacodex/sources/rule34/Rule34XxxSourceAdapter.kt</code>: nested <code>return@forEach</code> in <code>fetchTagCounts()</code> should become an explicit loop or uniquely labeled lambda.</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>Repository measurements captured while authoring</summary>
+        <pre><code>find . -path '*/src/test/*' -name '*.kt' | wc -l
+47
+
+rg -n "@Test" app core-data core-domain core-sources core-stubs -g '*Test.kt' | wc -l
+279
+
+wc -l app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt core-data/src/main/kotlin/com/theoriacodex/data/repository/FileBackedRepositories.kt app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt
+2991 app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt
+1636 core-data/src/main/kotlin/com/theoriacodex/data/repository/FileBackedRepositories.kt
+2401 app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt
+2122 app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt</code></pre>
+      </details>
+
+      <details>
+        <summary>Prior duplication scan baseline from the audit</summary>
+        <p>The broad duplication level was low, so this plan targets important workflow drift instead of blanket deduplication.</p>
+        <pre><code>npx -y jscpd --min-lines 12 --min-tokens 80 --reporters console --pattern "**/*.kt" --ignore "**/build/**,**/.gradle/**,**/src/test/**" .
+
+85 files
+25,994 source lines
+19 clones
+433 duplicated lines, 1.67%
+2,616 duplicated tokens, 1.74%</code></pre>
+        <p>Important duplicate clusters to remove or consciously keep: Search/Viewer image requests, Viewer/app download setup, TheoriaApp release dialog branches, FileBacked/InMemory settings normalization, Iwara/NHentai mirror fallback, and source deep-link parser helpers.</p>
+      </details>
+
+      <details>
+        <summary>Manual verification checklist for implementation closeout</summary>
+        <ul>
+          <li>[ ] Search loads in Unified mode and a single-source mode.</li>
+          <li>[ ] Search thumbnails still render for sources that need request headers.</li>
+          <li>[ ] Viewer opens image, GIF, video, and Pixiv ugoira-style posts when available.</li>
+          <li>[ ] Viewer and app-level downloads save files with sensible names under <code>TheoriaCodex/</code>.</li>
+          <li>[ ] Codex saved posts, Recents, Settings, likes, and UI restore state survive app restart.</li>
+          <li>[ ] A hand-edited persisted file with one unknown source/sort value does not crash startup.</li>
+          <li>[ ] External post deep links route to the intended post.</li>
+          <li>[ ] Codex import/export still works.</li>
+          <li>[ ] Startup update prompt behavior is unchanged when update eligibility is simulated.</li>
+          <li>[ ] Settings provider-health display still shows last-known state without running live provider calls.</li>
+        </ul>
+      </details>
+    </section>
+  </main>
+</body>
+</html>
