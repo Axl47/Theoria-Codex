@@ -6,10 +6,12 @@ updated_at: 2026-07-04T19:32:28Z
 
 ## Pending
 - [ ] Manual device acceptance for Recents behavior
+- [ ] Implement live source routing and seeded-search coverage ExecPlan
 
 ## In Progress
 
 ## Done
+- [x] Create live source routing and seeded-search coverage ExecPlan
 - [x] Implement code quality Phase 6: final regression audit and documentation (`./gradlew lint test :app:assembleDebug`, `./gradlew :app:testDebugUnitTest lint`, `./gradlew :app:assembleDebug`, `git diff --check`, `jscpd`)
 - [x] Implement code quality Phase 5: modernize tests and add UI smoke coverage (`./gradlew :core-data:test :core-domain:test :core-stubs:test`, `./gradlew :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin`; connected smoke skipped with no adb device)
 - [x] Implement code quality Phase 4: split `TheoriaApp.kt` dependency graph (`./gradlew :app:testDebugUnitTest :app:assembleDebug`)

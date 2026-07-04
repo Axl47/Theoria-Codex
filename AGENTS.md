@@ -22,6 +22,7 @@ Whenever new important updates are made, this file (`AGENTS.md`) should be updat
 - `/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex/app/src/main/java/com/theoriacodex/app/media/MediaRequestFactory.kt` and `/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex/app/src/main/java/com/theoriacodex/app/media/PostDownloadService.kt`: shared app media request/download policy for Search, Viewer, and app-level post downloads. Keep source request headers and filename rules here instead of duplicating them in screens.
 - `/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex/app/src/main/java/com/theoriacodex/app/ui/TheoriaAppGraph.kt`: app composition graph for constructing repositories, source clients, update services, credentials, and top-level coordinators outside `TheoriaApp.kt`.
 - `/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex/app/src/androidTest/java/com/theoriacodex/app/TheoriaAppSmokeTest.kt`: device/emulator-backed Compose smoke test for top-level app shell rendering; compile with `:app:compileDebugAndroidTestKotlin` and run with `:app:connectedDebugAndroidTest` when an Android target is attached.
+- `/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex/.docs/exec/live-source-routing-and-seeded-search-coverage.html`: HTML ExecPlan for opt-in live provider/source coverage: seeded searches, tag autocomplete/trending checks, app-level `SearchCoordinator` routing through `RealAdapterRegistry`, and media URL reachability with app source headers.
 
 ## Final Output
 
