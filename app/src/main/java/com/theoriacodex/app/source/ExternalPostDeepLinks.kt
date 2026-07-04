@@ -257,7 +257,7 @@ private fun parseExternalUri(rawUrl: String): ParsedExternalUri? {
 }
 
 private fun decodeQueryComponent(value: String): String {
-    return URLDecoder.decode(value, StandardCharsets.UTF_8)
+    return URLDecoder.decode(value, StandardCharsets.UTF_8.name())
 }
 
 private data class ParsedExternalUri(

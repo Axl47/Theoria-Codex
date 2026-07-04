@@ -15,14 +15,14 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.CapabilityExclusionReason
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UnifiedSearchOrchestratorTest {
     @Test
-    fun `excludes source when capability does not support selected sort`() = runBlocking {
+    fun `excludes source when capability does not support selected sort`() = runTest {
         val query = Query(
             mode = QueryMode.Unified,
             includeTags = listOf("landscape"),
@@ -78,7 +78,7 @@ class UnifiedSearchOrchestratorTest {
     }
 
     @Test
-    fun `interleaves successful sources with weights`() = runBlocking {
+    fun `interleaves successful sources with weights`() = runTest {
         val orchestrator = UnifiedSearchOrchestrator(
             adaptersBySource = mapOf(
                 SourceKey.PIXIV to FakeAdapter(
@@ -107,7 +107,7 @@ class UnifiedSearchOrchestratorTest {
     }
 
     @Test
-    fun `uses query override only for targeted source`() = runBlocking {
+    fun `uses query override only for targeted source`() = runTest {
         val pixivAdapter = FakeAdapter(
             sourceKey = SourceKey.PIXIV,
             capabilities = supportedCapabilities(),
@@ -140,7 +140,7 @@ class UnifiedSearchOrchestratorTest {
     }
 
     @Test
-    fun `applies exclude tags client side when source excludes are unsupported`() = runBlocking {
+    fun `applies exclude tags client side when source excludes are unsupported`() = runTest {
         val pixivAdapter = FakeAdapter(
             sourceKey = SourceKey.PIXIV,
             capabilities = SourceCapabilities(
@@ -184,7 +184,7 @@ class UnifiedSearchOrchestratorTest {
     }
 
     @Test
-    fun `propagates typed source failure reason`() = runBlocking {
+    fun `propagates typed source failure reason`() = runTest {
         val orchestrator = UnifiedSearchOrchestrator(
             adaptersBySource = mapOf(
                 SourceKey.PIXIV to FakeAdapter(

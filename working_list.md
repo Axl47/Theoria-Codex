@@ -1,20 +1,21 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-04T19:07:35Z
+updated_at: 2026-07-04T19:32:28Z
 ---
 # Working List
 
 ## Pending
 - [ ] Manual device acceptance for Recents behavior
-- [ ] Implement code quality Phase 1: restore green lint
-- [ ] Implement code quality Phase 2: harden file-backed persistence
-- [ ] Implement code quality Phase 3: consolidate media request and download policy
-- [ ] Implement code quality Phase 4: split `TheoriaApp.kt` workflows
-- [ ] Implement code quality Phase 5: modernize tests and add UI smoke coverage
 
 ## In Progress
 
 ## Done
+- [x] Implement code quality Phase 6: final regression audit and documentation (`./gradlew lint test :app:assembleDebug`, `./gradlew :app:testDebugUnitTest lint`, `./gradlew :app:assembleDebug`, `git diff --check`, `jscpd`)
+- [x] Implement code quality Phase 5: modernize tests and add UI smoke coverage (`./gradlew :core-data:test :core-domain:test :core-stubs:test`, `./gradlew :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin`; connected smoke skipped with no adb device)
+- [x] Implement code quality Phase 4: split `TheoriaApp.kt` dependency graph (`./gradlew :app:testDebugUnitTest :app:assembleDebug`)
+- [x] Implement code quality Phase 3: consolidate media request and download policy (`./gradlew :app:testDebugUnitTest`, `./gradlew lint`)
+- [x] Implement code quality Phase 2: harden file-backed persistence (`./gradlew :core-data:test`, `./gradlew test`)
+- [x] Implement code quality Phase 1: restore green lint (`./gradlew lint`, `./gradlew :app:testDebugUnitTest :core-sources:test`)
 - [x] Create code quality hardening and modularization ExecPlan
 - [x] Register code quality hardening ExecPlan in `AGENTS.md`
 - [x] Implement Recents tab after plan approval

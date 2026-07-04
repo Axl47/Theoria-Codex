@@ -1,11 +1,9 @@
 package com.theoriacodex.app.viewer
 
-import android.app.DownloadManager
 import android.content.res.Configuration
 import android.content.Context
 import android.graphics.Movie
 import android.net.Uri
-import android.os.Environment
 import android.os.SystemClock
 import android.webkit.URLUtil
 import android.widget.Toast
@@ -103,7 +101,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -111,6 +108,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import coil.imageLoader
 import coil.request.ImageRequest
@@ -120,6 +118,8 @@ import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isPixivUgoiraMedia
 import com.theoriacodex.app.media.isVideoMediaRef
+import com.theoriacodex.app.media.MediaRequestFactory
+import com.theoriacodex.app.media.PostDownloadService
 import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.app.media.progressiveImageCandidates
 import com.theoriacodex.app.media.supportsProgressiveImageCandidates
@@ -325,7 +325,7 @@ fun ViewerScreen(
                     prefetchVideoMedia(
                         context = context,
                         media = candidate.media,
-                        headers = viewerRequestHeaders(candidate.post.id.source),
+                        headers = candidate.post.id.source.requestHeaders(),
                     )
                 } finally {
                     prefetchInFlightVideoUrls.remove(videoLocation)
@@ -355,7 +355,7 @@ fun ViewerScreen(
             prefetchVideoMedia(
                 context = context,
                 media = currentMedia,
-                headers = viewerRequestHeaders(selectedPost.id.source),
+                headers = selectedPost.id.source.requestHeaders(),
             )
         } finally {
             prefetchInFlightVideoUrls.remove(location)
@@ -407,7 +407,7 @@ fun ViewerScreen(
         }
 
         val didQueueDownload = media?.let {
-            enqueueViewerDownload(
+            PostDownloadService.enqueueViewerDownload(
                 context = context,
                 post = selectedPost,
                 media = it,
@@ -1366,7 +1366,7 @@ private fun ViewerVideoPlayer(
         val player = createLoopingExoPlayer(
             context = context,
             location = playbackLocation,
-            headers = viewerRequestHeaders(sourceKey),
+            headers = sourceKey.requestHeaders(),
             muted = false,
         )
         player.playbackParameters = PlaybackParameters(effectivePlaybackRate)
@@ -1630,7 +1630,7 @@ private fun ViewerGifPlayer(
         movie = loadGifMovie(
             context = context,
             location = location,
-            headers = viewerRequestHeaders(sourceKey),
+            headers = sourceKey.requestHeaders(),
         )
         loading = false
         if (movie == null) {
@@ -1928,18 +1928,12 @@ private fun buildViewerImageRequest(
     url: String,
     sourceKey: SourceKey,
 ): ImageRequest {
-    val builder = ImageRequest.Builder(context)
-        .data(url)
-        .crossfade(true)
-        .allowHardware(false)
-    viewerRequestHeaders(sourceKey).forEach { (name, value) ->
-        builder.addHeader(name, value)
-    }
-    return builder.build()
-}
-
-private fun viewerRequestHeaders(sourceKey: SourceKey): Map<String, String> {
-    return sourceKey.requestHeaders()
+    return MediaRequestFactory.imageRequest(
+        context = context,
+        url = url,
+        sourceKey = sourceKey,
+        crossfade = true,
+    )
 }
 
 private data class PrefetchCandidate(
@@ -2118,72 +2112,6 @@ private fun viewerGifLocation(post: Post, media: ImageRef): String? {
 
 private fun isPixivUgoira(post: Post, media: ImageRef): Boolean {
     return isPixivUgoiraMedia(post, media)
-}
-
-private fun enqueueViewerDownload(
-    context: Context,
-    post: Post,
-    media: ImageRef,
-    pageIndex: Int,
-    totalPages: Int,
-): Boolean {
-    val url = media.url ?: return false
-    val request = DownloadManager.Request(Uri.parse(url))
-        .setAllowedOverMetered(true)
-        .setAllowedOverRoaming(true)
-        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-        .setMimeType(media.mime)
-    viewerRequestHeaders(post.id.source).forEach { (name, value) ->
-        request.addRequestHeader(name, value)
-    }
-
-    val fileName = buildDownloadFileName(post, media, pageIndex, totalPages, url)
-    request.setTitle(fileName)
-    request.setDescription(post.pageUrl ?: "Saved from Theoria Codex")
-    runCatching {
-        request.setDestinationInExternalPublicDir(
-            Environment.DIRECTORY_DOWNLOADS,
-            "TheoriaCodex/$fileName",
-        )
-    }.onFailure {
-        request.setDestinationInExternalFilesDir(
-            context,
-            Environment.DIRECTORY_DOWNLOADS,
-            fileName,
-        )
-    }
-
-    val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager ?: return false
-    return runCatching {
-        manager.enqueue(request)
-        true
-    }.getOrElse { false }
-}
-
-private fun buildDownloadFileName(
-    post: Post,
-    media: ImageRef,
-    pageIndex: Int,
-    totalPages: Int,
-    fallbackUrl: String,
-): String {
-    val guessedName = URLUtil.guessFileName(fallbackUrl, null, media.mime)
-    val extension = guessedName.substringAfterLast('.', "")
-    val base = post.title
-        ?.sanitizeFileName()
-        ?.takeIf { it.isNotBlank() }
-        ?: "${post.id.source.name.lowercase()}_${post.id.sourcePostId}"
-    val pageSuffix = if (totalPages > 1) "_p${pageIndex + 1}" else ""
-    return if (extension.isNotBlank()) {
-        "${base}$pageSuffix.$extension"
-    } else {
-        "$base$pageSuffix"
-    }
-}
-
-private fun String.sanitizeFileName(): String {
-    val cleaned = trim().replace(Regex("[^A-Za-z0-9._-]+"), "_").trim('_')
-    return cleaned.ifBlank { "image" }
 }
 
 private const val VIEWER_PREFETCH_LEFT_COUNT = 3

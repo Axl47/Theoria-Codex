@@ -5,7 +5,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -13,7 +13,7 @@ import org.junit.Test
 
 class JsonStubSourceAdapterTest {
     @Test
-    fun `loads paged fixtures in normal scenario`() = runBlocking {
+    fun `loads paged fixtures in normal scenario`() = runTest {
         val runtime = StubRuntime(StubScenarioPreset.NORMAL)
         val adapter = JsonStubSourceAdapter(
             sourceKey = SourceKey.PIXIV,
@@ -31,7 +31,7 @@ class JsonStubSourceAdapterTest {
     }
 
     @Test
-    fun `partial failure scenario fails gelbooru search`() = runBlocking {
+    fun `partial failure scenario fails gelbooru search`() = runTest {
         val runtime = StubRuntime(StubScenarioPreset.PARTIAL_FAILURE)
         val adapter = JsonStubSourceAdapter(
             sourceKey = SourceKey.GELBOORU,
@@ -47,7 +47,7 @@ class JsonStubSourceAdapterTest {
     }
 
     @Test
-    fun `quick query maps to expected sort mode`() = runBlocking {
+    fun `quick query maps to expected sort mode`() = runTest {
         val runtime = StubRuntime(StubScenarioPreset.NORMAL)
         val adapter = JsonStubSourceAdapter(
             sourceKey = SourceKey.AIBOORU,
@@ -62,7 +62,7 @@ class JsonStubSourceAdapterTest {
     }
 
     @Test
-    fun `rule34 family fixtures load search trending and resolve`() = runBlocking {
+    fun `rule34 family fixtures load search trending and resolve`() = runTest {
         val runtime = StubRuntime(StubScenarioPreset.NORMAL)
         val fixtureLoader = StubFixtureLoader()
         val sources = listOf(
@@ -87,7 +87,7 @@ class JsonStubSourceAdapterTest {
     }
 
     @Test
-    fun `iwara fixtures load search trending and resolve`() = runBlocking {
+    fun `iwara fixtures load search trending and resolve`() = runTest {
         val runtime = StubRuntime(StubScenarioPreset.NORMAL)
         val adapter = JsonStubSourceAdapter(
             sourceKey = SourceKey.IWARA,

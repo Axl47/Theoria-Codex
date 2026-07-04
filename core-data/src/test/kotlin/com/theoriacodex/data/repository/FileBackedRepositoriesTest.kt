@@ -10,19 +10,24 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
-import java.nio.file.Files
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 class FileBackedRepositoriesTest {
+    @get:Rule
+    val tempFolder = TemporaryFolder()
+
     @Test
     fun `codex repository persists codex and items across instances`() = runTest {
-        val dir = Files.createTempDirectory("codex-store-").toFile()
+        val dir = tempDir("codex-store-")
         val first = FileBackedCodexRepository(dir)
         val created = first.createCodex("Saved")
         first.addItem(created.codexId, samplePost("1", localPath = null, source = SourceKey.PIXIV))
@@ -39,7 +44,7 @@ class FileBackedRepositoriesTest {
 
     @Test
     fun `codex repository persists creator profiles across instances`() = runTest {
-        val dir = Files.createTempDirectory("codex-creator-profile-").toFile()
+        val dir = tempDir("codex-creator-profile-")
         val first = FileBackedCodexRepository(dir)
         val created = first.createCodex("Saved")
         val post = samplePost("1", localPath = null, source = SourceKey.PIXIV).copy(
@@ -64,7 +69,7 @@ class FileBackedRepositoriesTest {
 
     @Test
     fun `codex repository persists media metadata across instances`() = runTest {
-        val dir = Files.createTempDirectory("codex-progressive-urls-").toFile()
+        val dir = tempDir("codex-progressive-urls-")
         val first = FileBackedCodexRepository(dir)
         val created = first.createCodex("Saved")
         val progressiveUrls = listOf(
@@ -106,7 +111,7 @@ class FileBackedRepositoriesTest {
 
     @Test
     fun `codex repository reads legacy post records without creator profile`() = runTest {
-        val dir = Files.createTempDirectory("codex-legacy-post-record-").toFile()
+        val dir = tempDir("codex-legacy-post-record-")
         val storageFile = dir.resolve("codex_store.json")
         storageFile.writeText(
             """
@@ -150,8 +155,118 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
+    fun `codex repository drops records with unknown sources without losing valid records`() = runTest {
+        val dir = tempDir("codex-unknown-source-records-")
+        val storageFile = dir.resolve("codex_store.json")
+        storageFile.writeText(
+            """
+            {
+              "codices": [
+                {
+                  "codexId": "saved",
+                  "name": "Saved",
+                  "createdAtEpochMs": 1
+                }
+              ],
+              "items": {
+                "saved": [
+                  {
+                    "codexId": "saved",
+                    "source": "PIXIV",
+                    "sourcePostId": "1",
+                    "savedAtEpochMs": 2
+                  },
+                  {
+                    "codexId": "saved",
+                    "source": "REMOVED_SOURCE",
+                    "sourcePostId": "2",
+                    "savedAtEpochMs": 3
+                  }
+                ]
+              },
+              "posts": [
+                {
+                  "source": "PIXIV",
+                  "sourcePostId": "1",
+                  "previewUrl": "https://example.com/1.jpg",
+                  "previewLocalPath": null,
+                  "previewMime": "image/jpeg",
+                  "fullUrl": "https://example.com/full/1.jpg",
+                  "fullLocalPath": null,
+                  "fullMime": "image/jpeg",
+                  "pageUrl": "https://example.com/post/1",
+                  "width": 100,
+                  "height": 100,
+                  "canonicalTags": ["landscape"],
+                  "rawTags": ["landscape"],
+                  "authorName": "artist",
+                  "createdAtEpochMs": 1,
+                  "media": [],
+                  "title": "Valid",
+                  "creatorProfile": {
+                    "source": "REMOVED_SOURCE",
+                    "displayName": "legacy artist",
+                    "profileId": "artist-1",
+                    "profileUrl": "https://example.com/creator/1",
+                    "uploadsQuery": "artist-1"
+                  }
+                },
+                {
+                  "source": "REMOVED_SOURCE",
+                  "sourcePostId": "2",
+                  "previewUrl": "https://example.com/2.jpg",
+                  "previewLocalPath": null,
+                  "previewMime": "image/jpeg",
+                  "fullUrl": null,
+                  "fullLocalPath": null,
+                  "fullMime": null,
+                  "pageUrl": "https://example.com/post/2",
+                  "width": 100,
+                  "height": 100,
+                  "canonicalTags": [],
+                  "rawTags": [],
+                  "authorName": null,
+                  "createdAtEpochMs": null,
+                  "media": []
+                }
+              ]
+            }
+            """.trimIndent(),
+        )
+
+        val repository = FileBackedCodexRepository(dir)
+        val items = repository.observeCodexItems("saved").first()
+        val posts = repository.observeCodexPosts("saved", CodexSortMode.NEWEST_SAVED).first()
+        val validPost = repository.getPost(PostId(SourceKey.PIXIV, "1"))
+
+        assertEquals(listOf(PostId(SourceKey.PIXIV, "1")), items.map { it.postId })
+        assertEquals(listOf(PostId(SourceKey.PIXIV, "1")), posts.map { it.id })
+        assertEquals("Valid", validPost?.title)
+        assertNull(validPost?.creatorProfile)
+    }
+
+    @Test
+    fun `codex repository writes valid json without leaving temp files`() = runTest {
+        val dir = tempDir("codex-atomic-write-")
+        val repository = FileBackedCodexRepository(dir)
+        val codex = repository.createCodex("Saved")
+
+        repository.addItem(codex.codexId, samplePost("1", localPath = null, source = SourceKey.PIXIV))
+
+        val storageFile = dir.resolve("codex_store.json")
+        val reloaded = FileBackedCodexRepository(dir)
+        val leftoverTempFiles = dir.listFiles().orEmpty().filter { file ->
+            file.name.startsWith("codex_store.json.") && file.name.endsWith(".tmp")
+        }
+
+        assertTrue(storageFile.readText().contains("\"codices\""))
+        assertEquals(1, reloaded.observeCodexItems(codex.codexId).first().size)
+        assertTrue(leftoverTempFiles.isEmpty())
+    }
+
+    @Test
     fun `codex repository ensures stable system codex across restarts`() = runTest {
-        val dir = Files.createTempDirectory("codex-likes-system-").toFile()
+        val dir = tempDir("codex-likes-system-")
         val first = FileBackedCodexRepository(dir)
         first.ensureCodex(codexId = "system_likes_codex", name = "Likes")
 
@@ -166,7 +281,7 @@ class FileBackedRepositoriesTest {
 
     @Test
     fun `codex repository appends numeric suffix for duplicate names across restarts`() = runTest {
-        val dir = Files.createTempDirectory("codex-duplicate-names-").toFile()
+        val dir = tempDir("codex-duplicate-names-")
         val first = FileBackedCodexRepository(dir)
 
         val alpha = first.createCodex("Favorites")
@@ -184,7 +299,7 @@ class FileBackedRepositoriesTest {
 
     @Test
     fun `codex repository persists reorder across restarts`() = runTest {
-        val dir = Files.createTempDirectory("codex-reorder-").toFile()
+        val dir = tempDir("codex-reorder-")
         val first = FileBackedCodexRepository(dir)
         val alpha = first.createCodex("Alpha")
         val beta = first.createCodex("Beta")
@@ -200,7 +315,7 @@ class FileBackedRepositoriesTest {
 
     @Test
     fun `query repository persists applied query and scroll offsets`() = runTest {
-        val dir = Files.createTempDirectory("query-store-").toFile()
+        val dir = tempDir("query-store-")
         val first = FileBackedQueryRepository(dir)
         val query = Query(
             mode = QueryMode.Source(SourceKey.PIXIV),
@@ -220,8 +335,42 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
+    fun `query repository falls back when persisted source or sort is unknown`() = runTest {
+        val dir = tempDir("query-unknown-enums-")
+        dir.resolve("query_store.json").writeText(
+            """
+            {
+              "queries": {
+                "source:REMOVED_SOURCE": {
+                  "modeType": "source",
+                  "modeSource": "REMOVED_SOURCE",
+                  "includeTags": ["landscape"],
+                  "excludeTags": ["comic"],
+                  "sort": "REMOVED_SORT",
+                  "dateFromEpochMs": 100,
+                  "dateToEpochMs": 200,
+                  "minScore": 10
+                }
+              },
+              "scrollOffsets": {
+                "qhash": 320
+              }
+            }
+            """.trimIndent(),
+        )
+
+        val repository = FileBackedQueryRepository(dir)
+        val loaded = repository.observeAppliedQuery("source:REMOVED_SOURCE").first()
+
+        assertEquals(QueryMode.Unified, loaded?.mode)
+        assertEquals(SortMode.TOP, loaded?.sort)
+        assertEquals(listOf("landscape"), loaded?.includeTags)
+        assertEquals(320, repository.getScrollOffset("qhash"))
+    }
+
+    @Test
     fun `recents repository persists watched posts searches and activity order`() = runTest {
-        val dir = Files.createTempDirectory("recents-store-").toFile()
+        val dir = tempDir("recents-store-")
         var now = 10_000L
         val first = FileBackedRecentsRepository(
             baseDirectory = dir,
@@ -280,7 +429,7 @@ class FileBackedRepositoriesTest {
 
     @Test
     fun `recents repository clears watched and search history independently across restarts`() = runTest {
-        val dir = Files.createTempDirectory("recents-clear-store-").toFile()
+        val dir = tempDir("recents-clear-store-")
         val first = FileBackedRecentsRepository(dir, clock = { 1L })
 
         first.recordWatchedPost(samplePost("1", localPath = null), ViewerStreamSource.SEARCH, "hash")
@@ -306,7 +455,7 @@ class FileBackedRepositoriesTest {
 
     @Test
     fun `settings repository persists updates`() = runTest {
-        val dir = Files.createTempDirectory("settings-store-").toFile()
+        val dir = tempDir("settings-store-")
         val first = FileBackedSettingsRepository(dir)
         first.setEnabledSources(setOf(SourceKey.PIXIV, SourceKey.GELBOORU))
         first.setSourceWeights(mapOf(SourceKey.PIXIV to 4.0, SourceKey.GELBOORU to 1.0))
@@ -332,7 +481,7 @@ class FileBackedRepositoriesTest {
 
     @Test
     fun `settings repository persists provider health snapshots`() = runTest {
-        val dir = Files.createTempDirectory("settings-provider-health-").toFile()
+        val dir = tempDir("settings-provider-health-")
         val first = FileBackedSettingsRepository(dir)
         first.setProviderHealthSnapshots(
             listOf(
@@ -363,7 +512,7 @@ class FileBackedRepositoriesTest {
 
     @Test
     fun `settings repository defaults unknown duration resolution on for old files`() = runTest {
-        val dir = Files.createTempDirectory("settings-store-old-").toFile()
+        val dir = tempDir("settings-store-old-")
         dir.resolve("settings_store.json").writeText(
             """
                 {
@@ -382,7 +531,7 @@ class FileBackedRepositoriesTest {
 
     @Test
     fun `settings repository persists dynamic recommendation profiles`() = runTest {
-        val dir = Files.createTempDirectory("settings-profiles-").toFile()
+        val dir = tempDir("settings-profiles-")
         val first = FileBackedSettingsRepository(dir)
         val created = first.addRecommendationProfile("Anime Mood")
         assertTrue(
@@ -417,7 +566,7 @@ class FileBackedRepositoriesTest {
 
     @Test
     fun `settings repository persists for you blacklist entries`() = runTest {
-        val dir = Files.createTempDirectory("settings-for-you-blacklist-").toFile()
+        val dir = tempDir("settings-for-you-blacklist-")
         val first = FileBackedSettingsRepository(dir)
         val profileId = first.observeSettings().first().activeProfileId
 
@@ -453,7 +602,7 @@ class FileBackedRepositoriesTest {
 
     @Test
     fun `settings repository persists source-aware favorite tags`() = runTest {
-        val dir = Files.createTempDirectory("settings-favorite-tags-").toFile()
+        val dir = tempDir("settings-favorite-tags-")
         val first = FileBackedSettingsRepository(dir)
         val profileId = first.observeSettings().first().activeProfileId
 
@@ -501,7 +650,7 @@ class FileBackedRepositoriesTest {
 
     @Test
     fun `likes repository persists toggles and profile isolation`() = runTest {
-        val dir = Files.createTempDirectory("likes-store-").toFile()
+        val dir = tempDir("likes-store-")
         val first = FileBackedLikesRepository(dir)
         val pixivPost = samplePost("10", localPath = null, source = SourceKey.PIXIV)
         val gelbooruPost = samplePost("11", localPath = null, source = SourceKey.GELBOORU)
@@ -535,7 +684,7 @@ class FileBackedRepositoriesTest {
 
     @Test
     fun `cache repository writes entries and survives restart`() = runTest {
-        val dir = Files.createTempDirectory("cache-store-").toFile()
+        val dir = tempDir("cache-store-")
         val sourceFile = File(dir, "source-thumb.jpg")
         sourceFile.writeText("image-bytes")
 
@@ -551,7 +700,7 @@ class FileBackedRepositoriesTest {
 
     @Test
     fun `ui restore repository persists tab scroll and viewer context`() = runTest {
-        val dir = Files.createTempDirectory("ui-restore-store-").toFile()
+        val dir = tempDir("ui-restore-store-")
         val first = FileBackedUiRestoreRepository(dir)
         val context = ViewerLaunchContext(
             queryHash = "qhash",
@@ -580,6 +729,10 @@ class FileBackedRepositoriesTest {
             dateRange = DateRange(fromEpochMs = 100L, toEpochMs = 200L),
             minScore = 20,
         )
+    }
+
+    private fun tempDir(prefix: String): File {
+        return tempFolder.newFolder(prefix)
     }
 
     private fun samplePost(id: String, localPath: String?, source: SourceKey = SourceKey.PIXIV): Post {

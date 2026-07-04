@@ -6,14 +6,14 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.orchestration.SourceRunState
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StubAdapterRegistryTest {
     @Test
-    fun `unified orchestrator returns merged results from all sources`() = runBlocking {
+    fun `unified orchestrator returns merged results from all sources`() = runTest {
         val registry = StubAdapterRegistry()
         registry.runtime.preset = StubScenarioPreset.NORMAL
         val enabledSources = SourceKey.entries.toSet()
@@ -31,7 +31,7 @@ class StubAdapterRegistryTest {
     }
 
     @Test
-    fun `unified orchestrator reports partial failure scenario`() = runBlocking {
+    fun `unified orchestrator reports partial failure scenario`() = runTest {
         val registry = StubAdapterRegistry()
         registry.runtime.preset = StubScenarioPreset.PARTIAL_FAILURE
         val enabledSources = SourceKey.entries.toSet()

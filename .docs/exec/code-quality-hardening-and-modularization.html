@@ -179,14 +179,14 @@
     <h1>ExecPlan: Code Quality Hardening and Modularization</h1>
     <p>This plan turns the current quality audit into an implementation path: make lint green, make persisted user state resilient to partial writes and future enum changes, move duplicated media/download policy into shared services, reduce <code>TheoriaApp.kt</code> into a composition surface, and add the missing test lanes that make those changes safe.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Proposed</span>
+      <span class="pill">Status: Complete</span>
       <span class="pill">Owner: Codex</span>
       <span class="pill">Created: 2026-07-04</span>
       <span class="pill">Updated: 2026-07-04</span>
       <span class="pill">Plan file: .docs/exec/code-quality-hardening-and-modularization.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Start Phase 1 and make <code>./gradlew lint</code> pass without changing user-visible behavior.</div>
+      <div class="card"><strong>Next Action</strong>Manual device smoke for the new instrumentation lane and user-facing app flows.</div>
       <div class="card"><strong>Main Risk</strong>Large structural movement could mask behavior changes in Search, Viewer, update, deep-link, and Codex flows. Each phase adds tests before moving code.</div>
       <div class="card"><strong>Validation</strong><code>./gradlew lint</code>, focused unit suites, <code>./gradlew test</code>, <code>:app:assembleDebug</code>, and a small Compose instrumentation smoke lane.</div>
       <div class="card"><strong>Affected Areas</strong><code>app</code>, <code>core-data</code>, <code>core-domain</code>, <code>core-stubs</code>, <code>core-sources</code>, docs, and Gradle test wiring.</div>
@@ -365,13 +365,13 @@
       <h3>Progress</h3>
       <ul>
         <li>[x] 2026-07-04 - Created this ExecPlan from the code quality audit and current repository inspection.</li>
-        <li>[ ] 2026-07-04 - Re-run baseline <code>./gradlew test</code> and <code>./gradlew lint</code> immediately before implementation.</li>
-        <li>[ ] Phase 1 - Restore green lint.</li>
-        <li>[ ] Phase 2 - Harden file-backed persistence.</li>
-        <li>[ ] Phase 3 - Consolidate media request and download policy.</li>
-        <li>[ ] Phase 4 - Split <code>TheoriaApp.kt</code> workflows.</li>
-        <li>[ ] Phase 5 - Modernize test setup and add UI smoke coverage.</li>
-        <li>[ ] Phase 6 - Run final regression audit and update docs.</li>
+        <li>[x] 2026-07-04 - Re-ran baseline <code>./gradlew test</code> and <code>./gradlew lint</code>; tests passed and lint reproduced 16 errors before implementation.</li>
+        <li>[x] Phase 1 - Restored green lint with minSdk-safe URL decoding, explicit media retriever release, Media3 opt-ins, lifecycle import migration, and clearer Rule34 tag-count control flow.</li>
+        <li>[x] Phase 2 - Hardened file-backed persistence with atomic JSON replacement, tolerant Codex/query enum decoding, and focused repository tests.</li>
+        <li>[x] Phase 3 - Consolidated media request and download policy into <code>MediaRequestFactory</code> and <code>PostDownloadService</code>, with app unit tests for shared filename policy.</li>
+        <li>[x] Phase 4 - Split initial <code>TheoriaApp.kt</code> workflow ownership by moving dependency construction and seed tag loading into <code>TheoriaAppGraph</code>. Verified with <code>./gradlew :app:testDebugUnitTest :app:assembleDebug</code>.</li>
+        <li>[x] Phase 5 - Modernized coroutine tests to <code>runTest</code>, moved file-backed test temp directories to JUnit <code>TemporaryFolder</code>, and added a Compose instrumentation smoke test for top-level app navigation. Verified with <code>./gradlew :core-data:test :core-domain:test :core-stubs:test</code> and <code>./gradlew :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin</code>; <code>connectedDebugAndroidTest</code> was skipped because <code>adb devices</code> showed no attached targets.</li>
+        <li>[x] Phase 6 - Ran final regression audit, updated docs, extracted duplicated release changelog rendering, and recorded residual duplication. Verified with <code>./gradlew lint test :app:assembleDebug</code>, <code>./gradlew :app:testDebugUnitTest lint</code>, <code>./gradlew :app:assembleDebug</code>, <code>git diff --check</code>, and <code>jscpd</code>.</li>
       </ul>
 
       <h3>Surprises And Discoveries</h3>
@@ -380,6 +380,9 @@
         <li>Observation: <code>FileBackedRepositories.kt</code> already has some tolerant enum parsing, but direct parsing still exists in Codex item/post and query records. Evidence: <code>SourceKey.valueOf(source)</code> in <code>CodexItemRecord.toDomain()</code> and <code>PostRecord.toDomain()</code>; <code>SourceKey.valueOf(requireNotNull(modeSource))</code> and <code>SortMode.valueOf(sort)</code> in <code>QueryRecord.toDomain()</code>.</li>
         <li>Observation: App Gradle already declares Android test dependencies, but there is no <code>app/src/androidTest</code> directory. Evidence: <code>app/build.gradle.kts</code> includes <code>androidTestImplementation</code> entries and <code>find app/src -maxdepth 2 -type d</code> shows only <code>main</code> and <code>test</code>.</li>
         <li>Observation: Test count is strong for JVM logic but not UI wiring. Evidence: 47 Kotlin files under <code>src/test</code> and 279 <code>@Test</code> cases across app/core modules.</li>
+        <li>Observation: Media3 <code>UnstableApi</code> is an AndroidX opt-in annotation, not a Kotlin opt-in marker. Evidence: Kotlin compile warned when <code>@file:OptIn(UnstableApi::class)</code> was used, and the warning disappeared after switching to <code>@file:androidx.annotation.OptIn(UnstableApi::class)</code>.</li>
+        <li>Observation: <code>FileBackedRepositories.kt</code> already imported <code>java.nio.file.Files</code> for cache file copies, so atomic JSON replacement could use the same filesystem API without adding a new dependency. Evidence: <code>writeJson()</code> now writes a sibling temp file and moves it into place with <code>ATOMIC_MOVE</code>, falling back to replace move when atomic move is unsupported.</li>
+        <li>Observation: Viewer still needs <code>URLUtil</code> for video-cache file extension guessing, but Search, Viewer, and app-level post downloads no longer own <code>DownloadManager</code> request construction. Evidence: duplicate scan now shows <code>DownloadManager</code> only in <code>PostDownloadService</code>, updater download code, and Pixiv ugoira export paths.</li>
       </ul>
 
       <h3>Decision Log</h3>
@@ -391,7 +394,12 @@
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>No implementation outcome yet. Update this section at the end of each phase with what changed, what validation proved, and what a future agent should remember before continuing.</p>
+      <p>Phase 1 is complete. <code>./gradlew lint</code> now succeeds after fixing the API 33 <code>URLDecoder</code> overload, the API 29 <code>MediaMetadataRetriever.use</code> path, Media3 unstable API annotations, lifecycle owner imports, and the ambiguous Rule34 tag-count lambda. Focused verification also passed with <code>./gradlew :app:testDebugUnitTest :core-sources:test</code>.</p>
+      <p>Phase 2 is complete. File-backed JSON writes now go through a temp-file replacement path, Codex item/post records with unknown sources are dropped without crashing initialization, creator profiles with unknown sources are omitted from otherwise valid posts, and stored queries with unknown source or sort values fall back to Unified mode and <code>SortMode.TOP</code>. Verification passed with <code>./gradlew :core-data:test</code> and <code>./gradlew test</code>.</p>
+      <p>Phase 3 is complete. Search and Viewer image requests now delegate source-header-aware Coil request creation to <code>MediaRequestFactory</code>. Viewer downloads and app-level post downloads now delegate to <code>PostDownloadService</code>, which centralizes request headers, destination selection, filename sanitization, MIME handling, and <code>DownloadManager</code> enqueue behavior. Verification passed with <code>./gradlew :app:testDebugUnitTest</code> and <code>./gradlew lint</code>.</p>
+      <p>Phase 4 is complete. App dependency construction, source client setup, update services, repositories, seed tag loading, and top-level coordinators now live in <code>TheoriaAppGraph</code>. <code>TheoriaApp.kt</code> remains the navigation and app-shell junction, but no longer owns the dependency graph. Verification passed with <code>./gradlew :app:testDebugUnitTest :app:assembleDebug</code>.</p>
+      <p>Phase 5 is complete. Coroutine tests in <code>core-domain</code> and <code>core-stubs</code> now use <code>runTest</code>, file-backed test directories are runner-managed with JUnit <code>TemporaryFolder</code>, and a Compose instrumentation smoke test compiles under <code>app/src/androidTest</code>. Connected execution is device-required and was skipped because no adb device was attached.</p>
+      <p>Phase 6 is complete. The final Gradle gate is green, docs are updated, release changelog rendering in <code>TheoriaApp.kt</code> is shared, and the final duplication scan reports 15 clones / 1.18% duplicated lines. The remaining clones are recorded as follow-up design seams rather than forced abstractions.</p>
     </section>
 
     <section id="recovery">
@@ -412,6 +420,90 @@
           <li><code>app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt</code>: Media3/Android lifecycle import warnings may require targeted opt-in and <code>LocalLifecycleOwner</code> import migration.</li>
           <li><code>core-sources/src/main/kotlin/com/theoriacodex/sources/rule34/Rule34XxxSourceAdapter.kt</code>: nested <code>return@forEach</code> in <code>fetchTagCounts()</code> should become an explicit loop or uniquely labeled lambda.</li>
         </ul>
+      </details>
+
+      <details>
+        <summary>Phase 6 final validation transcript</summary>
+        <pre><code>./gradlew lint test :app:assembleDebug
+BUILD SUCCESSFUL in 1m 8s
+
+./gradlew :app:testDebugUnitTest lint
+BUILD SUCCESSFUL in 1m 14s
+
+./gradlew :app:assembleDebug
+BUILD SUCCESSFUL in 14s
+
+git diff --check
+No whitespace errors.
+
+npx -y jscpd --min-lines 12 --min-tokens 80 --reporters console --pattern "**/*.kt" --ignore "**/build/**,**/.gradle/**,**/src/test/**,**/src/androidTest/**" .
+88 files
+26,137 source lines
+15 clones
+308 duplicated lines, 1.18%
+2,070 duplicated tokens, 1.37%</code></pre>
+        <p>Residual clones are outside the extracted media/download policy: repeated post action UI across Search/Codex/Creator surfaces, creator/recommendation screen structures, selected repository normalization parity between file-backed and in-memory stores, source deep-link parser helpers, Pixiv ugoira player branches, and provider fallback patterns.</p>
+      </details>
+
+      <details>
+        <summary>Phase 5 validation transcript</summary>
+        <pre><code>./gradlew :core-data:test :core-domain:test :core-stubs:test
+BUILD SUCCESSFUL in 28s
+
+./gradlew :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin
+BUILD SUCCESSFUL in 9s
+
+adb devices
+List of devices attached</code></pre>
+        <p><code>:app:connectedDebugAndroidTest</code> was skipped because no Android device or emulator was attached.</p>
+      </details>
+
+      <details>
+        <summary>Phase 4 validation transcript</summary>
+        <pre><code>./gradlew :app:testDebugUnitTest
+BUILD SUCCESSFUL in 14s
+
+./gradlew :app:testDebugUnitTest :app:assembleDebug
+BUILD SUCCESSFUL in 4m 23s</code></pre>
+      </details>
+
+      <details>
+        <summary>Phase 3 validation transcript</summary>
+        <pre><code>./gradlew :app:testDebugUnitTest
+BUILD SUCCESSFUL in 55s
+
+./gradlew lint
+BUILD SUCCESSFUL in 1m 20s</code></pre>
+      </details>
+
+      <details>
+        <summary>Phase 2 validation transcript</summary>
+        <pre><code>./gradlew :core-data:test
+BUILD SUCCESSFUL in 1m 28s
+
+./gradlew test
+BUILD SUCCESSFUL in 1m 47s
+71 actionable tasks: 38 executed, 33 up-to-date</code></pre>
+      </details>
+
+      <details>
+        <summary>Phase 1 validation transcript</summary>
+        <pre><code>./gradlew test
+BUILD SUCCESSFUL in 9s
+71 actionable tasks: 5 executed, 66 up-to-date
+
+./gradlew lint
+Lint found 16 errors, 88 warnings.
+First failure: ExternalPostDeepLinks.kt:260 URLDecoder.decode(value, StandardCharsets.UTF_8) requires API level 33.
+
+./gradlew :app:compileDebugKotlin :core-sources:compileKotlin
+BUILD SUCCESSFUL in 2m 50s
+
+./gradlew :app:testDebugUnitTest :core-sources:test
+BUILD SUCCESSFUL in 1m 5s
+
+./gradlew lint
+BUILD SUCCESSFUL in 2m 51s</code></pre>
       </details>
 
       <details>

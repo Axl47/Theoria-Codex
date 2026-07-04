@@ -1,3 +1,5 @@
+@file:androidx.annotation.OptIn(UnstableApi::class)
+
 package com.theoriacodex.app.search
 
 import android.content.Context
@@ -86,7 +88,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -96,9 +97,11 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
@@ -111,6 +114,7 @@ import com.theoriacodex.app.media.copyPostTagsToClipboard
 import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.media.isPixivUgoiraPost
+import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.media.postPreviewImageCandidate
 import com.theoriacodex.app.media.probeRemoteVideoDurationMs
@@ -1181,7 +1185,7 @@ private fun SearchVideoPreview(
         val player = createLoopingExoPlayer(
             context = context,
             location = location,
-            headers = searchRequestHeaders(sourceKey),
+            headers = sourceKey.requestHeaders(),
             muted = true,
         )
         val listener = object : Player.Listener {
@@ -2094,18 +2098,12 @@ private fun buildImageRequest(
     url: String,
     sourceKey: SourceKey,
 ): ImageRequest {
-    val builder = ImageRequest.Builder(context)
-        .data(url)
-        .crossfade(false)
-        .allowHardware(false)
-    searchRequestHeaders(sourceKey).forEach { (name, value) ->
-        builder.addHeader(name, value)
-    }
-    return builder.build()
-}
-
-private fun searchRequestHeaders(sourceKey: SourceKey): Map<String, String> {
-    return sourceKey.requestHeaders()
+    return MediaRequestFactory.imageRequest(
+        context = context,
+        url = url,
+        sourceKey = sourceKey,
+        crossfade = false,
+    )
 }
 
 private fun String.isDigitsOnly(): Boolean {

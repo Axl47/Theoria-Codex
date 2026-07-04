@@ -107,9 +107,9 @@ class Rule34XxxSourceAdapter(
                     "limit" to chunk.size.toString(),
                 ),
             )
-            jsonArrayOfObjects(response, gson, "rule34.xxx tags").forEach { raw ->
+            jsonArrayOfObjects(response, gson, "rule34.xxx tags").forEach tagRecords@{ raw ->
                 val name = raw.get("name")?.asString?.trim().orEmpty()
-                val count = raw.get("count")?.asInt ?: raw.get("post_count")?.asInt ?: return@forEach
+                val count = raw.get("count")?.asInt ?: raw.get("post_count")?.asInt ?: return@tagRecords
                 if (name.isNotBlank()) {
                     counts.putIfAbsent(name, count)
                 }

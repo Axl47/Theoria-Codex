@@ -2,15 +2,20 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.SourceKey
-import java.nio.file.Files
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 class TagSuggestionStoreTest {
+    @get:Rule
+    val tempFolder = TemporaryFolder()
+
     @Test
     fun `incoming metadata overrides weaker seeded entry`() {
-        val tempDir = Files.createTempDirectory("tag-store-test").toFile()
+        val tempDir = tempDir("tag-store-test")
         val store = FileBackedTagSuggestionStore(
             storeFile = tempDir.resolve("tag_suggestions.json"),
             seedData = mapOf(
@@ -34,7 +39,7 @@ class TagSuggestionStoreTest {
 
     @Test
     fun `store size respects max entries per source`() {
-        val tempDir = Files.createTempDirectory("tag-store-cap-test").toFile()
+        val tempDir = tempDir("tag-store-cap-test")
         val store = FileBackedTagSuggestionStore(
             storeFile = tempDir.resolve("tag_suggestions.json"),
             maxEntriesPerSource = 2,
@@ -52,5 +57,9 @@ class TagSuggestionStoreTest {
         val saved = store.get(SourceKey.GELBOORU, limit = 10)
         assertEquals(2, saved.size)
         assertTrue(saved.map { it.text }.containsAll(listOf("tag_one", "tag_two")))
+    }
+
+    private fun tempDir(prefix: String): File {
+        return tempFolder.newFolder(prefix)
     }
 }

@@ -4,17 +4,13 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
-import android.app.DownloadManager
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Environment
 import android.os.Build
-import android.webkit.URLUtil
 import android.widget.Toast
 import com.google.gson.Gson
-import com.google.gson.JsonObject
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -68,9 +64,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.theoriacodex.app.R
 import com.theoriacodex.app.BuildConfig
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -85,7 +82,7 @@ import androidx.core.content.FileProvider
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.media.isPixivUgoiraPost
-import com.theoriacodex.app.media.postDownloadMediaCandidate
+import com.theoriacodex.app.media.PostDownloadService
 import com.theoriacodex.app.codex.CodexShareFile
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexListScreen
@@ -97,16 +94,12 @@ import com.theoriacodex.app.codex.codexSharePostId
 import com.theoriacodex.app.codex.codexSearchSourceOptions as buildCodexSearchSourceOptions
 import com.theoriacodex.app.codex.codexSearchTagOptions as buildCodexSearchTagOptions
 import com.theoriacodex.app.codex.sanitizeCodexExportName
-import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.creator.CreatorProfileScreen
 import com.theoriacodex.app.creator.browseableCreatorProfile
-import com.theoriacodex.app.recommend.ForYouCoordinator
 import com.theoriacodex.app.recommend.ForYouScreen
 import com.theoriacodex.app.recommend.trainingTagsFor
 import com.theoriacodex.app.recents.RecentsScreen
-import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.SearchScreen
-import com.theoriacodex.app.search.FileBackedTagSuggestionStore
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.search.filterSearchResults
@@ -118,25 +111,16 @@ import com.theoriacodex.app.source.exposedRealSources
 import com.theoriacodex.app.source.parseExternalCreatorDeepLink
 import com.theoriacodex.app.source.parseExternalPostDeepLink
 import com.theoriacodex.app.source.requestHeaders
-import com.theoriacodex.app.sourceauth.AndroidSecureSourceCredentialsStore
 import com.theoriacodex.app.sourceauth.parseGelbooruCredentialInput
 import com.theoriacodex.app.sourceauth.parseRule34XxxCredentialInput
-import com.theoriacodex.app.sourceauth.PixivPkceController
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
-import com.theoriacodex.app.update.AndroidApkInstaller
-import com.theoriacodex.app.update.ApkDownloadManager
-import com.theoriacodex.app.update.ApkUpdateValidator
 import com.theoriacodex.app.update.ChangelogSection
-import com.theoriacodex.app.update.FileBackedUpdateStateStore
-import com.theoriacodex.app.update.GitHubReleaseFeedClient
 import com.theoriacodex.app.update.RemoteUpdate
 import com.theoriacodex.app.update.PendingPostInstallChangelog
 import com.theoriacodex.app.update.StartupUpdateOutcome
 import com.theoriacodex.app.update.StartupUpdateState
-import com.theoriacodex.app.update.StartupUpdater
 import com.theoriacodex.app.update.UnknownSourcesPermissionRequiredException
 import com.theoriacodex.app.update.messageText
-import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.ViewerScreen
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.mergeViewerPosts
@@ -145,30 +129,19 @@ import com.theoriacodex.app.viewer.requiresViewerPostResolution
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.CodexSortMode
-import com.theoriacodex.data.repository.FileBackedCacheRepository
-import com.theoriacodex.data.repository.FileBackedCodexRepository
-import com.theoriacodex.data.repository.FileBackedLikesRepository
-import com.theoriacodex.data.repository.FileBackedQueryRepository
-import com.theoriacodex.data.repository.FileBackedRecentsRepository
-import com.theoriacodex.data.repository.FileBackedSettingsRepository
-import com.theoriacodex.data.repository.FileBackedUiRestoreRepository
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
-import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.sources.RealAdapterRegistry
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.Rule34XxxCredentials
-import com.theoriacodex.sources.http.DefaultSourceHttpClient
-import com.theoriacodex.sources.pixiv.PixivAuthApi
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.delay
@@ -220,109 +193,30 @@ fun TheoriaApp(
     val scope = rememberCoroutineScope()
     var rule34XxxConfigured by remember { mutableStateOf(false) }
 
-    val storageDirectory = remember(appContext) { File(appContext.filesDir, "theoria_codex") }
-    val seedTagSuggestions = remember(appContext) {
-        loadSeedTagSuggestions(appContext)
-    }
-    val tagSuggestionStore = remember(storageDirectory, seedTagSuggestions) {
-        FileBackedTagSuggestionStore(
-            storeFile = File(storageDirectory, "tag_suggestions.json"),
-            seedData = seedTagSuggestions,
-        )
-    }
-    val sourceHttpClient = remember { DefaultSourceHttpClient() }
-    val pixivAuthApi = remember(sourceHttpClient) { PixivAuthApi(sourceHttpClient) }
-    val credentialsStore = remember(appContext) { AndroidSecureSourceCredentialsStore(appContext) }
-    val pixivAuthController = remember(credentialsStore, pixivAuthApi) {
-        PixivPkceController(
-            authApi = pixivAuthApi,
-            credentialsProvider = credentialsStore,
-        )
-    }
-    val pixivUgoiraClient = remember(credentialsStore, sourceHttpClient) {
-        PixivUgoiraClient(
-            credentialsProvider = credentialsStore,
-            httpClient = sourceHttpClient,
-        )
-    }
-    val availableRealSources = remember(rule34XxxConfigured) {
-        exposedRealSources(rule34XxxConfigured)
-    }
-    val realRegistry = remember(credentialsStore, sourceHttpClient, availableRealSources) {
-        RealAdapterRegistry(
-            credentialsProvider = credentialsStore,
-            httpClient = sourceHttpClient,
-            exposedSources = availableRealSources,
-        )
-    }
-    val updateStateStore = remember(storageDirectory) {
-        FileBackedUpdateStateStore(
-            file = File(storageDirectory, "update_state.json"),
-        )
-    }
-    val updateFeedClient = remember {
-        GitHubReleaseFeedClient(
-            owner = BuildConfig.UPDATE_REPO_OWNER,
-            repo = BuildConfig.UPDATE_REPO_NAME,
-            channel = BuildConfig.UPDATE_CHANNEL,
-            assetName = BuildConfig.UPDATE_ASSET_NAME,
-        )
-    }
-    val apkDownloadManager = remember(appContext) {
-        ApkDownloadManager(
-            context = appContext,
-            outputFileName = BuildConfig.UPDATE_ASSET_NAME,
-        )
-    }
-    val apkUpdateValidator = remember(appContext) { ApkUpdateValidator(appContext) }
-    val apkInstaller = remember(appContext) { AndroidApkInstaller(appContext) }
-    val startupUpdater = remember(
-        appContext,
-        updateFeedClient,
-        apkDownloadManager,
-        apkUpdateValidator,
-        apkInstaller,
-        updateStateStore,
-    ) {
-        StartupUpdater(
-            context = appContext,
-            feedClient = updateFeedClient,
-            downloadManager = apkDownloadManager,
-            validator = apkUpdateValidator,
-            installer = apkInstaller,
-            stateStore = updateStateStore,
-            updateCheckTimeoutMs = BuildConfig.UPDATE_CHECK_TIMEOUT_MS,
-        )
-    }
-
-    val codexRepository = remember(storageDirectory) { FileBackedCodexRepository(storageDirectory) }
-    val likesRepository = remember(storageDirectory) { FileBackedLikesRepository(storageDirectory) }
-    val queryRepository = remember(storageDirectory) { FileBackedQueryRepository(storageDirectory) }
-    val recentsRepository = remember(storageDirectory) { FileBackedRecentsRepository(storageDirectory) }
-    val settingsRepository = remember(storageDirectory) { FileBackedSettingsRepository(storageDirectory) }
-    val cacheRepository = remember(storageDirectory) { FileBackedCacheRepository(storageDirectory) }
-    val uiRestoreRepository = remember(storageDirectory) { FileBackedUiRestoreRepository(storageDirectory) }
-    val searchCoordinator = remember(realRegistry) {
-        SearchCoordinator(
-            registry = realRegistry,
-            queryRepository = queryRepository,
-            settingsRepository = settingsRepository,
-            uiRestoreRepository = uiRestoreRepository,
-            recentsRepository = recentsRepository,
-            tagSuggestionStore = tagSuggestionStore,
-        )
-    }
-    val forYouCoordinator = remember(realRegistry) {
-        ForYouCoordinator(
-            registry = realRegistry,
-            settingsRepository = settingsRepository,
-            likesRepository = likesRepository,
-            tagSuggestionStore = tagSuggestionStore,
-        )
-    }
-    val creatorProfileCoordinator = remember(realRegistry) {
-        CreatorProfileCoordinator(registry = realRegistry)
-    }
+    val appGraph = rememberTheoriaAppGraph(
+        appContext = appContext,
+        rule34XxxConfigured = rule34XxxConfigured,
+    )
+    val storageDirectory = appGraph.storageDirectory
+    val sourceHttpClient = appGraph.sourceHttpClient
+    val credentialsStore = appGraph.credentialsStore
+    val pixivAuthApi = appGraph.pixivAuthApi
+    val pixivAuthController = appGraph.pixivAuthController
+    val pixivUgoiraClient = appGraph.pixivUgoiraClient
+    val availableRealSources = appGraph.availableRealSources
+    val realRegistry = appGraph.realRegistry
+    val updateStateStore = appGraph.updateStateStore
+    val updateFeedClient = appGraph.updateFeedClient
+    val startupUpdater = appGraph.startupUpdater
+    val codexRepository = appGraph.codexRepository
+    val likesRepository = appGraph.likesRepository
+    val recentsRepository = appGraph.recentsRepository
+    val settingsRepository = appGraph.settingsRepository
+    val cacheRepository = appGraph.cacheRepository
+    val uiRestoreRepository = appGraph.uiRestoreRepository
+    val searchCoordinator = appGraph.searchCoordinator
+    val forYouCoordinator = appGraph.forYouCoordinator
+    val creatorProfileCoordinator = appGraph.creatorProfileCoordinator
 
     val settings by settingsRepository.observeSettings().collectAsState(initial = AppSettings())
     val recentWatchedPosts by recentsRepository.observeWatchedPosts().collectAsState(initial = emptyList())
@@ -550,7 +444,7 @@ fun TheoriaApp(
                         }
                     }
                 }
-                if (postToDownload != null && enqueuePostDownload(appContext, postToDownload)) {
+                if (postToDownload != null && PostDownloadService.enqueuePostDownload(appContext, postToDownload)) {
                     "Download queued"
                 } else {
                     "Could not queue download"
@@ -2475,58 +2369,12 @@ private fun StartupUpdatePromptCard(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            if (releases.isNotEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 240.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    releases.forEachIndexed { index, release ->
-                        val titleBase = releaseDisplayTitle(release.releaseName, release.versionCode)
-                        val title = if (release.versionCode == installedVersionCode) {
-                            "$titleBase (Current)"
-                        } else {
-                            titleBase
-                        }
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        val sections = release.changelogSections.filter { section ->
-                            section.bullets.isNotEmpty()
-                        }
-                        if (sections.isNotEmpty()) {
-                            sections.forEach { section ->
-                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(
-                                        text = section.title,
-                                        style = MaterialTheme.typography.titleSmall,
-                                    )
-                                    section.bullets.forEach { bullet ->
-                                        ChangelogBulletText(bullet = bullet)
-                                    }
-                                }
-                            }
-                        } else {
-                            Text(
-                                text = firstChangelogLine(release.changelogMarkdown)
-                                    ?: "No changelog details were published for this build.",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                        if (index != releases.lastIndex) {
-                            HorizontalDivider()
-                        }
-                    }
-                }
-            } else {
-                Text(
-                    text = "No changelog details were published for this build.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
+            ReleaseChangelogList(
+                releases = releases,
+                installedVersionCode = installedVersionCode,
+                maxHeight = 240.dp,
+                itemSpacing = 10.dp,
+            )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -2575,49 +2423,12 @@ private fun PostInstallChangelogDialog(
             Text("What's new")
         },
         text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 320.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                releases.forEachIndexed { index, release ->
-                    val titleBase = releaseDisplayTitle(release.releaseName, release.versionCode)
-                    val title = if (release.versionCode == installedVersionCode) {
-                        "$titleBase (Current)"
-                    } else {
-                        titleBase
-                    }
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    val sections = release.changelogSections.filter { it.bullets.isNotEmpty() }
-                    if (sections.isNotEmpty()) {
-                        sections.forEach { section ->
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(
-                                    text = section.title,
-                                    style = MaterialTheme.typography.titleSmall,
-                                )
-                                section.bullets.forEach { bullet ->
-                                    ChangelogBulletText(bullet = bullet)
-                                }
-                            }
-                        }
-                    } else {
-                        Text(
-                            text = firstChangelogLine(release.changelogMarkdown)
-                                ?: "No changelog details were published for this build.",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                    if (index != releases.lastIndex) {
-                        HorizontalDivider()
-                    }
-                }
-            }
+            ReleaseChangelogList(
+                releases = releases,
+                installedVersionCode = installedVersionCode,
+                maxHeight = 320.dp,
+                itemSpacing = 14.dp,
+            )
         },
     )
 }
@@ -2639,51 +2450,87 @@ private fun ReleaseHistoryDialog(
             Text("Release changelog")
         },
         text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                releases.forEachIndexed { index, release ->
-                    val titleBase = releaseDisplayTitle(release.releaseName, release.versionCode)
-                    val title = if (release.versionCode == installedVersionCode) {
-                        "$titleBase (Current)"
-                    } else {
-                        titleBase
-                    }
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    val sections = release.changelogSections.filter { it.bullets.isNotEmpty() }
-                    if (sections.isNotEmpty()) {
-                        sections.forEach { section ->
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(
-                                    text = section.title,
-                                    style = MaterialTheme.typography.titleSmall,
-                                )
-                                section.bullets.forEach { bullet ->
-                                    ChangelogBulletText(bullet = bullet)
-                                }
-                            }
-                        }
-                    } else {
-                        Text(
-                            text = firstChangelogLine(release.changelogMarkdown)
-                                ?: "No changelog details were published for this build.",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                    if (index != releases.lastIndex) {
-                        HorizontalDivider()
-                    }
-                }
-            }
+            ReleaseChangelogList(
+                releases = releases,
+                installedVersionCode = installedVersionCode,
+                maxHeight = 420.dp,
+                itemSpacing = 14.dp,
+            )
         },
     )
+}
+
+@Composable
+private fun ReleaseChangelogList(
+    releases: List<ReleaseChangelogEntry>,
+    installedVersionCode: Int,
+    maxHeight: Dp,
+    itemSpacing: Dp,
+) {
+    if (releases.isEmpty()) {
+        Text(
+            text = "No changelog details were published for this build.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        return
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = maxHeight)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(itemSpacing),
+    ) {
+        releases.forEachIndexed { index, release ->
+            ReleaseChangelogEntryContent(
+                release = release,
+                installedVersionCode = installedVersionCode,
+            )
+            if (index != releases.lastIndex) {
+                HorizontalDivider()
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReleaseChangelogEntryContent(
+    release: ReleaseChangelogEntry,
+    installedVersionCode: Int,
+) {
+    val titleBase = releaseDisplayTitle(release.releaseName, release.versionCode)
+    val title = if (release.versionCode == installedVersionCode) {
+        "$titleBase (Current)"
+    } else {
+        titleBase
+    }
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+    )
+    val sections = release.changelogSections.filter { section ->
+        section.bullets.isNotEmpty()
+    }
+    if (sections.isNotEmpty()) {
+        sections.forEach { section ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = section.title,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                section.bullets.forEach { bullet ->
+                    ChangelogBulletText(bullet = bullet)
+                }
+            }
+        }
+    } else {
+        Text(
+            text = firstChangelogLine(release.changelogMarkdown)
+                ?: "No changelog details were published for this build.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
 }
 
 private fun openInBrowser(context: Context, url: String) {
@@ -2835,83 +2682,6 @@ private fun firstChangelogLine(markdown: String): String? {
         .lineSequence()
         .map { it.trim() }
         .firstOrNull { it.isNotBlank() && !it.startsWith("#") }
-}
-
-private fun enqueuePostDownload(context: Context, post: Post): Boolean {
-    val candidate = postDownloadMediaCandidate(post) ?: return false
-    val media = candidate.ref
-    val url = candidate.url
-    val request = DownloadManager.Request(Uri.parse(url))
-        .setAllowedOverMetered(true)
-        .setAllowedOverRoaming(true)
-        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-        .setMimeType(media.mime)
-    candidate.requestHeaders.forEach { (name, value) ->
-        request.addRequestHeader(name, value)
-    }
-
-    val guessedName = URLUtil.guessFileName(url, null, media.mime)
-    val extension = guessedName.substringAfterLast('.', "")
-    val base = post.title
-        ?.trim()
-        ?.replace(Regex("[^A-Za-z0-9._-]+"), "_")
-        ?.trim('_')
-        ?.takeIf { it.isNotBlank() }
-        ?: "${post.id.source.name.lowercase()}_${post.id.sourcePostId}"
-    val fileName = if (extension.isNotBlank()) "$base.$extension" else base
-    request.setTitle(fileName)
-    request.setDescription(post.pageUrl ?: "Saved from Theoria Codex")
-    runCatching {
-        request.setDestinationInExternalPublicDir(
-            Environment.DIRECTORY_DOWNLOADS,
-            "TheoriaCodex/$fileName",
-        )
-    }.onFailure {
-        request.setDestinationInExternalFilesDir(
-            context,
-            Environment.DIRECTORY_DOWNLOADS,
-            fileName,
-        )
-    }
-
-    val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager ?: return false
-    return runCatching {
-        manager.enqueue(request)
-        true
-    }.getOrElse { false }
-}
-
-private fun loadSeedTagSuggestions(context: Context): Map<SourceKey, List<TagSuggestion>> {
-    val body = runCatching {
-        context.assets.open("tag_store.json").bufferedReader().use { it.readText() }
-    }.getOrNull() ?: return emptyMap()
-    val root = runCatching { Gson().fromJson(body, JsonObject::class.java) }.getOrNull()
-        ?: return emptyMap()
-    val sources = root.getAsJsonObject("sources") ?: return emptyMap()
-    return sources.entrySet().mapNotNull outer@{ (sourceName, value) ->
-        val source = runCatching { SourceKey.valueOf(sourceName) }.getOrNull() ?: return@outer null
-        val tags = value.takeIf { it.isJsonArray }?.asJsonArray
-            ?.mapNotNull inner@{ element ->
-                val obj = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@inner null
-                val text = obj.get("text")
-                    ?.takeUnless { it.isJsonNull }
-                    ?.asString
-                    ?.trim()
-                    .orEmpty()
-                if (text.isBlank()) return@inner null
-                TagSuggestion(
-                    text = text,
-                    type = obj.get("type")
-                        ?.takeUnless { it.isJsonNull }
-                        ?.asString,
-                    count = obj.get("count")
-                        ?.takeUnless { it.isJsonNull }
-                        ?.asInt,
-                )
-            }
-            .orEmpty()
-        source to tags
-    }.toMap()
 }
 
 private fun likesCodexIdForProfile(profileId: String): String {

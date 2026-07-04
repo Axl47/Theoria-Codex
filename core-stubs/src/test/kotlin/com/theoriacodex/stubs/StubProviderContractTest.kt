@@ -9,7 +9,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -19,7 +19,7 @@ import org.junit.Test
 
 class StubProviderContractTest {
     @Test
-    fun `every stub source satisfies search identity media tag and paging contracts`() = runBlocking {
+    fun `every stub source satisfies search identity media tag and paging contracts`() = runTest {
         val registry = StubAdapterRegistry(runtime = StubRuntime(StubScenarioPreset.NORMAL))
 
         SourceKey.entries.forEach { source ->
@@ -42,7 +42,7 @@ class StubProviderContractTest {
     }
 
     @Test
-    fun `every stub source resolves own ids and ignores foreign ids`() = runBlocking {
+    fun `every stub source resolves own ids and ignores foreign ids`() = runTest {
         val registry = StubAdapterRegistry(runtime = StubRuntime(StubScenarioPreset.NORMAL))
 
         SourceKey.entries.forEach { source ->
@@ -57,7 +57,7 @@ class StubProviderContractTest {
     }
 
     @Test
-    fun `every stub source exposes shaped trending autocomplete and quick queries`() = runBlocking {
+    fun `every stub source exposes shaped trending autocomplete and quick queries`() = runTest {
         val registry = StubAdapterRegistry(runtime = StubRuntime(StubScenarioPreset.NORMAL))
 
         SourceKey.entries.forEach { source ->
@@ -87,7 +87,7 @@ class StubProviderContractTest {
     }
 
     @Test
-    fun `partial failure stubs surface typed network failures`() = runBlocking {
+    fun `partial failure stubs surface typed network failures`() = runTest {
         val registry = StubAdapterRegistry(runtime = StubRuntime(StubScenarioPreset.PARTIAL_FAILURE))
         val adapter = requireNotNull(registry.adapterFor(SourceKey.GELBOORU))
 

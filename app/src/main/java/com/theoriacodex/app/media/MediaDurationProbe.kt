@@ -11,11 +11,14 @@ suspend fun probeRemoteVideoDurationMs(post: Post): Long? = withContext(Dispatch
     val ref = bestDurationProbeRef(post) ?: return@withContext null
     val location = ref.url?.trim()?.takeIf(String::isNotBlank) ?: return@withContext null
     runCatching {
-        MediaMetadataRetriever().use { retriever ->
+        val retriever = MediaMetadataRetriever()
+        try {
             retriever.setDataSource(location, post.id.source.requestHeaders())
             retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull()
                 ?.takeIf { it > 0L }
+        } finally {
+            retriever.release()
         }
     }.getOrNull()
 }

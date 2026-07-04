@@ -17,7 +17,8 @@ import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
 import com.theoriacodex.domain.tags.sourceTagKey
 import java.io.File
 import java.nio.file.Files
-import java.nio.file.StandardCopyOption
+import java.nio.file.StandardCopyOption.ATOMIC_MOVE
+import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,9 +44,8 @@ class FileBackedCodexRepository(
         storageFile.parentFile?.mkdirs()
         val stored = readJson(storageFile, CodexStoreFile())
         codicesFlow.value = stored.codices.map { it.toDomain() }
-        itemsFlow.value = stored.items.mapValues { entry -> entry.value.map { it.toDomain() } }
-        postsFlow.value = stored.posts.associate { record ->
-            val post = record.toDomain()
+        itemsFlow.value = stored.items.mapValues { entry -> entry.value.mapNotNull { it.toDomainOrNull() } }
+        postsFlow.value = stored.posts.mapNotNull { record -> record.toDomainOrNull() }.associate { post ->
             post.id to post
         }
     }
@@ -653,7 +653,7 @@ class FileBackedCacheRepository(
             if (localFile.exists()) {
                 val extension = localFile.extension.takeIf { it.isNotBlank() } ?: "bin"
                 val output = targetDirectory.resolve("$key.$extension")
-                Files.copy(localFile.toPath(), output.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                Files.copy(localFile.toPath(), output.toPath(), REPLACE_EXISTING)
                 return
             }
         }
@@ -867,10 +867,11 @@ private data class CodexItemRecord(
     val sourcePostId: String,
     val savedAtEpochMs: Long,
 ) {
-    fun toDomain(): CodexItem {
+    fun toDomainOrNull(): CodexItem? {
+        val resolvedSource = source.toSourceKeyOrNull() ?: return null
         return CodexItem(
             codexId = codexId,
-            postId = PostId(source = SourceKey.valueOf(source), sourcePostId = sourcePostId),
+            postId = PostId(source = resolvedSource, sourcePostId = sourcePostId),
             savedAtEpochMs = savedAtEpochMs,
         )
     }
@@ -910,10 +911,11 @@ private data class PostRecord(
     val creatorProfile: CreatorProfileRecord? = null,
     val durationMs: Long? = null,
 ) {
-    fun toDomain(): Post {
+    fun toDomainOrNull(): Post? {
+        val resolvedSource = source.toSourceKeyOrNull() ?: return null
         return Post(
             id = PostId(
-                source = SourceKey.valueOf(source),
+                source = resolvedSource,
                 sourcePostId = sourcePostId,
             ),
             preview = ImageRef(
@@ -941,7 +943,7 @@ private data class PostRecord(
             createdAtEpochMs = createdAtEpochMs,
             media = media.orEmpty().map { it.toDomain() },
             title = title,
-            creatorProfile = creatorProfile?.toDomain(),
+            creatorProfile = creatorProfile?.toDomainOrNull(),
             durationMs = durationMs,
         )
     }
@@ -982,9 +984,10 @@ private data class CreatorProfileRecord(
     val profileUrl: String? = null,
     val uploadsQuery: String? = null,
 ) {
-    fun toDomain(): CreatorProfile {
+    fun toDomainOrNull(): CreatorProfile? {
+        val resolvedSource = source.toSourceKeyOrNull() ?: return null
         return CreatorProfile(
-            source = SourceKey.valueOf(source),
+            source = resolvedSource,
             displayName = displayName,
             profileId = profileId,
             profileUrl = profileUrl,
@@ -1050,14 +1053,14 @@ private data class QueryRecord(
     fun toDomain(): Query {
         val mode = when (modeType) {
             "unified" -> QueryMode.Unified
-            "source" -> QueryMode.Source(SourceKey.valueOf(requireNotNull(modeSource)))
+            "source" -> modeSource.toSourceKeyOrNull()?.let(QueryMode::Source) ?: QueryMode.Unified
             else -> QueryMode.Unified
         }
         return Query(
             mode = mode,
             includeTags = includeTags,
             excludeTags = excludeTags,
-            sort = SortMode.valueOf(sort),
+            sort = sort.toSortModeOrDefault(),
             dateRange = if (dateFromEpochMs == null && dateToEpochMs == null) null else DateRange(dateFromEpochMs, dateToEpochMs),
             minScore = minScore,
         )
@@ -1103,7 +1106,7 @@ private data class RecentPostRecord(
     val originQueryHash: String? = null,
 ) {
     fun toDomainOrNull(): RecentPostEntry? {
-        val loadedPost = runCatching { post?.toDomain() }.getOrNull() ?: return null
+        val loadedPost = post?.toDomainOrNull() ?: return null
         val loadedOrigin = origin
             ?.let { value -> runCatching { ViewerStreamSource.valueOf(value) }.getOrNull() }
             ?: ViewerStreamSource.SEARCH
@@ -1135,7 +1138,7 @@ private data class RecentSearchRecord(
     fun toDomainOrNull(): RecentSearchEntry? {
         val normalizedHash = queryHash?.trim().orEmpty()
         if (normalizedHash.isBlank()) return null
-        val loadedQuery = runCatching { query?.toDomain() }.getOrNull() ?: return null
+        val loadedQuery = query?.toDomain() ?: return null
         return RecentSearchEntry(
             query = loadedQuery,
             queryHash = normalizedHash,
@@ -1511,6 +1514,21 @@ private fun normalizeSettings(settings: AppSettings): AppSettings {
     )
 }
 
+private fun String?.toSourceKeyOrNull(): SourceKey? {
+    return this
+        ?.trim()
+        ?.takeIf(String::isNotBlank)
+        ?.let { value -> runCatching { SourceKey.valueOf(value) }.getOrNull() }
+}
+
+private fun String?.toSortModeOrDefault(): SortMode {
+    return this
+        ?.trim()
+        ?.takeIf(String::isNotBlank)
+        ?.let { value -> runCatching { SortMode.valueOf(value) }.getOrNull() }
+        ?: SortMode.TOP
+}
+
 private fun normalizeBlacklistTags(tags: List<String>): List<String> {
     return tags
         .asSequence()
@@ -1631,6 +1649,19 @@ private inline fun <reified T> readJson(file: File, fallback: T): T {
 }
 
 private fun <T> writeJson(file: File, payload: T) {
-    file.parentFile?.mkdirs()
-    file.writeText(json.toJson(payload))
+    val parent = file.parentFile
+    parent?.mkdirs()
+    val tempFile = File.createTempFile("${file.name}.", ".tmp", parent ?: File("."))
+    try {
+        tempFile.writeText(json.toJson(payload))
+        runCatching {
+            Files.move(tempFile.toPath(), file.toPath(), ATOMIC_MOVE, REPLACE_EXISTING)
+        }.getOrElse {
+            Files.move(tempFile.toPath(), file.toPath(), REPLACE_EXISTING)
+        }
+    } finally {
+        if (tempFile.exists()) {
+            tempFile.delete()
+        }
+    }
 }
