@@ -953,6 +953,110 @@ class SearchCoordinatorTest {
     }
 
     @Test
+    fun `post facet entry switches to its source without resetting portable draft filters`() = runTest {
+        val coordinator = coordinator()
+        coordinator.initialize()
+        val oldSourceTerm = SearchTerm("old artist", SearchFacet.ARTIST, "artist")
+        assertTrue(
+            coordinator.addPostExcludeTerm(
+                samplePost(source = SourceKey.NHENTAI),
+                oldSourceTerm,
+            ),
+        )
+        coordinator.addIncludeTag("portable")
+        coordinator.addExcludeTag("portable exclusion")
+        coordinator.setSort(SortMode.TOP)
+        val hitomiPost = samplePost(source = SourceKey.HITOMI)
+        val artist = SearchTerm("najar", SearchFacet.ARTIST, "artist")
+
+        assertTrue(coordinator.addPostIncludeTerm(hitomiPost, artist))
+
+        assertEquals(QueryMode.Source(SourceKey.HITOMI), coordinator.draftQuery.mode)
+        assertEquals(listOf(SearchTerm("portable"), artist), coordinator.draftQuery.includeTerms)
+        assertEquals(listOf(SearchTerm("portable exclusion")), coordinator.draftQuery.excludeTerms)
+        assertEquals(SortMode.TOP, coordinator.draftQuery.sort)
+    }
+
+    @Test
+    fun `portable post tag stays in unified mode`() = runTest {
+        val coordinator = coordinator()
+        coordinator.initialize()
+        val portableTag = SearchTerm("portable")
+
+        assertTrue(
+            coordinator.addPostIncludeTerm(
+                samplePost(source = SourceKey.HITOMI),
+                portableTag,
+            ),
+        )
+
+        assertEquals(QueryMode.Unified, coordinator.draftQuery.mode)
+        assertEquals(listOf(portableTag), coordinator.draftQuery.includeTerms)
+    }
+
+    @Test
+    fun `post term acceptance stays true when the exact term is already current`() = runTest {
+        val coordinator = coordinator()
+        coordinator.initialize()
+        val hitomiPost = samplePost(source = SourceKey.HITOMI)
+        val artist = SearchTerm("najar", SearchFacet.ARTIST, "artist")
+        val series = SearchTerm("series", SearchFacet.SERIES, "series")
+
+        assertTrue(coordinator.addPostIncludeTerm(hitomiPost, artist))
+        assertTrue(coordinator.addPostIncludeTerm(hitomiPost, artist))
+        assertTrue(coordinator.addPostExcludeTerm(hitomiPost, series))
+        assertTrue(coordinator.addPostExcludeTerm(hitomiPost, series))
+
+        assertEquals(listOf(artist), coordinator.draftQuery.includeTerms)
+        assertEquals(listOf(series), coordinator.draftQuery.excludeTerms)
+    }
+
+    @Test
+    fun `unavailable source owned post term leaves draft unchanged`() = runTest {
+        val coordinator = SearchCoordinator(
+            registry = LimitedStubRegistry(setOf(SourceKey.PIXIV)),
+        )
+        coordinator.initialize()
+        coordinator.addIncludeTag("portable")
+        coordinator.setSort(SortMode.TOP)
+        val originalDraft = coordinator.draftQuery
+
+        assertFalse(
+            coordinator.addPostExcludeTerm(
+                samplePost(source = SourceKey.HITOMI),
+                SearchTerm("najar", SearchFacet.ARTIST, "artist"),
+            ),
+        )
+
+        assertEquals(originalDraft, coordinator.draftQuery)
+    }
+
+    @Test
+    fun `post facet entry preserves same-source draft and exact removal keeps same-text tag`() = runTest {
+        val coordinator = coordinator()
+        coordinator.initialize()
+        val hitomiPost = samplePost(source = SourceKey.HITOMI)
+        val tag = SearchTerm("najar", SearchFacet.TAG, "tag")
+        val artist = SearchTerm("najar", SearchFacet.ARTIST, "artist")
+        val series = SearchTerm("series", SearchFacet.SERIES, "series")
+
+        assertTrue(coordinator.addPostIncludeTerm(hitomiPost, tag))
+        assertTrue(coordinator.addPostIncludeTerm(hitomiPost, artist))
+        coordinator.setSort(SortMode.RANDOM)
+        assertTrue(coordinator.addPostExcludeTerm(hitomiPost, series))
+
+        assertEquals(listOf(tag, artist), coordinator.draftQuery.includeTerms)
+        assertEquals(listOf(series), coordinator.draftQuery.excludeTerms)
+        assertEquals(SortMode.RANDOM, coordinator.draftQuery.sort)
+
+        coordinator.removeIncludeTerm(artist)
+        coordinator.removeExcludeTerm(series)
+
+        assertEquals(listOf(tag), coordinator.draftQuery.includeTerms)
+        assertTrue(coordinator.draftQuery.excludeTerms.isEmpty())
+    }
+
+    @Test
     fun `unified autocomplete projects only general tags from faceted sources`() = runTest {
         val all = FacetedSearchScope.All
         val adapter = FacetedRecordingAdapter(

@@ -69,6 +69,7 @@ import com.theoriacodex.app.media.probeRemoteVideoDurationMs
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.SearchTerm
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -84,6 +85,10 @@ fun CreatorProfileScreen(
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
     onOpenUrl: (String) -> Unit,
+    onAddIncludeTerm: (Post, SearchTerm) -> Boolean = { _, _ -> false },
+    onAddExcludeTerm: (Post, SearchTerm) -> Boolean = { _, _ -> false },
+    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
+    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
     onBack: () -> Unit,
 ) {
     val creator = coordinator.activeCreator
@@ -464,10 +469,10 @@ fun CreatorProfileScreen(
                 HorizontalDivider()
                 PostTagActionSection(
                     post = post,
-                    onAddIncludeTag = {},
-                    onAddExcludeTag = {},
-                    onRemoveIncludeTag = {},
-                    onRemoveExcludeTag = {},
+                    onAddIncludeTerm = { term -> onAddIncludeTerm(post, term) },
+                    onAddExcludeTerm = { term -> onAddExcludeTerm(post, term) },
+                    onRemoveIncludeTerm = { term -> onRemoveIncludeTerm(post, term) },
+                    onRemoveExcludeTerm = { term -> onRemoveExcludeTerm(post, term) },
                 )
                 TextButton(
                     modifier = Modifier.fillMaxWidth(),

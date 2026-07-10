@@ -1,19 +1,24 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T09:05:24-04:00
+updated_at: 2026-07-10T09:27:00-04:00
 ---
 # Working List
 
 ## Current Task: Implement Hitomi Source, Faceted Search, And Mixed Media
 
 ### Pending
-- [ ] Phase 6: Generalize the Viewer media overview and support animated WebP/anime video; verify media/viewer/download/device-test compilation; commit
 - [ ] Phase 7: Add live health and app smoke coverage, complete available device acceptance, update README/AGENTS/ExecPlan, run broad validation; commit
 
 ### In Progress
-- [ ] Phase 5: Add creator browsing, typed post actions, and Hitomi deep links; verify data/source/creator/deep-link tests; commit
+- [ ] Phase 6: Generalize the Viewer media overview and support animated WebP/anime video; verify media/viewer/download/device-test compilation; commit
 
 ### Done
+- [x] Phase 5: Add creator browsing, typed post actions, and Hitomi deep links (`./gradlew :core-domain:test :core-data:test :core-sources:test :core-stubs:test :app:testDebugUnitTest :app:processDebugManifest :app:compileDebugKotlin --rerun-tasks`: 421 tests, 0 failures, 2 opt-in live skips)
+  - [x] Delegate paginated Hitomi Creator Profile streams to exact typed artist search and preserve every distinct valid artist
+  - [x] Share one canonical Unicode-safe Hitomi artist identity contract across provider metadata, persistence-facing UI admission, and deep links
+  - [x] Preserve exact post taxonomy through Search, Viewer, Codex, and Creator actions without widening favorites/recommendations beyond general tags
+  - [x] Switch source mode only when a source-owned post term requires it, and leave unavailable-source actions visibly unchanged
+  - [x] Route Hitomi reader, gallery, anime, CG, and artist HTTP/HTTPS links for both supported hosts
 - [x] Phase 4: Implement and audit Hitomi search, pagination, hydration, and media URL resolution behind the release exposure gate (`./gradlew :core-domain:test :core-data:test :core-sources:test :core-stubs:test :app:testDebugUnitTest`: 400 tests, 0 failures, 2 opt-in live skips)
   - [x] Make Random source-wide with one bounded snapshot, v2 fingerprinted tokens, bounded LRU continuity, and changed-snapshot fail-closed behavior
   - [x] Reject candidate-less/empty galleries and type every bounded Nozomi/CDN failure while preserving per-gallery isolation

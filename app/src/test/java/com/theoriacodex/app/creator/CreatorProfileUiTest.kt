@@ -6,7 +6,9 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CreatorProfileUiTest {
@@ -73,10 +75,109 @@ class CreatorProfileUiTest {
         assertEquals(profile, browseableCreatorProfile(profile))
     }
 
+    @Test
+    fun `creator actions expose every exact distinct hitomi artist`() {
+        val first = CreatorProfile(
+            source = SourceKey.HITOMI,
+            displayName = "Artist One",
+            profileId = "artist-one",
+            uploadsQuery = "artist:artist-one",
+        )
+        val second = CreatorProfile(
+            source = SourceKey.HITOMI,
+            displayName = "Artist Two",
+            profileId = "artist-two",
+            uploadsQuery = "artist:artist-two",
+        )
+        val post = samplePost(
+            source = SourceKey.HITOMI,
+            authorName = "legacy",
+            creatorProfile = first,
+            creatorProfiles = listOf(first, second, first),
+        )
+
+        val actions = creatorProfileActions(post)
+
+        assertEquals(listOf(first, second), actions.map(CreatorProfileAction::profile))
+        assertEquals(listOf("Artist One", "Artist Two"), actions.map(CreatorProfileAction::label))
+        assertTrue(actions.none(CreatorProfileAction::requiresLegacyResolution))
+        assertTrue(supportsCreatorBrowsing(SourceKey.HITOMI))
+    }
+
+    @Test
+    fun `hitomi creator actions require the exact canonical profile contract`() {
+        val valid = CreatorProfile(
+            source = SourceKey.HITOMI,
+            displayName = "Artist One",
+            profileId = "artist one",
+            uploadsQuery = "artist:artist one",
+        )
+        val malformedUnicode = "\uD800"
+        val invalidProfiles = listOf(
+            valid.copy(uploadsQuery = "artist:someone else"),
+            valid.copy(profileId = "Artist One", uploadsQuery = "artist:Artist One"),
+            valid.copy(profileId = "artist/one", uploadsQuery = "artist:artist/one"),
+            valid.copy(profileId = malformedUnicode, uploadsQuery = "artist:$malformedUnicode"),
+        )
+
+        assertEquals(valid, browseableCreatorProfile(valid))
+        invalidProfiles.forEach { profile ->
+            assertNull(profile.toString(), browseableCreatorProfile(profile))
+        }
+
+        val post = samplePost(
+            source = SourceKey.HITOMI,
+            authorName = "Not actionable",
+            creatorProfile = null,
+            creatorProfiles = invalidProfiles,
+        )
+        assertTrue(creatorProfileActions(post).isEmpty())
+    }
+
+    @Test
+    fun `legacy creator action exists only when it has a usable label`() {
+        val legacy = samplePost(
+            source = SourceKey.HITOMI,
+            authorName = "Legacy Artist",
+            creatorProfile = null,
+            creatorProfiles = emptyList(),
+        )
+        val empty = samplePost(
+            source = SourceKey.HITOMI,
+            authorName = "   ",
+            creatorProfile = null,
+            creatorProfiles = emptyList(),
+        )
+
+        assertEquals("Legacy Artist", creatorProfileActions(legacy).single().label)
+        assertTrue(creatorProfileActions(legacy).single().requiresLegacyResolution)
+        assertTrue(creatorProfileActions(empty).isEmpty())
+    }
+
+    @Test
+    fun `invalid explicit profiles do not create a dead creator action`() {
+        val post = samplePost(
+            source = SourceKey.HITOMI,
+            authorName = "Not actionable",
+            creatorProfile = null,
+            creatorProfiles = listOf(
+                CreatorProfile(
+                    source = SourceKey.HITOMI,
+                    displayName = "Missing query",
+                    uploadsQuery = null,
+                ),
+            ),
+        )
+
+        assertTrue(creatorProfileActions(post).isEmpty())
+        assertFalse(creatorProfileActions(post).any(CreatorProfileAction::requiresLegacyResolution))
+    }
+
     private fun samplePost(
         source: SourceKey,
         authorName: String?,
         creatorProfile: CreatorProfile?,
+        creatorProfiles: List<CreatorProfile> = listOfNotNull(creatorProfile),
     ): Post {
         return Post(
             id = PostId(source = source, sourcePostId = "1"),
@@ -90,6 +191,7 @@ class CreatorProfileUiTest {
             authorName = authorName,
             createdAtEpochMs = 1L,
             creatorProfile = creatorProfile,
+            creatorProfiles = creatorProfiles,
         )
     }
 }

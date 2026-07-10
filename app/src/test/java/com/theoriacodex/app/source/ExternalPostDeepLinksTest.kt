@@ -1,6 +1,8 @@
 package com.theoriacodex.app.source
 
 import com.theoriacodex.domain.model.SourceKey
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -59,6 +61,49 @@ class ExternalPostDeepLinksTest {
     }
 
     @Test
+    fun `parses exact hitomi reader and gallery routes across supported areas`() {
+        assertDeepLink(
+            url = "http://www.hitomi.la/reader/4042375.html?ignored=true#17",
+            source = SourceKey.HITOMI,
+            postId = "4042375",
+        )
+        listOf(
+            "anime",
+            "cg",
+            "doujinshi",
+            "manga",
+            "artistcg",
+            "gamecg",
+            "imageset",
+        ).forEachIndexed { index, area ->
+            val postId = (7_231 + index).toString()
+            assertDeepLink(
+                url = "https://hitomi.la/$area/example-%E6%97%A5%E6%9C%AC%E8%AA%9E-$postId.html#1",
+                source = SourceKey.HITOMI,
+                postId = postId,
+            )
+        }
+    }
+
+    @Test
+    fun `rejects lookalike or unsupported hitomi post routes`() {
+        listOf(
+            "ftp://hitomi.la/reader/4042375.html",
+            "https://hitomi.la.example.com/reader/4042375.html",
+            "https://hitomi.la/reader/not-a-number.html",
+            "https://hitomi.la/reader/4042375.htm",
+            "https://hitomi.la/reader/4042375.html/extra",
+            "https://hitomi.la/tag/example-4042375.html",
+            "https://hitomi.la/cg/-4042375.html",
+            "https://hitomi.la/cg/example-4042375.htm",
+            "https://hitomi.la/cg/example-4042375.html/extra",
+            "https://hitomi.la/cg/example-4042375.html.bak",
+        ).forEach { url ->
+            assertNull(url, parseExternalPostDeepLink(url))
+        }
+    }
+
+    @Test
     fun `parses pixiv posts with and without locale`() {
         assertDeepLink(
             url = "https://www.pixiv.net/en/artworks/111111111",
@@ -100,6 +145,70 @@ class ExternalPostDeepLinksTest {
     }
 
     @Test
+    fun `parses hitomi artists into normalized canonical creator identities`() {
+        assertCreatorDeepLink(
+            url = "https://hitomi.la/artist/%20Arisue%20%20Tsukasa%20-all.html#works",
+            source = SourceKey.HITOMI,
+            creatorId = "arisue tsukasa",
+            profileUrl = "https://hitomi.la/artist/arisue%20tsukasa-all.html",
+        )
+        assertCreatorDeepLink(
+            url = "http://www.hitomi.la/artist/C++-all.html?ignored=true",
+            source = SourceKey.HITOMI,
+            creatorId = "c++",
+            profileUrl = "https://hitomi.la/artist/c%2B%2B-all.html",
+        )
+        assertCreatorDeepLink(
+            url = "https://hitomi.la/artist/%E3%81%82%E3%81%84%E3%81%86-all.html",
+            source = SourceKey.HITOMI,
+            creatorId = "あいう",
+            profileUrl = "https://hitomi.la/artist/%E3%81%82%E3%81%84%E3%81%86-all.html",
+        )
+    }
+
+    @Test
+    fun `hitomi artist identity limit counts unicode code points`() {
+        val supplementaryCharacter = "\uD83D\uDE00"
+        val maximumIdentity = supplementaryCharacter.repeat(256)
+        val maximumUrl = "https://hitomi.la/artist/${encodePathSegment(maximumIdentity)}-all.html"
+
+        assertCreatorDeepLink(
+            url = maximumUrl,
+            source = SourceKey.HITOMI,
+            creatorId = maximumIdentity,
+            profileUrl = maximumUrl,
+        )
+
+        val overLimitIdentity = supplementaryCharacter.repeat(257)
+        assertNull(
+            parseExternalCreatorDeepLink(
+                "https://hitomi.la/artist/${encodePathSegment(overLimitIdentity)}-all.html",
+            ),
+        )
+    }
+
+    @Test
+    fun `rejects unsafe malformed or empty hitomi artist identities`() {
+        listOf(
+            "https://hitomi.la/artist/%20-all.html",
+            "https://hitomi.la/artist/name%2Falias-all.html",
+            "https://hitomi.la/artist/name%5Calias-all.html",
+            "https://hitomi.la/artist/name%0Aalias-all.html",
+            "https://hitomi.la/artist/%C3%28-all.html",
+            "https://hitomi.la/artist/%ED%A0%80-all.html",
+            "https://hitomi.la/artist/%FF-all.html",
+            "https://hitomi.la/artist/name%ZZ-all.html",
+            "https://hitomi.la/artist/name.html",
+            "https://hitomi.la/artist/name-all.html/extra",
+            "https://hitomi.la.example.com/artist/name-all.html",
+            "content://hitomi.la/artist/name-all.html",
+            "https://hitomi.la/artist/${"a".repeat(257)}-all.html",
+        ).forEach { url ->
+            assertNull(url, parseExternalCreatorDeepLink(url))
+        }
+    }
+
+    @Test
     fun `returns null for unsupported host`() {
         assertNull(parseExternalPostDeepLink("https://example.com/video/8255/foo/"))
         assertNull(parseExternalCreatorDeepLink("https://example.com/users/201823"))
@@ -127,5 +236,9 @@ class ExternalPostDeepLinksTest {
         assertEquals(creatorId, parsed.creatorId)
         assertEquals(profileUrl, parsed.profileUrl)
         assertEquals(source.displayName(), parsed.sourceLabel)
+    }
+
+    private fun encodePathSegment(value: String): String {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("+", "%20")
     }
 }

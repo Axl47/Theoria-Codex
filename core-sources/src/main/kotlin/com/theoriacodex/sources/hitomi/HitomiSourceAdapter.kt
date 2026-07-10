@@ -7,6 +7,7 @@ import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
+import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.MediaRecoverySourceAdapter
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
@@ -15,6 +16,8 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.domain.model.HITOMI_ARTIST_QUERY_PREFIX
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -25,15 +28,19 @@ import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.canonicalHitomiArtistIdentity
 import com.theoriacodex.domain.query.QueryHash
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.http.SourceByteResponse
 import com.theoriacodex.sources.http.SourceHttpBodyTooLargeException
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.media.mimeFromFileExt
+import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.URI
 import java.net.URLEncoder
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
 import java.security.MessageDigest
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -66,7 +73,7 @@ class HitomiSourceAdapter(
     private val mediaCandidates: suspend (HitomiMediaFile) -> List<HitomiMediaCandidate> = { file ->
         mediaUrlResolver.candidates(file)
     },
-) : SourceAdapter, FacetedSearchSourceAdapter, MediaRecoverySourceAdapter {
+) : SourceAdapter, FacetedSearchSourceAdapter, CreatorPostsSourceAdapter, MediaRecoverySourceAdapter {
     override val sourceKey: SourceKey = SourceKey.HITOMI
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -480,6 +487,31 @@ class HitomiSourceAdapter(
         }
     }
 
+    override suspend fun searchCreatorPosts(
+        creator: CreatorProfile,
+        pageToken: String?,
+    ): Page<Post> {
+        val artist = creator.canonicalHitomiArtistIdentity()
+            ?: return Page(items = emptyList(), nextPageToken = null)
+        return search(
+            query = Query(
+                mode = QueryMode.Source(SourceKey.HITOMI),
+                includeTerms = listOf(
+                    SearchTerm(
+                        value = artist,
+                        facet = SearchFacet.ARTIST,
+                        sourceNamespace = HITOMI_ARTIST_NAMESPACE,
+                    ),
+                ),
+                excludeTerms = emptyList(),
+                sort = SortMode.NEWEST,
+                dateRange = null,
+                minScore = null,
+            ),
+            pageToken = pageToken,
+        )
+    }
+
     override suspend fun recoverPostMedia(post: Post, failedMedia: ImageRef): Post? {
         if (post.id.source != SourceKey.HITOMI) return null
         val identity = failedMedia.hitomiRecoveryIdentityOrNull() ?: return null
@@ -812,7 +844,8 @@ class HitomiSourceAdapter(
         } else {
             files.size
         }
-        val artists = taxonomy.filter { term -> term.facet == SearchFacet.ARTIST }
+        val creatorProfiles = parseCreatorProfiles()
+        val primaryCreator = creatorProfiles.firstOrNull()
         val canonicalTags = taxonomy
             .filter { term -> term.facet == SearchFacet.TAG }
             .map(PostTaxonomyTerm::value)
@@ -831,14 +864,90 @@ class HitomiSourceAdapter(
             height = height,
             canonicalTags = canonicalTags,
             rawTags = canonicalTags,
-            authorName = artists.firstOrNull()?.value,
+            authorName = primaryCreator?.displayName,
             createdAtEpochMs = parseHitomiDate(stringValue("date"), stringValue("datepublished")),
             title = stringValue("title")
                 ?: stringValue("japanese_title")
                 ?: "Hitomi #$galleryId",
+            creatorProfile = primaryCreator,
             mediaCount = declaredMediaCount,
             taxonomy = taxonomy,
+            creatorProfiles = creatorProfiles,
         )
+    }
+
+    private fun JsonObject.parseCreatorProfiles(): List<CreatorProfile> {
+        return arrayValue("artists")
+            ?.mapNotNull { element ->
+                val artist = element.asObjectOrNull() ?: return@mapNotNull null
+                val rawDisplayName = artist.untrimmedStringValue("artist") ?: return@mapNotNull null
+                val identity = canonicalHitomiArtistIdentity(rawDisplayName) ?: return@mapNotNull null
+                CreatorProfile(
+                    source = SourceKey.HITOMI,
+                    displayName = rawDisplayName.trim(),
+                    profileId = identity,
+                    profileUrl = canonicalHitomiArtistUrl(
+                        artistIdentity = identity,
+                        providerRelativeUrl = artist.stringValue("url"),
+                    ),
+                    uploadsQuery = "$HITOMI_ARTIST_QUERY_PREFIX$identity",
+                )
+            }
+            .orEmpty()
+            .distinctBy { creator -> creator.profileId }
+    }
+
+    private fun canonicalHitomiArtistUrl(
+        artistIdentity: String,
+        providerRelativeUrl: String?,
+    ): String {
+        providerRelativeUrl
+            ?.takeIf { value -> value.isSafeHitomiArtistPathFor(artistIdentity) }
+            ?.let { value -> return "https://hitomi.la$value" }
+        val encoded = URLEncoder.encode(artistIdentity, Charsets.UTF_8.name()).replace("+", "%20")
+        return "https://hitomi.la/artist/$encoded-all.html"
+    }
+
+    private fun String.isSafeHitomiArtistPathFor(artistIdentity: String): Boolean {
+        if ('+' in this) return false
+        val parsed = runCatching { URI(this) }.getOrNull() ?: return false
+        if (parsed.isAbsolute || parsed.host != null || parsed.rawQuery != null || parsed.rawFragment != null) {
+            return false
+        }
+        val path = parsed.rawPath ?: return false
+        if (!path.startsWith("/artist/") || !path.endsWith("-all.html")) return false
+        val encodedSlug = path.removePrefix("/artist/").removeSuffix("-all.html")
+        val decodedSlug = decodeHitomiArtistPathSegmentStrict(encodedSlug) ?: return false
+        return canonicalHitomiArtistIdentity(decodedSlug) == artistIdentity
+    }
+
+    private fun decodeHitomiArtistPathSegmentStrict(value: String): String? {
+        val bytes = ByteArrayOutputStream(value.length)
+        var index = 0
+        while (index < value.length) {
+            val character = value[index]
+            if (character == '%') {
+                if (index + 2 >= value.length) return null
+                val high = value[index + 1].digitToIntOrNull(radix = 16) ?: return null
+                val low = value[index + 2].digitToIntOrNull(radix = 16) ?: return null
+                bytes.write((high shl 4) or low)
+                index += 3
+            } else {
+                val codePoint = value.codePointAt(index)
+                if (codePoint in 0xD800..0xDFFF) return null
+                val encoded = String(Character.toChars(codePoint)).toByteArray(Charsets.UTF_8)
+                bytes.write(encoded)
+                index += Character.charCount(codePoint)
+            }
+        }
+        return runCatching {
+            Charsets.UTF_8
+                .newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(bytes.toByteArray()))
+                .toString()
+        }.getOrNull()
     }
 
     private suspend fun candidatesFor(file: ParsedHitomiFile): List<HitomiMediaCandidate> {
@@ -1301,7 +1410,6 @@ class HitomiSourceAdapter(
         private const val BASE_PRIMARY_KEY = "__all__"
         private const val HITOMI_ALL_LANGUAGE = "all"
         private const val HITOMI_ANIME_TYPE = "anime"
-
         private const val HITOMI_TAG_NAMESPACE = "tag"
         private const val HITOMI_FEMALE_NAMESPACE = "female"
         private const val HITOMI_MALE_NAMESPACE = "male"
@@ -1456,6 +1564,11 @@ class HitomiSourceAdapter(
         private fun JsonObject.stringValue(name: String): String? {
             val element = get(name)?.takeUnless(JsonElement::isJsonNull) ?: return null
             return runCatching { element.asString.trim() }.getOrNull()?.takeIf(String::isNotBlank)
+        }
+
+        private fun JsonObject.untrimmedStringValue(name: String): String? {
+            val element = get(name)?.takeUnless(JsonElement::isJsonNull) ?: return null
+            return runCatching { element.asString }.getOrNull()
         }
 
         private fun JsonObject.intValue(name: String): Int? {

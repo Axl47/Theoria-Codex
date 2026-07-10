@@ -472,14 +472,22 @@ fun TheoriaApp(
 
     suspend fun openCreatorProfile(post: Post) {
         var resolvedPost = post
-        var creator = browseableCreatorProfile(post.creatorProfile)
+        var creator = post.creatorProfiles
+            .asSequence()
+            .mapNotNull(::browseableCreatorProfile)
+            .firstOrNull()
+            ?: browseableCreatorProfile(post.creatorProfile)
         if (creator == null) {
             val adapter = realRegistry.adapterFor(post.id.source)
             val resolved = runCatching { adapter?.resolvePost(post.id) }.getOrNull()
             if (resolved != null) {
                 searchCoordinator.rememberResolvedPost(resolved)
                 resolvedPost = resolved
-                creator = browseableCreatorProfile(resolved.creatorProfile)
+                creator = resolved.creatorProfiles
+                    .asSequence()
+                    .mapNotNull(::browseableCreatorProfile)
+                    .firstOrNull()
+                    ?: browseableCreatorProfile(resolved.creatorProfile)
             }
         }
         if (creator == null) {
@@ -509,6 +517,14 @@ fun TheoriaApp(
                 profileId = deepLink.creatorId,
                 profileUrl = deepLink.profileUrl,
                 uploadsQuery = deepLink.creatorId,
+            )
+
+            SourceKey.HITOMI -> CreatorProfile(
+                source = SourceKey.HITOMI,
+                displayName = deepLink.creatorId,
+                profileId = deepLink.creatorId,
+                profileUrl = deepLink.profileUrl,
+                uploadsQuery = "artist:${deepLink.creatorId}",
             )
 
             SourceKey.GELBOORU -> {
@@ -1636,7 +1652,10 @@ fun TheoriaApp(
                                         },
                                         onAddFavoriteTag = addFavoriteTag,
                                         onRemoveFavoriteTag = removeFavoriteTag,
-                                        onOpenCreatorProfile = { post ->
+                                        onOpenCreatorProfile = { creator ->
+                                            scope.launch { openCreatorProfile(creator) }
+                                        },
+                                        onOpenLegacyCreatorProfile = { post ->
                                             scope.launch { openCreatorProfile(post) }
                                         },
                                         onApplySearch = {
@@ -2093,20 +2112,23 @@ fun TheoriaApp(
                             onSavePostToDevice = { post ->
                                 requestSaveToDevice(post)
                             },
-                            onOpenCreatorProfile = { post ->
+                            onOpenCreatorProfile = { creator ->
+                                scope.launch { openCreatorProfile(creator) }
+                            },
+                            onOpenLegacyCreatorProfile = { post ->
                                 scope.launch { openCreatorProfile(post) }
                             },
-                            onAddIncludeTag = { tag ->
-                                searchCoordinator.addIncludeTag(tag)
+                            onAddIncludeTerm = { post, term ->
+                                searchCoordinator.addPostIncludeTerm(post, term)
                             },
-                            onAddExcludeTag = { tag ->
-                                searchCoordinator.addExcludeTag(tag)
+                            onAddExcludeTerm = { post, term ->
+                                searchCoordinator.addPostExcludeTerm(post, term)
                             },
-                            onRemoveIncludeTag = { tag ->
-                                searchCoordinator.removeIncludeTag(tag)
+                            onRemoveIncludeTerm = { _, term ->
+                                searchCoordinator.removeIncludeTerm(term)
                             },
-                            onRemoveExcludeTag = { tag ->
-                                searchCoordinator.removeExcludeTag(tag)
+                            onRemoveExcludeTerm = { _, term ->
+                                searchCoordinator.removeExcludeTerm(term)
                             },
                             onFavoriteTagLongPress = addFavoriteTag,
                             onGoToSearch = {
@@ -2156,6 +2178,18 @@ fun TheoriaApp(
                             },
                             onOpenUrl = { url ->
                                 openInBrowser(appContext, url)
+                            },
+                            onAddIncludeTerm = { post, term ->
+                                searchCoordinator.addPostIncludeTerm(post, term)
+                            },
+                            onAddExcludeTerm = { post, term ->
+                                searchCoordinator.addPostExcludeTerm(post, term)
+                            },
+                            onRemoveIncludeTerm = { _, term ->
+                                searchCoordinator.removeIncludeTerm(term)
+                            },
+                            onRemoveExcludeTerm = { _, term ->
+                                searchCoordinator.removeExcludeTerm(term)
                             },
                             onBack = {
                                 navController.popBackStack()
@@ -2265,17 +2299,17 @@ fun TheoriaApp(
                                         openInBrowser(appContext, url)
                                     }
                                 },
-                                onAddIncludeTag = { tag ->
-                                    searchCoordinator.addIncludeTag(tag)
+                                onAddIncludeTerm = { post, term ->
+                                    searchCoordinator.addPostIncludeTerm(post, term)
                                 },
-                                onAddExcludeTag = { tag ->
-                                    searchCoordinator.addExcludeTag(tag)
+                                onAddExcludeTerm = { post, term ->
+                                    searchCoordinator.addPostExcludeTerm(post, term)
                                 },
-                                onRemoveIncludeTag = { tag ->
-                                    searchCoordinator.removeIncludeTag(tag)
+                                onRemoveIncludeTerm = { _, term ->
+                                    searchCoordinator.removeIncludeTerm(term)
                                 },
-                                onRemoveExcludeTag = { tag ->
-                                    searchCoordinator.removeExcludeTag(tag)
+                                onRemoveExcludeTerm = { _, term ->
+                                    searchCoordinator.removeExcludeTerm(term)
                                 },
                                 onFavoriteTagLongPress = addFavoriteTag,
                                 onGoToSearch = {
@@ -2295,7 +2329,10 @@ fun TheoriaApp(
                                         topLevelPagerState.scrollToPage(searchIndex)
                                     }
                                 },
-                                onOpenCreatorProfile = { post ->
+                                onOpenCreatorProfile = { creator ->
+                                    scope.launch { openCreatorProfile(creator) }
+                                },
+                                onOpenLegacyCreatorProfile = { post ->
                                     scope.launch { openCreatorProfile(post) }
                                 },
                             )

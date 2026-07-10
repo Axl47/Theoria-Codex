@@ -128,9 +128,11 @@ import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import java.net.HttpURLConnection
@@ -166,13 +168,14 @@ fun ViewerScreen(
     onDismiss: () -> Unit,
     onSave: (Post) -> Unit,
     onOpenInBrowser: (Post) -> Unit,
-    onAddIncludeTag: (String) -> Unit,
-    onAddExcludeTag: (String) -> Unit,
-    onRemoveIncludeTag: (String) -> Unit,
-    onRemoveExcludeTag: (String) -> Unit,
+    onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
+    onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
+    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
+    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     onGoToSearch: () -> Unit,
-    onOpenCreatorProfile: ((Post) -> Unit)? = null,
+    onOpenCreatorProfile: ((CreatorProfile) -> Unit)? = null,
+    onOpenLegacyCreatorProfile: ((Post) -> Unit)? = null,
 ) {
     if (posts.isEmpty()) {
         Box(
@@ -1080,12 +1083,17 @@ fun ViewerScreen(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (onOpenCreatorProfile != null) {
+                if (onOpenCreatorProfile != null && onOpenLegacyCreatorProfile != null) {
                     CreatorProfileActionButton(
                         post = post,
-                        onClick = {
+                        onOpenProfile = { profile ->
                             mediaPlaybackEnabled = false
-                            onOpenCreatorProfile(post)
+                            onOpenCreatorProfile(profile)
+                            showInfoSheet = false
+                        },
+                        onOpenLegacyPost = {
+                            mediaPlaybackEnabled = false
+                            onOpenLegacyCreatorProfile(post)
                             showInfoSheet = false
                         },
                     )
@@ -1095,10 +1103,10 @@ fun ViewerScreen(
                     post = post,
                     tagVideoCountProvider = tagVideoCountProvider,
                     fetchTagVideoCounts = fetchTagVideoCounts,
-                    onAddIncludeTag = onAddIncludeTag,
-                    onAddExcludeTag = onAddExcludeTag,
-                    onRemoveIncludeTag = onRemoveIncludeTag,
-                    onRemoveExcludeTag = onRemoveExcludeTag,
+                    onAddIncludeTerm = { term -> onAddIncludeTerm(post, term) },
+                    onAddExcludeTerm = { term -> onAddExcludeTerm(post, term) },
+                    onRemoveIncludeTerm = { term -> onRemoveIncludeTerm(post, term) },
+                    onRemoveExcludeTerm = { term -> onRemoveExcludeTerm(post, term) },
                     onFavoriteTagLongPress = onFavoriteTagLongPress,
                 )
 

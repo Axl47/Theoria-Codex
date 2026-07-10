@@ -1,9 +1,11 @@
 package com.theoriacodex.sources.hitomi
 
+import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -382,6 +384,10 @@ class HitomiSourceAdapterTest {
         val animatedCard = cards.first()
         assertEquals("Hana 12/2024 webp Animated", animatedCard.title)
         assertEquals("najar", animatedCard.authorName)
+        assertEquals("najar", animatedCard.creatorProfile?.profileId)
+        assertEquals("artist:najar", animatedCard.creatorProfile?.uploadsQuery)
+        assertEquals("https://hitomi.la/artist/najar-all.html", animatedCard.creatorProfile?.profileUrl)
+        assertEquals(1, animatedCard.creatorProfiles.size)
         assertEquals(44, animatedCard.mediaCount)
         assertTrue(animatedCard.media.isEmpty())
         assertNull(animatedCard.full)
@@ -393,6 +399,8 @@ class HitomiSourceAdapterTest {
             animatedCard.createdAtEpochMs,
         )
         assertEquals(1, cards.last().mediaCount)
+        assertNull(cards.last().creatorProfile)
+        assertTrue(cards.last().creatorProfiles.isEmpty())
         assertEquals(2, mediaCalls.get())
 
         val resolved = requireNotNull(adapter.resolvePost(PostId(SourceKey.HITOMI, "4042375")))
@@ -409,6 +417,128 @@ class HitomiSourceAdapterTest {
         assertTrue(anime.media.single().url?.contains("/videos/") == true)
         assertEquals(1, anime.mediaCount)
         assertEquals(47, mediaCalls.get())
+        assertNull(anime.creatorProfile)
+        assertTrue(anime.creatorProfiles.isEmpty())
+        assertNull(anime.authorName)
+    }
+
+    @Test
+    fun `gallery maps every artist to canonical creator identity and encoded URL`() = runTest {
+        val http = RoutingHitomiHttpClient().apply {
+            galleryBodies[55] = galleryWithArtists(
+                id = 55,
+                artists = """[
+                    {"artist":"Arisue Tsukasa","url":"/artist/arisue%20tsukasa-all.html"},
+                    {"artist":"Artist & Co","url":"/artist/wrong-all.html"},
+                    {"artist":"A/B","url":"/artist/a%2Fb-all.html"}
+                ]""".trimIndent(),
+            )
+        }
+        val post = requireNotNull(adapter(http).resolvePost(PostId(SourceKey.HITOMI, "55")))
+
+        assertEquals(2, post.creatorProfiles.size)
+        assertEquals(post.creatorProfiles.first(), post.creatorProfile)
+        assertEquals("Arisue Tsukasa", post.authorName)
+        assertEquals(
+            CreatorProfile(
+                source = SourceKey.HITOMI,
+                displayName = "Arisue Tsukasa",
+                profileId = "arisue tsukasa",
+                profileUrl = "https://hitomi.la/artist/arisue%20tsukasa-all.html",
+                uploadsQuery = "artist:arisue tsukasa",
+            ),
+            post.creatorProfiles[0],
+        )
+        assertEquals("artist & co", post.creatorProfiles[1].profileId)
+        assertEquals("artist:artist & co", post.creatorProfiles[1].uploadsQuery)
+        assertEquals(
+            "https://hitomi.la/artist/artist%20%26%20co-all.html",
+            post.creatorProfiles[1].profileUrl,
+        )
+    }
+
+    @Test
+    fun `gallery creator identities count code points and reject malformed unicode`() = runTest {
+        val supplementaryCharacter = "\uD83D\uDE00"
+        val maximumIdentity = supplementaryCharacter.repeat(256)
+        val overLimitIdentity = supplementaryCharacter.repeat(257)
+        val replacementIdentity = "replacement \uFFFD"
+        val gson = Gson()
+        val http = RoutingHitomiHttpClient().apply {
+            galleryBodies[56] = galleryWithArtists(
+                id = 56,
+                artists = """[
+                    {"artist":${gson.toJson(maximumIdentity)}},
+                    {"artist":${gson.toJson(overLimitIdentity)}},
+                    {"artist":"\uD800"},
+                    {"artist":"\u000Acontrol"},
+                    {"artist":${gson.toJson(replacementIdentity)},"url":"/artist/replacement%20%FF-all.html"}
+                ]""".trimIndent(),
+            )
+        }
+
+        val post = requireNotNull(adapter(http).resolvePost(PostId(SourceKey.HITOMI, "56")))
+
+        assertEquals(2, post.creatorProfiles.size)
+        assertEquals(maximumIdentity, post.creatorProfiles[0].profileId)
+        assertEquals("artist:$maximumIdentity", post.creatorProfiles[0].uploadsQuery)
+        assertEquals(replacementIdentity, post.creatorProfiles[1].profileId)
+        assertEquals(
+            "https://hitomi.la/artist/replacement%20%EF%BF%BD-all.html",
+            post.creatorProfiles[1].profileUrl,
+        )
+    }
+
+    @Test
+    fun `creator browsing delegates to typed artist pagination and validates identity tokens`() = runTest {
+        val artistUrl = HitomiNozomi.urlFor(
+            HitomiNozomiRequest(area = "artist", tag = "arisue tsukasa"),
+        )
+        val http = RoutingHitomiHttpClient().apply {
+            binaryIndexes[artistUrl] = listOf(4, 3, 2)
+        }
+        val adapter = adapter(http, pageSize = 1)
+        val creator = CreatorProfile(
+            source = SourceKey.HITOMI,
+            displayName = "Arisue Tsukasa",
+            profileId = "arisue tsukasa",
+            profileUrl = "https://hitomi.la/artist/arisue%20tsukasa-all.html",
+            uploadsQuery = "artist:arisue tsukasa",
+        )
+
+        val first = adapter.searchCreatorPosts(creator, null)
+        val second = adapter.searchCreatorPosts(creator, requireNotNull(first.nextPageToken))
+
+        assertEquals(listOf("4"), first.items.map { post -> post.id.sourcePostId })
+        assertEquals(listOf("3"), second.items.map { post -> post.id.sourcePostId })
+        assertEquals(listOf(0L, 4L), http.binaryRequests.map { request -> request.range.startInclusive })
+        assertTrue(http.binaryRequests.all { request -> request.url == artistUrl })
+
+        val requestsBeforeInvalidProfiles = http.binaryRequests.size
+        assertTrue(
+            adapter.searchCreatorPosts(creator.copy(source = SourceKey.NHENTAI), null).items.isEmpty(),
+        )
+        assertTrue(
+            adapter.searchCreatorPosts(creator.copy(profileId = ""), null).items.isEmpty(),
+        )
+        assertTrue(
+            adapter.searchCreatorPosts(creator.copy(uploadsQuery = "arisue tsukasa"), null).items.isEmpty(),
+        )
+        assertTrue(
+            adapter.searchCreatorPosts(creator.copy(uploadsQuery = "artist:someone else"), null).items.isEmpty(),
+        )
+        assertEquals(requestsBeforeInvalidProfiles, http.binaryRequests.size)
+
+        assertParseFailure {
+            adapter.searchCreatorPosts(
+                creator.copy(
+                    displayName = "Other",
+                    profileId = "other",
+                    uploadsQuery = "artist:other",
+                ),
+                requireNotNull(first.nextPageToken),
+            )
+        }
     }
 
     @Test
@@ -616,6 +746,11 @@ class HitomiSourceAdapterTest {
         type: String = "doujinshi",
     ): String {
         return """var galleryinfo = {"id":"$id","title":"Gallery $id","galleryurl":"/galleries/$id.html","type":"$type","language":"english","blocked":0,"tags":[],"artists":[],"files":$files};"""
+    }
+
+    private fun galleryWithArtists(id: Int, artists: String): String {
+        val hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        return """var galleryinfo = {"id":"$id","title":"Gallery $id","galleryurl":"/galleries/$id.html","type":"doujinshi","language":"english","blocked":0,"tags":[],"artists":$artists,"files":[{"name":"1.jpg","hash":"$hash","width":800,"height":1200,"hasavif":1}]};"""
     }
 }
 

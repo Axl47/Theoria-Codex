@@ -27,7 +27,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.search.searchScopeLabel
+import com.theoriacodex.app.search.searchTermChipLabel
+import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 
 @Composable
@@ -35,28 +40,32 @@ fun PostTagActionSection(
     post: Post,
     tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
-    onAddIncludeTag: (String) -> Unit,
-    onAddExcludeTag: (String) -> Unit,
-    onRemoveIncludeTag: (String) -> Unit,
-    onRemoveExcludeTag: (String) -> Unit,
+    onAddIncludeTerm: (SearchTerm) -> Boolean,
+    onAddExcludeTerm: (SearchTerm) -> Boolean,
+    onRemoveIncludeTerm: (SearchTerm) -> Unit,
+    onRemoveExcludeTerm: (SearchTerm) -> Unit,
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
 ) {
-    Text("Tags", style = MaterialTheme.typography.titleSmall)
-    val distinctTags = remember(post.canonicalTags, post.rawTags) {
-        interactiveTags(post)
+    Text("Search terms", style = MaterialTheme.typography.titleSmall)
+    val termGroups = remember(post.taxonomy, post.canonicalTags, post.rawTags) {
+        postActionTermGroups(post)
+    }
+    val terms = remember(termGroups) { termGroups.flatMap(PostActionTermGroup::terms) }
+    val generalTags = remember(terms) {
+        terms.filter(SearchTerm::isGeneralPostTag).map(SearchTerm::value).distinct()
     }
     var tagSelections by remember(post.id.source, post.id.sourcePostId) {
-        mutableStateOf<Map<TagActionSelection, Set<String>>>(emptyMap())
+        mutableStateOf<Map<TagActionSelection, Set<SearchTerm>>>(emptyMap())
     }
-    var tagVideoCounts by remember(post.id.source, distinctTags) {
+    var tagVideoCounts by remember(post.id.source, generalTags) {
         mutableStateOf(
-            distinctTags.associateWith { tag ->
+            generalTags.associateWith { tag ->
                 tagVideoCountProvider(post.id.source, tag)
             }
         )
     }
-    LaunchedEffect(post.id.source, distinctTags) {
-        val missingTags = distinctTags.filter { tag -> tagVideoCounts[tag] == null }
+    LaunchedEffect(post.id.source, generalTags) {
+        val missingTags = generalTags.filter { tag -> tagVideoCounts[tag] == null }
         if (missingTags.isEmpty()) return@LaunchedEffect
         val fetchedCounts = fetchTagVideoCounts(post.id.source, missingTags)
         if (fetchedCounts.isNotEmpty()) {
@@ -65,55 +74,45 @@ fun PostTagActionSection(
     }
 
     TagActionGrid(
-        tags = distinctTags,
+        groups = termGroups,
         videoCounts = tagVideoCounts,
-        includedTags = tagSelections[TagActionSelection.INCLUDE].orEmpty(),
-        excludedTags = tagSelections[TagActionSelection.EXCLUDE].orEmpty(),
+        includedTerms = tagSelections[TagActionSelection.INCLUDE].orEmpty(),
+        excludedTerms = tagSelections[TagActionSelection.EXCLUDE].orEmpty(),
         onFavoriteTagLongPress = if (onFavoriteTagLongPress != null) {
             { tag -> onFavoriteTagLongPress(post.id.source, tag) }
         } else {
             null
         },
-        onIncludeTag = { tag ->
+        onIncludeTerm = { term ->
             val included = tagSelections[TagActionSelection.INCLUDE].orEmpty()
             val excluded = tagSelections[TagActionSelection.EXCLUDE].orEmpty()
-            when {
-                tag in included -> {
-                    onRemoveIncludeTag(tag)
-                    tagSelections = tagSelections + (TagActionSelection.INCLUDE to (included - tag))
-                }
-                tag in excluded -> {
-                    onRemoveExcludeTag(tag)
-                    onAddIncludeTag(tag)
-                    tagSelections = tagSelections +
-                        (TagActionSelection.EXCLUDE to (excluded - tag)) +
-                        (TagActionSelection.INCLUDE to (included + tag))
-                }
-                else -> {
-                    onAddIncludeTag(tag)
-                    tagSelections = tagSelections + (TagActionSelection.INCLUDE to (included + tag))
-                }
+            if (term in included) {
+                onRemoveIncludeTerm(term)
+                tagSelections = tagSelections.removeSelectedTerm(TagActionSelection.INCLUDE, term)
+            } else {
+                val accepted = onAddIncludeTerm(term)
+                if (accepted && term in excluded) onRemoveExcludeTerm(term)
+                tagSelections = tagSelections.afterSelectionAttempt(
+                    target = TagActionSelection.INCLUDE,
+                    term = term,
+                    accepted = accepted,
+                )
             }
         },
-        onExcludeTag = { tag ->
+        onExcludeTerm = { term ->
             val included = tagSelections[TagActionSelection.INCLUDE].orEmpty()
             val excluded = tagSelections[TagActionSelection.EXCLUDE].orEmpty()
-            when {
-                tag in excluded -> {
-                    onRemoveExcludeTag(tag)
-                    tagSelections = tagSelections + (TagActionSelection.EXCLUDE to (excluded - tag))
-                }
-                tag in included -> {
-                    onRemoveIncludeTag(tag)
-                    onAddExcludeTag(tag)
-                    tagSelections = tagSelections +
-                        (TagActionSelection.INCLUDE to (included - tag)) +
-                        (TagActionSelection.EXCLUDE to (excluded + tag))
-                }
-                else -> {
-                    onAddExcludeTag(tag)
-                    tagSelections = tagSelections + (TagActionSelection.EXCLUDE to (excluded + tag))
-                }
+            if (term in excluded) {
+                onRemoveExcludeTerm(term)
+                tagSelections = tagSelections.removeSelectedTerm(TagActionSelection.EXCLUDE, term)
+            } else {
+                val accepted = onAddExcludeTerm(term)
+                if (accepted && term in included) onRemoveIncludeTerm(term)
+                tagSelections = tagSelections.afterSelectionAttempt(
+                    target = TagActionSelection.EXCLUDE,
+                    term = term,
+                    accepted = accepted,
+                )
             }
         },
     )
@@ -176,54 +175,88 @@ fun FavoriteTagActionGrid(
     }
 }
 
-private enum class TagActionSelection {
+internal enum class TagActionSelection {
     INCLUDE,
     EXCLUDE,
 }
 
+internal fun Map<TagActionSelection, Set<SearchTerm>>.afterSelectionAttempt(
+    target: TagActionSelection,
+    term: SearchTerm,
+    accepted: Boolean,
+): Map<TagActionSelection, Set<SearchTerm>> {
+    if (!accepted) return this
+    val opposite = target.opposite()
+    return this +
+        (opposite to (get(opposite).orEmpty() - term)) +
+        (target to (get(target).orEmpty() + term))
+}
+
+internal fun Map<TagActionSelection, Set<SearchTerm>>.removeSelectedTerm(
+    target: TagActionSelection,
+    term: SearchTerm,
+): Map<TagActionSelection, Set<SearchTerm>> {
+    return this + (target to (get(target).orEmpty() - term))
+}
+
+private fun TagActionSelection.opposite(): TagActionSelection {
+    return when (this) {
+        TagActionSelection.INCLUDE -> TagActionSelection.EXCLUDE
+        TagActionSelection.EXCLUDE -> TagActionSelection.INCLUDE
+    }
+}
+
 @Composable
 private fun TagActionGrid(
-    tags: List<String>,
+    groups: List<PostActionTermGroup>,
     videoCounts: Map<String, Int?>,
-    includedTags: Set<String>,
-    excludedTags: Set<String>,
+    includedTerms: Set<SearchTerm>,
+    excludedTerms: Set<SearchTerm>,
     onFavoriteTagLongPress: ((String) -> Unit)?,
-    onIncludeTag: (String) -> Unit,
-    onExcludeTag: (String) -> Unit,
+    onIncludeTerm: (SearchTerm) -> Unit,
+    onExcludeTerm: (SearchTerm) -> Unit,
 ) {
-    if (tags.isEmpty()) {
+    if (groups.isEmpty()) {
         Text(
-            text = "No tags",
+            text = "No search terms",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         return
     }
 
-    tags.chunked(3).forEach { rowTags ->
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            rowTags.forEach { tag ->
-                TagActionCell(
-                    tag = tag,
-                    videoCount = videoCounts[tag],
-                    includeSelected = tag in includedTags,
-                    excludeSelected = tag in excludedTags,
-                    onTagLongPress = if (onFavoriteTagLongPress != null) {
-                        { onFavoriteTagLongPress(tag) }
-                    } else {
-                        null
-                    },
-                    onInclude = { onIncludeTag(tag) },
-                    onExclude = { onExcludeTag(tag) },
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            repeat(3 - rowTags.size) {
-                Spacer(modifier = Modifier.weight(1f))
+    groups.forEach { group ->
+        Text(
+            text = group.label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        group.terms.chunked(3).forEach { rowTerms ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                rowTerms.forEach { term ->
+                    val generalTag = term.takeIf(SearchTerm::isGeneralPostTag)?.value
+                    TagActionCell(
+                        label = postActionTermLabel(term),
+                        videoCount = generalTag?.let(videoCounts::get),
+                        includeSelected = term in includedTerms,
+                        excludeSelected = term in excludedTerms,
+                        onTagLongPress = if (generalTag != null && onFavoriteTagLongPress != null) {
+                            { onFavoriteTagLongPress(generalTag) }
+                        } else {
+                            null
+                        },
+                        onInclude = { onIncludeTerm(term) },
+                        onExclude = { onExcludeTerm(term) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                repeat(3 - rowTerms.size) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
             }
         }
     }
@@ -232,7 +265,7 @@ private fun TagActionGrid(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TagActionCell(
-    tag: String,
+    label: String,
     videoCount: Int?,
     includeSelected: Boolean,
     excludeSelected: Boolean,
@@ -247,7 +280,7 @@ private fun TagActionCell(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         TagSelectionSurface(
-            tag = tag,
+            tag = label,
             active = includeSelected || excludeSelected,
             modifier = Modifier.fillMaxWidth(),
             longPressModifier = if (onTagLongPress != null) {
@@ -400,16 +433,97 @@ private fun TagActionPill(
     }
 }
 
-private fun interactiveTags(post: Post): List<String> {
-    val canonical = post.canonicalTags
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
+internal data class PostActionTermGroup(
+    val label: String,
+    val terms: List<SearchTerm>,
+)
+
+internal fun postActionTerms(post: Post): List<SearchTerm> {
+    val typedTerms = post.taxonomy
+        .mapNotNull { taxonomyTerm -> taxonomyTerm.toSearchTerm().normalizedPostActionTermOrNull() }
         .distinct()
-    if (canonical.isNotEmpty()) {
-        return canonical
-    }
-    return post.rawTags
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
+    if (typedTerms.isNotEmpty()) return typedTerms
+
+    val legacyTags = post.canonicalTags
+        .ifEmpty { post.rawTags }
+        .map(String::trim)
+        .filter(String::isNotBlank)
+        .distinct()
+    return legacyTags.map { value -> SearchTerm(value = value) }
+}
+
+internal fun postActionTermGroups(post: Post): List<PostActionTermGroup> {
+    return postActionTerms(post)
+        .groupBy(SearchTerm::postActionGroupKey)
+        .entries
+        .sortedWith(
+            compareBy<Map.Entry<PostActionGroupKey, List<SearchTerm>>> { entry ->
+                POST_ACTION_FACET_ORDER.indexOf(entry.key.facet)
+            }.thenBy { entry -> entry.key.namespaceOrder }
+                .thenBy { entry -> entry.key.sourceNamespace.orEmpty() },
+        )
+        .map { (key, terms) ->
+            PostActionTermGroup(
+                label = searchScopeLabel(
+                    FacetedSearchScope(
+                        facet = key.facet,
+                        sourceNamespace = key.sourceNamespace,
+                    ),
+                ),
+                terms = terms,
+            )
+        }
+}
+
+internal fun generalPostActionTags(post: Post): List<String> {
+    return postActionTerms(post)
+        .filter(SearchTerm::isGeneralPostTag)
+        .map(SearchTerm::value)
         .distinct()
 }
+
+internal fun postActionTermLabel(term: SearchTerm): String {
+    return searchTermChipLabel(term, excluded = false)
+}
+
+internal fun SearchTerm.isGeneralPostTag(): Boolean {
+    return facet == SearchFacet.TAG && (
+        sourceNamespace == null || sourceNamespace.equals(GENERAL_TAG_NAMESPACE, ignoreCase = true)
+    )
+}
+
+private data class PostActionGroupKey(
+    val facet: SearchFacet,
+    val sourceNamespace: String?,
+) {
+    val namespaceOrder: Int
+        get() = when (sourceNamespace?.lowercase()) {
+            null, GENERAL_TAG_NAMESPACE -> 0
+            "female" -> 1
+            "male" -> 2
+            else -> 3
+        }
+}
+
+private fun SearchTerm.postActionGroupKey(): PostActionGroupKey {
+    val groupNamespace = sourceNamespace
+        ?.takeUnless { namespace -> facet == SearchFacet.TAG && namespace.equals(GENERAL_TAG_NAMESPACE, true) }
+    return PostActionGroupKey(facet = facet, sourceNamespace = groupNamespace)
+}
+
+private fun SearchTerm.normalizedPostActionTermOrNull(): SearchTerm? {
+    val normalizedValue = value.trim().takeIf(String::isNotBlank) ?: return null
+    val normalizedNamespace = sourceNamespace?.trim()?.takeIf(String::isNotBlank)
+    return copy(value = normalizedValue, sourceNamespace = normalizedNamespace)
+}
+
+private val POST_ACTION_FACET_ORDER = listOf(
+    SearchFacet.TAG,
+    SearchFacet.ARTIST,
+    SearchFacet.CHARACTER,
+    SearchFacet.SERIES,
+    SearchFacet.GROUP,
+    SearchFacet.TYPE,
+    SearchFacet.LANGUAGE,
+)
+private const val GENERAL_TAG_NAMESPACE = "tag"

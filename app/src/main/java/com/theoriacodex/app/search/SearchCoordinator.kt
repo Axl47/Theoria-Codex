@@ -361,6 +361,20 @@ class SearchCoordinator(
         return true
     }
 
+    fun addPostIncludeTerm(post: Post, term: SearchTerm): Boolean {
+        val normalized = term.normalizedOrNull() ?: return false
+        if (!prepareModeForPostTerm(post, normalized)) return false
+        addIncludeTerm(normalized)
+        return normalized in draftQuery.includeTerms
+    }
+
+    fun addPostExcludeTerm(post: Post, term: SearchTerm): Boolean {
+        val normalized = term.normalizedOrNull() ?: return false
+        if (!prepareModeForPostTerm(post, normalized)) return false
+        addExcludeTerm(normalized)
+        return normalized in draftQuery.excludeTerms
+    }
+
     fun addIncludeSuggestion(suggestion: FacetedTagSuggestion): Boolean {
         return addIncludeTerm(suggestion.toSearchTerm())
     }
@@ -1499,6 +1513,23 @@ class SearchCoordinator(
         if (draftQuery.mode != QueryMode.Unified || term.isPortableGeneralTag) return true
         tagInputValidationMessage = UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE
         return false
+    }
+
+    private fun prepareModeForPostTerm(post: Post, term: SearchTerm): Boolean {
+        if (term.isPortableGeneralTag) return true
+
+        val sourceMode = QueryMode.Source(post.id.source)
+        if (!isModeAvailable(sourceMode)) return false
+        if (draftQuery.mode == sourceMode) return true
+
+        draftQuery = draftQuery.copy(
+            mode = sourceMode,
+            includeTerms = draftQuery.includeTerms.filter(SearchTerm::isPortableGeneralTag),
+            excludeTerms = draftQuery.excludeTerms.filter(SearchTerm::isPortableGeneralTag),
+        )
+        resetUnsupportedSearchScope()
+        clearTagInputUiState()
+        return true
     }
 
     private fun resetUnsupportedSearchScope() {

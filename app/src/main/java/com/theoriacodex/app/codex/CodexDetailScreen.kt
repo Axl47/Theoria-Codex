@@ -45,8 +45,10 @@ import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,13 +63,14 @@ fun CodexDetailScreen(
     resolvePostById: suspend (PostId) -> Post? = { null },
     onRemovePost: (Post) -> Unit,
     onSavePostToDevice: (Post) -> Unit,
-    onOpenCreatorProfile: (Post) -> Unit,
+    onOpenCreatorProfile: (CreatorProfile) -> Unit,
+    onOpenLegacyCreatorProfile: (Post) -> Unit,
     tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
-    onAddIncludeTag: (String) -> Unit = {},
-    onAddExcludeTag: (String) -> Unit = {},
-    onRemoveIncludeTag: (String) -> Unit = {},
-    onRemoveExcludeTag: (String) -> Unit = {},
+    onAddIncludeTerm: (Post, SearchTerm) -> Boolean = { _, _ -> false },
+    onAddExcludeTerm: (Post, SearchTerm) -> Boolean = { _, _ -> false },
+    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
+    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     onGoToSearch: (() -> Unit)? = null,
     onBack: () -> Unit,
@@ -246,9 +249,13 @@ fun CodexDetailScreen(
                 )
                 CreatorProfileActionButton(
                     post = post,
-                    onClick = {
+                    onOpenProfile = { profile ->
                         selectedActionPost = null
-                        onOpenCreatorProfile(post)
+                        onOpenCreatorProfile(profile)
+                    },
+                    onOpenLegacyPost = {
+                        selectedActionPost = null
+                        onOpenLegacyCreatorProfile(post)
                     },
                 )
                 HorizontalDivider()
@@ -256,10 +263,10 @@ fun CodexDetailScreen(
                     post = post,
                     tagVideoCountProvider = tagVideoCountProvider,
                     fetchTagVideoCounts = fetchTagVideoCounts,
-                    onAddIncludeTag = onAddIncludeTag,
-                    onAddExcludeTag = onAddExcludeTag,
-                    onRemoveIncludeTag = onRemoveIncludeTag,
-                    onRemoveExcludeTag = onRemoveExcludeTag,
+                    onAddIncludeTerm = { term -> onAddIncludeTerm(post, term) },
+                    onAddExcludeTerm = { term -> onAddExcludeTerm(post, term) },
+                    onRemoveIncludeTerm = { term -> onRemoveIncludeTerm(post, term) },
+                    onRemoveExcludeTerm = { term -> onRemoveExcludeTerm(post, term) },
                     onFavoriteTagLongPress = onFavoriteTagLongPress,
                 )
                 onGoToSearch?.let { goToSearch ->

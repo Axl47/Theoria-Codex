@@ -199,15 +199,15 @@
     <h1>ExecPlan: Add Hitomi Faceted Search, Creators, and Mixed Media</h1>
     <p>This plan adds Hitomi as a first-class Theoria Codex source and introduces a reusable faceted-search layer shared with NHentai. Users will be able to distinguish tags, artists, characters, series, groups, types, and languages; browse Hitomi artist uploads; open Hitomi links directly in the app; swipe through still and animated gallery pages; and play Hitomi anime MP4s inside the existing Viewer.</p>
     <div class="meta" role="group" aria-label="Plan metadata">
-      <span class="pill">Status: In Progress — Phase 5</span>
+      <span class="pill">Status: In Progress — Phase 6</span>
       <span class="pill">Owner: Codex</span>
       <span class="pill">Created: 2026-07-10</span>
       <span class="pill">Updated: 2026-07-10</span>
       <span class="pill">Plan file: .docs/exec/hitomi-source-faceted-search-and-mixed-media.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Connect Hitomi artists and typed taxonomy to Creator Profile and post actions, then add gallery, reader, anime, CG, and artist deep-link routing.</div>
-      <div class="card"><strong>Main Risk</strong>Typed post actions must preserve each Hitomi facet instead of flattening everything into general tags, while creator and deep-link navigation must remain source-owned and paginated.</div>
+      <div class="card"><strong>Next Action</strong>Promote animated WebP through the shared image pipeline, generalize the Viewer gallery into a mixed-media overview, and harden video prefetch/download behavior.</div>
+      <div class="card"><strong>Main Risk</strong>API 26/27 lacks the platform animated-WebP decoder used on API 28+, so minimum-SDK playback needs a narrow fallback without turning animated images into seekable videos or loading entire videos during background prefetch.</div>
       <div class="card"><strong>Validation</strong>Deterministic fixtures, opt-in live provider probes, app Search route smoke, API 26 and API 28+ media checks, and the two exact galleries named in this plan.</div>
       <div class="card"><strong>Affected Areas</strong><code>core-domain</code> query/post models, <code>core-data</code> persistence, <code>core-sources</code> HTTP and adapters, Search, Creator Profile, Viewer, deep links, stubs, health tooling, and current docs.</div>
     </div>
@@ -242,10 +242,10 @@
       <h2>Current Status</h2>
       <table class="status-table">
         <tbody>
-          <tr><td>Plan state</td><td>In progress. Phases 1–4 are complete; Phase 5 is connecting stable Hitomi metadata to creator navigation, typed post actions, and deep links.</td></tr>
+          <tr><td>Plan state</td><td>In progress. Phases 1–5 are complete; Phase 6 is making animated images, still pages, and videos first-class media in the shared Viewer.</td></tr>
           <tr><td>UX state</td><td>Agreed: contextual scope chips under the search field; source-specific facets in the first release; poster/badge tiles in the overview with playback in the main Viewer.</td></tr>
           <tr><td>Protocol state</td><td>Live route shapes were verified on 2026-07-10. Search and CDN details can drift and therefore have explicit live probes and recovery behavior.</td></tr>
-          <tr><td>Current implementation action</td><td>Phase 5 creator streams, all-artist metadata, facet-preserving post actions, and Android deep-link routing.</td></tr>
+          <tr><td>Current implementation action</td><td>Phase 6 animated-WebP decoding/classification, mixed-media overview tiles, and bounded video playback/prefetch/download behavior.</td></tr>
           <tr><td>Out of scope</td><td>Hitomi account support, WebView scraping, unrestricted title/full-text search, OR expressions, playing every video inside the overview grid, and making artist/series terms cross-source in Unified mode.</td></tr>
         </tbody>
       </table>
@@ -536,8 +536,8 @@
         <li>[x] Phase 2 — Faceted domain/persistence migration. Verified 483 tests with 0 failures and 4 opt-in live skips.</li>
         <li>[x] Phase 3 — Shared scoped UX and NHentai reuse. Verified 288 tests with 0 failures and 2 opt-in live skips.</li>
         <li>[x] Phase 4 — Hitomi adapter, settings migration, registry wiring, source exposure gate, and production media recovery. Verified 400 tests with 0 failures and 2 opt-in live skips.</li>
-        <li>[~] Phase 5 — Creators, typed post actions, and deep links.</li>
-        <li>[ ] Phase 6 — Animated WebP, anime video, and Media Overview.</li>
+        <li>[x] Phase 5 — Creators, typed post actions, and deep links. Verified 421 tests with 0 failures and 2 opt-in live skips.</li>
+        <li>[~] Phase 6 — Animated WebP, anime video, and Media Overview.</li>
         <li>[ ] Phase 7 — Live/device validation, docs, and closeout.</li>
       </ul>
 
@@ -555,6 +555,8 @@
         <li><strong>Nozomi membership must stay compact:</strong> include intersections and exclusions use sorted primitive <code>IntArray</code> caches rather than boxed ID sets, keeping large provider lists bounded in memory.</li>
         <li><strong>Random pagination needs a snapshot, not only a seed:</strong> one bounded full-index read is fingerprinted before shuffling, and the digest travels in the page token. A cached order resumes exactly; after eviction the adapter refetches and rejects changed provider bytes rather than applying an old offset to a new permutation.</li>
         <li><strong>Media refresh crosses source and Viewer layers:</strong> a generic recovery capability lets Hitomi reconstruct file/config identity from persisted URLs, refresh <code>gg.js</code> once for the failed version, and replace only matching media. Search and Viewer trigger it only for exact HTTP 404s, preserve cancellation, and retain normal candidate fallback.</li>
+        <li><strong>Creator links require one identity boundary:</strong> provider artist metadata, persisted/imported profiles, app-link slugs, and creator pagination must agree on canonical case, whitespace, separators, Unicode validity, and a 256-code-point limit. A shared contract prevents generated links or stale profiles from becoming dead actions.</li>
+        <li><strong>Post-action state is an acknowledged mutation:</strong> a typed action can be rejected when its source is unavailable. The chip now changes only after the coordinator confirms the exact term is current, so saved/imported posts cannot display a search state that was never created.</li>
       </ul>
 
       <h3>Decision Log</h3>
@@ -572,6 +574,8 @@
         <li><strong>Decision:</strong> treat source-catalog version 2 as a one-time default enablement migration. <strong>Rationale:</strong> existing users discover Hitomi when it is released, while any later explicit disable choice remains durable. <strong>Date/Author:</strong> 2026-07-10 / Codex.</li>
         <li><strong>Decision:</strong> make Random tokens identify both the query seed and the exact Nozomi snapshot. <strong>Rationale:</strong> a seed alone cannot prevent duplicate or skipped pages when the live provider index changes between requests or an in-memory order is evicted. <strong>Date/Author:</strong> 2026-07-10 / Codex.</li>
         <li><strong>Decision:</strong> recover mutable media through optional <code>MediaRecoverySourceAdapter</code> ownership. <strong>Rationale:</strong> the UI detects only an exact 404 and hands back the failed reference; provider URL parsing, refresh limits, and candidate reconstruction remain inside the source adapter. <strong>Date/Author:</strong> 2026-07-10 / Codex.</li>
+        <li><strong>Decision:</strong> define one canonical Hitomi artist/profile contract in the shared domain layer and require it at adapter, deep-link, and UI-admission boundaries. <strong>Rationale:</strong> every producer and consumer must round-trip the same source-owned identity, including non-BMP Unicode, without exposing malformed persisted profiles as tappable actions. <strong>Date/Author:</strong> 2026-07-10 / Codex.</li>
+        <li><strong>Decision:</strong> treat post-action selection as accepted only when the coordinator confirms the exact typed term is current. <strong>Rationale:</strong> source availability can reject a mutation, and local UI state must never claim a search term that the draft query does not contain. <strong>Date/Author:</strong> 2026-07-10 / Codex.</li>
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
@@ -579,7 +583,8 @@
       <p><strong>Phase 2 outcome:</strong> queries now retain facet and source namespace across hashing, recents, file persistence, and app state; posts retain typed taxonomy, all creators, ordered media metadata, and animation flags. Legacy records still load as general tags, malformed optional typed records are isolated instead of discarding valid data, and Unified search strips source-owned facets before both capability checks and provider compatibility rewrites. Codex v2 exports portable remote snapshots without machine-local paths and imports them through source, snapshot, then repository fallback. <code>./gradlew :core-domain:test :core-data:test :core-sources:test :app:testDebugUnitTest</code> passed 483 tests with no failures; four opt-in live tests remained skipped by design.</p>
       <p><strong>Phase 3 outcome:</strong> source mode now exposes a reusable All/Tags/Artists/Characters/Series/More scope row, scoped autocomplete preserves typed suggestion identity, raw positive and negative prefixes compile to the same terms, and source-owned terms cannot silently narrow Unified search. NHentai now implements the faceted adapter directly, including Series/parody and Type/category translation, while same-text Tag and Artist suggestions remain distinct through cache and query selection. Only general tags reach favorites, For You, affinity, and seen-tag learning, with Pixiv's native raw-tag preference preserved. <code>./gradlew :core-sources:test :app:testDebugUnitTest</code> passed 288 tests with no failures; two opt-in live app tests remained skipped by design.</p>
       <p><strong>Phase 4 outcome:</strong> Hitomi is now a registered but release-gated real adapter with exact ranged Nozomi pagination, typed include/exclude compilation, bounded ordered hydration, isolated malformed galleries, and sparse poster-only Search cards. Popular maps to month, Top to year, and Random shuffles one complete bounded ID snapshot whose SHA-256 fingerprint is carried in v2 tokens; cached and refetched continuation either resumes the exact order or fails closed when provider bytes changed. Opening a post resolves all ordered gallery pages or one anime MP4. <code>HitomiMediaUrlResolver</code> caches mutable <code>gg.js</code> configuration and derives WebP-first preview plus AVIF-first full candidates, while exact Search/Viewer 404s invoke generic source-owned recovery once per failed configuration version before continuing through the alternate shard. Candidate/configuration failures are typed, empty or malformed galleries never become dead cards, and cancellation propagates through every boundary. Source catalog version 2 enables Hitomi once for upgraded settings without overriding later user choices, and the supplied logo is copied byte-for-byte into the source chip. <code>./gradlew :core-domain:test :core-data:test :core-sources:test :core-stubs:test :app:testDebugUnitTest</code> passed 400 tests with no failures; two opt-in live app tests remained skipped by design. Integrated re-review found no remaining Phase 4 blocker, and source exposure stays closed until Phase 7.</p>
-      <p>Planning outcome: Phase 5 can now connect stable typed gallery metadata to existing Creator Profile, post-action, and deep-link flows without changing the source protocol. Viewer overview and animated decoder improvements remain global Phase 6 work. Update this section after every phase with the user-visible result, exact validation evidence, remaining risk, and any scope change. At completion, replace this paragraph with the released behavior and the durable provider lessons added to <code>AGENTS.md</code>.</p>
+      <p><strong>Phase 5 outcome:</strong> every valid Hitomi artist now becomes an exact Creator Profile action and a paginated typed artist stream, while empty or malformed artist lists create no dead action. One shared Unicode-safe identity contract governs provider metadata, stored/imported profiles, UI admission, and artist deep links; it rejects malformed UTF-8/UTF-16, unsafe separators and controls, noncanonical query tuples, and identities beyond 256 Unicode code points. Search, Viewer, Codex, and Creator surfaces preserve exact facet/namespace identity for includes and excludes, keep general-tag favorites/counts separate from source taxonomy, switch to a source only when required, and update chip state only after the coordinator accepts the mutation. Android routing now covers both Hitomi hosts over HTTP/HTTPS for reader, gallery, anime, CG, and artist routes without fragment-dependent IDs. <code>./gradlew :core-domain:test :core-data:test :core-sources:test :core-stubs:test :app:testDebugUnitTest :app:processDebugManifest :app:compileDebugKotlin --rerun-tasks</code> passed 421 tests with no failures; two opt-in live app tests remained skipped by design.</p>
+      <p>Planning outcome: Phase 6 can treat resolved Hitomi media as ordinary shared Viewer input. The remaining work is global media classification, API 26/27 animated-WebP decoding, a no-autoplay mixed-media overview, and bounded video prefetch/download behavior. Update this section after every phase with the user-visible result, exact validation evidence, remaining risk, and any scope change. At completion, replace this paragraph with the released behavior and the durable provider lessons added to <code>AGENTS.md</code>.</p>
     </section>
 
     <section id="recovery">

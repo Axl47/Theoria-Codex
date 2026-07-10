@@ -140,6 +140,7 @@ import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -173,7 +174,8 @@ fun SearchScreen(
     onOpenViewer: (List<Post>, ViewerLaunchContext, SearchVisibilityFilters) -> Unit,
     onApplySearch: () -> Unit,
     onRetrySearch: () -> Unit,
-    onOpenCreatorProfile: (Post) -> Unit,
+    onOpenCreatorProfile: (CreatorProfile) -> Unit,
+    onOpenLegacyCreatorProfile: (Post) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
     onAddFavoriteTag: (SourceKey, String) -> Unit = { _, _ -> },
@@ -894,10 +896,15 @@ fun SearchScreen(
                 )
                 CreatorProfileActionButton(
                     post = post,
-                    onClick = {
+                    onOpenProfile = { profile ->
                         selectedActionPost = null
                         selectedActionPostResolving = false
-                        onOpenCreatorProfile(post)
+                        onOpenCreatorProfile(profile)
+                    },
+                    onOpenLegacyPost = {
+                        selectedActionPost = null
+                        selectedActionPostResolving = false
+                        onOpenLegacyCreatorProfile(post)
                     },
                 )
                 HorizontalDivider()
@@ -912,10 +919,10 @@ fun SearchScreen(
                         post = post,
                         tagVideoCountProvider = coordinator::tagVideoCount,
                         fetchTagVideoCounts = coordinator::fetchTagVideoCounts,
-                        onAddIncludeTag = coordinator::addIncludeTag,
-                        onAddExcludeTag = coordinator::addExcludeTag,
-                        onRemoveIncludeTag = coordinator::removeIncludeTag,
-                        onRemoveExcludeTag = coordinator::removeExcludeTag,
+                        onAddIncludeTerm = { term -> coordinator.addPostIncludeTerm(post, term) },
+                        onAddExcludeTerm = { term -> coordinator.addPostExcludeTerm(post, term) },
+                        onRemoveIncludeTerm = coordinator::removeIncludeTerm,
+                        onRemoveExcludeTerm = coordinator::removeExcludeTerm,
                         onFavoriteTagLongPress = onAddFavoriteTag,
                     )
                 }

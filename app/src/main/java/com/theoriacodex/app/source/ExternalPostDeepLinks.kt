@@ -1,9 +1,15 @@
 package com.theoriacodex.app.source
 
 import android.net.Uri
+import com.theoriacodex.domain.model.HITOMI_ARTIST_IDENTITY_MAX_CODE_POINTS
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.canonicalHitomiArtistIdentity
+import java.io.ByteArrayOutputStream
 import java.net.URI
 import java.net.URLDecoder
+import java.net.URLEncoder
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 
 data class ExternalPostDeepLink(
@@ -36,6 +42,13 @@ fun parseExternalPostDeepLink(rawUrl: String): ExternalPostDeepLink? {
         return ExternalPostDeepLink(
             source = SourceKey.NHENTAI,
             sourceLabel = SourceKey.NHENTAI.displayName(),
+            postId = postId,
+        )
+    }
+    parseHitomiGalleryIdFromUri(uri)?.let { postId ->
+        return ExternalPostDeepLink(
+            source = SourceKey.HITOMI,
+            sourceLabel = SourceKey.HITOMI.displayName(),
             postId = postId,
         )
     }
@@ -104,6 +117,14 @@ fun parseExternalCreatorDeepLink(rawUrl: String): ExternalCreatorDeepLink? {
             sourceLabel = SourceKey.GELBOORU.displayName(),
             creatorId = creatorId,
             profileUrl = "https://gelbooru.com/index.php?page=account&s=profile&id=$creatorId",
+        )
+    }
+    parseHitomiArtistFromUri(uri)?.let { creatorId ->
+        return ExternalCreatorDeepLink(
+            source = SourceKey.HITOMI,
+            sourceLabel = SourceKey.HITOMI.displayName(),
+            creatorId = creatorId,
+            profileUrl = "https://hitomi.la/artist/${encodePathSegment(creatorId)}-all.html",
         )
     }
     return null
@@ -232,6 +253,27 @@ private fun parseNhentaiGalleryIdFromUri(uri: ParsedExternalUri): String? {
     return match.groupValues.getOrNull(1)?.takeIf(String::isDigitsOnly)
 }
 
+private fun parseHitomiGalleryIdFromUri(uri: ParsedExternalUri): String? {
+    if (!uri.isHttpUrlFor(HITOMI_HOSTS)) return null
+
+    HITOMI_READER_PATH.matchEntire(uri.encodedPath)?.let { match ->
+        return match.groupValues[1].takeIf(String::isDigitsOnly)
+    }
+    val match = HITOMI_GALLERY_PATH.matchEntire(uri.encodedPath) ?: return null
+    return match.groupValues[1].takeIf(String::isDigitsOnly)
+}
+
+private fun parseHitomiArtistFromUri(uri: ParsedExternalUri): String? {
+    if (!uri.isHttpUrlFor(HITOMI_HOSTS)) return null
+    val encodedSlug = HITOMI_ARTIST_PATH.matchEntire(uri.encodedPath)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?: return null
+    if (encodedSlug.length > MAX_HITOMI_ARTIST_ENCODED_LENGTH) return null
+    val decoded = decodePathSegmentStrict(encodedSlug) ?: return null
+    return canonicalHitomiArtistIdentity(decoded)
+}
+
 private fun parseExternalUri(rawUrl: String): ParsedExternalUri? {
     val parsed = runCatching { URI(rawUrl.trim()) }.getOrNull() ?: return null
     val scheme = parsed.scheme?.lowercase().orEmpty()
@@ -260,6 +302,43 @@ private fun decodeQueryComponent(value: String): String {
     return URLDecoder.decode(value, StandardCharsets.UTF_8.name())
 }
 
+private fun decodePathSegmentStrict(value: String): String? {
+    val bytes = ByteArrayOutputStream(value.length)
+    var index = 0
+    while (index < value.length) {
+        val character = value[index]
+        if (character == '%') {
+            if (index + 2 >= value.length) return null
+            val high = value[index + 1].digitToIntOrNull(radix = 16) ?: return null
+            val low = value[index + 2].digitToIntOrNull(radix = 16) ?: return null
+            bytes.write((high shl 4) or low)
+            index += 3
+        } else {
+            val codePoint = value.codePointAt(index)
+            if (codePoint in 0xD800..0xDFFF) return null
+            val encoded = String(Character.toChars(codePoint)).toByteArray(StandardCharsets.UTF_8)
+            bytes.write(encoded)
+            index += Character.charCount(codePoint)
+        }
+    }
+    return runCatching {
+        StandardCharsets.UTF_8
+            .newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(bytes.toByteArray()))
+            .toString()
+    }.getOrNull()
+}
+
+private fun encodePathSegment(value: String): String {
+    return URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("+", "%20")
+}
+
+private fun ParsedExternalUri.isHttpUrlFor(hosts: Set<String>): Boolean {
+    return (scheme == "https" || scheme == "http") && host in hosts
+}
+
 private data class ParsedExternalUri(
     val scheme: String,
     val host: String,
@@ -270,3 +349,12 @@ private data class ParsedExternalUri(
 private fun String.isDigitsOnly(): Boolean {
     return isNotBlank() && all { it.isDigit() }
 }
+
+private const val MAX_HITOMI_ARTIST_ENCODED_LENGTH = HITOMI_ARTIST_IDENTITY_MAX_CODE_POINTS * 12
+
+private val HITOMI_HOSTS = setOf("hitomi.la", "www.hitomi.la")
+private val HITOMI_READER_PATH = Regex("^/reader/(\\d+)\\.html/?$")
+private val HITOMI_GALLERY_PATH = Regex(
+    "^/(?:anime|cg|doujinshi|manga|artistcg|gamecg|imageset)/[^/]+-(\\d+)\\.html/?$",
+)
+private val HITOMI_ARTIST_PATH = Regex("^/artist/([^/]+)-all\\.html/?$")
