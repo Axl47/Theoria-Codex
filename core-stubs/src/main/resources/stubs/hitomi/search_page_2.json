@@ -1,0 +1,19 @@
+{
+  "nextPageToken": null,
+  "items": [
+    {
+      "sourcePostId": "7231",
+      "title": "Hitomi anime fixture",
+      "previewUrl": "https://tn.hitomi.la/smalltn/fixture/7231.jpg",
+      "fullUrl": "https://a.hitomi.la/videos/fixture/7231.mp4",
+      "pageUrl": "https://hitomi.la/anime/fixture-7231.html",
+      "width": 1280,
+      "height": 720,
+      "canonicalTags": ["anime", "full color"],
+      "rawTags": ["anime", "full color"],
+      "authorName": null,
+      "createdAtEpochMs": 1700000010000,
+      "durationMs": 120000
+    }
+  ]
+}

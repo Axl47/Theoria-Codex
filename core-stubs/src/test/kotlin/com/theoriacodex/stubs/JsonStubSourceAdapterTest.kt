@@ -102,6 +102,25 @@ class JsonStubSourceAdapterTest {
         assertNotNull(adapter.resolvePost(firstPage.items.first().id))
     }
 
+    @Test
+    fun `hitomi fixtures load search trending paging and resolve`() = runTest {
+        val runtime = StubRuntime(StubScenarioPreset.NORMAL)
+        val adapter = JsonStubSourceAdapter(
+            sourceKey = SourceKey.HITOMI,
+            fixtureLoader = StubFixtureLoader(),
+            runtime = runtime,
+        )
+
+        val firstPage = adapter.search(sampleQuery(), pageToken = null)
+        val secondPage = adapter.search(sampleQuery(), pageToken = firstPage.nextPageToken)
+
+        assertEquals("4042375", firstPage.items.single().id.sourcePostId)
+        assertEquals("page_2", firstPage.nextPageToken)
+        assertEquals("7231", secondPage.items.single().id.sourcePostId)
+        assertTrue(adapter.trendingTags(limit = 3).any { it.type == "artist" })
+        assertNotNull(adapter.resolvePost(firstPage.items.single().id))
+    }
+
     private fun sampleQuery(): Query {
         return Query(
             mode = QueryMode.Unified,

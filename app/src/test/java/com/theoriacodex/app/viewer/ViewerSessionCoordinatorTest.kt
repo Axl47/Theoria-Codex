@@ -13,8 +13,9 @@ import org.junit.Test
 
 class ViewerSessionCoordinatorTest {
     @Test
-    fun `requires lazy media resolution for unresolved iwara and rule34 video posts`() {
+    fun `requires lazy media resolution for unresolved gallery and video source posts`() {
         assertTrue(requiresLazyMediaResolution(samplePost(source = SourceKey.NHENTAI, full = null, media = emptyList())))
+        assertTrue(requiresLazyMediaResolution(samplePost(source = SourceKey.HITOMI, full = null, media = emptyList())))
         assertTrue(requiresLazyMediaResolution(samplePost(source = SourceKey.IWARA, full = null, media = emptyList())))
         assertTrue(requiresLazyMediaResolution(samplePost(source = SourceKey.RULE34VIDEO, full = null, media = emptyList())))
         assertTrue(requiresLazyMediaResolution(samplePost(source = SourceKey.RULE34GEN, full = null, media = emptyList())))
@@ -90,6 +91,14 @@ class ViewerSessionCoordinatorTest {
         assertTrue(requiresViewerPostResolution(staleGelbooruPost, ViewerStreamSource.CODEX))
         assertTrue(requiresViewerPostResolution(staleGelbooruPost, ViewerStreamSource.RECENTS))
         assertFalse(requiresViewerPostResolution(staleGelbooruPost, ViewerStreamSource.SEARCH))
+
+        val staleHitomiPost = samplePost(
+            source = SourceKey.HITOMI,
+            full = ImageRef(url = "https://w1.gold-usergeneratedcontent.net/stale.webp", localPath = null, mime = "image/webp"),
+            media = emptyList(),
+        )
+        assertTrue(requiresViewerPostResolution(staleHitomiPost, ViewerStreamSource.CODEX))
+        assertTrue(requiresViewerPostResolution(staleHitomiPost, ViewerStreamSource.RECENTS))
     }
 
     @Test

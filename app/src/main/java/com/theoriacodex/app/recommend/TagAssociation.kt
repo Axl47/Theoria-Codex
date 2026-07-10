@@ -104,6 +104,7 @@ fun normalizeTagForSource(
         -> cleaned.replace(' ', '_')
         SourceKey.PIXIV,
         SourceKey.NHENTAI,
+        SourceKey.HITOMI,
         SourceKey.RULE34PAHEAL,
         SourceKey.RULE34VIDEO,
         SourceKey.RULE34GEN,

@@ -116,6 +116,7 @@ import coil.request.SuccessResult
 import com.theoriacodex.app.creator.CreatorProfileActionButton
 import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.media.isGifMediaRef
+import com.theoriacodex.app.media.isHttpNotFound
 import com.theoriacodex.app.media.isPixivUgoiraMedia
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.media.MediaRequestFactory
@@ -160,6 +161,7 @@ fun ViewerScreen(
     likedPostIds: Set<PostId> = emptySet(),
     onToggleLike: ((Post) -> Unit)? = null,
     onRequestPostResolution: ((Post) -> Unit)? = null,
+    onRequestMediaRecovery: ((Post, ImageRef) -> Unit)? = null,
     onVisiblePostChanged: ((Post) -> Unit)? = null,
     onDismiss: () -> Unit,
     onSave: (Post) -> Unit,
@@ -212,6 +214,7 @@ fun ViewerScreen(
     var galleryVisible by remember { mutableStateOf(false) }
     val pendingMediaJumpByPost = remember { mutableStateMapOf<Int, Int>() }
     val resolutionRequestedByPostId = remember { mutableStateMapOf<PostId, Boolean>() }
+    val mediaRecoveryRequestedKeys = remember { mutableSetOf<String>() }
     val currentPostIndex = postPagerState.currentPage.coerceIn(0, posts.lastIndex)
     val selectedPost = posts[currentPostIndex]
     val selectedPostLiked = selectedPost.id in likedPostIds
@@ -714,6 +717,11 @@ fun ViewerScreen(
                     val imageModel = remember(context, activeImageUrl, post.id.source) {
                         activeImageUrl?.let { buildViewerImageRequest(context, it, post.id.source) }
                     }
+                    LaunchedEffect(imageCandidates) {
+                        displayedCandidateIndex = 0
+                        maxPreparedCandidateIndex = 0
+                        imageLoadFailed = false
+                    }
                     LaunchedEffect(
                         imageCandidates,
                         displayedCandidateIndex,
@@ -819,7 +827,17 @@ fun ViewerScreen(
                                     hasVisibleImage = true
                                     activeImageUrl?.let { loadedMediaUrls[it] = true }
                                 },
-                                onError = {
+                                onError = { state ->
+                                    val recoveryKey =
+                                        "${post.id.source.name}:${post.id.sourcePostId}:$mediaPage:$activeImageUrl"
+                                    if (
+                                        activeImageUrl != null &&
+                                        onRequestMediaRecovery != null &&
+                                        isHttpNotFound(state.result.throwable) &&
+                                        mediaRecoveryRequestedKeys.add(recoveryKey)
+                                    ) {
+                                        onRequestMediaRecovery(post, media.copy(url = activeImageUrl))
+                                    }
                                     val canAdvance = displayedCandidateIndex < imageCandidates.lastIndex &&
                                         (!hasVisibleImage || !supportsProgressiveImageUpgrade(post, media))
                                     if (canAdvance) {
@@ -2109,7 +2127,9 @@ internal fun viewerPrefetchImageLocation(post: Post, media: ImageRef): String? {
 }
 
 private fun supportsProgressiveImageUpgrade(post: Post, media: ImageRef): Boolean {
-    return supportsProgressiveImageCandidates(post, media) && media.progressiveUrls.isNotEmpty()
+    return post.id.source != SourceKey.HITOMI &&
+        supportsProgressiveImageCandidates(post, media) &&
+        media.progressiveUrls.isNotEmpty()
 }
 
 private fun viewerGifLocation(post: Post, media: ImageRef): String? {

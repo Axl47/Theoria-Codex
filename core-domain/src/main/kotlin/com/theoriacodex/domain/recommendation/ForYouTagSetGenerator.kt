@@ -116,6 +116,7 @@ object ForYouTagSetGenerator {
             SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.IWARA, SourceKey.RULE34XXX -> cleaned.replace(' ', '_')
             SourceKey.PIXIV,
             SourceKey.NHENTAI,
+            SourceKey.HITOMI,
             SourceKey.RULE34PAHEAL,
             SourceKey.RULE34VIDEO,
             SourceKey.RULE34GEN,

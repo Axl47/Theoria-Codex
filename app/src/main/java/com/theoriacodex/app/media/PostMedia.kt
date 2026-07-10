@@ -253,7 +253,8 @@ fun supportsProgressiveImageCandidates(post: Post, media: ImageRef): Boolean {
     if (
         post.id.source != SourceKey.PIXIV &&
         post.id.source != SourceKey.GELBOORU &&
-        post.id.source != SourceKey.NHENTAI
+        post.id.source != SourceKey.NHENTAI &&
+        post.id.source != SourceKey.HITOMI
     ) {
         return false
     }

@@ -1,0 +1,18 @@
+{
+  "nextPageToken": "page_2",
+  "items": [
+    {
+      "sourcePostId": "4042375",
+      "title": "Hitomi mixed gallery fixture",
+      "previewUrl": "https://tn.hitomi.la/smalltn/fixture/4042375.jpg",
+      "fullUrl": "https://a.hitomi.la/webp/fixture/4042375.webp",
+      "pageUrl": "https://hitomi.la/cg/fixture-4042375.html",
+      "width": 1200,
+      "height": 1800,
+      "canonicalTags": ["full color", "animated"],
+      "rawTags": ["full color", "animated"],
+      "authorName": "najar",
+      "createdAtEpochMs": 1700000009000
+    }
+  ]
+}

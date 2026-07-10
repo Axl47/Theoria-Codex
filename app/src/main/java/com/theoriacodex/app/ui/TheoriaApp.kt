@@ -84,6 +84,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.PostDownloadService
 import com.theoriacodex.app.media.normalizeMediaUrl
+import com.theoriacodex.app.media.recoverRemoteMedia
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.CodexSearchSourceOption
@@ -138,6 +139,7 @@ import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.QueryMode
@@ -851,6 +853,35 @@ fun TheoriaApp(
                 session.copy(
                     posts = session.posts.toMutableList().apply {
                         this[index] = resolved
+                    },
+                )
+            }
+        }
+    }
+
+    fun requestViewerMediaRecovery(post: Post, failedMedia: ImageRef) {
+        scope.launch {
+            val recovered = try {
+                recoverRemoteMedia(realRegistry, post, failedMedia)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            } ?: return@launch
+            val activeSession = viewerSession ?: return@launch
+            if (activeSession.posts.none { current -> current.id == post.id }) return@launch
+            when (activeSession.context.streamSource) {
+                ViewerStreamSource.SEARCH -> searchCoordinator.rememberResolvedPost(recovered)
+                ViewerStreamSource.FOR_YOU -> forYouCoordinator.rememberResolvedPost(recovered)
+                ViewerStreamSource.CREATOR_PROFILE -> creatorProfileCoordinator.rememberResolvedPost(recovered)
+                ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> codexRepository.updatePost(recovered)
+            }
+            viewerSession = viewerSession?.let { session ->
+                val index = session.posts.indexOfFirst { current -> current.id == post.id }
+                if (index < 0) return@let session
+                session.copy(
+                    posts = session.posts.toMutableList().apply {
+                        this[index] = recovered
                     },
                 )
             }
@@ -2216,6 +2247,7 @@ fun TheoriaApp(
                                     }
                                 },
                                 onRequestPostResolution = ::requestViewerPostResolution,
+                                onRequestMediaRecovery = ::requestViewerMediaRecovery,
                                 onVisiblePostChanged = { post ->
                                     scope.launch { recordVisibleViewerPost(post) }
                                 },

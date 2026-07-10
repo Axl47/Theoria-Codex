@@ -78,6 +78,26 @@ class ViewerScreenImagePipelineTest {
     }
 
     @Test
+    fun `hitomi viewer candidates try refreshed primary then alternate`() {
+        val primary = "https://w1.gold-usergeneratedcontent.net/current/383/hash.webp"
+        val alternate = "https://w2.gold-usergeneratedcontent.net/current/383/hash.webp"
+        val media = ImageRef(
+            url = primary,
+            localPath = null,
+            mime = "image/webp",
+            progressiveUrls = listOf(primary, alternate),
+        )
+        val post = samplePost(
+            sourceKey = SourceKey.HITOMI,
+            preview = media,
+            full = media,
+            media = listOf(media),
+        )
+
+        assertEquals(listOf(primary, alternate), viewerImageCandidates(post, media))
+    }
+
+    @Test
     fun `non pixiv viewer candidates preserve media full preview order`() {
         val media = ImageRef(
             url = "https://example.com/media.jpg",
@@ -281,10 +301,20 @@ class ViewerScreenImagePipelineTest {
                 "https://i.nhentai.net/galleries/3821534/1.jpg",
             ),
         )
+        val hitomiMedia = ImageRef(
+            url = "https://a1.gold-usergeneratedcontent.net/current/1/hash.avif",
+            localPath = null,
+            mime = "image/avif",
+            progressiveUrls = listOf(
+                "https://a1.gold-usergeneratedcontent.net/current/1/hash.avif",
+                "https://a2.gold-usergeneratedcontent.net/current/1/hash.avif",
+            ),
+        )
         val cases = listOf(
             SourceKey.PIXIV to pixivMedia,
             SourceKey.GELBOORU to gelbooruMedia,
             SourceKey.NHENTAI to nhentaiMedia,
+            SourceKey.HITOMI to hitomiMedia,
         )
 
         cases.forEach { (sourceKey, media) ->

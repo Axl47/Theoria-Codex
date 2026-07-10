@@ -1,6 +1,7 @@
 package com.theoriacodex.sources
 
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.hitomi.HitomiSourceAdapter
 import com.theoriacodex.sources.testing.FakeCredentialsProvider
 import com.theoriacodex.sources.testing.FakeHttpClient
 import org.junit.Assert.assertEquals
@@ -19,6 +20,7 @@ class RealAdapterRegistryTest {
         assertEquals(setOf(SourceKey.PIXIV), registry.availableSources())
         assertNull(registry.adapterFor(SourceKey.AIBOORU))
         assertNull(registry.adapterFor(SourceKey.GELBOORU))
+        assertNull(registry.adapterFor(SourceKey.HITOMI))
         assertNull(registry.adapterFor(SourceKey.IWARA))
         assertNull(registry.adapterFor(SourceKey.NHENTAI))
         assertNull(registry.adapterFor(SourceKey.RULE34PAHEAL))
@@ -33,6 +35,7 @@ class RealAdapterRegistryTest {
                 SourceKey.PIXIV,
                 SourceKey.AIBOORU,
                 SourceKey.NHENTAI,
+                SourceKey.HITOMI,
                 SourceKey.IWARA,
                 SourceKey.RULE34PAHEAL,
                 SourceKey.RULE34VIDEO,
@@ -43,6 +46,8 @@ class RealAdapterRegistryTest {
         assertTrue(SourceKey.PIXIV in registry.availableSources())
         assertTrue(SourceKey.AIBOORU in registry.availableSources())
         assertTrue(SourceKey.NHENTAI in registry.availableSources())
+        assertTrue(SourceKey.HITOMI in registry.availableSources())
+        assertTrue(registry.adapterFor(SourceKey.HITOMI) is HitomiSourceAdapter)
         assertTrue(SourceKey.IWARA in registry.availableSources())
         assertTrue(SourceKey.RULE34PAHEAL in registry.availableSources())
         assertTrue(SourceKey.RULE34VIDEO in registry.availableSources())

@@ -16,14 +16,16 @@ internal data class ViewerSession(
 
 private val LAZY_MEDIA_RESOLUTION_SOURCES = setOf(
     SourceKey.NHENTAI,
+    SourceKey.HITOMI,
     SourceKey.RULE34VIDEO,
     SourceKey.RULE34GEN,
     SourceKey.IWARA,
 )
 
-private val REFRESHABLE_REMOTE_VIDEO_SOURCES = setOf(
+private val REFRESHABLE_REMOTE_MEDIA_SOURCES = setOf(
     SourceKey.AIBOORU,
     SourceKey.GELBOORU,
+    SourceKey.HITOMI,
     SourceKey.IWARA,
     SourceKey.RULE34XXX,
     SourceKey.RULE34PAHEAL,
@@ -36,7 +38,7 @@ internal fun requiresViewerPostResolution(post: Post, streamSource: ViewerStream
         streamSource == ViewerStreamSource.CODEX ||
         streamSource == ViewerStreamSource.RECENTS
     ) {
-        return post.id.source in REFRESHABLE_REMOTE_VIDEO_SOURCES &&
+        return post.id.source in REFRESHABLE_REMOTE_MEDIA_SOURCES &&
             (hasRemoteViewerMedia(post) || requiresLazyMediaResolution(post))
     }
     return requiresLazyMediaResolution(post)
@@ -48,7 +50,7 @@ internal fun requiresLazyMediaResolution(post: Post): Boolean {
         post.full?.let { add(it) }
     }
     if (
-        post.id.source in REFRESHABLE_REMOTE_VIDEO_SOURCES &&
+        post.id.source in REFRESHABLE_REMOTE_MEDIA_SOURCES &&
         mediaRefs.any { ref -> isVideoMediaRef(ref) && ref.localPath.isNullOrBlank() && !ref.url.isNullOrBlank() }
     ) {
         return true

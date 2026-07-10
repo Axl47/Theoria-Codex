@@ -801,6 +801,31 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
+    fun `legacy settings enable hitomi once and preserve a post-upgrade disable`() = runTest {
+        val dir = tempDir("settings-source-catalog-migration-")
+        dir.resolve("settings_store.json").writeText(
+            """
+                {
+                  "enabledSources": ["PIXIV", "GELBOORU"],
+                  "sourceWeights": {"PIXIV": 0.8, "GELBOORU": 0.2}
+                }
+            """.trimIndent(),
+        )
+
+        val repository = FileBackedSettingsRepository(dir)
+        val migrated = repository.observeSettings().first()
+
+        assertTrue(SourceKey.HITOMI in migrated.runtime.enabledSources)
+        assertTrue(migrated.runtime.sourceWeights.containsKey(SourceKey.HITOMI))
+        assertTrue(dir.resolve("settings_store.json").readText().contains("\"sourceCatalogVersion\": 2"))
+
+        repository.setEnabledSources(migrated.runtime.enabledSources - SourceKey.HITOMI)
+
+        val reloaded = FileBackedSettingsRepository(dir).observeSettings().first()
+        assertFalse(SourceKey.HITOMI in reloaded.runtime.enabledSources)
+    }
+
+    @Test
     fun `settings repository persists dynamic recommendation profiles`() = runTest {
         val dir = tempDir("settings-profiles-")
         val first = FileBackedSettingsRepository(dir)

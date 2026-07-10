@@ -11,8 +11,9 @@ import org.junit.Test
 
 class SearchScreenMediaBehaviorTest {
     @Test
-    fun `iwara cards do not allow inline autoplay in search`() {
+    fun `iwara and hitomi cards remain poster only in search`() {
         assertFalse(allowsInlineAutoplayInSearch(samplePost(SourceKey.IWARA)))
+        assertFalse(allowsInlineAutoplayInSearch(samplePost(SourceKey.HITOMI)))
     }
 
     @Test
@@ -22,7 +23,7 @@ class SearchScreenMediaBehaviorTest {
     }
 
     @Test
-    fun `non iwara sources keep inline autoplay enabled in search`() {
+    fun `other image and gallery sources keep inline autoplay enabled in search`() {
         assertTrue(allowsInlineAutoplayInSearch(samplePost(SourceKey.PIXIV)))
         assertTrue(allowsInlineAutoplayInSearch(samplePost(SourceKey.GELBOORU)))
         assertTrue(allowsInlineAutoplayInSearch(samplePost(SourceKey.NHENTAI)))
@@ -40,6 +41,20 @@ class SearchScreenMediaBehaviorTest {
         val post = samplePost(SourceKey.NHENTAI).copy(width = null, height = null)
 
         assertEquals(1f, previewAspectRatio(post), 0.001f)
+    }
+
+    @Test
+    fun `search card tries refreshed primary then alternate without duplicates`() {
+        val primary = "https://w1.gold-usergeneratedcontent.net/current/383/hash.webp"
+        val alternate = "https://w2.gold-usergeneratedcontent.net/current/383/hash.webp"
+        val ref = ImageRef(
+            url = primary,
+            localPath = null,
+            mime = "image/webp",
+            progressiveUrls = listOf(primary, alternate),
+        )
+
+        assertEquals(listOf(primary, alternate), searchCardImageCandidates(ref))
     }
 
     private fun samplePost(source: SourceKey): Post {

@@ -102,6 +102,7 @@ data class SourceRuntimeSettings(
         SourceKey.RULE34XXX to 0.15,
         SourceKey.RULE34PAHEAL to 0.12,
         SourceKey.NHENTAI to 0.10,
+        SourceKey.HITOMI to 0.10,
         SourceKey.IWARA to 0.08,
         SourceKey.RULE34VIDEO to 0.07,
         SourceKey.RULE34GEN to 0.07,

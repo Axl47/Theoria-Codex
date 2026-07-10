@@ -74,6 +74,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -115,6 +116,7 @@ import com.theoriacodex.app.media.animatedDurationRangeLabel
 import com.theoriacodex.app.media.copyPostTagsToClipboard
 import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.media.isAnimatedPost
+import com.theoriacodex.app.media.isHttpNotFound
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.media.postPlaybackMediaCandidate
@@ -150,6 +152,7 @@ import com.theoriacodex.domain.orchestration.SourceRunState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import coil.decode.SvgDecoder
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
@@ -763,6 +766,9 @@ fun SearchScreen(
                                         { toggle(post) }
                                     },
                                     resolvePostById = { postId -> coordinator.resolvePostForSearch(postId) },
+                                    recoverPostMedia = { failedPost, failedMedia ->
+                                        coordinator.recoverPostMedia(failedPost, failedMedia)
+                                    },
                                     onClick = {
                                         focusManager.clearFocus()
                                         val context = coordinator.buildViewerLaunchContext(
@@ -1016,6 +1022,7 @@ fun SearchResultCard(
     liked: Boolean = false,
     onToggleLike: (() -> Unit)? = null,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
+    recoverPostMedia: (suspend (Post, ImageRef) -> Post?)? = null,
     refreshOnPreviewError: Boolean = false,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
@@ -1024,6 +1031,7 @@ fun SearchResultCard(
     val scope = rememberCoroutineScope()
     var resolvedPostOverride by remember(post.id) { mutableStateOf<Post?>(null) }
     var resolutionAttempted by remember(post.id) { mutableStateOf(false) }
+    val mediaRecoveryAttemptedUrls = remember(post.id) { mutableSetOf<String>() }
     val effectivePost = resolvedPostOverride ?: post
 
     fun requestResolvedCardPreview(force: Boolean = false) {
@@ -1071,7 +1079,20 @@ fun SearchResultCard(
         ) {
             mutableStateOf(false)
         }
-        val previewUrl = resolveCardPreviewUrl(effectivePost)
+        val previewRef = remember(effectivePost) {
+            postPreviewImageCandidate(effectivePost)?.ref
+        }
+        val imageCandidates = remember(previewRef?.url, previewRef?.progressiveUrls) {
+            searchCardImageCandidates(previewRef)
+        }
+        var displayedImageCandidateIndex by remember(
+            effectivePost.id,
+            previewRef?.url,
+            previewRef?.progressiveUrls,
+        ) {
+            mutableIntStateOf(0)
+        }
+        val previewUrl = imageCandidates.getOrNull(displayedImageCandidateIndex)
         val ratio = remember(post.id) {
             previewAspectRatio(post)
         }
@@ -1119,8 +1140,32 @@ fun SearchResultCard(
                     contentDescription = title,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
-                    onError = {
-                        if (resolvedPostOverride == null && refreshOnPreviewError) {
+                    onError = { state ->
+                        val canAdvance = displayedImageCandidateIndex < imageCandidates.lastIndex
+                        val failedRef = previewRef?.copy(url = previewUrl)
+                        if (
+                            failedRef != null &&
+                            recoverPostMedia != null &&
+                            isHttpNotFound(state.result.throwable) &&
+                            mediaRecoveryAttemptedUrls.add(previewUrl.orEmpty())
+                        ) {
+                            scope.launch {
+                                val recovered = try {
+                                    recoverPostMedia(effectivePost, failedRef)
+                                } catch (error: CancellationException) {
+                                    throw error
+                                } catch (_: Exception) {
+                                    null
+                                }
+                                if (recovered != null && recovered != effectivePost) {
+                                    resolvedPostOverride = recovered
+                                } else if (canAdvance) {
+                                    displayedImageCandidateIndex += 1
+                                }
+                            }
+                        } else if (canAdvance) {
+                            displayedImageCandidateIndex += 1
+                        } else if (resolvedPostOverride == null && refreshOnPreviewError) {
                             requestResolvedCardPreview(force = true)
                         }
                     },
@@ -1385,8 +1430,11 @@ internal fun postMediaCount(post: Post): Int {
     }
 }
 
-private fun resolveCardPreviewUrl(post: Post): String? {
-    return postPreviewImageCandidate(post)?.url
+internal fun searchCardImageCandidates(previewRef: ImageRef?): List<String> {
+    return buildList {
+        previewRef?.url?.takeIf(String::isNotBlank)?.let(::add)
+        addAll(previewRef?.progressiveUrls.orEmpty().filter(String::isNotBlank))
+    }.distinct()
 }
 
 private fun resolveCardVideoRef(post: Post): ImageRef? {
@@ -1394,7 +1442,7 @@ private fun resolveCardVideoRef(post: Post): ImageRef? {
 }
 
 internal fun allowsInlineAutoplayInSearch(post: Post): Boolean {
-    return post.id.source != SourceKey.IWARA
+    return post.id.source != SourceKey.IWARA && post.id.source != SourceKey.HITOMI
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1950,6 +1998,21 @@ private fun SourceChipLogo(
 
         SourceKey.NHENTAI -> {
             svgLogo(R.raw.nhentai_logo, "NHentai")
+        }
+
+        SourceKey.HITOMI -> {
+            Image(
+                painter = painterResource(id = R.drawable.hitomi_logo),
+                contentDescription = "Hitomi",
+                modifier = modifier
+                    .size(size)
+                    .background(
+                        color = Color.Black,
+                        shape = RoundedCornerShape(4.dp),
+                    )
+                    .padding(2.dp),
+                contentScale = ContentScale.Fit,
+            )
         }
 
         SourceKey.RULE34XXX -> {

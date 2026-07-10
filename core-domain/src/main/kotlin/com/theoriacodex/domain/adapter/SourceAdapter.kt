@@ -1,6 +1,7 @@
 package com.theoriacodex.domain.adapter
 
 import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -24,6 +25,18 @@ interface CreatorPostsSourceAdapter {
         creator: CreatorProfile,
         pageToken: String?,
     ): Page<Post>
+}
+
+/**
+ * Optional source-owned recovery for media URLs whose provider configuration can change after a
+ * post was loaded. The adapter receives the original post and exact failed media reference so it
+ * can preserve source identity without teaching the app layer provider URL rules.
+ */
+interface MediaRecoverySourceAdapter {
+    suspend fun recoverPostMedia(
+        post: Post,
+        failedMedia: ImageRef,
+    ): Post?
 }
 
 data class FacetedSearchScope(

@@ -1,20 +1,28 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T09:25:00-04:00
+updated_at: 2026-07-10T09:05:24-04:00
 ---
 # Working List
 
 ## Current Task: Implement Hitomi Source, Faceted Search, And Mixed Media
 
 ### Pending
-- [ ] Phase 5: Add creator browsing, typed post actions, and Hitomi deep links; verify data/source/creator/deep-link tests; commit
 - [ ] Phase 6: Generalize the Viewer media overview and support animated WebP/anime video; verify media/viewer/download/device-test compilation; commit
 - [ ] Phase 7: Add live health and app smoke coverage, complete available device acceptance, update README/AGENTS/ExecPlan, run broad validation; commit
 
 ### In Progress
-- [ ] Phase 4: Implement and expose Hitomi search, pagination, hydration, and media URL resolution; verify domain/source/stub/app tests; commit
+- [ ] Phase 5: Add creator browsing, typed post actions, and Hitomi deep links; verify data/source/creator/deep-link tests; commit
 
 ### Done
+- [x] Phase 4: Implement and audit Hitomi search, pagination, hydration, and media URL resolution behind the release exposure gate (`./gradlew :core-domain:test :core-data:test :core-sources:test :core-stubs:test :app:testDebugUnitTest`: 400 tests, 0 failures, 2 opt-in live skips)
+  - [x] Make Random source-wide with one bounded snapshot, v2 fingerprinted tokens, bounded LRU continuity, and changed-snapshot fail-closed behavior
+  - [x] Reject candidate-less/empty galleries and type every bounded Nozomi/CDN failure while preserving per-gallery isolation
+  - [x] Connect exact-404 one-refresh CDN recovery to Search and Viewer through a generic source capability
+  - [x] Register the real adapter while keeping `exposedRealSources()` closed until Phase 7
+  - [x] Add exact Nozomi range paging, faceted include/exclude compilation, bounded hydration, and sparse Search cards
+  - [x] Resolve ordered galleries, animated-page metadata, anime MP4s, and mutable AVIF/WebP/original CDN candidates
+  - [x] Migrate upgraded settings once and preserve later user source-disable choices
+  - [x] Copy `/Users/axel/Downloads/hitomi-logo.png` byte-for-byte into the source chip asset
 - [x] Phase 3: Build reusable scoped autocomplete for NHentai and the Search UI (`./gradlew :core-sources:test :app:testDebugUnitTest`: 288 tests, 0 failures, 2 opt-in live skips)
   - [x] Add source-owned scope selection, typed suggestion actions/chips, raw prefix parsing, and Unified-mode protection
   - [x] Make NHentai compile typed facets while preserving language, full-color, direct-ID, and same-name Tag/Artist behavior

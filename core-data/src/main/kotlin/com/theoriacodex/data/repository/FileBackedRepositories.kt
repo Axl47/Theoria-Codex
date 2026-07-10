@@ -381,6 +381,9 @@ class FileBackedSettingsRepository(
         storageFile.parentFile?.mkdirs()
         val stored = readJson(storageFile, SettingsStoreFile.fromDomain(AppSettings()))
         settingsFlow.value = stored.toDomain()
+        if (stored.requiresSourceCatalogMigration()) {
+            persist()
+        }
     }
 
     override fun observeSettings(): Flow<AppSettings> {
@@ -1258,7 +1261,10 @@ private data class RecentSearchRecord(
     }
 }
 
+private const val CURRENT_SOURCE_CATALOG_VERSION = 2
+
 private data class SettingsStoreFile(
+    val sourceCatalogVersion: Int? = null,
     val enabledSources: List<String> = SourceKey.entries.map { it.name },
     val sourceWeights: Map<String, Double> = SourceRuntimeSettings().sourceWeights.mapKeys { it.key.name },
     val cacheFullImageOnSave: Boolean = false,
@@ -1274,8 +1280,16 @@ private data class SettingsStoreFile(
     val providerHealth: List<ProviderHealthSnapshotRecord>? = null,
 ) {
     fun toDomain(): AppSettings {
+        val storedEnabledSources = enabledSources
+            .mapNotNull { runCatching { SourceKey.valueOf(it) }.getOrNull() }
+            .toSet()
+        val migratedEnabledSources = if (requiresSourceCatalogMigration()) {
+            storedEnabledSources + SourceKey.HITOMI
+        } else {
+            storedEnabledSources
+        }
         val runtime = SourceRuntimeSettings(
-            enabledSources = enabledSources.mapNotNull { runCatching { SourceKey.valueOf(it) }.getOrNull() }.toSet(),
+            enabledSources = migratedEnabledSources,
             sourceWeights = sourceWeights.mapNotNull { (key, value) ->
                 runCatching { SourceKey.valueOf(key) }.getOrNull()?.let { source -> source to value }
             }.toMap(),
@@ -1324,9 +1338,14 @@ private data class SettingsStoreFile(
         )
     }
 
+    fun requiresSourceCatalogMigration(): Boolean {
+        return (sourceCatalogVersion ?: 1) < CURRENT_SOURCE_CATALOG_VERSION
+    }
+
     companion object {
         fun fromDomain(settings: AppSettings): SettingsStoreFile {
             return SettingsStoreFile(
+                sourceCatalogVersion = CURRENT_SOURCE_CATALOG_VERSION,
                 enabledSources = settings.runtime.enabledSources.map { it.name },
                 sourceWeights = settings.runtime.sourceWeights.mapKeys { it.key.name },
                 cacheFullImageOnSave = settings.cache.cacheFullImageOnSave,

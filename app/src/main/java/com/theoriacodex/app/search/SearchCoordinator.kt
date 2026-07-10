@@ -3,6 +3,7 @@ package com.theoriacodex.app.search
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.theoriacodex.app.media.recoverRemoteMedia
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
@@ -25,6 +26,7 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.model.DateRange
+import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -1017,6 +1019,12 @@ class SearchCoordinator(
         return adapter.resolvePost(postId)
     }
 
+    suspend fun recoverPostMedia(post: Post, failedMedia: ImageRef): Post? {
+        val recovered = recoverRemoteMedia(registry, post, failedMedia) ?: return null
+        rememberResolvedPost(recovered)
+        return recovered
+    }
+
     suspend fun resolvePostForSearch(postId: PostId): Post? {
         val existing = resolvedPostOverridesByQueryHash[appliedQueryHash]?.get(postId)
         if (existing != null) return existing
@@ -1629,6 +1637,7 @@ private val SOURCE_DISPLAY_ORDER = listOf(
     SourceKey.GELBOORU,
     SourceKey.PIXIV,
     SourceKey.NHENTAI,
+    SourceKey.HITOMI,
     SourceKey.IWARA,
     SourceKey.RULE34XXX,
     SourceKey.RULE34PAHEAL,
@@ -1648,6 +1657,7 @@ private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(
     SourceKey.PIXIV,
     SourceKey.GELBOORU,
     SourceKey.NHENTAI,
+    SourceKey.HITOMI,
     SourceKey.IWARA,
     SourceKey.RULE34XXX,
     SourceKey.RULE34PAHEAL,

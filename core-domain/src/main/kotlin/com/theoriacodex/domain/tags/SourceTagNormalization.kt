@@ -33,6 +33,7 @@ fun sourceTagKey(source: SourceKey, tag: String): String {
         SourceKey.GELBOORU, SourceKey.IWARA, SourceKey.RULE34XXX -> normalizeGelbooruToken(tag)
         SourceKey.PIXIV,
         SourceKey.NHENTAI,
+        SourceKey.HITOMI,
         SourceKey.RULE34PAHEAL,
         SourceKey.RULE34VIDEO,
         SourceKey.RULE34GEN,
@@ -50,6 +51,7 @@ fun sourceTagsMatch(source: SourceKey, left: String, right: String): Boolean {
             normalizeGelbooruToken(normalizedLeft) == normalizeGelbooruToken(normalizedRight)
         SourceKey.PIXIV,
         SourceKey.NHENTAI,
+        SourceKey.HITOMI,
         SourceKey.RULE34PAHEAL,
         SourceKey.RULE34VIDEO,
         SourceKey.RULE34GEN,
