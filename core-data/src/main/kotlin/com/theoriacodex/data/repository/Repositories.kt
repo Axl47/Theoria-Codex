@@ -169,6 +169,7 @@ data class AppSettings(
     val contentFilters: ContentFilterSettings = ContentFilterSettings(),
     val viewer: ViewerSettings = ViewerSettings(),
     val scenarioPreset: ScenarioPreset = ScenarioPreset.NORMAL,
+    /** Legacy migration input. New last-tab state is owned by [UiRestoreRepository]. */
     val lastSelectedTabRoute: String = "search",
     val recommendationProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
     val activeProfileId: String = defaultRecommendationProfiles().first().profileId,
@@ -193,6 +194,7 @@ interface SettingsRepository {
     suspend fun setResolveUnknownAnimatedDurations(enabled: Boolean)
     suspend fun setInvertMultiImageScrollDirection(enabled: Boolean)
     suspend fun setScenarioPreset(preset: ScenarioPreset)
+    @Deprecated("Last-tab state is owned by UiRestoreRepository; retain this writer only for compatibility.")
     suspend fun setLastTab(route: String)
     suspend fun setActiveProfile(profileId: String)
     suspend fun addRecommendationProfile(name: String): RecommendationProfile
@@ -240,6 +242,7 @@ data class SearchScrollState(
 interface UiRestoreRepository {
     suspend fun setLastTab(route: String)
     suspend fun getLastTab(): String?
+    suspend fun migrateLegacyLastTab(legacyRoute: String?): String?
     suspend fun setSearchScrollState(queryHash: String, state: SearchScrollState)
     suspend fun getSearchScrollState(queryHash: String): SearchScrollState?
     fun observeViewerLaunchContext(): Flow<ViewerLaunchContext?>

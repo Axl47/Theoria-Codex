@@ -16,6 +16,7 @@ import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -433,7 +434,7 @@ class ForYouCoordinator(
             return cached.map { suggestion -> suggestion.text }
         }
 
-        val fetched = runCatching {
+        val fetched = runCatchingPreservingCancellation {
             registry.adapterFor(source)?.trendingTags(limit = TRENDING_FALLBACK_LIMIT).orEmpty()
         }.getOrDefault(emptyList())
         if (fetched.isNotEmpty()) {

@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T17:54:03-04:00
+updated_at: 2026-07-10T18:13:36-04:00
 ---
 # Working List
 
@@ -10,7 +10,6 @@ updated_at: 2026-07-10T17:54:03-04:00
 
 ### Pending
 
-- [ ] Phase 1: repair correctness invariants
 - [ ] Phase 2: bound transport, caches, and disk work
 - [ ] Phase 3: establish the application container and immutable UI contracts
 - [ ] Phase 4: move UI ownership to route-scoped state holders
@@ -20,6 +19,19 @@ updated_at: 2026-07-10T17:54:03-04:00
 
 ### Done
 
+- [x] Phase 1: repair correctness invariants
+  - [x] 1A: preserve cancellation across app and provider suspend boundaries
+    - Evidence: shared helper rethrows the same cancellation; For You, Creator, Search, Ugoira, NHentai, Rule34Video, and Rule34Paheal focused cancellation tests passed across core-domain/core-sources/app
+  - [x] 1B: make hydrated Codex snapshots durable when membership already exists
+    - Evidence: sparse-to-hydrated duplicate `addItem` survives reconstruction without changing order/timestamp; exact no-op avoids disk rewrite
+  - [x] 1E: exclude credentials from backup/transfer and expose recoverable reconnect state
+    - Evidence: legacy and Android 12+ rules exclude encrypted credential preferences from cloud/device transfer; corruption enters `ReconnectRequired` without deletion, and reset requires explicit confirmation
+  - [x] 1C: migrate last-tab persistence to one `UiRestoreRepository` owner
+    - Evidence: empty restore imports one trimmed legacy value, later restore wins, file-backed migration survives reconstruction, and the app no longer writes the legacy Settings owner
+  - [x] 1D: make Search latest-request-wins and cancellation-safe
+    - Evidence: generation snapshots cancel/supersede older root/page work, serialize final applied persistence, and gate every publication; delayed-first, stale-page, and external-cancellation tests pass
+  - [x] 1I: integrate sole tab ownership, credential recovery, and cancellation behavior in `TheoriaApp`
+    - Evidence: full 110-task gate passed 738 configured tests with 0 failures/errors and 6 opt-in skips; debug APK installed/cold-launched with a live process and empty crash buffer
 - [x] Phase 0: establish trustworthy guardrails
   - [x] 0A: add deterministic PR/main verification workflow
     - Evidence: reusable YAML parsed; core modules and app lint/unit/android-test compilation/debug assembly passed

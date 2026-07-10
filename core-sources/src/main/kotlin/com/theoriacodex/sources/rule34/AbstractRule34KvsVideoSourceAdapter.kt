@@ -8,6 +8,7 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -57,7 +58,7 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
 
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
         if (limit <= 0) return emptyList()
-        return runCatching {
+        return runCatchingPreservingCancellation {
             request("$baseUrl/tags_json.php?id=true&advanced_search=true")
         }.map { body ->
             parseTagSuggestionsFromSelect2(body, gson, "trending").take(limit).ifEmpty {
@@ -71,7 +72,7 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
         val suggestions = linkedMapOf<String, TagSuggestion>()
         prefixes.forEach { prefix ->
             if (suggestions.size >= limit) return@forEach
-            runCatching {
+            runCatchingPreservingCancellation {
                 request("$baseUrl/tags_json.php?id=true&advanced_search=true&q=${encodePathSegment(prefix)}")
             }.getOrNull()
                 ?.let { body -> parseTagSuggestionsFromSelect2(body, gson, "trending") }
@@ -87,7 +88,7 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
     override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
         val normalized = prefix.trim()
         if (normalized.isBlank() || limit <= 0) return emptyList()
-        return runCatching {
+        return runCatchingPreservingCancellation {
             request("$baseUrl/tags_json.php?id=true&advanced_search=true&q=${encodePathSegment(normalized)}")
         }.map { body ->
             parseTagSuggestionsFromSelect2(body, gson, "tag").take(limit)

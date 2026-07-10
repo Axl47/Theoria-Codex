@@ -5,11 +5,14 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.testing.FakeHttpClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class Rule34PahealSourceAdapterTest {
@@ -59,6 +62,35 @@ class Rule34PahealSourceAdapterTest {
         assertEquals(1645, post?.height)
         assertEquals(listOf("Neon Genesis Evangelion", "Asuka Langley Sohryu"), post?.canonicalTags)
         assertEquals("https://rule34.paheal.net/post/view/5773878", post?.pageUrl)
+    }
+
+    @Test
+    fun `trending cancellation is not degraded to an empty list`() = runTest {
+        val expected = CancellationException("source changed")
+        val adapter = Rule34PahealSourceAdapter(
+            httpClient = object : SourceHttpClient {
+                override suspend fun get(
+                    url: String,
+                    query: Map<String, String>,
+                    headers: Map<String, String>,
+                ): SourceHttpResponse = throw expected
+
+                override suspend fun postForm(
+                    url: String,
+                    form: Map<String, String>,
+                    headers: Map<String, String>,
+                ): SourceHttpResponse = error("POST is not used by Rule34Paheal tests")
+            },
+        )
+
+        var thrown: CancellationException? = null
+        try {
+            adapter.trendingTags(limit = 2)
+        } catch (error: CancellationException) {
+            thrown = error
+        }
+
+        assertTrue(thrown === expected)
     }
 
     private fun sampleQuery(): Query {

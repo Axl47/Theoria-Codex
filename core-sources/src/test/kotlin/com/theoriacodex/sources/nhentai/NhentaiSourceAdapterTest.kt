@@ -13,6 +13,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.testing.FakeHttpClient
 import java.util.ArrayDeque
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -749,6 +750,40 @@ class NhentaiSourceAdapterTest {
         assertEquals("yomoda yomo", post?.authorName)
     }
 
+    @Test
+    fun `exact tag lookup cancellation stops search instead of falling through`() = runTest {
+        val expected = CancellationException("query replaced")
+        val httpClient = CancellingTagLookupHttpClient(expected)
+        val adapter = NhentaiSourceAdapter(httpClient = httpClient, minRequestIntervalMs = 0L)
+
+        var thrown: CancellationException? = null
+        try {
+            adapter.search(sampleQuery(), pageToken = null)
+        } catch (error: CancellationException) {
+            thrown = error
+        }
+
+        assertTrue(thrown === expected)
+        assertEquals(0, httpClient.getCalls)
+    }
+
+    @Test
+    fun `mirror metadata cancellation stops resolution without trying another mirror`() = runTest {
+        val expected = CancellationException("viewer closed")
+        val httpClient = CancellingMirrorMetadataHttpClient(expected)
+        val adapter = NhentaiSourceAdapter(httpClient = httpClient, minRequestIntervalMs = 0L)
+
+        var thrown: CancellationException? = null
+        try {
+            adapter.resolvePost(PostId(source = SourceKey.NHENTAI, sourcePostId = "634609"))
+        } catch (error: CancellationException) {
+            thrown = error
+        }
+
+        assertTrue(thrown === expected)
+        assertEquals(3, httpClient.getCalls)
+    }
+
     private fun sampleQuery(): Query {
         return Query(
             mode = QueryMode.Source(SourceKey.NHENTAI),
@@ -808,5 +843,75 @@ class NhentaiSourceAdapterTest {
             )
             return queue.removeFirst()
         }
+    }
+
+    private class CancellingTagLookupHttpClient(
+        private val cancellation: CancellationException,
+    ) : com.theoriacodex.sources.http.SourceHttpClient {
+        var getCalls = 0
+            private set
+
+        override suspend fun get(
+            url: String,
+            query: Map<String, String>,
+            headers: Map<String, String>,
+        ): SourceHttpResponse {
+            getCalls += 1
+            return SourceHttpResponse(
+                statusCode = 200,
+                body = """{"result":[],"num_pages":1,"per_page":25}""",
+            )
+        }
+
+        override suspend fun postForm(
+            url: String,
+            form: Map<String, String>,
+            headers: Map<String, String>,
+        ): SourceHttpResponse = error("Form POST is not used by NHentai tests")
+
+        override suspend fun postJson(
+            url: String,
+            body: String,
+            headers: Map<String, String>,
+        ): SourceHttpResponse = throw cancellation
+    }
+
+    private class CancellingMirrorMetadataHttpClient(
+        private val cancellation: CancellationException,
+    ) : com.theoriacodex.sources.http.SourceHttpClient {
+        var getCalls = 0
+            private set
+
+        override suspend fun get(
+            url: String,
+            query: Map<String, String>,
+            headers: Map<String, String>,
+        ): SourceHttpResponse {
+            getCalls += 1
+            return when (getCalls) {
+                1 -> SourceHttpResponse(
+                    statusCode = 403,
+                    body = "<html>Attention Required! Cloudflare</html>",
+                    headers = mapOf("cf-mitigated" to listOf("challenge")),
+                )
+                2 -> SourceHttpResponse(
+                    statusCode = 200,
+                    body = """
+                        Title: Mirrored Gallery - Page 1
+
+                        Markdown Content:
+                        1 of 1
+                        [![Image 1: Page 1](https://i2.nhentai.net/galleries/3821534/1.webp)](http://nhentai.net/g/634609/1/)
+                    """.trimIndent(),
+                )
+                else -> throw cancellation
+            }
+        }
+
+        override suspend fun postForm(
+            url: String,
+            form: Map<String, String>,
+            headers: Map<String, String>,
+        ): SourceHttpResponse = error("POST is not used by NHentai tests")
     }
 }

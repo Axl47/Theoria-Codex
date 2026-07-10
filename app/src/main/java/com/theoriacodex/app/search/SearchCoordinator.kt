@@ -25,6 +25,7 @@ import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -45,7 +46,12 @@ import com.theoriacodex.domain.tags.sourceTagKey
 import com.theoriacodex.domain.tags.sourceTagsMatch
 import com.theoriacodex.app.recommend.recommendationTaxonomyFor
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class SearchCoordinator(
     private val registry: SourceAdapterRegistry,
@@ -65,6 +71,12 @@ class SearchCoordinator(
     private val lastTrendingRefreshAtBySource = mutableMapOf<SourceKey, Long>()
     private val resolvedPostOverridesByQueryHash = linkedMapOf<String, LinkedHashMap<PostId, Post>>()
     private val recentResolveFailuresByQueryHash = mutableMapOf<String, MutableMap<PostId, ResolveFailureRecord>>()
+    private val searchGenerationLock = Any()
+    private val appliedPersistenceMutex = Mutex()
+    private var nextSearchGeneration = 0L
+    private var activeRootSearch: RootSearchRequest? = null
+    private var activeRootSearchJob: Job? = null
+    private var activeLoadMoreJob: Job? = null
 
     var draftQuery by mutableStateOf(defaultQuery())
         private set
@@ -190,7 +202,7 @@ class SearchCoordinator(
         val adapter = registry.adapterFor(source) ?: return resolved
         if (adapter is TagCountLookupSourceAdapter) {
             val sourceTags = missing.map { tag -> autocompletePrefixForSource(source, tag) }
-            val batchCounts = runCatching {
+            val batchCounts = runCatchingPreservingCancellation {
                 adapter.fetchTagCounts(sourceTags)
             }.getOrDefault(emptyMap())
             if (batchCounts.isNotEmpty()) {
@@ -218,7 +230,7 @@ class SearchCoordinator(
 
         missing.forEach { tag ->
             val sourcePrefix = autocompletePrefixForSource(source, tag)
-            val fetched = runCatching {
+            val fetched = runCatchingPreservingCancellation {
                 adapter.autocompleteTags(prefix = sourcePrefix, limit = TAG_FETCH_LIMIT)
             }.getOrDefault(emptyList())
             if (fetched.isNotEmpty()) {
@@ -729,7 +741,7 @@ class SearchCoordinator(
                 } else {
                     facetedAutocompleteSuggestions = emptyList()
                     val sourcePrefix = autocompletePrefixForSource(mode.source, typedPrefix)
-                    val fetched = runCatching {
+                    val fetched = runCatchingPreservingCancellation {
                         registry.adapterFor(mode.source)?.autocompleteTags(prefix = sourcePrefix, limit = 20).orEmpty()
                     }.getOrDefault(emptyList())
                     if (fetched.isNotEmpty()) {
@@ -857,7 +869,7 @@ class SearchCoordinator(
     }
 
     private suspend fun fetchTrendingForSource(source: SourceKey, limit: Int): List<TagSuggestion> {
-        val fetched = runCatching {
+        val fetched = runCatchingPreservingCancellation {
             registry.adapterFor(source)?.trendingTags(limit = limit).orEmpty()
         }.getOrDefault(emptyList())
         lastTrendingRefreshAtBySource[source] = clock()
@@ -886,25 +898,16 @@ class SearchCoordinator(
 
     suspend fun applyDraft() {
         val sanitized = draftQuery.forMode(draftQuery.mode)
-        draftQuery = sanitized.query
-        if (sanitized.removedSourceOwnedTerms) {
-            tagInputValidationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
+        val request = beginRootSearch(sanitized.query)
+        publishIfCurrent(request) {
+            draftQuery = request.query
+            appliedQuery = request.query
+            appliedByMode[modeKey(request.query.mode)] = request.query
+            if (sanitized.removedSourceOwnedTerms) {
+                tagInputValidationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
+            }
         }
-        appliedQuery = draftQuery
-        appliedByMode[modeKey(appliedQuery.mode)] = appliedQuery
-        queryRepository.upsertAppliedQuery(modeKey(appliedQuery.mode), appliedQuery)
-        queryRepository.upsertAppliedQuery(LAST_ACTIVE_QUERY_KEY, appliedQuery)
-        val hash = appliedQueryHash
-        uiRestoreRepository.setSearchScrollState(
-            queryHash = hash,
-            state = SearchScrollState(
-                firstVisibleItemIndex = 0,
-                firstVisibleItemOffsetPx = 0,
-            ),
-        )
-        queryRepository.upsertScrollOffset(hash, 0)
-        recentsRepository.recordSearch(appliedQuery, hash)
-        executeSearch()
+        runRootSearch(request, shouldPersistAppliedQuery = true)
     }
 
     suspend fun applyHistoricalQuery(query: Query): Boolean {
@@ -921,26 +924,30 @@ class SearchCoordinator(
     }
 
     suspend fun retry() {
-        executeSearch()
+        runRootSearch(
+            request = beginRootSearch(appliedQuery),
+            shouldPersistAppliedQuery = false,
+        )
     }
 
     suspend fun restoreLastAppliedSearchIfNeeded() {
         if (!hasExecutedSearch) return
         if (hasPendingChanges) return
-        if (loading || loadingMore || results.isNotEmpty()) return
-        executeSearch()
+        if (results.isNotEmpty()) return
+        runRootSearch(
+            request = beginRootSearch(appliedQuery),
+            shouldPersistAppliedQuery = false,
+        )
     }
 
     suspend fun loadNextPage() {
-        if (loading || loadingMore || !canLoadMore) return
-
-        loadingMore = true
-        errorMessage = null
+        val loadRequest = beginLoadMore() ?: return
+        val request = loadRequest.root
         try {
-            when (val mode = appliedQuery.mode) {
+            when (val mode = request.query.mode) {
                 QueryMode.Unified -> {
-                    val enabledSources = effectiveEnabledSources()
-                    val disabledStatuses = availableSources
+                    val enabledSources = request.enabledSources
+                    val disabledStatuses = request.availableSources
                         .filterNot { it in enabledSources }
                         .map { source ->
                             SourceRunStatus(
@@ -948,68 +955,78 @@ class SearchCoordinator(
                                 state = SourceRunState.EXCLUDED,
                                 errorMessage = "Disabled in settings",
                             )
-                        }
+                    }
                     if (enabledSources.isEmpty()) {
-                        canLoadMore = false
-                        statuses = disabledStatuses
+                        publishIfCurrent(request) {
+                            canLoadMore = false
+                            statuses = disabledStatuses
+                        }
                         return
                     }
 
                     val pageableSources = enabledSources.filterTo(mutableSetOf()) { source ->
-                        !unifiedNextPageTokens[source].isNullOrBlank()
+                        !loadRequest.unifiedPageTokens[source].isNullOrBlank()
                     }
                     if (pageableSources.isEmpty()) {
-                        canLoadMore = false
+                        publishIfCurrent(request) { canLoadMore = false }
                         return
                     }
 
                     val result = registry.unifiedOrchestrator().search(
-                        query = appliedQuery,
+                        query = request.query,
                         enabledSources = pageableSources,
-                        pageTokens = unifiedNextPageTokens.filterKeys { it in pageableSources },
-                        weights = effectiveWeights(pageableSources),
-                        queryOverridesBySource = unifiedQueryOverrides.filterKeys { it in pageableSources },
+                        pageTokens = loadRequest.unifiedPageTokens.filterKeys { it in pageableSources },
+                        weights = request.weights.filterKeys { it in pageableSources }.renormalizedWeights(),
+                        queryOverridesBySource = loadRequest.unifiedQueryOverrides.filterKeys { it in pageableSources },
                     )
-                    results = mergeResults(results, result.items)
-                    rememberSeenTags(result.items)
-                    statuses = (result.statuses + disabledStatuses)
-                        .distinctBy { it.source }
-                        .sortedBy { it.source.name }
-                    unifiedNextPageTokens = unifiedNextPageTokens.toMutableMap().apply {
-                        putAll(result.nextPageTokens)
+                    ensureCurrent(request)
+                    publishIfCurrent(request) {
+                        results = mergeResults(loadRequest.results, result.items)
+                        rememberSeenTags(result.items)
+                        statuses = (result.statuses + disabledStatuses)
+                            .distinctBy { it.source }
+                            .sortedBy { it.source.name }
+                        unifiedNextPageTokens = loadRequest.unifiedPageTokens.toMutableMap().apply {
+                            putAll(result.nextPageTokens)
+                        }
+                        canLoadMore = unifiedNextPageTokens.values.any { !it.isNullOrBlank() }
+                        maybeHandlePixivUnknownFailure()
                     }
-                    canLoadMore = unifiedNextPageTokens.values.any { !it.isNullOrBlank() }
-                    maybeHandlePixivUnknownFailure()
                 }
 
                 is QueryMode.Source -> {
-                    val token = sourceNextPageToken
+                    val token = loadRequest.sourcePageToken
                     if (token.isNullOrBlank()) {
-                        canLoadMore = false
+                        publishIfCurrent(request) { canLoadMore = false }
                         return
                     }
                     val adapter = requireNotNull(registry.adapterFor(mode.source)) {
                         "No adapter for ${mode.source}"
                     }
-                    val page = adapter.search(appliedQuery, pageToken = token)
-                    results = mergeResults(results, page.items)
-                    rememberSeenTags(page.items)
-                    statuses = listOf(SourceRunStatus(mode.source, state = SourceRunState.SUCCESS))
-                    sourceNextPageToken = page.nextPageToken
-                    canLoadMore = !sourceNextPageToken.isNullOrBlank()
+                    val page = adapter.search(request.query, pageToken = token)
+                    ensureCurrent(request)
+                    publishIfCurrent(request) {
+                        results = mergeResults(loadRequest.results, page.items)
+                        rememberSeenTags(page.items)
+                        statuses = listOf(SourceRunStatus(mode.source, state = SourceRunState.SUCCESS))
+                        sourceNextPageToken = page.nextPageToken
+                        canLoadMore = !sourceNextPageToken.isNullOrBlank()
+                    }
                 }
             }
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
-            errorMessage = if (isPixivUnknownError(error)) {
-                PIXIV_UNKNOWN_RETRY_MESSAGE
-            } else {
-                error.message ?: "Could not load more results"
+            publishIfCurrent(request) {
+                errorMessage = if (isPixivUnknownError(error, request.query)) {
+                    PIXIV_UNKNOWN_RETRY_MESSAGE
+                } else {
+                    error.message ?: "Could not load more results"
+                }
+                canLoadMore = false
             }
-            canLoadMore = false
         } finally {
-            loadingMore = false
+            finishLoadMore(loadRequest)
         }
     }
 
@@ -1104,23 +1121,164 @@ class SearchCoordinator(
         return record.reason == SourceFailureReason.RATE_LIMITED && now < record.backoffUntilMs
     }
 
-    private suspend fun executeSearch() {
-        val previousResults = results
-        val previousStatuses = statuses
-        loading = true
-        loadingMore = false
-        canLoadMore = false
-        unifiedNextPageTokens = emptyMap()
-        unifiedQueryOverrides = emptyMap()
-        sourceNextPageToken = null
-        errorMessage = null
-        statuses = emptyList()
+    private suspend fun beginRootSearch(query: Query): RootSearchRequest {
+        val context = currentCoroutineContext()
+        context.ensureActive()
+        val ownerJob = context[Job]
+        val start = synchronized(searchGenerationLock) {
+            nextSearchGeneration += 1L
+            val enabledSources = effectiveEnabledSources()
+            val request = RootSearchRequest(
+                generation = nextSearchGeneration,
+                query = query,
+                queryHash = QueryHash.from(query),
+                enabledSources = enabledSources,
+                availableSources = availableSources,
+                weights = effectiveWeights(enabledSources),
+                previousResults = results,
+                previousStatuses = statuses,
+                ownerJob = ownerJob,
+            )
+            val previousRootJob = activeRootSearchJob?.takeIf { job -> job !== ownerJob }
+            val previousLoadMoreJob = activeLoadMoreJob?.takeIf { job -> job !== ownerJob }
+            activeRootSearch = request
+            activeRootSearchJob = ownerJob
+            activeLoadMoreJob = null
+            Triple(request, previousRootJob, previousLoadMoreJob)
+        }
+        val request = start.first
+        val previousRootJob = start.second
+        val previousLoadMoreJob = start.third
+        previousRootJob?.cancel(CancellationException("Search superseded by generation ${request.generation}"))
+        previousLoadMoreJob?.cancel(CancellationException("Search page superseded by generation ${request.generation}"))
+        return request
+    }
 
+    private suspend fun runRootSearch(
+        request: RootSearchRequest,
+        shouldPersistAppliedQuery: Boolean,
+    ) {
+        var didStartExecution = false
         try {
-            when (val mode = appliedQuery.mode) {
+            if (shouldPersistAppliedQuery) {
+                persistAppliedQuery(request)
+            }
+            ensureCurrent(request)
+            didStartExecution = true
+            executeSearch(request)
+        } finally {
+            finishRootSearch(request, didStartExecution)
+        }
+    }
+
+    private suspend fun persistAppliedQuery(request: RootSearchRequest) {
+        appliedPersistenceMutex.withLock {
+            ensureCurrent(request)
+            queryRepository.upsertAppliedQuery(modeKey(request.query.mode), request.query)
+            ensureCurrent(request)
+            queryRepository.upsertAppliedQuery(LAST_ACTIVE_QUERY_KEY, request.query)
+            ensureCurrent(request)
+            uiRestoreRepository.setSearchScrollState(
+                queryHash = request.queryHash,
+                state = SearchScrollState(
+                    firstVisibleItemIndex = 0,
+                    firstVisibleItemOffsetPx = 0,
+                ),
+            )
+            ensureCurrent(request)
+            queryRepository.upsertScrollOffset(request.queryHash, 0)
+            ensureCurrent(request)
+            recentsRepository.recordSearch(request.query, request.queryHash)
+            ensureCurrent(request)
+        }
+    }
+
+    private suspend fun beginLoadMore(): LoadMoreRequest? {
+        val context = currentCoroutineContext()
+        context.ensureActive()
+        val ownerJob = context[Job]
+        return synchronized(searchGenerationLock) {
+            val root = activeRootSearch ?: return@synchronized null
+            if (loading || loadingMore || !canLoadMore) return@synchronized null
+            activeLoadMoreJob = ownerJob
+            loadingMore = true
+            errorMessage = null
+            LoadMoreRequest(
+                root = root,
+                results = results,
+                unifiedPageTokens = unifiedNextPageTokens,
+                unifiedQueryOverrides = unifiedQueryOverrides,
+                sourcePageToken = sourceNextPageToken,
+                ownerJob = ownerJob,
+            )
+        }
+    }
+
+    private fun finishRootSearch(request: RootSearchRequest, didStartExecution: Boolean) {
+        publishIfCurrent(request) {
+            if (didStartExecution) {
+                hasExecutedSearch = true
+            }
+            loading = false
+            if (activeRootSearchJob === request.ownerJob) {
+                activeRootSearchJob = null
+            }
+        }
+    }
+
+    private fun finishLoadMore(loadRequest: LoadMoreRequest) {
+        publishIfCurrent(loadRequest.root) {
+            if (activeLoadMoreJob === loadRequest.ownerJob) {
+                loadingMore = false
+                activeLoadMoreJob = null
+            }
+        }
+    }
+
+    private suspend fun ensureCurrent(request: RootSearchRequest) {
+        currentCoroutineContext().ensureActive()
+        if (!isCurrent(request)) {
+            throw CancellationException("Search generation ${request.generation} was superseded")
+        }
+    }
+
+    private fun isCurrent(request: RootSearchRequest): Boolean {
+        return synchronized(searchGenerationLock) {
+            activeRootSearch?.generation == request.generation
+        }
+    }
+
+    private inline fun publishIfCurrent(
+        request: RootSearchRequest,
+        publication: () -> Unit,
+    ): Boolean {
+        return synchronized(searchGenerationLock) {
+            if (activeRootSearch?.generation != request.generation) {
+                false
+            } else {
+                publication()
+                true
+            }
+        }
+    }
+
+    private suspend fun executeSearch(request: RootSearchRequest) {
+        ensureCurrent(request)
+        publishIfCurrent(request) {
+            loading = true
+            loadingMore = false
+            canLoadMore = false
+            unifiedNextPageTokens = emptyMap()
+            unifiedQueryOverrides = emptyMap()
+            sourceNextPageToken = null
+            errorMessage = null
+            statuses = emptyList()
+        }
+        try {
+            when (val mode = request.query.mode) {
                 QueryMode.Unified -> {
-                    val enabledSources = effectiveEnabledSources()
-                    val disabledStatuses = availableSources
+                    val enabledSources = request.enabledSources
+                    val disabledStatuses = request.availableSources
                         .filterNot { it in enabledSources }
                         .map { source ->
                             SourceRunStatus(
@@ -1130,70 +1288,78 @@ class SearchCoordinator(
                             )
                         }
                     if (enabledSources.isEmpty()) {
-                        results = emptyList()
-                        statuses = disabledStatuses
+                        publishIfCurrent(request) {
+                            results = emptyList()
+                            statuses = disabledStatuses
+                        }
                         return
                     }
 
-                    unifiedQueryOverrides = buildUnifiedQueryOverrides(
-                        query = appliedQuery,
-                        enabledSources = enabledSources,
-                    )
+                    val queryOverrides = buildUnifiedQueryOverrides(request)
+                    ensureCurrent(request)
                     val result = registry.unifiedOrchestrator().search(
-                        query = appliedQuery,
+                        query = request.query,
                         enabledSources = enabledSources,
                         pageTokens = emptyMap(),
-                        weights = effectiveWeights(enabledSources),
-                        queryOverridesBySource = unifiedQueryOverrides,
+                        weights = request.weights,
+                        queryOverridesBySource = queryOverrides,
                     )
-                    results = result.items
-                    rememberSeenTags(result.items)
-                    statuses = (result.statuses + disabledStatuses)
-                        .distinctBy { it.source }
-                        .sortedBy { it.source.name }
-                    unifiedNextPageTokens = result.nextPageTokens
-                    canLoadMore = unifiedNextPageTokens.values.any { !it.isNullOrBlank() }
-                    maybeHandlePixivUnknownFailure()
+                    ensureCurrent(request)
+                    publishIfCurrent(request) {
+                        results = result.items
+                        rememberSeenTags(result.items)
+                        statuses = (result.statuses + disabledStatuses)
+                            .distinctBy { it.source }
+                            .sortedBy { it.source.name }
+                        unifiedQueryOverrides = queryOverrides
+                        unifiedNextPageTokens = result.nextPageTokens
+                        canLoadMore = unifiedNextPageTokens.values.any { !it.isNullOrBlank() }
+                        maybeHandlePixivUnknownFailure()
+                    }
                 }
 
                 is QueryMode.Source -> {
                     if (!isModeAvailable(mode)) {
-                        results = emptyList()
-                        statuses = listOf(
-                            SourceRunStatus(
-                                source = mode.source,
-                                state = SourceRunState.EXCLUDED,
-                                errorMessage = "Source not available in this build",
+                        publishIfCurrent(request) {
+                            results = emptyList()
+                            statuses = listOf(
+                                SourceRunStatus(
+                                    source = mode.source,
+                                    state = SourceRunState.EXCLUDED,
+                                    errorMessage = "Source not available in this build",
+                                )
                             )
-                        )
+                        }
                         return
                     }
                     val adapter = requireNotNull(registry.adapterFor(mode.source)) {
                         "No adapter for ${mode.source}"
                     }
-                    val page = adapter.search(appliedQuery, pageToken = null)
-                    results = page.items
-                    rememberSeenTags(page.items)
-                    statuses = listOf(SourceRunStatus(mode.source, state = SourceRunState.SUCCESS))
-                    sourceNextPageToken = page.nextPageToken
-                    canLoadMore = !sourceNextPageToken.isNullOrBlank()
+                    val page = adapter.search(request.query, pageToken = null)
+                    ensureCurrent(request)
+                    publishIfCurrent(request) {
+                        results = page.items
+                        rememberSeenTags(page.items)
+                        statuses = listOf(SourceRunStatus(mode.source, state = SourceRunState.SUCCESS))
+                        sourceNextPageToken = page.nextPageToken
+                        canLoadMore = !sourceNextPageToken.isNullOrBlank()
+                    }
                 }
             }
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
-            if (isPixivUnknownError(error)) {
-                clearSearchResultsForRetry()
-                errorMessage = PIXIV_UNKNOWN_RETRY_MESSAGE
-            } else {
-                results = previousResults
-                statuses = previousStatuses
-                errorMessage = error.message ?: "Unknown error"
-                canLoadMore = false
+            publishIfCurrent(request) {
+                if (isPixivUnknownError(error, request.query)) {
+                    clearSearchResultsForRetry()
+                    errorMessage = PIXIV_UNKNOWN_RETRY_MESSAGE
+                } else {
+                    results = request.previousResults
+                    statuses = request.previousStatuses
+                    errorMessage = error.message ?: "Unknown error"
+                    canLoadMore = false
+                }
             }
-        } finally {
-            hasExecutedSearch = true
-            loading = false
         }
     }
 
@@ -1222,9 +1388,10 @@ class SearchCoordinator(
     }
 
     private suspend fun buildUnifiedQueryOverrides(
-        query: Query,
-        enabledSources: Set<SourceKey>,
+        request: RootSearchRequest,
     ): Map<SourceKey, Query> {
+        val query = request.query
+        val enabledSources = request.enabledSources
         if (query.mode != QueryMode.Unified) return emptyMap()
         val overrides = mutableMapOf<SourceKey, Query>()
         val portableIncludeTerms = query.includeTerms.filter(SearchTerm::isPortableGeneralTag)
@@ -1234,10 +1401,12 @@ class SearchCoordinator(
             val gelbooruAdapter = registry.adapterFor(SourceKey.GELBOORU)
             if (gelbooruAdapter != null) {
                 val includeTags = resolveGelbooruCompatibilityTags(
+                    request,
                     gelbooruAdapter,
                     portableIncludeTerms.map(SearchTerm::value),
                 )
                 val excludeTags = resolveGelbooruCompatibilityTags(
+                    request,
                     gelbooruAdapter,
                     portableExcludeTerms.map(SearchTerm::value),
                 )
@@ -1261,6 +1430,7 @@ class SearchCoordinator(
     }
 
     private suspend fun resolveGelbooruCompatibilityTags(
+        request: RootSearchRequest,
         adapter: SourceAdapter,
         tags: List<String>,
     ): List<String> {
@@ -1274,9 +1444,10 @@ class SearchCoordinator(
             val key = normalized.lowercase()
             val mapped = cache.getOrPut(key) {
                 val sourcePrefix = autocompletePrefixForSource(SourceKey.GELBOORU, normalized)
-                val suggestions = runCatching {
+                val suggestions = runCatchingPreservingCancellation {
                     adapter.autocompleteTags(prefix = sourcePrefix, limit = 1)
                 }.getOrDefault(emptyList())
+                ensureCurrent(request)
                 if (suggestions.isNotEmpty()) {
                     tagSuggestionStore.put(SourceKey.GELBOORU, suggestions)
                 }
@@ -1319,9 +1490,9 @@ class SearchCoordinator(
         return normalized
     }
 
-    private fun isPixivUnknownError(error: Throwable): Boolean {
+    private fun isPixivUnknownError(error: Throwable, query: Query = appliedQuery): Boolean {
         if (error is SourceAdapterException && error.reason == SourceFailureReason.UNKNOWN) {
-            return when (val mode = appliedQuery.mode) {
+            return when (val mode = query.mode) {
                 QueryMode.Unified -> true
                 is QueryMode.Source -> mode.source == SourceKey.PIXIV
             }
@@ -1923,6 +2094,33 @@ private fun Query.directNhentaiGalleryIdCandidate(): String? {
 private fun String.isDigitsOnly(): Boolean {
     return isNotBlank() && all { ch -> ch.isDigit() }
 }
+
+private fun Map<SourceKey, Double>.renormalizedWeights(): Map<SourceKey, Double> {
+    if (isEmpty()) return emptyMap()
+    val total = values.sum().takeIf { value -> value > 0.0 } ?: size.toDouble()
+    return mapValues { (_, weight) -> weight / total }
+}
+
+private data class RootSearchRequest(
+    val generation: Long,
+    val query: Query,
+    val queryHash: String,
+    val enabledSources: Set<SourceKey>,
+    val availableSources: List<SourceKey>,
+    val weights: Map<SourceKey, Double>,
+    val previousResults: List<Post>,
+    val previousStatuses: List<SourceRunStatus>,
+    val ownerJob: Job?,
+)
+
+private data class LoadMoreRequest(
+    val root: RootSearchRequest,
+    val results: List<Post>,
+    val unifiedPageTokens: Map<SourceKey, String?>,
+    val unifiedQueryOverrides: Map<SourceKey, Query>,
+    val sourcePageToken: String?,
+    val ownerJob: Job?,
+)
 
 private data class ResolveFailureRecord(
     val lastFailureAtMs: Long,

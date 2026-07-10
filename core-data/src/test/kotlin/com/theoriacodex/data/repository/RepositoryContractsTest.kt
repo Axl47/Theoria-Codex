@@ -21,6 +21,7 @@ abstract class RepositoryContract {
     protected abstract fun createRecentsRepository(clock: () -> Long): RecentsRepository
     protected abstract fun createSettingsRepository(): SettingsRepository
     protected abstract fun createLikesRepository(): LikesRepository
+    protected abstract fun createUiRestoreRepository(): UiRestoreRepository
 
     @Test
     fun `codex membership deduplicates while explicit hydration updates the shared post`() = runTest {
@@ -110,6 +111,35 @@ abstract class RepositoryContract {
         assertFalse(repository.toggleLike("profile-main", postId, emptyList()))
         assertTrue(repository.observeLikes("profile-main").first().isEmpty())
     }
+
+    @Test
+    fun `ui restore starts empty and imports the default legacy tab`() = runTest {
+        val repository = createUiRestoreRepository()
+
+        assertEquals(null, repository.getLastTab())
+        assertEquals(null, repository.migrateLegacyLastTab("  "))
+        assertEquals("search", repository.migrateLegacyLastTab(AppSettings().lastSelectedTabRoute))
+        assertEquals("search", repository.getLastTab())
+    }
+
+    @Test
+    fun `ui restore imports a nonblank legacy tab only once`() = runTest {
+        val repository = createUiRestoreRepository()
+
+        assertEquals("codex", repository.migrateLegacyLastTab(" codex "))
+        assertEquals("codex", repository.migrateLegacyLastTab("search"))
+        assertEquals("codex", repository.getLastTab())
+    }
+
+    @Test
+    fun `later ui restore state wins over legacy settings`() = runTest {
+        val repository = createUiRestoreRepository()
+
+        repository.setLastTab("settings")
+
+        assertEquals("settings", repository.migrateLegacyLastTab("for-you"))
+        assertEquals("settings", repository.getLastTab())
+    }
 }
 
 class InMemoryRepositoryContractTest : RepositoryContract() {
@@ -122,6 +152,8 @@ class InMemoryRepositoryContractTest : RepositoryContract() {
     override fun createSettingsRepository(): SettingsRepository = InMemorySettingsRepository()
 
     override fun createLikesRepository(): LikesRepository = InMemoryLikesRepository()
+
+    override fun createUiRestoreRepository(): UiRestoreRepository = InMemoryUiRestoreRepository()
 }
 
 class FileBackedRepositoryContractTest : RepositoryContract() {
@@ -139,6 +171,8 @@ class FileBackedRepositoryContractTest : RepositoryContract() {
     override fun createSettingsRepository(): SettingsRepository = FileBackedSettingsRepository(newDirectory())
 
     override fun createLikesRepository(): LikesRepository = FileBackedLikesRepository(newDirectory())
+
+    override fun createUiRestoreRepository(): UiRestoreRepository = FileBackedUiRestoreRepository(newDirectory())
 
     private fun newDirectory(): File {
         directoryIndex += 1

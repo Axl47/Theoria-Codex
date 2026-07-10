@@ -62,6 +62,7 @@ import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SortMode
@@ -126,7 +127,9 @@ fun ForYouScreen(
         ).filter { post -> durationResolutionRequests.add(post.id) }
             .take(FOR_YOU_DURATION_RESOLVE_BATCH_SIZE)
         candidates.forEach { post ->
-            val resolved = runCatching { coordinator.resolvePostForFeed(post.id) }.getOrNull()
+            val resolved = runCatchingPreservingCancellation {
+                coordinator.resolvePostForFeed(post.id)
+            }.getOrNull()
             val candidate = resolved ?: post
             if (animatedDurationMs(candidate) == null) {
                 val probedDurationMs = probeRemoteVideoDurationMs(candidate)

@@ -73,6 +73,7 @@ import com.theoriacodex.app.media.copyPostTagsToClipboard
 import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.media.probeRemoteVideoDurationMs
 import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
@@ -155,7 +156,9 @@ fun CreatorProfileScreen(
         ).filter { post -> durationResolutionRequests.add(post.id) }
             .take(CREATOR_PROFILE_DURATION_RESOLVE_BATCH_SIZE)
         candidates.forEach { post ->
-            val resolved = runCatching { coordinator.resolvePostForCreator(post.id) }.getOrNull()
+            val resolved = runCatchingPreservingCancellation {
+                coordinator.resolvePostForCreator(post.id)
+            }.getOrNull()
             val candidate = resolved ?: post
             if (animatedDurationMs(candidate) == null) {
                 val probedDurationMs = probeRemoteVideoDurationMs(candidate)

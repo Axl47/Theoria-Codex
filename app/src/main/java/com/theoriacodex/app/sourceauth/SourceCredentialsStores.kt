@@ -10,18 +10,44 @@ import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import java.security.KeyStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+
+sealed interface CredentialStoreRecoveryState {
+    data object Ready : CredentialStoreRecoveryState
+
+    data object ReconnectRequired : CredentialStoreRecoveryState
+}
 
 class AndroidSecureSourceCredentialsStore(
     context: Context,
 ) : SourceCredentialsProvider {
     private val appContext = context.applicationContext
-    private val prefs = createRecoveringEncryptedPrefs(appContext)
+    private val preferences = RecoverableCredentialPreferences(
+        openPreferences = {
+            AndroidCredentialPreferences(createEncryptedPrefs(appContext))
+        },
+        resetStorage = {
+            appContext.deleteSharedPreferences(PREFS_NAME)
+            deleteMasterKey()
+        },
+    )
+
+    val recoveryState: StateFlow<CredentialStoreRecoveryState> = preferences.recoveryState
 
     override suspend fun getPixivTokens(): PixivAuthTokens? = withContext(Dispatchers.IO) {
-        val accessToken = prefs.getString(KEY_PIXIV_ACCESS_TOKEN, null)
-        val refreshToken = prefs.getString(KEY_PIXIV_REFRESH_TOKEN, null)
-        val expiresAt = prefs.getLong(KEY_PIXIV_EXPIRES_AT, -1L).takeIf { it > 0L }
+        val stored = preferences.read {
+            StoredPixivCredentials(
+                accessToken = getString(KEY_PIXIV_ACCESS_TOKEN),
+                refreshToken = getString(KEY_PIXIV_REFRESH_TOKEN),
+                expiresAtEpochMs = getLong(KEY_PIXIV_EXPIRES_AT, -1L),
+            )
+        } ?: return@withContext null
+        val accessToken = stored.accessToken
+        val refreshToken = stored.refreshToken
+        val expiresAt = stored.expiresAtEpochMs.takeIf { it > 0L }
         if (accessToken.isNullOrBlank() || refreshToken.isNullOrBlank() || expiresAt == null) {
             null
         } else {
@@ -34,24 +60,32 @@ class AndroidSecureSourceCredentialsStore(
     }
 
     override suspend fun savePixivTokens(tokens: PixivAuthTokens) = withContext(Dispatchers.IO) {
-        prefs.edit()
-            .putString(KEY_PIXIV_ACCESS_TOKEN, tokens.accessToken)
-            .putString(KEY_PIXIV_REFRESH_TOKEN, tokens.refreshToken)
-            .putLong(KEY_PIXIV_EXPIRES_AT, tokens.expiresAtEpochMs)
-            .apply()
+        preferences.update {
+            putString(KEY_PIXIV_ACCESS_TOKEN, tokens.accessToken)
+            putString(KEY_PIXIV_REFRESH_TOKEN, tokens.refreshToken)
+            putLong(KEY_PIXIV_EXPIRES_AT, tokens.expiresAtEpochMs)
+        }
+        Unit
     }
 
     override suspend fun clearPixivTokens() = withContext(Dispatchers.IO) {
-        prefs.edit()
-            .remove(KEY_PIXIV_ACCESS_TOKEN)
-            .remove(KEY_PIXIV_REFRESH_TOKEN)
-            .remove(KEY_PIXIV_EXPIRES_AT)
-            .apply()
+        preferences.update {
+            remove(KEY_PIXIV_ACCESS_TOKEN)
+            remove(KEY_PIXIV_REFRESH_TOKEN)
+            remove(KEY_PIXIV_EXPIRES_AT)
+        }
+        Unit
     }
 
     override suspend fun getGelbooruCredentials(): GelbooruCredentials? = withContext(Dispatchers.IO) {
-        val userId = prefs.getString(KEY_GELBOORU_USER_ID, null)
-        val apiKey = prefs.getString(KEY_GELBOORU_API_KEY, null)
+        val stored = preferences.read {
+            StoredApiCredentials(
+                userId = getString(KEY_GELBOORU_USER_ID),
+                apiKey = getString(KEY_GELBOORU_API_KEY),
+            )
+        } ?: return@withContext null
+        val userId = stored.userId
+        val apiKey = stored.apiKey
         if (userId.isNullOrBlank() || apiKey.isNullOrBlank()) {
             null
         } else {
@@ -60,22 +94,30 @@ class AndroidSecureSourceCredentialsStore(
     }
 
     override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) = withContext(Dispatchers.IO) {
-        prefs.edit()
-            .putString(KEY_GELBOORU_USER_ID, credentials.userId)
-            .putString(KEY_GELBOORU_API_KEY, credentials.apiKey)
-            .apply()
+        preferences.update {
+            putString(KEY_GELBOORU_USER_ID, credentials.userId)
+            putString(KEY_GELBOORU_API_KEY, credentials.apiKey)
+        }
+        Unit
     }
 
     override suspend fun clearGelbooruCredentials() = withContext(Dispatchers.IO) {
-        prefs.edit()
-            .remove(KEY_GELBOORU_USER_ID)
-            .remove(KEY_GELBOORU_API_KEY)
-            .apply()
+        preferences.update {
+            remove(KEY_GELBOORU_USER_ID)
+            remove(KEY_GELBOORU_API_KEY)
+        }
+        Unit
     }
 
     override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? = withContext(Dispatchers.IO) {
-        val userId = prefs.getString(KEY_RULE34XXX_USER_ID, null)
-        val apiKey = prefs.getString(KEY_RULE34XXX_API_KEY, null)
+        val stored = preferences.read {
+            StoredApiCredentials(
+                userId = getString(KEY_RULE34XXX_USER_ID),
+                apiKey = getString(KEY_RULE34XXX_API_KEY),
+            )
+        } ?: return@withContext null
+        val userId = stored.userId
+        val apiKey = stored.apiKey
         if (userId.isNullOrBlank() || apiKey.isNullOrBlank()) {
             null
         } else {
@@ -84,28 +126,137 @@ class AndroidSecureSourceCredentialsStore(
     }
 
     override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) = withContext(Dispatchers.IO) {
-        prefs.edit()
-            .putString(KEY_RULE34XXX_USER_ID, credentials.userId)
-            .putString(KEY_RULE34XXX_API_KEY, credentials.apiKey)
-            .apply()
+        preferences.update {
+            putString(KEY_RULE34XXX_USER_ID, credentials.userId)
+            putString(KEY_RULE34XXX_API_KEY, credentials.apiKey)
+        }
+        Unit
     }
 
     override suspend fun clearRule34XxxCredentials() = withContext(Dispatchers.IO) {
-        prefs.edit()
-            .remove(KEY_RULE34XXX_USER_ID)
-            .remove(KEY_RULE34XXX_API_KEY)
-            .apply()
+        preferences.update {
+            remove(KEY_RULE34XXX_USER_ID)
+            remove(KEY_RULE34XXX_API_KEY)
+        }
+        Unit
+    }
+
+    /**
+     * Clears an unreadable encrypted store only after the user has chosen to reconnect sources.
+     * Ordinary startup and reads never delete credential material automatically.
+     */
+    suspend fun resetAfterReconnectRequired(): Boolean = withContext(Dispatchers.IO) {
+        preferences.resetAfterReconnectRequired()
     }
 }
 
-private fun createRecoveringEncryptedPrefs(context: Context): SharedPreferences {
-    return try {
-        createEncryptedPrefs(context)
-    } catch (error: Exception) {
-        if (!error.isRecoverableEncryptedPrefsFailure()) throw error
-        context.deleteSharedPreferences(PREFS_NAME)
-        deleteMasterKey()
-        createEncryptedPrefs(context)
+internal interface CredentialPreferences {
+    fun getString(key: String): String?
+
+    fun getLong(key: String, defaultValue: Long): Long
+
+    fun update(block: CredentialPreferencesEditor.() -> Unit)
+}
+
+internal interface CredentialPreferencesEditor {
+    fun putString(key: String, value: String)
+
+    fun putLong(key: String, value: Long)
+
+    fun remove(key: String)
+}
+
+private class AndroidCredentialPreferences(
+    private val preferences: SharedPreferences,
+) : CredentialPreferences {
+    override fun getString(key: String): String? = preferences.getString(key, null)
+
+    override fun getLong(key: String, defaultValue: Long): Long {
+        return preferences.getLong(key, defaultValue)
+    }
+
+    override fun update(block: CredentialPreferencesEditor.() -> Unit) {
+        val editor = preferences.edit()
+        AndroidCredentialPreferencesEditor(editor).block()
+        editor.apply()
+    }
+}
+
+private class AndroidCredentialPreferencesEditor(
+    private val editor: SharedPreferences.Editor,
+) : CredentialPreferencesEditor {
+    override fun putString(key: String, value: String) {
+        editor.putString(key, value)
+    }
+
+    override fun putLong(key: String, value: Long) {
+        editor.putLong(key, value)
+    }
+
+    override fun remove(key: String) {
+        editor.remove(key)
+    }
+}
+
+internal class RecoverableCredentialPreferences(
+    private val openPreferences: () -> CredentialPreferences,
+    private val resetStorage: () -> Unit,
+) {
+    private val lock = Any()
+    private val mutableRecoveryState = MutableStateFlow<CredentialStoreRecoveryState>(
+        CredentialStoreRecoveryState.Ready,
+    )
+    private var activePreferences: CredentialPreferences? = openOrMarkReconnectRequired()
+
+    val recoveryState: StateFlow<CredentialStoreRecoveryState> = mutableRecoveryState.asStateFlow()
+
+    fun <T> read(block: CredentialPreferences.() -> T): T? = synchronized(lock) {
+        val current = activePreferences ?: return@synchronized null
+        try {
+            current.block()
+        } catch (error: Exception) {
+            if (!error.isRecoverableEncryptedPrefsFailure()) throw error
+            markReconnectRequired()
+            null
+        }
+    }
+
+    fun update(block: CredentialPreferencesEditor.() -> Unit): Boolean = synchronized(lock) {
+        val current = activePreferences ?: return@synchronized false
+        try {
+            current.update(block)
+            true
+        } catch (error: Exception) {
+            if (!error.isRecoverableEncryptedPrefsFailure()) throw error
+            markReconnectRequired()
+            false
+        }
+    }
+
+    fun resetAfterReconnectRequired(): Boolean = synchronized(lock) {
+        if (mutableRecoveryState.value != CredentialStoreRecoveryState.ReconnectRequired) {
+            return@synchronized true
+        }
+        resetStorage()
+        activePreferences = openOrMarkReconnectRequired()
+        activePreferences != null
+    }
+
+    private fun openOrMarkReconnectRequired(): CredentialPreferences? {
+        return try {
+            openPreferences().also {
+                mutableRecoveryState.value = CredentialStoreRecoveryState.Ready
+            }
+        } catch (error: Exception) {
+            if (!error.isRecoverableEncryptedPrefsFailure()) throw error
+            markReconnectRequired()
+            null
+        }
+    }
+
+    private fun markReconnectRequired() {
+        activePreferences = null
+        mutableRecoveryState.value = CredentialStoreRecoveryState.ReconnectRequired
     }
 }
 
@@ -121,7 +272,7 @@ private fun createEncryptedPrefs(context: Context): SharedPreferences {
     )
 }
 
-private fun Exception.isRecoverableEncryptedPrefsFailure(): Boolean {
+internal fun Exception.isRecoverableEncryptedPrefsFailure(): Boolean {
     return generateSequence(this as Throwable?) { error -> error.cause }
         .any { error ->
             val name = error::class.java.name
@@ -130,6 +281,17 @@ private fun Exception.isRecoverableEncryptedPrefsFailure(): Boolean {
                 name == "com.google.crypto.tink.shaded.protobuf.InvalidProtocolBufferException"
         }
 }
+
+private data class StoredPixivCredentials(
+    val accessToken: String?,
+    val refreshToken: String?,
+    val expiresAtEpochMs: Long,
+)
+
+private data class StoredApiCredentials(
+    val userId: String?,
+    val apiKey: String?,
+)
 
 private fun deleteMasterKey() {
     runCatching {

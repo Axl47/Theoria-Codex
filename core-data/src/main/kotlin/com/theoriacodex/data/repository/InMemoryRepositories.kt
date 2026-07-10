@@ -318,6 +318,7 @@ class InMemorySettingsRepository : SettingsRepository {
         settings.value = settings.value.copy(scenarioPreset = preset)
     }
 
+    @Deprecated("Last-tab state is owned by UiRestoreRepository; retain this writer only for compatibility.")
     override suspend fun setLastTab(route: String) {
         settings.value = settings.value.copy(lastSelectedTabRoute = route)
     }
@@ -567,11 +568,23 @@ class InMemoryUiRestoreRepository : UiRestoreRepository {
     private val viewerLaunchContext = MutableStateFlow<ViewerLaunchContext?>(null)
 
     override suspend fun setLastTab(route: String) {
-        lastTab.value = route
+        mutex.withLock {
+            lastTab.value = route
+        }
     }
 
     override suspend fun getLastTab(): String? {
         return lastTab.value
+    }
+
+    override suspend fun migrateLegacyLastTab(legacyRoute: String?): String? {
+        return mutex.withLock {
+            lastTab.value?.let { current -> return@withLock current }
+            val migrated = legacyRoute?.trim()?.takeIf { route -> route.isNotEmpty() }
+                ?: return@withLock null
+            lastTab.value = migrated
+            migrated
+        }
     }
 
     override suspend fun setSearchScrollState(queryHash: String, state: SearchScrollState) {

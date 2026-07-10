@@ -29,9 +29,17 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import com.theoriacodex.stubs.StubAdapterRegistry
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -39,7 +47,100 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SearchCoordinatorTest {
+    @Test
+    fun `slower first search cannot replace a faster second query`() = runTest {
+        val adapter = GenerationControlledAdapter(SourceKey.PIXIV)
+        val queryRepository = InMemoryQueryRepository()
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(mapOf(SourceKey.PIXIV to adapter)),
+            queryRepository = queryRepository,
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
+        coordinator.addIncludeTag("slow")
+
+        val slowSearch = async { coordinator.applyDraft() }
+        runCurrent()
+        adapter.slowSearchStarted.await()
+
+        coordinator.clearDraft()
+        coordinator.addIncludeTag("fast")
+        val fastSearch = async { coordinator.applyDraft() }
+        runCurrent()
+        fastSearch.await()
+        slowSearch.join()
+
+        assertTrue(adapter.slowSearchCancelled)
+        assertEquals(listOf("fast-result"), coordinator.results.map { it.id.sourcePostId })
+        assertEquals(listOf("fast"), coordinator.appliedQuery.includeTags)
+        assertEquals(
+            listOf("fast"),
+            queryRepository.observeAppliedQuery("last_active").first()?.includeTags,
+        )
+        assertFalse(coordinator.loading)
+        assertNull(coordinator.errorMessage)
+    }
+
+    @Test
+    fun `stale load more page cannot enter a replacement query`() = runTest {
+        val adapter = GenerationControlledAdapter(SourceKey.PIXIV)
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(mapOf(SourceKey.PIXIV to adapter)),
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
+        coordinator.addIncludeTag("paged")
+        coordinator.applyDraft()
+        assertTrue(coordinator.canLoadMore)
+
+        val stalePage = async { coordinator.loadNextPage() }
+        runCurrent()
+        adapter.loadMoreStarted.await()
+
+        coordinator.clearDraft()
+        coordinator.addIncludeTag("fast")
+        val replacement = async { coordinator.applyDraft() }
+        runCurrent()
+        replacement.await()
+        adapter.releaseStaleLoadMore.complete(Unit)
+        runCurrent()
+        stalePage.join()
+
+        assertEquals(listOf("fast-result"), coordinator.results.map { it.id.sourcePostId })
+        assertFalse(coordinator.results.any { it.id.sourcePostId == "stale-page" })
+        assertFalse(coordinator.loading)
+        assertFalse(coordinator.loadingMore)
+        assertFalse(coordinator.canLoadMore)
+    }
+
+    @Test
+    fun `external root cancellation clears loading without publishing partial results`() = runTest {
+        val adapter = GenerationControlledAdapter(SourceKey.PIXIV)
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(mapOf(SourceKey.PIXIV to adapter)),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
+        coordinator.addIncludeTag("slow")
+
+        val search = async { coordinator.applyDraft() }
+        runCurrent()
+        adapter.slowSearchStarted.await()
+        search.cancelAndJoin()
+
+        assertTrue(adapter.slowSearchCancelled)
+        assertTrue(coordinator.results.isEmpty())
+        assertFalse(coordinator.loading)
+        assertNull(coordinator.errorMessage)
+    }
+
     @Test
     fun `draft apply reset transitions preserve explicit apply semantics`() = runTest {
         val coordinator = coordinator()
@@ -1503,6 +1604,76 @@ private class CompatibilityRegistry(
     override fun adapterFor(sourceKey: SourceKey): SourceAdapter? = adapters[sourceKey]
 
     override fun unifiedOrchestrator(): UnifiedSearchOrchestrator = orchestrator
+}
+
+private class GenerationControlledAdapter(
+    override val sourceKey: SourceKey,
+) : SourceAdapter {
+    val slowSearchStarted = CompletableDeferred<Unit>()
+    val loadMoreStarted = CompletableDeferred<Unit>()
+    val releaseStaleLoadMore = CompletableDeferred<Unit>()
+    var slowSearchCancelled: Boolean = false
+        private set
+
+    override val capabilities: SourceCapabilities = SourceCapabilities(
+        supportsSortNewest = true,
+        supportsSortPopular = true,
+        supportsSortTop = true,
+        supportsSortRandom = true,
+        supportsExcludeTagsServerSide = true,
+        supportsDateRangeServerSide = true,
+        supportsMinScoreServerSide = true,
+        requiresCredentials = false,
+    )
+
+    override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+        if (pageToken == "next") {
+            loadMoreStarted.complete(Unit)
+            withContext(NonCancellable) {
+                releaseStaleLoadMore.await()
+            }
+            return Page(
+                items = listOf(samplePost(source = sourceKey, sourcePostId = "stale-page")),
+                nextPageToken = null,
+            )
+        }
+
+        return when (query.includeTags.singleOrNull()) {
+            "slow" -> {
+                slowSearchStarted.complete(Unit)
+                try {
+                    awaitCancellation()
+                } finally {
+                    slowSearchCancelled = true
+                }
+            }
+            "paged" -> Page(
+                items = listOf(samplePost(source = sourceKey, sourcePostId = "first-page")),
+                nextPageToken = "next",
+            )
+            else -> Page(
+                items = listOf(samplePost(source = sourceKey, sourcePostId = "fast-result")),
+                nextPageToken = null,
+            )
+        }
+    }
+
+    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
+
+    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = emptyList()
+
+    override suspend fun quickQuery(kind: QuickQueryKind): Query {
+        return Query(
+            mode = QueryMode.Source(sourceKey),
+            includeTags = emptyList(),
+            excludeTags = emptyList(),
+            sort = SortMode.NEWEST,
+            dateRange = null,
+            minScore = null,
+        )
+    }
+
+    override suspend fun resolvePost(id: PostId): Post? = null
 }
 
 private class RecordingAdapter(

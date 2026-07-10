@@ -172,6 +172,57 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
+    fun `codex addItem persists hydrated snapshots without duplicating or resaving membership`() = runTest {
+        val dir = tempDir("codex-add-item-hydration-")
+        val first = FileBackedCodexRepository(dir)
+        val created = first.createCodex("Saved")
+        val sparse = samplePost("1", localPath = null, source = SourceKey.GELBOORU).copy(
+            full = null,
+            title = null,
+        )
+        first.addItem(created.codexId, sparse)
+        first.addItem(
+            created.codexId,
+            samplePost("2", localPath = null, source = SourceKey.PIXIV),
+        )
+        val originalItems = first.observeCodexItems(created.codexId).first()
+        val hydrated = sparse.copy(
+            title = "Hydrated",
+            full = ImageRef(
+                url = "https://gelbooru.com/hydrated-full.jpg",
+                localPath = null,
+                mime = "image/jpeg",
+            ),
+        )
+
+        first.addItem(created.codexId, hydrated)
+
+        assertEquals(originalItems, first.observeCodexItems(created.codexId).first())
+        val reconstructed = FileBackedCodexRepository(dir)
+        val reconstructedItems = reconstructed.observeCodexItems(created.codexId).first()
+        assertEquals(hydrated, reconstructed.getPost(hydrated.id))
+        assertEquals(originalItems, reconstructedItems)
+        assertEquals(1, reconstructedItems.count { item -> item.postId == hydrated.id })
+    }
+
+    @Test
+    fun `codex addItem skips persistence when snapshot and membership are unchanged`() = runTest {
+        val dir = tempDir("codex-add-item-no-op-")
+        val repository = FileBackedCodexRepository(dir)
+        val codex = repository.createCodex("Saved")
+        val post = samplePost("1", localPath = null, source = SourceKey.PIXIV)
+        repository.addItem(codex.codexId, post)
+        val storageFile = dir.resolve("codex_store.json")
+        val sentinelModifiedAt = 1_000_000_000_000L
+        assertTrue(storageFile.setLastModified(sentinelModifiedAt))
+
+        repository.addItem(codex.codexId, post)
+
+        assertEquals(sentinelModifiedAt, storageFile.lastModified())
+        assertEquals(1, repository.observeCodexItems(codex.codexId).first().size)
+    }
+
+    @Test
     fun `codex repository reads legacy post records with safe typed defaults`() = runTest {
         val dir = tempDir("codex-legacy-post-record-")
         val storageFile = dir.resolve("codex_store.json")
@@ -1014,6 +1065,18 @@ class FileBackedRepositoriesTest {
         assertEquals("settings", second.getLastTab())
         assertEquals(3, second.getSearchScrollState("qhash")?.firstVisibleItemIndex)
         assertEquals(context, second.observeViewerLaunchContext().first())
+    }
+
+    @Test
+    fun `ui restore repository persists one-time legacy tab migration across reconstruction`() = runTest {
+        val dir = tempDir("ui-restore-legacy-tab-")
+        val first = FileBackedUiRestoreRepository(dir)
+
+        assertEquals("codex", first.migrateLegacyLastTab("codex"))
+
+        val second = FileBackedUiRestoreRepository(dir)
+        assertEquals("codex", second.migrateLegacyLastTab("search"))
+        assertEquals("codex", second.getLastTab())
     }
 
     private fun sampleQuery(includeTags: List<String> = listOf("landscape")): Query {

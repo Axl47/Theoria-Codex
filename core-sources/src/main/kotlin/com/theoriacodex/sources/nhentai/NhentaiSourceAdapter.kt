@@ -15,6 +15,7 @@ import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -88,7 +89,7 @@ class NhentaiSourceAdapter(
         val params = linkedMapOf("page" to pageIndex.toString())
         val exactTag = if (query.sort != SortMode.RANDOM) {
             query.singleIncludeTagCandidate()?.let { tag ->
-                runCatching { resolveNhentaiTag(tag) }.getOrNull()
+                runCatchingPreservingCancellation { resolveNhentaiTag(tag) }.getOrNull()
             }
         } else {
             null
@@ -501,7 +502,7 @@ class NhentaiSourceAdapter(
 
     private suspend fun requestMetadataMirror(url: String): SourceHttpResponse? {
         throttle()
-        return runCatching {
+        return runCatchingPreservingCancellation {
             httpClient.get(
                 url = url,
                 query = emptyMap(),

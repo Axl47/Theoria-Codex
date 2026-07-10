@@ -140,6 +140,7 @@ import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -250,7 +251,9 @@ fun SearchScreen(
         ).filter { post -> durationResolutionRequests.add(post.id) }
             .take(ANIMATED_DURATION_RESOLVE_BATCH_SIZE)
         candidates.forEach { post ->
-            val resolved = runCatching { coordinator.resolvePostForSearch(post.id) }.getOrNull()
+            val resolved = runCatchingPreservingCancellation {
+                coordinator.resolvePostForSearch(post.id)
+            }.getOrNull()
             val candidate = resolved ?: post
             if (animatedDurationMs(candidate) == null) {
                 val probedDurationMs = probeRemoteVideoDurationMs(candidate)
@@ -269,7 +272,9 @@ fun SearchScreen(
 
         selectedActionPostResolving = true
         scope.launch {
-            val resolved = runCatching { coordinator.resolvePostForSearch(post.id) }.getOrNull()
+            val resolved = runCatchingPreservingCancellation {
+                coordinator.resolvePostForSearch(post.id)
+            }.getOrNull()
             if (selectedActionPost?.id == post.id) {
                 selectedActionPost = resolved ?: displayPost
                 selectedActionPostResolving = false
@@ -333,7 +338,7 @@ fun SearchScreen(
     }
     suspend fun resetScrollToTop() {
         if (visibleResults.isNotEmpty()) {
-            runCatching {
+            runCatchingPreservingCancellation {
                 gridState.scrollToItem(index = 0, scrollOffset = 0)
             }
         }
@@ -1051,7 +1056,9 @@ fun SearchResultCard(
         ) return
         resolutionAttempted = true
         scope.launch {
-            val resolved = runCatching { resolver(post.id) }.getOrNull() ?: return@launch
+            val resolved = runCatchingPreservingCancellation {
+                resolver(post.id)
+            }.getOrNull() ?: return@launch
             resolvedPostOverride = resolved
         }
     }

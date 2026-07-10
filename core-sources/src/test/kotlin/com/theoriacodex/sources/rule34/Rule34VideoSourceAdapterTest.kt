@@ -5,8 +5,10 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.testing.FakeHttpClient
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -70,6 +72,60 @@ class Rule34VideoSourceAdapterTest {
         assertEquals(listOf("trending", "trending"), tags.map { it.type })
     }
 
+    @Test
+    fun `trending cancellation is not degraded to an empty list`() = runTest {
+        val expected = CancellationException("source changed")
+        val adapter = Rule34VideoSourceAdapter(
+            httpClient = CancellationHttpClient(expected),
+        )
+
+        var thrown: CancellationException? = null
+        try {
+            adapter.trendingTags(limit = 2)
+        } catch (error: CancellationException) {
+            thrown = error
+        }
+
+        assertTrue(thrown === expected)
+    }
+
+    @Test
+    fun `fallback trending cancellation is not degraded to an empty list`() = runTest {
+        val expected = CancellationException("source changed")
+        val adapter = Rule34VideoSourceAdapter(
+            httpClient = CancellationHttpClient(
+                cancellation = expected,
+                successfulResponsesBeforeCancellation = 1,
+            ),
+        )
+
+        var thrown: CancellationException? = null
+        try {
+            adapter.trendingTags(limit = 2)
+        } catch (error: CancellationException) {
+            thrown = error
+        }
+
+        assertTrue(thrown === expected)
+    }
+
+    @Test
+    fun `autocomplete cancellation is not degraded to an empty list`() = runTest {
+        val expected = CancellationException("source changed")
+        val adapter = Rule34VideoSourceAdapter(
+            httpClient = CancellationHttpClient(expected),
+        )
+
+        var thrown: CancellationException? = null
+        try {
+            adapter.autocompleteTags(prefix = "anim", limit = 2)
+        } catch (error: CancellationException) {
+            thrown = error
+        }
+
+        assertTrue(thrown === expected)
+    }
+
     private fun sampleQuery(): Query {
         return Query(
             mode = QueryMode.Source(SourceKey.RULE34VIDEO),
@@ -103,6 +159,34 @@ class Rule34VideoSourceAdapterTest {
         ): SourceHttpResponse {
             error("POST is not used by Rule34Video tests")
         }
+    }
+
+    private class CancellationHttpClient(
+        private val cancellation: CancellationException,
+        successfulResponsesBeforeCancellation: Int = 0,
+    ) : SourceHttpClient {
+        private var remainingSuccessfulResponses = successfulResponsesBeforeCancellation
+
+        override suspend fun get(
+            url: String,
+            query: Map<String, String>,
+            headers: Map<String, String>,
+        ): SourceHttpResponse {
+            if (remainingSuccessfulResponses > 0) {
+                remainingSuccessfulResponses -= 1
+                return SourceHttpResponse(
+                    statusCode = 200,
+                    body = """{"total_count":0,"items":"","pagination":{"more":0}}""",
+                )
+            }
+            throw cancellation
+        }
+
+        override suspend fun postForm(
+            url: String,
+            form: Map<String, String>,
+            headers: Map<String, String>,
+        ): SourceHttpResponse = error("POST is not used by Rule34Video tests")
     }
 }
 

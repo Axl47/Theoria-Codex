@@ -114,6 +114,7 @@ import com.theoriacodex.app.source.exposedRealSources
 import com.theoriacodex.app.source.parseExternalCreatorDeepLink
 import com.theoriacodex.app.source.parseExternalPostDeepLink
 import com.theoriacodex.app.source.requestHeaders
+import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
 import com.theoriacodex.app.sourceauth.parseGelbooruCredentialInput
 import com.theoriacodex.app.sourceauth.parseRule34XxxCredentialInput
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
@@ -139,6 +140,7 @@ import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -222,6 +224,7 @@ fun TheoriaApp(
     val searchCoordinator = appGraph.searchCoordinator
     val forYouCoordinator = appGraph.forYouCoordinator
     val creatorProfileCoordinator = appGraph.creatorProfileCoordinator
+    val credentialRecoveryState by credentialsStore.recoveryState.collectAsState()
 
     val settings by settingsRepository.observeSettings().collectAsState(initial = AppSettings())
     val recentWatchedPosts by recentsRepository.observeWatchedPosts().collectAsState(initial = emptyList())
@@ -358,8 +361,21 @@ fun TheoriaApp(
     var rule34XxxStatusLabel by remember { mutableStateOf("Not configured") }
     var rule34XxxUserIdInput by rememberSaveable { mutableStateOf("") }
     var rule34XxxApiKeyInput by rememberSaveable { mutableStateOf("") }
+    var showCredentialRecoveryDialog by rememberSaveable { mutableStateOf(false) }
 
     suspend fun refreshSourceAccountState() {
+        if (credentialsStore.recoveryState.value == CredentialStoreRecoveryState.ReconnectRequired) {
+            pixivConnected = false
+            pixivStatusLabel = CREDENTIAL_RECONNECT_MESSAGE
+            gelbooruStatusLabel = CREDENTIAL_RECONNECT_MESSAGE
+            gelbooruUserIdInput = ""
+            gelbooruApiKeyInput = ""
+            rule34XxxConfigured = false
+            rule34XxxStatusLabel = CREDENTIAL_RECONNECT_MESSAGE
+            rule34XxxUserIdInput = ""
+            rule34XxxApiKeyInput = ""
+            return
+        }
         val pixivTokens = credentialsStore.getPixivTokens()
         pixivStatusLabel = when {
             pixivTokens == null -> {
@@ -369,7 +385,9 @@ fun TheoriaApp(
             pixivTokens.expiresAtEpochMs <= System.currentTimeMillis() -> {
                 pixivStatusLabel = "Connected (refreshing token...)"
                 val refreshResult = withTimeoutOrNull(PIXIV_TOKEN_REFRESH_TIMEOUT_MS) {
-                    runCatching { pixivAuthApi.refresh(pixivTokens.refreshToken) }
+                    runCatchingPreservingCancellation {
+                        pixivAuthApi.refresh(pixivTokens.refreshToken)
+                    }
                 }
                 when {
                     refreshResult == null -> {
@@ -428,6 +446,13 @@ fun TheoriaApp(
         }
     }
 
+    LaunchedEffect(credentialRecoveryState) {
+        if (credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired) {
+            showCredentialRecoveryDialog = true
+            refreshSourceAccountState()
+        }
+    }
+
     fun requestSaveToDevice(post: Post) {
         scope.launch {
             val resultLabel = if (isPixivUgoiraPost(post)) {
@@ -444,7 +469,9 @@ fun TheoriaApp(
                     !requiresLazyMediaResolution(post) -> post
                     else -> {
                         val adapter = realRegistry.adapterFor(post.id.source)
-                        runCatching { adapter?.resolvePost(post.id) }.getOrNull()?.also { resolved ->
+                        runCatchingPreservingCancellation {
+                            adapter?.resolvePost(post.id)
+                        }.getOrNull()?.also { resolved ->
                             searchCoordinator.rememberResolvedPost(resolved)
                         }
                     }
@@ -480,7 +507,9 @@ fun TheoriaApp(
             ?: browseableCreatorProfile(post.creatorProfile)
         if (creator == null) {
             val adapter = realRegistry.adapterFor(post.id.source)
-            val resolved = runCatching { adapter?.resolvePost(post.id) }.getOrNull()
+            val resolved = runCatchingPreservingCancellation {
+                adapter?.resolvePost(post.id)
+            }.getOrNull()
             if (resolved != null) {
                 searchCoordinator.rememberResolvedPost(resolved)
                 resolvedPost = resolved
@@ -529,7 +558,7 @@ fun TheoriaApp(
             )
 
             SourceKey.GELBOORU -> {
-                val response = runCatching {
+                val response = runCatchingPreservingCancellation {
                     sourceHttpClient.get(
                         url = "https://gelbooru.com/index.php",
                         query = mapOf(
@@ -755,7 +784,9 @@ fun TheoriaApp(
         var imported = 0
         entries.forEach { (entry, postId) ->
             val resolvedFromSource = realRegistry.adapterFor(postId.source)?.let { adapter ->
-                runCatching { adapter.resolvePost(postId) }.getOrNull()
+                runCatchingPreservingCancellation {
+                    adapter.resolvePost(postId)
+                }.getOrNull()
             }
             val resolved = resolveCodexShareImportPost(
                 entry = entry,
@@ -815,10 +846,12 @@ fun TheoriaApp(
         forYouCoordinator.initialize()
         ensureLikesCodexId(activeRecommendationProfile)
         refreshSourceAccountState()
-        homeTabRoute = uiRestoreRepository.getLastTab()
+        val legacyLastTabRoute = settingsRepository
+            .observeSettings()
+            .first()
+            .lastSelectedTabRoute
+        homeTabRoute = uiRestoreRepository.migrateLegacyLastTab(legacyLastTabRoute)
             ?.takeIf { route -> TopLevelDestination.entries.any { destination -> destination.route == route } }
-            ?: settingsRepository.observeSettings().first().lastSelectedTabRoute
-                .takeIf { route -> TopLevelDestination.entries.any { destination -> destination.route == route } }
             ?: TopLevelDestination.Search.route
         navReady = true
         scope.launch {
@@ -857,7 +890,9 @@ fun TheoriaApp(
         if (!requiresViewerPostResolution(post, streamSource)) return
         scope.launch {
             val adapter = realRegistry.adapterFor(post.id.source) ?: return@launch
-            val resolved = runCatching { adapter.resolvePost(post.id) }.getOrNull() ?: return@launch
+            val resolved = runCatchingPreservingCancellation {
+                adapter.resolvePost(post.id)
+            }.getOrNull() ?: return@launch
             when (viewerSession?.context?.streamSource) {
                 ViewerStreamSource.SEARCH -> searchCoordinator.rememberResolvedPost(resolved)
                 ViewerStreamSource.FOR_YOU -> forYouCoordinator.rememberResolvedPost(resolved)
@@ -914,7 +949,9 @@ fun TheoriaApp(
         val selectedPost = posts[startIndex]
         if (!requiresPrelaunchViewerPostResolution(selectedPost, context.streamSource)) return posts
         val adapter = realRegistry.adapterFor(selectedPost.id.source) ?: return posts
-        val resolved = runCatching { adapter.resolvePost(selectedPost.id) }.getOrNull() ?: return posts
+        val resolved = runCatchingPreservingCancellation {
+            adapter.resolvePost(selectedPost.id)
+        }.getOrNull() ?: return posts
         when (context.streamSource) {
             ViewerStreamSource.SEARCH -> searchCoordinator.rememberResolvedPost(resolved)
             ViewerStreamSource.FOR_YOU -> forYouCoordinator.rememberResolvedPost(resolved)
@@ -1301,7 +1338,6 @@ fun TheoriaApp(
             homeTabRoute = route
         }
         if (persistedHomeTabRoute != route) {
-            settingsRepository.setLastTab(route)
             uiRestoreRepository.setLastTab(route)
             persistedHomeTabRoute = route
         }
@@ -1667,7 +1703,7 @@ fun TheoriaApp(
                                                     val resolved = searchCoordinator.results.firstOrNull { post ->
                                                         post.id.source == SourceKey.NHENTAI &&
                                                             post.id.sourcePostId == directNhentaiId
-                                                    } ?: runCatching {
+                                                    } ?: runCatchingPreservingCancellation {
                                                         searchCoordinator.resolveNhentaiGalleryById(directNhentaiId)
                                                     }.getOrNull()
 
@@ -1890,17 +1926,26 @@ fun TheoriaApp(
                                         showDeveloperScenarios = false,
                                         pixivStatusLabel = pixivStatusLabel,
                                         pixivConnectEnabled = !pixivConnected &&
+                                            credentialRecoveryState == CredentialStoreRecoveryState.Ready &&
                                             !pixivStatusLabel.startsWith("Awaiting authorization callback"),
                                         onPixivConnect = {
-                                            val authUrl = pixivAuthController.startAuthorizationUri().toString()
-                                            pixivStatusLabel = "Awaiting authorization callback..."
-                                            pixivConnected = false
-                                            openInBrowser(appContext, authUrl)
+                                            if (credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired) {
+                                                showCredentialRecoveryDialog = true
+                                            } else {
+                                                val authUrl = pixivAuthController.startAuthorizationUri().toString()
+                                                pixivStatusLabel = "Awaiting authorization callback..."
+                                                pixivConnected = false
+                                                openInBrowser(appContext, authUrl)
+                                            }
                                         },
                                         onPixivDisconnect = {
-                                            scope.launch {
-                                                credentialsStore.clearPixivTokens()
-                                                refreshSourceAccountState()
+                                            if (credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired) {
+                                                showCredentialRecoveryDialog = true
+                                            } else {
+                                                scope.launch {
+                                                    credentialsStore.clearPixivTokens()
+                                                    refreshSourceAccountState()
+                                                }
                                             }
                                         },
                                         gelbooruUserId = gelbooruUserIdInput,
@@ -1917,7 +1962,9 @@ fun TheoriaApp(
                                             }
                                         },
                                         onSaveGelbooruCredentials = {
-                                            scope.launch {
+                                            if (credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired) {
+                                                showCredentialRecoveryDialog = true
+                                            } else scope.launch {
                                                 if (gelbooruUserIdInput.isBlank() || gelbooruApiKeyInput.isBlank()) {
                                                     gelbooruStatusLabel = "Missing user ID or API key"
                                                 } else {
@@ -1928,14 +1975,17 @@ fun TheoriaApp(
                                                         )
                                                     )
                                                     refreshSourceAccountState()
-                                                    gelbooruStatusLabel = "Configured"
                                                 }
                                             }
                                         },
                                         onClearGelbooruCredentials = {
-                                            scope.launch {
-                                                credentialsStore.clearGelbooruCredentials()
-                                                refreshSourceAccountState()
+                                            if (credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired) {
+                                                showCredentialRecoveryDialog = true
+                                            } else {
+                                                scope.launch {
+                                                    credentialsStore.clearGelbooruCredentials()
+                                                    refreshSourceAccountState()
+                                                }
                                             }
                                         },
                                         rule34XxxUserId = rule34XxxUserIdInput,
@@ -1952,7 +2002,9 @@ fun TheoriaApp(
                                             }
                                         },
                                         onSaveRule34XxxCredentials = {
-                                            scope.launch {
+                                            if (credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired) {
+                                                showCredentialRecoveryDialog = true
+                                            } else scope.launch {
                                                 if (rule34XxxUserIdInput.isBlank() || rule34XxxApiKeyInput.isBlank()) {
                                                     rule34XxxStatusLabel = "Missing user ID or API key"
                                                 } else {
@@ -1963,14 +2015,17 @@ fun TheoriaApp(
                                                         )
                                                     )
                                                     refreshSourceAccountState()
-                                                    rule34XxxStatusLabel = "Configured"
                                                 }
                                             }
                                         },
                                         onClearRule34XxxCredentials = {
-                                            scope.launch {
-                                                credentialsStore.clearRule34XxxCredentials()
-                                                refreshSourceAccountState()
+                                            if (credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired) {
+                                                showCredentialRecoveryDialog = true
+                                            } else {
+                                                scope.launch {
+                                                    credentialsStore.clearRule34XxxCredentials()
+                                                    refreshSourceAccountState()
+                                                }
                                             }
                                         },
                                         onSetEnabledSources = { enabled ->
@@ -2078,7 +2133,9 @@ fun TheoriaApp(
                             onSortChange = { sortMode = it },
                             resolvePostById = resolver@{ postId ->
                                 val adapter = realRegistry.adapterFor(postId.source) ?: return@resolver null
-                                val resolved = runCatching { adapter.resolvePost(postId) }.getOrNull() ?: return@resolver null
+                                val resolved = runCatchingPreservingCancellation {
+                                    adapter.resolvePost(postId)
+                                }.getOrNull() ?: return@resolver null
                                 codexRepository.updatePost(resolved)
                                 resolved
                             },
@@ -2406,6 +2463,68 @@ fun TheoriaApp(
                 releases = entries,
                 installedVersionCode = installedVersionCode,
                 onDismiss = { releaseHistoryEntries = null },
+            )
+        }
+
+        if (
+            showCredentialRecoveryDialog &&
+            credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired
+        ) {
+            AlertDialog(
+                onDismissRequest = { showCredentialRecoveryDialog = false },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showCredentialRecoveryDialog = false
+                            scope.launch {
+                                val reset = credentialsStore.resetAfterReconnectRequired()
+                                refreshSourceAccountState()
+                                if (reset) {
+                                    pendingTopLevelRoute = TopLevelDestination.Settings.route
+                                    homeTabRoute = TopLevelDestination.Settings.route
+                                    if (navReady && currentRoute != AppRoute.Home) {
+                                        val returnedHome = navController.popBackStack(
+                                            route = AppRoute.Home,
+                                            inclusive = false,
+                                        )
+                                        if (!returnedHome) {
+                                            navController.navigate(AppRoute.Home) {
+                                                launchSingleTop = true
+                                            }
+                                        }
+                                    }
+                                    Toast.makeText(
+                                        appContext,
+                                        "Reconnect each source account in Settings",
+                                        Toast.LENGTH_LONG,
+                                    ).show()
+                                } else {
+                                    showCredentialRecoveryDialog = true
+                                    Toast.makeText(
+                                        appContext,
+                                        "Could not reset source credentials",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                }
+                            }
+                        },
+                    ) {
+                        Text("Reconnect")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCredentialRecoveryDialog = false }) {
+                        Text("Not now")
+                    }
+                },
+                title = { Text("Reconnect source accounts") },
+                text = {
+                    Text(
+                        "Encrypted source credentials cannot be read on this device. " +
+                            "Reconnect clears the unreadable shared credential store, then opens " +
+                            "Settings so Pixiv, Gelbooru, and rule34.xxx can be connected again."
+                    )
+                },
             )
         }
     }
@@ -2824,6 +2943,7 @@ private fun parseGelbooruProfileOwner(html: String): String? {
 }
 
 private const val PIXIV_TOKEN_REFRESH_TIMEOUT_MS = 6_000L
+private const val CREDENTIAL_RECONNECT_MESSAGE = "Source credentials need to be reconnected"
 private const val BOTTOM_BAR_HEIGHT_RATIO = 0.085f
 private const val BOTTOM_BAR_ICON_RATIO = 0.38f
 private const val MIN_BOTTOM_BAR_HEIGHT_DP = 68

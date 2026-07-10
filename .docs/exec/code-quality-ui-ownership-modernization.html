@@ -128,7 +128,7 @@
       <span class="pill">Plan: .docs/exec/code-quality-ui-ownership-modernization.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next action</strong>Start Phase 1 with parallel cancellation, Codex durability, tab migration, and credential-safety lanes; serialize Search and app-shell integration afterward.</div>
+      <div class="card"><strong>Next action</strong>Start Phase 2 with independent HTTP-bound, Hitomi-cache, and repository-IO lanes, then integrate app file stores and debounced Search persistence.</div>
       <div class="card"><strong>Main risk</strong>Concurrent edits to <code>TheoriaApp.kt</code>, <code>TheoriaAppGraph.kt</code>, <code>SearchCoordinator.kt</code>, or repository files can silently undo each other. Those files have explicit single-owner integration lanes.</div>
       <div class="card"><strong>Primary validation</strong><code>./gradlew lint test :app:assembleDebug</code>, focused module tests, deterministic connected tests, release assembly, and manual navigation/search/viewer checks.</div>
       <div class="card"><strong>Target outcome</strong>Stable application-scoped services, route-scoped UI state, bounded background work, durable storage, deterministic CI, and staged modern dependencies.</div>
@@ -162,12 +162,12 @@
     <section id="status">
       <h2>Current Status</h2>
       <table class="compact"><tbody>
-        <tr><td>Plan state</td><td>In progress. Phase 0 is complete; Phase 1 is next.</td></tr>
+        <tr><td>Plan state</td><td>In progress. Phases 0 and 1 are complete; Phase 2 is next.</td></tr>
         <tr><td>Audit baseline</td><td>49,216 Kotlin/Kotlin-script lines across production and tests. Production duplication is 341 lines / 1.02% across 99 Kotlin files.</td></tr>
-        <tr><td>Deterministic baseline</td><td>Phase 0 gate <code>./gradlew lint test :app:assembleDebug :app:compileDebugAndroidTestKotlin --rerun-tasks</code> passed 110 tasks and 701 configured test executions with zero failures/errors and six opt-in skips.</td></tr>
+        <tr><td>Deterministic baseline</td><td>Phase 1 gate <code>./gradlew lint test :app:assembleDebug :app:compileDebugAndroidTestKotlin --rerun-tasks</code> passed 110 tasks and 738 configured test executions with zero failures/errors and six opt-in skips.</td></tr>
         <tr><td>Device baseline</td><td>The offline Hitomi Android-runtime parser passes. The app-shell smoke host renders, but the connected phone is securely locked/dozing, so Android moves the activity to <code>CREATED</code> and removes its semantics hierarchy. The test reports this lifecycle cause directly; hermetic route-flow coverage awaits the Phase 3 fake-container/content seam.</td></tr>
         <tr><td>Worktree constraint</td><td>Preserve unrelated user edits. At authoring time <code>.codex/skills/theoria-release/SKILL.md</code> was already modified and is outside this plan.</td></tr>
-        <tr><td>Next action</td><td>Run Phase 1's disjoint correctness lanes, then integrate request ordering and the sole last-tab owner through the app shell.</td></tr>
+        <tr><td>Next action</td><td>Bound text transport and Hitomi index memory, move file work to injected IO, then make high-frequency app-store writes atomic and conflated.</td></tr>
       </tbody></table>
     </section>
 
@@ -506,7 +506,9 @@
         <li>[x] 2026-07-10 — Phase 0 established reusable PR/main/tag verification, blocked release publication behind the exact tagged commit's gate, classified offline/live Android tests, diagnosed the shell harness, and expanded repository/updater/recommendation characterization coverage. The integrated 110-task gate and offline device parser passed.</li>
         <li>[x] 2026-07-10 — Phase 0B classified Hitomi parser coverage as offline and live transport as explicit opt-in; connected offline parser and Animated WebP tests passed.</li>
         <li>[x] 2026-07-10 — Phase 0C added shared test fixtures, equivalent repository contracts for both backends, and characterization tests for For You degradation plus updater deferral/retry behavior.</li>
-        <li>[ ] Phase 1 — Repair correctness invariants.</li>
+        <li>[x] 2026-07-10 — Phase 1 repaired cancellation propagation, Codex duplicate-save durability, credential backup/recovery, last-tab ownership, and Search request ordering. The full 110-task gate passed 738 configured tests; the installed debug APK cold-launched with no crash-buffer entry.</li>
+        <li>[x] 2026-07-10 — Phase 1E excluded encrypted credential preferences from cloud backup and device transfer, replaced automatic destructive recovery with an explicit <code>ReconnectRequired</code> state, and reserved destructive reset for a confirmed reconnect flow.</li>
+        <li>[x] 2026-07-10 — Phase 1D added generation-bound Search requests and pages. Older jobs are canceled and, even when a provider ignores cancellation, cannot publish results, tokens, errors, loading flags, seen tags, or final applied persistence over the current request.</li>
         <li>[ ] Phase 2 — Bound transport, caches, and disk work.</li>
         <li>[ ] Phase 3 — Establish the application container and UI state contracts.</li>
         <li>[ ] Phase 4 — Move UI ownership to route-scoped state holders.</li>
@@ -522,6 +524,7 @@
         <li>The Compose smoke host did render its first frame, but the connected device was securely locked and dozing; Android moved <code>MainActivity</code> from <code>RESUMED</code> to <code>CREATED</code> and removed the semantics hierarchy. The test now reports that lifecycle cause directly and targets the navigation icons' actual content descriptions. A fake application container and render-only <code>TheoriaAppContent</code> seam are still required in Phase 3 for hermetic route-flow tests.</li>
         <li>The previous quality plan successfully extracted the graph and shared media/download policy, but dependency creation still lives inside composition and feature growth moved orchestration pressure into the graph and route coordinators.</li>
         <li>Hitomi's global index records can individually approach the configured multi-megabyte bound, making entry-count-only caching insufficient; the cache budget must be byte-weighted.</li>
+        <li>Some providers can ignore coroutine cancellation while finishing a request. Search therefore needs both job cancellation and generation-gated publication; cancellation alone cannot protect visible state or persisted query order.</li>
       </ul>
 
       <h3>Decision Log</h3>
@@ -533,11 +536,14 @@
         <li><strong>2026-07-10 / Codex:</strong> Prototype DataStore/Room before migration. Rationale: the right store depends on measured write patterns and migration safety; modernization alone is not sufficient justification.</li>
         <li><strong>2026-07-10 / Codex:</strong> Upgrade libraries, Kotlin/Compose, AGP/Gradle, and R8 in separate waves. Rationale: each layer changes failure modes and must remain independently revertible.</li>
         <li><strong>2026-07-10 / Codex:</strong> Keep provider-live Android checks behind explicit instrumentation arguments. Rationale: protocol reachability is valuable evidence but must not make deterministic PR verification depend on external provider availability.</li>
+        <li><strong>2026-07-10 / Codex:</strong> Make <code>UiRestoreRepository</code> the sole final tab owner and retain the Settings field only as migration input. Rationale: one-time compatibility does not justify ongoing dual writes.</li>
+        <li><strong>2026-07-10 / Codex:</strong> Never delete unreadable encrypted credentials automatically. Rationale: a restore/key mismatch must be visible and user-confirmed because all source accounts share the encrypted store.</li>
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
       <p>Planning outcome: every audit finding is assigned to an implementation lane and behavior-based acceptance check.</p>
       <p>Phase 0 outcome: deterministic verification is reusable across pull requests, main, and tagged releases, and signing/publication cannot start until that verification passes. Offline Android protocol checks are isolated from live transport. The Compose smoke failure is no longer ambiguous: the current device is locked/dozing, while a separate Phase 3 injection seam remains necessary for hermetic app-shell flows. Shared test fixtures and cross-backend contracts now protect repository, recommendation-degradation, and update retry/deferral behavior.</p>
+      <p>Phase 1 outcome: cancellation remains a control signal from screens through provider adapters; Search snapshots each root request and page so stale work cannot publish even when cancellation is ignored; richer Codex snapshots survive duplicate saves and reconstruction; only UI restore receives ongoing tab writes; and credential restore mismatch is excluded from backup, surfaced globally, and reset only after confirmation. The debug APK installed and cold-launched without a crash.</p>
       <p>At completion, record final line counts for the main ownership hotspots, duplication percentage, lint warning count, test counts, CI duration, startup/frame evidence, and storage migration results.</p>
     </section>
 

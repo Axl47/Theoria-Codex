@@ -174,9 +174,14 @@ class FileBackedCodexRepository(
     override suspend fun addItem(codexId: String, post: Post) {
         mutex.withLock {
             if (codicesFlow.value.none { it.codexId == codexId }) return@withLock
-            postsFlow.value = postsFlow.value + (post.id to post)
             val existing = itemsFlow.value[codexId].orEmpty()
             val alreadyExists = existing.any { it.postId == post.id }
+            val postChanged = postsFlow.value[post.id] != post
+            if (!postChanged && alreadyExists) return@withLock
+
+            if (postChanged) {
+                postsFlow.value = postsFlow.value + (post.id to post)
+            }
             if (!alreadyExists) {
                 val updated = existing + CodexItem(
                     codexId = codexId,
@@ -184,8 +189,8 @@ class FileBackedCodexRepository(
                     savedAtEpochMs = System.currentTimeMillis(),
                 )
                 itemsFlow.value = itemsFlow.value + (codexId to updated)
-                persist()
             }
+            persist()
         }
     }
 
@@ -443,6 +448,7 @@ class FileBackedSettingsRepository(
         }
     }
 
+    @Deprecated("Last-tab state is owned by UiRestoreRepository; retain this writer only for compatibility.")
     override suspend fun setLastTab(route: String) {
         updateSettings {
             it.copy(lastSelectedTabRoute = route)
@@ -722,6 +728,17 @@ class FileBackedUiRestoreRepository(
 
     override suspend fun getLastTab(): String? {
         return lastTab
+    }
+
+    override suspend fun migrateLegacyLastTab(legacyRoute: String?): String? {
+        return mutex.withLock {
+            lastTab?.let { current -> return@withLock current }
+            val migrated = legacyRoute?.trim()?.takeIf { route -> route.isNotEmpty() }
+                ?: return@withLock null
+            lastTab = migrated
+            persist()
+            migrated
+        }
     }
 
     override suspend fun setSearchScrollState(queryHash: String, state: SearchScrollState) {

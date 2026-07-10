@@ -38,6 +38,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -74,7 +75,7 @@ class PixivUgoiraClient(
 
     suspend fun load(postId: String): Result<UgoiraPlayback> {
         cached(postId)?.let { return Result.success(it) }
-        return runCatching {
+        return runCatchingPreservingCancellation {
             loadOrThrow(postId).also { playback ->
                 cachePlayback(postId, playback)
             }
@@ -86,7 +87,9 @@ class PixivUgoiraClient(
         postId: String,
         title: String?,
     ): Result<Uri> {
-        return runCatching { exportToMp4OrThrow(context, postId, title) }
+        return runCatchingPreservingCancellation {
+            exportToMp4OrThrow(context, postId, title)
+        }
     }
 
     private suspend fun loadOrThrow(postId: String): UgoiraPlayback = withContext(Dispatchers.IO) {

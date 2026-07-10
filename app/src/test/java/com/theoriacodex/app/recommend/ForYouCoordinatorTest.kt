@@ -17,6 +17,7 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -132,6 +133,40 @@ class ForYouCoordinatorTest {
         assertNull(coordinator.errorMessage)
     }
 
+    @Test
+    fun `cancellation while loading fallback tags propagates without replacing current posts`() = runTest {
+        val adapter = FakeAdapter(SourceKey.PIXIV, "pixiv-post")
+        val likesRepository = InMemoryLikesRepository()
+        val profileId = defaultRecommendationProfiles().first().profileId
+        likesRepository.toggleLike(
+            profileId = profileId,
+            postId = PostId(SourceKey.PIXIV, "liked-pixiv"),
+            tags = listOf("pixiv favorite"),
+        )
+        val coordinator = ForYouCoordinator(
+            registry = registryOf(adapter),
+            settingsRepository = InMemorySettingsRepository(),
+            likesRepository = likesRepository,
+        )
+        coordinator.initialize()
+        coordinator.refresh(shuffle = false)
+        val postsBeforeCancellation = coordinator.results
+        val expected = CancellationException("recommendation request superseded")
+        adapter.trendingCancellation = expected
+
+        var thrown: CancellationException? = null
+        try {
+            coordinator.refresh(shuffle = false)
+        } catch (error: CancellationException) {
+            thrown = error
+        }
+
+        assertTrue(thrown === expected)
+        assertEquals(postsBeforeCancellation, coordinator.results)
+        assertFalse(coordinator.loading)
+        assertNull(coordinator.errorMessage)
+    }
+
     private fun registryOf(vararg adapters: SourceAdapter): SourceAdapterRegistry {
         val adaptersBySource = adapters.associateBy { adapter -> adapter.sourceKey }
         val orchestrator = UnifiedSearchOrchestrator(adaptersBySource)
@@ -172,6 +207,7 @@ class ForYouCoordinatorTest {
         var lastSearchQuery: Query? = null
             private set
         val requestedPageTokens = mutableListOf<String?>()
+        var trendingCancellation: CancellationException? = null
 
         override suspend fun search(query: Query, pageToken: String?): Page<Post> {
             if (failSearch) error("$sourceKey failed")
@@ -188,7 +224,10 @@ class ForYouCoordinatorTest {
             )
         }
 
-        override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
+        override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
+            trendingCancellation?.let { error -> throw error }
+            return emptyList()
+        }
 
         override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = emptyList()
 

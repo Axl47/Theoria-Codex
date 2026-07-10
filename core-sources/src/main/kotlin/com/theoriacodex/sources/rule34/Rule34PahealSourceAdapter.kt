@@ -9,6 +9,7 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -63,7 +64,7 @@ class Rule34PahealSourceAdapter(
 
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
         if (limit <= 0) return emptyList()
-        return runCatching {
+        return runCatchingPreservingCancellation {
             val html = request("$RULE34PAHEAL_BASE_URL/post/list") ?: return emptyList()
             val doc = Jsoup.parse(html, RULE34PAHEAL_BASE_URL)
             val counts = linkedMapOf<String, Int>()
