@@ -22,6 +22,7 @@ import com.theoriacodex.sources.http.SourceHttpBodyTooLargeException
 import com.theoriacodex.sources.http.SourceHttpResponse
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.security.MessageDigest
 import java.time.OffsetDateTime
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
@@ -40,22 +41,22 @@ import org.junit.Test
 
 class HitomiSourceAdapterTest {
     @Test
-    fun `All search resolves an exact global term to its provider facet`() = runTest {
-        val globalAutocomplete = HitomiProtocol.autocompleteUrl("global", "Gyaru")
-        val femaleGyaru = HitomiNozomi.urlFor(
-            HitomiNozomiRequest(area = "tag", tag = "female:gyaru"),
-        )
+    fun `All search reads the provider global galleries index without classifying as a tag`() = runTest {
+        val version = "12345"
+        val indexUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/galleries.$version.index"
+        val dataUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/galleries.$version.data"
         val http = RoutingHitomiHttpClient().apply {
-            textRoutes[globalAutocomplete] = "[[\"gyaru\",23191,\"female\"],[\"gyaru-oh\",7355,\"male\"]]"
-            binaryIndexes[femaleGyaru] = listOf(4, 3)
+            textRoutes["https://ltn.gold-usergeneratedcontent.net/galleriesindex/version"] = version
+            rawFullBodies[indexUrl] = globalIndexNode("girl", dataLength = 12)
+            rawFullBodies[dataUrl] = globalGalleryRecord(listOf(4, 3))
         }
         val adapter = adapter(http, pageSize = 2)
 
-        val page = adapter.search(query(include = listOf(SearchTerm("Gyaru"))), null)
+        val page = adapter.search(query(include = listOf(SearchTerm("girl"))), null)
 
         assertEquals(listOf("4", "3"), page.items.map { post -> post.id.sourcePostId })
-        assertTrue(http.binaryRequests.any { request -> request.url == femaleGyaru })
-        assertFalse(http.binaryRequests.any { request -> request.url.endsWith("/tag/gyaru-all.nozomi") })
+        assertEquals(listOf(indexUrl, dataUrl), http.binaryRequests.map { request -> request.url })
+        assertFalse(http.binaryRequests.any { request -> request.url.endsWith("/tag/girl-all.nozomi") })
     }
 
     @Test
@@ -789,6 +790,30 @@ class HitomiSourceAdapterTest {
     private fun decodeRandomSeed(token: String): Long {
         val json = Base64.getUrlDecoder().decode(token).toString(Charsets.UTF_8)
         return JsonParser.parseString(json).asJsonObject.get("randomSeed").asLong
+    }
+
+    private fun globalIndexNode(term: String, dataLength: Int): ByteArray {
+        val key = MessageDigest.getInstance("SHA-256")
+            .digest(term.toByteArray(Charsets.UTF_8))
+            .copyOf(4)
+        return ByteBuffer.allocate(464).order(ByteOrder.BIG_ENDIAN).apply {
+            putInt(1)
+            putInt(key.size)
+            put(key)
+            putInt(1)
+            putLong(0L)
+            putInt(dataLength)
+            repeat(17) { putLong(0L) }
+        }.array()
+    }
+
+    private fun globalGalleryRecord(ids: List<Int>): ByteArray {
+        return ByteBuffer.allocate(Int.SIZE_BYTES + ids.size * Int.SIZE_BYTES)
+            .order(ByteOrder.BIG_ENDIAN)
+            .apply {
+                putInt(ids.size)
+                ids.forEach(::putInt)
+            }.array()
     }
 
     private fun galleryWithFiles(

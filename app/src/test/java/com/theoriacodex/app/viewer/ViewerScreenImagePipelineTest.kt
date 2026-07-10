@@ -265,7 +265,7 @@ class ViewerScreenImagePipelineTest {
     }
 
     @Test
-    fun `media overview selects animated webp for static first frame decoding`() {
+    fun `media overview selects animated webp and leaves it animated`() {
         val animatedOnly = ImageRef(
             url = "https://example.com/page.webp",
             localPath = null,
@@ -287,6 +287,7 @@ class ViewerScreenImagePipelineTest {
 
         assertEquals(ViewerMediaOverviewKind.ANIMATED_IMAGE, item.kind)
         assertEquals("https://example.com/page.webp", item.posterLocation)
+        assertFalse(shouldDecodeStaticOverviewFrame(item.kind))
     }
 
     @Test

@@ -1205,13 +1205,13 @@ private fun ViewerMediaOverviewGrid(
             items = items,
             key = { item -> item.mediaIndex },
         ) { item ->
-            val imageModel = remember(context, item.posterLocation, post.id.source) {
+            val imageModel = remember(context, item.posterLocation, item.kind, post.id.source) {
                 item.posterLocation?.let { url ->
                     buildViewerImageRequest(
                         context = context,
                         url = url,
                         sourceKey = post.id.source,
-                        staticAnimatedWebPFrame = true,
+                        staticAnimatedWebPFrame = shouldDecodeStaticOverviewFrame(item.kind),
                     )
                 }
             }
@@ -1282,6 +1282,10 @@ private fun ViewerMediaOverviewGrid(
             }
         }
     }
+}
+
+internal fun shouldDecodeStaticOverviewFrame(kind: ViewerMediaOverviewKind): Boolean {
+    return kind != ViewerMediaOverviewKind.ANIMATED_IMAGE
 }
 
 @Composable

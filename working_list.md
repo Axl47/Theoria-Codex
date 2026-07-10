@@ -9,6 +9,13 @@ updated_at: 2026-07-10T16:21:59-04:00
 ### In Progress
 
 ### Done
+- [x] Correct the remaining Hitomi global-search, animated-overview, and creator-sharing gaps
+  - [x] Mirror Hitomi's versioned galleries B-tree for unqualified All terms such as `girl`
+  - [x] Autoplay visible Animated WebP entries in Media Overview while keeping non-animated posters static
+  - [x] Add Share link and Copy link actions to Creator Profile
+  - [x] Update the active ExecPlan and developer runtime contracts
+  - [x] Pass deterministic source/viewer tests, the opt-in live app route, all JVM tests, and two Hitomi device tests
+  - [x] Install and cold-launch `com.theoriacodex.debug` explicitly; keep production installed separately and confirm an empty crash buffer
 - [x] Restore Hitomi-global All searches and add honest animated-WebP playback controls
   - [x] Resolve exact global terms such as plain `Gyaru` to Hitomi's `female` facet only during Nozomi compilation
   - [x] Preserve the original unprefixed portable query in UI, persistence, and page-token hashing

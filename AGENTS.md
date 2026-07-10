@@ -34,15 +34,15 @@ Hitomi protocol objects are initialized while the application graph is built, so
 
 Cancellation is a control signal across provider health checks and background transport work. Any boundary that catches broad transport failures must rethrow `CancellationException` before degrading the source or treating media as unavailable.
 
-Animated WebP uses the platform decoder on API 28 and newer. API 26/27 uses the bounded fallback, with compressed input and decoded canvas limits enforced before returning a drawable. Media Overview uses Hitomi's WebP candidate and a distinct static-first-frame request/cache path so grid tiles do not autoplay on any supported API.
+Animated WebP uses the platform decoder on API 28 and newer. API 26/27 uses the bounded fallback, with compressed input and decoded canvas limits enforced before returning a drawable. Visible Animated WebP tiles in Media Overview must use the animated request path so users can identify a page before selecting it; still-image and video-poster tiles remain static, and off-screen lazy-grid items are not composed.
 
 Hitomi Search cards are intentionally sparse. Opening one from Search must enter the Viewer immediately with the existing preview, then resolve and replace the full gallery through the Viewer's background-resolution path; do not make Search wait for every gallery page. An animated Hitomi preview stays on the WebP path so it can keep playing during that handoff.
 
 The Search `All` scope creates portable plain terms and should not display a facet prefix. A selected facet may expose source-owned featured values before typing; Hitomi uses this for closed Type and Language vocabularies so users can discover valid values without memorizing prefixes.
 
-Hitomi `All` terms are provider-global, not automatically general tags. Resolve an exact global autocomplete match to its source facet only for Nozomi compilation while preserving the original portable term in app state and UI; for example, plain `Gyaru` compiles to `female:gyaru`.
+Hitomi `All` terms are provider-global, not automatically general tags and not autocomplete-classified facets. Mirror Hitomi's versioned `galleriesindex` B-tree for every unqualified term, using the first four SHA-256 bytes as its key and the returned gallery-ID record as the ordered index. Explicit facets continue to use Nozomi.
 
-Main-Viewer animated WebP uses the controllable bounded `awebp` path on every API and exposes honest play/pause, restart, and frame progress controls. The decoder does not support arbitrary seek, so do not present a draggable video-style seek bar. Overview tiles remain static first frames. The Hitomi PNG already contains transparency; do not wrap it in an opaque source-chip background.
+Main-Viewer animated WebP uses the controllable bounded `awebp` path on every API and exposes honest play/pause, restart, and frame progress controls. The decoder does not support arbitrary seek, so do not present a draggable video-style seek bar. Media Overview Animated tiles autoplay while visible. The Hitomi PNG already contains transparency; do not wrap it in an opaque source-chip background.
 
 Viewer video prefetch requests at most the first 16 MiB and caches only a response proven to be a complete small representation. Partial or larger media stays remote and streams through Media3 with source headers; transport failures remain nonfatal and cancellation must propagate.
 

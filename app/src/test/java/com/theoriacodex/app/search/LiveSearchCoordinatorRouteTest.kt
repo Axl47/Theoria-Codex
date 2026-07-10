@@ -220,6 +220,13 @@ class LiveSearchCoordinatorRouteTest {
             newest.results.all { post -> post.id.source == SourceKey.HITOMI },
         )
 
+        val global = searchCoordinator(registry, "hitomi-global-girl")
+        global.initialize()
+        global.setMode(QueryMode.Source(SourceKey.HITOMI))
+        assertTrue("Hitomi rejected global girl search", global.commitTagInput("girl"))
+        global.applyDraft()
+        assertCoordinatorSucceeded("Hitomi global girl", global)
+
         val typed = searchCoordinator(registry, "hitomi-typed")
         typed.initialize()
         typed.setMode(QueryMode.Source(SourceKey.HITOMI))

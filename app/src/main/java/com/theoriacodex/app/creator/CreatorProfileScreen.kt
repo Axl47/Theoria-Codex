@@ -1,5 +1,9 @@
 package com.theoriacodex.app.creator
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,6 +29,8 @@ import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
@@ -92,7 +98,9 @@ fun CreatorProfileScreen(
     onBack: () -> Unit,
 ) {
     val creator = coordinator.activeCreator
+    val context = LocalContext.current
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
+    var showProfileShareMenu by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var animatedOnly by rememberSaveable { mutableStateOf(false) }
     var hideLiked by rememberSaveable { mutableStateOf(false) }
@@ -252,11 +260,44 @@ fun CreatorProfileScreen(
                     }
                 }
                 creator.profileUrl?.takeIf { it.isNotBlank() }?.let { profileUrl ->
-                    IconButton(onClick = { onOpenUrl(profileUrl) }) {
-                        Icon(
-                            imageVector = Icons.Default.OpenInBrowser,
-                            contentDescription = "Open creator profile in browser",
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { onOpenUrl(profileUrl) }) {
+                            Icon(
+                                imageVector = Icons.Default.OpenInBrowser,
+                                contentDescription = "Open creator profile in browser",
+                            )
+                        }
+                        Box {
+                            IconButton(onClick = { showProfileShareMenu = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = "Share creator profile",
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showProfileShareMenu,
+                                onDismissRequest = { showProfileShareMenu = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Share link") },
+                                    leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                                    onClick = {
+                                        showProfileShareMenu = false
+                                        shareCreatorProfile(context = context, profileUrl = profileUrl)
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Copy link") },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.ContentCopy, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        showProfileShareMenu = false
+                                        copyCreatorProfile(context = context, profileUrl = profileUrl)
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -396,7 +437,6 @@ fun CreatorProfileScreen(
 
     if (selectedActionPost != null) {
         val post = requireNotNull(selectedActionPost)
-        val context = LocalContext.current
         ModalBottomSheet(
             onDismissRequest = { selectedActionPost = null },
             dragHandle = null,
@@ -483,6 +523,20 @@ fun CreatorProfileScreen(
             }
         }
     }
+}
+
+private fun shareCreatorProfile(context: Context, profileUrl: String) {
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, profileUrl)
+    }
+    context.startActivity(Intent.createChooser(intent, "Share creator profile"))
+}
+
+private fun copyCreatorProfile(context: Context, profileUrl: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText("Creator profile", profileUrl))
+    Toast.makeText(context, "Creator link copied", Toast.LENGTH_SHORT).show()
 }
 
 private const val CREATOR_PROFILE_PREFETCH_RATIO = 0.7f

@@ -102,7 +102,8 @@ class HitomiSourceAdapter(
 
     private val gson = Gson()
     private val suggestionCounts = ConcurrentHashMap<String, Int>()
-    private val portableTermResolutions = ConcurrentHashMap<String, SearchTerm>()
+    private val globalSearchIndex = HitomiGlobalSearchIndex(httpClient)
+    private val globalIndexes = ConcurrentHashMap<String, IntArray>()
     private val knownNozomiSizes = ConcurrentHashMap<String, Long>()
     private val membershipCacheMutex = Mutex()
     private val membershipCache = object : LinkedHashMap<String, IntArray>(
@@ -151,7 +152,7 @@ class HitomiSourceAdapter(
     }
 
     private suspend fun searchInternal(query: Query, pageToken: String?): Page<Post> {
-        val compiled = compileQuery(resolvePortableTerms(query))
+        val compiled = compileQuery(query)
         if (compiled.isUnsatisfiable) return Page(items = emptyList(), nextPageToken = null)
 
         val queryHash = QueryHash.from(query)
@@ -263,37 +264,6 @@ class HitomiSourceAdapter(
         return Page(items = posts, nextPageToken = nextToken)
     }
 
-    private suspend fun resolvePortableTerms(query: Query): Query {
-        suspend fun resolve(term: SearchTerm): SearchTerm {
-            if (!term.isPortableGeneralTag) return term
-            val key = term.value.trim().lowercase(Locale.ROOT)
-            portableTermResolutions[key]?.let { return it }
-            val exact = try {
-                autocompleteFacetedInternal(
-                    prefix = term.value,
-                    scope = FacetedSearchScope.All,
-                    limit = HITOMI_AUTOCOMPLETE_LIMIT,
-                ).filter { suggestion -> suggestion.text.equals(term.value.trim(), ignoreCase = true) }
-                    .maxWithOrNull(
-                        compareBy<FacetedTagSuggestion> { suggestion -> suggestion.count ?: 0 }
-                            .thenBy { suggestion -> suggestion.sourceNamespace == HITOMI_TAG_NAMESPACE },
-                    )
-                    ?.toSearchTerm()
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Throwable) {
-                null
-            }
-            if (exact != null) portableTermResolutions[key] = exact
-            return exact ?: term
-        }
-
-        return query.copy(
-            includeTerms = query.includeTerms.map { term -> resolve(term) },
-            excludeTerms = query.excludeTerms.map { term -> resolve(term) },
-        )
-    }
-
     private suspend fun randomPage(
         queryHash: String,
         primary: CompiledIndex,
@@ -388,6 +358,15 @@ class HitomiSourceAdapter(
     }
 
     private suspend fun readCompleteNozomi(url: String, maxGalleryIds: Int): NozomiSnapshot {
+        globalIndexes[url]?.let { ordered ->
+            if (ordered.size > maxGalleryIds) {
+                throw sourceParseFailure("Hitomi global index exceeded the bounded gallery limit")
+            }
+            val bytes = ByteBuffer.allocate(ordered.size * Int.SIZE_BYTES)
+                .apply { ordered.forEach(::putInt) }
+                .array()
+            return NozomiSnapshot(ordered.copyOf(), sha256Hex(bytes))
+        }
         val maxBytes = Math.multiplyExact(maxGalleryIds, Int.SIZE_BYTES)
         val response = requestNozomi(
             url = url,
@@ -620,6 +599,7 @@ class HitomiSourceAdapter(
     }
 
     private suspend fun nozomiSize(url: String): Long {
+        globalIndexes[url]?.let { return it.size.toLong() }
         knownNozomiSizes[url]?.let { return it }
         val response = requestNozomi(
             url = url,
@@ -645,6 +625,12 @@ class HitomiSourceAdapter(
     private suspend fun membershipFor(url: String): IntArray {
         membershipCacheMutex.withLock {
             membershipCache[url]?.let { return it }
+        }
+
+        globalIndexes[url]?.let { ids ->
+            val membership = ids.distinct().sorted().toIntArray()
+            membershipCacheMutex.withLock { membershipCache[url] = membership }
+            return membership
         }
 
         val response = requestNozomi(
@@ -698,6 +684,11 @@ class HitomiSourceAdapter(
         firstIdIndex: Long,
         idCount: Int,
     ): PrimaryRange {
+        globalIndexes[url]?.let { ids ->
+            val from = firstIdIndex.coerceAtMost(ids.size.toLong()).toInt()
+            val until = (firstIdIndex + idCount).coerceAtMost(ids.size.toLong()).toInt()
+            return PrimaryRange(ids.slice(from until until), exhausted = until >= ids.size)
+        }
         val response = requestNozomi(url, firstIdIndex, idCount)
         return when (response.statusCode) {
             404, 416 -> PrimaryRange(emptyList(), exhausted = true)
@@ -1191,7 +1182,7 @@ class HitomiSourceAdapter(
         }
     }
 
-    private fun compileQuery(query: Query): CompiledHitomiQuery {
+    private suspend fun compileQuery(query: Query): CompiledHitomiQuery {
         val includes = query.includeTerms.normalizedDistinctTerms()
         val excludes = query.excludeTerms.normalizedDistinctTerms()
         (includes + excludes).forEach(::validateHitomiTerm)
@@ -1205,7 +1196,7 @@ class HitomiSourceAdapter(
         val language = includedLanguages.singleOrNull() ?: HITOMI_ALL_LANGUAGE
         val positiveTerms = includes.filterNot { term -> term.facet == SearchFacet.LANGUAGE }
         val positiveIndexes = positiveTerms.map { term ->
-            CompiledIndex(
+            if (term.isPortableGeneralTag) globalCompiledIndex(term) else CompiledIndex(
                 key = term.termCacheKey(),
                 term = term,
                 newestUrl = term.nozomiUrl(HitomiNozomiSort.NEWEST, language),
@@ -1213,6 +1204,7 @@ class HitomiSourceAdapter(
             )
         }.distinctBy(CompiledIndex::key)
         val exclusionIndexes = excludes.map { term ->
+            if (term.isPortableGeneralTag) return@map globalCompiledIndex(term)
             val request = if (term.facet == SearchFacet.LANGUAGE) {
                 HitomiNozomiRequest(
                     language = term.value,
@@ -1243,6 +1235,32 @@ class HitomiSourceAdapter(
             base = base,
             positives = positiveIndexes,
             exclusions = exclusionIndexes.map { index -> index.forNewest() },
+        )
+    }
+
+    private suspend fun globalCompiledIndex(term: SearchTerm): CompiledIndex {
+        val normalized = term.value.trim().lowercase(Locale.ROOT)
+        val url = "hitomi-global://${sha256Hex(normalized.toByteArray()).take(16)}"
+        if (!globalIndexes.containsKey(url)) {
+            globalIndexes[url] = try {
+                globalSearchIndex.galleryIds(normalized)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: SourceHttpBodyTooLargeException) {
+                throw sourceParseFailure("Hitomi global search exceeded its bounded response", error)
+            } catch (error: IOException) {
+                throw SourceAdapterException(
+                    reason = SourceFailureReason.NETWORK,
+                    message = "Hitomi global search request failed",
+                    cause = error,
+                )
+            }
+        }
+        return CompiledIndex(
+            key = term.termCacheKey(),
+            term = term,
+            newestUrl = url,
+            sortedUrl = url,
         )
     }
 
