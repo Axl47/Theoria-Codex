@@ -53,6 +53,7 @@ internal fun searchFacetLabel(facet: SearchFacet, sourceNamespace: String?): Str
 
 internal fun searchTermChipLabel(term: SearchTerm, excluded: Boolean): String {
     val polarity = if (excluded) "− " else ""
+    if (term.isPortableGeneralTag) return "$polarity${term.value}"
     return "$polarity${searchFacetLabel(term.facet, term.sourceNamespace)} · ${term.value}"
 }
 

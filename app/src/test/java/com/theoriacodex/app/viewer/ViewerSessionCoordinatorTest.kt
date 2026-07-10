@@ -22,6 +22,15 @@ class ViewerSessionCoordinatorTest {
     }
 
     @Test
+    fun `Hitomi search opens its animated preview before resolving the full gallery`() {
+        val previewOnly = samplePost(source = SourceKey.HITOMI, full = null, media = emptyList())
+
+        assertFalse(requiresPrelaunchViewerPostResolution(previewOnly, ViewerStreamSource.SEARCH))
+        assertTrue(requiresViewerPostResolution(previewOnly, ViewerStreamSource.SEARCH))
+        assertTrue(requiresPrelaunchViewerPostResolution(previewOnly, ViewerStreamSource.CODEX))
+    }
+
+    @Test
     fun `does not require lazy media resolution when playable media already exists`() {
         assertFalse(
             requiresLazyMediaResolution(

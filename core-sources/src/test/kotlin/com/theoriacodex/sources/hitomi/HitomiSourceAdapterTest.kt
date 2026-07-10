@@ -40,6 +40,30 @@ import org.junit.Test
 
 class HitomiSourceAdapterTest {
     @Test
+    fun `featured closed facets expose discoverable type and language values`() = runTest {
+        val adapter = adapter(RoutingHitomiHttpClient())
+
+        val types = adapter.featuredFacetedSuggestions(
+            FacetedSearchScope(SearchFacet.TYPE, "type"),
+            limit = 20,
+        )
+        val languages = adapter.featuredFacetedSuggestions(
+            FacetedSearchScope(SearchFacet.LANGUAGE, "language"),
+            limit = 3,
+        )
+
+        assertEquals(
+            listOf("doujinshi", "manga", "artistcg", "gamecg", "imageset", "anime"),
+            types.map { suggestion -> suggestion.text },
+        )
+        assertEquals(
+            listOf("japanese", "english", "chinese"),
+            languages.map { suggestion -> suggestion.text },
+        )
+        assertTrue(types.all { it.facet == SearchFacet.TYPE && it.sourceNamespace == "type" })
+    }
+
+    @Test
     fun `autocomplete preserves global and scoped Hitomi taxonomy`() = runTest {
         val http = RoutingHitomiHttpClient().apply {
             textRoutes[HitomiProtocol.autocompleteUrl("global", "tag")] = fixture("global-tags.json")

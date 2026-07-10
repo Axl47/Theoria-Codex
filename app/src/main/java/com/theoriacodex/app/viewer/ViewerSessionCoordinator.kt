@@ -44,6 +44,16 @@ internal fun requiresViewerPostResolution(post: Post, streamSource: ViewerStream
     return requiresLazyMediaResolution(post)
 }
 
+internal fun requiresPrelaunchViewerPostResolution(
+    post: Post,
+    streamSource: ViewerStreamSource,
+): Boolean {
+    if (post.id.source == SourceKey.HITOMI && streamSource == ViewerStreamSource.SEARCH) {
+        return false
+    }
+    return requiresViewerPostResolution(post, streamSource)
+}
+
 internal fun requiresLazyMediaResolution(post: Post): Boolean {
     val mediaRefs = buildList {
         addAll(post.media)

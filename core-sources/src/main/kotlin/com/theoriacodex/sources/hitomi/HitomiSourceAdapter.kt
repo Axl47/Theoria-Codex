@@ -427,6 +427,30 @@ class HitomiSourceAdapter(
         }
     }
 
+    override suspend fun featuredFacetedSuggestions(
+        scope: FacetedSearchScope,
+        limit: Int,
+    ): List<FacetedTagSuggestion> {
+        if (limit <= 0 || scope !in supportedSearchScopes) return emptyList()
+        val values = when (scope.facet) {
+            SearchFacet.TYPE -> HITOMI_FEATURED_TYPES
+            SearchFacet.LANGUAGE -> HITOMI_FEATURED_LANGUAGES
+            else -> emptyList()
+        }
+        return values.take(limit).map { value ->
+            FacetedTagSuggestion(
+                text = value,
+                facet = requireNotNull(scope.facet),
+                sourceNamespace = scope.sourceNamespace,
+                count = suggestionCounts[SearchTerm(
+                    value = value,
+                    facet = requireNotNull(scope.facet),
+                    sourceNamespace = scope.sourceNamespace,
+                ).termCacheKey()],
+            )
+        }
+    }
+
     private suspend fun autocompleteFacetedInternal(
         prefix: String,
         scope: FacetedSearchScope,
@@ -1418,6 +1442,25 @@ class HitomiSourceAdapter(
         private const val HITOMI_SERIES_NAMESPACE = "series"
         private const val HITOMI_GROUP_NAMESPACE = "group"
         private const val HITOMI_TYPE_NAMESPACE = "type"
+        private val HITOMI_FEATURED_TYPES = listOf(
+            "doujinshi",
+            "manga",
+            "artistcg",
+            "gamecg",
+            "imageset",
+            "anime",
+        )
+        private val HITOMI_FEATURED_LANGUAGES = listOf(
+            "japanese",
+            "english",
+            "chinese",
+            "korean",
+            "spanish",
+            "french",
+            "german",
+            "italian",
+            "russian",
+        )
         private const val HITOMI_LANGUAGE_NAMESPACE = "language"
 
         private val HITOMI_AVIF_HOST = Regex("""a[12]\.gold-usergeneratedcontent\.net""")

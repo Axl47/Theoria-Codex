@@ -581,7 +581,6 @@ class SearchCoordinator(
         val parsedInput = parseScopedInput(input)
         val typedPrefix = parsedInput.value
         if (typedPrefix.isBlank()) {
-            clearAutocompleteSuggestions()
             val explicitScope = parsedInput.explicitScope
             if (explicitScope != null) {
                 when (draftQuery.mode) {
@@ -603,6 +602,7 @@ class SearchCoordinator(
                     }
                 }
             }
+            refreshFeaturedFacetedSuggestions()
             return
         }
 
@@ -746,6 +746,35 @@ class SearchCoordinator(
         if (draftQuery.mode == QueryMode.Unified) {
             facetedAutocompleteSuggestions = emptyList()
         }
+    }
+
+    suspend fun refreshFeaturedFacetedSuggestions() {
+        val mode = draftQuery.mode as? QueryMode.Source
+        val adapter = mode?.let { registry.adapterFor(it.source) as? FacetedSearchSourceAdapter }
+        val scope = selectedSearchScope.takeIf { candidate ->
+            !candidate.isAll && candidate in supportedSearchScopes
+        }
+        if (mode == null || adapter == null || scope == null) {
+            clearAutocompleteSuggestions()
+            return
+        }
+        val featured = try {
+            adapter.featuredFacetedSuggestions(scope, FACETED_AUTOCOMPLETE_LIMIT)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            emptyList()
+        }
+        if (featured.isNotEmpty()) tagSuggestionStore.putFaceted(mode.source, featured)
+        val suggestions = featured.ifEmpty {
+            tagSuggestionStore.getFaceted(
+                source = mode.source,
+                scope = scope,
+                limit = FACETED_AUTOCOMPLETE_LIMIT,
+            )
+        }
+        facetedAutocompleteSuggestions = suggestions
+        autocompleteSuggestions = suggestions.map(FacetedTagSuggestion::toLegacySuggestion)
     }
 
     suspend fun loadTrendingTags(forceRefresh: Boolean = false) {

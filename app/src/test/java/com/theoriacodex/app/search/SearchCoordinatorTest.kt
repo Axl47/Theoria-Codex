@@ -953,6 +953,28 @@ class SearchCoordinatorTest {
     }
 
     @Test
+    fun `selected facet exposes featured values before typing`() = runTest {
+        val types = FacetedSearchScope(SearchFacet.TYPE, "type")
+        val gameCg = FacetedTagSuggestion("gamecg", SearchFacet.TYPE, "type", count = 37_877)
+        val adapter = FacetedRecordingAdapter(
+            sourceKey = SourceKey.HITOMI,
+            supportedSearchScopes = linkedSetOf(FacetedSearchScope.All, types),
+            featuredByScope = mapOf(types to listOf(gameCg)),
+        )
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(mapOf(SourceKey.HITOMI to adapter)),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.HITOMI))
+        assertTrue(coordinator.selectSearchScope(types))
+
+        coordinator.refreshFeaturedFacetedSuggestions()
+
+        assertEquals(listOf(gameCg), coordinator.facetedAutocompleteSuggestions)
+        assertEquals(listOf("gamecg"), coordinator.autocompleteSuggestions.map(TagSuggestion::text))
+    }
+
+    @Test
     fun `post facet entry switches to its source without resetting portable draft filters`() = runTest {
         val coordinator = coordinator()
         coordinator.initialize()
@@ -1559,6 +1581,7 @@ private class FacetedRecordingAdapter(
     override val sourceKey: SourceKey,
     override val supportedSearchScopes: Set<FacetedSearchScope>,
     private val suggestionsByScope: Map<FacetedSearchScope, List<FacetedTagSuggestion>> = emptyMap(),
+    private val featuredByScope: Map<FacetedSearchScope, List<FacetedTagSuggestion>> = emptyMap(),
     private val autocompleteFailure: Throwable? = null,
 ) : SourceAdapter, FacetedSearchSourceAdapter {
     var lastSearchQuery: Query? = null
@@ -1600,6 +1623,11 @@ private class FacetedRecordingAdapter(
             .filter { suggestion -> suggestion.text.contains(prefix, ignoreCase = true) }
             .take(limit)
     }
+
+    override suspend fun featuredFacetedSuggestions(
+        scope: FacetedSearchScope,
+        limit: Int,
+    ): List<FacetedTagSuggestion> = featuredByScope[scope].orEmpty().take(limit)
 
     override suspend fun quickQuery(kind: QuickQueryKind): Query {
         return Query(

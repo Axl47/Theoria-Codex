@@ -24,6 +24,14 @@ class SearchFacetUiTest {
     @Test
     fun `term chips preserve facet namespace and polarity`() {
         assertEquals(
+            "animated",
+            searchTermChipLabel(SearchTerm("animated"), excluded = false),
+        )
+        assertEquals(
+            "− animated",
+            searchTermChipLabel(SearchTerm("animated"), excluded = true),
+        )
+        assertEquals(
             "Artist · najar",
             searchTermChipLabel(
                 SearchTerm("najar", SearchFacet.ARTIST, sourceNamespace = "artist"),

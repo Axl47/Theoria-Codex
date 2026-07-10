@@ -36,6 +36,10 @@ Cancellation is a control signal across provider health checks and background tr
 
 Animated WebP uses the platform decoder on API 28 and newer. API 26/27 uses the bounded fallback, with compressed input and decoded canvas limits enforced before returning a drawable. Media Overview uses Hitomi's WebP candidate and a distinct static-first-frame request/cache path so grid tiles do not autoplay on any supported API.
 
+Hitomi Search cards are intentionally sparse. Opening one from Search must enter the Viewer immediately with the existing preview, then resolve and replace the full gallery through the Viewer's background-resolution path; do not make Search wait for every gallery page. An animated Hitomi preview stays on the WebP path so it can keep playing during that handoff.
+
+The Search `All` scope creates portable plain terms and should not display a facet prefix. A selected facet may expose source-owned featured values before typing; Hitomi uses this for closed Type and Language vocabularies so users can discover valid values without memorizing prefixes.
+
 Viewer video prefetch requests at most the first 16 MiB and caches only a response proven to be a complete small representation. Partial or larger media stays remote and streams through Media3 with source headers; transport failures remain nonfatal and cancellation must propagate.
 
 ## Releases

@@ -356,7 +356,7 @@ fun SearchScreen(
         }
         val trimmed = input.trim()
         if (trimmed.isBlank()) {
-            coordinator.clearAutocompleteSuggestions()
+            coordinator.refreshFeaturedFacetedSuggestions()
             return@LaunchedEffect
         }
         delay(300)

@@ -83,6 +83,12 @@ interface FacetedSearchSourceAdapter {
         scope: FacetedSearchScope,
         limit: Int,
     ): List<FacetedTagSuggestion>
+
+    /** Source-owned values that make a selected facet discoverable before the user types. */
+    suspend fun featuredFacetedSuggestions(
+        scope: FacetedSearchScope,
+        limit: Int,
+    ): List<FacetedTagSuggestion> = emptyList()
 }
 
 interface TagCountLookupSourceAdapter {

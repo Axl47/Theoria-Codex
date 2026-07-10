@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T15:51:56-04:00
+updated_at: 2026-07-10T16:07:19-04:00
 ---
 # Working List
 
@@ -9,6 +9,11 @@ updated_at: 2026-07-10T15:51:56-04:00
 ### In Progress
 
 ### Done
+- [x] Make Hitomi gallery entry and faceted Search vocabulary immediate and discoverable
+  - [x] Open sparse Hitomi Search results immediately on their animated WebP preview and resolve the full gallery in the Viewer background
+  - [x] Keep deep-link, Codex, and Recents resolution behavior unchanged when no current Search preview can bridge the load
+  - [x] Render plain `All` terms without a misleading `Tag` prefix
+  - [x] Add a source-owned featured-facet contract and expose Hitomi Type and Language values before typing
 - [x] Fix Hitomi `gamecg` and multi-tag searches on Android's ranged binary transport
   - [x] Reproduce `gamecg` failure on the physical Galaxy through `HitomiSourceAdapter` as Android gzip `EOFException`
   - [x] Require identity encoding for every shared binary byte-range request
