@@ -13,12 +13,19 @@ object MediaRequestFactory {
         crossfade: Boolean,
         allowHardware: Boolean = false,
         staticAnimatedWebPFrame: Boolean = false,
+        controllableAnimatedWebP: Boolean = false,
     ): ImageRequest {
         val builder = ImageRequest.Builder(context)
             .data(normalizeMediaUrl(sourceKey, url) ?: url)
             .crossfade(crossfade)
             .allowHardware(allowHardware)
-            .staticAnimatedWebPFrame(staticAnimatedWebPFrame)
+            .animatedWebPDecodeMode(
+                when {
+                    staticAnimatedWebPFrame -> AnimatedWebPDecodeMode.STATIC_FIRST_FRAME
+                    controllableAnimatedWebP -> AnimatedWebPDecodeMode.CONTROLLABLE
+                    else -> null
+                },
+            )
         sourceKey.requestHeaders().forEach { (name, value) ->
             builder.addHeader(name, value)
         }
@@ -27,11 +34,19 @@ object MediaRequestFactory {
 }
 
 internal fun ImageRequest.Builder.staticAnimatedWebPFrame(enabled: Boolean): ImageRequest.Builder {
-    return if (enabled) {
+    return animatedWebPDecodeMode(
+        if (enabled) AnimatedWebPDecodeMode.STATIC_FIRST_FRAME else null,
+    )
+}
+
+internal fun ImageRequest.Builder.animatedWebPDecodeMode(
+    mode: AnimatedWebPDecodeMode?,
+): ImageRequest.Builder {
+    return if (mode != null) {
         setParameter(
             key = ANIMATED_WEBP_DECODE_MODE_PARAMETER,
-            value = AnimatedWebPDecodeMode.STATIC_FIRST_FRAME,
-            memoryCacheKey = STATIC_ANIMATED_WEBP_MEMORY_CACHE_KEY,
+            value = mode,
+            memoryCacheKey = mode.memoryCacheKey,
         )
     } else {
         removeParameter(ANIMATED_WEBP_DECODE_MODE_PARAMETER)

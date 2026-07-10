@@ -102,6 +102,7 @@ class HitomiSourceAdapter(
 
     private val gson = Gson()
     private val suggestionCounts = ConcurrentHashMap<String, Int>()
+    private val portableTermResolutions = ConcurrentHashMap<String, SearchTerm>()
     private val knownNozomiSizes = ConcurrentHashMap<String, Long>()
     private val membershipCacheMutex = Mutex()
     private val membershipCache = object : LinkedHashMap<String, IntArray>(
@@ -150,7 +151,7 @@ class HitomiSourceAdapter(
     }
 
     private suspend fun searchInternal(query: Query, pageToken: String?): Page<Post> {
-        val compiled = compileQuery(query)
+        val compiled = compileQuery(resolvePortableTerms(query))
         if (compiled.isUnsatisfiable) return Page(items = emptyList(), nextPageToken = null)
 
         val queryHash = QueryHash.from(query)
@@ -260,6 +261,37 @@ class HitomiSourceAdapter(
             null
         }
         return Page(items = posts, nextPageToken = nextToken)
+    }
+
+    private suspend fun resolvePortableTerms(query: Query): Query {
+        suspend fun resolve(term: SearchTerm): SearchTerm {
+            if (!term.isPortableGeneralTag) return term
+            val key = term.value.trim().lowercase(Locale.ROOT)
+            portableTermResolutions[key]?.let { return it }
+            val exact = try {
+                autocompleteFacetedInternal(
+                    prefix = term.value,
+                    scope = FacetedSearchScope.All,
+                    limit = HITOMI_AUTOCOMPLETE_LIMIT,
+                ).filter { suggestion -> suggestion.text.equals(term.value.trim(), ignoreCase = true) }
+                    .maxWithOrNull(
+                        compareBy<FacetedTagSuggestion> { suggestion -> suggestion.count ?: 0 }
+                            .thenBy { suggestion -> suggestion.sourceNamespace == HITOMI_TAG_NAMESPACE },
+                    )
+                    ?.toSearchTerm()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                null
+            }
+            if (exact != null) portableTermResolutions[key] = exact
+            return exact ?: term
+        }
+
+        return query.copy(
+            includeTerms = query.includeTerms.map { term -> resolve(term) },
+            excludeTerms = query.excludeTerms.map { term -> resolve(term) },
+        )
     }
 
     private suspend fun randomPage(

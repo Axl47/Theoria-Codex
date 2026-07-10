@@ -2011,13 +2011,7 @@ private fun SourceChipLogo(
             Image(
                 painter = painterResource(id = R.drawable.hitomi_logo),
                 contentDescription = "Hitomi",
-                modifier = modifier
-                    .size(size)
-                    .background(
-                        color = Color.Black,
-                        shape = RoundedCornerShape(4.dp),
-                    )
-                    .padding(2.dp),
+                modifier = modifier.size(size),
                 contentScale = ContentScale.Fit,
             )
         }

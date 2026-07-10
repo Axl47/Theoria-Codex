@@ -40,6 +40,25 @@ import org.junit.Test
 
 class HitomiSourceAdapterTest {
     @Test
+    fun `All search resolves an exact global term to its provider facet`() = runTest {
+        val globalAutocomplete = HitomiProtocol.autocompleteUrl("global", "Gyaru")
+        val femaleGyaru = HitomiNozomi.urlFor(
+            HitomiNozomiRequest(area = "tag", tag = "female:gyaru"),
+        )
+        val http = RoutingHitomiHttpClient().apply {
+            textRoutes[globalAutocomplete] = "[[\"gyaru\",23191,\"female\"],[\"gyaru-oh\",7355,\"male\"]]"
+            binaryIndexes[femaleGyaru] = listOf(4, 3)
+        }
+        val adapter = adapter(http, pageSize = 2)
+
+        val page = adapter.search(query(include = listOf(SearchTerm("Gyaru"))), null)
+
+        assertEquals(listOf("4", "3"), page.items.map { post -> post.id.sourcePostId })
+        assertTrue(http.binaryRequests.any { request -> request.url == femaleGyaru })
+        assertFalse(http.binaryRequests.any { request -> request.url.endsWith("/tag/gyaru-all.nozomi") })
+    }
+
+    @Test
     fun `featured closed facets expose discoverable type and language values`() = runTest {
         val adapter = adapter(RoutingHitomiHttpClient())
 

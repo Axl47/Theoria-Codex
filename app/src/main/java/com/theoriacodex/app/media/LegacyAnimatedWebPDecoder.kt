@@ -52,7 +52,9 @@ internal class LegacyAnimatedWebPDecoder(
 
         var isSampled = false
         val drawable = when (mode) {
-            AnimatedWebPDecodeMode.ANIMATED -> webPDrawable
+            AnimatedWebPDecodeMode.ANIMATED,
+            AnimatedWebPDecodeMode.CONTROLLABLE,
+            -> webPDrawable
             AnimatedWebPDecodeMode.STATIC_FIRST_FRAME -> {
                 val frame = try {
                     webPDrawable.frameSeqDecoder.getFrameBitmap(0)
@@ -91,7 +93,7 @@ internal class LegacyAnimatedWebPDecoder(
             val mode = requestedMode ?: AnimatedWebPDecodeMode.ANIMATED
             if (
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
-                mode != AnimatedWebPDecodeMode.STATIC_FIRST_FRAME
+                mode == AnimatedWebPDecodeMode.ANIMATED
             ) {
                 return null
             }
@@ -109,6 +111,15 @@ internal class LegacyAnimatedWebPDecoder(
 internal enum class AnimatedWebPDecodeMode {
     ANIMATED,
     STATIC_FIRST_FRAME,
+    CONTROLLABLE,
+    ;
+
+    val memoryCacheKey: String
+        get() = when (this) {
+            ANIMATED -> "animated-webp-v1"
+            STATIC_FIRST_FRAME -> STATIC_ANIMATED_WEBP_MEMORY_CACHE_KEY
+            CONTROLLABLE -> "controllable-animated-webp-v1"
+        }
 }
 
 internal data class AnimatedWebPHeader(

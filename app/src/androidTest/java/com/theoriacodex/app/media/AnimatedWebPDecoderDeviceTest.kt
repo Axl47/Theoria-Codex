@@ -42,6 +42,11 @@ class AnimatedWebPDecoderDeviceTest {
             .allowHardware(false)
             .staticAnimatedWebPFrame(true)
             .build()
+        val controllableRequest = ImageRequest.Builder(context)
+            .data(bytes)
+            .allowHardware(false)
+            .animatedWebPDecodeMode(AnimatedWebPDecodeMode.CONTROLLABLE)
+            .build()
         assertNull(normalRequest.parameters.memoryCacheKey(ANIMATED_WEBP_DECODE_MODE_PARAMETER))
         assertEquals(
             STATIC_ANIMATED_WEBP_MEMORY_CACHE_KEY,
@@ -50,8 +55,10 @@ class AnimatedWebPDecoderDeviceTest {
 
         val normalResult = context.imageLoader.execute(normalRequest)
         val staticResult = context.imageLoader.execute(staticRequest)
+        val controllableResult = context.imageLoader.execute(controllableRequest)
         assertTrue(normalResult is SuccessResult)
         assertTrue(staticResult is SuccessResult)
+        assertTrue(controllableResult is SuccessResult)
 
         val drawable = (normalResult as SuccessResult).drawable.unwrapScaleDrawable()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -74,6 +81,9 @@ class AnimatedWebPDecoderDeviceTest {
         val firstFrame = (staticDrawable as BitmapDrawable).bitmap
         assertEquals(2, firstFrame.width)
         assertEquals(2, firstFrame.height)
+        val controllableDrawable = (controllableResult as SuccessResult).drawable.unwrapScaleDrawable()
+        assertTrue(controllableDrawable is WebPDrawable)
+        assertEquals(2, (controllableDrawable as WebPDrawable).frameSeqDecoder.frameCount)
     }
 
     private tailrec fun Drawable.unwrapScaleDrawable(): Drawable {

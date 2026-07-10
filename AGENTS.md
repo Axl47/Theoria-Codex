@@ -40,6 +40,10 @@ Hitomi Search cards are intentionally sparse. Opening one from Search must enter
 
 The Search `All` scope creates portable plain terms and should not display a facet prefix. A selected facet may expose source-owned featured values before typing; Hitomi uses this for closed Type and Language vocabularies so users can discover valid values without memorizing prefixes.
 
+Hitomi `All` terms are provider-global, not automatically general tags. Resolve an exact global autocomplete match to its source facet only for Nozomi compilation while preserving the original portable term in app state and UI; for example, plain `Gyaru` compiles to `female:gyaru`.
+
+Main-Viewer animated WebP uses the controllable bounded `awebp` path on every API and exposes honest play/pause, restart, and frame progress controls. The decoder does not support arbitrary seek, so do not present a draggable video-style seek bar. Overview tiles remain static first frames. The Hitomi PNG already contains transparency; do not wrap it in an opaque source-chip background.
+
 Viewer video prefetch requests at most the first 16 MiB and caches only a response proven to be a complete small representation. Partial or larger media stays remote and streams through Media3 with source headers; transport failures remain nonfatal and cancellation must propagate.
 
 ## Releases

@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T16:07:19-04:00
+updated_at: 2026-07-10T16:21:59-04:00
 ---
 # Working List
 
@@ -9,6 +9,12 @@ updated_at: 2026-07-10T16:07:19-04:00
 ### In Progress
 
 ### Done
+- [x] Restore Hitomi-global All searches and add honest animated-WebP playback controls
+  - [x] Resolve exact global terms such as plain `Gyaru` to Hitomi's `female` facet only during Nozomi compilation
+  - [x] Preserve the original unprefixed portable query in UI, persistence, and page-token hashing
+  - [x] Route every Hitomi animated WebP page through the bounded controllable decoder on all supported APIs
+  - [x] Add play/pause, restart, and live frame progress without advertising unsupported arbitrary seeking
+  - [x] Remove the opaque black source-chip background while retaining the supplied transparent PNG byte-for-byte
 - [x] Make Hitomi gallery entry and faceted Search vocabulary immediate and discoverable
   - [x] Open sparse Hitomi Search results immediately on their animated WebP preview and resolve the full gallery in the Viewer background
   - [x] Keep deep-link, Codex, and Recents resolution behavior unchanged when no current Search preview can bridge the load

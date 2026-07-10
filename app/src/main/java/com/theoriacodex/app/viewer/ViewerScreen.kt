@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
@@ -63,6 +64,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.ModalBottomSheet
@@ -110,9 +112,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
+import coil.drawable.ScaleDrawable
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import com.github.penfeizhou.animation.webp.WebPDrawable
 import com.theoriacodex.app.creator.CreatorProfileActionButton
 import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.media.isAnimatedImageMediaRef
@@ -137,6 +141,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.delay
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -564,19 +569,22 @@ fun ViewerScreen(
                 }
                 val isVideoMedia = isVideoMediaRef(media)
                 val isGifMedia = isGifMediaRef(media)
+                val isControlledAnimatedWebP = post.id.source == SourceKey.HITOMI &&
+                    isAnimatedImageMediaRef(media)
                 val showUgoira = isPixivUgoira(post, media) && pixivUgoiraClient != null
                 val isCurrentMediaPage =
                     postPage == postPagerState.currentPage &&
                         mediaPage == mediaPagerState.currentPage
                 val isSeekableMedia = isVideoMedia || isGifMedia || showUgoira
-                val hasBottomTimeline = viewerState.chromeVisible && (isVideoMedia || isGifMedia || showUgoira)
+                val hasBottomTimeline = viewerState.chromeVisible &&
+                    (isVideoMedia || isGifMedia || showUgoira || isControlledAnimatedWebP)
                 var seekJumpSerial by remember(postPage, mediaPage) { mutableIntStateOf(0) }
                 var seekJumpDeltaMs by remember(postPage, mediaPage) { mutableLongStateOf(0L) }
                 var seekFeedbackSerial by remember(postPage, mediaPage) { mutableIntStateOf(0) }
                 var seekFeedback by remember(postPage, mediaPage) { mutableStateOf<SeekJumpFeedback?>(null) }
                 val mediaContainerPadding = when {
                     isLandscape -> 0.dp
-                    isVideoMedia || isGifMedia || showUgoira -> 0.dp
+                    isVideoMedia || isGifMedia || showUgoira || isControlledAnimatedWebP -> 0.dp
                     else -> 16.dp
                 }
                 val mediaAspectRatio = remember(post.width, post.height) {
@@ -810,6 +818,48 @@ fun ViewerScreen(
                                 seekJumpDeltaMs = seekJumpDeltaMs,
                                 playbackRate = playbackRate.speed,
                                 onTimelineInteractionActiveChanged = ::onTimelineInteractionChanged,
+                            )
+                        } else if (isControlledAnimatedWebP && activeImageUrl != null) {
+                            ViewerAnimatedWebPPlayer(
+                                sourceKey = post.id.source,
+                                location = activeImageUrl,
+                                contentDescription = post.title ?: post.id.sourcePostId,
+                                modifier = Modifier.fillMaxSize(),
+                                mediaModifier = mediaTransformModifier,
+                                showControls = viewerState.chromeVisible && isCurrentMediaPage,
+                                isActive = mediaPlaybackEnabled && isCurrentMediaPage,
+                                onLoading = {
+                                    imageLoading = true
+                                    imageLoadFailed = false
+                                },
+                                onSuccess = {
+                                    imageLoading = false
+                                    imageLoadFailed = false
+                                    hasVisibleImage = true
+                                    loadedMediaUrls[activeImageUrl] = true
+                                },
+                                onError = { throwable ->
+                                    val recoveryKey =
+                                        "${post.id.source.name}:${post.id.sourcePostId}:$mediaPage:$activeImageUrl"
+                                    if (
+                                        onRequestMediaRecovery != null &&
+                                        isHttpNotFound(throwable) &&
+                                        mediaRecoveryRequestedKeys.add(recoveryKey)
+                                    ) {
+                                        onRequestMediaRecovery(post, media.copy(url = activeImageUrl))
+                                    }
+                                    val canAdvance = displayedCandidateIndex < imageCandidates.lastIndex
+                                    if (canAdvance) {
+                                        val nextIndex = displayedCandidateIndex + 1
+                                        displayedCandidateIndex = nextIndex
+                                        maxPreparedCandidateIndex = nextIndex
+                                        imageLoading = false
+                                        imageLoadFailed = false
+                                    } else {
+                                        imageLoading = false
+                                        imageLoadFailed = !hasVisibleImage
+                                    }
+                                },
                             )
                         } else if (imageModel != null) {
                             AsyncImage(
@@ -1645,6 +1695,128 @@ private fun ViewerVideoPlayer(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ViewerAnimatedWebPPlayer(
+    sourceKey: SourceKey,
+    location: String,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    mediaModifier: Modifier = Modifier,
+    showControls: Boolean = true,
+    isActive: Boolean = true,
+    onLoading: () -> Unit = {},
+    onSuccess: () -> Unit = {},
+    onError: (Throwable) -> Unit = {},
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val request = remember(context, location, sourceKey) {
+        MediaRequestFactory.imageRequest(
+            context = context,
+            url = location,
+            sourceKey = sourceKey,
+            crossfade = false,
+            controllableAnimatedWebP = true,
+        )
+    }
+    var drawable by remember(location) { mutableStateOf<WebPDrawable?>(null) }
+    var paused by remember(location) { mutableStateOf(false) }
+    var frameIndex by remember(location) { mutableIntStateOf(0) }
+    var frameCount by remember(location) { mutableIntStateOf(0) }
+
+    DisposableEffect(drawable, lifecycleOwner, isActive, paused) {
+        val activeDrawable = drawable
+        fun syncPlayback() {
+            if (activeDrawable == null) return
+            if (isActive && !paused && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                if (activeDrawable.isPaused) activeDrawable.resume() else activeDrawable.start()
+            } else {
+                activeDrawable.pause()
+            }
+        }
+        val observer = LifecycleEventObserver { _, _ -> syncPlayback() }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        syncPlayback()
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            activeDrawable?.pause()
+        }
+    }
+
+    LaunchedEffect(drawable, isActive) {
+        val activeDrawable = drawable ?: return@LaunchedEffect
+        frameCount = activeDrawable.frameSeqDecoder.frameCount
+        while (isActive) {
+            frameIndex = activeDrawable.frameSeqDecoder.frameIndex.coerceAtLeast(0)
+            delay(100L)
+        }
+    }
+
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        AsyncImage(
+            model = request,
+            contentDescription = contentDescription,
+            modifier = Modifier.fillMaxSize().then(mediaModifier),
+            contentScale = ContentScale.Fit,
+            onLoading = { onLoading() },
+            onSuccess = { state ->
+                drawable = state.result.drawable.unwrapWebPDrawable()
+                frameCount = drawable?.frameSeqDecoder?.frameCount ?: 0
+                onSuccess()
+            },
+            onError = { state -> onError(state.result.throwable) },
+        )
+        if (showControls && drawable != null) {
+            ViewerPlaybackFooter(modifier = Modifier.align(Alignment.BottomCenter)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TimelinePlaybackButton(
+                        isPaused = paused,
+                        onToggle = { paused = !paused },
+                    )
+                    IconButton(
+                        onClick = {
+                            drawable?.reset()
+                            if (isActive) drawable?.start()
+                            frameIndex = 0
+                            paused = false
+                        },
+                    ) {
+                        Icon(Icons.Default.Replay, contentDescription = "Restart animation")
+                    }
+                    LinearProgressIndicator(
+                        progress = {
+                            if (frameCount <= 1) 0f else {
+                                frameIndex.coerceIn(0, frameCount - 1).toFloat() / (frameCount - 1).toFloat()
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = if (frameCount > 0) {
+                            "${frameIndex.coerceIn(0, frameCount - 1) + 1}/$frameCount"
+                        } else {
+                            "—"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private tailrec fun android.graphics.drawable.Drawable.unwrapWebPDrawable(): WebPDrawable? {
+    return when (this) {
+        is WebPDrawable -> this
+        is ScaleDrawable -> child.unwrapWebPDrawable()
+        else -> null
     }
 }
 

@@ -57,6 +57,19 @@ class HitomiProtocolDeviceTest {
         )
 
         withTimeout(60_000) {
+            val allGyaru = adapter.search(
+                Query(
+                    mode = QueryMode.Source(SourceKey.HITOMI),
+                    includeTerms = listOf(SearchTerm("Gyaru")),
+                    excludeTerms = emptyList(),
+                    sort = SortMode.NEWEST,
+                    dateRange = null,
+                    minScore = null,
+                ),
+                null,
+            )
+            assertEquals(2, allGyaru.items.size)
+
             val gameCg = adapter.search(
                 Query(
                     mode = QueryMode.Source(SourceKey.HITOMI),
