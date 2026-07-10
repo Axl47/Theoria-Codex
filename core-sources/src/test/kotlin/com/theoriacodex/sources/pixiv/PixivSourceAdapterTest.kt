@@ -81,6 +81,59 @@ class PixivSourceAdapterTest {
     }
 
     @Test
+    fun `search tolerates explicit nulls in optional pixiv fields`() = runTest {
+        val credentials = FakeCredentialsProvider().apply {
+            pixivTokens = PixivAuthTokens(
+                accessToken = "access",
+                refreshToken = "refresh",
+                expiresAtEpochMs = Long.MAX_VALUE,
+            )
+        }
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "illusts": [
+                        null,
+                        {
+                          "id": 12345,
+                          "title": null,
+                          "width": null,
+                          "height": null,
+                          "create_date": null,
+                          "image_urls": {
+                            "square_medium": null,
+                            "medium": "https://i.pximg.net/medium.jpg",
+                            "large": null
+                          },
+                          "meta_single_page": null,
+                          "meta_pages": [null],
+                          "tags": [null, {"name": "Hsin", "translated_name": null}],
+                          "user": {"id": null, "name": null}
+                        }
+                      ],
+                      "next_url": null
+                    }
+                """.trimIndent(),
+            )
+        }
+        val adapter = PixivSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = credentials,
+        )
+
+        val page = adapter.search(sampleQuery(), pageToken = null)
+
+        assertEquals(1, page.items.size)
+        assertEquals("12345", page.items.first().id.sourcePostId)
+        assertEquals("https://i.pximg.net/medium.jpg", page.items.first().preview.url)
+        assertEquals(listOf("Hsin"), page.items.first().canonicalTags)
+        assertEquals(null, page.items.first().title)
+        assertEquals(null, page.nextPageToken)
+    }
+
+    @Test
     fun `search maps creator metadata`() = runTest {
         val credentials = FakeCredentialsProvider().apply {
             pixivTokens = PixivAuthTokens(

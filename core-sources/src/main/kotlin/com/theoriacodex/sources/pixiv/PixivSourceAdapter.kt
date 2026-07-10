@@ -78,9 +78,11 @@ class PixivSourceAdapter(
         )
         val root = parseJsonObject(response)
         val illusts = root.optionalJsonArray("illusts")
-        val posts = illusts?.mapNotNull { parseIllust(it.asJsonObject) }.orEmpty()
+        val posts = illusts?.mapNotNull { element ->
+            element.takeIf { it.isJsonObject }?.asJsonObject?.let(::parseIllust)
+        }.orEmpty()
         val normalizedPosts = if (query.sort == SortMode.RANDOM) posts.shuffled() else posts
-        val nextToken = parseNextOffset(root.get("next_url")?.asString)
+        val nextToken = parseNextOffset(root.optionalString("next_url"))
         return Page(items = normalizedPosts, nextPageToken = nextToken)
     }
 
@@ -94,7 +96,7 @@ class PixivSourceAdapter(
         return tags.mapNotNull { item ->
             val tag = item.asJsonObject.optionalJsonObject("tag") ?: return@mapNotNull null
             TagSuggestion(
-                text = tag.get("name")?.asString.orEmpty(),
+                text = tag.optionalString("name").orEmpty(),
                 type = "trending",
                 count = null,
             ).takeIf { it.text.isNotBlank() }
@@ -112,7 +114,7 @@ class PixivSourceAdapter(
         return tags.mapNotNull { item ->
             val tag = item.asJsonObject
             TagSuggestion(
-                text = tag.get("name")?.asString.orEmpty(),
+                text = tag.optionalString("name").orEmpty(),
                 type = "tag",
                 count = null,
             ).takeIf { it.text.isNotBlank() }
@@ -154,7 +156,7 @@ class PixivSourceAdapter(
         val root = parseJsonObject(response)
         val illust = root.optionalJsonObject("illust") ?: return null
         val parsed = parseIllust(illust) ?: return null
-        return if (illust.get("type")?.asString == "ugoira" && parsed.durationMs == null) {
+        return if (illust.optionalString("type") == "ugoira" && parsed.durationMs == null) {
             parsed.copy(durationMs = fetchUgoiraDurationMs(id.sourcePostId))
         } else {
             parsed
@@ -184,11 +186,13 @@ class PixivSourceAdapter(
         )
         val root = parseJsonObject(response)
         val posts = root.optionalJsonArray("illusts")
-            ?.mapNotNull { parseIllust(it.asJsonObject) }
+            ?.mapNotNull { element ->
+                element.takeIf { it.isJsonObject }?.asJsonObject?.let(::parseIllust)
+            }
             .orEmpty()
         return Page(
             items = posts,
-            nextPageToken = parseNextOffset(root.get("next_url")?.asString),
+            nextPageToken = parseNextOffset(root.optionalString("next_url")),
         )
     }
 
@@ -286,18 +290,17 @@ class PixivSourceAdapter(
     }
 
     private fun parseIllust(raw: JsonObject): Post? {
-        val id = raw.get("id")?.asLong?.toString() ?: return null
-        val isUgoira = raw.get("type")?.asString == "ugoira"
+        val id = raw.optionalLong("id")?.toString() ?: return null
+        val isUgoira = raw.optionalString("type") == "ugoira"
         val imageUrls = raw.optionalJsonObject("image_urls")
         val previewUrl = normalizedUrl(
-            imageUrls?.get("square_medium")?.asString ?: imageUrls?.get("medium")?.asString,
+            imageUrls?.optionalString("square_medium") ?: imageUrls?.optionalString("medium"),
         )
-        val singlePageMediumUrl = normalizedUrl(imageUrls?.get("medium")?.asString)
-        val singlePageLargeUrl = normalizedUrl(imageUrls?.get("large")?.asString)
+        val singlePageMediumUrl = normalizedUrl(imageUrls?.optionalString("medium"))
+        val singlePageLargeUrl = normalizedUrl(imageUrls?.optionalString("large"))
         val singlePageOriginalUrl = normalizedUrl(
             raw.optionalJsonObject("meta_single_page")
-                ?.get("original_image_url")
-                ?.asString,
+                ?.optionalString("original_image_url"),
         )
         val fullUrl = singlePageOriginalUrl ?: singlePageLargeUrl ?: singlePageMediumUrl
         val fullMime = if (isUgoira) PIXIV_UGOIRA_MIME else inferMimeFromUrl(fullUrl)
@@ -320,10 +323,11 @@ class PixivSourceAdapter(
             )
         }
         val multiPageRefs = raw.optionalJsonArray("meta_pages").orEmpty().mapNotNull { page ->
-            val pageUrls = page.asJsonObject.optionalJsonObject("image_urls") ?: return@mapNotNull null
-            val mediumUrl = normalizedUrl(pageUrls.get("medium")?.asString)
-            val largeUrl = normalizedUrl(pageUrls.get("large")?.asString)
-            val originalUrl = normalizedUrl(pageUrls.get("original")?.asString)
+            val pageObject = page.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+            val pageUrls = pageObject.optionalJsonObject("image_urls") ?: return@mapNotNull null
+            val mediumUrl = normalizedUrl(pageUrls.optionalString("medium"))
+            val largeUrl = normalizedUrl(pageUrls.optionalString("large"))
+            val originalUrl = normalizedUrl(pageUrls.optionalString("original"))
             val pageUrl = originalUrl ?: largeUrl ?: mediumUrl ?: return@mapNotNull null
             ImageRef(
                 url = pageUrl,
@@ -347,8 +351,8 @@ class PixivSourceAdapter(
         val rawTags = mutableListOf<String>()
         val canonicalTags = linkedSetOf<String>()
         raw.optionalJsonArray("tags").orEmpty().forEach { tagElement ->
-            val tagObject = tagElement.asJsonObject
-            val name = tagObject.get("name")?.asString?.trim().orEmpty()
+            val tagObject = tagElement.takeIf { it.isJsonObject }?.asJsonObject ?: return@forEach
+            val name = tagObject.optionalString("name")?.trim().orEmpty()
             if (name.isNotBlank()) {
                 rawTags += name
                 canonicalTags += name
@@ -362,11 +366,11 @@ class PixivSourceAdapter(
                 canonicalTags += translatedName
             }
         }
-        val createdAt = parseIsoInstant(raw.get("create_date")?.asString)
+        val createdAt = parseIsoInstant(raw.optionalString("create_date"))
         val user = raw.optionalJsonObject("user")
-        val userName = user?.get("name")?.asString?.trim().orEmpty().ifBlank { null }
-        val userId = user?.get("id")?.asLong?.toString()
-        val title = raw.get("title")?.asString
+        val userName = user?.optionalString("name")?.trim().orEmpty().ifBlank { null }
+        val userId = user?.optionalLong("id")?.toString()
+        val title = raw.optionalString("title")
 
         return Post(
             id = PostId(SourceKey.PIXIV, id),
@@ -374,8 +378,8 @@ class PixivSourceAdapter(
             full = fallbackFullRef ?: mediaRefs.firstOrNull(),
             media = mediaRefs,
             pageUrl = "https://www.pixiv.net/en/artworks/$id",
-            width = raw.get("width")?.asInt,
-            height = raw.get("height")?.asInt,
+            width = raw.optionalInt("width"),
+            height = raw.optionalInt("height"),
             canonicalTags = canonicalTags.toList(),
             rawTags = rawTags.distinct(),
             authorName = userName,
@@ -493,6 +497,21 @@ private fun JsonObject.optionalJsonArray(name: String): JsonArray? {
 
 private fun JsonObject.optionalJsonObject(name: String): JsonObject? {
     return get(name)?.takeIf { it.isJsonObject }?.asJsonObject
+}
+
+private fun JsonObject.optionalString(name: String): String? {
+    val element = get(name)?.takeUnless { it.isJsonNull } ?: return null
+    return runCatching { element.asString }.getOrNull()
+}
+
+private fun JsonObject.optionalLong(name: String): Long? {
+    val element = get(name)?.takeUnless { it.isJsonNull } ?: return null
+    return runCatching { element.asLong }.getOrNull()
+}
+
+private fun JsonObject.optionalInt(name: String): Int? {
+    val element = get(name)?.takeUnless { it.isJsonNull } ?: return null
+    return runCatching { element.asInt }.getOrNull()
 }
 
 private fun JsonArray?.orEmpty(): List<com.google.gson.JsonElement> {
