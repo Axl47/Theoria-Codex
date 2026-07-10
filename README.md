@@ -75,7 +75,7 @@ The Android manifest handles Pixiv auth callbacks, source post/profile links for
 
 Release builds enable the startup updater. The updater reads GitHub prereleases for the `main` channel, expects the fixed APK asset name `theoria-codex-main.apk`, validates version metadata/signature, and launches Android's package installer. Debug builds disable the updater and use `applicationIdSuffix ".debug"` plus `versionNameSuffix "-debug"`, so debug and release installs have separate app storage.
 
-Main-channel release publishing lives in `.github/workflows/main-prerelease.yml`. It derives release tags from `versionName` as `v<major>.<minor>.<patch>`, computes an Android `versionCode`, signs the release APK, and generates sectioned release notes from Conventional Commit metadata with `.github/scripts/generate_main_release_notes.py`.
+Main-channel releases are deliberate, not made for every push to `main`. A release commit updates `versionName`, its matching SemVer-derived `versionCode`, and `release-notes/v<major>.<minor>.<patch>.md`; pushing the matching annotated `v<major>.<minor>.<patch>` tag starts `.github/workflows/main-prerelease.yml`. The workflow verifies those three pieces agree, signs the APK, and publishes the checked-in user-facing notes. The Android code uses `1_500_000_000 + major * 10_000 + minor * 100 + patch`, preserving the updater’s existing ordering contract.
 
 ## Documentation And Plans
 

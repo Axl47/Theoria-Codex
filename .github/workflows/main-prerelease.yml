@@ -2,8 +2,8 @@ name: Main Prerelease
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
 
 permissions:
   contents: write
@@ -29,11 +29,15 @@ jobs:
 
       - name: Compute release metadata
         run: |
-          SHORT_SHA="${GITHUB_SHA::7}"
           APP_BUILD_FILE="app/build.gradle.kts"
           VERSION_NAME="$(sed -nE 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*\"([^\"]+)\".*/\1/p' "$APP_BUILD_FILE" | head -n 1)"
+          DECLARED_VERSION_CODE="$(sed -nE 's/^[[:space:]]*versionCode[[:space:]]*=[[:space:]]*([0-9_]+).*/\1/p' "$APP_BUILD_FILE" | head -n 1 | tr -d '_')"
           if [ -z "$VERSION_NAME" ]; then
             echo "Could not resolve versionName from $APP_BUILD_FILE"
+            exit 1
+          fi
+          if [ -z "$DECLARED_VERSION_CODE" ]; then
+            echo "Could not resolve versionCode from $APP_BUILD_FILE"
             exit 1
           fi
           if ! [[ "$VERSION_NAME" =~ ^[0-9]{1,4}\.[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
@@ -48,18 +52,33 @@ jobs:
           VERSION_CODE=$((VERSION_CODE_BASE + VERSION_MAJOR * 10000 + VERSION_MINOR * 100 + VERSION_PATCH))
           RELEASE_TITLE="v${VERSION_NAME}"
           RELEASE_TAG="${RELEASE_TITLE}"
+          RELEASE_NOTES_FILE="release-notes/${RELEASE_TITLE}.md"
 
-          echo "SHORT_SHA=${SHORT_SHA}" >> "$GITHUB_ENV"
+          if [ "${GITHUB_REF_NAME}" != "$RELEASE_TAG" ]; then
+            echo "Pushed tag ${GITHUB_REF_NAME} does not match app version $RELEASE_TAG"
+            exit 1
+          fi
+          if [ "$(git cat-file -t "$GITHUB_REF")" != "tag" ]; then
+            echo "$GITHUB_REF_NAME must be an annotated tag"
+            exit 1
+          fi
+          if [ "$DECLARED_VERSION_CODE" -ne "$VERSION_CODE" ]; then
+            echo "versionCode $DECLARED_VERSION_CODE must equal SemVer-derived code $VERSION_CODE"
+            exit 1
+          fi
+          if [ ! -s "$RELEASE_NOTES_FILE" ]; then
+            echo "Missing curated release notes: $RELEASE_NOTES_FILE"
+            exit 1
+          fi
+
           echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
-          echo "VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
           echo "RELEASE_TITLE=${RELEASE_TITLE}" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=${RELEASE_TAG}" >> "$GITHUB_ENV"
+          echo "RELEASE_NOTES_FILE=${RELEASE_NOTES_FILE}" >> "$GITHUB_ENV"
 
       - name: Assemble release APK
         run: |
-          ./gradlew :app:assembleRelease \
-            -Ptheoria.versionCode=${VERSION_CODE} \
-            -Ptheoria.versionName=${VERSION_NAME}
+          ./gradlew :app:assembleRelease
 
       - name: Sign release APK
         id: sign_app
@@ -77,24 +96,6 @@ jobs:
         run: |
           cp "${{ steps.sign_app.outputs.signedReleaseFile }}" theoria-codex-main.apk
 
-      - name: Generate sectioned release notes
-        run: |
-          PREV_TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-creatordate | head -n 1)
-          if [ -n "$PREV_TAG" ]; then
-            python3 .github/scripts/generate_main_release_notes.py \
-              --output main-release-notes.md \
-              --channel main \
-              --head "${GITHUB_SHA}" \
-              --commit "${SHORT_SHA}" \
-              --previous-tag "$PREV_TAG"
-          else
-            python3 .github/scripts/generate_main_release_notes.py \
-              --output main-release-notes.md \
-              --channel main \
-              --head "${GITHUB_SHA}" \
-              --commit "${SHORT_SHA}"
-          fi
-
       - name: Publish prerelease
         uses: softprops/action-gh-release@v2
         with:
@@ -104,4 +105,4 @@ jobs:
           draft: false
           files: theoria-codex-main.apk
           fail_on_unmatched_files: true
-          body_path: main-release-notes.md
+          body_path: ${{ env.RELEASE_NOTES_FILE }}

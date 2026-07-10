@@ -18,7 +18,9 @@ android {
         applicationId = "com.theoriacodex"
         minSdk = 26
         targetSdk = 35
-        versionCode = 43
+        // Keep this calculation aligned with MainReleaseTagParser and the release workflow:
+        // 1_500_000_000 + major * 10_000 + minor * 100 + patch.
+        versionCode = 1_500_000_503
         versionName = "0.5.3"
         if (versionCodeOverride != null) {
             versionCode = versionCodeOverride

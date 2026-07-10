@@ -22,6 +22,10 @@ Explain plans, questions, and completed work in plain system-level language. The
 
 For installed release-build crashes on a connected Android device, use `adb logcat -b crash -d` even when `run-as com.theoriacodex` is unavailable because the package is not debuggable. Viewer background prefetch must treat provider TLS, socket, and stream failures as unavailable media while rethrowing coroutine cancellation; otherwise an adjacent saved video can terminate the whole app.
 
+## Releases
+
+GitHub prereleases are created only by pushing an annotated `vX.Y.Z` tag. The tagged commit must declare the same `versionName`, its calculated Android `versionCode` (`1_500_000_000 + major * 10_000 + minor * 100 + patch`), and a curated `release-notes/vX.Y.Z.md` file. Do not use a low sequential version code: existing installs and the updater already compare against this high SemVer-derived range.
+
 ## Final Output
 
 Include a Conventional Commit message after each change. These commit messages feed the version changelog, so make the message user-facing.
