@@ -1,51 +1,112 @@
 # THEORIA CODEX AGENTS DOCUMENT
 
+## Communication
+
+Explain plans, questions, and completed work in plain system-level language. The user is strongest at holding how the whole app connects and flows, so focus on architecture, feature boundaries, runtime behavior, and user-visible consequences. Keep deep implementation detail available when it matters, but do not lead with it.
+
 ## ExecPlans
 
-When writing complex features or significant refactors, use an ExecPlan (as described in `PLANS.md` or the repo root `PLANS.md`) from design to implementation.
+For complex features or significant refactors, use an ExecPlan from design through implementation.
 
-## Development Details
+The current plan standard lives at `.docs/PLANS.md`. New ExecPlans should be standalone HTML files in `.docs/exec/<kebab-case-name>.html`. Older Markdown plans in `.docs/exec/execplans/` are historical unless explicitly reactivated.
 
-Whenever new important updates are made, this file (`AGENTS.md`) should be updated with any surprising files not apparent from the codebase. Additionally, the `README.md` file should be updated with any new features or changes the app receives that are not simple fixes, so that users can easily see what's new without having to read through the codebase.
+Keep active ExecPlans current while working: progress, decisions, surprises, validation evidence, and outcomes should reflect reality before the work is closed.
 
-## Surprising Files Added
+## Subagents
 
-- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/update/` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/test/java/com/theoriacodex/app/update/GitHubReleaseFeedClientTest.kt`: startup auto-update module (GitHub prerelease feed parsing, download, APK validation, installer launch orchestration, persisted pending state) plus parser contract tests.
-- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/.github/workflows/main-prerelease.yml`: CI release publisher contract for main-channel updater (release title/tag `v<major>.<minor>.<patch>` plus semver-derived Android `versionCode`, with updater backward-compatibility for legacy `main-vc<versionCode>-<sha>` tags and fixed `theoria-codex-main.apk` asset).
-- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/docs/execplans/maintainability-reliability-refactor-execplan.md`: living ExecPlan for persistence integrity, shared media policy, provider contract tests, opt-in provider health, and `TheoriaApp.kt` modularization.
-- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-sources/src/main/kotlin/com/theoriacodex/sources/common/` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-stubs/src/test/kotlin/com/theoriacodex/stubs/StubProviderContractTest.kt`: shared provider helper functions plus fixture-backed provider contract tests that protect search identity, media metadata, tag shape, paging, quick queries, resolve behavior, and typed failures without live network access.
-- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-sources/src/main/kotlin/com/theoriacodex/sources/health/` and the Gradle task `:core-sources:providerHealthCheck`: opt-in live provider health reporting. The task performs no live network work unless run with `-Ptheoria.liveProviders=true`, then writes `core-sources/build/reports/provider-health/provider-health.json`. Live reports include newest search, seeded search, autocomplete, trending, resolve, and media-metadata steps; add `-Ptheoria.liveSources.strict=true` to fail on hard live failures and `-Ptheoria.providerProbeCases=/absolute/path.json` to override seeds.
-- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/viewer/ViewerSessionCoordinator.kt` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/codex/CodexShareModels.kt`: app workflow policy extracted from `TheoriaApp.kt` for viewer lazy media/session merging and Codex import/export payload naming/parsing, with focused unit tests under matching `app/src/test` packages.
-- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/search/SourceFailureUiText.kt`: user-facing provider failure message policy for Search status chips and empty-state errors, covering auth, rate limit, network/blocked, parse-change, and unknown failures.
-- `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/app/src/main/java/com/theoriacodex/app/recents/` and `/Users/axel/Desktop/Code_Projects/Personal/Theoria Codex/core-data/src/main/kotlin/com/theoriacodex/data/repository/FileBackedRepositories.kt`: Recents tab UI plus persistent `recents_store.json` activity history for watched posts and applied searches; watched posts open Viewer as a static `ViewerStreamSource.RECENTS` list.
-- `/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex/.docs/exec/code-quality-hardening-and-modularization.html`: HTML ExecPlan for the next quality pass: green lint, atomic/tolerant persistence, shared media/download policy, `TheoriaApp.kt` workflow extraction, and test-lane modernization.
-- `/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex/app/src/main/java/com/theoriacodex/app/media/MediaRequestFactory.kt` and `/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex/app/src/main/java/com/theoriacodex/app/media/PostDownloadService.kt`: shared app media request/download policy for Search, Viewer, and app-level post downloads. Keep source request headers and filename rules here instead of duplicating them in screens.
-- `/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex/app/src/main/java/com/theoriacodex/app/ui/TheoriaAppGraph.kt`: app composition graph for constructing repositories, source clients, update services, credentials, and top-level coordinators outside `TheoriaApp.kt`.
-- `/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex/app/src/androidTest/java/com/theoriacodex/app/TheoriaAppSmokeTest.kt`: device/emulator-backed Compose smoke test for top-level app shell rendering; compile with `:app:compileDebugAndroidTestKotlin` and run with `:app:connectedDebugAndroidTest` when an Android target is attached.
-- `/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex/.docs/exec/live-source-routing-and-seeded-search-coverage.html`: HTML ExecPlan for opt-in live provider/source coverage: seeded searches, tag autocomplete/trending checks, app-level `SearchCoordinator` routing through `RealAdapterRegistry`, and media URL reachability with app source headers.
-- `/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex/app/src/test/java/com/theoriacodex/app/search/LiveSearchCoordinatorRouteTest.kt`: opt-in JVM live smoke for app-exposed source routes. It is skipped by default; run `./gradlew :app:testDebugUnitTest -Ptheoria.liveSources=true --tests '*LiveSearchCoordinatorRouteTest*'` to exercise `SearchCoordinator`, `RealAdapterRegistry`, seeded tags, autocomplete/trending, and media candidate byte-range reachability with app headers.
+Use the `$solar-orchestration` skill when independent exploration, implementation, testing, or review would materially improve a complex task. The primary agent retains responsibility for integration, validation, and the final result.
 
 ## Final Output
 
-When asking the user to verify implemented changes, output a checklist they can fill to make sure everything works as intended. Describe what they should see, how it should work, and keep in mind the possible checkboxes types (`[x]` is completed, `[~]` is partial, `[ ]` is not completed/not working). The user will then fill in the checklist and provide feedback on any issues they encounter, which can be used to further refine the implementation.
+Include a Conventional Commit message after each change. These commit messages feed the version changelog, so make the message user-facing.
 
-Occasionally, remind the developer of the commands they need to use to test the changes, lest they run the run command and forget to build before then. For example, if they need to run `npm run build` before `npm run start`, remind them of this in the final output instructions.
-
-Include a commit message after each change, following the Conventional Commits specifications. From these commit messages the version changelog gets created, so make the message user-facing.
-If it's a big change, follow this format:
+For a larger change, use this style:
 
 ```txt
-feat(update): add startup update prompt choices and sectioned changelog pipeline
+feat(recents): add durable watched and search history
 
-- feat(update): gate startup updates behind user choice (Yes/No/Remind Later)
-- feat(update): persist per-release prompt decisions (ignore until newer, 24h remind-later)
-- refactor(update): split updater flow into eligibility check and install phases
-- feat(update): parse GitHub release body into sectioned changelog blocks for in-app prompt
-- test(update): add updater decision/state-store/changelog parser coverage
-- feat(ci): generate release notes sections from commit metadata and publish via body_path
-- feat(ci): support multi-section changelog from Conventional Commit lines in commit body
-- fix(navigation): clamp bottom navbar sizing to prevent tiny rendering on some phones
-- fix(navigation): make top-level tab swipe detection more reliable in Explore
-- fix(search): move Explore apply+navigate to app scope to prevent canceled loads on slower devices
-- docs(readme): document updater prompt behavior and changelog contract
+- feat(recents): add watched/search activity history
+- feat(recents): reopen watched posts as a static Viewer stream
+- feat(search): record applied queries through SearchCoordinator
+- feat(codex): add JSON import/export for saved collections
+- fix(viewer): preserve lazy media resolution across multi-page posts
+- docs(readme): document current navigation and persistence model
 ```
+
+## Current App Shape
+
+The top-level app order is `Search`, `Recents`, `For You`, `Codex`, `Settings`. `TopLevelDestination.entries` in `app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt` drives both pager order and bottom-navigation order, so tab changes must update navigation, pager branches, icons, restore behavior, and README together.
+
+The app is local-first. Runtime app data is stored under the Android files directory in `theoria_codex`, with file-backed repositories for Codex, applied queries, Recents, Settings, Likes, cache snapshots, UI restore, tag suggestions, and update state.
+
+## Source Exposure
+
+The app currently exposes Pixiv, Gelbooru, NHentai, Iwara, Rule34 Paheal, Rule34 Video, Rule34 Gen, and Rule34.xxx after credentials are configured. `core-sources` also contains AIBooru support, but AIBooru is not currently exposed by the app UI.
+
+Credential-gated flows should degrade as typed provider failures or skipped live probes, not as crashes. User-facing source failure copy belongs in `app/src/main/java/com/theoriacodex/app/search/SourceFailureUiText.kt`.
+
+Live provider health is opt-in. Default Gradle test and build flows must stay deterministic and avoid live network requirements.
+
+## Persistence Files
+
+Important local files under `theoria_codex`:
+
+- `codex_store.json`
+- `query_store.json`
+- `recents_store.json`
+- `settings_store.json`
+- `likes_store.json`
+- `ui_restore_store.json`
+- `tag_suggestions.json`
+- `update_state.json`
+- `cache/thumbnails`
+- `cache/full`
+
+When adding or changing persistence, update file-backed and in-memory repositories together when both exist, add focused repository tests, and preserve tolerant startup behavior for missing or older JSON fields.
+
+## Release And Update Flow
+
+Main-channel release publishing lives in `.github/workflows/main-prerelease.yml`. It builds and signs a release APK, normalizes the asset to `theoria-codex-main.apk`, derives a semver tag from `versionName`, computes the release `versionCode`, and publishes sectioned release notes generated by `.github/scripts/generate_main_release_notes.py`.
+
+The app updater expects GitHub prereleases for the configured `main` channel. Keep the workflow contract, `RemoteUpdate` parsing, `GitHubReleaseFeedClient` tests, and updater UI behavior aligned when changing release metadata.
+
+Debug builds disable the updater and use a `.debug` application ID suffix plus `-debug` version-name suffix, so debug/release installs use separate storage.
+
+## Validation Commands
+
+Default deterministic validation:
+
+```sh
+./gradlew :core-domain:test :core-data:test :core-stubs:test :core-sources:test
+./gradlew :app:testDebugUnitTest
+./gradlew lintDebug
+```
+
+Build before installing or manually running:
+
+```sh
+./gradlew assembleDebug
+./gradlew installDebug
+```
+
+When app shell or Compose navigation changes:
+
+```sh
+./gradlew :app:compileDebugAndroidTestKotlin
+```
+
+Run the device-backed smoke only when an Android target is attached:
+
+```sh
+./gradlew :app:connectedDebugAndroidTest
+```
+
+Opt-in live provider/source checks:
+
+```sh
+./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true
+./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true -Ptheoria.liveSources.strict=true
+./gradlew :app:testDebugUnitTest -Ptheoria.liveSources=true --tests '*LiveSearchCoordinatorRouteTest*'
+```
+
+Use `-Ptheoria.providerProbeCases=/absolute/path.json` when live provider seeds need to be overridden.

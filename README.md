@@ -1,87 +1,152 @@
 ---
 created_at: 2026-02-24T18:16
-updated_at: 2026-07-04T20:33
+updated_at: 2026-07-06T00:00
 ---
 # Theoria Codex
 
-Theoria Codex is an Android-first, local-first, tag-driven art browser.
+Theoria Codex is an Android-first, local-first, tag-driven media browser and collection app. It is built around a small loop: search real sources, open posts in an immersive viewer, save or like what matters, revisit activity through Recents, and use liked/tag history to drive recommendations.
 
-The product spec lives at `./docs/TheoriaSpec.md`.
+The long-form product/spec artifact lives at `.docs/TheoriaSpec.md`. It is useful historical context, but this README is the current-facing map of the app because that spec predates several navigation and source-system changes.
 
-Recent updates:
-- Viewer multi-image posts now offer an overflow-menu toggle to invert horizontal page scrolling, and the choice persists across Viewer sessions while leaving single-image posts unchanged.
-- Recents replaces Explore as the second top-level tab, with persistent Watched history by default, applied Search history in v1, full-list Viewer reopening from watched posts, and independent clear actions.
-- Search provider status chips and empty-state errors now use clearer source-specific messages for missing account setup, expired auth, rate limits, blocked/unreachable providers, parser changes, and unknown failures.
-- Viewer session media-resolution policy and Codex import/export payload rules now live in focused app modules with unit tests, reducing the amount of workflow logic embedded directly in `TheoriaApp.kt`.
-- Live source health checks now cover seeded searches, tag autocomplete/trending, resolve behavior, and media metadata per source. An opt-in app smoke also runs real SearchCoordinator routes and media URL header checks before releases.
-- Settings can now show last-known provider health per source, and developers can run `./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true` to write a live JSON health report under `core-sources/build/reports/provider-health/`.
-- Search, Viewer, Codex, and Creator Profile now share media and copy-action selection, so post URLs, tag-copy output, thumbnails, playback candidates, and device downloads use the same source-aware rules.
-- Viewer multi-image posts now include a Gallery toggle that opens a two-column page grid and jumps back to full-view mode when a page is selected.
-- Codex long-press Search now asks which represented source to search, then opens a source-specific tag picker with Codex-frequency counts, active tag toggles, and random selection before applying the Search query.
-- Viewer now groups Info and Download under a top-right action menu, and animated media has a session playback-rate menu for video, GIF, and Pixiv ugoira playback.
-- Viewer double-tap seeking now shows a left/right dim seek overlay and stacks repeated taps, such as `+ 30s`, before the feedback fades.
-- Search, Creator Profile, and For You filters now include a two-handle animated duration slider. The range runs from `<5s` through 5-second steps to `>2m`, affects animated media only, and Settings > Storage & caching includes an opt-in switch to resolve unknown animation durations in the background.
-- Gelbooru viewer image loading is now progressive too: image posts render `sample_url` first in Viewer, then upgrade in place to the full asset while keeping downloads on the canonical file URL.
-- Pixiv viewer image loading is now progressive: static image posts render a fast page-sized Pixiv asset first, then upgrade in place to larger/original quality while keeping downloads on the highest-quality source URL.
-- Iwara is now available as a real videos-first source in Search and Unified mode, including public API-backed video search, tag autocomplete, best-effort trending tags, creator upload browsing, `iwara.tv/video/<id>` deep links, and lazy resolve before Viewer playback or device downloads.
-- Tags can now be favorited per recommendation profile and per source by long-pressing a tag inside the shared Viewer/Search/Codex tag menu. Search also adds a `List` button beside `Add` that opens a favorite-tag sheet, scoped to the current source or grouped by source in Unified mode, with `Add` and `Remove` actions that keep the sheet open.
-- Pixiv and Gelbooru posts now expose creator-profile browsing from Search, Codex, and Viewer action sheets. Tapping the creator name opens a dedicated creator page with upload pagination, browser-open support, and local `Animated only` / `Hide liked` / `Hide saved` filters, without replacing or mutating the current Search tab tag query.
-- Search and Codex long-press post menus now reuse the Viewer's interactive tag action grid, including include/exclude tag toggles and source tag-count chips, instead of a plain text tag list.
-- Search filters now include `Hide liked` and `Hide saved` visibility chips alongside `Animated only`, so result grids can locally exclude liked posts and any post already saved in any Codex without changing the underlying query.
-- Rule34 family sources are now available as real integrations: `rule34.paheal.net`, `rule34video.com`, and `rule34gen.com` are exposed directly, while `rule34.xxx` is available after adding a `user_id` and `api_key` in Settings. The rollout includes source logos, request headers, deep-link opening, and viewer-time full-video resolution for Rule34 video posts.
-- NHentai is now available as a real source in Search and Unified mode, including gallery-page parsing, tag suggestions, fixed browser-style request headers, language filter chips (English/Chinese/Japanese), a `Full Color` filter chip, direct ID-open search (`634609`), and gallery deep-link opening via `nhentai.net/g/<id>/` plus page URLs like `nhentai.net/g/<id>/1/`.
-- Codex long-press actions now include share/export to `.json` (title + source/post IDs), and Codex tab has an Import action to reconstruct codices from exported files.
-- The app now registers `.json` open intents so opening a Codex export file launches Theoria Codex and attempts import automatically.
-- Codex import now accepts provider-backed JSON URIs (including chat/file-share `content://` streams) in addition to public-folder files.
-- Codex names now auto-deduplicate on create/rename/import by appending numeric suffixes (` 2`, ` 3`, ...).
-- `For You` now supports profile-scoped blacklist controls: trash the current recommendation seed to hide it and refresh immediately, then manage/remove blacklisted tag sets from Settings.
-- Top-level tab swipe navigation now uses a pager-based host so horizontal drags reveal adjacent tabs while preserving vertical scroll behavior.
+## Current App Shape
 
-- The project includes five top-level tabs:
-  - Search
-  - Recents
-  - For You
-  - Codex
-  - Settings
+The app has five top-level tabs, in bottom-navigation and pager order:
 
-## Project Structure
+- `Search`: source-specific or Unified search, staged draft/apply behavior, include/exclude tags, source status chips, autocomplete/favorite tag sheets, direct NHentai gallery ID open, and local filters such as `Animated only`, animated duration range, `Hide liked`, and `Hide saved`.
+- `Recents`: local activity history for watched posts and applied searches. Watched posts reopen Viewer as a static recent-post stream; search history entries reapply their saved query in Search. Watched/search/all filters have independent clear actions.
+- `For You`: recommendation browsing from profile-scoped liked posts and source/tag affinity. Users can blacklist the current recommendation seed and manage blacklisted tag sets in Settings.
+- `Codex`: local saved collections. Codices can be created, renamed, reordered, sorted, deleted, downloaded, exported to JSON, imported from JSON, and used as a source-specific tag search launcher.
+- `Settings`: recommendation profiles, source enablement and Unified weights, source accounts, cache controls, provider health snapshots, changelog history, and developer scenario presets in debug builds.
 
-- `app`: Android shell, navigation, UI screens, secure credential storage, PKCE callback handling.
-- `core-domain`: immutable domain models, adapter contracts, orchestration/query utilities.
-- `core-data`: repository contracts and file-backed/in-memory implementations.
-- `core-sources`: real source integrations and runtime `RealAdapterRegistry`.
-- `core-stubs`: fixture-backed stub adapters for tests/dev scenarios.
-- `docs/execplans`: living execution plans.
+## Viewer And Media
+
+Viewer handles still images, videos, GIF-like animated media, Pixiv ugoira, and multi-page posts. Multi-page posts support full-view paging, a two-column Gallery mode, and a persisted scroll-direction toggle. Animated media supports playback-rate controls, scrub/seek affordances, and repeated double-tap seek feedback.
+
+Media policy is shared across Search, Viewer, Codex, Creator Profile, and downloads. Source-aware request headers, progressive image URLs, canonical download URLs, lazy media resolution, and filename rules live in app media helpers instead of being duplicated inside screens.
+
+## Sources
+
+The app currently exposes these real sources:
+
+- Pixiv
+- Gelbooru
+- NHentai
+- Iwara
+- Rule34 Paheal
+- Rule34 Video
+- Rule34 Gen
+- Rule34.xxx, after `user_id` and `api_key` are saved in Settings
+
+`core-sources` also contains an AIBooru adapter, but the app exposure policy does not currently include AIBooru in the UI. Source exposure is controlled by `app/src/main/java/com/theoriacodex/app/source/SourceMetadata.kt`; adapter construction is centralized in `core-sources/src/main/kotlin/com/theoriacodex/sources/RealAdapterRegistry.kt`.
+
+Credential-gated local and live checks use these environment variables when available:
+
+```sh
+THEORIA_PIXIV_ACCESS_TOKEN
+THEORIA_GELBOORU_USER_ID
+THEORIA_GELBOORU_API_KEY
+THEORIA_RULE34XXX_USER_ID
+THEORIA_RULE34XXX_API_KEY
+```
+
+## Architecture
+
+- `app`: Android Compose shell, top-level navigation, viewer/search/codex/settings screens, source account flows, deep links, update UI, and app-level coordinators.
+- `core-domain`: immutable domain models, source adapter contracts, query state, capability gates, unified search orchestration, and recommendation primitives.
+- `core-data`: repository contracts plus file-backed and in-memory implementations for Codex, Search state, Recents, Settings, Likes, cache snapshots, and UI restore.
+- `core-sources`: real source integrations, HTTP infrastructure, source helper policy, media MIME helpers, and opt-in live provider health tooling.
+- `core-stubs`: fixture-backed source adapters and provider contract tests for deterministic development and CI coverage.
+
+`TheoriaApp.kt` remains the main Compose workflow shell. Construction of repositories, source clients, credentials, update services, and coordinators is centralized in `app/src/main/java/com/theoriacodex/app/ui/TheoriaAppGraph.kt`.
+
+## Local Persistence
+
+Runtime state is local-first and stored under the app files directory in `theoria_codex`. Important files and folders include:
+
+- `codex_store.json`: codices, codex items, and saved post records.
+- `query_store.json`: applied queries and scroll offsets.
+- `recents_store.json`: watched posts, applied searches, and combined activity history.
+- `settings_store.json`: source settings, profiles, favorite tags, blacklists, viewer settings, provider health snapshots, and cache preferences.
+- `likes_store.json`: profile-scoped liked posts used by For You.
+- `ui_restore_store.json`: last selected tab, search scroll state, and viewer launch context.
+- `tag_suggestions.json`: learned/cached tag suggestions seeded from the bundled `tag_store.json` asset.
+- `update_state.json`: startup updater state, ignored/remind-later choices, pending install metadata, and changelog state.
+- `cache/thumbnails` and `cache/full`: local media cache folders.
+
+## Deep Links And Imports
+
+The Android manifest handles Pixiv auth callbacks, source post/profile links for supported providers, and JSON file/content URIs for Codex import. Codex export files contain the title plus source/post IDs, so imports reconstruct collections from source-backed post identities instead of copying the whole local cache.
+
+## Releases And Updates
+
+Release builds enable the startup updater. The updater reads GitHub prereleases for the `main` channel, expects the fixed APK asset name `theoria-codex-main.apk`, validates version metadata/signature, and launches Android's package installer. Debug builds disable the updater and use `applicationIdSuffix ".debug"` plus `versionNameSuffix "-debug"`, so debug and release installs have separate app storage.
+
+Main-channel release publishing lives in `.github/workflows/main-prerelease.yml`. It derives release tags from `versionName` as `v<major>.<minor>.<patch>`, computes an Android `versionCode`, signs the release APK, and generates sectioned release notes from Conventional Commit metadata with `.github/scripts/generate_main_release_notes.py`.
+
+## Documentation And Plans
+
+- `.docs/PLANS.md`: current ExecPlan authoring standard. New plans should be standalone HTML files in `.docs/exec/`.
+- `.docs/exec/*.html`: current executable planning documents for active/modern implementation work.
+- `.docs/exec/execplans/*.md`: older Markdown ExecPlans. Treat these mostly as decision logs unless intentionally resuming one.
+- `.docs/TheoriaSpec.md`: older product/spec artifact and reference material, not a fully current UI inventory.
 
 ## Local Development
 
-From the project root, run:
-    ./gradlew :core-domain:test :core-data:test :core-stubs:test :core-sources:test
-    ./gradlew testDebugUnitTest
-    ./gradlew assembleDebug
-    ./gradlew lintDebug
+From the project root, run the deterministic test lane:
 
-Build before running on device/emulator:
+```sh
+./gradlew :core-domain:test :core-data:test :core-stubs:test :core-sources:test
+./gradlew :app:testDebugUnitTest
+./gradlew lintDebug
+```
 
-    ./gradlew assembleDebug
-    ./gradlew installDebug
+Build before installing or running on a device/emulator:
 
-Debug builds now use `applicationIdSuffix ".debug"` and `versionNameSuffix "-debug"`, so debug and release can be installed side-by-side with separate app storage/data.
+```sh
+./gradlew assembleDebug
+./gradlew installDebug
+```
+
+Compile the device-backed Compose smoke test when the app shell changes:
+
+```sh
+./gradlew :app:compileDebugAndroidTestKotlin
+```
+
+Run it only when an Android target is attached:
+
+```sh
+./gradlew :app:connectedDebugAndroidTest
+```
 
 Opt-in live provider health report:
-    ./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true
+
+```sh
+./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true
+```
+
+Strict live provider health report:
+
+```sh
+./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true -Ptheoria.liveSources.strict=true
+```
 
 Opt-in live app source-route smoke:
-    ./gradlew :app:testDebugUnitTest -Ptheoria.liveSources=true --tests '*LiveSearchCoordinatorRouteTest*'
 
-Credential-gated live checks use these environment variables when available:
-    THEORIA_PIXIV_ACCESS_TOKEN
-    THEORIA_GELBOORU_USER_ID
-    THEORIA_GELBOORU_API_KEY
-    THEORIA_RULE34XXX_USER_ID
-    THEORIA_RULE34XXX_API_KEY
+```sh
+./gradlew :app:testDebugUnitTest -Ptheoria.liveSources=true --tests '*LiveSearchCoordinatorRouteTest*'
+```
+
+Override provider probe seeds when needed:
+
+```sh
+./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true -Ptheoria.providerProbeCases=/absolute/path/to/cases.json
+```
 
 Tag store update helper:
-    python3 scripts/update_tag_store.py --source PIXIV --input /path/to/tags.txt
-    python3 scripts/update_tag_store.py --source PIXIV --pixiv-tags-url
-    python3 scripts/update_tag_store.py --source PIXIV --pixiv-tags-html /path/to/pixiv-tags-page.html
+
+```sh
+python3 scripts/update_tag_store.py --source PIXIV --input /path/to/tags.txt
+python3 scripts/update_tag_store.py --source PIXIV --pixiv-tags-url
+python3 scripts/update_tag_store.py --source PIXIV --pixiv-tags-html /path/to/pixiv-tags-page.html
+```
