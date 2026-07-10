@@ -5,6 +5,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 class PostDownloadServiceTest {
@@ -66,6 +67,36 @@ class PostDownloadServiceTest {
         )
 
         assertEquals("pixiv_123.png", fileName)
+    }
+
+    @Test
+    fun `hitomi anime download keeps the single mp4 and source headers`() {
+        val video = ImageRef(
+            url = "https://streaming.gold-usergeneratedcontent.net/videos/example.mp4",
+            localPath = null,
+            mime = "video/mp4",
+        )
+        val post = samplePost(title = "Anime Episode", source = SourceKey.HITOMI).copy(
+            full = video,
+            media = listOf(video),
+            mediaCount = 1,
+        )
+
+        val candidate = postDownloadMediaCandidate(post)
+        assertNotNull(candidate)
+        assertEquals(video, candidate?.ref)
+        assertEquals("video/mp4", candidate?.ref?.mime)
+        assertEquals("https://hitomi.la/", candidate?.requestHeaders?.get("Referer"))
+        assertEquals(
+            "Anime_Episode.mp4",
+            PostDownloadService.buildDownloadFileName(
+                post = post,
+                media = video,
+                fallbackUrl = requireNotNull(video.url),
+                pageIndex = 0,
+                totalPages = 1,
+            ),
+        )
     }
 
     private fun samplePost(title: String?, source: SourceKey): Post {

@@ -988,7 +988,7 @@ class HitomiSourceAdapter(
         animated: Boolean,
         preview: Boolean,
     ): ImageRef {
-        val first = if (preview) {
+        val first = if (preview || animated) {
             candidates.firstOrNull { candidate -> candidate.format == HitomiMediaFormat.WEBP }
                 ?: candidates.firstOrNull { candidate -> candidate.format == HitomiMediaFormat.ORIGINAL }
                 ?: candidates.firstOrNull()

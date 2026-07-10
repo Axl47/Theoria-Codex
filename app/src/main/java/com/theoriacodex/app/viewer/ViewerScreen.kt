@@ -5,7 +5,6 @@ import android.content.Context
 import android.graphics.Movie
 import android.net.Uri
 import android.os.SystemClock
-import android.webkit.URLUtil
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
@@ -52,6 +51,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInBrowser
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
@@ -115,12 +115,15 @@ import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.theoriacodex.app.creator.CreatorProfileActionButton
 import com.theoriacodex.app.media.copyPostUrlToClipboard
+import com.theoriacodex.app.media.isAnimatedImageMediaRef
 import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isHttpNotFound
 import com.theoriacodex.app.media.isPixivUgoiraMedia
 import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.media.PostDownloadService
+import com.theoriacodex.app.media.PostMediaKind
+import com.theoriacodex.app.media.mediaKind
 import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.app.media.progressiveImageCandidates
 import com.theoriacodex.app.media.supportsProgressiveImageCandidates
@@ -137,12 +140,8 @@ import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
-import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
@@ -214,7 +213,7 @@ fun ViewerScreen(
     var playbackRate by remember { mutableStateOf(ViewerPlaybackRate.Normal) }
     var actionsMenuExpanded by remember { mutableStateOf(false) }
     var playbackSettingsExpanded by remember { mutableStateOf(false) }
-    var galleryVisible by remember { mutableStateOf(false) }
+    var mediaOverviewVisible by remember { mutableStateOf(false) }
     val pendingMediaJumpByPost = remember { mutableStateMapOf<Int, Int>() }
     val resolutionRequestedByPostId = remember { mutableStateMapOf<PostId, Boolean>() }
     val mediaRecoveryRequestedKeys = remember { mutableSetOf<String>() }
@@ -232,14 +231,14 @@ fun ViewerScreen(
     val canDownloadCurrentMedia = selectedCurrentMedia?.let { media ->
         (isPixivUgoira(selectedPost, media) && pixivUgoiraClient != null) || !media.url.isNullOrBlank()
     } == true
-    val selectedGalleryItems = remember(selectedPost) { viewerGalleryMediaItems(selectedPost) }
-    val galleryAvailable = selectedGalleryItems.size > 1 && !currentIsSeekableMedia
+    val selectedMediaOverviewItems = remember(selectedPost) { viewerMediaOverviewItems(selectedPost) }
+    val mediaOverviewAvailable = viewerMediaOverviewAvailable(selectedMediaOverviewItems)
 
     LaunchedEffect(posts, launchContext.queryHash, launchContext.startIndex) {
         pendingDismiss = false
         mediaPlaybackEnabled = true
         playbackRate = ViewerPlaybackRate.Normal
-        galleryVisible = false
+        mediaOverviewVisible = false
     }
 
     LaunchedEffect(currentIsSeekableMedia, viewerState.chromeVisible) {
@@ -252,9 +251,9 @@ fun ViewerScreen(
         }
     }
 
-    LaunchedEffect(galleryAvailable) {
-        if (!galleryAvailable) {
-            galleryVisible = false
+    LaunchedEffect(mediaOverviewAvailable) {
+        if (!mediaOverviewAvailable) {
+            mediaOverviewVisible = false
         }
     }
 
@@ -284,7 +283,7 @@ fun ViewerScreen(
         showInfoSheet = false
         actionsMenuExpanded = false
         playbackSettingsExpanded = false
-        galleryVisible = false
+        mediaOverviewVisible = false
         pendingDismiss = true
     }
 
@@ -296,8 +295,8 @@ fun ViewerScreen(
     }
 
     BackHandler(enabled = !pendingDismiss) {
-        if (galleryVisible) {
-            galleryVisible = false
+        if (mediaOverviewVisible) {
+            mediaOverviewVisible = false
             markInteraction()
         } else {
             requestDismissViewer()
@@ -329,7 +328,7 @@ fun ViewerScreen(
                 if (prefetchedVideoUrls[videoLocation] == true) return@forEach
                 if (!prefetchInFlightVideoUrls.add(videoLocation)) return@forEach
                 val didPrefetch = try {
-                    prefetchVideoMedia(
+                    prefetchViewerVideoMediaBounded(
                         context = context,
                         media = candidate.media,
                         headers = candidate.post.id.source.requestHeaders(),
@@ -359,7 +358,7 @@ fun ViewerScreen(
         if (prefetchedVideoUrls[location] == true) return@LaunchedEffect
         if (!prefetchInFlightVideoUrls.add(location)) return@LaunchedEffect
         val didCache = try {
-            prefetchVideoMedia(
+            prefetchViewerVideoMediaBounded(
                 context = context,
                 media = currentMedia,
                 headers = selectedPost.id.source.requestHeaders(),
@@ -432,7 +431,7 @@ fun ViewerScreen(
 
     LaunchedEffect(postPagerState.currentPage) {
         viewerState = viewerState.withIndex(postPagerState.currentPage)
-        galleryVisible = false
+        mediaOverviewVisible = false
         markInteraction()
     }
 
@@ -440,11 +439,11 @@ fun ViewerScreen(
         onVisiblePostChanged?.invoke(selectedPost)
     }
 
-    LaunchedEffect(viewerState.chromeVisible, interactionSerial, timelineInteractionActive, galleryVisible) {
-        if (viewerState.chromeVisible && !timelineInteractionActive && !galleryVisible) {
+    LaunchedEffect(viewerState.chromeVisible, interactionSerial, timelineInteractionActive, mediaOverviewVisible) {
+        if (viewerState.chromeVisible && !timelineInteractionActive && !mediaOverviewVisible) {
             val serial = interactionSerial
             delay(1500)
-            if (serial == interactionSerial && !timelineInteractionActive && !galleryVisible) {
+            if (serial == interactionSerial && !timelineInteractionActive && !mediaOverviewVisible) {
                 viewerState = viewerState.hideChrome()
             }
         }
@@ -461,15 +460,15 @@ fun ViewerScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        if (galleryVisible && galleryAvailable) {
-            ViewerGalleryGrid(
+        if (mediaOverviewVisible && mediaOverviewAvailable) {
+            ViewerMediaOverviewGrid(
                 post = selectedPost,
-                items = selectedGalleryItems,
+                items = selectedMediaOverviewItems,
                 selectedMediaIndex = selectedMediaIndex,
                 onMediaSelected = { mediaIndex ->
                     mediaIndexByPost[currentPostIndex] = mediaIndex
                     pendingMediaJumpByPost[currentPostIndex] = mediaIndex
-                    galleryVisible = false
+                    mediaOverviewVisible = false
                     markInteraction()
                 },
                 modifier = Modifier.fillMaxSize(),
@@ -976,11 +975,11 @@ fun ViewerScreen(
                     playbackSettingsExpanded = false
                     markInteraction()
                 },
-                galleryAvailable = galleryAvailable,
-                galleryVisible = galleryVisible,
-                onToggleGallery = {
-                    if (galleryAvailable) {
-                        galleryVisible = !galleryVisible
+                mediaOverviewAvailable = mediaOverviewAvailable,
+                mediaOverviewVisible = mediaOverviewVisible,
+                onToggleMediaOverview = {
+                    if (mediaOverviewAvailable) {
+                        mediaOverviewVisible = !mediaOverviewVisible
                         actionsMenuExpanded = false
                         playbackSettingsExpanded = false
                         markInteraction()
@@ -1127,20 +1126,20 @@ fun ViewerScreen(
 }
 
 @Composable
-private fun ViewerGalleryGrid(
+private fun ViewerMediaOverviewGrid(
     post: Post,
-    items: List<ViewerGalleryMediaItem>,
+    items: List<ViewerMediaOverviewItem>,
     selectedMediaIndex: Int,
     onMediaSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val selectedGalleryIndex = remember(items, selectedMediaIndex) {
+    val selectedOverviewIndex = remember(items, selectedMediaIndex) {
         items.indexOfFirst { item -> item.mediaIndex == selectedMediaIndex }
             .coerceAtLeast(0)
     }
     val gridState = rememberLazyGridState(
-        initialFirstVisibleItemIndex = selectedGalleryIndex,
+        initialFirstVisibleItemIndex = selectedOverviewIndex,
     )
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
@@ -1156,15 +1155,13 @@ private fun ViewerGalleryGrid(
             items = items,
             key = { item -> item.mediaIndex },
         ) { item ->
-            val thumbnailUrl = remember(post, item.media) {
-                viewerPrefetchImageLocation(post, item.media)
-            }
-            val imageModel = remember(context, thumbnailUrl, post.id.source) {
-                thumbnailUrl?.let { url ->
+            val imageModel = remember(context, item.posterLocation, post.id.source) {
+                item.posterLocation?.let { url ->
                     buildViewerImageRequest(
                         context = context,
                         url = url,
                         sourceKey = post.id.source,
+                        staticAnimatedWebPFrame = true,
                     )
                 }
             }
@@ -1186,7 +1183,7 @@ private fun ViewerGalleryGrid(
                 if (imageModel != null) {
                     AsyncImage(
                         model = imageModel,
-                        contentDescription = "Page ${item.mediaIndex + 1}",
+                        contentDescription = "Media ${item.mediaIndex + 1}: ${item.kind.accessibilityLabel}",
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(4.dp),
@@ -1194,9 +1191,10 @@ private fun ViewerGalleryGrid(
                     )
                 } else {
                     Text(
-                        text = "Unavailable",
+                        text = "Preview unavailable",
                         color = Color.White,
                         style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
                     )
                 }
                 Text(
@@ -1208,6 +1206,29 @@ private fun ViewerGalleryGrid(
                         .background(Color.Black.copy(alpha = 0.62f))
                         .padding(horizontal = 6.dp, vertical = 3.dp),
                 )
+                item.kind.badgeLabel?.let { label ->
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .background(Color.Black.copy(alpha = 0.72f))
+                            .padding(horizontal = 7.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (item.kind == ViewerMediaOverviewKind.VIDEO) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = Color.White,
+                            )
+                        }
+                        Text(
+                            text = label,
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                }
             }
         }
     }
@@ -1353,7 +1374,7 @@ private fun ViewerVideoPlayer(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val playbackLocation = remember(media.localPath, media.url, media.mime) {
-        resolveViewerVideoLocation(context, media)
+        resolveViewerVideoPlaybackLocation(context, media)
     }
     if (playbackLocation.isNullOrBlank()) {
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
@@ -1829,149 +1850,18 @@ private suspend fun loadGifMovie(
     Movie.decodeByteArray(bytes, 0, bytes.size)
 }
 
-private suspend fun prefetchVideoMedia(
-    context: Context,
-    media: ImageRef,
-    headers: Map<String, String>,
-): Boolean = nonFatalMediaPrefetch {
-    withContext(Dispatchers.IO) {
-        val location = media.localPath ?: media.url ?: return@withContext false
-        when {
-            location.startsWith("http://", ignoreCase = true) || location.startsWith("https://", ignoreCase = true) -> {
-                val output = viewerVideoCacheFile(context, location, media.mime)
-                if (output.exists() && output.length() > 0L) {
-                    output.setLastModified(System.currentTimeMillis())
-                    trimViewerVideoCache(context)
-                    return@withContext true
-                }
-                val connection = URL(location).openConnection() as? HttpURLConnection ?: return@withContext false
-                val temp = File(output.absolutePath + ".part")
-                try {
-                    connection.instanceFollowRedirects = true
-                    connection.connectTimeout = 12_000
-                    connection.readTimeout = 24_000
-                    headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
-                    val statusCode = connection.responseCode
-                    if (statusCode !in 200..299) {
-                        false
-                    } else {
-                        connection.inputStream.use { input ->
-                            output.parentFile?.mkdirs()
-                            temp.outputStream().use { out ->
-                                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                                while (true) {
-                                    currentCoroutineContext().ensureActive()
-                                    val count = input.read(buffer)
-                                    if (count <= 0) break
-                                    out.write(buffer, 0, count)
-                                }
-                            }
-                        }
-                        if (temp.length() <= 0L) {
-                            temp.delete()
-                            false
-                        } else {
-                            if (output.exists()) {
-                                output.delete()
-                            }
-                            val renamed = temp.renameTo(output)
-                            if (renamed) {
-                                trimViewerVideoCache(context)
-                            }
-                            renamed
-                        }
-                    }
-                } finally {
-                    connection.disconnect()
-                    if (temp.exists() && (!output.exists() || output.length() == 0L)) {
-                        temp.delete()
-                    }
-                }
-            }
-
-            location.startsWith("content://", ignoreCase = true) -> true
-            else -> File(location).exists()
-        }
-    }
-}
-
-internal suspend fun nonFatalMediaPrefetch(block: suspend () -> Boolean): Boolean {
-    return try {
-        block()
-    } catch (error: CancellationException) {
-        throw error
-    } catch (_: Exception) {
-        false
-    }
-}
-
-private fun trimViewerVideoCache(context: Context) {
-    val directory = File(context.cacheDir, "theoria_codex/viewer/videos")
-    val files = directory.listFiles()
-        ?.filter { it.isFile && !it.name.endsWith(".part") }
-        ?.toMutableList()
-        ?: return
-    var totalBytes = files.sumOf { it.length() }
-    var fileCount = files.size
-    if (fileCount <= VIEWER_VIDEO_CACHE_MAX_FILES && totalBytes <= VIEWER_VIDEO_CACHE_MAX_BYTES) {
-        return
-    }
-    files.sortBy { it.lastModified() }
-    for (file in files) {
-        if (fileCount <= VIEWER_VIDEO_CACHE_MAX_FILES && totalBytes <= VIEWER_VIDEO_CACHE_MAX_BYTES) {
-            break
-        }
-        val bytes = file.length()
-        if (file.delete()) {
-            fileCount -= 1
-            totalBytes = (totalBytes - bytes).coerceAtLeast(0L)
-        }
-    }
-}
-
-private fun resolveViewerVideoLocation(context: Context, media: ImageRef): String? {
-    val local = media.localPath?.takeIf { it.isNotBlank() }
-    if (local != null) return local
-
-    val remoteUrl = media.url?.takeIf { it.isNotBlank() } ?: return null
-    if (!remoteUrl.startsWith("http://", ignoreCase = true) &&
-        !remoteUrl.startsWith("https://", ignoreCase = true)
-    ) {
-        return remoteUrl
-    }
-
-    val cached = viewerVideoCacheFile(context, remoteUrl, media.mime)
-    return if (cached.exists() && cached.length() > 0L) cached.absolutePath else remoteUrl
-}
-
-private fun viewerVideoCacheFile(context: Context, remoteUrl: String, mime: String?): File {
-    val guessedName = URLUtil.guessFileName(remoteUrl, null, mime)
-    val extension = guessedName.substringAfterLast('.', "").ifBlank { "bin" }
-    val key = sha256(remoteUrl)
-    val directory = File(context.cacheDir, "theoria_codex/viewer/videos")
-    return File(directory, "$key.$extension")
-}
-
-private fun sha256(value: String): String {
-    val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
-    return buildString(digest.size * 2) {
-        digest.forEach { byte ->
-            append(((byte.toInt() ushr 4) and 0xF).toString(16))
-            append((byte.toInt() and 0xF).toString(16))
-        }
-    }
-}
-
 private fun buildViewerImageRequest(
     context: Context,
     url: String,
     sourceKey: SourceKey,
+    staticAnimatedWebPFrame: Boolean = false,
 ): ImageRequest {
     return MediaRequestFactory.imageRequest(
         context = context,
         url = url,
         sourceKey = sourceKey,
         crossfade = true,
+        staticAnimatedWebPFrame = staticAnimatedWebPFrame,
     )
 }
 
@@ -2109,21 +1999,118 @@ private fun viewerMediaItems(post: Post): List<ImageRef> {
     return postMediaItems(post)
 }
 
-internal data class ViewerGalleryMediaItem(
+internal enum class ViewerMediaOverviewKind(
+    val badgeLabel: String?,
+    val accessibilityLabel: String,
+) {
+    STILL_IMAGE(badgeLabel = null, accessibilityLabel = "still image"),
+    ANIMATED_IMAGE(badgeLabel = "Animated", accessibilityLabel = "animated image"),
+    GIF(badgeLabel = "GIF", accessibilityLabel = "GIF"),
+    UGOIRA(badgeLabel = "Ugoira", accessibilityLabel = "Ugoira animation"),
+    VIDEO(badgeLabel = "Video", accessibilityLabel = "video"),
+    UNKNOWN(badgeLabel = "Media", accessibilityLabel = "media"),
+}
+
+internal data class ViewerMediaOverviewItem(
     val mediaIndex: Int,
     val media: ImageRef,
+    val kind: ViewerMediaOverviewKind,
+    val posterLocation: String?,
 )
 
-internal fun viewerGalleryMediaItems(post: Post): List<ViewerGalleryMediaItem> {
-    return viewerMediaItems(post).mapIndexedNotNull { index, media ->
-        if (isVideoMediaRef(media) || isGifMediaRef(media) || isPixivUgoira(post, media)) {
-            null
-        } else if (viewerImageCandidates(post, media).isEmpty()) {
-            null
-        } else {
-            ViewerGalleryMediaItem(mediaIndex = index, media = media)
-        }
+internal fun viewerMediaOverviewItems(post: Post): List<ViewerMediaOverviewItem> {
+    return viewerMediaItems(post).mapIndexed { index, media ->
+        val kind = viewerMediaOverviewKind(post, media)
+        ViewerMediaOverviewItem(
+            mediaIndex = index,
+            media = media,
+            kind = kind,
+            posterLocation = viewerMediaOverviewPosterLocation(post, media, kind),
+        )
     }
+}
+
+internal fun viewerMediaOverviewAvailable(items: List<ViewerMediaOverviewItem>): Boolean {
+    return items.size > 1
+}
+
+internal fun viewerMediaOverviewKind(post: Post, media: ImageRef): ViewerMediaOverviewKind {
+    if (isPixivUgoira(post, media)) return ViewerMediaOverviewKind.UGOIRA
+    if (isVideoMediaRef(media)) return ViewerMediaOverviewKind.VIDEO
+    if (isGifMediaRef(media)) return ViewerMediaOverviewKind.GIF
+    if (isAnimatedImageMediaRef(media)) return ViewerMediaOverviewKind.ANIMATED_IMAGE
+    return when (mediaKind(media)) {
+        PostMediaKind.IMAGE -> ViewerMediaOverviewKind.STILL_IMAGE
+        PostMediaKind.VIDEO -> ViewerMediaOverviewKind.VIDEO
+        PostMediaKind.UGOIRA -> ViewerMediaOverviewKind.UGOIRA
+        PostMediaKind.UNKNOWN -> ViewerMediaOverviewKind.UNKNOWN
+    }
+}
+
+internal fun viewerMediaOverviewPosterLocation(
+    post: Post,
+    media: ImageRef,
+    kind: ViewerMediaOverviewKind = viewerMediaOverviewKind(post, media),
+): String? {
+    val mediaPoster = when (kind) {
+        ViewerMediaOverviewKind.STILL_IMAGE -> {
+            if (post.id.source == SourceKey.HITOMI) {
+                overviewWebPImageLocation(media) ?: viewerPrefetchImageLocation(post, media)
+            } else {
+                viewerPrefetchImageLocation(post, media)
+            }
+        }
+        ViewerMediaOverviewKind.ANIMATED_IMAGE -> staticOverviewImageLocation(media)
+        ViewerMediaOverviewKind.GIF,
+        ViewerMediaOverviewKind.UGOIRA,
+        ViewerMediaOverviewKind.VIDEO,
+        ViewerMediaOverviewKind.UNKNOWN,
+        -> null
+    }
+    if (mediaPoster != null) return mediaPoster
+    if (media == post.preview) return null
+    return staticOverviewImageLocation(post.preview)
+}
+
+private fun staticOverviewImageLocation(ref: ImageRef): String? {
+    if (mediaKind(ref) != PostMediaKind.IMAGE || isGifMediaRef(ref)) return null
+    val locations = buildList {
+        ref.localPath?.takeIf(String::isNotBlank)?.let(::add)
+        addAll(ref.progressiveUrls.filter(String::isNotBlank))
+        ref.url?.takeIf(String::isNotBlank)?.let(::add)
+    }.distinct()
+    if (!ref.isAnimated) return locations.firstOrNull()
+    return locations.firstOrNull { location -> isOverviewWebPImageLocation(ref, location) }
+        ?: locations.firstOrNull(::isStaticOverviewImageLocation)
+}
+
+private fun overviewWebPImageLocation(ref: ImageRef): String? {
+    val locations = buildList {
+        ref.localPath?.takeIf(String::isNotBlank)?.let(::add)
+        addAll(ref.progressiveUrls.filter(String::isNotBlank))
+        ref.url?.takeIf(String::isNotBlank)?.let(::add)
+    }.distinct()
+    return locations.firstOrNull { location -> isOverviewWebPImageLocation(ref, location) }
+}
+
+private fun isOverviewWebPImageLocation(ref: ImageRef, location: String): Boolean {
+    val extension = location
+        .substringBefore('?')
+        .substringBefore('#')
+        .substringAfterLast('.', missingDelimiterValue = "")
+        .lowercase()
+    if (extension == "webp") return true
+    val normalizedMime = ref.mime?.substringBefore(';')?.trim()?.lowercase()
+    return normalizedMime == "image/webp" && (location == ref.localPath || location == ref.url)
+}
+
+private fun isStaticOverviewImageLocation(location: String): Boolean {
+    val extension = location
+        .substringBefore('?')
+        .substringBefore('#')
+        .substringAfterLast('.', missingDelimiterValue = "")
+        .lowercase()
+    return extension in STATIC_OVERVIEW_IMAGE_EXTENSIONS
 }
 
 internal fun viewerImageCandidates(post: Post, media: ImageRef): List<String> {
@@ -2155,6 +2142,16 @@ private fun isPixivUgoira(post: Post, media: ImageRef): Boolean {
     return isPixivUgoiraMedia(post, media)
 }
 
+private val STATIC_OVERVIEW_IMAGE_EXTENSIONS = setOf(
+    "avif",
+    "bmp",
+    "heic",
+    "heif",
+    "jpeg",
+    "jpg",
+    "png",
+)
+
 private const val VIEWER_PREFETCH_LEFT_COUNT = 3
 private const val VIEWER_PREFETCH_RIGHT_COUNT = 3
 private const val VIEWER_PAGINATION_PREFETCH_RATIO = 0.8f
@@ -2163,8 +2160,6 @@ private const val VIEWER_HORIZONTAL_SWIPE_WIDTH_RATIO = 0.12f
 private const val VIEWER_HORIZONTAL_SWIPE_SLOP_FRACTION = 0.35f
 private const val VIEWER_HORIZONTAL_SWIPE_AXIS_RATIO = 1.25f
 private const val GIF_FALLBACK_DURATION_MS = 1000L
-private const val VIEWER_VIDEO_CACHE_MAX_FILES = 80
-private const val VIEWER_VIDEO_CACHE_MAX_BYTES = 750L * 1024L * 1024L
 private const val MIN_PLAYBACK_RATE = 0.1f
 
 private enum class ViewerPlaybackRate(
@@ -2194,9 +2189,9 @@ private fun ViewerChrome(
     playbackSettingsEnabled: Boolean,
     playbackRate: ViewerPlaybackRate,
     onPlaybackRateSelected: (ViewerPlaybackRate) -> Unit,
-    galleryAvailable: Boolean,
-    galleryVisible: Boolean,
-    onToggleGallery: () -> Unit,
+    mediaOverviewAvailable: Boolean,
+    mediaOverviewVisible: Boolean,
+    onToggleMediaOverview: () -> Unit,
     invertScrollOptionVisible: Boolean,
     invertMultiImageScrollDirection: Boolean,
     onInvertMultiImageScrollDirectionChange: (Boolean) -> Unit,
@@ -2254,25 +2249,29 @@ private fun ViewerChrome(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                if (galleryAvailable) {
-                    IconButton(onClick = onToggleGallery) {
+                if (mediaOverviewAvailable) {
+                    IconButton(onClick = onToggleMediaOverview) {
                         Icon(
                             imageVector = Icons.Default.Collections,
-                            contentDescription = if (galleryVisible) "Close gallery" else "Open gallery",
-                            tint = if (galleryVisible) {
+                            contentDescription = if (mediaOverviewVisible) {
+                                "Close media overview"
+                            } else {
+                                "Open media overview"
+                            },
+                            tint = if (mediaOverviewVisible) {
                                 MaterialTheme.colorScheme.primary
                             } else {
                                 MaterialTheme.colorScheme.onSurface
                             },
                         )
                     }
-                } else {
+                }
+                if (playbackSettingsEnabled) {
                     Box {
                         IconButton(
                             onClick = {
                                 onPlaybackSettingsExpandedChange(!playbackSettingsExpanded)
                             },
-                            enabled = playbackSettingsEnabled,
                         ) {
                             Icon(Icons.Default.Settings, contentDescription = "Playback settings")
                         }

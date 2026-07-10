@@ -392,6 +392,7 @@ class HitomiSourceAdapterTest {
         assertTrue(animatedCard.media.isEmpty())
         assertNull(animatedCard.full)
         assertTrue(animatedCard.preview.url?.contains("/webp/") == true)
+        assertTrue(animatedCard.preview.isAnimated)
         assertTrue(animatedCard.taxonomy.any { it.facet == SearchFacet.SERIES && it.value == "the idolmaster" })
         assertTrue(animatedCard.taxonomy.any { it.facet == SearchFacet.TAG && it.sourceNamespace == "female" })
         assertEquals(
@@ -407,8 +408,15 @@ class HitomiSourceAdapterTest {
         assertEquals(44, resolved.media.size)
         assertEquals(44, resolved.mediaCount)
         assertTrue(resolved.preview.url?.contains("/webp/") == true)
-        assertTrue(resolved.full?.url?.contains("/avif/") == true)
+        assertTrue(resolved.full?.url?.contains("/webp/") == true)
+        assertEquals("image/webp", resolved.full?.mime)
         assertTrue(resolved.media.all { it.isAnimated })
+        assertTrue(resolved.media.all { it.url?.contains("/webp/") == true })
+        assertTrue(resolved.media.all { media ->
+            media.progressiveUrls.firstOrNull()?.contains("/webp/") == true &&
+                media.progressiveUrls.any { it.contains("/avif/") } &&
+                media.progressiveUrls.any { it.contains("/original/") }
+        })
         assertEquals(46, mediaCalls.get())
 
         val anime = requireNotNull(adapter.resolvePost(PostId(SourceKey.HITOMI, "7231")))

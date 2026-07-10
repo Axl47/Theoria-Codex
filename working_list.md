@@ -1,18 +1,23 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T09:27:00-04:00
+updated_at: 2026-07-10T09:49:18-04:00
 ---
 # Working List
 
 ## Current Task: Implement Hitomi Source, Faceted Search, And Mixed Media
 
-### Pending
-- [ ] Phase 7: Add live health and app smoke coverage, complete available device acceptance, update README/AGENTS/ExecPlan, run broad validation; commit
-
 ### In Progress
-- [ ] Phase 6: Generalize the Viewer media overview and support animated WebP/anime video; verify media/viewer/download/device-test compilation; commit
+- [ ] Phase 7: Add cancellation-safe targeted Hitomi health and app smoke coverage, expose only after the live gate, complete available device acceptance, update README/AGENTS/ExecPlan, run broad validation; commit
 
 ### Done
+- [x] Phase 6: Generalize the Viewer Media Overview and support animated WebP/anime video (`./gradlew :core-domain:test :core-data:test :core-sources:test :core-stubs:test :app:testDebugUnitTest :app:processDebugManifest :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin :app:assembleDebug --rerun-tasks`: 435 tests, 0 failures, 2 opt-in live skips)
+  - [x] Classify explicit animated images independently from videos and preserve exact ordered media indices
+  - [x] Render still, animated, GIF, Ugoira, and video poster/badge tiles without overview autoplay
+  - [x] Decode animated WebP natively on API 28+ and through a bounded, interruptible API 26/27 fallback
+  - [x] Decode Hitomi WebP overview posters as separately cached static first frames on every API
+  - [x] Cache only complete videos up to 16 MiB and leave large/partial MP4s on Media3 ranged streaming
+  - [x] Preserve selected gallery page index/count and save Hitomi anime once as MP4 with source headers
+  - [x] Compile the generated two-frame WebP instrumentation test; runtime execution remains unavailable because no adb device, emulator command, or Android system image is installed
 - [x] Phase 5: Add creator browsing, typed post actions, and Hitomi deep links (`./gradlew :core-domain:test :core-data:test :core-sources:test :core-stubs:test :app:testDebugUnitTest :app:processDebugManifest :app:compileDebugKotlin --rerun-tasks`: 421 tests, 0 failures, 2 opt-in live skips)
   - [x] Delegate paginated Hitomi Creator Profile streams to exact typed artist search and preserve every distinct valid artist
   - [x] Share one canonical Unicode-safe Hitomi artist identity contract across provider metadata, persistence-facing UI admission, and deep links

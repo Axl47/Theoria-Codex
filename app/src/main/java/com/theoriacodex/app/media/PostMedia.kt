@@ -19,7 +19,7 @@ enum class PostMediaSelectionReason {
     EXPLICIT_MEDIA,
     FULL_MEDIA,
     PREVIEW_MEDIA,
-    FULL_GIF,
+    FULL_ANIMATED_IMAGE,
     PROGRESSIVE_IMAGE,
 }
 
@@ -111,6 +111,10 @@ fun mediaKind(ref: ImageRef): PostMediaKind {
 
 fun isVideoMediaRef(ref: ImageRef): Boolean = mediaKind(ref) == PostMediaKind.VIDEO
 
+fun isAnimatedImageMediaRef(ref: ImageRef): Boolean {
+    return mediaKind(ref) == PostMediaKind.IMAGE && (ref.isAnimated || isGifMediaRef(ref))
+}
+
 fun isGifMediaRef(ref: ImageRef): Boolean {
     val normalizedMime = ref.mime?.trim()?.lowercase()
     if (normalizedMime == "image/gif") return true
@@ -152,7 +156,7 @@ fun isAnimatedPost(post: Post): Boolean {
     return refs.any { ref ->
         when (mediaKind(ref)) {
             PostMediaKind.UGOIRA, PostMediaKind.VIDEO -> true
-            PostMediaKind.IMAGE -> isGifMediaRef(ref)
+            PostMediaKind.IMAGE -> isAnimatedImageMediaRef(ref)
             PostMediaKind.UNKNOWN -> false
         }
     }
@@ -173,12 +177,12 @@ fun postMediaItems(post: Post): List<ImageRef> {
 
 fun postPreviewImageCandidate(post: Post): PostMediaCandidate? {
     val full = post.full
-    if (full != null && isGifMediaRef(full)) {
+    if (full != null && isAnimatedImageMediaRef(full)) {
         full.url?.takeIf(String::isNotBlank)?.let { url ->
             return post.candidate(
                 ref = full,
                 url = url,
-                reason = PostMediaSelectionReason.FULL_GIF,
+                reason = PostMediaSelectionReason.FULL_ANIMATED_IMAGE,
             )
         }
     }

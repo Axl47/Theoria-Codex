@@ -43,6 +43,41 @@ class PostMediaTest {
     }
 
     @Test
+    fun `animated image metadata distinguishes animated and static webp`() {
+        val animatedWebP = ImageRef(
+            url = "https://example.test/animated.webp",
+            localPath = null,
+            mime = "image/webp",
+            isAnimated = true,
+        )
+        val staticWebP = animatedWebP.copy(
+            url = "https://example.test/static.webp",
+            isAnimated = false,
+        )
+        val animatedPost = samplePost(
+            source = SourceKey.HITOMI,
+            preview = staticWebP,
+            full = animatedWebP,
+        )
+        val staticPost = animatedPost.copy(
+            full = staticWebP,
+            media = listOf(staticWebP),
+        )
+
+        assertTrue(isAnimatedImageMediaRef(animatedWebP))
+        assertFalse(isGifMediaRef(animatedWebP))
+        assertFalse(isVideoMediaRef(animatedWebP))
+        assertFalse(isAnimatedImageMediaRef(staticWebP))
+        assertTrue(isAnimatedPost(animatedPost))
+        assertFalse(isAnimatedPost(staticPost))
+        assertEquals(animatedWebP, postPreviewImageCandidate(animatedPost)?.ref)
+        assertEquals(
+            PostMediaSelectionReason.FULL_ANIMATED_IMAGE,
+            postPreviewImageCandidate(animatedPost)?.reason,
+        )
+    }
+
+    @Test
     fun `pixiv ugoira detection requires pixiv source`() {
         val pixivUgoira = samplePost(
             source = SourceKey.PIXIV,
@@ -82,7 +117,7 @@ class PostMediaTest {
     }
 
     @Test
-    fun `preview image candidate prefers animated full gifs before static preview`() {
+    fun `preview image candidate prefers animated full images before static preview`() {
         val post = samplePost(
             source = SourceKey.GELBOORU,
             preview = ImageRef(url = "https://gelbooru.com/preview.jpg", localPath = null, mime = "image/jpeg"),
@@ -92,7 +127,7 @@ class PostMediaTest {
         val candidate = postPreviewImageCandidate(post)
 
         assertEquals("https://gelbooru.com/file.gif", candidate?.url)
-        assertEquals(PostMediaSelectionReason.FULL_GIF, candidate?.reason)
+        assertEquals(PostMediaSelectionReason.FULL_ANIMATED_IMAGE, candidate?.reason)
         assertEquals(PostMediaKind.IMAGE, candidate?.kind)
     }
 

@@ -18,12 +18,12 @@ class ViewerScreenImagePipelineTest {
     @Test
     fun `viewer media prefetch treats tls and socket failures as unavailable`() = runTest {
         assertFalse(
-            nonFatalMediaPrefetch {
+            runNonFatalViewerVideoPrefetch {
                 throw SSLPeerUnverifiedException("video-cdn4 hostname mismatch")
             },
         )
         assertFalse(
-            nonFatalMediaPrefetch {
+            runNonFatalViewerVideoPrefetch {
                 throw SocketException("connection aborted")
             },
         )
@@ -33,7 +33,7 @@ class ViewerScreenImagePipelineTest {
     fun `viewer media prefetch preserves coroutine cancellation`() = runTest {
         var cancelled = false
         try {
-            nonFatalMediaPrefetch { throw CancellationException("stop") }
+            runNonFatalViewerVideoPrefetch { throw CancellationException("stop") }
         } catch (_: CancellationException) {
             cancelled = true
         }
@@ -205,81 +205,143 @@ class ViewerScreenImagePipelineTest {
     }
 
     @Test
-    fun `viewer gallery media keeps image media indices`() {
-        val media = listOf(
-            imageRef("https://example.com/1.jpg"),
-            imageRef("https://example.com/2.jpg"),
-            imageRef("https://example.com/3.jpg"),
+    fun `media overview maps every ordered media item with exact indices and kinds`() {
+        val preview = imageRef("https://example.com/preview.jpg")
+        val staticImage = imageRef("https://example.com/1.jpg")
+        val animatedImage = ImageRef(
+            url = "https://example.com/2.webp",
+            localPath = null,
+            mime = "image/webp",
+            progressiveUrls = listOf(
+                "https://example.com/2.webp",
+                "https://example.com/2.avif",
+            ),
+            isAnimated = true,
         )
-        val post = samplePost(
-            sourceKey = SourceKey.NHENTAI,
-            preview = imageRef("https://example.com/preview.jpg"),
-            full = media.first(),
-            media = media,
-        )
-
-        assertEquals(
-            listOf(0, 1, 2),
-            viewerGalleryMediaItems(post).map { it.mediaIndex },
-        )
-    }
-
-    @Test
-    fun `viewer gallery excludes seekable media`() {
-        val staticOne = imageRef("https://example.com/1.jpg")
         val gif = ImageRef(
-            url = "https://example.com/2.gif",
+            url = "https://example.com/3.gif",
             localPath = null,
             mime = "image/gif",
-        )
-        val video = ImageRef(
-            url = "https://example.com/3.mp4",
-            localPath = null,
-            mime = "video/mp4",
         )
         val ugoira = ImageRef(
             url = "https://example.com/4.zip",
             localPath = null,
             mime = PIXIV_UGOIRA_MIME,
         )
-        val staticTwo = imageRef("https://example.com/5.jpg")
+        val video = ImageRef(
+            url = "https://example.com/5.mp4",
+            localPath = null,
+            mime = "video/mp4",
+        )
         val post = samplePost(
             sourceKey = SourceKey.PIXIV,
-            preview = imageRef("https://example.com/preview.jpg"),
+            preview = preview,
             full = null,
-            media = listOf(staticOne, gif, video, ugoira, staticTwo),
+            media = listOf(staticImage, animatedImage, gif, ugoira, video),
         )
+        val items = viewerMediaOverviewItems(post)
 
+        assertEquals(listOf(0, 1, 2, 3, 4), items.map { it.mediaIndex })
         assertEquals(
-            listOf(0, 4),
-            viewerGalleryMediaItems(post).map { it.mediaIndex },
+            listOf(
+                ViewerMediaOverviewKind.STILL_IMAGE,
+                ViewerMediaOverviewKind.ANIMATED_IMAGE,
+                ViewerMediaOverviewKind.GIF,
+                ViewerMediaOverviewKind.UGOIRA,
+                ViewerMediaOverviewKind.VIDEO,
+            ),
+            items.map { it.kind },
+        )
+        assertEquals(
+            listOf(
+                staticImage.url,
+                "https://example.com/2.webp",
+                preview.url,
+                preview.url,
+                preview.url,
+            ),
+            items.map { it.posterLocation },
         )
     }
 
     @Test
-    fun `viewer gallery requires more than one image`() {
-        val singleImagePost = samplePost(
+    fun `media overview selects animated webp for static first frame decoding`() {
+        val animatedOnly = ImageRef(
+            url = "https://example.com/page.webp",
+            localPath = null,
+            mime = "image/webp",
+            progressiveUrls = listOf(
+                "https://example.com/page.webp",
+                "https://mirror.example.com/page.webp",
+            ),
+            isAnimated = true,
+        )
+        val post = samplePost(
+            sourceKey = SourceKey.HITOMI,
+            preview = animatedOnly,
+            full = animatedOnly,
+            media = listOf(animatedOnly),
+        )
+
+        val item = viewerMediaOverviewItems(post).single()
+
+        assertEquals(ViewerMediaOverviewKind.ANIMATED_IMAGE, item.kind)
+        assertEquals("https://example.com/page.webp", item.posterLocation)
+    }
+
+    @Test
+    fun `Hitomi overview prefers webp for non animated AVIF first media`() {
+        val media = ImageRef(
+            url = "https://a1.gold-usergeneratedcontent.net/current/1/hash.avif",
+            localPath = null,
+            mime = "image/avif",
+            progressiveUrls = listOf(
+                "https://a1.gold-usergeneratedcontent.net/current/1/hash.avif",
+                "https://w1.gold-usergeneratedcontent.net/current/1/hash.webp",
+                "https://1.gold-usergeneratedcontent.net/images/current/1/hash.jpg",
+            ),
+        )
+        val post = samplePost(
+            sourceKey = SourceKey.HITOMI,
+            preview = media,
+            full = media,
+            media = listOf(media),
+        )
+
+        assertEquals(
+            "https://w1.gold-usergeneratedcontent.net/current/1/hash.webp",
+            viewerMediaOverviewItems(post).single().posterLocation,
+        )
+    }
+
+    @Test
+    fun `media overview availability depends only on ordered media count`() {
+        val singleItemPost = samplePost(
             sourceKey = SourceKey.NHENTAI,
             preview = imageRef("https://example.com/preview.jpg"),
             full = null,
             media = listOf(imageRef("https://example.com/1.jpg")),
         )
-        val twoImagePost = samplePost(
-            sourceKey = SourceKey.NHENTAI,
+        val seekableMultiItemPost = samplePost(
+            sourceKey = SourceKey.PIXIV,
             preview = imageRef("https://example.com/preview.jpg"),
             full = null,
             media = listOf(
-                imageRef("https://example.com/1.jpg"),
+                ImageRef(
+                    url = "https://example.com/1.mp4",
+                    localPath = null,
+                    mime = "video/mp4",
+                ),
                 imageRef("https://example.com/2.jpg"),
             ),
         )
 
-        assertFalse(viewerGalleryMediaItems(singleImagePost).size > 1)
-        assertTrue(viewerGalleryMediaItems(twoImagePost).size > 1)
+        assertFalse(viewerMediaOverviewAvailable(viewerMediaOverviewItems(singleItemPost)))
+        assertTrue(viewerMediaOverviewAvailable(viewerMediaOverviewItems(seekableMultiItemPost)))
     }
 
     @Test
-    fun `viewer gallery tile candidates use fast prefetch location`() {
+    fun `still media overview posters use fast prefetch locations`() {
         val pixivMedia = ImageRef(
             url = "https://i.pximg.net/original.jpg",
             localPath = null,
@@ -324,11 +386,11 @@ class ViewerScreenImagePipelineTest {
                 full = media,
                 media = listOf(media),
             )
-            val galleryItem = viewerGalleryMediaItems(post).single()
+            val overviewItem = viewerMediaOverviewItems(post).single()
 
             assertEquals(
-                viewerPrefetchImageLocation(post, galleryItem.media),
-                media.progressiveUrls.first(),
+                viewerPrefetchImageLocation(post, overviewItem.media),
+                overviewItem.posterLocation,
             )
         }
     }
