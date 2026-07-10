@@ -6,6 +6,7 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.CapabilityExclusionReason
 import com.theoriacodex.domain.query.SourceCapabilityGate
@@ -43,12 +44,13 @@ class UnifiedSearchOrchestrator(
         weights: Map<SourceKey, Double>,
         queryOverridesBySource: Map<SourceKey, Query> = emptyMap(),
     ): UnifiedSearchResult = coroutineScope {
+        val portableQuery = query.portableTermsForUnified()
         val candidateAdapters = enabledSources.mapNotNull { source ->
             adaptersBySource[source]?.let { source to it }
         }.toMap()
 
         val excluded = SourceCapabilityGate.excludedSources(
-            query = query,
+            query = portableQuery,
             capabilitiesBySource = candidateAdapters.mapValues { it.value.capabilities },
         )
         val clientSideExcludeSources = excluded
@@ -66,9 +68,19 @@ class UnifiedSearchOrchestrator(
             .filterKeys { source -> source !in hardExcluded }
             .map { (source, adapter) ->
                 async {
-                    val sourceBaseQuery = queryOverridesBySource[source] ?: query
+                    val sourceBaseQuery = (queryOverridesBySource[source] ?: portableQuery)
+                        .let { override ->
+                            if (query.mode == QueryMode.Unified) {
+                                override.copy(
+                                    includeTerms = override.includeTerms.filter { it.isPortableGeneralTag },
+                                    excludeTerms = override.excludeTerms.filter { it.isPortableGeneralTag },
+                                )
+                            } else {
+                                override
+                            }
+                        }
                     val sourceQuery = if (source in clientSideExcludeSources) {
-                        sourceBaseQuery.copy(excludeTags = emptyList())
+                        sourceBaseQuery.copy(excludeTerms = emptyList())
                     } else {
                         sourceBaseQuery
                     }

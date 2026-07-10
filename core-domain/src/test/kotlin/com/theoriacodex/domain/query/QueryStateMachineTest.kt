@@ -2,6 +2,7 @@ package com.theoriacodex.domain.query
 
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -24,7 +25,9 @@ class QueryStateMachineTest {
     fun `update draft marks state dirty and apply clears pending`() {
         val state = SearchQueryState.fromApplied(baseQuery())
 
-        val updated = state.updateDraft { it.copy(includeTags = it.includeTags + "portrait") }
+        val updated = state.updateDraft {
+            it.copy(includeTerms = it.includeTerms + SearchTerm("portrait"))
+        }
         assertTrue(updated.hasPendingChanges)
 
         val applied = updated.applyDraft()
@@ -46,8 +49,8 @@ class QueryStateMachineTest {
     private fun baseQuery(): Query {
         return Query(
             mode = QueryMode.Unified,
-            includeTags = listOf("landscape"),
-            excludeTags = emptyList(),
+            includeTerms = listOf(SearchTerm("landscape")),
+            excludeTerms = emptyList(),
             sort = SortMode.NEWEST,
             dateRange = null,
             minScore = null,

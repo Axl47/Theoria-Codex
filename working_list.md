@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T07:29:26-04:00
+updated_at: 2026-07-10T09:25:00-04:00
 ---
 # Working List
 
@@ -14,10 +14,14 @@ updated_at: 2026-07-10T07:29:26-04:00
 - [ ] Phase 7: Add live health and app smoke coverage, complete available device acceptance, update README/AGENTS/ExecPlan, run broad validation; commit
 
 ### In Progress
-- [~] Phase 2: Introduce faceted terms and backward-compatible persistence; verify domain, data, source, and app tests; commit
 
 ### Done
-- [x] Phase 1: Freeze Hitomi protocol fixtures and add binary HTTP primitives (`./gradlew :core-sources:test`: 100 tests, 0 failures); commit pending
+- [x] Phase 2: Add typed query/post taxonomy, safe legacy persistence, portable Codex snapshots, and Unified facet boundaries (`./gradlew :core-domain:test :core-data:test :core-sources:test :app:testDebugUnitTest`: 483 tests, 0 failures, 4 opt-in live skips)
+  - [x] 2.1 Add canonical domain terms, typed suggestions, post taxonomy, and facet-aware query hashing
+  - [x] 2.2 Add backward-compatible query/post/recents persistence records and malformed-record recovery
+  - [x] 2.3 Preserve typed post snapshots through Codex share/import and offline fallback without exporting local paths
+  - [x] 2.4 Migrate app/source query writers, close combined-review findings, and verify the integrated phase
+- [x] Phase 1: Freeze Hitomi protocol fixtures and add binary HTTP primitives (`./gradlew :core-sources:test`: 100 tests, 0 failures); commit `0724ced`
 - [x] Read `.docs/PLANS.md`, the active Hitomi ExecPlan, repository guidance, and orchestration skills
 - [x] Confirm the implementation worktree is clean before phase edits (`git status --short --branch`)
 - [x] Verify the new HTML ExecPlan structure, required sections, links, and diff (`npx --yes html-validate`, required-section scan, `git diff --check`)

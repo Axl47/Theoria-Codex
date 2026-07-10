@@ -4,6 +4,7 @@ import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
@@ -15,8 +16,8 @@ class SourceCapabilityGateTest {
     fun `returns all relevant exclusion reasons per source`() {
         val query = Query(
             mode = QueryMode.Unified,
-            includeTags = listOf("landscape"),
-            excludeTags = listOf("comic"),
+            includeTerms = listOf(SearchTerm("landscape")),
+            excludeTerms = listOf(SearchTerm("comic")),
             sort = SortMode.TOP,
             dateRange = DateRange(fromEpochMs = 1L, toEpochMs = 2L),
             minScore = 100,
@@ -53,7 +54,7 @@ class SourceCapabilityGateTest {
                 CapabilityExclusionReason.DATE_RANGE_UNSUPPORTED,
                 CapabilityExclusionReason.MIN_SCORE_UNSUPPORTED,
             ),
-            excluded[SourceKey.PIXIV]
+            excluded[SourceKey.PIXIV],
         )
         assertTrue(SourceKey.GELBOORU !in excluded)
     }

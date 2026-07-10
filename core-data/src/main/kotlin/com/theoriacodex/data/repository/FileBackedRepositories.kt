@@ -9,8 +9,11 @@ import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
@@ -904,10 +907,12 @@ private data class PostRecord(
     val previewLocalPath: String?,
     val previewMime: String?,
     val previewProgressiveUrls: List<String>? = null,
+    val previewIsAnimated: Boolean? = null,
     val fullUrl: String?,
     val fullLocalPath: String?,
     val fullMime: String?,
     val fullProgressiveUrls: List<String>? = null,
+    val fullIsAnimated: Boolean? = null,
     val pageUrl: String?,
     val width: Int?,
     val height: Int?,
@@ -915,13 +920,17 @@ private data class PostRecord(
     val rawTags: List<String>,
     val authorName: String?,
     val createdAtEpochMs: Long?,
-    val media: List<ImageRefRecord>? = null,
+    val media: List<ImageRefRecord?>? = null,
     val title: String? = null,
     val creatorProfile: CreatorProfileRecord? = null,
     val durationMs: Long? = null,
+    val mediaCount: Int? = null,
+    val taxonomy: List<PostTaxonomyTermRecord?>? = null,
+    val creatorProfiles: List<CreatorProfileRecord?>? = null,
 ) {
     fun toDomainOrNull(): Post? {
         val resolvedSource = source.toSourceKeyOrNull() ?: return null
+        val resolvedCreatorProfile = creatorProfile?.toDomainOrNull()
         return Post(
             id = PostId(
                 source = resolvedSource,
@@ -932,8 +941,15 @@ private data class PostRecord(
                 localPath = previewLocalPath,
                 mime = previewMime,
                 progressiveUrls = previewProgressiveUrls.orEmpty(),
+                isAnimated = previewIsAnimated ?: false,
             ),
-            full = if (fullUrl == null && fullLocalPath == null && fullMime == null) {
+            full = if (
+                fullUrl == null &&
+                fullLocalPath == null &&
+                fullMime == null &&
+                fullProgressiveUrls.isNullOrEmpty() &&
+                fullIsAnimated != true
+            ) {
                 null
             } else {
                 ImageRef(
@@ -941,6 +957,7 @@ private data class PostRecord(
                     localPath = fullLocalPath,
                     mime = fullMime,
                     progressiveUrls = fullProgressiveUrls.orEmpty(),
+                    isAnimated = fullIsAnimated ?: false,
                 )
             },
             pageUrl = pageUrl,
@@ -950,10 +967,17 @@ private data class PostRecord(
             rawTags = rawTags,
             authorName = authorName,
             createdAtEpochMs = createdAtEpochMs,
-            media = media.orEmpty().map { it.toDomain() },
+            media = media.orEmpty().mapNotNull { record -> record?.toDomain() },
             title = title,
-            creatorProfile = creatorProfile?.toDomainOrNull(),
+            creatorProfile = resolvedCreatorProfile,
             durationMs = durationMs,
+            mediaCount = mediaCount,
+            taxonomy = taxonomy
+                ?.mapNotNull { record -> record?.toDomainOrNull() }
+                ?: canonicalTags.map { value -> PostTaxonomyTerm(value = value) },
+            creatorProfiles = creatorProfiles
+                ?.mapNotNull { record -> record?.toDomainOrNull() }
+                ?: listOfNotNull(resolvedCreatorProfile),
         )
     }
 
@@ -966,10 +990,12 @@ private data class PostRecord(
                 previewLocalPath = post.preview.localPath,
                 previewMime = post.preview.mime,
                 previewProgressiveUrls = post.preview.progressiveUrls,
+                previewIsAnimated = post.preview.isAnimated,
                 fullUrl = post.full?.url,
                 fullLocalPath = post.full?.localPath,
                 fullMime = post.full?.mime,
                 fullProgressiveUrls = post.full?.progressiveUrls,
+                fullIsAnimated = post.full?.isAnimated,
                 pageUrl = post.pageUrl,
                 width = post.width,
                 height = post.height,
@@ -981,6 +1007,35 @@ private data class PostRecord(
                 title = post.title,
                 creatorProfile = post.creatorProfile?.let(CreatorProfileRecord::fromDomain),
                 durationMs = post.durationMs,
+                mediaCount = post.mediaCount,
+                taxonomy = post.taxonomy.map(PostTaxonomyTermRecord::fromDomain),
+                creatorProfiles = post.creatorProfiles.map(CreatorProfileRecord::fromDomain),
+            )
+        }
+    }
+}
+
+private data class PostTaxonomyTermRecord(
+    val value: String? = null,
+    val facet: String? = null,
+    val sourceNamespace: String? = null,
+) {
+    fun toDomainOrNull(): PostTaxonomyTerm? {
+        val resolvedValue = value?.trim()?.takeIf(String::isNotBlank) ?: return null
+        val resolvedFacet = facet.toSearchFacetOrNull() ?: return null
+        return PostTaxonomyTerm(
+            value = resolvedValue,
+            facet = resolvedFacet,
+            sourceNamespace = sourceNamespace?.trim()?.takeIf(String::isNotBlank),
+        )
+    }
+
+    companion object {
+        fun fromDomain(term: PostTaxonomyTerm): PostTaxonomyTermRecord {
+            return PostTaxonomyTermRecord(
+                value = term.value,
+                facet = term.facet.name,
+                sourceNamespace = term.sourceNamespace,
             )
         }
     }
@@ -1022,6 +1077,7 @@ private data class ImageRefRecord(
     val localPath: String?,
     val mime: String?,
     val progressiveUrls: List<String>? = null,
+    val isAnimated: Boolean? = null,
 ) {
     fun toDomain(): ImageRef {
         return ImageRef(
@@ -1029,6 +1085,7 @@ private data class ImageRefRecord(
             localPath = localPath,
             mime = mime,
             progressiveUrls = progressiveUrls.orEmpty(),
+            isAnimated = isAnimated ?: false,
         )
     }
 
@@ -1039,6 +1096,7 @@ private data class ImageRefRecord(
                 localPath = ref.localPath,
                 mime = ref.mime,
                 progressiveUrls = ref.progressiveUrls,
+                isAnimated = ref.isAnimated,
             )
         }
     }
@@ -1058,6 +1116,8 @@ private data class QueryRecord(
     val dateFromEpochMs: Long?,
     val dateToEpochMs: Long?,
     val minScore: Int?,
+    val includeTerms: List<SearchTermRecord?>? = null,
+    val excludeTerms: List<SearchTermRecord?>? = null,
 ) {
     fun toDomain(): Query {
         val mode = when (modeType) {
@@ -1067,8 +1127,12 @@ private data class QueryRecord(
         }
         return Query(
             mode = mode,
-            includeTags = includeTags,
-            excludeTags = excludeTags,
+            includeTerms = includeTerms
+                ?.mapNotNull { record -> record?.toDomainOrNull() }
+                ?: includeTags.orEmpty().map { value -> SearchTerm(value = value) },
+            excludeTerms = excludeTerms
+                ?.mapNotNull { record -> record?.toDomainOrNull() }
+                ?: excludeTags.orEmpty().map { value -> SearchTerm(value = value) },
             sort = sort.toSortModeOrDefault(),
             dateRange = if (dateFromEpochMs == null && dateToEpochMs == null) null else DateRange(dateFromEpochMs, dateToEpochMs),
             minScore = minScore,
@@ -1098,6 +1162,34 @@ private data class QueryRecord(
                 dateFromEpochMs = query.dateRange?.fromEpochMs,
                 dateToEpochMs = query.dateRange?.toEpochMs,
                 minScore = query.minScore,
+                includeTerms = query.includeTerms.map(SearchTermRecord::fromDomain),
+                excludeTerms = query.excludeTerms.map(SearchTermRecord::fromDomain),
+            )
+        }
+    }
+}
+
+private data class SearchTermRecord(
+    val value: String? = null,
+    val facet: String? = null,
+    val sourceNamespace: String? = null,
+) {
+    fun toDomainOrNull(): SearchTerm? {
+        val resolvedValue = value?.trim()?.takeIf(String::isNotBlank) ?: return null
+        val resolvedFacet = facet.toSearchFacetOrNull() ?: return null
+        return SearchTerm(
+            value = resolvedValue,
+            facet = resolvedFacet,
+            sourceNamespace = sourceNamespace?.trim()?.takeIf(String::isNotBlank),
+        )
+    }
+
+    companion object {
+        fun fromDomain(term: SearchTerm): SearchTermRecord {
+            return SearchTermRecord(
+                value = term.value,
+                facet = term.facet.name,
+                sourceNamespace = term.sourceNamespace,
             )
         }
     }
@@ -1536,6 +1628,11 @@ private fun String?.toSortModeOrDefault(): SortMode {
         ?.takeIf(String::isNotBlank)
         ?.let { value -> runCatching { SortMode.valueOf(value) }.getOrNull() }
         ?: SortMode.TOP
+}
+
+private fun String?.toSearchFacetOrNull(): SearchFacet? {
+    val normalized = this?.trim()?.takeIf(String::isNotBlank) ?: return SearchFacet.TAG
+    return runCatching { SearchFacet.valueOf(normalized) }.getOrNull()
 }
 
 private fun normalizeBlacklistTags(tags: List<String>): List<String> {

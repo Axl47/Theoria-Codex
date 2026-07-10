@@ -199,14 +199,14 @@
     <h1>ExecPlan: Add Hitomi Faceted Search, Creators, and Mixed Media</h1>
     <p>This plan adds Hitomi as a first-class Theoria Codex source and introduces a reusable faceted-search layer shared with NHentai. Users will be able to distinguish tags, artists, characters, series, groups, types, and languages; browse Hitomi artist uploads; open Hitomi links directly in the app; swipe through still and animated gallery pages; and play Hitomi anime MP4s inside the existing Viewer.</p>
     <div class="meta" role="group" aria-label="Plan metadata">
-      <span class="pill">Status: In Progress — Phase 2</span>
+      <span class="pill">Status: In Progress — Phase 3</span>
       <span class="pill">Owner: Codex</span>
       <span class="pill">Created: 2026-07-10</span>
       <span class="pill">Updated: 2026-07-10</span>
       <span class="pill">Plan file: .docs/exec/hitomi-source-faceted-search-and-mixed-media.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Implement Phase 2 canonical faceted query/post models and additive persistence migration, then verify legacy and typed records across domain, data, source, and app tests.</div>
+      <div class="card"><strong>Next Action</strong>Implement Phase 3 scoped autocomplete and typed Search interactions, prove the shared facet flow with NHentai, and keep source-owned terms out of Unified mode.</div>
       <div class="card"><strong>Main Risk</strong>Hitomi search and media URLs depend on binary Nozomi indexes and mutable CDN shard configuration. Protocol parsing, caching, bounded concurrency, and refresh-on-404 behavior must land before UI exposure.</div>
       <div class="card"><strong>Validation</strong>Deterministic fixtures, opt-in live provider probes, app Search route smoke, API 26 and API 28+ media checks, and the two exact galleries named in this plan.</div>
       <div class="card"><strong>Affected Areas</strong><code>core-domain</code> query/post models, <code>core-data</code> persistence, <code>core-sources</code> HTTP and adapters, Search, Creator Profile, Viewer, deep links, stubs, health tooling, and current docs.</div>
@@ -242,10 +242,10 @@
       <h2>Current Status</h2>
       <table class="status-table">
         <tbody>
-          <tr><td>Plan state</td><td>In progress. Phase 1 is complete and Phase 2 is adding canonical faceted models with backward-compatible persistence.</td></tr>
+          <tr><td>Plan state</td><td>In progress. Phases 1 and 2 are complete; Phase 3 is adding shared scoped autocomplete and typed Search interactions with NHentai as the first adapter.</td></tr>
           <tr><td>UX state</td><td>Agreed: contextual scope chips under the search field; source-specific facets in the first release; poster/badge tiles in the overview with playback in the main Viewer.</td></tr>
           <tr><td>Protocol state</td><td>Live route shapes were verified on 2026-07-10. Search and CDN details can drift and therefore have explicit live probes and recovery behavior.</td></tr>
-          <tr><td>Current implementation action</td><td>Phase 2 faceted query/post models, query hashing, and additive record migration.</td></tr>
+          <tr><td>Current implementation action</td><td>Phase 3 scope state, typed suggestion selection/chips, NHentai facet compilation, and facet-aware suggestion caching.</td></tr>
           <tr><td>Out of scope</td><td>Hitomi account support, WebView scraping, unrestricted title/full-text search, OR expressions, playing every video inside the overview grid, and making artist/series terms cross-source in Unified mode.</td></tr>
         </tbody>
       </table>
@@ -533,8 +533,8 @@
         <li>[x] 2026-07-10 — Verified global/scoped autocomplete, Nozomi lists, gallery JavaScript metadata, mutable CDN configuration, animated WebP chunks, and MP4 byte-range playback.</li>
         <li>[x] 2026-07-10 — Authored this implementation-ready HTML ExecPlan.</li>
         <li>[x] Phase 1 — Protocol fixtures and binary HTTP. Verified with <code>./gradlew :core-sources:test</code>: 100 tests, 0 failures.</li>
-        <li>[~] Phase 2 — Faceted domain/persistence migration.</li>
-        <li>[ ] Phase 3 — Shared scoped UX and NHentai reuse.</li>
+        <li>[x] Phase 2 — Faceted domain/persistence migration. Verified 483 tests with 0 failures and 4 opt-in live skips.</li>
+        <li>[~] Phase 3 — Shared scoped UX and NHentai reuse.</li>
         <li>[ ] Phase 4 — Hitomi adapter and source exposure.</li>
         <li>[ ] Phase 5 — Creators, typed post actions, and deep links.</li>
         <li>[ ] Phase 6 — Animated WebP, anime video, and Media Overview.</li>
@@ -565,7 +565,8 @@
 
       <h3>Outcomes And Retrospective</h3>
       <p><strong>Phase 1 outcome:</strong> the shared HTTP layer now supports bounded binary GETs, exact inclusive Range headers, response headers, retry behavior, 200/206 responses, size rejection, and prompt cancellation of active/retrying reads while preserving the existing text API. Versioned offline fixtures cover mixed/scoped autocomplete, the 29-ID Najar Nozomi list, animated gallery <code>4042375</code>, anime gallery <code>7231</code>, and the mutable <code>gg.js</code> shape. <code>./gradlew :core-sources:test</code> passed 100 tests with no failures. No Hitomi source or UI is exposed yet, as required.</p>
-      <p>Planning outcome: the remaining work stays ordered so faceted search is proved with an already-supported source before Hitomi exposure, and Viewer improvements remain global rather than Hitomi-specific. Update this section after every phase with the user-visible result, exact validation evidence, remaining risk, and any scope change. At completion, replace this paragraph with the released behavior and the durable provider lessons added to <code>AGENTS.md</code>.</p>
+      <p><strong>Phase 2 outcome:</strong> queries now retain facet and source namespace across hashing, recents, file persistence, and app state; posts retain typed taxonomy, all creators, ordered media metadata, and animation flags. Legacy records still load as general tags, malformed optional typed records are isolated instead of discarding valid data, and Unified search strips source-owned facets before both capability checks and provider compatibility rewrites. Codex v2 exports portable remote snapshots without machine-local paths and imports them through source, snapshot, then repository fallback. <code>./gradlew :core-domain:test :core-data:test :core-sources:test :app:testDebugUnitTest</code> passed 483 tests with no failures; four opt-in live tests remained skipped by design.</p>
+      <p>Planning outcome: Phase 3 can now build one scoped interaction on stable typed contracts and prove it with NHentai before Hitomi exposure. Viewer improvements remain global rather than Hitomi-specific. Update this section after every phase with the user-visible result, exact validation evidence, remaining risk, and any scope change. At completion, replace this paragraph with the released behavior and the durable provider lessons added to <code>AGENTS.md</code>.</p>
     </section>
 
     <section id="recovery">

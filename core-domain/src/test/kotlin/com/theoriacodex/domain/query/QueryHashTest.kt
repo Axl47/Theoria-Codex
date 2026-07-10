@@ -2,26 +2,33 @@ package com.theoriacodex.domain.query
 
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
+import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class QueryHashTest {
     @Test
-    fun `hash remains stable when include and exclude tags are permuted`() {
+    fun `hash remains stable when include and exclude terms are permuted`() {
         val first = Query(
             mode = QueryMode.Unified,
-            includeTags = listOf("landscape", "artist:foo"),
-            excludeTags = listOf("lowres", "comic"),
+            includeTerms = listOf(
+                SearchTerm("landscape"),
+                SearchTerm("foo", SearchFacet.ARTIST, sourceNamespace = "artist"),
+            ),
+            excludeTerms = listOf(SearchTerm("lowres"), SearchTerm("comic")),
             sort = SortMode.NEWEST,
             dateRange = null,
             minScore = null,
         )
         val second = Query(
             mode = QueryMode.Unified,
-            includeTags = listOf("artist:foo", "landscape"),
-            excludeTags = listOf("comic", "lowres"),
+            includeTerms = first.includeTerms.reversed(),
+            excludeTerms = first.excludeTerms.reversed(),
             sort = SortMode.NEWEST,
             dateRange = null,
             minScore = null,
@@ -34,8 +41,8 @@ class QueryHashTest {
     fun `hash changes when sort changes`() {
         val newest = Query(
             mode = QueryMode.Unified,
-            includeTags = listOf("landscape"),
-            excludeTags = emptyList(),
+            includeTerms = listOf(SearchTerm("landscape")),
+            excludeTerms = emptyList(),
             sort = SortMode.NEWEST,
             dateRange = null,
             minScore = null,
@@ -43,5 +50,53 @@ class QueryHashTest {
         val popular = newest.copy(sort = SortMode.POPULAR)
 
         assertNotEquals(QueryHash.from(newest), QueryHash.from(popular))
+    }
+
+    @Test
+    fun `hash distinguishes facet namespace and polarity for identical text`() {
+        val base = Query(
+            mode = QueryMode.Source(SourceKey.NHENTAI),
+            includeTerms = listOf(SearchTerm("najar")),
+            excludeTerms = emptyList(),
+            sort = SortMode.NEWEST,
+            dateRange = null,
+            minScore = null,
+        )
+        val artist = base.copy(
+            includeTerms = listOf(SearchTerm("najar", SearchFacet.ARTIST, sourceNamespace = "artist")),
+        )
+        val namespacedTag = base.copy(
+            includeTerms = listOf(SearchTerm("najar", SearchFacet.TAG, sourceNamespace = "female")),
+        )
+        val excluded = base.copy(
+            includeTerms = emptyList(),
+            excludeTerms = listOf(SearchTerm("najar")),
+        )
+
+        val hashes = listOf(base, artist, namespacedTag, excluded).map(QueryHash::from)
+
+        assertEquals(hashes.size, hashes.distinct().size)
+        assertTrue(hashes.all { it.startsWith("v2|") })
+    }
+
+    @Test
+    fun `hash normalizes term values and namespaces`() {
+        val first = Query(
+            mode = QueryMode.Unified,
+            includeTerms = listOf(
+                SearchTerm("  The   Idolmaster ", SearchFacet.SERIES, sourceNamespace = " PARODY "),
+            ),
+            excludeTerms = emptyList(),
+            sort = SortMode.TOP,
+            dateRange = null,
+            minScore = null,
+        )
+        val second = first.copy(
+            includeTerms = listOf(
+                SearchTerm("the idolmaster", SearchFacet.SERIES, sourceNamespace = "parody"),
+            ),
+        )
+
+        assertEquals(QueryHash.from(first), QueryHash.from(second))
     }
 }

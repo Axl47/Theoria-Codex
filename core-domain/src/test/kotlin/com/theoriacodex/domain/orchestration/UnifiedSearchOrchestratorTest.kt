@@ -12,6 +12,8 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.CapabilityExclusionReason
@@ -25,8 +27,8 @@ class UnifiedSearchOrchestratorTest {
     fun `excludes source when capability does not support selected sort`() = runTest {
         val query = Query(
             mode = QueryMode.Unified,
-            includeTags = listOf("landscape"),
-            excludeTags = emptyList(),
+            includeTerms = listOf(SearchTerm("landscape")),
+            excludeTerms = emptyList(),
             sort = SortMode.TOP,
             dateRange = null,
             minScore = null,
@@ -125,7 +127,7 @@ class UnifiedSearchOrchestratorTest {
             )
         )
         val query = sampleQuery()
-        val override = query.copy(includeTags = listOf("gelbooru_tag"))
+        val override = query.copy(includeTerms = listOf(SearchTerm("gelbooru_tag")))
 
         orchestrator.search(
             query = query,
@@ -137,6 +139,43 @@ class UnifiedSearchOrchestratorTest {
 
         assertEquals(listOf("landscape"), pixivAdapter.lastSearchQuery?.includeTags)
         assertEquals(listOf("gelbooru_tag"), gelbooruAdapter.lastSearchQuery?.includeTags)
+    }
+
+    @Test
+    fun `unified fanout sends only portable general tags to source adapters`() = runTest {
+        val adapter = FakeAdapter(
+            sourceKey = SourceKey.GELBOORU,
+            capabilities = supportedCapabilities(),
+            posts = listOf(post(SourceKey.GELBOORU, "g1")),
+        )
+        val orchestrator = UnifiedSearchOrchestrator(
+            adaptersBySource = mapOf(SourceKey.GELBOORU to adapter),
+        )
+        val query = Query(
+            mode = QueryMode.Unified,
+            includeTerms = listOf(
+                SearchTerm("landscape"),
+                SearchTerm("najar", SearchFacet.ARTIST, sourceNamespace = "artist"),
+                SearchTerm("x-ray", SearchFacet.TAG, sourceNamespace = "female"),
+            ),
+            excludeTerms = listOf(
+                SearchTerm("lowres"),
+                SearchTerm("rei", SearchFacet.CHARACTER, sourceNamespace = "character"),
+            ),
+            sort = SortMode.NEWEST,
+            dateRange = null,
+            minScore = null,
+        )
+
+        orchestrator.search(
+            query = query,
+            enabledSources = setOf(SourceKey.GELBOORU),
+            pageTokens = emptyMap(),
+            weights = mapOf(SourceKey.GELBOORU to 1.0),
+        )
+
+        assertEquals(listOf(SearchTerm("landscape")), adapter.lastSearchQuery?.includeTerms)
+        assertEquals(listOf(SearchTerm("lowres")), adapter.lastSearchQuery?.excludeTerms)
     }
 
     @Test
@@ -163,8 +202,8 @@ class UnifiedSearchOrchestratorTest {
         )
         val query = Query(
             mode = QueryMode.Unified,
-            includeTags = listOf("landscape"),
-            excludeTags = listOf("nsfw"),
+            includeTerms = listOf(SearchTerm("landscape")),
+            excludeTerms = listOf(SearchTerm("nsfw")),
             sort = SortMode.NEWEST,
             dateRange = null,
             minScore = null,
@@ -214,8 +253,8 @@ class UnifiedSearchOrchestratorTest {
     private fun sampleQuery(): Query {
         return Query(
             mode = QueryMode.Unified,
-            includeTags = listOf("landscape"),
-            excludeTags = emptyList(),
+            includeTerms = listOf(SearchTerm("landscape")),
+            excludeTerms = emptyList(),
             sort = SortMode.NEWEST,
             dateRange = null,
             minScore = null,
@@ -275,8 +314,8 @@ class UnifiedSearchOrchestratorTest {
         override suspend fun quickQuery(kind: QuickQueryKind): Query {
             return Query(
                 mode = QueryMode.Source(sourceKey),
-                includeTags = emptyList(),
-                excludeTags = emptyList(),
+                includeTerms = emptyList(),
+                excludeTerms = emptyList(),
                 sort = SortMode.NEWEST,
                 dateRange = null,
                 minScore = null,

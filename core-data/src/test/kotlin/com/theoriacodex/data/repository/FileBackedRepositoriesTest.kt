@@ -1,12 +1,15 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.CreatorProfile
-import com.theoriacodex.domain.model.DateRange
+import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
@@ -43,17 +46,38 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
-    fun `codex repository persists creator profiles across instances`() = runTest {
+    fun `codex repository persists typed taxonomy and creator profiles across instances`() = runTest {
         val dir = tempDir("codex-creator-profile-")
         val first = FileBackedCodexRepository(dir)
         val created = first.createCodex("Saved")
+        val primaryCreator = CreatorProfile(
+            source = SourceKey.PIXIV,
+            displayName = "artist",
+            profileId = "201823",
+            profileUrl = "https://www.pixiv.net/en/users/201823",
+            uploadsQuery = "201823",
+        )
+        val collaborator = CreatorProfile(
+            source = SourceKey.PIXIV,
+            displayName = "collaborator",
+            profileId = "441002",
+            profileUrl = "https://www.pixiv.net/en/users/441002",
+            uploadsQuery = "441002",
+        )
         val post = samplePost("1", localPath = null, source = SourceKey.PIXIV).copy(
-            creatorProfile = CreatorProfile(
-                source = SourceKey.PIXIV,
-                displayName = "artist",
-                profileId = "201823",
-                profileUrl = "https://www.pixiv.net/en/users/201823",
-                uploadsQuery = "201823",
+            creatorProfile = primaryCreator,
+            creatorProfiles = listOf(primaryCreator, collaborator),
+            taxonomy = listOf(
+                PostTaxonomyTerm(
+                    value = "artist",
+                    facet = SearchFacet.ARTIST,
+                    sourceNamespace = "artist",
+                ),
+                PostTaxonomyTerm(
+                    value = "original",
+                    facet = SearchFacet.SERIES,
+                    sourceNamespace = "series",
+                ),
             ),
         )
 
@@ -65,6 +89,8 @@ class FileBackedRepositoriesTest {
         assertEquals("artist", loaded?.creatorProfile?.displayName)
         assertEquals("201823", loaded?.creatorProfile?.profileId)
         assertEquals("201823", loaded?.creatorProfile?.uploadsQuery)
+        assertEquals(listOf("artist", "collaborator"), loaded?.creatorProfiles?.map(CreatorProfile::displayName))
+        assertEquals(post.taxonomy, loaded?.taxonomy)
     }
 
     @Test
@@ -85,6 +111,7 @@ class FileBackedRepositoriesTest {
             localPath = null,
             mime = "image/jpeg",
             progressiveUrls = progressiveUrls,
+            isAnimated = true,
         )
         val post = samplePost("1", localPath = null, source = SourceKey.GELBOORU).copy(
             preview = ImageRef(
@@ -92,10 +119,12 @@ class FileBackedRepositoriesTest {
                 localPath = null,
                 mime = "image/jpeg",
                 progressiveUrls = previewProgressiveUrls,
+                isAnimated = true,
             ),
             full = media,
             media = listOf(media),
             durationMs = 12_345L,
+            mediaCount = 4,
         )
 
         first.addItem(created.codexId, post)
@@ -106,7 +135,11 @@ class FileBackedRepositoriesTest {
         assertEquals(previewProgressiveUrls, loaded?.preview?.progressiveUrls)
         assertEquals(progressiveUrls, loaded?.full?.progressiveUrls)
         assertEquals(progressiveUrls, loaded?.media?.single()?.progressiveUrls)
+        assertEquals(true, loaded?.preview?.isAnimated)
+        assertEquals(true, loaded?.full?.isAnimated)
+        assertEquals(true, loaded?.media?.single()?.isAnimated)
         assertEquals(12_345L, loaded?.durationMs)
+        assertEquals(4, loaded?.mediaCount)
     }
 
     @Test
@@ -139,7 +172,7 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
-    fun `codex repository reads legacy post records without creator profile`() = runTest {
+    fun `codex repository reads legacy post records with safe typed defaults`() = runTest {
         val dir = tempDir("codex-legacy-post-record-")
         val storageFile = dir.resolve("codex_store.json")
         storageFile.writeText(
@@ -166,6 +199,30 @@ class FileBackedRepositoriesTest {
                   "createdAtEpochMs": 1,
                   "media": [],
                   "title": "Legacy"
+                },
+                {
+                  "source": "PIXIV",
+                  "sourcePostId": "2",
+                  "previewUrl": "https://example.com/2.jpg",
+                  "previewLocalPath": null,
+                  "previewMime": "image/jpeg",
+                  "fullUrl": null,
+                  "fullLocalPath": null,
+                  "fullMime": null,
+                  "pageUrl": "https://example.com/post/2",
+                  "width": 100,
+                  "height": 100,
+                  "canonicalTags": ["portrait"],
+                  "rawTags": ["portrait"],
+                  "authorName": "legacy artist",
+                  "createdAtEpochMs": 2,
+                  "creatorProfile": {
+                    "source": "PIXIV",
+                    "displayName": "legacy artist",
+                    "profileId": "legacy-artist",
+                    "profileUrl": "https://example.com/artist/legacy-artist",
+                    "uploadsQuery": "legacy-artist"
+                  }
                 }
               ]
             }
@@ -174,13 +231,80 @@ class FileBackedRepositoriesTest {
 
         val repository = FileBackedCodexRepository(dir)
         val loaded = repository.getPost(PostId(SourceKey.PIXIV, "1"))
+        val loadedWithCreator = repository.getPost(PostId(SourceKey.PIXIV, "2"))
 
         assertNotNull(loaded)
         assertEquals(null, loaded?.creatorProfile)
         assertEquals("Legacy", loaded?.title)
         assertEquals(emptyList<String>(), loaded?.preview?.progressiveUrls)
         assertEquals(emptyList<String>(), loaded?.full?.progressiveUrls)
+        assertFalse(loaded?.preview?.isAnimated ?: true)
+        assertFalse(loaded?.full?.isAnimated ?: true)
+        assertEquals(listOf(PostTaxonomyTerm(value = "landscape")), loaded?.taxonomy)
+        assertEquals(emptyList<CreatorProfile>(), loaded?.creatorProfiles)
         assertEquals(null, loaded?.durationMs)
+        assertEquals(null, loaded?.mediaCount)
+        assertEquals("legacy artist", loadedWithCreator?.creatorProfile?.displayName)
+        assertEquals(
+            listOf("legacy artist"),
+            loadedWithCreator?.creatorProfiles?.map(CreatorProfile::displayName),
+        )
+        assertEquals(listOf(PostTaxonomyTerm(value = "portrait")), loadedWithCreator?.taxonomy)
+    }
+
+    @Test
+    fun `codex repository skips malformed elements inside typed post arrays`() = runTest {
+        val dir = tempDir("codex-malformed-typed-arrays-")
+        dir.resolve("codex_store.json").writeText(
+            """
+            {
+              "codices": [],
+              "items": {},
+              "posts": [
+                {
+                  "source": "PIXIV",
+                  "sourcePostId": "1",
+                  "previewUrl": "https://example.com/preview.jpg",
+                  "previewLocalPath": null,
+                  "previewMime": "image/jpeg",
+                  "fullUrl": null,
+                  "fullLocalPath": null,
+                  "fullMime": null,
+                  "pageUrl": "https://example.com/post/1",
+                  "width": 100,
+                  "height": 100,
+                  "canonicalTags": ["legacy"],
+                  "rawTags": ["legacy"],
+                  "authorName": "artist",
+                  "createdAtEpochMs": 1,
+                  "media": [
+                    null,
+                    {"url": "https://example.com/full.jpg", "localPath": null, "mime": "image/jpeg"}
+                  ],
+                  "taxonomy": [
+                    null,
+                    {"value": "", "facet": "TAG"},
+                    {"value": "removed", "facet": "REMOVED_FACET"},
+                    {"value": " najar ", "facet": "ARTIST", "sourceNamespace": " artist "}
+                  ],
+                  "creatorProfiles": [
+                    null,
+                    {"source": "PIXIV", "displayName": "Najar", "profileId": "najar"}
+                  ]
+                }
+              ]
+            }
+            """.trimIndent(),
+        )
+
+        val loaded = FileBackedCodexRepository(dir).getPost(PostId(SourceKey.PIXIV, "1"))
+
+        assertEquals(listOf("https://example.com/full.jpg"), loaded?.media?.map(ImageRef::url))
+        assertEquals(
+            listOf(PostTaxonomyTerm(value = "najar", facet = SearchFacet.ARTIST, sourceNamespace = "artist")),
+            loaded?.taxonomy,
+        )
+        assertEquals(listOf("Najar"), loaded?.creatorProfiles?.map(CreatorProfile::displayName))
     }
 
     @Test
@@ -348,8 +472,21 @@ class FileBackedRepositoriesTest {
         val first = FileBackedQueryRepository(dir)
         val query = Query(
             mode = QueryMode.Source(SourceKey.PIXIV),
-            includeTags = listOf("landscape"),
-            excludeTags = listOf("comic"),
+            includeTerms = listOf(
+                SearchTerm(value = "landscape"),
+                SearchTerm(
+                    value = "najar",
+                    facet = SearchFacet.ARTIST,
+                    sourceNamespace = "artist",
+                ),
+            ),
+            excludeTerms = listOf(
+                SearchTerm(
+                    value = "english",
+                    facet = SearchFacet.LANGUAGE,
+                    sourceNamespace = "language",
+                ),
+            ),
             sort = SortMode.NEWEST,
             dateRange = null,
             minScore = 10,
@@ -358,8 +495,14 @@ class FileBackedRepositoriesTest {
         first.upsertScrollOffset("qhash", 320)
 
         val second = FileBackedQueryRepository(dir)
+        val loaded = second.observeAppliedQuery("source:PIXIV").first()
+        val storedJson = dir.resolve("query_store.json").readText()
 
-        assertNotNull(second.observeAppliedQuery("source:PIXIV").first())
+        assertEquals(query, loaded)
+        assertTrue(storedJson.contains("\"includeTerms\""))
+        assertTrue(storedJson.contains("\"excludeTerms\""))
+        assertTrue(storedJson.contains("\"includeTags\""))
+        assertTrue(storedJson.contains("\"excludeTags\""))
         assertEquals(320, second.getScrollOffset("qhash"))
     }
 
@@ -394,7 +537,78 @@ class FileBackedRepositoriesTest {
         assertEquals(QueryMode.Unified, loaded?.mode)
         assertEquals(SortMode.TOP, loaded?.sort)
         assertEquals(listOf("landscape"), loaded?.includeTags)
+        assertEquals(listOf(SearchTerm(value = "landscape")), loaded?.includeTerms)
         assertEquals(320, repository.getScrollOffset("qhash"))
+    }
+
+    @Test
+    fun `query repository distinguishes absent typed terms from explicit empty terms`() = runTest {
+        val dir = tempDir("query-null-vs-empty-terms-")
+        dir.resolve("query_store.json").writeText(
+            """
+            {
+              "queries": {
+                "legacy": {
+                  "modeType": "source",
+                  "modeSource": "PIXIV",
+                  "includeTags": ["legacy include"],
+                  "excludeTags": ["legacy exclude"],
+                  "includeTerms": null,
+                  "excludeTerms": null,
+                  "sort": "TOP",
+                  "dateFromEpochMs": null,
+                  "dateToEpochMs": null,
+                  "minScore": null
+                },
+                "typed-empty": {
+                  "modeType": "source",
+                  "modeSource": "PIXIV",
+                  "includeTags": ["must not return"],
+                  "excludeTags": ["must not return"],
+                  "includeTerms": [],
+                  "excludeTerms": [],
+                  "sort": "TOP",
+                  "dateFromEpochMs": null,
+                  "dateToEpochMs": null,
+                  "minScore": null
+                },
+                "typed-malformed": {
+                  "modeType": "source",
+                  "modeSource": "PIXIV",
+                  "includeTags": ["must not return"],
+                  "excludeTags": [],
+                  "includeTerms": [
+                    null,
+                    {"value": "", "facet": "TAG"},
+                    {"value": "unknown", "facet": "REMOVED_FACET"},
+                    {"value": " najar ", "facet": "ARTIST", "sourceNamespace": " artist "}
+                  ],
+                  "excludeTerms": [null],
+                  "sort": "TOP",
+                  "dateFromEpochMs": null,
+                  "dateToEpochMs": null,
+                  "minScore": null
+                }
+              },
+              "scrollOffsets": {}
+            }
+            """.trimIndent(),
+        )
+
+        val repository = FileBackedQueryRepository(dir)
+        val legacy = repository.observeAppliedQuery("legacy").first()
+        val typedEmpty = repository.observeAppliedQuery("typed-empty").first()
+        val typedMalformed = repository.observeAppliedQuery("typed-malformed").first()
+
+        assertEquals(listOf(SearchTerm(value = "legacy include")), legacy?.includeTerms)
+        assertEquals(listOf(SearchTerm(value = "legacy exclude")), legacy?.excludeTerms)
+        assertEquals(emptyList<SearchTerm>(), typedEmpty?.includeTerms)
+        assertEquals(emptyList<SearchTerm>(), typedEmpty?.excludeTerms)
+        assertEquals(
+            listOf(SearchTerm(value = "najar", facet = SearchFacet.ARTIST, sourceNamespace = "artist")),
+            typedMalformed?.includeTerms,
+        )
+        assertEquals(emptyList<SearchTerm>(), typedMalformed?.excludeTerms)
     }
 
     @Test
@@ -413,14 +627,35 @@ class FileBackedRepositoriesTest {
             mime = "video/mp4",
             progressiveUrls = listOf("https://example.com/sample-video.mp4"),
         )
-        val pixivPost = samplePost("1", localPath = null, source = SourceKey.PIXIV).copy(
+        val basePixivPost = samplePost("1", localPath = null, source = SourceKey.PIXIV)
+        val pixivPost = basePixivPost.copy(
             title = "First viewed",
+            preview = basePixivPost.preview.copy(
+                mime = "image/webp",
+                isAnimated = true,
+            ),
             media = listOf(media),
             durationMs = 42_000L,
+            mediaCount = 2,
+            taxonomy = listOf(
+                PostTaxonomyTerm(
+                    value = "najar",
+                    facet = SearchFacet.ARTIST,
+                    sourceNamespace = "artist",
+                ),
+            ),
         )
         val gelbooruPost = samplePost("2", localPath = null, source = SourceKey.GELBOORU)
         val aibooruPost = samplePost("3", localPath = null, source = SourceKey.AIBOORU)
-        val firstQuery = sampleQuery(includeTags = listOf("landscape"))
+        val firstQuery = sampleQuery(includeTags = listOf("landscape")).copy(
+            includeTerms = listOf(
+                SearchTerm(
+                    value = "najar",
+                    facet = SearchFacet.ARTIST,
+                    sourceNamespace = "artist",
+                ),
+            ),
+        )
         val secondQuery = sampleQuery(includeTags = listOf("portrait"))
         val thirdQuery = sampleQuery(includeTags = listOf("city"))
 
@@ -436,7 +671,10 @@ class FileBackedRepositoriesTest {
         now += 1
         first.recordSearch(secondQuery, "search-2")
         now += 1
-        first.recordSearch(firstQuery.copy(excludeTags = listOf("comic")), "search-1")
+        first.recordSearch(
+            firstQuery.copy(excludeTerms = listOf(SearchTerm(value = "comic"))),
+            "search-1",
+        )
         now += 1
         first.recordSearch(thirdQuery, "search-3")
 
@@ -450,9 +688,13 @@ class FileBackedRepositoriesTest {
         assertEquals(ViewerStreamSource.CODEX, watched[1].origin)
         assertEquals("query-3", watched[1].originQueryHash)
         assertEquals(listOf("https://example.com/sample-video.mp4"), watched[1].post.media.single().progressiveUrls)
+        assertTrue(watched[1].post.preview.isAnimated)
         assertEquals(42_000L, watched[1].post.durationMs)
+        assertEquals(2, watched[1].post.mediaCount)
+        assertEquals(pixivPost.taxonomy, watched[1].post.taxonomy)
         assertEquals(listOf("search-3", "search-1"), searches.map { entry -> entry.queryHash })
         assertEquals(listOf("comic"), searches[1].query.excludeTags)
+        assertEquals(firstQuery.includeTerms, searches[1].query.includeTerms)
         assertEquals(searches.first().searchedAtEpochMs, activity.first().occurredAtEpochMs)
     }
 

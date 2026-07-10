@@ -576,6 +576,7 @@ class NhentaiSourceAdapterTest {
         )
         assertEquals("https://i.nhentai.net/galleries/3821534/3.webp", post?.media?.get(2)?.url)
         assertEquals(listOf("big breasts", "yomoda yomo", "english"), post?.canonicalTags)
+        assertEquals(post?.canonicalTags, post?.taxonomy?.map { term -> term.value })
         assertEquals("yomoda yomo", post?.authorName)
     }
 

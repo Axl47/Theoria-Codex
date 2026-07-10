@@ -1,10 +1,12 @@
 package com.theoriacodex.domain.adapter
 
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.model.CreatorProfile
 
 interface SourceAdapter {
     val sourceKey: SourceKey
@@ -22,6 +24,52 @@ interface CreatorPostsSourceAdapter {
         creator: CreatorProfile,
         pageToken: String?,
     ): Page<Post>
+}
+
+data class FacetedSearchScope(
+    val facet: SearchFacet? = null,
+    val sourceNamespace: String? = null,
+) {
+    init {
+        require(facet != null || sourceNamespace == null) {
+            "A source namespace requires a search facet"
+        }
+    }
+
+    val isAll: Boolean
+        get() = facet == null
+
+    companion object {
+        val All = FacetedSearchScope()
+    }
+}
+
+data class FacetedTagSuggestion(
+    val text: String,
+    val facet: SearchFacet,
+    val sourceNamespace: String? = null,
+    val count: Int? = null,
+) {
+    fun toSearchTerm(): SearchTerm {
+        return SearchTerm(
+            value = text,
+            facet = facet,
+            sourceNamespace = sourceNamespace,
+        )
+    }
+}
+
+interface FacetedSearchSourceAdapter {
+    val supportedSearchScopes: Set<FacetedSearchScope>
+
+    val supportedSearchFacets: Set<SearchFacet>
+        get() = supportedSearchScopes.mapNotNullTo(linkedSetOf(), FacetedSearchScope::facet)
+
+    suspend fun autocompleteFaceted(
+        prefix: String,
+        scope: FacetedSearchScope,
+        limit: Int,
+    ): List<FacetedTagSuggestion>
 }
 
 interface TagCountLookupSourceAdapter {

@@ -30,7 +30,22 @@ data class ImageRef(
     val localPath: String?,
     val mime: String?,
     val progressiveUrls: List<String> = emptyList(),
+    val isAnimated: Boolean = false,
 )
+
+data class PostTaxonomyTerm(
+    val value: String,
+    val facet: SearchFacet = SearchFacet.TAG,
+    val sourceNamespace: String? = null,
+) {
+    fun toSearchTerm(): SearchTerm {
+        return SearchTerm(
+            value = value,
+            facet = facet,
+            sourceNamespace = sourceNamespace,
+        )
+    }
+}
 
 data class Post(
     val id: PostId,
@@ -48,4 +63,8 @@ data class Post(
     val creatorProfile: CreatorProfile? = null,
     val durationMs: Long? = null,
     val mediaCount: Int? = null,
+    val taxonomy: List<PostTaxonomyTerm> = canonicalTags.map { value ->
+        PostTaxonomyTerm(value = value)
+    },
+    val creatorProfiles: List<CreatorProfile> = listOfNotNull(creatorProfile),
 )

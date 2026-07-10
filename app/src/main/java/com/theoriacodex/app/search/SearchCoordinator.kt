@@ -26,6 +26,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
@@ -292,23 +293,33 @@ class SearchCoordinator(
     fun addIncludeTag(tag: String) {
         val normalized = tag.trim()
         if (normalized.isBlank()) return
-        if (normalized in draftQuery.includeTags) return
-        draftQuery = draftQuery.copy(includeTags = draftQuery.includeTags + normalized)
+        val term = SearchTerm(value = normalized)
+        if (term in draftQuery.includeTerms) return
+        draftQuery = draftQuery.copy(includeTerms = draftQuery.includeTerms + term)
     }
 
     fun addExcludeTag(tag: String) {
         val normalized = tag.trim()
         if (normalized.isBlank()) return
-        if (normalized in draftQuery.excludeTags) return
-        draftQuery = draftQuery.copy(excludeTags = draftQuery.excludeTags + normalized)
+        val term = SearchTerm(value = normalized)
+        if (term in draftQuery.excludeTerms) return
+        draftQuery = draftQuery.copy(excludeTerms = draftQuery.excludeTerms + term)
     }
 
     fun removeIncludeTag(tag: String) {
-        draftQuery = draftQuery.copy(includeTags = draftQuery.includeTags.filterNot { it == tag })
+        draftQuery = draftQuery.copy(
+            includeTerms = draftQuery.includeTerms.filterNot { term ->
+                term.isPortableGeneralTag && term.value == tag
+            },
+        )
     }
 
     fun removeExcludeTag(tag: String) {
-        draftQuery = draftQuery.copy(excludeTags = draftQuery.excludeTags.filterNot { it == tag })
+        draftQuery = draftQuery.copy(
+            excludeTerms = draftQuery.excludeTerms.filterNot { term ->
+                term.isPortableGeneralTag && term.value == tag
+            },
+        )
     }
 
     fun setMode(mode: QueryMode) {
@@ -353,8 +364,8 @@ class SearchCoordinator(
         if (normalizedInclude.isEmpty() && normalizedExclude.isEmpty()) return false
         if (!isModeAvailable(mode)) return false
         draftQuery = defaultQuery(mode).copy(
-            includeTags = normalizedInclude,
-            excludeTags = normalizedExclude,
+            includeTerms = normalizedInclude.map { value -> SearchTerm(value = value) },
+            excludeTerms = normalizedExclude.map { value -> SearchTerm(value = value) },
         )
         clearSearchResultsForRetry()
         statuses = emptyList()
@@ -384,41 +395,41 @@ class SearchCoordinator(
     }
 
     fun selectedNhentaiLanguageFilter(): NhentaiLanguageFilter {
-        val match = draftQuery.includeTags.firstNotNullOfOrNull { tag ->
-            nhentaiLanguageFilterForTag(tag)
+        val match = draftQuery.includeTerms.firstNotNullOfOrNull { term ->
+            nhentaiLanguageFilterForTag(term.value)
         }
         return match ?: NhentaiLanguageFilter.ANY
     }
 
     fun setNhentaiLanguageFilter(filter: NhentaiLanguageFilter) {
-        val cleaned = draftQuery.includeTags.filterNot { tag ->
-            nhentaiLanguageFilterForTag(tag) != null
+        val cleaned = draftQuery.includeTerms.filterNot { term ->
+            nhentaiLanguageFilterForTag(term.value) != null
         }
         val languageTag = NHENTAI_LANGUAGE_TAG_BY_FILTER[filter]
-        val nextInclude = if (languageTag == null || languageTag in cleaned) {
+        val nextInclude = if (languageTag == null || cleaned.any { it.value == languageTag }) {
             cleaned
         } else {
-            cleaned + languageTag
+            cleaned + SearchTerm(value = languageTag)
         }
-        draftQuery = draftQuery.copy(includeTags = nextInclude)
+        draftQuery = draftQuery.copy(includeTerms = nextInclude)
     }
 
     fun selectedNhentaiFullColorFilter(): Boolean {
-        return draftQuery.includeTags.any { tag ->
-            normalizeNhentaiTagFilter(tag) == NHENTAI_FULL_COLOR_TAG
+        return draftQuery.includeTerms.any { term ->
+            normalizeNhentaiTagFilter(term.value) == NHENTAI_FULL_COLOR_TAG
         }
     }
 
     fun setNhentaiFullColorFilter(enabled: Boolean) {
-        val cleaned = draftQuery.includeTags.filterNot { tag ->
-            normalizeNhentaiTagFilter(tag) == NHENTAI_FULL_COLOR_TAG
+        val cleaned = draftQuery.includeTerms.filterNot { term ->
+            normalizeNhentaiTagFilter(term.value) == NHENTAI_FULL_COLOR_TAG
         }
         val nextInclude = if (enabled) {
-            cleaned + NHENTAI_FULL_COLOR_TAG
+            cleaned + SearchTerm(value = NHENTAI_FULL_COLOR_TAG)
         } else {
             cleaned
         }
-        draftQuery = draftQuery.copy(includeTags = nextInclude)
+        draftQuery = draftQuery.copy(includeTerms = nextInclude)
     }
 
     fun directNhentaiGalleryIdCandidate(query: Query = draftQuery): String? {
@@ -920,23 +931,33 @@ class SearchCoordinator(
     ): Map<SourceKey, Query> {
         if (query.mode != QueryMode.Unified) return emptyMap()
         val overrides = mutableMapOf<SourceKey, Query>()
+        val portableIncludeTerms = query.includeTerms.filter(SearchTerm::isPortableGeneralTag)
+        val portableExcludeTerms = query.excludeTerms.filter(SearchTerm::isPortableGeneralTag)
 
         if (SourceKey.GELBOORU in enabledSources) {
             val gelbooruAdapter = registry.adapterFor(SourceKey.GELBOORU)
             if (gelbooruAdapter != null) {
-                val includeTags = resolveGelbooruCompatibilityTags(gelbooruAdapter, query.includeTags)
-                val excludeTags = resolveGelbooruCompatibilityTags(gelbooruAdapter, query.excludeTags)
+                val includeTags = resolveGelbooruCompatibilityTags(
+                    gelbooruAdapter,
+                    portableIncludeTerms.map(SearchTerm::value),
+                )
+                val excludeTags = resolveGelbooruCompatibilityTags(
+                    gelbooruAdapter,
+                    portableExcludeTerms.map(SearchTerm::value),
+                )
                 overrides[SourceKey.GELBOORU] = query.copy(
-                    includeTags = includeTags,
-                    excludeTags = excludeTags,
+                    includeTerms = includeTags.map { value -> SearchTerm(value = value) },
+                    excludeTerms = excludeTags.map { value -> SearchTerm(value = value) },
                 )
             }
         }
 
         if (SourceKey.PIXIV in enabledSources) {
             overrides[SourceKey.PIXIV] = query.copy(
-                includeTags = resolvePixivCompatibilityTags(query.includeTags),
-                excludeTags = resolvePixivCompatibilityTags(query.excludeTags),
+                includeTerms = resolvePixivCompatibilityTags(portableIncludeTerms.map(SearchTerm::value))
+                    .map { value -> SearchTerm(value = value) },
+                excludeTerms = resolvePixivCompatibilityTags(portableExcludeTerms.map(SearchTerm::value))
+                    .map { value -> SearchTerm(value = value) },
             )
         }
 

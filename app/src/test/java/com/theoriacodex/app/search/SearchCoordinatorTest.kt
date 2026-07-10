@@ -19,6 +19,8 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
@@ -828,6 +830,46 @@ class SearchCoordinatorTest {
         assertEquals(listOf("nsfw"), pixivAdapter.lastSearchQuery?.excludeTags)
         assertEquals(listOf("this_is_a_tag_(Game)"), gelbooruAdapter.lastSearchQuery?.includeTags)
         assertEquals(listOf("nsfw_(content)"), gelbooruAdapter.lastSearchQuery?.excludeTags)
+    }
+
+    @Test
+    fun `unified compatibility mapping never promotes source facets into portable tags`() = runTest {
+        val pixivAdapter = RecordingAdapter(sourceKey = SourceKey.PIXIV)
+        val gelbooruAdapter = RecordingAdapter(sourceKey = SourceKey.GELBOORU)
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(
+                adapters = mapOf(
+                    SourceKey.PIXIV to pixivAdapter,
+                    SourceKey.GELBOORU to gelbooruAdapter,
+                ),
+            ),
+            queryRepository = InMemoryQueryRepository(),
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+        )
+        coordinator.initialize()
+        val query = Query(
+            mode = QueryMode.Unified,
+            includeTerms = listOf(
+                SearchTerm(value = "portable_tag"),
+                SearchTerm(value = "najar", facet = SearchFacet.ARTIST, sourceNamespace = "artist"),
+                SearchTerm(value = "owned", sourceNamespace = "hitomi"),
+            ),
+            excludeTerms = listOf(
+                SearchTerm(value = "portable_exclusion"),
+                SearchTerm(value = "series name", facet = SearchFacet.SERIES, sourceNamespace = "series"),
+            ),
+            sort = SortMode.TOP,
+            dateRange = null,
+            minScore = null,
+        )
+
+        coordinator.applyHistoricalQuery(query)
+
+        assertEquals(listOf("portable tag"), pixivAdapter.lastSearchQuery?.includeTags)
+        assertEquals(listOf("portable exclusion"), pixivAdapter.lastSearchQuery?.excludeTags)
+        assertEquals(listOf("portable_tag"), gelbooruAdapter.lastSearchQuery?.includeTags)
+        assertEquals(listOf("portable_exclusion"), gelbooruAdapter.lastSearchQuery?.excludeTags)
     }
 
     @Test

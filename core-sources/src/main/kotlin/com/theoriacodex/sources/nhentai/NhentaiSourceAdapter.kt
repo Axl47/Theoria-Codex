@@ -15,6 +15,7 @@ import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
@@ -437,6 +438,7 @@ class NhentaiSourceAdapter(
                 canonicalTags = metadata.canonicalTags,
                 rawTags = metadata.canonicalTags,
                 authorName = metadata.authorName,
+                taxonomy = metadata.canonicalTags.map { value -> PostTaxonomyTerm(value = value) },
             )
         } else {
             post

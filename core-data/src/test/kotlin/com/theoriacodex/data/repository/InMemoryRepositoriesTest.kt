@@ -6,6 +6,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.first
@@ -137,7 +138,10 @@ class InMemoryRepositoriesTest {
         now += 1
         repo.recordSearch(secondQuery, "query-2")
         now += 1
-        repo.recordSearch(firstQuery.copy(excludeTags = listOf("sketch")), "query-1")
+        repo.recordSearch(
+            firstQuery.copy(excludeTerms = listOf(SearchTerm(value = "sketch"))),
+            "query-1",
+        )
         now += 1
         repo.recordSearch(thirdQuery, "query-3")
 

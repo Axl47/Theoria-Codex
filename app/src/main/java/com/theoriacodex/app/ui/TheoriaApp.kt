@@ -84,17 +84,18 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.PostDownloadService
 import com.theoriacodex.app.media.normalizeMediaUrl
-import com.theoriacodex.app.codex.CodexShareFile
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.CodexSearchSourceOption
 import com.theoriacodex.app.codex.CodexSearchTagOption
 import com.theoriacodex.app.codex.SaveToCodexSheet
 import com.theoriacodex.app.codex.buildCodexShareFile
-import com.theoriacodex.app.codex.codexSharePostId
 import com.theoriacodex.app.codex.codexSearchSourceOptions as buildCodexSearchSourceOptions
 import com.theoriacodex.app.codex.codexSearchTagOptions as buildCodexSearchTagOptions
+import com.theoriacodex.app.codex.parseCodexShareFile
+import com.theoriacodex.app.codex.resolveCodexShareImportPost
 import com.theoriacodex.app.codex.sanitizeCodexExportName
+import com.theoriacodex.app.codex.selectCodexShareEntries
 import com.theoriacodex.app.creator.CreatorProfileScreen
 import com.theoriacodex.app.creator.browseableCreatorProfile
 import com.theoriacodex.app.recommend.ForYouScreen
@@ -710,7 +711,7 @@ fun TheoriaApp(
             return
         }
 
-        val parsed = runCatching { Gson().fromJson(raw, CodexShareFile::class.java) }.getOrNull()
+        val parsed = parseCodexShareFile(raw)
         val title = parsed?.title?.trim().orEmpty()
         if (title.isBlank()) {
             Toast.makeText(appContext, "Invalid codex file", Toast.LENGTH_SHORT).show()
@@ -723,9 +724,7 @@ fun TheoriaApp(
             name = title,
         )
 
-        val entries = parsed?.posts.orEmpty()
-            .mapNotNull(::codexSharePostId)
-            .distinctBy { postId -> "${postId.source.name}:${postId.sourcePostId}" }
+        val entries = selectCodexShareEntries(parsed?.posts.orEmpty())
 
         if (entries.isEmpty()) {
             Toast.makeText(appContext, "Imported codex with no posts", Toast.LENGTH_SHORT).show()
@@ -735,12 +734,16 @@ fun TheoriaApp(
         refreshSourceAccountState()
 
         var imported = 0
-        entries.forEach { postId ->
-            val adapter = realRegistry.adapterFor(postId.source) ?: return@forEach
-            val resolvedFromSource = runCatching {
-                adapter.resolvePost(postId)
-            }.getOrNull()
-            val resolved = resolvedFromSource ?: codexRepository.getPost(postId) ?: return@forEach
+        entries.forEach { (entry, postId) ->
+            val resolvedFromSource = realRegistry.adapterFor(postId.source)?.let { adapter ->
+                runCatching { adapter.resolvePost(postId) }.getOrNull()
+            }
+            val resolved = resolveCodexShareImportPost(
+                entry = entry,
+                resolvedFromSource = resolvedFromSource,
+                storedPost = { codexRepository.getPost(postId) },
+            )
+                ?: return@forEach
 
             codexRepository.addItem(codex.codexId, resolved)
             cacheRepository.cacheThumbnail(resolved)

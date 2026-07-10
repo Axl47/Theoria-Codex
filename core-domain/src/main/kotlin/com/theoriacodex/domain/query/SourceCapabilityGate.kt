@@ -23,7 +23,7 @@ object SourceCapabilityGate {
             if (!supportsSort(query.sort, capability)) {
                 reasons += CapabilityExclusionReason.SORT_UNSUPPORTED
             }
-            if (query.excludeTags.isNotEmpty() && !capability.supportsExcludeTagsServerSide) {
+            if (query.excludeTerms.isNotEmpty() && !capability.supportsExcludeTagsServerSide) {
                 reasons += CapabilityExclusionReason.EXCLUDE_TAGS_UNSUPPORTED
             }
             if (query.dateRange != null && !capability.supportsDateRangeServerSide) {
