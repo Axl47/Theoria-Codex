@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recommend
 
+import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.InMemoryLikesRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.defaultRecommendationProfiles
@@ -9,7 +10,6 @@ import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.TagSuggestion
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -19,6 +19,8 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -74,6 +76,62 @@ class ForYouCoordinatorTest {
         assertEquals(setOf(SourceKey.PIXIV, SourceKey.GELBOORU), coordinator.results.map { it.id.source }.toSet())
     }
 
+    @Test
+    fun `blacklisting the only personalized seed leaves an honest empty feed`() = runTest {
+        val adapter = FakeAdapter(SourceKey.PIXIV, "pixiv-post")
+        val likesRepository = InMemoryLikesRepository()
+        val settingsRepository = InMemorySettingsRepository()
+        val profileId = defaultRecommendationProfiles().first().profileId
+        likesRepository.toggleLike(
+            profileId = profileId,
+            postId = PostId(SourceKey.PIXIV, "liked-pixiv"),
+            tags = listOf("only seed"),
+        )
+        settingsRepository.addForYouBlacklistEntry(
+            profileId = profileId,
+            source = SourceKey.PIXIV,
+            tags = listOf("only seed"),
+        )
+        val coordinator = ForYouCoordinator(
+            registry = registryOf(adapter),
+            settingsRepository = settingsRepository,
+            likesRepository = likesRepository,
+        )
+
+        coordinator.initialize()
+        coordinator.refresh(shuffle = false)
+
+        assertTrue(coordinator.results.isEmpty())
+        assertTrue(coordinator.seedSummaryBySource.isEmpty())
+        assertEquals("empty-seed", coordinator.seedId)
+        assertFalse(coordinator.canLoadMore)
+        assertNull(coordinator.errorMessage)
+        assertTrue(adapter.requestedPageTokens.isEmpty())
+    }
+
+    @Test
+    fun `one failed source does not discard healthy recommendations`() = runTest {
+        val healthy = FakeAdapter(SourceKey.PIXIV, "pixiv-post")
+        val failing = FakeAdapter(SourceKey.GELBOORU, "gelbooru-post", failSearch = true)
+        val likesRepository = InMemoryLikesRepository()
+        val profileId = defaultRecommendationProfiles().first().profileId
+        likesRepository.toggleLike(profileId, PostId(SourceKey.PIXIV, "liked-pixiv"), listOf("pixiv seed"))
+        likesRepository.toggleLike(profileId, PostId(SourceKey.GELBOORU, "liked-gelbooru"), listOf("gelbooru seed"))
+        val coordinator = ForYouCoordinator(
+            registry = registryOf(healthy, failing),
+            settingsRepository = InMemorySettingsRepository(),
+            likesRepository = likesRepository,
+        )
+
+        coordinator.initialize()
+        coordinator.refresh(shuffle = false)
+
+        assertEquals(listOf(SourceKey.PIXIV), coordinator.results.map { post -> post.id.source })
+        assertEquals(setOf(SourceKey.PIXIV, SourceKey.GELBOORU), coordinator.seedSummaryBySource.keys)
+        assertTrue(coordinator.statuses.any { status -> status.source == SourceKey.GELBOORU })
+        assertNull(coordinator.errorMessage)
+    }
+
     private fun registryOf(vararg adapters: SourceAdapter): SourceAdapterRegistry {
         val adaptersBySource = adapters.associateBy { adapter -> adapter.sourceKey }
         val orchestrator = UnifiedSearchOrchestrator(adaptersBySource)
@@ -87,6 +145,7 @@ class ForYouCoordinatorTest {
     private class FakeAdapter(
         override val sourceKey: SourceKey,
         postId: String,
+        private val failSearch: Boolean = false,
     ) : SourceAdapter {
         override val capabilities = SourceCapabilities(
             supportsSortNewest = true,
@@ -98,9 +157,9 @@ class ForYouCoordinatorTest {
             supportsMinScoreServerSide = true,
             requiresCredentials = false,
         )
-        private val post = Post(
-            id = PostId(sourceKey, postId),
-            preview = ImageRef("https://example.com/$postId.jpg", null, "image/jpeg"),
+        private val post = testPost(
+            source = sourceKey,
+            sourcePostId = postId,
             full = null,
             pageUrl = null,
             width = 100,
@@ -115,6 +174,7 @@ class ForYouCoordinatorTest {
         val requestedPageTokens = mutableListOf<String?>()
 
         override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+            if (failSearch) error("$sourceKey failed")
             lastSearchQuery = query
             requestedPageTokens += pageToken
             val pagePost = if (pageToken == null) {

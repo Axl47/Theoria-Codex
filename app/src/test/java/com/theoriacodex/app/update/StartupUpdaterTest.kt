@@ -1,14 +1,20 @@
 package com.theoriacodex.app.update
 
+import android.content.Context
 import android.content.ContextWrapper
 import java.io.File
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 class StartupUpdaterTest {
+    @get:Rule
+    val tempFolder = TemporaryFolder()
+
     @Test
     fun `eligible update emits awaiting user choice`() = runTest {
         val feed = FakeFeedClient()
@@ -104,21 +110,129 @@ class StartupUpdaterTest {
         assertNull(snapshot.remindLaterUntilEpochMs)
     }
 
+    @Test
+    fun `newer release clears stale prompt decisions before prompting`() = runTest {
+        val feed = FakeFeedClient()
+        val store = FakeUpdateStateStore().apply {
+            snapshot = snapshot.copy(
+                ignoredReleaseId = 301L,
+                remindLaterReleaseId = 301L,
+                remindLaterUntilEpochMs = 999_999L,
+            )
+        }
+        val updater = buildUpdater(
+            feedClient = feed,
+            stateStore = store,
+            nowProvider = { 1_000L },
+            installedVersionCode = 10,
+        )
+        val newer = sampleRemote(releaseId = 302L, versionCode = 12)
+        feed.result = Result.success(newer)
+
+        val result = updater.checkForEligibleUpdate { }
+
+        assertEquals(newer, result.getOrNull())
+        assertNull(store.snapshot().ignoredReleaseId)
+        assertNull(store.snapshot().remindLaterReleaseId)
+        assertNull(store.snapshot().remindLaterUntilEpochMs)
+    }
+
+    @Test
+    fun `installed release records last seen and clears pending install`() = runTest {
+        val feed = FakeFeedClient()
+        val store = FakeUpdateStateStore().apply {
+            setPendingInstall(releaseId = 401L, versionCode = 12)
+        }
+        val updater = buildUpdater(
+            feedClient = feed,
+            stateStore = store,
+            nowProvider = { 1_000L },
+            installedVersionCode = 12,
+        )
+        val installed = sampleRemote(releaseId = 401L, versionCode = 12)
+        feed.result = Result.success(installed)
+        val states = mutableListOf<StartupUpdateState>()
+
+        val result = updater.checkForEligibleUpdate(states::add)
+
+        assertNull(result.getOrNull())
+        assertTrue(states.last() is StartupUpdateState.NoUpdate)
+        assertEquals(401L, store.snapshot().lastSeenReleaseId)
+        assertNull(store.snapshot().pendingInstallReleaseId)
+        assertNull(store.snapshot().pendingInstallVersionCode)
+    }
+
+    @Test
+    fun `retry clears pending state when downloaded apk is missing`() {
+        val context = TempFilesContext(tempFolder.newFolder("missing-apk"))
+        val store = FakeUpdateStateStore().apply {
+            setPendingInstall(releaseId = 501L, versionCode = 13)
+        }
+        val updater = buildUpdater(
+            feedClient = FakeFeedClient(),
+            stateStore = store,
+            nowProvider = { 1_000L },
+            installedVersionCode = 12,
+            context = context,
+        )
+
+        val outcome = updater.retryPendingInstall(sampleRemote(501L, 13)) { }
+
+        assertTrue(outcome is StartupUpdateOutcome.ContinueToAppWithError)
+        assertNull(store.snapshot().pendingInstallReleaseId)
+        assertNull(store.snapshot().pendingInstallVersionCode)
+    }
+
+    @Test
+    fun `unknown sources retry preserves pending install for a later retry`() {
+        val context = TempFilesContext(tempFolder.newFolder("unknown-sources"))
+        val store = FakeUpdateStateStore().apply {
+            setPendingInstall(releaseId = 601L, versionCode = 14)
+        }
+        val updater = buildUpdater(
+            feedClient = FakeFeedClient(),
+            stateStore = store,
+            nowProvider = { 1_000L },
+            installedVersionCode = 12,
+            context = context,
+            installer = object : ApkInstaller {
+                override fun launchInstaller(apkFile: File): Result<Unit> {
+                    return Result.failure(UnknownSourcesPermissionRequiredException())
+                }
+            },
+        )
+        val outputFile = ApkDownloadManager(
+            context = context,
+            outputFileName = "theoria-codex-main.apk",
+        ).outputFile()
+        outputFile.parentFile?.mkdirs()
+        outputFile.writeBytes(byteArrayOf(1, 2, 3))
+        val states = mutableListOf<StartupUpdateState>()
+
+        val outcome = updater.retryPendingInstall(sampleRemote(601L, 14), states::add)
+
+        assertTrue(outcome is StartupUpdateOutcome.AwaitingUnknownSources)
+        assertTrue(states.last() is StartupUpdateState.Installing)
+        assertEquals(601L, store.snapshot().pendingInstallReleaseId)
+        assertEquals(14, store.snapshot().pendingInstallVersionCode)
+    }
+
     private fun buildUpdater(
         feedClient: UpdateFeedClient,
         stateStore: FakeUpdateStateStore,
         nowProvider: () -> Long,
         installedVersionCode: Int,
+        context: Context = ContextWrapper(null),
+        installer: ApkInstaller = object : ApkInstaller {
+            override fun launchInstaller(apkFile: File): Result<Unit> = Result.success(Unit)
+        },
     ): StartupUpdater {
-        val context = ContextWrapper(null)
         return StartupUpdater(
             context = context,
             feedClient = feedClient,
             downloadManager = ApkDownloadManager(context, outputFileName = "theoria-codex-main.apk"),
             validator = ApkUpdateValidator(context),
-            installer = object : ApkInstaller {
-                override fun launchInstaller(apkFile: File): Result<Unit> = Result.success(Unit)
-            },
+            installer = installer,
             stateStore = stateStore,
             updateCheckTimeoutMs = 3_000L,
             installedVersionCodeProvider = { installedVersionCode },
@@ -199,5 +313,11 @@ class StartupUpdaterTest {
         override fun setLastInstalledChangelog(changelog: PendingPostInstallChangelog?) {
             snapshot = snapshot.copy(lastInstalledChangelog = changelog)
         }
+    }
+
+    private class TempFilesContext(
+        private val root: File,
+    ) : ContextWrapper(null) {
+        override fun getFilesDir(): File = root
     }
 }

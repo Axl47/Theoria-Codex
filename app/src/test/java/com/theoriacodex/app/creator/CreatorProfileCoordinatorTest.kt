@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -8,7 +9,6 @@ import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.model.CreatorProfile
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -31,8 +31,8 @@ class CreatorProfileCoordinatorTest {
             pages = mapOf(
                 null to Page(
                     items = listOf(
-                        samplePost("1", sampleCreator()),
-                        samplePost("2", sampleCreator()),
+                        testPost(sourcePostId = "1", creatorProfile = sampleCreator()),
+                        testPost(sourcePostId = "2", creatorProfile = sampleCreator()),
                     ),
                     nextPageToken = "next",
                 ),
@@ -55,8 +55,8 @@ class CreatorProfileCoordinatorTest {
         val adapter = FakeCreatorAdapter(
             adapterSourceKey = SourceKey.PIXIV,
             pages = mapOf(
-                null to Page(items = listOf(samplePost("1", sampleCreator())), nextPageToken = "page-2"),
-                "page-2" to Page(items = listOf(samplePost("2", sampleCreator())), nextPageToken = null),
+                null to Page(items = listOf(testPost(sourcePostId = "1", creatorProfile = sampleCreator())), nextPageToken = "page-2"),
+                "page-2" to Page(items = listOf(testPost(sourcePostId = "2", creatorProfile = sampleCreator())), nextPageToken = null),
             ),
         )
         val coordinator = CreatorProfileCoordinator(registry = singleAdapterRegistry(adapter))
@@ -74,8 +74,8 @@ class CreatorProfileCoordinatorTest {
         val adapter = FakeCreatorAdapter(
             adapterSourceKey = SourceKey.PIXIV,
             pages = mapOf(
-                null to Page(items = listOf(samplePost("1", sampleCreator())), nextPageToken = "page-2"),
-                "page-2" to Page(items = listOf(samplePost("2", sampleCreator())), nextPageToken = null),
+                null to Page(items = listOf(testPost(sourcePostId = "1", creatorProfile = sampleCreator())), nextPageToken = "page-2"),
+                "page-2" to Page(items = listOf(testPost(sourcePostId = "2", creatorProfile = sampleCreator())), nextPageToken = null),
             ),
         )
         val coordinator = CreatorProfileCoordinator(registry = singleAdapterRegistry(adapter))
@@ -105,7 +105,13 @@ class CreatorProfileCoordinatorTest {
         val adapter = FakeCreatorAdapter(
             adapterSourceKey = SourceKey.PIXIV,
             pages = mapOf(
-                null to Page(items = listOf(samplePost("1", sampleCreator()), samplePost("2", sampleCreator())), nextPageToken = null),
+                null to Page(
+                    items = listOf(
+                        testPost(sourcePostId = "1", creatorProfile = sampleCreator()),
+                        testPost(sourcePostId = "2", creatorProfile = sampleCreator()),
+                    ),
+                    nextPageToken = null,
+                ),
             ),
         )
         val coordinator = CreatorProfileCoordinator(registry = singleAdapterRegistry(adapter))
@@ -128,8 +134,14 @@ class CreatorProfileCoordinatorTest {
         val adapter = FakeCreatorAdapter(
             adapterSourceKey = SourceKey.IWARA,
             pages = mapOf(
-                null to Page(items = listOf(samplePost("i1", creator)), nextPageToken = "1"),
-                "1" to Page(items = listOf(samplePost("i2", creator)), nextPageToken = null),
+                null to Page(
+                    items = listOf(testPost(source = creator.source, sourcePostId = "i1", creatorProfile = creator)),
+                    nextPageToken = "1",
+                ),
+                "1" to Page(
+                    items = listOf(testPost(source = creator.source, sourcePostId = "i2", creatorProfile = creator)),
+                    nextPageToken = null,
+                ),
             ),
         )
         val coordinator = CreatorProfileCoordinator(registry = singleAdapterRegistry(adapter))
@@ -156,22 +168,6 @@ class CreatorProfileCoordinatorTest {
                 "https://www.pixiv.net/en/users/$profileId"
             },
             uploadsQuery = profileId,
-        )
-    }
-
-    private fun samplePost(id: String, creator: CreatorProfile): Post {
-        return Post(
-            id = PostId(source = creator.source, sourcePostId = id),
-            preview = ImageRef(url = "https://example.com/$id.jpg", localPath = null, mime = "image/jpeg"),
-            full = ImageRef(url = "https://example.com/full/$id.jpg", localPath = null, mime = "image/jpeg"),
-            pageUrl = "https://example.com/post/$id",
-            width = 100,
-            height = 100,
-            canonicalTags = listOf("landscape"),
-            rawTags = listOf("landscape"),
-            authorName = "artist",
-            createdAtEpochMs = 1L,
-            creatorProfile = creator,
         )
     }
 

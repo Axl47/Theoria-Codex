@@ -414,17 +414,6 @@ class InMemoryRepositoriesTest {
     }
 
     private fun samplePost(id: String, source: SourceKey = SourceKey.PIXIV): Post {
-        return Post(
-            id = PostId(source = source, sourcePostId = id),
-            preview = ImageRef(url = "https://example.com/$id.jpg", localPath = null, mime = "image/jpeg"),
-            full = ImageRef(url = "https://example.com/full/$id.jpg", localPath = null, mime = "image/jpeg"),
-            pageUrl = "https://example.com/post/$id",
-            width = 1000,
-            height = 1500,
-            canonicalTags = listOf("landscape"),
-            rawTags = listOf("landscape"),
-            authorName = "artist",
-            createdAtEpochMs = 1L,
-        )
+        return repositoryTestPost(id = id, source = source)
     }
 }

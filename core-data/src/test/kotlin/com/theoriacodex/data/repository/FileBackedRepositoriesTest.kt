@@ -1032,24 +1032,6 @@ class FileBackedRepositoriesTest {
     }
 
     private fun samplePost(id: String, localPath: String?, source: SourceKey = SourceKey.PIXIV): Post {
-        return Post(
-            id = PostId(source, id),
-            preview = ImageRef(url = "https://example.com/$id.jpg", localPath = localPath, mime = "image/jpeg"),
-            full = ImageRef(url = "https://example.com/full/$id.jpg", localPath = null, mime = "image/jpeg"),
-            pageUrl = "https://example.com/post/$id",
-            width = 100,
-            height = 100,
-            canonicalTags = listOf("landscape"),
-            rawTags = listOf("landscape"),
-            authorName = "artist",
-            createdAtEpochMs = 1L,
-            creatorProfile = CreatorProfile(
-                source = source,
-                displayName = "artist",
-                profileId = "profile-$id",
-                profileUrl = "https://example.com/creator/$id",
-                uploadsQuery = "uploads-$id",
-            ),
-        )
+        return repositoryTestPost(id = id, localPath = localPath, source = source)
     }
 }

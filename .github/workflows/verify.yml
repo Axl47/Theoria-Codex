@@ -1,0 +1,52 @@
+name: Verify
+
+on:
+  workflow_call:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    name: Lint, test, and assemble
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Test core modules
+        run: >-
+          ./gradlew
+          :core-domain:test
+          :core-data:test
+          :core-sources:test
+          :core-stubs:test
+
+      - name: Verify Android app
+        run: >-
+          ./gradlew
+          lint
+          :app:testDebugUnitTest
+          :app:compileDebugAndroidTestKotlin
+          :app:assembleDebug

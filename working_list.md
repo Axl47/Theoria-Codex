@@ -1,17 +1,35 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T17:40:21-04:00
+updated_at: 2026-07-10T17:54:03-04:00
 ---
 # Working List
 
-## Current Task: Code Quality And UI Ownership ExecPlan
+## Current Task: Implement Code Quality And UI Ownership Modernization
 
 ### In Progress
 
 ### Pending
 
+- [ ] Phase 1: repair correctness invariants
+- [ ] Phase 2: bound transport, caches, and disk work
+- [ ] Phase 3: establish the application container and immutable UI contracts
+- [ ] Phase 4: move UI ownership to route-scoped state holders
+- [ ] Phase 5: consolidate repeated policy and stable UI primitives
+- [ ] Phase 6: modernize persistence, credentials, and Android tooling in reversible waves
+- [ ] Phase 7: enforce quality budgets, complete system acceptance, and close the program
+
 ### Done
 
+- [x] Phase 0: establish trustworthy guardrails
+  - [x] 0A: add deterministic PR/main verification workflow
+    - Evidence: reusable YAML parsed; core modules and app lint/unit/android-test compilation/debug assembly passed
+  - [x] 0B: classify offline/live Android tests and diagnose the Compose smoke harness
+    - Evidence: offline Hitomi parser and Animated WebP device tests passed; live Hitomi transport skips without explicit opt-in; smoke failure is a locked/dozing device lifecycle (`CREATED`, not `RESUMED`), not an unknown missing hierarchy
+  - [x] 0C: consolidate test fixtures and expand characterization coverage
+    - Evidence: shared fixtures plus repository backend contracts, For You failure/blacklist cases, and updater retry/deferral cases passed (`core-data`: 50 tests; app: 232 tests, 3 opt-in skips)
+  - [x] 0I: integrate tagged-SHA release verification, run the phase gate, and update the ExecPlan
+    - Evidence: `./gradlew lint test :app:assembleDebug :app:compileDebugAndroidTestKotlin --rerun-tasks` passed 110 tasks and 701 configured test executions with 0 failures/errors and 6 opt-in skips; offline Hitomi device parser passed
+- [x] Confirm the approved plan commit is the current baseline (`57bcb15`)
 - [x] Read the repository ExecPlan standard and orchestration skills
 - [x] Preserve the existing release-skill edit and completed audit evidence
 - [x] Define the phased architecture, dependency order, and conflict-safe parallel agent lanes
