@@ -70,6 +70,7 @@ class HitomiSourceAdapter(
     private val mediaUrlResolver: HitomiMediaUrlResolver = HitomiMediaUrlResolver(httpClient),
     private val pageSize: Int = DEFAULT_PAGE_SIZE,
     private val hydrationConcurrency: Int = DEFAULT_HYDRATION_CONCURRENCY,
+    globalIndexCacheMaxBytes: Long = HitomiGlobalIndexCache.DEFAULT_MAX_BYTES,
     private val mediaCandidates: suspend (HitomiMediaFile) -> List<HitomiMediaCandidate> = { file ->
         mediaUrlResolver.candidates(file)
     },
@@ -103,7 +104,7 @@ class HitomiSourceAdapter(
     private val gson = Gson()
     private val suggestionCounts = ConcurrentHashMap<String, Int>()
     private val globalSearchIndex = HitomiGlobalSearchIndex(httpClient)
-    private val globalIndexes = ConcurrentHashMap<String, IntArray>()
+    private val globalIndexCache = HitomiGlobalIndexCache(globalIndexCacheMaxBytes)
     private val knownNozomiSizes = ConcurrentHashMap<String, Long>()
     private val membershipCacheMutex = Mutex()
     private val membershipCache = object : LinkedHashMap<String, IntArray>(
@@ -160,6 +161,9 @@ class HitomiSourceAdapter(
         if (decodedToken != null && decodedToken.queryHash != queryHash) {
             throw sourceParseFailure("Hitomi page token does not match the active query")
         }
+        if (decodedToken != null && decodedToken.globalIndexVersion != compiled.globalIndexVersion) {
+            throw sourceParseFailure("Hitomi page token does not match the active global index version")
+        }
         if (
             decodedToken != null &&
             query.sort == SortMode.RANDOM &&
@@ -189,12 +193,12 @@ class HitomiSourceAdapter(
         }
 
         val secondaryIncludes = compiled.secondaryIncludes(primary.key)
-            .map { index -> membershipFor(index.url) }
+            .map { index -> membershipFor(index) }
         if (secondaryIncludes.any(IntArray::isEmpty)) {
             return Page(items = emptyList(), nextPageToken = null)
         }
         val exclusions = compiled.exclusions
-            .map { index -> membershipFor(index.url) }
+            .map { index -> membershipFor(index) }
 
         if (query.sort == SortMode.RANDOM) {
             return randomPage(
@@ -205,6 +209,7 @@ class HitomiSourceAdapter(
                 expectedSnapshotFingerprint = decodedToken?.randomSnapshotFingerprint,
                 secondaryIncludes = secondaryIncludes,
                 exclusions = exclusions,
+                globalIndexVersion = compiled.globalIndexVersion,
             )
         }
 
@@ -221,7 +226,7 @@ class HitomiSourceAdapter(
                 .coerceAtMost(MAX_PRIMARY_SCAN_IDS_PER_PAGE - scannedIds)
 
             val range = readPrimaryRange(
-                url = primary.url,
+                index = primary,
                 firstIdIndex = primaryOffset,
                 idCount = requestedIds,
             )
@@ -256,6 +261,7 @@ class HitomiSourceAdapter(
                     primaryOffset = primaryOffset,
                     randomSeed = seed,
                     randomSnapshotFingerprint = null,
+                    globalIndexVersion = compiled.globalIndexVersion,
                 ),
             )
         } else {
@@ -272,9 +278,10 @@ class HitomiSourceAdapter(
         expectedSnapshotFingerprint: String?,
         secondaryIncludes: List<IntArray>,
         exclusions: List<IntArray>,
+        globalIndexVersion: String?,
     ): Page<Post> {
         val randomOrder = randomOrderFor(
-            url = primary.url,
+            compiledIndex = primary,
             seed = seed,
             expectedSnapshotFingerprint = expectedSnapshotFingerprint,
         )
@@ -308,6 +315,7 @@ class HitomiSourceAdapter(
                     primaryOffset = offset.toLong(),
                     randomSeed = seed,
                     randomSnapshotFingerprint = randomOrder.snapshotFingerprint,
+                    globalIndexVersion = globalIndexVersion,
                 ),
             )
         } else {
@@ -317,10 +325,11 @@ class HitomiSourceAdapter(
     }
 
     private suspend fun randomOrderFor(
-        url: String,
+        compiledIndex: CompiledIndex,
         seed: Long,
         expectedSnapshotFingerprint: String?,
     ): RandomOrder {
+        val url = compiledIndex.url
         if (expectedSnapshotFingerprint != null) {
             randomOrderCacheMutex.withLock {
                 val key = RandomOrderCacheKey(url, seed, expectedSnapshotFingerprint)
@@ -333,7 +342,7 @@ class HitomiSourceAdapter(
             }
         }
 
-        val snapshot = readCompleteNozomi(url, MAX_RANDOM_GALLERY_IDS)
+        val snapshot = readCompleteNozomi(compiledIndex, MAX_RANDOM_GALLERY_IDS)
         if (
             expectedSnapshotFingerprint != null &&
             snapshot.fingerprint != expectedSnapshotFingerprint
@@ -357,8 +366,12 @@ class HitomiSourceAdapter(
         return RandomOrder(ids = ids, snapshotFingerprint = snapshot.fingerprint)
     }
 
-    private suspend fun readCompleteNozomi(url: String, maxGalleryIds: Int): NozomiSnapshot {
-        globalIndexes[url]?.let { ordered ->
+    private suspend fun readCompleteNozomi(
+        index: CompiledIndex,
+        maxGalleryIds: Int,
+    ): NozomiSnapshot {
+        val url = index.url
+        (index.inlineIds ?: globalIndexCache.get(url))?.let { ordered ->
             if (ordered.size > maxGalleryIds) {
                 throw sourceParseFailure("Hitomi global index exceeded the bounded gallery limit")
             }
@@ -586,7 +599,8 @@ class HitomiSourceAdapter(
         require(options.isNotEmpty()) { "Hitomi search requires a primary index" }
         if (options.size == 1) return options.single()
         val estimates = options.associateWith { option ->
-            option.term
+            option.inlineIds?.size?.toLong()
+                ?: option.term
                 ?.termCacheKey()
                 ?.let(suggestionCounts::get)
                 ?.toLong()
@@ -599,7 +613,7 @@ class HitomiSourceAdapter(
     }
 
     private suspend fun nozomiSize(url: String): Long {
-        globalIndexes[url]?.let { return it.size.toLong() }
+        globalIndexCache.get(url)?.let { return it.size.toLong() }
         knownNozomiSizes[url]?.let { return it }
         val response = requestNozomi(
             url = url,
@@ -622,12 +636,13 @@ class HitomiSourceAdapter(
         return size
     }
 
-    private suspend fun membershipFor(url: String): IntArray {
+    private suspend fun membershipFor(index: CompiledIndex): IntArray {
+        val url = index.url
         membershipCacheMutex.withLock {
             membershipCache[url]?.let { return it }
         }
 
-        globalIndexes[url]?.let { ids ->
+        (index.inlineIds ?: globalIndexCache.get(url))?.let { ids ->
             val membership = ids.distinct().sorted().toIntArray()
             membershipCacheMutex.withLock { membershipCache[url] = membership }
             return membership
@@ -680,11 +695,12 @@ class HitomiSourceAdapter(
     }
 
     private suspend fun readPrimaryRange(
-        url: String,
+        index: CompiledIndex,
         firstIdIndex: Long,
         idCount: Int,
     ): PrimaryRange {
-        globalIndexes[url]?.let { ids ->
+        val url = index.url
+        (index.inlineIds ?: globalIndexCache.get(url))?.let { ids ->
             val from = firstIdIndex.coerceAtMost(ids.size.toLong()).toInt()
             val until = (firstIdIndex + idCount).coerceAtMost(ids.size.toLong()).toInt()
             return PrimaryRange(ids.slice(from until until), exhausted = until >= ids.size)
@@ -1193,10 +1209,18 @@ class HitomiSourceAdapter(
         if (includedLanguages.size > 1) {
             return CompiledHitomiQuery(isUnsatisfiable = true)
         }
+        val globalIndexVersion = if ((includes + excludes).any(SearchTerm::isPortableGeneralTag)) {
+            loadGlobalIndexVersion()
+        } else {
+            null
+        }
         val language = includedLanguages.singleOrNull() ?: HITOMI_ALL_LANGUAGE
         val positiveTerms = includes.filterNot { term -> term.facet == SearchFacet.LANGUAGE }
         val positiveIndexes = positiveTerms.map { term ->
-            if (term.isPortableGeneralTag) globalCompiledIndex(term) else CompiledIndex(
+            if (term.isPortableGeneralTag) globalCompiledIndex(
+                term = term,
+                version = requireNotNull(globalIndexVersion),
+            ) else CompiledIndex(
                 key = term.termCacheKey(),
                 term = term,
                 newestUrl = term.nozomiUrl(HitomiNozomiSort.NEWEST, language),
@@ -1204,7 +1228,12 @@ class HitomiSourceAdapter(
             )
         }.distinctBy(CompiledIndex::key)
         val exclusionIndexes = excludes.map { term ->
-            if (term.isPortableGeneralTag) return@map globalCompiledIndex(term)
+            if (term.isPortableGeneralTag) {
+                return@map globalCompiledIndex(
+                    term = term,
+                    version = requireNotNull(globalIndexVersion),
+                )
+            }
             val request = if (term.facet == SearchFacet.LANGUAGE) {
                 HitomiNozomiRequest(
                     language = term.value,
@@ -1235,15 +1264,42 @@ class HitomiSourceAdapter(
             base = base,
             positives = positiveIndexes,
             exclusions = exclusionIndexes.map { index -> index.forNewest() },
+            globalIndexVersion = globalIndexVersion?.value,
         )
     }
 
-    private suspend fun globalCompiledIndex(term: SearchTerm): CompiledIndex {
+    private suspend fun loadGlobalIndexVersion(): HitomiGlobalIndexVersion {
+        return try {
+            globalSearchIndex.currentVersion()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: SourceHttpBodyTooLargeException) {
+            throw sourceParseFailure("Hitomi global search version exceeded its bounded response", error)
+        } catch (error: IOException) {
+            throw SourceAdapterException(
+                reason = SourceFailureReason.NETWORK,
+                message = "Hitomi global search version request failed",
+                cause = error,
+            )
+        }
+    }
+
+    private suspend fun globalCompiledIndex(
+        term: SearchTerm,
+        version: HitomiGlobalIndexVersion,
+    ): CompiledIndex {
         val normalized = term.value.trim().lowercase(Locale.ROOT)
-        val url = "hitomi-global://${sha256Hex(normalized.toByteArray()).take(16)}"
-        if (!globalIndexes.containsKey(url)) {
-            globalIndexes[url] = try {
-                globalSearchIndex.galleryIds(normalized)
+        val url = "hitomi-global://${version.value}/${sha256Hex(normalized.toByteArray()).take(16)}"
+        val ids = globalIndexCache.getOrLoad(
+            version = version.value,
+            key = url,
+        ) {
+            try {
+                val loaded = globalSearchIndex.galleryIds(normalized, version)
+                if (loaded.version != version) {
+                    throw HitomiProtocolException("global search returned an unexpected index version")
+                }
+                loaded.galleryIds
             } catch (error: CancellationException) {
                 throw error
             } catch (error: SourceHttpBodyTooLargeException) {
@@ -1261,6 +1317,7 @@ class HitomiSourceAdapter(
             term = term,
             newestUrl = url,
             sortedUrl = url,
+            inlineIds = ids,
         )
     }
 
@@ -1335,7 +1392,7 @@ class HitomiSourceAdapter(
             throw sourceParseFailure("Hitomi page token was malformed", error)
         }
         if (
-            token.version != PAGE_TOKEN_VERSION ||
+            token.version !in setOf(LEGACY_PAGE_TOKEN_VERSION, PAGE_TOKEN_VERSION) ||
             token.queryHash.isNullOrBlank() ||
             token.primaryKey.isNullOrBlank() ||
             token.primaryOffset == null ||
@@ -1353,6 +1410,15 @@ class HitomiSourceAdapter(
                 ?: token.randomSnapshotFingerprint?.let {
                     throw sourceParseFailure("Hitomi page token contained an invalid random snapshot")
                 },
+            globalIndexVersion = if (token.version == PAGE_TOKEN_VERSION) {
+                token.globalIndexVersion
+                    ?.takeIf(GLOBAL_INDEX_VERSION_PATTERN::matches)
+                    ?: token.globalIndexVersion?.let {
+                        throw sourceParseFailure("Hitomi page token contained an invalid global index version")
+                    }
+            } else {
+                null
+            },
         )
     }
 
@@ -1375,6 +1441,7 @@ class HitomiSourceAdapter(
         val base: CompiledIndex? = null,
         val positives: List<CompiledIndex> = emptyList(),
         val exclusions: List<CompiledIndex> = emptyList(),
+        val globalIndexVersion: String? = null,
         val isUnsatisfiable: Boolean = false,
     ) {
         fun primaryOptions(sort: SortMode): List<CompiledIndex> {
@@ -1393,6 +1460,7 @@ class HitomiSourceAdapter(
         val newestUrl: String,
         val sortedUrl: String,
         val url: String = sortedUrl,
+        val inlineIds: IntArray? = null,
     ) {
         fun forNewest(): CompiledIndex = copy(url = newestUrl)
         fun forSort(sort: SortMode): CompiledIndex {
@@ -1428,6 +1496,7 @@ class HitomiSourceAdapter(
         val primaryOffset: Long?,
         val randomSeed: Long?,
         val randomSnapshotFingerprint: String?,
+        val globalIndexVersion: String?,
     )
 
     private data class DecodedHitomiPageToken(
@@ -1436,6 +1505,7 @@ class HitomiSourceAdapter(
         val primaryOffset: Long,
         val randomSeed: Long,
         val randomSnapshotFingerprint: String?,
+        val globalIndexVersion: String?,
     )
 
     private data class ParsedContentRange(
@@ -1480,7 +1550,8 @@ class HitomiSourceAdapter(
         private const val MAX_NOZOMI_RESPONSE_BYTES = 8 * 1024 * 1024
         private const val MAX_RANDOM_GALLERY_IDS = HitomiNozomi.MAX_GALLERY_IDS
         private const val MAX_RANDOM_ORDER_CACHE_ENTRIES = 2
-        private const val PAGE_TOKEN_VERSION = 2
+        private const val LEGACY_PAGE_TOKEN_VERSION = 2
+        private const val PAGE_TOKEN_VERSION = 3
         private const val BASE_PRIMARY_KEY = "__all__"
         private const val HITOMI_ALL_LANGUAGE = "all"
         private const val HITOMI_ANIME_TYPE = "anime"
@@ -1512,6 +1583,7 @@ class HitomiSourceAdapter(
             "russian",
         )
         private const val HITOMI_LANGUAGE_NAMESPACE = "language"
+        private val GLOBAL_INDEX_VERSION_PATTERN = Regex("[0-9]+")
 
         private val HITOMI_AVIF_HOST = Regex("""a[12]\.gold-usergeneratedcontent\.net""")
         private val HITOMI_WEBP_HOST = Regex("""w[12]\.gold-usergeneratedcontent\.net""")

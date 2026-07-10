@@ -23,13 +23,51 @@ data class UpdateStateSnapshot(
 )
 
 interface UpdateStateStore {
-    fun snapshot(): UpdateStateSnapshot
-    fun setLastSeenReleaseId(releaseId: Long?)
-    fun setPendingInstall(releaseId: Long?, versionCode: Int?)
-    fun clearPendingInstall()
-    fun setIgnoredRelease(releaseId: Long?)
-    fun setRemindLater(releaseId: Long?, untilEpochMs: Long?)
-    fun clearPromptDeferrals()
-    fun setPendingPostInstallChangelog(changelog: PendingPostInstallChangelog?)
-    fun setLastInstalledChangelog(changelog: PendingPostInstallChangelog?)
+    suspend fun snapshot(): UpdateStateSnapshot
+    suspend fun update(transform: (UpdateStateSnapshot) -> UpdateStateSnapshot)
+
+    suspend fun setLastSeenReleaseId(releaseId: Long?) = update { current ->
+        current.copy(lastSeenReleaseId = releaseId)
+    }
+
+    suspend fun setPendingInstall(releaseId: Long?, versionCode: Int?) = update { current ->
+        current.copy(
+            pendingInstallReleaseId = releaseId,
+            pendingInstallVersionCode = versionCode,
+        )
+    }
+
+    suspend fun clearPendingInstall() = update { current ->
+        current.copy(
+            pendingInstallReleaseId = null,
+            pendingInstallVersionCode = null,
+        )
+    }
+
+    suspend fun setIgnoredRelease(releaseId: Long?) = update { current ->
+        current.copy(ignoredReleaseId = releaseId)
+    }
+
+    suspend fun setRemindLater(releaseId: Long?, untilEpochMs: Long?) = update { current ->
+        current.copy(
+            remindLaterReleaseId = releaseId,
+            remindLaterUntilEpochMs = untilEpochMs,
+        )
+    }
+
+    suspend fun clearPromptDeferrals() = update { current ->
+        current.copy(
+            ignoredReleaseId = null,
+            remindLaterReleaseId = null,
+            remindLaterUntilEpochMs = null,
+        )
+    }
+
+    suspend fun setPendingPostInstallChangelog(changelog: PendingPostInstallChangelog?) = update { current ->
+        current.copy(pendingPostInstallChangelog = changelog)
+    }
+
+    suspend fun setLastInstalledChangelog(changelog: PendingPostInstallChangelog?) = update { current ->
+        current.copy(lastInstalledChangelog = changelog)
+    }
 }

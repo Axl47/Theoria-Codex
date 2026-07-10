@@ -51,6 +51,7 @@ class StartupUpdaterTest {
         val remoteV1 = sampleRemote(releaseId = 101, versionCode = 11)
         feed.result = Result.success(remoteV1)
         updater.onUserChoseNo(remoteV1)
+        assertEquals(1, store.transactionCount)
 
         val sameRelease = updater.checkForEligibleUpdate { }
         assertNull(sameRelease.getOrNull())
@@ -86,7 +87,7 @@ class StartupUpdaterTest {
     }
 
     @Test
-    fun `yes clears matching deferrals`() {
+    fun `yes clears matching deferrals`() = runTest {
         val feed = FakeFeedClient()
         val store = FakeUpdateStateStore().apply {
             snapshot = snapshot.copy(
@@ -163,7 +164,7 @@ class StartupUpdaterTest {
     }
 
     @Test
-    fun `retry clears pending state when downloaded apk is missing`() {
+    fun `retry clears pending state when downloaded apk is missing`() = runTest {
         val context = TempFilesContext(tempFolder.newFolder("missing-apk"))
         val store = FakeUpdateStateStore().apply {
             setPendingInstall(releaseId = 501L, versionCode = 13)
@@ -184,7 +185,7 @@ class StartupUpdaterTest {
     }
 
     @Test
-    fun `unknown sources retry preserves pending install for a later retry`() {
+    fun `unknown sources retry preserves pending install for a later retry`() = runTest {
         val context = TempFilesContext(tempFolder.newFolder("unknown-sources"))
         val store = FakeUpdateStateStore().apply {
             setPendingInstall(releaseId = 601L, versionCode = 14)
@@ -266,53 +267,15 @@ class StartupUpdaterTest {
 
     private class FakeUpdateStateStore : UpdateStateStore {
         var snapshot = UpdateStateSnapshot()
+        var transactionCount = 0
 
-        override fun snapshot(): UpdateStateSnapshot = snapshot
+        override suspend fun snapshot(): UpdateStateSnapshot = snapshot
 
-        override fun setLastSeenReleaseId(releaseId: Long?) {
-            snapshot = snapshot.copy(lastSeenReleaseId = releaseId)
+        override suspend fun update(transform: (UpdateStateSnapshot) -> UpdateStateSnapshot) {
+            transactionCount += 1
+            snapshot = transform(snapshot)
         }
 
-        override fun setPendingInstall(releaseId: Long?, versionCode: Int?) {
-            snapshot = snapshot.copy(
-                pendingInstallReleaseId = releaseId,
-                pendingInstallVersionCode = versionCode,
-            )
-        }
-
-        override fun clearPendingInstall() {
-            snapshot = snapshot.copy(
-                pendingInstallReleaseId = null,
-                pendingInstallVersionCode = null,
-            )
-        }
-
-        override fun setIgnoredRelease(releaseId: Long?) {
-            snapshot = snapshot.copy(ignoredReleaseId = releaseId)
-        }
-
-        override fun setRemindLater(releaseId: Long?, untilEpochMs: Long?) {
-            snapshot = snapshot.copy(
-                remindLaterReleaseId = releaseId,
-                remindLaterUntilEpochMs = untilEpochMs,
-            )
-        }
-
-        override fun clearPromptDeferrals() {
-            snapshot = snapshot.copy(
-                ignoredReleaseId = null,
-                remindLaterReleaseId = null,
-                remindLaterUntilEpochMs = null,
-            )
-        }
-
-        override fun setPendingPostInstallChangelog(changelog: PendingPostInstallChangelog?) {
-            snapshot = snapshot.copy(pendingPostInstallChangelog = changelog)
-        }
-
-        override fun setLastInstalledChangelog(changelog: PendingPostInstallChangelog?) {
-            snapshot = snapshot.copy(lastInstalledChangelog = changelog)
-        }
     }
 
     private class TempFilesContext(

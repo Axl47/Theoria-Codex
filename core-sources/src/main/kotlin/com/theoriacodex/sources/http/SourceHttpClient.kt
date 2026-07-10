@@ -29,6 +29,7 @@ class SourceHttpBodyTooLargeException(
     val maxBodyBytes: Int,
 ) : IllegalStateException("Source HTTP response exceeded the $maxBodyBytes byte limit")
 
+const val DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES: Int = 8 * 1024 * 1024
 const val DEFAULT_MAX_SOURCE_BINARY_BODY_BYTES: Int = 8 * 1024 * 1024
 
 interface SourceHttpClient {

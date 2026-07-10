@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T18:13:36-04:00
+updated_at: 2026-07-10T18:40:37-04:00
 ---
 # Working List
 
@@ -10,7 +10,6 @@ updated_at: 2026-07-10T18:13:36-04:00
 
 ### Pending
 
-- [ ] Phase 2: bound transport, caches, and disk work
 - [ ] Phase 3: establish the application container and immutable UI contracts
 - [ ] Phase 4: move UI ownership to route-scoped state holders
 - [ ] Phase 5: consolidate repeated policy and stable UI primitives
@@ -18,6 +17,20 @@ updated_at: 2026-07-10T18:13:36-04:00
 - [ ] Phase 7: enforce quality budgets, complete system acceptance, and close the program
 
 ### Done
+
+- [x] Phase 2: bound transport, caches, and disk work
+  - [x] 2A: cap text HTTP responses and unify GET/POST cleanup and cancellation
+    - Evidence: 8 MiB bounded text transport shares GET/POST cleanup and active disconnect-on-cancel; focused 16-test HTTP suite and final 172-test core-sources suite passed
+  - [x] 2B: replace Hitomi's global index map with a versioned byte-weighted single-flight LRU
+    - Evidence: 32 MiB injectable byte-weighted LRU evicts by access, separates versions, coalesces loads, preserves cancellation and active-query IDs, and binds v3 pagination tokens to the index version; focused and full core-sources suites passed
+  - [x] 2C: move repository file work onto injected IO and share atomic JSON replacement
+    - Evidence: repositories dispatch file/cache work to injected IO, share hardened atomic JSON, and roll visible state back after failed/cancelled writes; 72 core-data tests passed
+  - [x] 2D: adopt atomic, bounded, batched app file stores
+    - Evidence: updater transitions use one atomic suspend transform; tag suggestions hydrate asynchronously, debounce 500 ms, cap at 25,000/source and 4 MiB total, and flush non-cancellably on close; 24 focused store/updater tests passed
+  - [x] 2I: conflate Search scroll and suggestion persistence without composition-time disk work
+    - Evidence: scroll bursts debounce, final state flushes on effect disposal, commits cannot be cancelled between compatibility stores, suggestion hydration completes before Search initialization, and one application-owned suggestion store prevents overlapping writers across Activity recreation; 54 Search coordinator plus 4 scroll lifecycle tests passed
+  - [x] 2 gate: full validation and installed-app smoke
+    - Evidence: 110-task gate passed 793 configured tests with 0 failures/errors and 6 opt-in skips; final debug APK installed/cold-launched as pid 26753 with an empty crash buffer
 
 - [x] Phase 1: repair correctness invariants
   - [x] 1A: preserve cancellation across app and provider suspend boundaries

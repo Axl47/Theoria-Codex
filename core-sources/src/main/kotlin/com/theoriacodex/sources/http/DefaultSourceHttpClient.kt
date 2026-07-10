@@ -12,7 +12,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
 
 class DefaultSourceHttpClient(
     private val connectTimeoutMs: Int = 10_000,
@@ -30,7 +29,7 @@ class DefaultSourceHttpClient(
             url = url,
             query = query,
             headers = headers,
-            maxBodyBytes = Int.MAX_VALUE,
+            maxBodyBytes = DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES,
         )
         return SourceHttpResponse(
             statusCode = response.statusCode,
@@ -50,9 +49,11 @@ class DefaultSourceHttpClient(
         val requestUrl = buildUrl(url, query)
         val requestHeaders = headers.withByteRange(range)
         return executeBytesWithRetry(requestUrl) {
-            executeByteRequest(
+            executeRequest(
+                method = "GET",
                 url = requestUrl,
                 headers = requestHeaders,
+                body = null,
                 maxBodyBytes = maxBodyBytes,
             )
         }
@@ -69,14 +70,16 @@ class DefaultSourceHttpClient(
         } else {
             headers + ("Content-Type" to "application/x-www-form-urlencoded")
         }
-        return executeWithRetry(url) {
+        val response = executeBytesWithRetry(url) {
             executeRequest(
                 method = "POST",
                 url = url,
                 headers = normalizedHeaders,
                 body = encodedForm.toByteArray(Charsets.UTF_8),
+                maxBodyBytes = DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES,
             )
         }
+        return response.toTextResponse()
     }
 
     override suspend fun postJson(
@@ -89,38 +92,16 @@ class DefaultSourceHttpClient(
         } else {
             headers + ("Content-Type" to "application/json")
         }
-        return executeWithRetry(url) {
+        val response = executeBytesWithRetry(url) {
             executeRequest(
                 method = "POST",
                 url = url,
                 headers = normalizedHeaders,
                 body = body.toByteArray(Charsets.UTF_8),
+                maxBodyBytes = DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES,
             )
         }
-    }
-
-    private suspend fun executeWithRetry(
-        requestUrl: String,
-        block: suspend () -> SourceHttpResponse,
-    ): SourceHttpResponse {
-        var attempt = 0
-        var lastError: Throwable? = null
-        while (attempt <= maxRetries) {
-            try {
-                val response = block()
-                if (!shouldRetryStatus(requestUrl, response.statusCode) || attempt == maxRetries) {
-                    return response
-                }
-                attempt += 1
-                delay(resolveRetryDelayMs(response, attempt, retryBaseDelayMs))
-            } catch (error: IOException) {
-                lastError = error
-                if (attempt == maxRetries) throw error
-                attempt += 1
-                delay(retryBaseDelayMs * attempt)
-            }
-        }
-        throw IllegalStateException("Unexpected HTTP retry state", lastError)
+        return response.toTextResponse()
     }
 
     private suspend fun executeBytesWithRetry(
@@ -162,50 +143,17 @@ class DefaultSourceHttpClient(
         url: String,
         headers: Map<String, String>,
         body: ByteArray?,
-    ): SourceHttpResponse = withContext(Dispatchers.IO) {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        connection.requestMethod = method
-        connection.connectTimeout = connectTimeoutMs
-        connection.readTimeout = readTimeoutMs
-        connection.instanceFollowRedirects = true
-        connection.useCaches = false
-        headers.forEach { (key, value) ->
-            connection.setRequestProperty(key, value)
-        }
-
-        if (body != null) {
-            connection.doOutput = true
-            connection.outputStream.use { output ->
-                output.write(body)
-            }
-        }
-
-        val status = connection.responseCode
-        val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-        val bodyText = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-        val headersMap = connection.headerFields
-            .filterKeys { it != null }
-            .mapKeys { (key, _) -> requireNotNull(key) }
-
-        SourceHttpResponse(
-            statusCode = status,
-            body = bodyText,
-            headers = headersMap,
-        )
-    }
-
-    private suspend fun executeByteRequest(
-        url: String,
-        headers: Map<String, String>,
         maxBodyBytes: Int,
     ): SourceByteResponse = suspendCancellableCoroutine { continuation ->
         val connection = URL(url).openConnection() as HttpURLConnection
         val request = CoroutineScope(Dispatchers.IO).launch {
             try {
                 val response = runInterruptible {
-                    executeBlockingByteRequest(
+                    executeBlockingRequest(
                         connection = connection,
+                        method = method,
                         headers = headers,
+                        body = body,
                         maxBodyBytes = maxBodyBytes,
                     )
                 }
@@ -222,13 +170,15 @@ class DefaultSourceHttpClient(
         }
     }
 
-    private fun executeBlockingByteRequest(
+    private fun executeBlockingRequest(
         connection: HttpURLConnection,
+        method: String,
         headers: Map<String, String>,
+        body: ByteArray?,
         maxBodyBytes: Int,
     ): SourceByteResponse {
         try {
-            connection.requestMethod = "GET"
+            connection.requestMethod = method
             connection.connectTimeout = connectTimeoutMs
             connection.readTimeout = readTimeoutMs
             connection.instanceFollowRedirects = true
@@ -237,7 +187,18 @@ class DefaultSourceHttpClient(
                 connection.setRequestProperty(key, value)
             }
 
+            if (body != null) {
+                connection.doOutput = true
+                connection.outputStream.use { output ->
+                    output.write(body)
+                }
+            }
+
             val status = connection.responseCode
+            val contentLength = connection.contentLengthLong
+            if (contentLength > maxBodyBytes.toLong()) {
+                throw SourceHttpBodyTooLargeException(maxBodyBytes)
+            }
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val bodyBytes = stream?.use { it.readBoundedBytes(maxBodyBytes) } ?: ByteArray(0)
             val headersMap = connection.headerFields
@@ -253,6 +214,14 @@ class DefaultSourceHttpClient(
             connection.disconnect()
         }
     }
+}
+
+private fun SourceByteResponse.toTextResponse(): SourceHttpResponse {
+    return SourceHttpResponse(
+        statusCode = statusCode,
+        body = body.toString(Charsets.UTF_8),
+        headers = headers,
+    )
 }
 
 private fun InputStream.readBoundedBytes(maxBodyBytes: Int): ByteArray {

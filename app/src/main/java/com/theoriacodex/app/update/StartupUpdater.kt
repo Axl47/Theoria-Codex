@@ -54,8 +54,13 @@ class StartupUpdater(
         val installedVersionCode = installedVersionCodeProvider?.invoke() ?: readInstalledVersionCode(context)
         if (remote.versionCode <= installedVersionCode) {
             onState(StartupUpdateState.NoUpdate)
-            stateStore.setLastSeenReleaseId(remote.releaseId)
-            stateStore.clearPendingInstall()
+            stateStore.update { current ->
+                current.copy(
+                    lastSeenReleaseId = remote.releaseId,
+                    pendingInstallReleaseId = null,
+                    pendingInstallVersionCode = null,
+                )
+            }
             return Result.success(null)
         }
 
@@ -67,19 +72,26 @@ class StartupUpdater(
 
         val remindLaterReleaseId = snapshot.remindLaterReleaseId
         val remindUntil = snapshot.remindLaterUntilEpochMs
+        var matchingReminderExpired = false
         if (remindLaterReleaseId == remote.releaseId && remindUntil != null) {
             if (nowProvider() < remindUntil) {
                 onState(StartupUpdateState.NoUpdate)
                 return Result.success(null)
             }
-            stateStore.setRemindLater(releaseId = null, untilEpochMs = null)
+            matchingReminderExpired = true
         }
 
-        if (
+        val hasStalePromptDecision =
             (snapshot.ignoredReleaseId != null && snapshot.ignoredReleaseId != remote.releaseId) ||
             (remindLaterReleaseId != null && remindLaterReleaseId != remote.releaseId)
-        ) {
-            stateStore.clearPromptDeferrals()
+        if (matchingReminderExpired || hasStalePromptDecision) {
+            stateStore.update { current ->
+                current.copy(
+                    ignoredReleaseId = if (hasStalePromptDecision) null else current.ignoredReleaseId,
+                    remindLaterReleaseId = null,
+                    remindLaterUntilEpochMs = null,
+                )
+            }
         }
 
         onState(StartupUpdateState.AwaitingUserChoice(remote))
@@ -110,32 +122,47 @@ class StartupUpdater(
         return launchInstaller(remote = remote, apkFile = updateFile)
     }
 
-    fun onUserChoseNo(remote: RemoteUpdate) {
-        stateStore.setIgnoredRelease(remote.releaseId)
-        stateStore.setRemindLater(releaseId = null, untilEpochMs = null)
-        stateStore.clearPendingInstall()
-    }
-
-    fun onUserChoseRemindLater(remote: RemoteUpdate, nowEpochMs: Long = nowProvider()) {
-        stateStore.setIgnoredRelease(null)
-        stateStore.setRemindLater(
-            releaseId = remote.releaseId,
-            untilEpochMs = nowEpochMs + REMIND_LATER_WINDOW_MS,
-        )
-        stateStore.clearPendingInstall()
-    }
-
-    fun onUserChoseYes(remote: RemoteUpdate) {
-        val snapshot = stateStore.snapshot()
-        if (snapshot.ignoredReleaseId == remote.releaseId) {
-            stateStore.setIgnoredRelease(null)
-        }
-        if (snapshot.remindLaterReleaseId == remote.releaseId) {
-            stateStore.setRemindLater(releaseId = null, untilEpochMs = null)
+    suspend fun onUserChoseNo(remote: RemoteUpdate) {
+        stateStore.update { current ->
+            current.copy(
+                ignoredReleaseId = remote.releaseId,
+                remindLaterReleaseId = null,
+                remindLaterUntilEpochMs = null,
+                pendingInstallReleaseId = null,
+                pendingInstallVersionCode = null,
+            )
         }
     }
 
-    fun retryPendingInstall(
+    suspend fun onUserChoseRemindLater(remote: RemoteUpdate, nowEpochMs: Long = nowProvider()) {
+        stateStore.update { current ->
+            current.copy(
+                ignoredReleaseId = null,
+                remindLaterReleaseId = remote.releaseId,
+                remindLaterUntilEpochMs = nowEpochMs + REMIND_LATER_WINDOW_MS,
+                pendingInstallReleaseId = null,
+                pendingInstallVersionCode = null,
+            )
+        }
+    }
+
+    suspend fun onUserChoseYes(remote: RemoteUpdate) {
+        stateStore.update { current ->
+            current.copy(
+                ignoredReleaseId = current.ignoredReleaseId.takeUnless { releaseId ->
+                    releaseId == remote.releaseId
+                },
+                remindLaterReleaseId = current.remindLaterReleaseId.takeUnless { releaseId ->
+                    releaseId == remote.releaseId
+                },
+                remindLaterUntilEpochMs = current.remindLaterUntilEpochMs.takeUnless {
+                    current.remindLaterReleaseId == remote.releaseId
+                },
+            )
+        }
+    }
+
+    suspend fun retryPendingInstall(
         remote: RemoteUpdate,
         onState: (StartupUpdateState) -> Unit,
     ): StartupUpdateOutcome {
@@ -148,9 +175,9 @@ class StartupUpdater(
         return launchInstaller(remote = remote, apkFile = file)
     }
 
-    fun pendingSnapshot(): UpdateStateSnapshot = stateStore.snapshot()
+    suspend fun pendingSnapshot(): UpdateStateSnapshot = stateStore.snapshot()
 
-    fun clearPendingInstall() {
+    suspend fun clearPendingInstall() {
         stateStore.clearPendingInstall()
     }
 
@@ -170,7 +197,7 @@ class StartupUpdater(
         return downloadResult.getOrNull()
     }
 
-    private fun launchInstaller(
+    private suspend fun launchInstaller(
         remote: RemoteUpdate,
         apkFile: File,
     ): StartupUpdateOutcome {
@@ -186,9 +213,13 @@ class StartupUpdater(
                 changelogMarkdown = remote.changelogMarkdown,
                 changelogSections = remote.changelogSections,
             )
-            stateStore.setLastSeenReleaseId(remote.releaseId)
-            stateStore.setPendingPostInstallChangelog(changelog)
-            stateStore.setLastInstalledChangelog(changelog)
+            stateStore.update { current ->
+                current.copy(
+                    lastSeenReleaseId = remote.releaseId,
+                    pendingPostInstallChangelog = changelog,
+                    lastInstalledChangelog = changelog,
+                )
+            }
             StartupUpdateOutcome.InstallerLaunched(remote = remote, apkFile = apkFile)
         } else {
             val error = result.exceptionOrNull()

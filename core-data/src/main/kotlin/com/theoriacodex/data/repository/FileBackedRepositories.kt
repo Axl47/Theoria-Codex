@@ -1,7 +1,7 @@
 package com.theoriacodex.data.repository
 
-import com.google.gson.Gson
-import com.google.gson.GsonBuilder
+import com.theoriacodex.data.storage.AtomicJsonFileStore
+import com.theoriacodex.data.storage.mutateAndPersistWithRollback
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.CreatorProfile
@@ -20,32 +20,35 @@ import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
 import com.theoriacodex.domain.tags.sourceTagKey
 import java.io.File
 import java.nio.file.Files
-import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.util.UUID
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
-private val json: Gson = GsonBuilder().setPrettyPrinting().create()
 private const val DEFAULT_RECENT_WATCHED_LIMIT = 200
 private const val DEFAULT_RECENT_SEARCH_LIMIT = 100
 
 class FileBackedCodexRepository(
     baseDirectory: File,
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : CodexRepository {
     private val mutex = Mutex()
     private val storageFile = baseDirectory.resolve("codex_store.json")
+    private val fileStore = AtomicJsonFileStore(ioDispatcher = ioDispatcher)
     private val codicesFlow = MutableStateFlow<List<Codex>>(emptyList())
     private val itemsFlow = MutableStateFlow<Map<String, List<CodexItem>>>(emptyMap())
     private val postsFlow = MutableStateFlow<Map<PostId, Post>>(emptyMap())
 
     init {
-        storageFile.parentFile?.mkdirs()
-        val stored = readJson(storageFile, CodexStoreFile())
+        val stored = runBlocking { fileStore.read(storageFile, CodexStoreFile()) }
         codicesFlow.value = stored.codices.map { it.toDomain() }
         itemsFlow.value = stored.items.mapValues { entry -> entry.value.mapNotNull { it.toDomainOrNull() } }
         postsFlow.value = stored.posts.mapNotNull { record -> record.toDomainOrNull() }.associate { post ->
@@ -75,11 +78,12 @@ class FileBackedCodexRepository(
                     existing
                 } else {
                     val updated = existing.copy(name = resolvedName)
-                    codicesFlow.value = codicesFlow.value.map { codex ->
-                        if (codex.codexId == codexId) updated else codex
+                    commitMutation {
+                        codicesFlow.value = codicesFlow.value.map { codex ->
+                            if (codex.codexId == codexId) updated else codex
+                        }
+                        updated
                     }
-                    persist()
-                    updated
                 }
             } else {
                 val codex = Codex(
@@ -87,9 +91,10 @@ class FileBackedCodexRepository(
                     name = resolvedName,
                     createdAtEpochMs = System.currentTimeMillis(),
                 )
-                codicesFlow.value = codicesFlow.value + codex
-                persist()
-                codex
+                commitMutation {
+                    codicesFlow.value = codicesFlow.value + codex
+                    codex
+                }
             }
         }
     }
@@ -105,9 +110,10 @@ class FileBackedCodexRepository(
                 name = resolvedName,
                 createdAtEpochMs = System.currentTimeMillis(),
             )
-            codicesFlow.value = codicesFlow.value + codex
-            persist()
-            codex
+            commitMutation {
+                codicesFlow.value = codicesFlow.value + codex
+                codex
+            }
         }
     }
 
@@ -124,8 +130,7 @@ class FileBackedCodexRepository(
             val reordered = current.toMutableList()
             val moved = reordered.removeAt(sourceIndex)
             reordered.add(clampedTarget, moved)
-            codicesFlow.value = reordered
-            persist()
+            commitMutation { codicesFlow.value = reordered }
         }
     }
 
@@ -139,18 +144,20 @@ class FileBackedCodexRepository(
                 excludeCodexId = codexId,
             )
             if (existing.name == resolvedName) return@withLock
-            codicesFlow.value = codicesFlow.value.map { codex ->
-                if (codex.codexId == codexId) codex.copy(name = resolvedName) else codex
+            commitMutation {
+                codicesFlow.value = codicesFlow.value.map { codex ->
+                    if (codex.codexId == codexId) codex.copy(name = resolvedName) else codex
+                }
             }
-            persist()
         }
     }
 
     override suspend fun deleteCodex(codexId: String) {
         mutex.withLock {
-            codicesFlow.value = codicesFlow.value.filterNot { it.codexId == codexId }
-            itemsFlow.value = itemsFlow.value - codexId
-            persist()
+            commitMutation {
+                codicesFlow.value = codicesFlow.value.filterNot { it.codexId == codexId }
+                itemsFlow.value = itemsFlow.value - codexId
+            }
         }
     }
 
@@ -179,18 +186,19 @@ class FileBackedCodexRepository(
             val postChanged = postsFlow.value[post.id] != post
             if (!postChanged && alreadyExists) return@withLock
 
-            if (postChanged) {
-                postsFlow.value = postsFlow.value + (post.id to post)
+            commitMutation {
+                if (postChanged) {
+                    postsFlow.value = postsFlow.value + (post.id to post)
+                }
+                if (!alreadyExists) {
+                    val updated = existing + CodexItem(
+                        codexId = codexId,
+                        postId = post.id,
+                        savedAtEpochMs = System.currentTimeMillis(),
+                    )
+                    itemsFlow.value = itemsFlow.value + (codexId to updated)
+                }
             }
-            if (!alreadyExists) {
-                val updated = existing + CodexItem(
-                    codexId = codexId,
-                    postId = post.id,
-                    savedAtEpochMs = System.currentTimeMillis(),
-                )
-                itemsFlow.value = itemsFlow.value + (codexId to updated)
-            }
-            persist()
         }
     }
 
@@ -198,8 +206,7 @@ class FileBackedCodexRepository(
         mutex.withLock {
             val existing = postsFlow.value[post.id] ?: return@withLock
             if (existing == post) return@withLock
-            postsFlow.value = postsFlow.value + (post.id to post)
-            persist()
+            commitMutation { postsFlow.value = postsFlow.value + (post.id to post) }
         }
     }
 
@@ -207,32 +214,45 @@ class FileBackedCodexRepository(
         mutex.withLock {
             val target = PostId(source = sourceKey, sourcePostId = sourcePostId)
             val updated = itemsFlow.value[codexId].orEmpty().filterNot { it.postId == target }
-            itemsFlow.value = itemsFlow.value + (codexId to updated)
-            persist()
+            commitMutation { itemsFlow.value = itemsFlow.value + (codexId to updated) }
         }
     }
 
-    private fun persist() {
+    private suspend inline fun <T> commitMutation(mutate: () -> T): T {
+        return mutateAndPersistWithRollback(
+            snapshot = { Triple(codicesFlow.value, itemsFlow.value, postsFlow.value) },
+            restore = { (codices, items, posts) ->
+                codicesFlow.value = codices
+                itemsFlow.value = items
+                postsFlow.value = posts
+            },
+            mutate = mutate,
+            persist = { persist() },
+        )
+    }
+
+    private suspend fun persist() {
         val toPersist = CodexStoreFile(
             codices = codicesFlow.value.map { CodexRecord.fromDomain(it) },
             items = itemsFlow.value.mapValues { entry -> entry.value.map { CodexItemRecord.fromDomain(it) } },
             posts = postsFlow.value.values.map { PostRecord.fromDomain(it) },
         )
-        writeJson(storageFile, toPersist)
+        fileStore.write(storageFile, toPersist)
     }
 }
 
 class FileBackedQueryRepository(
     baseDirectory: File,
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : QueryRepository {
     private val mutex = Mutex()
     private val storageFile = baseDirectory.resolve("query_store.json")
+    private val fileStore = AtomicJsonFileStore(ioDispatcher = ioDispatcher)
     private val queriesFlow = MutableStateFlow<Map<String, Query>>(emptyMap())
     private val offsetsFlow = MutableStateFlow<Map<String, Int>>(emptyMap())
 
     init {
-        storageFile.parentFile?.mkdirs()
-        val stored = readJson(storageFile, QueryStoreFile())
+        val stored = runBlocking { fileStore.read(storageFile, QueryStoreFile()) }
         queriesFlow.value = stored.queries.mapValues { (_, record) -> record.toDomain() }
         offsetsFlow.value = stored.scrollOffsets
     }
@@ -243,15 +263,13 @@ class FileBackedQueryRepository(
 
     override suspend fun upsertAppliedQuery(modeKey: String, query: Query) {
         mutex.withLock {
-            queriesFlow.value = queriesFlow.value + (modeKey to query)
-            persist()
+            commitMutation { queriesFlow.value = queriesFlow.value + (modeKey to query) }
         }
     }
 
     override suspend fun upsertScrollOffset(queryHash: String, offsetPx: Int) {
         mutex.withLock {
-            offsetsFlow.value = offsetsFlow.value + (queryHash to offsetPx)
-            persist()
+            commitMutation { offsetsFlow.value = offsetsFlow.value + (queryHash to offsetPx) }
         }
     }
 
@@ -259,12 +277,24 @@ class FileBackedQueryRepository(
         return offsetsFlow.value[queryHash]
     }
 
-    private fun persist() {
+    private suspend inline fun <T> commitMutation(mutate: () -> T): T {
+        return mutateAndPersistWithRollback(
+            snapshot = { queriesFlow.value to offsetsFlow.value },
+            restore = { (queries, offsets) ->
+                queriesFlow.value = queries
+                offsetsFlow.value = offsets
+            },
+            mutate = mutate,
+            persist = { persist() },
+        )
+    }
+
+    private suspend fun persist() {
         val payload = QueryStoreFile(
             queries = queriesFlow.value.mapValues { (_, query) -> QueryRecord.fromDomain(query) },
             scrollOffsets = offsetsFlow.value,
         )
-        writeJson(storageFile, payload)
+        fileStore.write(storageFile, payload)
     }
 }
 
@@ -273,15 +303,16 @@ class FileBackedRecentsRepository(
     private val watchedLimit: Int = DEFAULT_RECENT_WATCHED_LIMIT,
     private val searchLimit: Int = DEFAULT_RECENT_SEARCH_LIMIT,
     private val clock: () -> Long = System::currentTimeMillis,
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : RecentsRepository {
     private val mutex = Mutex()
     private val storageFile = baseDirectory.resolve("recents_store.json")
+    private val fileStore = AtomicJsonFileStore(ioDispatcher = ioDispatcher)
     private val watchedFlow = MutableStateFlow<List<RecentPostEntry>>(emptyList())
     private val searchesFlow = MutableStateFlow<List<RecentSearchEntry>>(emptyList())
 
     init {
-        storageFile.parentFile?.mkdirs()
-        val stored = readJson(storageFile, RecentsStoreFile())
+        val stored = runBlocking { fileStore.read(storageFile, RecentsStoreFile()) }
         watchedFlow.value = stored.watchedPosts
             .orEmpty()
             .mapNotNull { record -> record.toDomainOrNull() }
@@ -313,16 +344,17 @@ class FileBackedRecentsRepository(
 
     override suspend fun recordWatchedPost(post: Post, origin: ViewerStreamSource, originQueryHash: String?) {
         mutex.withLock {
-            watchedFlow.value = (listOf(
-                RecentPostEntry(
-                    post = post,
-                    viewedAtEpochMs = clock(),
-                    origin = origin,
-                    originQueryHash = originQueryHash,
-                )
-            ) + watchedFlow.value.filterNot { entry -> entry.post.id == post.id })
-                .take(watchedLimit.coerceAtLeast(0))
-            persist()
+            commitMutation {
+                watchedFlow.value = (listOf(
+                    RecentPostEntry(
+                        post = post,
+                        viewedAtEpochMs = clock(),
+                        origin = origin,
+                        originQueryHash = originQueryHash,
+                    )
+                ) + watchedFlow.value.filterNot { entry -> entry.post.id == post.id })
+                    .take(watchedLimit.coerceAtLeast(0))
+            }
         }
     }
 
@@ -330,42 +362,54 @@ class FileBackedRecentsRepository(
         val normalizedHash = queryHash.trim()
         if (normalizedHash.isBlank()) return
         mutex.withLock {
-            searchesFlow.value = (listOf(
-                RecentSearchEntry(
-                    query = query,
-                    queryHash = normalizedHash,
-                    searchedAtEpochMs = clock(),
-                )
-            ) + searchesFlow.value.filterNot { entry -> entry.queryHash == normalizedHash })
-                .take(searchLimit.coerceAtLeast(0))
-            persist()
+            commitMutation {
+                searchesFlow.value = (listOf(
+                    RecentSearchEntry(
+                        query = query,
+                        queryHash = normalizedHash,
+                        searchedAtEpochMs = clock(),
+                    )
+                ) + searchesFlow.value.filterNot { entry -> entry.queryHash == normalizedHash })
+                    .take(searchLimit.coerceAtLeast(0))
+            }
         }
     }
 
     override suspend fun clearWatchedPosts() {
         mutex.withLock {
-            watchedFlow.value = emptyList()
-            persist()
+            commitMutation { watchedFlow.value = emptyList() }
         }
     }
 
     override suspend fun clearSearches() {
         mutex.withLock {
-            searchesFlow.value = emptyList()
-            persist()
+            commitMutation { searchesFlow.value = emptyList() }
         }
     }
 
     override suspend fun clearAll() {
         mutex.withLock {
-            watchedFlow.value = emptyList()
-            searchesFlow.value = emptyList()
-            persist()
+            commitMutation {
+                watchedFlow.value = emptyList()
+                searchesFlow.value = emptyList()
+            }
         }
     }
 
-    private fun persist() {
-        writeJson(
+    private suspend inline fun <T> commitMutation(mutate: () -> T): T {
+        return mutateAndPersistWithRollback(
+            snapshot = { watchedFlow.value to searchesFlow.value },
+            restore = { (watched, searches) ->
+                watchedFlow.value = watched
+                searchesFlow.value = searches
+            },
+            mutate = mutate,
+            persist = { persist() },
+        )
+    }
+
+    private suspend fun persist() {
+        fileStore.write(
             storageFile,
             RecentsStoreFile(
                 watchedPosts = watchedFlow.value.map(RecentPostRecord::fromDomain),
@@ -377,17 +421,20 @@ class FileBackedRecentsRepository(
 
 class FileBackedSettingsRepository(
     baseDirectory: File,
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : SettingsRepository {
     private val mutex = Mutex()
     private val storageFile = baseDirectory.resolve("settings_store.json")
+    private val fileStore = AtomicJsonFileStore(ioDispatcher = ioDispatcher)
     private val settingsFlow = MutableStateFlow(AppSettings())
 
     init {
-        storageFile.parentFile?.mkdirs()
-        val stored = readJson(storageFile, SettingsStoreFile.fromDomain(AppSettings()))
+        val stored = runBlocking {
+            fileStore.read(storageFile, SettingsStoreFile.fromDomain(AppSettings()))
+        }
         settingsFlow.value = stored.toDomain()
         if (stored.requiresSourceCatalogMigration()) {
-            persist()
+            runBlocking { persist() }
         }
     }
 
@@ -397,8 +444,14 @@ class FileBackedSettingsRepository(
 
     override suspend fun updateSettings(transform: (AppSettings) -> AppSettings) {
         mutex.withLock {
-            settingsFlow.value = normalizeSettings(transform(settingsFlow.value))
-            persist()
+            mutateAndPersistWithRollback(
+                snapshot = { settingsFlow.value },
+                restore = { settings -> settingsFlow.value = settings },
+                mutate = {
+                    settingsFlow.value = normalizeSettings(transform(settingsFlow.value))
+                },
+                persist = { persist() },
+            )
         }
     }
 
@@ -599,13 +652,14 @@ class FileBackedSettingsRepository(
         }
     }
 
-    private fun persist() {
-        writeJson(storageFile, SettingsStoreFile.fromDomain(settingsFlow.value))
+    private suspend fun persist() {
+        fileStore.write(storageFile, SettingsStoreFile.fromDomain(settingsFlow.value))
     }
 }
 
 class FileBackedCacheRepository(
     baseDirectory: File,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : CacheRepository {
     private val mutex = Mutex()
     private val thumbnailDir = baseDirectory.resolve("cache/thumbnails")
@@ -613,9 +667,13 @@ class FileBackedCacheRepository(
     private val snapshotFlow = MutableStateFlow(CacheSnapshot(thumbnailCount = 0, fullImageCount = 0))
 
     init {
-        thumbnailDir.mkdirs()
-        fullDir.mkdirs()
-        snapshotFlow.value = currentSnapshot()
+        snapshotFlow.value = runBlocking {
+            withContext(ioDispatcher) {
+                thumbnailDir.mkdirs()
+                fullDir.mkdirs()
+                currentSnapshot()
+            }
+        }
     }
 
     override fun observeSnapshot(): Flow<CacheSnapshot> {
@@ -624,42 +682,50 @@ class FileBackedCacheRepository(
 
     override suspend fun cacheThumbnail(post: Post) {
         mutex.withLock {
-            writeCachedEntry(
-                targetDirectory = thumbnailDir,
-                key = cacheKey(post.id),
-                localPath = post.preview.localPath,
-                fallbackUrl = post.preview.url,
-            )
-            snapshotFlow.value = currentSnapshot()
+            snapshotFlow.value = withContext(ioDispatcher) {
+                writeCachedEntry(
+                    targetDirectory = thumbnailDir,
+                    key = cacheKey(post.id),
+                    localPath = post.preview.localPath,
+                    fallbackUrl = post.preview.url,
+                )
+                currentSnapshot()
+            }
         }
     }
 
     override suspend fun cacheFull(post: Post) {
         mutex.withLock {
             val fullImage = post.full ?: return@withLock
-            writeCachedEntry(
-                targetDirectory = fullDir,
-                key = cacheKey(post.id),
-                localPath = fullImage.localPath,
-                fallbackUrl = fullImage.url,
-            )
-            snapshotFlow.value = currentSnapshot()
+            snapshotFlow.value = withContext(ioDispatcher) {
+                writeCachedEntry(
+                    targetDirectory = fullDir,
+                    key = cacheKey(post.id),
+                    localPath = fullImage.localPath,
+                    fallbackUrl = fullImage.url,
+                )
+                currentSnapshot()
+            }
         }
     }
 
     override suspend fun clearThumbnailCache() {
         mutex.withLock {
-            thumbnailDir.deleteRecursively()
-            thumbnailDir.mkdirs()
-            snapshotFlow.value = currentSnapshot()
+            snapshotFlow.value = withContext(ioDispatcher) {
+                thumbnailDir.deleteRecursively()
+                thumbnailDir.mkdirs()
+                currentSnapshot()
+            }
         }
     }
 
     override suspend fun clearFullImageCache() {
         mutex.withLock {
-            fullDir.deleteRecursively()
-            fullDir.mkdirs()
-            snapshotFlow.value = currentSnapshot()
+            snapshotFlow.value = withContext(ioDispatcher) {
+                fullDir.deleteRecursively()
+                fullDir.mkdirs()
+                currentSnapshot()
+            }
         }
     }
 
@@ -697,16 +763,17 @@ class FileBackedCacheRepository(
 
 class FileBackedUiRestoreRepository(
     baseDirectory: File,
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : UiRestoreRepository {
     private val mutex = Mutex()
     private val storageFile = baseDirectory.resolve("ui_restore_store.json")
+    private val fileStore = AtomicJsonFileStore(ioDispatcher = ioDispatcher)
     private val viewerContextFlow = MutableStateFlow<ViewerLaunchContext?>(null)
     private val scrollStates = mutableMapOf<String, SearchScrollState>()
     private var lastTab: String? = null
 
     init {
-        storageFile.parentFile?.mkdirs()
-        val stored = readJson(storageFile, UiRestoreStoreFile())
+        val stored = runBlocking { fileStore.read(storageFile, UiRestoreStoreFile()) }
         lastTab = stored.lastTab
         scrollStates.putAll(
             stored.searchScrollStates.mapValues { (_, record) ->
@@ -721,8 +788,7 @@ class FileBackedUiRestoreRepository(
 
     override suspend fun setLastTab(route: String) {
         mutex.withLock {
-            lastTab = route
-            persist()
+            commitMutation { lastTab = route }
         }
     }
 
@@ -735,16 +801,16 @@ class FileBackedUiRestoreRepository(
             lastTab?.let { current -> return@withLock current }
             val migrated = legacyRoute?.trim()?.takeIf { route -> route.isNotEmpty() }
                 ?: return@withLock null
-            lastTab = migrated
-            persist()
-            migrated
+            commitMutation {
+                lastTab = migrated
+                migrated
+            }
         }
     }
 
     override suspend fun setSearchScrollState(queryHash: String, state: SearchScrollState) {
         mutex.withLock {
-            scrollStates[queryHash] = state
-            persist()
+            commitMutation { scrollStates[queryHash] = state }
         }
     }
 
@@ -758,13 +824,32 @@ class FileBackedUiRestoreRepository(
 
     override suspend fun setViewerLaunchContext(context: ViewerLaunchContext?) {
         mutex.withLock {
-            viewerContextFlow.value = context
-            persist()
+            commitMutation { viewerContextFlow.value = context }
         }
     }
 
-    private fun persist() {
-        writeJson(
+    private suspend inline fun <T> commitMutation(mutate: () -> T): T {
+        return mutateAndPersistWithRollback(
+            snapshot = {
+                UiRestoreMemoryState(
+                    lastTab = lastTab,
+                    scrollStates = scrollStates.toMap(),
+                    viewerLaunchContext = viewerContextFlow.value,
+                )
+            },
+            restore = { state ->
+                lastTab = state.lastTab
+                scrollStates.clear()
+                scrollStates.putAll(state.scrollStates)
+                viewerContextFlow.value = state.viewerLaunchContext
+            },
+            mutate = mutate,
+            persist = { persist() },
+        )
+    }
+
+    private suspend fun persist() {
+        fileStore.write(
             storageFile,
             UiRestoreStoreFile(
                 lastTab = lastTab,
@@ -782,14 +867,15 @@ class FileBackedUiRestoreRepository(
 
 class FileBackedLikesRepository(
     baseDirectory: File,
+    ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : LikesRepository {
     private val mutex = Mutex()
     private val storageFile = baseDirectory.resolve("likes_store.json")
+    private val fileStore = AtomicJsonFileStore(ioDispatcher = ioDispatcher)
     private val likesFlow = MutableStateFlow<Map<String, Map<PostId, LikedPost>>>(emptyMap())
 
     init {
-        storageFile.parentFile?.mkdirs()
-        val stored = readJson(storageFile, LikesStoreFile())
+        val stored = runBlocking { fileStore.read(storageFile, LikesStoreFile()) }
         val grouped = mutableMapOf<String, MutableMap<PostId, LikedPost>>()
         stored.likes.orEmpty().forEach { record ->
             val source = record.source
@@ -845,20 +931,29 @@ class FileBackedLikesRepository(
                 profileLikes -= postId
                 false
             }
-            likesFlow.value = likesFlow.value + (profileId to profileLikes)
-            persist()
-            nowLiked
+            commitMutation {
+                likesFlow.value = likesFlow.value + (profileId to profileLikes)
+                nowLiked
+            }
         }
     }
 
     override suspend fun clearLikes(profileId: String) {
         mutex.withLock {
-            likesFlow.value = likesFlow.value - profileId
-            persist()
+            commitMutation { likesFlow.value = likesFlow.value - profileId }
         }
     }
 
-    private fun persist() {
+    private suspend inline fun <T> commitMutation(mutate: () -> T): T {
+        return mutateAndPersistWithRollback(
+            snapshot = { likesFlow.value },
+            restore = { likes -> likesFlow.value = likes },
+            mutate = mutate,
+            persist = { persist() },
+        )
+    }
+
+    private suspend fun persist() {
         val flattened = likesFlow.value
             .entries
             .flatMap { (profileId, likes) ->
@@ -867,7 +962,7 @@ class FileBackedLikesRepository(
                 }
             }
             .sortedByDescending { it.likedAtEpochMs ?: Long.MIN_VALUE }
-        writeJson(storageFile, LikesStoreFile(likes = flattened))
+        fileStore.write(storageFile, LikesStoreFile(likes = flattened))
     }
 }
 
@@ -1517,6 +1612,12 @@ private data class UiRestoreStoreFile(
     val viewerLaunchContext: ViewerLaunchContextRecord? = null,
 )
 
+private data class UiRestoreMemoryState(
+    val lastTab: String?,
+    val scrollStates: Map<String, SearchScrollState>,
+    val viewerLaunchContext: ViewerLaunchContext?,
+)
+
 private data class SearchScrollStateRecord(
     val firstVisibleItemIndex: Int,
     val firstVisibleItemOffsetPx: Int,
@@ -1775,35 +1876,4 @@ private fun List<RecentPostEntry>.dedupeRecentWatched(): List<RecentPostEntry> {
 private fun List<RecentSearchEntry>.dedupeRecentSearches(): List<RecentSearchEntry> {
     return sortedByDescending { entry -> entry.searchedAtEpochMs }
         .distinctBy { entry -> entry.queryHash }
-}
-
-private fun <T> readJson(file: File, fallback: T, clazz: Class<T>): T {
-    if (!file.exists()) {
-        return fallback
-    }
-    return runCatching {
-        json.fromJson(file.readText(), clazz) ?: fallback
-    }.getOrDefault(fallback)
-}
-
-private inline fun <reified T> readJson(file: File, fallback: T): T {
-    return readJson(file, fallback, T::class.java)
-}
-
-private fun <T> writeJson(file: File, payload: T) {
-    val parent = file.parentFile
-    parent?.mkdirs()
-    val tempFile = File.createTempFile("${file.name}.", ".tmp", parent ?: File("."))
-    try {
-        tempFile.writeText(json.toJson(payload))
-        runCatching {
-            Files.move(tempFile.toPath(), file.toPath(), ATOMIC_MOVE, REPLACE_EXISTING)
-        }.getOrElse {
-            Files.move(tempFile.toPath(), file.toPath(), REPLACE_EXISTING)
-        }
-    } finally {
-        if (tempFile.exists()) {
-            tempFile.delete()
-        }
-    }
 }

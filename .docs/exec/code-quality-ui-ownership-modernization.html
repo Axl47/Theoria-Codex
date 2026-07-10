@@ -128,7 +128,7 @@
       <span class="pill">Plan: .docs/exec/code-quality-ui-ownership-modernization.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next action</strong>Start Phase 2 with independent HTTP-bound, Hitomi-cache, and repository-IO lanes, then integrate app file stores and debounced Search persistence.</div>
+      <div class="card"><strong>Next action</strong>Start Phase 3 by defining immutable route contracts in parallel, then move concrete construction into one application-owned container and integrate lifecycle-aware shell collection.</div>
       <div class="card"><strong>Main risk</strong>Concurrent edits to <code>TheoriaApp.kt</code>, <code>TheoriaAppGraph.kt</code>, <code>SearchCoordinator.kt</code>, or repository files can silently undo each other. Those files have explicit single-owner integration lanes.</div>
       <div class="card"><strong>Primary validation</strong><code>./gradlew lint test :app:assembleDebug</code>, focused module tests, deterministic connected tests, release assembly, and manual navigation/search/viewer checks.</div>
       <div class="card"><strong>Target outcome</strong>Stable application-scoped services, route-scoped UI state, bounded background work, durable storage, deterministic CI, and staged modern dependencies.</div>
@@ -162,12 +162,12 @@
     <section id="status">
       <h2>Current Status</h2>
       <table class="compact"><tbody>
-        <tr><td>Plan state</td><td>In progress. Phases 0 and 1 are complete; Phase 2 is next.</td></tr>
+        <tr><td>Plan state</td><td>In progress. Phases 0 through 2 are complete; Phase 3 application-container and UI-contract work is next.</td></tr>
         <tr><td>Audit baseline</td><td>49,216 Kotlin/Kotlin-script lines across production and tests. Production duplication is 341 lines / 1.02% across 99 Kotlin files.</td></tr>
-        <tr><td>Deterministic baseline</td><td>Phase 1 gate <code>./gradlew lint test :app:assembleDebug :app:compileDebugAndroidTestKotlin --rerun-tasks</code> passed 110 tasks and 738 configured test executions with zero failures/errors and six opt-in skips.</td></tr>
+        <tr><td>Deterministic baseline</td><td>Phase 2 gate <code>./gradlew lint test :app:assembleDebug :app:compileDebugAndroidTestKotlin --rerun-tasks</code> passed 110 tasks and 793 configured test executions with zero failures/errors and six opt-in skips.</td></tr>
         <tr><td>Device baseline</td><td>The offline Hitomi Android-runtime parser passes. The app-shell smoke host renders, but the connected phone is securely locked/dozing, so Android moves the activity to <code>CREATED</code> and removes its semantics hierarchy. The test reports this lifecycle cause directly; hermetic route-flow coverage awaits the Phase 3 fake-container/content seam.</td></tr>
         <tr><td>Worktree constraint</td><td>Preserve unrelated user edits. At authoring time <code>.codex/skills/theoria-release/SKILL.md</code> was already modified and is outside this plan.</td></tr>
-        <tr><td>Next action</td><td>Bound text transport and Hitomi index memory, move file work to injected IO, then make high-frequency app-store writes atomic and conflated.</td></tr>
+        <tr><td>Next action</td><td>Define Search, Viewer, For You, and Creator state contracts; then create a stable application container and remove dependency construction from Compose.</td></tr>
       </tbody></table>
     </section>
 
@@ -509,7 +509,10 @@
         <li>[x] 2026-07-10 — Phase 1 repaired cancellation propagation, Codex duplicate-save durability, credential backup/recovery, last-tab ownership, and Search request ordering. The full 110-task gate passed 738 configured tests; the installed debug APK cold-launched with no crash-buffer entry.</li>
         <li>[x] 2026-07-10 — Phase 1E excluded encrypted credential preferences from cloud backup and device transfer, replaced automatic destructive recovery with an explicit <code>ReconnectRequired</code> state, and reserved destructive reset for a confirmed reconnect flow.</li>
         <li>[x] 2026-07-10 — Phase 1D added generation-bound Search requests and pages. Older jobs are canceled and, even when a provider ignores cancellation, cannot publish results, tokens, errors, loading flags, seen tags, or final applied persistence over the current request.</li>
-        <li>[ ] Phase 2 — Bound transport, caches, and disk work.</li>
+        <li>[x] 2026-07-10 — Phase 2A unified GET and POST on one bounded cancellable transport. Text bodies now stop at 8 MiB, declared and streaming overflow use the typed transport failure, every path disconnects, and byte ranges retain identity encoding.</li>
+        <li>[x] 2026-07-10 — Phase 2B replaced Hitomi's unbounded global-index map with a 32 MiB version-aware byte LRU and single-flight loader. Active queries retain their loaded IDs even when another query rotates the provider version or evicts the shared entry.</li>
+        <li>[x] 2026-07-10 — Phase 2C centralized tolerant atomic JSON replacement and injected repository IO dispatchers. Mutations remain serialized through repository mutexes while reads, serialization, temp writes, moves, cache copies, and scans execute on the IO lane.</li>
+        <li>[x] 2026-07-10 — Phase 2 bounded transport and Hitomi index memory, moved repository mutations onto hardened atomic IO with rollback, made updater transitions transactional, bounded/debounced tag persistence, and made Search scroll commits disposal-safe. The 110-task gate passed 793 configured tests and the installed debug APK cold-launched without a crash-buffer entry.</li>
         <li>[ ] Phase 3 — Establish the application container and UI state contracts.</li>
         <li>[ ] Phase 4 — Move UI ownership to route-scoped state holders.</li>
         <li>[ ] Phase 5 — Consolidate repeated policy and UI primitives.</li>
@@ -525,6 +528,8 @@
         <li>The previous quality plan successfully extracted the graph and shared media/download policy, but dependency creation still lives inside composition and feature growth moved orchestration pressure into the graph and route coordinators.</li>
         <li>Hitomi's global index records can individually approach the configured multi-megabyte bound, making entry-count-only caching insufficient; the cache budget must be byte-weighted.</li>
         <li>Some providers can ignore coroutine cancellation while finishing a request. Search therefore needs both job cancellation and generation-gated publication; cancellation alone cannot protect visible state or persisted query order.</li>
+        <li>Independent green lanes were not sufficient by themselves: integration review found repository memory could get ahead of failed disk writes, Hitomi page tokens could cross an index-version rotation, Search could lose a pending scroll write on disposal, and updater choices spanned multiple file commits. Phase 2 closed each cross-lane gap before commit.</li>
+        <li>File-backed constructors now dispatch bytes to IO but still synchronously await readiness. Phase 3 must move their construction out of Compose and give the container application lifetime; Phase 6's asynchronous-store decision remains responsible for eliminating the remaining startup wait.</li>
       </ul>
 
       <h3>Decision Log</h3>
@@ -538,12 +543,16 @@
         <li><strong>2026-07-10 / Codex:</strong> Keep provider-live Android checks behind explicit instrumentation arguments. Rationale: protocol reachability is valuable evidence but must not make deterministic PR verification depend on external provider availability.</li>
         <li><strong>2026-07-10 / Codex:</strong> Make <code>UiRestoreRepository</code> the sole final tab owner and retain the Settings field only as migration input. Rationale: one-time compatibility does not justify ongoing dual writes.</li>
         <li><strong>2026-07-10 / Codex:</strong> Never delete unreadable encrypted credentials automatically. Rationale: a restore/key mismatch must be visible and user-confirmed because all source accounts share the encrypted store.</li>
+        <li><strong>2026-07-10 / Codex:</strong> Treat an atomic file commit and its observable repository state as one operation. Rationale: failure or cancellation must restore the previous in-memory snapshot so restart behavior cannot contradict what the UI just observed.</li>
+        <li><strong>2026-07-10 / Codex:</strong> Bind Hitomi global pagination to the galleries-index version. Rationale: an offset is meaningful only for the exact ordered ID snapshot that produced it; legacy global tokens therefore fail closed while pure Nozomi v2 tokens remain compatible.</li>
+        <li><strong>2026-07-10 / Codex:</strong> Make transient persistence lifecycle-owned. Rationale: Search flushes its final observed scroll position on disposal, updater decisions use one transform, and one application-owned tag store removes cross-Activity writer overlap while retaining explicit flush/close operations for tests and the future container.</li>
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
       <p>Planning outcome: every audit finding is assigned to an implementation lane and behavior-based acceptance check.</p>
       <p>Phase 0 outcome: deterministic verification is reusable across pull requests, main, and tagged releases, and signing/publication cannot start until that verification passes. Offline Android protocol checks are isolated from live transport. The Compose smoke failure is no longer ambiguous: the current device is locked/dozing, while a separate Phase 3 injection seam remains necessary for hermetic app-shell flows. Shared test fixtures and cross-backend contracts now protect repository, recommendation-degradation, and update retry/deferral behavior.</p>
       <p>Phase 1 outcome: cancellation remains a control signal from screens through provider adapters; Search snapshots each root request and page so stale work cannot publish even when cancellation is ignored; richer Codex snapshots survive duplicate saves and reconstruction; only UI restore receives ongoing tab writes; and credential restore mismatch is excluded from backup, surfaced globally, and reset only after confirmation. The debug APK installed and cold-launched without a crash.</p>
+      <p>Phase 2 outcome: provider text and Hitomi index memory are explicitly bounded; global-index pages cannot cross protocol versions; file-backed repositories execute durable work on injected IO and restore memory on failure; updater decisions commit as one state transition; tag suggestions are bounded, debounced, and lifecycle-flushed; and Search persists the final stable scroll position even when its composition leaves before the debounce window. The installed debug APK cold-launched without a crash after the full gate.</p>
       <p>At completion, record final line counts for the main ownership hotspots, duplication percentage, lint warning count, test counts, CI duration, startup/frame evidence, and storage migration results.</p>
     </section>
 

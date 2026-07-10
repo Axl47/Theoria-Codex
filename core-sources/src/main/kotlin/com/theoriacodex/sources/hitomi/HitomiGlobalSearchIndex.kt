@@ -10,26 +10,31 @@ import java.util.Locale
 internal class HitomiGlobalSearchIndex(
     private val httpClient: SourceHttpClient,
 ) {
-    private var version: String? = null
-
-    suspend fun galleryIds(term: String): IntArray {
-        val normalized = term.trim().lowercase(Locale.ROOT)
-        if (normalized.isEmpty()) return IntArray(0)
-        val currentVersion = version ?: loadVersion().also { version = it }
-        val key = MessageDigest.getInstance("SHA-256")
-            .digest(normalized.toByteArray(Charsets.UTF_8))
-            .copyOf(KEY_BYTES)
-        val record = findRecord(currentVersion, key) ?: return IntArray(0)
-        return loadGalleryIds(currentVersion, record)
-    }
-
-    private suspend fun loadVersion(): String {
+    suspend fun currentVersion(): HitomiGlobalIndexVersion {
         val response = httpClient.get(VERSION_URL, headers = HitomiProtocol.requestHeaders)
         if (response.statusCode != 200) {
             throw HitomiProtocolException("global search version returned HTTP ${response.statusCode}")
         }
-        return response.body.trim().takeIf(VERSION_PATTERN::matches)
+        val version = response.body.trim().takeIf(VERSION_PATTERN::matches)
             ?: throw HitomiProtocolException("global search version was invalid")
+        return HitomiGlobalIndexVersion(version)
+    }
+
+    suspend fun galleryIds(
+        term: String,
+        version: HitomiGlobalIndexVersion,
+    ): HitomiVersionedGalleryIds {
+        val normalized = term.trim().lowercase(Locale.ROOT)
+        if (normalized.isEmpty()) return HitomiVersionedGalleryIds(version, IntArray(0))
+        val key = MessageDigest.getInstance("SHA-256")
+            .digest(normalized.toByteArray(Charsets.UTF_8))
+            .copyOf(KEY_BYTES)
+        val record = findRecord(version.value, key)
+            ?: return HitomiVersionedGalleryIds(version, IntArray(0))
+        return HitomiVersionedGalleryIds(
+            version = version,
+            galleryIds = loadGalleryIds(version.value, record),
+        )
     }
 
     private suspend fun findRecord(version: String, key: ByteArray): DataRecord? {
@@ -159,3 +164,11 @@ internal class HitomiGlobalSearchIndex(
         private val VERSION_PATTERN = Regex("[0-9]+")
     }
 }
+
+@JvmInline
+internal value class HitomiGlobalIndexVersion(val value: String)
+
+internal data class HitomiVersionedGalleryIds(
+    val version: HitomiGlobalIndexVersion,
+    val galleryIds: IntArray,
+)

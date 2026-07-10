@@ -47,11 +47,13 @@ import com.theoriacodex.domain.tags.sourceTagsMatch
 import com.theoriacodex.app.recommend.recommendationTaxonomyFor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 class SearchCoordinator(
     private val registry: SourceAdapterRegistry,
@@ -73,6 +75,8 @@ class SearchCoordinator(
     private val recentResolveFailuresByQueryHash = mutableMapOf<String, MutableMap<PostId, ResolveFailureRecord>>()
     private val searchGenerationLock = Any()
     private val appliedPersistenceMutex = Mutex()
+    private val scrollPersistenceMutex = Mutex()
+    private val persistedScrollStateByQuery = mutableMapOf<String, SearchScrollState>()
     private var nextSearchGeneration = 0L
     private var activeRootSearch: RootSearchRequest? = null
     private var activeRootSearchJob: Job? = null
@@ -249,6 +253,7 @@ class SearchCoordinator(
     }
 
     suspend fun initialize() {
+        tagSuggestionStore.awaitLoaded()
         runtimeSettings = settingsRepository.observeSettings().first()
 
         modeOptions.forEach { mode ->
@@ -1030,24 +1035,37 @@ class SearchCoordinator(
         }
     }
 
-    suspend fun persistSearchScrollState(index: Int, offsetPx: Int) {
-        val hash = appliedQueryHash
-        uiRestoreRepository.setSearchScrollState(
-            queryHash = hash,
-            state = SearchScrollState(
-                firstVisibleItemIndex = index,
-                firstVisibleItemOffsetPx = offsetPx,
-            ),
+    suspend fun persistSearchScrollState(
+        index: Int,
+        offsetPx: Int,
+        queryHash: String = appliedQueryHash,
+    ) {
+        val state = SearchScrollState(
+            firstVisibleItemIndex = index,
+            firstVisibleItemOffsetPx = offsetPx,
         )
-        queryRepository.upsertScrollOffset(hash, offsetPx)
+        withContext(NonCancellable) {
+            scrollPersistenceMutex.withLock {
+                if (persistedScrollStateByQuery[queryHash] == state) return@withLock
+                uiRestoreRepository.setSearchScrollState(queryHash = queryHash, state = state)
+                queryRepository.upsertScrollOffset(queryHash, offsetPx)
+                persistedScrollStateByQuery[queryHash] = state
+            }
+        }
     }
 
     suspend fun restoreSearchScrollState(): SearchScrollState? {
         val hash = appliedQueryHash
-        return uiRestoreRepository.getSearchScrollState(hash)
+        val restored = uiRestoreRepository.getSearchScrollState(hash)
             ?: queryRepository.getScrollOffset(hash)?.let { offset ->
                 SearchScrollState(firstVisibleItemIndex = 0, firstVisibleItemOffsetPx = offset)
             }
+        if (restored != null) {
+            scrollPersistenceMutex.withLock {
+                persistedScrollStateByQuery[hash] = restored
+            }
+        }
+        return restored
     }
 
     fun buildViewerLaunchContext(

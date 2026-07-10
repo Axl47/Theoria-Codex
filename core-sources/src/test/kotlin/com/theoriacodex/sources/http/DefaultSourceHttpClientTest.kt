@@ -16,6 +16,142 @@ import org.junit.Test
 
 class DefaultSourceHttpClientTest {
     @Test
+    fun `text responses use an eight mebibyte default ceiling`() {
+        assertEquals(8 * 1024 * 1024, DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES)
+    }
+
+    @Test
+    fun `rejects oversized get text response with typed transport failure`() = runTest {
+        val oversizedLength = DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES.toLong() + 1L
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/oversized-text") { exchange ->
+                exchange.sendResponseHeaders(200, oversizedLength)
+                exchange.close()
+            }
+            start()
+        }
+
+        val failure = try {
+            runCatching {
+                DefaultSourceHttpClient(maxRetries = 0).get(
+                    "http://127.0.0.1:${server.address.port}/oversized-text",
+                )
+            }.exceptionOrNull()
+        } finally {
+            server.stop(0)
+        }
+
+        assertTrue(failure is SourceHttpBodyTooLargeException)
+        assertEquals(
+            DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES,
+            (failure as SourceHttpBodyTooLargeException).maxBodyBytes,
+        )
+    }
+
+    @Test
+    fun `post form shares bounded response path and preserves request encoding`() = runTest {
+        var capturedMethod: String? = null
+        var capturedContentType: String? = null
+        var capturedBody: String? = null
+        val responseBody = "accepted"
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/form") { exchange ->
+                capturedMethod = exchange.requestMethod
+                capturedContentType = exchange.requestHeaders.getFirst("Content-Type")
+                capturedBody = exchange.requestBody.bufferedReader().use { it.readText() }
+                val bytes = responseBody.toByteArray()
+                exchange.sendResponseHeaders(200, bytes.size.toLong())
+                exchange.responseBody.use { output -> output.write(bytes) }
+                exchange.close()
+            }
+            start()
+        }
+
+        val response = try {
+            DefaultSourceHttpClient(maxRetries = 0).postForm(
+                url = "http://127.0.0.1:${server.address.port}/form",
+                form = mapOf("tag" to "blue hair"),
+            )
+        } finally {
+            server.stop(0)
+        }
+
+        assertEquals("POST", capturedMethod)
+        assertTrue(capturedContentType.orEmpty().startsWith("application/x-www-form-urlencoded"))
+        assertEquals("tag=blue%20hair", capturedBody)
+        assertEquals(responseBody, response.body)
+    }
+
+    @Test
+    fun `post response uses the same default text ceiling`() = runTest {
+        val oversizedLength = DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES.toLong() + 1L
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/oversized-post") { exchange ->
+                exchange.requestBody.close()
+                exchange.sendResponseHeaders(200, oversizedLength)
+                exchange.close()
+            }
+            start()
+        }
+
+        val failure = try {
+            runCatching {
+                DefaultSourceHttpClient(maxRetries = 0).postJson(
+                    url = "http://127.0.0.1:${server.address.port}/oversized-post",
+                    body = "{}",
+                )
+            }.exceptionOrNull()
+        } finally {
+            server.stop(0)
+        }
+
+        assertTrue(failure is SourceHttpBodyTooLargeException)
+        assertEquals(
+            DEFAULT_MAX_SOURCE_TEXT_BODY_BYTES,
+            (failure as SourceHttpBodyTooLargeException).maxBodyBytes,
+        )
+    }
+
+    @Test
+    fun `cancellation disconnects an active post response read`() = runBlocking {
+        val releaseServer = CountDownLatch(1)
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/stalled-post") { exchange ->
+                exchange.requestBody.close()
+                exchange.sendResponseHeaders(200, 10L)
+                exchange.responseBody.write(byteArrayOf(1))
+                exchange.responseBody.flush()
+                releaseServer.await(2L, TimeUnit.SECONDS)
+                exchange.close()
+            }
+            start()
+        }
+
+        val (failure, cancellationElapsedMs) = try {
+            val startedAt = System.nanoTime()
+            val result = runCatching {
+                withTimeout(100L) {
+                    DefaultSourceHttpClient(
+                        readTimeoutMs = 10_000,
+                        maxRetries = 0,
+                    ).postJson(
+                        url = "http://127.0.0.1:${server.address.port}/stalled-post",
+                        body = "{}",
+                    )
+                }
+            }
+            result.exceptionOrNull() to
+                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
+        } finally {
+            releaseServer.countDown()
+            server.stop(0)
+        }
+
+        assertTrue(failure is TimeoutCancellationException)
+        assertTrue("Cancellation took ${cancellationElapsedMs}ms", cancellationElapsedMs < 1_000L)
+    }
+
+    @Test
     fun `returns exact binary range response and headers`() = runTest {
         var capturedRange: String? = null
         var capturedEncoding: String? = null

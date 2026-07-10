@@ -60,6 +60,158 @@ class HitomiSourceAdapterTest {
     }
 
     @Test
+    fun `global search cache switches atomically to the current galleries index version`() = runTest {
+        val versionUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/version"
+        val v1IndexUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/galleries.100.index"
+        val v1DataUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/galleries.100.data"
+        val v2IndexUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/galleries.200.index"
+        val v2DataUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/galleries.200.data"
+        val http = RoutingHitomiHttpClient().apply {
+            textRoutes[versionUrl] = "100"
+            rawFullBodies[v1IndexUrl] = globalIndexNode("girl", dataLength = 8)
+            rawFullBodies[v1DataUrl] = globalGalleryRecord(listOf(4))
+            rawFullBodies[v2IndexUrl] = globalIndexNode("girl", dataLength = 8)
+            rawFullBodies[v2DataUrl] = globalGalleryRecord(listOf(9))
+        }
+        val adapter = adapter(http, pageSize = 1)
+
+        val first = adapter.search(query(include = listOf(SearchTerm("girl"))), null)
+        http.textRoutes[versionUrl] = "200"
+        val second = adapter.search(query(include = listOf(SearchTerm("girl"))), null)
+
+        assertEquals(listOf("4"), first.items.map { post -> post.id.sourcePostId })
+        assertEquals(listOf("9"), second.items.map { post -> post.id.sourcePostId })
+        assertEquals(
+            listOf(v1IndexUrl, v1DataUrl, v2IndexUrl, v2DataUrl),
+            http.binaryRequests.map { request -> request.url },
+        )
+    }
+
+    @Test
+    fun `same global term and version reuse the cached gallery ids`() = runTest {
+        val version = "12345"
+        val versionUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/version"
+        val indexUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/galleries.$version.index"
+        val dataUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/galleries.$version.data"
+        val http = RoutingHitomiHttpClient().apply {
+            textRoutes[versionUrl] = version
+            rawFullBodies[indexUrl] = globalIndexNode("girl", dataLength = 8)
+            rawFullBodies[dataUrl] = globalGalleryRecord(listOf(4))
+        }
+        val adapter = adapter(http, pageSize = 1)
+
+        adapter.search(query(include = listOf(SearchTerm("girl"))), null)
+        adapter.search(query(include = listOf(SearchTerm("girl"))), null)
+
+        assertEquals(listOf(indexUrl, dataUrl), http.binaryRequests.map { request -> request.url })
+        assertEquals(2, http.textRequests.count { request -> request.url == versionUrl })
+    }
+
+    @Test
+    fun `global search retains loaded ids when one record exceeds an injected cache budget`() = runTest {
+        val version = "12345"
+        val indexUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/galleries.$version.index"
+        val dataUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/galleries.$version.data"
+        val http = RoutingHitomiHttpClient().apply {
+            textRoutes["https://ltn.gold-usergeneratedcontent.net/galleriesindex/version"] = version
+            rawFullBodies[indexUrl] = globalIndexNode("girl", dataLength = 12)
+            rawFullBodies[dataUrl] = globalGalleryRecord(listOf(4, 3))
+        }
+        val adapter = adapter(
+            http = http,
+            pageSize = 2,
+            globalIndexCacheMaxBytes = Int.SIZE_BYTES.toLong(),
+        )
+
+        val page = adapter.search(query(include = listOf(SearchTerm("girl"))), null)
+
+        assertEquals(listOf("4", "3"), page.items.map { post -> post.id.sourcePostId })
+    }
+
+    @Test
+    fun `global primary page token fails closed when galleries index version rotates`() = runTest {
+        val versionUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/version"
+        val http = RoutingHitomiHttpClient().apply {
+            textRoutes[versionUrl] = "100"
+            routeGlobalIndex(version = "100", term = "girl", ids = listOf(6, 5, 4))
+            routeGlobalIndex(version = "200", term = "girl", ids = listOf(9, 8, 7))
+        }
+        val adapter = adapter(http, pageSize = 1)
+        val query = query(include = listOf(SearchTerm("girl")))
+
+        val first = adapter.search(query, null)
+        val token = requireNotNull(first.nextPageToken)
+        assertEquals("100", decodeTokenString(token, "globalIndexVersion"))
+        assertEquals("TAG|tag|girl", decodeTokenString(token, "primaryKey"))
+        assertParseFailure {
+            adapter.search(query, token.asLegacyVersionTwoToken())
+        }
+
+        http.textRoutes[versionUrl] = "200"
+
+        assertParseFailure {
+            adapter.search(query, token)
+        }
+    }
+
+    @Test
+    fun `global secondary page token fails closed when galleries index version rotates`() = runTest {
+        val versionUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/version"
+        val artistUrl = HitomiNozomi.urlFor(
+            HitomiNozomiRequest(area = "artist", tag = "najar", language = "all"),
+        )
+        val http = RoutingHitomiHttpClient().apply {
+            textRoutes[versionUrl] = "100"
+            binaryIndexes[artistUrl] = listOf(6, 5, 4)
+            routeGlobalIndex(version = "100", term = "girl", ids = listOf(6, 5, 4, 3))
+            routeGlobalIndex(version = "200", term = "girl", ids = listOf(6, 5, 3, 2))
+        }
+        val adapter = adapter(http, pageSize = 1)
+        val query = query(
+            include = listOf(
+                SearchTerm("najar", SearchFacet.ARTIST, "artist"),
+                SearchTerm("girl"),
+            ),
+        )
+
+        val first = adapter.search(query, null)
+        val token = requireNotNull(first.nextPageToken)
+        assertEquals("ARTIST|artist|najar", decodeTokenString(token, "primaryKey"))
+        assertEquals("100", decodeTokenString(token, "globalIndexVersion"))
+
+        http.textRoutes[versionUrl] = "200"
+
+        assertParseFailure {
+            adapter.search(query, token)
+        }
+    }
+
+    @Test
+    fun `global exclusion page token fails closed when galleries index version rotates`() = runTest {
+        val versionUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/version"
+        val newest = HitomiNozomi.urlFor(HitomiNozomiRequest())
+        val http = RoutingHitomiHttpClient().apply {
+            textRoutes[versionUrl] = "100"
+            binaryIndexes[newest] = listOf(6, 5, 4, 3)
+            routeGlobalIndex(version = "100", term = "girl", ids = listOf(2))
+            routeGlobalIndex(version = "200", term = "girl", ids = listOf(5))
+        }
+        val adapter = adapter(http, pageSize = 1)
+        val query = query(exclude = listOf(SearchTerm("girl")))
+
+        val first = adapter.search(query, null)
+        val token = requireNotNull(first.nextPageToken)
+        assertEquals("__all__", decodeTokenString(token, "primaryKey"))
+        assertEquals("100", decodeTokenString(token, "globalIndexVersion"))
+
+        http.textRoutes[versionUrl] = "200"
+
+        assertParseFailure {
+            adapter.search(query, token)
+        }
+    }
+
+    @Test
     fun `featured closed facets expose discoverable type and language values`() = runTest {
         val adapter = adapter(RoutingHitomiHttpClient())
 
@@ -189,6 +341,22 @@ class HitomiSourceAdapterTest {
         assertNull(third.nextPageToken)
         assertEquals(listOf(0L, 8L, 16L), http.binaryRequests.map { it.range.startInclusive })
         assertEquals(5, (first.items + second.items + third.items).map { it.id }.distinct().size)
+    }
+
+    @Test
+    fun `legacy version two page token remains valid for Nozomi only query`() = runTest {
+        val newest = HitomiNozomi.urlFor(HitomiNozomiRequest())
+        val http = RoutingHitomiHttpClient().apply {
+            binaryIndexes[newest] = listOf(5, 4, 3)
+        }
+        val adapter = adapter(http, pageSize = 1)
+
+        val first = adapter.search(query(), null)
+        val legacyToken = requireNotNull(first.nextPageToken).asLegacyVersionTwoToken()
+        val second = adapter.search(query(), legacyToken)
+
+        assertEquals(listOf("5"), first.items.map { it.id.sourcePostId })
+        assertEquals(listOf("4"), second.items.map { it.id.sourcePostId })
     }
 
     @Test
@@ -724,6 +892,7 @@ class HitomiSourceAdapterTest {
         http: RoutingHitomiHttpClient,
         pageSize: Int = 25,
         hydrationConcurrency: Int = 4,
+        globalIndexCacheMaxBytes: Long = HitomiGlobalIndexCache.DEFAULT_MAX_BYTES,
         mediaCalls: AtomicInteger = AtomicInteger(0),
         candidateProvider: (suspend (HitomiMediaFile) -> List<HitomiMediaCandidate>)? = null,
     ): HitomiSourceAdapter {
@@ -731,6 +900,7 @@ class HitomiSourceAdapterTest {
             httpClient = http,
             pageSize = pageSize,
             hydrationConcurrency = hydrationConcurrency,
+            globalIndexCacheMaxBytes = globalIndexCacheMaxBytes,
             mediaCandidates = candidateProvider ?: { file ->
                 mediaCalls.incrementAndGet()
                 listOf(
@@ -790,6 +960,34 @@ class HitomiSourceAdapterTest {
     private fun decodeRandomSeed(token: String): Long {
         val json = Base64.getUrlDecoder().decode(token).toString(Charsets.UTF_8)
         return JsonParser.parseString(json).asJsonObject.get("randomSeed").asLong
+    }
+
+    private fun decodeTokenString(token: String, field: String): String? {
+        val json = Base64.getUrlDecoder().decode(token).toString(Charsets.UTF_8)
+        return JsonParser.parseString(json).asJsonObject.get(field)
+            ?.takeUnless { value -> value.isJsonNull }
+            ?.asString
+    }
+
+    private fun String.asLegacyVersionTwoToken(): String {
+        val json = Base64.getUrlDecoder().decode(this).toString(Charsets.UTF_8)
+        val token = JsonParser.parseString(json).asJsonObject.apply {
+            addProperty("version", 2)
+            remove("globalIndexVersion")
+        }
+        return Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(token.toString().toByteArray(Charsets.UTF_8))
+    }
+
+    private fun RoutingHitomiHttpClient.routeGlobalIndex(
+        version: String,
+        term: String,
+        ids: List<Int>,
+    ) {
+        val record = globalGalleryRecord(ids)
+        rawFullBodies["https://ltn.gold-usergeneratedcontent.net/galleriesindex/galleries.$version.index"] =
+            globalIndexNode(term, dataLength = record.size)
+        rawFullBodies["https://ltn.gold-usergeneratedcontent.net/galleriesindex/galleries.$version.data"] = record
     }
 
     private fun globalIndexNode(term: String, dataLength: Int): ByteArray {

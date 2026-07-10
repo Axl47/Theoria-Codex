@@ -1,9 +1,15 @@
 package com.theoriacodex.app.update
 
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonSerializer
+import com.theoriacodex.data.storage.AtomicJsonFileStore
 import java.io.File
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -13,7 +19,7 @@ class FileBackedUpdateStateStoreTest {
     val tempFolder = TemporaryFolder()
 
     @Test
-    fun `persists ignored and remind later fields`() {
+    fun `persists ignored and remind later fields`() = runTest {
         val tempDir = tempDir("update-store-test-")
         val file = File(tempDir, "update_state.json")
         val store = FileBackedUpdateStateStore(file)
@@ -29,7 +35,7 @@ class FileBackedUpdateStateStoreTest {
     }
 
     @Test
-    fun `clear prompt deferrals resets fields`() {
+    fun `clear prompt deferrals resets fields`() = runTest {
         val tempDir = tempDir("update-store-test-")
         val file = File(tempDir, "update_state.json")
         val store = FileBackedUpdateStateStore(file)
@@ -45,7 +51,7 @@ class FileBackedUpdateStateStoreTest {
     }
 
     @Test
-    fun `persists last installed changelog`() {
+    fun `persists last installed changelog`() = runTest {
         val tempDir = tempDir("update-store-test-")
         val file = File(tempDir, "update_state.json")
         val store = FileBackedUpdateStateStore(file)
@@ -74,6 +80,91 @@ class FileBackedUpdateStateStoreTest {
         assertEquals(100, changelog?.fromVersionCode)
         assertEquals(101, changelog?.versionCode)
         assertEquals("abc1234", changelog?.commitShaShort)
+    }
+
+    @Test
+    fun `corrupt and legacy snapshots read tolerantly`() = runTest {
+        val file = File(tempDir("update-store-tolerant-test-"), "update_state.json")
+        file.writeText("{broken")
+
+        assertEquals(UpdateStateSnapshot(), FileBackedUpdateStateStore(file).snapshot())
+
+        file.writeText(
+            """
+            {
+              "lastSeenReleaseId": 701,
+              "ignoredReleaseId": 702
+            }
+            """.trimIndent(),
+        )
+        val legacy = FileBackedUpdateStateStore(file).snapshot()
+        assertEquals(701L, legacy.lastSeenReleaseId)
+        assertEquals(702L, legacy.ignoredReleaseId)
+        assertNull(legacy.pendingInstallReleaseId)
+    }
+
+    @Test
+    fun `failed atomic replacement preserves prior update state`() = runTest {
+        val file = File(tempDir("update-store-failed-write-test-"), "update_state.json")
+        FileBackedUpdateStateStore(file).setLastSeenReleaseId(800L)
+        val priorBody = file.readText()
+        val failingGson = GsonBuilder()
+            .registerTypeAdapter(
+                UpdateStateSnapshot::class.java,
+                JsonSerializer<UpdateStateSnapshot> { _, _, _ -> error("serialization failed") },
+            )
+            .create()
+        val store = FileBackedUpdateStateStore(
+            file = file,
+            fileStore = AtomicJsonFileStore(gson = failingGson),
+        )
+
+        val failure = runCatching { store.setIgnoredRelease(801L) }.exceptionOrNull()
+
+        assertTrue(failure is IllegalStateException)
+        assertEquals(priorBody, file.readText())
+        assertEquals(800L, store.snapshot().lastSeenReleaseId)
+        assertNull(store.snapshot().ignoredReleaseId)
+    }
+
+    @Test
+    fun `cancelled atomic replacement preserves the complete prior snapshot`() = runTest {
+        val file = File(tempDir("update-store-cancelled-write-test-"), "update_state.json")
+        val stableStore = FileBackedUpdateStateStore(file)
+        stableStore.update { current ->
+            current.copy(
+                ignoredReleaseId = 900L,
+                remindLaterReleaseId = 900L,
+                remindLaterUntilEpochMs = 123_456L,
+            )
+        }
+        val priorBody = file.readText()
+        val cancellingGson = GsonBuilder()
+            .registerTypeAdapter(
+                UpdateStateSnapshot::class.java,
+                JsonSerializer<UpdateStateSnapshot> { _, _, _ -> throw CancellationException("cancelled") },
+            )
+            .create()
+        val store = FileBackedUpdateStateStore(
+            file = file,
+            fileStore = AtomicJsonFileStore(gson = cancellingGson),
+        )
+
+        val failure = runCatching {
+            store.update { current ->
+                current.copy(
+                    ignoredReleaseId = null,
+                    remindLaterReleaseId = null,
+                    remindLaterUntilEpochMs = null,
+                )
+            }
+        }.exceptionOrNull()
+
+        assertTrue(failure is CancellationException)
+        assertEquals(priorBody, file.readText())
+        assertEquals(900L, store.snapshot().ignoredReleaseId)
+        assertEquals(900L, store.snapshot().remindLaterReleaseId)
+        assertEquals(123_456L, store.snapshot().remindLaterUntilEpochMs)
     }
 
     private fun tempDir(prefix: String): File {

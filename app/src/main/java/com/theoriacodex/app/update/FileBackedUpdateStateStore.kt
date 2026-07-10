@@ -1,123 +1,33 @@
 package com.theoriacodex.app.update
 
-import com.google.gson.Gson
+import com.theoriacodex.data.storage.AtomicJsonFileStore
 import java.io.File
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class FileBackedUpdateStateStore(
     private val file: File,
-    private val gson: Gson = Gson(),
+    private val fileStore: AtomicJsonFileStore = AtomicJsonFileStore(),
 ) : UpdateStateStore {
-    private val lock = Any()
+    private val mutex = Mutex()
+    private var cachedSnapshot: UpdateStateSnapshot? = null
 
-    override fun snapshot(): UpdateStateSnapshot = synchronized(lock) {
+    override suspend fun snapshot(): UpdateStateSnapshot = mutex.withLock {
         readLocked()
     }
 
-    override fun setLastSeenReleaseId(releaseId: Long?) {
-        synchronized(lock) {
-            val current = readLocked()
-            writeLocked(current.copy(lastSeenReleaseId = releaseId))
+    override suspend fun update(transform: (UpdateStateSnapshot) -> UpdateStateSnapshot) {
+        mutex.withLock {
+            val replacement = transform(readLocked())
+            fileStore.write(file, replacement)
+            cachedSnapshot = replacement
         }
     }
 
-    override fun setPendingInstall(releaseId: Long?, versionCode: Int?) {
-        synchronized(lock) {
-            val current = readLocked()
-            writeLocked(
-                current.copy(
-                    pendingInstallReleaseId = releaseId,
-                    pendingInstallVersionCode = versionCode,
-                )
-            )
+    private suspend fun readLocked(): UpdateStateSnapshot {
+        cachedSnapshot?.let { snapshot -> return snapshot }
+        return fileStore.read(file, UpdateStateSnapshot()).also { snapshot ->
+            cachedSnapshot = snapshot
         }
-    }
-
-    override fun clearPendingInstall() {
-        synchronized(lock) {
-            val current = readLocked()
-            writeLocked(
-                current.copy(
-                    pendingInstallReleaseId = null,
-                    pendingInstallVersionCode = null,
-                )
-            )
-        }
-    }
-
-    override fun setIgnoredRelease(releaseId: Long?) {
-        synchronized(lock) {
-            val current = readLocked()
-            writeLocked(
-                current.copy(
-                    ignoredReleaseId = releaseId,
-                )
-            )
-        }
-    }
-
-    override fun setRemindLater(releaseId: Long?, untilEpochMs: Long?) {
-        synchronized(lock) {
-            val current = readLocked()
-            writeLocked(
-                current.copy(
-                    remindLaterReleaseId = releaseId,
-                    remindLaterUntilEpochMs = untilEpochMs,
-                )
-            )
-        }
-    }
-
-    override fun clearPromptDeferrals() {
-        synchronized(lock) {
-            val current = readLocked()
-            writeLocked(
-                current.copy(
-                    ignoredReleaseId = null,
-                    remindLaterReleaseId = null,
-                    remindLaterUntilEpochMs = null,
-                )
-            )
-        }
-    }
-
-    override fun setPendingPostInstallChangelog(changelog: PendingPostInstallChangelog?) {
-        synchronized(lock) {
-            val current = readLocked()
-            writeLocked(
-                current.copy(
-                    pendingPostInstallChangelog = changelog,
-                )
-            )
-        }
-    }
-
-    override fun setLastInstalledChangelog(changelog: PendingPostInstallChangelog?) {
-        synchronized(lock) {
-            val current = readLocked()
-            writeLocked(
-                current.copy(
-                    lastInstalledChangelog = changelog,
-                )
-            )
-        }
-    }
-
-    private fun readLocked(): UpdateStateSnapshot {
-        if (!file.exists()) return UpdateStateSnapshot()
-        val body = runCatching { file.readText() }.getOrDefault("")
-        if (body.isBlank()) return UpdateStateSnapshot()
-        return runCatching {
-            gson.fromJson(body, UpdateStateSnapshot::class.java)
-        }.getOrDefault(UpdateStateSnapshot())
-    }
-
-    private fun writeLocked(snapshot: UpdateStateSnapshot) {
-        file.parentFile?.mkdirs()
-        val temp = File(file.parentFile, "${file.name}.tmp")
-        temp.writeText(gson.toJson(snapshot))
-        if (file.exists()) {
-            file.delete()
-        }
-        temp.renameTo(file)
     }
 }

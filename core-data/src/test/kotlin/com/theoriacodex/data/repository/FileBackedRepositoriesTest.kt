@@ -1,5 +1,7 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.data.testing.RecordingIoDispatcher
+import com.theoriacodex.data.testing.ControllableIoDispatcher
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
@@ -13,7 +15,12 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
+import java.util.concurrent.RejectedExecutionException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -555,6 +562,117 @@ class FileBackedRepositoriesTest {
         assertTrue(storedJson.contains("\"includeTags\""))
         assertTrue(storedJson.contains("\"excludeTags\""))
         assertEquals(320, second.getScrollOffset("qhash"))
+    }
+
+    @Test
+    fun `file-backed repository initialization and writes use the injected IO lane`() = runTest {
+        val dir = tempDir("query-injected-io-")
+        RecordingIoDispatcher("repository-file-io").use { dispatcher ->
+            val repository = FileBackedQueryRepository(dir, ioDispatcher = dispatcher)
+            val dispatchesAfterInitialization = dispatcher.executionThreadNames.size
+
+            repository.upsertScrollOffset("query", 42)
+
+            assertTrue(dispatchesAfterInitialization > 0)
+            assertTrue(dispatcher.executionThreadNames.size > dispatchesAfterInitialization)
+            assertTrue(dispatcher.executionThreadNames.all { name -> name == "repository-file-io" })
+            assertEquals(42, FileBackedQueryRepository(dir).getScrollOffset("query"))
+        }
+    }
+
+    @Test
+    fun `file-backed repository serializes concurrent mutations before persistence`() = runTest {
+        val dir = tempDir("query-concurrent-writes-")
+        val repository = FileBackedQueryRepository(dir)
+
+        coroutineScope {
+            repeat(24) { index ->
+                launch(Dispatchers.Default) {
+                    repository.upsertScrollOffset("query-$index", index)
+                }
+            }
+        }
+
+        val reconstructed = FileBackedQueryRepository(dir)
+        repeat(24) { index ->
+            assertEquals(index, reconstructed.getScrollOffset("query-$index"))
+        }
+    }
+
+    @Test
+    fun `cancelled Codex persistence rolls back every in-memory flow`() = runTest {
+        val dir = tempDir("codex-cancelled-persistence-")
+        ControllableIoDispatcher("codex-io").use { dispatcher ->
+            val repository = FileBackedCodexRepository(dir, ioDispatcher = dispatcher)
+            val codex = repository.createCodex("Saved")
+            val persisted = samplePost("persisted", localPath = null)
+            repository.addItem(codex.codexId, persisted)
+            val originalItems = repository.observeCodexItems(codex.codexId).first()
+            val attempted = samplePost("attempted", localPath = null, source = SourceKey.GELBOORU)
+            val cancellation = CancellationException("cancelled write")
+            dispatcher.dispatchFailure = cancellation
+
+            val failure = runCatching { repository.addItem(codex.codexId, attempted) }.exceptionOrNull()
+
+            assertTrue(failure is CancellationException)
+            assertEquals(cancellation.message, failure?.message)
+            assertEquals(originalItems, repository.observeCodexItems(codex.codexId).first())
+            assertEquals(null, repository.getPost(attempted.id))
+            assertEquals(listOf(persisted), repository.observeCodexPosts(codex.codexId, CodexSortMode.NEWEST_SAVED).first())
+            val reconstructed = FileBackedCodexRepository(dir)
+            assertEquals(originalItems, reconstructed.observeCodexItems(codex.codexId).first())
+            assertEquals(null, reconstructed.getPost(attempted.id))
+        }
+    }
+
+    @Test
+    fun `failed Recents persistence rolls back watched and search flows`() = runTest {
+        val dir = tempDir("recents-failed-persistence-")
+        ControllableIoDispatcher("recents-io").use { dispatcher ->
+            val repository = FileBackedRecentsRepository(dir, ioDispatcher = dispatcher)
+            repository.recordWatchedPost(samplePost("1", localPath = null), ViewerStreamSource.SEARCH, "query")
+            repository.recordSearch(sampleQuery(), "query")
+            val originalWatched = repository.observeWatchedPosts().first()
+            val originalSearches = repository.observeSearches().first()
+            dispatcher.dispatchFailure = RejectedExecutionException("write rejected")
+
+            val failure = runCatching { repository.clearAll() }.exceptionOrNull()
+
+            assertTrue(failure is RejectedExecutionException)
+            assertEquals(originalWatched, repository.observeWatchedPosts().first())
+            assertEquals(originalSearches, repository.observeSearches().first())
+            val reconstructed = FileBackedRecentsRepository(dir)
+            assertEquals(originalWatched, reconstructed.observeWatchedPosts().first())
+            assertEquals(originalSearches, reconstructed.observeSearches().first())
+        }
+    }
+
+    @Test
+    fun `failed UI restore persistence rolls back plain and mapped state`() = runTest {
+        val dir = tempDir("ui-restore-failed-persistence-")
+        ControllableIoDispatcher("ui-restore-io").use { dispatcher ->
+            val repository = FileBackedUiRestoreRepository(dir, ioDispatcher = dispatcher)
+            val originalScroll = SearchScrollState(firstVisibleItemIndex = 2, firstVisibleItemOffsetPx = 30)
+            repository.setLastTab("codex")
+            repository.setSearchScrollState("query", originalScroll)
+            dispatcher.dispatchFailure = RejectedExecutionException("write rejected")
+
+            val tabFailure = runCatching { repository.setLastTab("settings") }.exceptionOrNull()
+            val scrollFailure = runCatching {
+                repository.setSearchScrollState(
+                    "query",
+                    SearchScrollState(firstVisibleItemIndex = 9, firstVisibleItemOffsetPx = 90),
+                )
+            }.exceptionOrNull()
+
+            assertTrue(tabFailure is RejectedExecutionException)
+            assertTrue(scrollFailure is RejectedExecutionException)
+            assertEquals("codex", repository.getLastTab())
+            assertEquals(originalScroll, repository.getSearchScrollState("query"))
+            val reconstructed = FileBackedUiRestoreRepository(dir)
+            assertEquals("codex", reconstructed.getLastTab())
+            assertEquals(originalScroll, reconstructed.getSearchScrollState("query"))
+        }
     }
 
     @Test

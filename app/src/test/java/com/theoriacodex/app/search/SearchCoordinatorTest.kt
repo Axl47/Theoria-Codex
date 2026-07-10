@@ -5,6 +5,9 @@ import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
+import com.theoriacodex.data.repository.QueryRepository
+import com.theoriacodex.data.repository.SearchScrollState
+import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
@@ -290,6 +293,29 @@ class SearchCoordinatorTest {
         restoredSession.initialize()
 
         assertTrue(restoredSession.hasAnySearchRun)
+    }
+
+    @Test
+    fun `identical stable scroll state is written once to both compatibility stores`() = runTest {
+        val queryRepository = CountingQueryRepository()
+        val uiRestoreRepository = CountingUiRestoreRepository()
+        val coordinator = SearchCoordinator(
+            registry = StubAdapterRegistry(),
+            queryRepository = queryRepository,
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = uiRestoreRepository,
+        )
+        coordinator.initialize()
+
+        coordinator.persistSearchScrollState(index = 4, offsetPx = 12)
+        coordinator.persistSearchScrollState(index = 4, offsetPx = 12)
+
+        assertEquals(1, queryRepository.scrollWriteCount)
+        assertEquals(1, uiRestoreRepository.scrollWriteCount)
+        assertEquals(
+            SearchScrollState(firstVisibleItemIndex = 4, firstVisibleItemOffsetPx = 12),
+            coordinator.restoreSearchScrollState(),
+        )
     }
 
     @Test
@@ -1572,6 +1598,30 @@ class SearchCoordinatorTest {
             settingsRepository = InMemorySettingsRepository(),
             uiRestoreRepository = InMemoryUiRestoreRepository(),
         )
+    }
+}
+
+private class CountingQueryRepository(
+    private val delegate: InMemoryQueryRepository = InMemoryQueryRepository(),
+) : QueryRepository by delegate {
+    var scrollWriteCount: Int = 0
+        private set
+
+    override suspend fun upsertScrollOffset(queryHash: String, offsetPx: Int) {
+        scrollWriteCount += 1
+        delegate.upsertScrollOffset(queryHash, offsetPx)
+    }
+}
+
+private class CountingUiRestoreRepository(
+    private val delegate: InMemoryUiRestoreRepository = InMemoryUiRestoreRepository(),
+) : UiRestoreRepository by delegate {
+    var scrollWriteCount: Int = 0
+        private set
+
+    override suspend fun setSearchScrollState(queryHash: String, state: SearchScrollState) {
+        scrollWriteCount += 1
+        delegate.setSearchScrollState(queryHash, state)
     }
 }
 
