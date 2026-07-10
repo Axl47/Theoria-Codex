@@ -1,0 +1,4 @@
+interface:
+  display_name: "Theoria Release"
+  short_description: "Prepare safe curated Theoria Codex releases"
+  default_prompt: "Use $theoria-release to draft the next Theoria Codex release with a user-facing changelog and version validation."
