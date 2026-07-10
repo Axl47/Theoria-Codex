@@ -7,16 +7,20 @@ updated_at: 2026-07-10T09:25:00-04:00
 ## Current Task: Implement Hitomi Source, Faceted Search, And Mixed Media
 
 ### Pending
-- [ ] Phase 3: Build reusable scoped autocomplete for NHentai and the Search UI; verify focused source/app tests; commit
-- [ ] Phase 4: Implement and expose Hitomi search, pagination, hydration, and media URL resolution; verify domain/source/stub/app tests; commit
 - [ ] Phase 5: Add creator browsing, typed post actions, and Hitomi deep links; verify data/source/creator/deep-link tests; commit
 - [ ] Phase 6: Generalize the Viewer media overview and support animated WebP/anime video; verify media/viewer/download/device-test compilation; commit
 - [ ] Phase 7: Add live health and app smoke coverage, complete available device acceptance, update README/AGENTS/ExecPlan, run broad validation; commit
 
 ### In Progress
+- [ ] Phase 4: Implement and expose Hitomi search, pagination, hydration, and media URL resolution; verify domain/source/stub/app tests; commit
 
 ### Done
-- [x] Phase 2: Add typed query/post taxonomy, safe legacy persistence, portable Codex snapshots, and Unified facet boundaries (`./gradlew :core-domain:test :core-data:test :core-sources:test :app:testDebugUnitTest`: 483 tests, 0 failures, 4 opt-in live skips)
+- [x] Phase 3: Build reusable scoped autocomplete for NHentai and the Search UI (`./gradlew :core-sources:test :app:testDebugUnitTest`: 288 tests, 0 failures, 2 opt-in live skips)
+  - [x] Add source-owned scope selection, typed suggestion actions/chips, raw prefix parsing, and Unified-mode protection
+  - [x] Make NHentai compile typed facets while preserving language, full-color, direct-ID, and same-name Tag/Artist behavior
+  - [x] Migrate suggestion caching to source + facet + namespace + normalized-value identity
+  - [x] Keep recommendations and seen-tag learning general-tag-only while preserving Pixiv's native raw-tag preference
+- [x] Phase 2: Add typed query/post taxonomy, safe legacy persistence, portable Codex snapshots, and Unified facet boundaries (`./gradlew :core-domain:test :core-data:test :core-sources:test :app:testDebugUnitTest`: 483 tests, 0 failures, 4 opt-in live skips); commit `067da0f`
   - [x] 2.1 Add canonical domain terms, typed suggestions, post taxonomy, and facet-aware query hashing
   - [x] 2.2 Add backward-compatible query/post/recents persistence records and malformed-record recovery
   - [x] 2.3 Preserve typed post snapshots through Codex share/import and offline fallback without exporting local paths

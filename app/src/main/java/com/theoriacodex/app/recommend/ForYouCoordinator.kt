@@ -15,6 +15,7 @@ import com.theoriacodex.data.repository.defaultRecommendationProfiles
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
+import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -425,7 +426,9 @@ class ForYouCoordinator(
     }
 
     private suspend fun fallbackTagsForSource(source: SourceKey): List<String> {
-        val cached = tagSuggestionStore.get(source = source, limit = TRENDING_FALLBACK_LIMIT)
+        val cached = tagSuggestionStore
+            .get(source = source, limit = TRENDING_FALLBACK_LIMIT)
+            .filter(TagSuggestion::isRecommendationTagSuggestion)
         if (cached.isNotEmpty()) {
             return cached.map { suggestion -> suggestion.text }
         }
@@ -436,7 +439,9 @@ class ForYouCoordinator(
         if (fetched.isNotEmpty()) {
             tagSuggestionStore.put(source, fetched)
         }
-        return fetched.map { suggestion -> suggestion.text }
+        return fetched
+            .filter(TagSuggestion::isRecommendationTagSuggestion)
+            .map { suggestion -> suggestion.text }
     }
 
     private fun sourceQuery(

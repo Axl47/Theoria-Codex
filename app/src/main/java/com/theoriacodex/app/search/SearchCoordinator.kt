@@ -18,6 +18,9 @@ import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceAdapter
+import com.theoriacodex.domain.adapter.FacetedSearchScope
+import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
+import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
@@ -26,6 +29,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
@@ -37,6 +41,7 @@ import com.theoriacodex.domain.tags.normalizeGelbooruToken
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import com.theoriacodex.domain.tags.sourceTagKey
 import com.theoriacodex.domain.tags.sourceTagsMatch
+import com.theoriacodex.app.recommend.recommendationTaxonomyFor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
@@ -77,6 +82,16 @@ class SearchCoordinator(
     var autocompleteSuggestions by mutableStateOf<List<TagSuggestion>>(emptyList())
         private set
 
+    /**
+     * The lossless suggestion lane used by faceted sources. The legacy suggestion list above
+     * remains available for sources that only expose general tags.
+     */
+    var facetedAutocompleteSuggestions by mutableStateOf<List<FacetedTagSuggestion>>(emptyList())
+        private set
+
+    var selectedSearchScope by mutableStateOf(FacetedSearchScope.All)
+        private set
+
     var tagInputValidationMessage by mutableStateOf<String?>(null)
         private set
 
@@ -103,6 +118,15 @@ class SearchCoordinator(
 
     val modeOptions: List<QueryMode>
         get() = listOf(QueryMode.Unified) + availableSources.map(QueryMode::Source)
+
+    val supportedSearchScopes: List<FacetedSearchScope>
+        get() {
+            val mode = draftQuery.mode as? QueryMode.Source ?: return emptyList()
+            val adapter = registry.adapterFor(mode.source) as? FacetedSearchSourceAdapter
+                ?: return emptyList()
+            return adapter.supportedSearchScopes
+                .sortedWith(SEARCH_SCOPE_COMPARATOR)
+        }
 
     val hasPendingChanges: Boolean
         get() = draftQuery != appliedQuery
@@ -227,8 +251,13 @@ class SearchCoordinator(
         } else {
             appliedByMode[modeKey(QueryMode.Unified)] ?: defaultQuery()
         }
-        appliedQuery = restored
-        draftQuery = restored
+        val sanitized = restored.forMode(restored.mode)
+        appliedQuery = sanitized.query
+        draftQuery = sanitized.query
+        if (sanitized.removedSourceOwnedTerms) {
+            tagInputValidationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
+        }
+        resetUnsupportedSearchScope()
         hasExecutedSearch =
             appliedByMode.containsKey(modeKey(appliedQuery.mode)) ||
             queryRepository.getScrollOffset(appliedQueryHash) != null
@@ -240,6 +269,7 @@ class SearchCoordinator(
 
         if (!isModeAvailable(draftQuery.mode)) {
             draftQuery = defaultQuery(QueryMode.Unified)
+            resetUnsupportedSearchScope()
         }
         if (!isModeAvailable(appliedQuery.mode)) {
             appliedQuery = defaultQuery(QueryMode.Unified)
@@ -249,21 +279,23 @@ class SearchCoordinator(
     }
 
     fun addTagInput(input: String) {
-        val trimmed = input.trim()
-        if (trimmed.isBlank()) return
+        val parsed = parseScopedInput(input)
+        if (parsed.value.isBlank()) return
 
-        if (trimmed.startsWith("-")) {
-            val tag = trimmed.removePrefix("-").trim()
-            addExcludeTag(tag)
-            return
+        val term = resolveInputTerm(parsed) ?: return
+        if (parsed.isExclude) {
+            addExcludeTerm(term)
+        } else {
+            addIncludeTerm(term)
         }
-
-        addIncludeTag(trimmed)
     }
 
     fun canCommitTagInput(input: String): Boolean {
         val trimmed = input.trim()
         if (trimmed.isBlank()) return false
+        val parsed = parseScopedInput(trimmed)
+        if (parsed.value.isBlank()) return false
+        if (parsed.explicitScope != null && !canUseParsedScope(parsed)) return false
         if (!requiresGelbooruSuggestionSelection()) return true
         val normalizedTag = normalizeTypedTag(trimmed)
         if (normalizedTag.isBlank()) return false
@@ -272,7 +304,13 @@ class SearchCoordinator(
 
     fun commitTagInput(input: String): Boolean {
         if (!canCommitTagInput(input)) {
-            if (requiresGelbooruSuggestionSelection()) {
+            val parsed = parseScopedInput(input)
+            if (parsed.explicitScope != null && !canUseParsedScope(parsed)) {
+                tagInputValidationMessage = when (draftQuery.mode) {
+                    QueryMode.Unified -> UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE
+                    is QueryMode.Source -> UNSUPPORTED_SEARCH_SCOPE_MESSAGE
+                }
+            } else if (requiresGelbooruSuggestionSelection()) {
                 tagInputValidationMessage = GELBOORU_SUGGESTION_REQUIRED_MESSAGE
             }
             return false
@@ -288,22 +326,52 @@ class SearchCoordinator(
 
     fun clearAutocompleteSuggestions() {
         autocompleteSuggestions = emptyList()
+        facetedAutocompleteSuggestions = emptyList()
     }
 
     fun addIncludeTag(tag: String) {
         val normalized = tag.trim()
         if (normalized.isBlank()) return
-        val term = SearchTerm(value = normalized)
-        if (term in draftQuery.includeTerms) return
-        draftQuery = draftQuery.copy(includeTerms = draftQuery.includeTerms + term)
+        addIncludeTerm(SearchTerm(value = normalized))
     }
 
     fun addExcludeTag(tag: String) {
         val normalized = tag.trim()
         if (normalized.isBlank()) return
-        val term = SearchTerm(value = normalized)
-        if (term in draftQuery.excludeTerms) return
-        draftQuery = draftQuery.copy(excludeTerms = draftQuery.excludeTerms + term)
+        addExcludeTerm(SearchTerm(value = normalized))
+    }
+
+    fun addIncludeTerm(term: SearchTerm): Boolean {
+        val normalized = term.normalizedOrNull() ?: return false
+        if (!canAddTermToMode(normalized)) return false
+        if (normalized in draftQuery.includeTerms) return false
+        draftQuery = draftQuery.copy(includeTerms = draftQuery.includeTerms + normalized)
+        tagInputValidationMessage = null
+        return true
+    }
+
+    fun addExcludeTerm(term: SearchTerm): Boolean {
+        val normalized = term.normalizedOrNull() ?: return false
+        if (!canAddTermToMode(normalized)) return false
+        if (normalized in draftQuery.excludeTerms) return false
+        draftQuery = draftQuery.copy(excludeTerms = draftQuery.excludeTerms + normalized)
+        tagInputValidationMessage = null
+        return true
+    }
+
+    fun addIncludeSuggestion(suggestion: FacetedTagSuggestion): Boolean {
+        return addIncludeTerm(suggestion.toSearchTerm())
+    }
+
+    fun addExcludeSuggestion(suggestion: FacetedTagSuggestion): Boolean {
+        return addExcludeTerm(suggestion.toSearchTerm())
+    }
+
+    fun addSuggestion(
+        suggestion: FacetedTagSuggestion,
+        excluded: Boolean = false,
+    ): Boolean {
+        return if (excluded) addExcludeSuggestion(suggestion) else addIncludeSuggestion(suggestion)
     }
 
     fun removeIncludeTag(tag: String) {
@@ -322,14 +390,44 @@ class SearchCoordinator(
         )
     }
 
+    fun removeIncludeTerm(term: SearchTerm) {
+        draftQuery = draftQuery.copy(
+            includeTerms = draftQuery.includeTerms.filterNot { candidate -> candidate == term },
+        )
+    }
+
+    fun removeExcludeTerm(term: SearchTerm) {
+        draftQuery = draftQuery.copy(
+            excludeTerms = draftQuery.excludeTerms.filterNot { candidate -> candidate == term },
+        )
+    }
+
+    fun selectSearchScope(scope: FacetedSearchScope): Boolean {
+        if (scope !in supportedSearchScopes) return false
+        if (selectedSearchScope == scope) return true
+        selectedSearchScope = scope
+        clearAutocompleteSuggestions()
+        tagInputValidationMessage = null
+        return true
+    }
+
     fun setMode(mode: QueryMode) {
+        val hadSourceOwnedTerms = draftQuery.hasSourceOwnedTerms()
         val resolvedMode = when {
             isModeAvailable(mode) -> mode
             else -> QueryMode.Unified
         }
         val restored = appliedByMode[modeKey(resolvedMode)] ?: defaultQuery(resolvedMode)
-        draftQuery = restored.copy(mode = resolvedMode)
+        val sanitized = restored.copy(mode = resolvedMode).forMode(resolvedMode)
+        draftQuery = sanitized.query
+        resetUnsupportedSearchScope()
         clearTagInputUiState()
+        if (
+            resolvedMode == QueryMode.Unified &&
+            (hadSourceOwnedTerms || sanitized.removedSourceOwnedTerms)
+        ) {
+            tagInputValidationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
+        }
     }
 
     fun setSort(sort: SortMode) {
@@ -338,12 +436,14 @@ class SearchCoordinator(
 
     fun resetDraft() {
         draftQuery = appliedQuery
+        resetUnsupportedSearchScope()
         clearTagInputUiState()
     }
 
     fun clearDraft() {
         val mode = draftQuery.mode.takeIf(::isModeAvailable) ?: QueryMode.Unified
         draftQuery = defaultQuery(mode)
+        resetUnsupportedSearchScope()
         clearTagInputUiState()
     }
 
@@ -396,36 +496,47 @@ class SearchCoordinator(
 
     fun selectedNhentaiLanguageFilter(): NhentaiLanguageFilter {
         val match = draftQuery.includeTerms.firstNotNullOfOrNull { term ->
-            nhentaiLanguageFilterForTag(term.value)
+            term.nhentaiLanguageFilterOrNull()
         }
         return match ?: NhentaiLanguageFilter.ANY
     }
 
     fun setNhentaiLanguageFilter(filter: NhentaiLanguageFilter) {
         val cleaned = draftQuery.includeTerms.filterNot { term ->
-            nhentaiLanguageFilterForTag(term.value) != null
+            term.nhentaiLanguageFilterOrNull() != null
         }
         val languageTag = NHENTAI_LANGUAGE_TAG_BY_FILTER[filter]
-        val nextInclude = if (languageTag == null || cleaned.any { it.value == languageTag }) {
+        val languageTerm = languageTag?.let { value ->
+            SearchTerm(
+                value = value,
+                facet = SearchFacet.LANGUAGE,
+                sourceNamespace = NHENTAI_LANGUAGE_NAMESPACE,
+            )
+        }
+        val nextInclude = if (languageTerm == null || languageTerm in cleaned) {
             cleaned
         } else {
-            cleaned + SearchTerm(value = languageTag)
+            cleaned + languageTerm
         }
         draftQuery = draftQuery.copy(includeTerms = nextInclude)
     }
 
     fun selectedNhentaiFullColorFilter(): Boolean {
         return draftQuery.includeTerms.any { term ->
-            normalizeNhentaiTagFilter(term.value) == NHENTAI_FULL_COLOR_TAG
+            term.isNhentaiFullColorFilter()
         }
     }
 
     fun setNhentaiFullColorFilter(enabled: Boolean) {
         val cleaned = draftQuery.includeTerms.filterNot { term ->
-            normalizeNhentaiTagFilter(term.value) == NHENTAI_FULL_COLOR_TAG
+            term.isNhentaiFullColorFilter()
         }
         val nextInclude = if (enabled) {
-            cleaned + SearchTerm(value = NHENTAI_FULL_COLOR_TAG)
+            cleaned + SearchTerm(
+                value = NHENTAI_FULL_COLOR_TAG,
+                facet = SearchFacet.TAG,
+                sourceNamespace = NHENTAI_TAG_NAMESPACE,
+            )
         } else {
             cleaned
         }
@@ -451,10 +562,53 @@ class SearchCoordinator(
     }
 
     suspend fun refreshAutocompleteSuggestions(input: String) {
-        val typedPrefix = normalizeTypedTag(input)
+        val parsedInput = parseScopedInput(input)
+        val typedPrefix = parsedInput.value
         if (typedPrefix.isBlank()) {
-            autocompleteSuggestions = emptyList()
+            clearAutocompleteSuggestions()
+            val explicitScope = parsedInput.explicitScope
+            if (explicitScope != null) {
+                when (draftQuery.mode) {
+                    QueryMode.Unified -> {
+                        tagInputValidationMessage = UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE
+                    }
+
+                    is QueryMode.Source -> {
+                        val resolvedScope = resolveSupportedScope(
+                            explicitScope,
+                            supportedSearchScopes,
+                        )
+                        if (resolvedScope == null) {
+                            tagInputValidationMessage = UNSUPPORTED_SEARCH_SCOPE_MESSAGE
+                        } else {
+                            selectedSearchScope = resolvedScope
+                            tagInputValidationMessage = null
+                        }
+                    }
+                }
+            }
             return
+        }
+
+        val explicitScope = parsedInput.explicitScope
+        if (explicitScope != null) {
+            when (draftQuery.mode) {
+                QueryMode.Unified -> {
+                    clearAutocompleteSuggestions()
+                    tagInputValidationMessage = UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE
+                    return
+                }
+
+                is QueryMode.Source -> {
+                    val resolvedScope = resolveSupportedScope(explicitScope, supportedSearchScopes)
+                    if (resolvedScope == null) {
+                        clearAutocompleteSuggestions()
+                        tagInputValidationMessage = UNSUPPORTED_SEARCH_SCOPE_MESSAGE
+                        return
+                    }
+                    selectedSearchScope = resolvedScope
+                }
+            }
         }
 
         autocompleteSuggestions = when (val mode = draftQuery.mode) {
@@ -463,13 +617,45 @@ class SearchCoordinator(
                 val fetched = enabledSources
                     .flatMap { source ->
                         val sourcePrefix = autocompletePrefixForSource(source, typedPrefix)
-                        val suggestions = runCatching {
-                            registry.adapterFor(source)?.autocompleteTags(prefix = sourcePrefix, limit = 10).orEmpty()
-                        }.getOrDefault(emptyList())
-                        if (suggestions.isNotEmpty()) {
-                            tagSuggestionStore.put(source, suggestions)
+                        val adapter = registry.adapterFor(source)
+                        if (adapter is FacetedSearchSourceAdapter) {
+                            val allScope = FacetedSearchScope.All.takeIf { scope ->
+                                scope in adapter.supportedSearchScopes
+                            } ?: adapter.supportedSearchScopes.firstOrNull { scope ->
+                                scope.facet == SearchFacet.TAG &&
+                                    scope.sourceNamespace in setOf(null, "tag")
+                            }
+                            if (allScope == null) return@flatMap emptyList()
+                            val faceted = try {
+                                adapter.autocompleteFaceted(
+                                    prefix = sourcePrefix,
+                                    scope = allScope,
+                                    limit = FACETED_AUTOCOMPLETE_LIMIT,
+                                )
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (_: Throwable) {
+                                emptyList()
+                            }
+                            if (faceted.isNotEmpty()) {
+                                tagSuggestionStore.putFaceted(source, faceted)
+                            }
+                            faceted
+                                .filter(FacetedTagSuggestion::isPortableTagSuggestion)
+                                .map(FacetedTagSuggestion::toPortableLegacySuggestion)
+                        } else {
+                            val suggestions = try {
+                                adapter?.autocompleteTags(prefix = sourcePrefix, limit = 10).orEmpty()
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (_: Throwable) {
+                                emptyList()
+                            }
+                            if (suggestions.isNotEmpty()) {
+                                tagSuggestionStore.put(source, suggestions)
+                            }
+                            suggestions.filter(TagSuggestion::isPortableTagSuggestion)
                         }
-                        suggestions
                     }
                 if (fetched.isNotEmpty()) {
                     rankSuggestionsByPrefix(fetched, prefix = typedPrefix, limit = 20)
@@ -481,19 +667,68 @@ class SearchCoordinator(
             }
 
             is QueryMode.Source -> {
-                val sourcePrefix = autocompletePrefixForSource(mode.source, typedPrefix)
-                val fetched = runCatching {
-                    registry.adapterFor(mode.source)?.autocompleteTags(prefix = sourcePrefix, limit = 20).orEmpty()
-                }.getOrDefault(emptyList())
-                if (fetched.isNotEmpty()) {
-                    tagSuggestionStore.put(mode.source, fetched)
-                    rankSuggestionsByPrefix(fetched, prefix = typedPrefix, limit = 20)
+                val facetedAdapter = registry.adapterFor(mode.source) as? FacetedSearchSourceAdapter
+                if (facetedAdapter != null) {
+                    val requestedScope = explicitScope
+                        ?.let { prefix -> resolveSupportedScope(prefix, supportedSearchScopes) }
+                        ?: selectedSearchScope.takeIf { scope -> scope in supportedSearchScopes }
+                        ?: FacetedSearchScope.All.takeIf { scope -> scope in supportedSearchScopes }
+                    if (requestedScope == null) {
+                        clearAutocompleteSuggestions()
+                        tagInputValidationMessage = UNSUPPORTED_SEARCH_SCOPE_MESSAGE
+                        return
+                    }
+                    selectedSearchScope = requestedScope
+                    val fetched = try {
+                        facetedAdapter.autocompleteFaceted(
+                            prefix = typedPrefix,
+                            scope = requestedScope,
+                            limit = FACETED_AUTOCOMPLETE_LIMIT,
+                        )
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Throwable) {
+                        emptyList()
+                    }
+                    if (fetched.isNotEmpty()) {
+                        tagSuggestionStore.putFaceted(mode.source, fetched)
+                    }
+                    val candidates = if (fetched.isNotEmpty()) {
+                        fetched
+                    } else {
+                        tagSuggestionStore.getFaceted(
+                            source = mode.source,
+                            scope = requestedScope,
+                            limit = FACETED_AUTOCOMPLETE_CACHE_LIMIT,
+                        )
+                    }
+                    val ranked = rankFacetedSuggestionsByPrefix(
+                        suggestions = candidates,
+                        prefix = typedPrefix,
+                        limit = FACETED_AUTOCOMPLETE_LIMIT,
+                    )
+                    facetedAutocompleteSuggestions = ranked
+                    tagInputValidationMessage = null
+                    ranked.map(FacetedTagSuggestion::toLegacySuggestion)
                 } else {
-                    val cached = tagSuggestionStore.get(mode.source, limit = 120)
-                    val fallback = if (cached.isNotEmpty()) cached else trendingTags
-                    rankSuggestionsByPrefix(fallback, prefix = typedPrefix, limit = 20)
+                    facetedAutocompleteSuggestions = emptyList()
+                    val sourcePrefix = autocompletePrefixForSource(mode.source, typedPrefix)
+                    val fetched = runCatching {
+                        registry.adapterFor(mode.source)?.autocompleteTags(prefix = sourcePrefix, limit = 20).orEmpty()
+                    }.getOrDefault(emptyList())
+                    if (fetched.isNotEmpty()) {
+                        tagSuggestionStore.put(mode.source, fetched)
+                        rankSuggestionsByPrefix(fetched, prefix = typedPrefix, limit = 20)
+                    } else {
+                        val cached = tagSuggestionStore.get(mode.source, limit = 120)
+                        val fallback = if (cached.isNotEmpty()) cached else trendingTags
+                        rankSuggestionsByPrefix(fallback, prefix = typedPrefix, limit = 20)
+                    }
                 }
             }
+        }
+        if (draftQuery.mode == QueryMode.Unified) {
+            facetedAutocompleteSuggestions = emptyList()
         }
     }
 
@@ -605,6 +840,11 @@ class SearchCoordinator(
     }
 
     suspend fun applyDraft() {
+        val sanitized = draftQuery.forMode(draftQuery.mode)
+        draftQuery = sanitized.query
+        if (sanitized.removedSourceOwnedTerms) {
+            tagInputValidationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
+        }
         appliedQuery = draftQuery
         appliedByMode[modeKey(appliedQuery.mode)] = appliedQuery
         queryRepository.upsertAppliedQuery(modeKey(appliedQuery.mode), appliedQuery)
@@ -624,8 +864,13 @@ class SearchCoordinator(
 
     suspend fun applyHistoricalQuery(query: Query): Boolean {
         if (!isModeAvailable(query.mode)) return false
-        draftQuery = query
+        val sanitized = query.forMode(query.mode)
+        draftQuery = sanitized.query
+        resetUnsupportedSearchScope()
         clearTagInputUiState()
+        if (sanitized.removedSourceOwnedTerms) {
+            tagInputValidationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
+        }
         applyDraft()
         return true
     }
@@ -1063,17 +1308,29 @@ class SearchCoordinator(
                 val seenSuggestions = sourcePosts
                     .asSequence()
                     .flatMap { post ->
-                        val tags = post.rawTags.ifEmpty { post.canonicalTags }
-                        tags.asSequence()
+                        recommendationTaxonomyFor(post)
+                            .asSequence()
+                            .map { term ->
+                                FacetedTagSuggestion(
+                                    text = normalizeStoredTagForSource(source, term.value),
+                                    facet = SearchFacet.TAG,
+                                    sourceNamespace = term.sourceNamespace,
+                                    count = null,
+                                )
+                            }
                     }
-                    .map(String::trim)
-                    .filter(String::isNotBlank)
-                    .map { tag -> TagSuggestion(text = normalizeStoredTagForSource(source, tag), type = "seen", count = null) }
-                    .distinctBy { suggestion -> sourceTagKey(source, suggestion.text) }
+                    .filter { suggestion -> suggestion.text.isNotBlank() }
+                    .distinctBy { suggestion ->
+                        Triple(
+                            suggestion.facet,
+                            suggestion.sourceNamespace,
+                            sourceTagKey(source, suggestion.text),
+                        )
+                    }
                     .take(SEEN_TAGS_PER_SOURCE_INGEST_LIMIT)
                     .toList()
                 if (seenSuggestions.isNotEmpty()) {
-                    tagSuggestionStore.put(source, seenSuggestions)
+                    tagSuggestionStore.putFaceted(source, seenSuggestions)
                 }
             }
     }
@@ -1146,7 +1403,7 @@ class SearchCoordinator(
     }
 
     private fun normalizeTypedTag(input: String): String {
-        return input.trim().removePrefix("-").trim()
+        return parseScopedInput(input).value
     }
 
     private fun autocompletePrefixForSource(source: SourceKey, input: String): String {
@@ -1160,6 +1417,7 @@ class SearchCoordinator(
     private fun resolveCommittedTagInput(input: String): String {
         val trimmed = input.trim()
         val source = (draftQuery.mode as? QueryMode.Source)?.source ?: return trimmed
+        if (registry.adapterFor(source) is FacetedSearchSourceAdapter) return trimmed
         if (source !in SUGGESTION_CANONICALIZATION_SOURCES) return trimmed
 
         val isExclude = trimmed.startsWith("-")
@@ -1187,8 +1445,64 @@ class SearchCoordinator(
         }
     }
 
+    private fun canUseParsedScope(input: ParsedScopedInput): Boolean {
+        val prefix = input.explicitScope ?: return true
+        if (draftQuery.mode == QueryMode.Unified) return false
+        val mode = draftQuery.mode as? QueryMode.Source ?: return false
+        if (registry.adapterFor(mode.source) !is FacetedSearchSourceAdapter) return false
+        return resolveSupportedScope(prefix, supportedSearchScopes) != null
+    }
+
+    private fun resolveInputTerm(input: ParsedScopedInput): SearchTerm? {
+        val explicitScope = input.explicitScope
+        if (explicitScope != null) {
+            if (!canUseParsedScope(input)) {
+                tagInputValidationMessage = when (draftQuery.mode) {
+                    QueryMode.Unified -> UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE
+                    is QueryMode.Source -> UNSUPPORTED_SEARCH_SCOPE_MESSAGE
+                }
+                return null
+            }
+            val resolvedScope = requireNotNull(
+                resolveSupportedScope(explicitScope, supportedSearchScopes),
+            )
+            selectedSearchScope = resolvedScope
+            return SearchTerm(
+                value = input.value,
+                facet = requireNotNull(resolvedScope.facet),
+                sourceNamespace = resolvedScope.sourceNamespace ?: explicitScope.sourceNamespace,
+            )
+        }
+
+        val selectedScope = selectedSearchScope
+            .takeIf { scope -> !scope.isAll && scope in supportedSearchScopes }
+        return if (selectedScope == null) {
+            SearchTerm(value = input.value)
+        } else {
+            SearchTerm(
+                value = input.value,
+                facet = requireNotNull(selectedScope.facet),
+                sourceNamespace = selectedScope.sourceNamespace,
+            )
+        }
+    }
+
+    private fun canAddTermToMode(term: SearchTerm): Boolean {
+        if (draftQuery.mode != QueryMode.Unified || term.isPortableGeneralTag) return true
+        tagInputValidationMessage = UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE
+        return false
+    }
+
+    private fun resetUnsupportedSearchScope() {
+        val scopes = supportedSearchScopes
+        if (selectedSearchScope in scopes) return
+        selectedSearchScope = FacetedSearchScope.All.takeIf { scope -> scope in scopes }
+            ?: FacetedSearchScope.All
+        clearAutocompleteSuggestions()
+    }
+
     private fun clearTagInputUiState() {
-        autocompleteSuggestions = emptyList()
+        clearAutocompleteSuggestions()
         tagInputValidationMessage = null
     }
 
@@ -1207,6 +1521,36 @@ class SearchCoordinator(
             .distinctBy { suggestion -> suggestion.text.trim().lowercase() }
             .sortedWith(
                 compareByDescending<TagSuggestion> { suggestion ->
+                    suggestion.count ?: Int.MIN_VALUE
+                }.thenBy { suggestion ->
+                    !normalizeMatchToken(suggestion.text).startsWith(normalizedPrefix)
+                }.thenBy { suggestion -> suggestion.text.lowercase() }
+            )
+            .take(limit)
+            .toList()
+    }
+
+    private fun rankFacetedSuggestionsByPrefix(
+        suggestions: List<FacetedTagSuggestion>,
+        prefix: String,
+        limit: Int,
+    ): List<FacetedTagSuggestion> {
+        val normalizedPrefix = normalizeMatchToken(prefix)
+        if (normalizedPrefix.isBlank() || limit <= 0) return emptyList()
+        return suggestions
+            .asSequence()
+            .filter { suggestion ->
+                normalizeMatchToken(suggestion.text).contains(normalizedPrefix)
+            }
+            .distinctBy { suggestion ->
+                FacetedSuggestionIdentity(
+                    facet = suggestion.facet,
+                    sourceNamespace = suggestion.sourceNamespace,
+                    normalizedValue = normalizeMatchToken(suggestion.text),
+                )
+            }
+            .sortedWith(
+                compareByDescending<FacetedTagSuggestion> { suggestion ->
                     suggestion.count ?: Int.MIN_VALUE
                 }.thenBy { suggestion ->
                     !normalizeMatchToken(suggestion.text).startsWith(normalizedPrefix)
@@ -1259,8 +1603,16 @@ private const val PIXIV_UNKNOWN_RETRY_MESSAGE =
     "Pixiv returned a temporary unknown error. Search was reset. Please retry."
 private const val GELBOORU_SUGGESTION_REQUIRED_MESSAGE =
     "For Gelbooru, pick a suggested tag from autocomplete."
+private const val UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE =
+    "Artists, series, characters, groups, types, and languages require a specific source."
+private const val UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE =
+    "Source-specific search terms were removed when switching to Unified."
+private const val UNSUPPORTED_SEARCH_SCOPE_MESSAGE =
+    "That search scope is not supported by this source."
 private const val TAG_LOOKUP_LIMIT = 20_000
 private const val TAG_FETCH_LIMIT = 25
+private const val FACETED_AUTOCOMPLETE_LIMIT = 20
+private const val FACETED_AUTOCOMPLETE_CACHE_LIMIT = 120
 private const val TRENDING_REFRESH_INTERVAL_MS = 12L * 60L * 60L * 1000L
 private const val TRENDING_FETCH_PER_SOURCE_LIMIT = 10
 private const val TRENDING_PER_SOURCE_CACHE_LIMIT = 40
@@ -1290,8 +1642,8 @@ private val NHENTAI_LANGUAGE_TAG_BY_FILTER = mapOf(
     NhentaiLanguageFilter.JAPANESE to "japanese",
 )
 private const val NHENTAI_FULL_COLOR_TAG = "full color"
-private val NHENTAI_LANGUAGE_FILTER_TAGS = NHENTAI_LANGUAGE_TAG_BY_FILTER.values.toSet()
-private val NHENTAI_DIRECT_LOOKUP_FILTER_TAGS = NHENTAI_LANGUAGE_FILTER_TAGS + NHENTAI_FULL_COLOR_TAG
+private const val NHENTAI_LANGUAGE_NAMESPACE = "language"
+private const val NHENTAI_TAG_NAMESPACE = "tag"
 private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(
     SourceKey.PIXIV,
     SourceKey.GELBOORU,
@@ -1305,13 +1657,174 @@ private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(
 private val WHITESPACE_REGEX = Regex("\\s+")
 private val PIXIV_TRAILING_PARENTHESIS_REGEX = Regex("\\s*\\([^)]*\\)\\s*$")
 
-private fun nhentaiLanguageFilterForTag(tag: String): NhentaiLanguageFilter? {
-    return when (normalizeNhentaiTagFilter(tag)) {
+private val SEARCH_SCOPE_ORDER = listOf(
+    null,
+    SearchFacet.TAG,
+    SearchFacet.ARTIST,
+    SearchFacet.CHARACTER,
+    SearchFacet.SERIES,
+    SearchFacet.GROUP,
+    SearchFacet.TYPE,
+    SearchFacet.LANGUAGE,
+)
+private val SEARCH_SCOPE_COMPARATOR =
+    compareBy<FacetedSearchScope> { scope -> SEARCH_SCOPE_ORDER.indexOf(scope.facet) }
+        .thenBy { scope -> scope.scopeNamespaceOrder() }
+        .thenBy { scope -> scope.sourceNamespace.orEmpty() }
+
+private val SEARCH_SCOPE_PREFIXES = mapOf(
+    "tag" to SearchScopePrefix(SearchFacet.TAG, sourceNamespace = "tag"),
+    "female" to SearchScopePrefix(
+        facet = SearchFacet.TAG,
+        sourceNamespace = "female",
+        requiresExactNamespace = true,
+    ),
+    "male" to SearchScopePrefix(
+        facet = SearchFacet.TAG,
+        sourceNamespace = "male",
+        requiresExactNamespace = true,
+    ),
+    "artist" to SearchScopePrefix(SearchFacet.ARTIST),
+    "character" to SearchScopePrefix(SearchFacet.CHARACTER),
+    "series" to SearchScopePrefix(SearchFacet.SERIES),
+    "parody" to SearchScopePrefix(
+        facet = SearchFacet.SERIES,
+        sourceNamespace = "parody",
+        requiresExactNamespace = true,
+    ),
+    "group" to SearchScopePrefix(SearchFacet.GROUP),
+    "type" to SearchScopePrefix(SearchFacet.TYPE),
+    "category" to SearchScopePrefix(
+        facet = SearchFacet.TYPE,
+        sourceNamespace = "category",
+        requiresExactNamespace = true,
+    ),
+    "language" to SearchScopePrefix(SearchFacet.LANGUAGE),
+)
+
+private fun parseScopedInput(input: String): ParsedScopedInput {
+    val trimmed = input.trim()
+    val isExclude = trimmed.startsWith("-")
+    val unsigned = trimmed.removePrefix("-").trim()
+    val separatorIndex = unsigned.indexOf(':')
+    if (separatorIndex <= 0) {
+        return ParsedScopedInput(
+            value = unsigned,
+            isExclude = isExclude,
+            explicitScope = null,
+        )
+    }
+
+    val rawPrefix = unsigned.substring(0, separatorIndex).trim().lowercase()
+    val scope = SEARCH_SCOPE_PREFIXES[rawPrefix]
+        ?: return ParsedScopedInput(
+            value = unsigned,
+            isExclude = isExclude,
+            explicitScope = null,
+        )
+    return ParsedScopedInput(
+        value = unsigned.substring(separatorIndex + 1).trim(),
+        isExclude = isExclude,
+        explicitScope = scope,
+    )
+}
+
+private fun resolveSupportedScope(
+    prefix: SearchScopePrefix,
+    supportedScopes: List<FacetedSearchScope>,
+): FacetedSearchScope? {
+    val exactNamespace = prefix.sourceNamespace?.let { namespace ->
+        supportedScopes.firstOrNull { scope ->
+            scope.facet == prefix.facet && scope.sourceNamespace == namespace
+        }
+    }
+    if (exactNamespace != null) return exactNamespace
+    if (prefix.requiresExactNamespace) return null
+    return supportedScopes.firstOrNull { scope ->
+        scope.facet == prefix.facet && scope.sourceNamespace == null
+    } ?: supportedScopes.firstOrNull { scope -> scope.facet == prefix.facet }
+}
+
+private fun FacetedSearchScope.scopeNamespaceOrder(): Int {
+    if (sourceNamespace == null) return 0
+    return if (facet == SearchFacet.TAG && sourceNamespace == "tag") 0 else 1
+}
+
+private fun SearchTerm.normalizedOrNull(): SearchTerm? {
+    val normalizedValue = value.trim().takeIf(String::isNotBlank) ?: return null
+    val normalizedNamespace = sourceNamespace?.trim()?.takeIf(String::isNotBlank)
+    return copy(value = normalizedValue, sourceNamespace = normalizedNamespace)
+}
+
+private fun Query.hasSourceOwnedTerms(): Boolean {
+    return (includeTerms + excludeTerms).any { term -> !term.isPortableGeneralTag }
+}
+
+private fun Query.forMode(mode: QueryMode): ModeQuerySanitization {
+    if (mode != QueryMode.Unified) {
+        return ModeQuerySanitization(query = copy(mode = mode), removedSourceOwnedTerms = false)
+    }
+    val portableIncludes = includeTerms.filter(SearchTerm::isPortableGeneralTag)
+    val portableExcludes = excludeTerms.filter(SearchTerm::isPortableGeneralTag)
+    return ModeQuerySanitization(
+        query = copy(
+            mode = QueryMode.Unified,
+            includeTerms = portableIncludes,
+            excludeTerms = portableExcludes,
+        ),
+        removedSourceOwnedTerms =
+            portableIncludes.size != includeTerms.size || portableExcludes.size != excludeTerms.size,
+    )
+}
+
+private fun FacetedTagSuggestion.toLegacySuggestion(): TagSuggestion {
+    return TagSuggestion(
+        text = text,
+        type = sourceNamespace ?: facet.name.lowercase(),
+        count = count,
+    )
+}
+
+private fun FacetedTagSuggestion.isPortableTagSuggestion(): Boolean {
+    return facet == SearchFacet.TAG && sourceNamespace in setOf(null, "tag")
+}
+
+private fun FacetedTagSuggestion.toPortableLegacySuggestion(): TagSuggestion {
+    return TagSuggestion(
+        text = text,
+        type = "tag",
+        count = count,
+    )
+}
+
+private fun TagSuggestion.isPortableTagSuggestion(): Boolean {
+    return when (type?.trim()?.lowercase()) {
+        "artist", "character", "series", "parody", "group", "type", "category", "language",
+        "female", "male" -> false
+        else -> true
+    }
+}
+
+private fun SearchTerm.nhentaiLanguageFilterOrNull(): NhentaiLanguageFilter? {
+    val hasLanguageMeaning = when {
+        facet == SearchFacet.LANGUAGE ->
+            sourceNamespace == null || sourceNamespace == NHENTAI_LANGUAGE_NAMESPACE
+        isPortableGeneralTag -> true
+        else -> false
+    }
+    if (!hasLanguageMeaning) return null
+    return when (normalizeNhentaiTagFilter(value)) {
         "english" -> NhentaiLanguageFilter.ENGLISH
         "chinese" -> NhentaiLanguageFilter.CHINESE
         "japanese" -> NhentaiLanguageFilter.JAPANESE
         else -> null
     }
+}
+
+private fun SearchTerm.isNhentaiFullColorFilter(): Boolean {
+    val hasGeneralTagMeaning = facet == SearchFacet.TAG &&
+        (sourceNamespace == null || sourceNamespace == NHENTAI_TAG_NAMESPACE)
+    return hasGeneralTagMeaning && normalizeNhentaiTagFilter(value) == NHENTAI_FULL_COLOR_TAG
 }
 
 private fun normalizeNhentaiTagFilter(value: String): String {
@@ -1325,19 +1838,16 @@ private fun normalizeNhentaiTagFilter(value: String): String {
 private fun Query.directNhentaiGalleryIdCandidate(): String? {
     val supportsDirectLookup = mode == QueryMode.Unified || mode == QueryMode.Source(SourceKey.NHENTAI)
     if (!supportsDirectLookup) return null
-    if (excludeTags.isNotEmpty()) return null
+    if (excludeTerms.isNotEmpty()) return null
 
-    val includes = includeTags
-        .asSequence()
-        .map(String::trim)
-        .filter(String::isNotBlank)
-        .toList()
-    val searchable = includes.filterNot { tag ->
-        normalizeNhentaiTagFilter(tag) in NHENTAI_DIRECT_LOOKUP_FILTER_TAGS
+    val searchable = includeTerms.filterNot { term ->
+        term.nhentaiLanguageFilterOrNull() != null || term.isNhentaiFullColorFilter()
     }
     if (searchable.size != 1) return null
 
-    return searchable.first().takeIf(String::isDigitsOnly)
+    val candidate = searchable.single()
+    if (!candidate.isPortableGeneralTag) return null
+    return candidate.value.trim().takeIf(String::isDigitsOnly)
 }
 
 private fun String.isDigitsOnly(): Boolean {
@@ -1348,4 +1858,27 @@ private data class ResolveFailureRecord(
     val lastFailureAtMs: Long,
     val backoffUntilMs: Long,
     val reason: SourceFailureReason,
+)
+
+private data class SearchScopePrefix(
+    val facet: SearchFacet,
+    val sourceNamespace: String? = null,
+    val requiresExactNamespace: Boolean = false,
+)
+
+private data class ParsedScopedInput(
+    val value: String,
+    val isExclude: Boolean,
+    val explicitScope: SearchScopePrefix?,
+)
+
+private data class FacetedSuggestionIdentity(
+    val facet: SearchFacet,
+    val sourceNamespace: String?,
+    val normalizedValue: String,
+)
+
+private data class ModeQuerySanitization(
+    val query: Query,
+    val removedSourceOwnedTerms: Boolean,
 )

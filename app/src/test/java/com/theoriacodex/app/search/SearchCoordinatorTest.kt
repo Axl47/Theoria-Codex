@@ -6,6 +6,9 @@ import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.domain.adapter.Page
+import com.theoriacodex.domain.adapter.FacetedSearchScope
+import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
+import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
@@ -26,6 +29,7 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import com.theoriacodex.stubs.StubAdapterRegistry
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -873,6 +877,369 @@ class SearchCoordinatorTest {
     }
 
     @Test
+    fun `faceted source exposes scopes and resets ephemeral selection on mode change`() = runTest {
+        val all = FacetedSearchScope.All
+        val tags = FacetedSearchScope(SearchFacet.TAG, "tag")
+        val artists = FacetedSearchScope(SearchFacet.ARTIST, "artist")
+        val series = FacetedSearchScope(SearchFacet.SERIES, "parody")
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(
+                adapters = mapOf(
+                    SourceKey.NHENTAI to FacetedRecordingAdapter(
+                        sourceKey = SourceKey.NHENTAI,
+                        supportedSearchScopes = linkedSetOf(series, artists, tags, all),
+                    ),
+                    SourceKey.GELBOORU to RecordingAdapter(SourceKey.GELBOORU),
+                ),
+            ),
+        )
+        coordinator.initialize()
+
+        assertTrue(coordinator.supportedSearchScopes.isEmpty())
+        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
+        assertEquals(listOf(all, tags, artists, series), coordinator.supportedSearchScopes)
+        assertTrue(coordinator.selectSearchScope(artists))
+        assertEquals(artists, coordinator.selectedSearchScope)
+        assertFalse(coordinator.selectSearchScope(FacetedSearchScope(SearchFacet.GROUP, "group")))
+
+        coordinator.setMode(QueryMode.Source(SourceKey.GELBOORU))
+
+        assertTrue(coordinator.supportedSearchScopes.isEmpty())
+        assertEquals(FacetedSearchScope.All, coordinator.selectedSearchScope)
+    }
+
+    @Test
+    fun `faceted autocomplete keeps suggestion identity through selection and removal`() = runTest {
+        val artists = FacetedSearchScope(SearchFacet.ARTIST, "artist")
+        val artistSuggestion = FacetedTagSuggestion(
+            text = "najar",
+            facet = SearchFacet.ARTIST,
+            sourceNamespace = "artist",
+            count = 42,
+        )
+        val adapter = FacetedRecordingAdapter(
+            sourceKey = SourceKey.NHENTAI,
+            supportedSearchScopes = linkedSetOf(FacetedSearchScope.All, artists),
+            suggestionsByScope = mapOf(artists to listOf(artistSuggestion)),
+        )
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(mapOf(SourceKey.NHENTAI to adapter)),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
+
+        coordinator.refreshAutocompleteSuggestions("artist:naj")
+
+        assertEquals(artists, coordinator.selectedSearchScope)
+        assertEquals("naj", adapter.lastFacetedPrefix)
+        assertEquals(artists, adapter.lastFacetedScope)
+        assertEquals(listOf(artistSuggestion), coordinator.facetedAutocompleteSuggestions)
+        assertEquals(listOf("najar"), coordinator.autocompleteSuggestions.map(TagSuggestion::text))
+
+        assertTrue(coordinator.addIncludeSuggestion(artistSuggestion))
+        val tagSuggestion = artistSuggestion.copy(
+            facet = SearchFacet.TAG,
+            sourceNamespace = "tag",
+        )
+        assertTrue(coordinator.addIncludeSuggestion(tagSuggestion))
+        assertEquals(2, coordinator.draftQuery.includeTerms.size)
+
+        coordinator.removeIncludeTerm(artistSuggestion.toSearchTerm())
+
+        assertEquals(listOf(tagSuggestion.toSearchTerm()), coordinator.draftQuery.includeTerms)
+        assertTrue(coordinator.addExcludeSuggestion(artistSuggestion))
+        coordinator.removeExcludeTerm(artistSuggestion.toSearchTerm())
+        assertTrue(coordinator.draftQuery.excludeTerms.isEmpty())
+    }
+
+    @Test
+    fun `unified autocomplete projects only general tags from faceted sources`() = runTest {
+        val all = FacetedSearchScope.All
+        val adapter = FacetedRecordingAdapter(
+            sourceKey = SourceKey.NHENTAI,
+            supportedSearchScopes = linkedSetOf(
+                all,
+                FacetedSearchScope(SearchFacet.TAG, "tag"),
+                FacetedSearchScope(SearchFacet.ARTIST, "artist"),
+            ),
+            suggestionsByScope = mapOf(
+                all to listOf(
+                    FacetedTagSuggestion("najar", SearchFacet.TAG, "tag", count = 5),
+                    FacetedTagSuggestion("najar", SearchFacet.ARTIST, "artist", count = 42),
+                ),
+            ),
+        )
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(mapOf(SourceKey.NHENTAI to adapter)),
+        )
+        coordinator.initialize()
+
+        coordinator.refreshAutocompleteSuggestions("najar")
+
+        assertEquals(listOf("najar"), coordinator.autocompleteSuggestions.map(TagSuggestion::text))
+        assertEquals(listOf("tag"), coordinator.autocompleteSuggestions.map(TagSuggestion::type))
+        assertTrue(coordinator.facetedAutocompleteSuggestions.isEmpty())
+        coordinator.addIncludeTag(coordinator.autocompleteSuggestions.single().text)
+        assertEquals(listOf(SearchTerm("najar")), coordinator.draftQuery.includeTerms)
+    }
+
+    @Test
+    fun `unsupported scoped autocomplete clears suggestions before commit`() = runTest {
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(
+                mapOf(
+                    SourceKey.NHENTAI to FacetedRecordingAdapter(
+                        sourceKey = SourceKey.NHENTAI,
+                        supportedSearchScopes = linkedSetOf(
+                            FacetedSearchScope.All,
+                            FacetedSearchScope(SearchFacet.ARTIST, "artist"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
+
+        coordinator.refreshAutocompleteSuggestions("series:idolmaster")
+
+        assertTrue(coordinator.autocompleteSuggestions.isEmpty())
+        assertTrue(coordinator.facetedAutocompleteSuggestions.isEmpty())
+        assertTrue(coordinator.tagInputValidationMessage?.contains("not supported") == true)
+        assertFalse(coordinator.commitTagInput("series:idolmaster"))
+    }
+
+    @Test
+    fun `faceted autocomplete rethrows cancellation`() = runTest {
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(
+                mapOf(
+                    SourceKey.NHENTAI to FacetedRecordingAdapter(
+                        sourceKey = SourceKey.NHENTAI,
+                        supportedSearchScopes = linkedSetOf(FacetedSearchScope.All),
+                        autocompleteFailure = CancellationException("scope changed"),
+                    ),
+                ),
+            ),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
+
+        val error = runCatching {
+            coordinator.refreshAutocompleteSuggestions("najar")
+        }.exceptionOrNull()
+
+        assertTrue(error is CancellationException)
+    }
+
+    @Test
+    fun `seen tag ingestion preserves same-text source namespaces`() = runTest {
+        val store = RecordingFacetedSuggestionStore()
+        val post = samplePost(source = SourceKey.NHENTAI).copy(
+            canonicalTags = listOf("shared"),
+            taxonomy = listOf(
+                com.theoriacodex.domain.model.PostTaxonomyTerm("shared", SearchFacet.TAG, "female"),
+                com.theoriacodex.domain.model.PostTaxonomyTerm("shared", SearchFacet.TAG, "male"),
+            ),
+        )
+        val adapter = SearchResolveAdapter(
+            sourceKey = SourceKey.NHENTAI,
+            searchResults = listOf(post),
+            resolveBlock = { null },
+        )
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(mapOf(SourceKey.NHENTAI to adapter)),
+            tagSuggestionStore = store,
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
+
+        coordinator.applyDraft()
+
+        assertEquals(
+            listOf("female", "male"),
+            store.facetedSuggestions.map(FacetedTagSuggestion::sourceNamespace),
+        )
+    }
+
+    @Test
+    fun `seen tag ingestion keeps pixiv native raw tags instead of translated aliases`() = runTest {
+        val store = RecordingFacetedSuggestionStore()
+        val post = samplePost(source = SourceKey.PIXIV).copy(
+            canonicalTags = listOf("猫", "cat"),
+            rawTags = listOf("猫"),
+            taxonomy = listOf(
+                com.theoriacodex.domain.model.PostTaxonomyTerm("猫"),
+                com.theoriacodex.domain.model.PostTaxonomyTerm("cat"),
+            ),
+        )
+        val adapter = SearchResolveAdapter(
+            sourceKey = SourceKey.PIXIV,
+            searchResults = listOf(post),
+            resolveBlock = { null },
+        )
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(mapOf(SourceKey.PIXIV to adapter)),
+            tagSuggestionStore = store,
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
+
+        coordinator.applyDraft()
+
+        assertEquals(listOf("猫"), store.facetedSuggestions.map(FacetedTagSuggestion::text))
+    }
+
+    @Test
+    fun `raw scoped prefixes auto-select source scope and preserve positive and negative meaning`() = runTest {
+        val scopes = linkedSetOf(
+            FacetedSearchScope.All,
+            FacetedSearchScope(SearchFacet.TAG, "tag"),
+            FacetedSearchScope(SearchFacet.TAG, "female"),
+            FacetedSearchScope(SearchFacet.TAG, "male"),
+            FacetedSearchScope(SearchFacet.ARTIST, "artist"),
+            FacetedSearchScope(SearchFacet.CHARACTER, "character"),
+            FacetedSearchScope(SearchFacet.SERIES, "parody"),
+            FacetedSearchScope(SearchFacet.GROUP, "group"),
+            FacetedSearchScope(SearchFacet.TYPE, "category"),
+            FacetedSearchScope(SearchFacet.LANGUAGE, "language"),
+        )
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(
+                mapOf(
+                    SourceKey.NHENTAI to FacetedRecordingAdapter(
+                        sourceKey = SourceKey.NHENTAI,
+                        supportedSearchScopes = scopes,
+                    ),
+                ),
+            ),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
+
+        assertTrue(coordinator.commitTagInput("artist:najar"))
+        assertTrue(coordinator.commitTagInput("series:the idolmaster"))
+        assertTrue(coordinator.commitTagInput("female:x-ray"))
+        assertTrue(coordinator.commitTagInput("male:sole male"))
+        assertTrue(coordinator.commitTagInput("-character:rin"))
+
+        assertEquals(
+            listOf(
+                SearchTerm("najar", SearchFacet.ARTIST, "artist"),
+                SearchTerm("the idolmaster", SearchFacet.SERIES, "parody"),
+                SearchTerm("x-ray", SearchFacet.TAG, "female"),
+                SearchTerm("sole male", SearchFacet.TAG, "male"),
+            ),
+            coordinator.draftQuery.includeTerms,
+        )
+        assertEquals(
+            listOf(SearchTerm("rin", SearchFacet.CHARACTER, "character")),
+            coordinator.draftQuery.excludeTerms,
+        )
+        assertEquals(
+            FacetedSearchScope(SearchFacet.CHARACTER, "character"),
+            coordinator.selectedSearchScope,
+        )
+    }
+
+    @Test
+    fun `unified mode blocks scoped input and removes historical source terms without excluding sources`() = runTest {
+        val pixiv = RecordingAdapter(SourceKey.PIXIV)
+        val gelbooru = RecordingAdapter(SourceKey.GELBOORU)
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(
+                mapOf(SourceKey.PIXIV to pixiv, SourceKey.GELBOORU to gelbooru),
+            ),
+        )
+        coordinator.initialize()
+
+        assertFalse(coordinator.commitTagInput("artist:najar"))
+        assertTrue(coordinator.tagInputValidationMessage?.contains("specific source") == true)
+        assertTrue(coordinator.draftQuery.includeTerms.isEmpty())
+
+        coordinator.applyHistoricalQuery(
+            Query(
+                mode = QueryMode.Unified,
+                includeTerms = listOf(
+                    SearchTerm("portable"),
+                    SearchTerm("najar", SearchFacet.ARTIST, "artist"),
+                ),
+                excludeTerms = listOf(
+                    SearchTerm("series", SearchFacet.SERIES, "series"),
+                ),
+                sort = SortMode.NEWEST,
+                dateRange = null,
+                minScore = null,
+            ),
+        )
+
+        assertEquals(listOf(SearchTerm("portable")), coordinator.appliedQuery.includeTerms)
+        assertTrue(coordinator.appliedQuery.excludeTerms.isEmpty())
+        assertTrue(coordinator.tagInputValidationMessage?.contains("removed") == true)
+        assertEquals(listOf("portable"), pixiv.lastSearchQuery?.includeTags)
+        assertEquals(listOf("portable"), gelbooru.lastSearchQuery?.includeTags)
+        assertEquals(
+            setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
+            coordinator.statuses
+                .filter { status -> status.state == SourceRunState.SUCCESS }
+                .mapTo(mutableSetOf()) { status -> status.source },
+        )
+    }
+
+    @Test
+    fun `nhentai filters inspect typed language and type terms without consuming artist terms`() = runTest {
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(
+                mapOf(SourceKey.NHENTAI to RecordingAdapter(SourceKey.NHENTAI)),
+            ),
+        )
+        coordinator.initialize()
+        val numeric = SearchTerm("634609")
+        val artistChinese = SearchTerm("chinese", SearchFacet.ARTIST, "artist")
+        val artistFullColor = SearchTerm("full color", SearchFacet.ARTIST, "artist")
+        val japanese = SearchTerm("japanese", SearchFacet.LANGUAGE, "language")
+        val categoryFullColor = SearchTerm("full color", SearchFacet.TYPE, "category")
+        val fullColor = SearchTerm("full color", SearchFacet.TAG, "tag")
+        coordinator.applyHistoricalQuery(
+            Query(
+                mode = QueryMode.Source(SourceKey.NHENTAI),
+                includeTerms = listOf(
+                    numeric,
+                    artistChinese,
+                    artistFullColor,
+                    japanese,
+                    categoryFullColor,
+                    fullColor,
+                ),
+                excludeTerms = emptyList(),
+                sort = SortMode.NEWEST,
+                dateRange = null,
+                minScore = null,
+            ),
+        )
+
+        assertEquals(NhentaiLanguageFilter.JAPANESE, coordinator.selectedNhentaiLanguageFilter())
+        assertTrue(coordinator.selectedNhentaiFullColorFilter())
+        assertNull(coordinator.directNhentaiGalleryIdCandidate())
+
+        coordinator.setNhentaiLanguageFilter(NhentaiLanguageFilter.CHINESE)
+        coordinator.setNhentaiFullColorFilter(false)
+
+        assertTrue(artistChinese in coordinator.draftQuery.includeTerms)
+        assertTrue(artistFullColor in coordinator.draftQuery.includeTerms)
+        assertTrue(categoryFullColor in coordinator.draftQuery.includeTerms)
+        assertFalse(japanese in coordinator.draftQuery.includeTerms)
+        assertFalse(fullColor in coordinator.draftQuery.includeTerms)
+        assertEquals(NhentaiLanguageFilter.CHINESE, coordinator.selectedNhentaiLanguageFilter())
+        assertFalse(coordinator.selectedNhentaiFullColorFilter())
+
+        coordinator.removeIncludeTerm(artistChinese)
+        coordinator.removeIncludeTerm(artistFullColor)
+        coordinator.removeIncludeTerm(categoryFullColor)
+        assertEquals("634609", coordinator.directNhentaiGalleryIdCandidate())
+    }
+
+    @Test
     fun `autocomplete suggestions are sorted by post count descending`() = runTest {
         val registry = CompatibilityRegistry(
             adapters = mapOf(
@@ -1082,6 +1449,84 @@ private class RecordingAdapter(
     }
 
     override suspend fun resolvePost(id: PostId): Post? = null
+}
+
+private class FacetedRecordingAdapter(
+    override val sourceKey: SourceKey,
+    override val supportedSearchScopes: Set<FacetedSearchScope>,
+    private val suggestionsByScope: Map<FacetedSearchScope, List<FacetedTagSuggestion>> = emptyMap(),
+    private val autocompleteFailure: Throwable? = null,
+) : SourceAdapter, FacetedSearchSourceAdapter {
+    var lastSearchQuery: Query? = null
+    var lastFacetedPrefix: String? = null
+    var lastFacetedScope: FacetedSearchScope? = null
+
+    override val capabilities: SourceCapabilities = SourceCapabilities(
+        supportsSortNewest = true,
+        supportsSortPopular = true,
+        supportsSortTop = true,
+        supportsSortRandom = true,
+        supportsExcludeTagsServerSide = true,
+        supportsDateRangeServerSide = false,
+        supportsMinScoreServerSide = false,
+        requiresCredentials = false,
+    )
+
+    override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+        lastSearchQuery = query
+        return Page(items = emptyList(), nextPageToken = null)
+    }
+
+    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
+
+    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
+        return emptyList()
+    }
+
+    override suspend fun autocompleteFaceted(
+        prefix: String,
+        scope: FacetedSearchScope,
+        limit: Int,
+    ): List<FacetedTagSuggestion> {
+        autocompleteFailure?.let { error -> throw error }
+        lastFacetedPrefix = prefix
+        lastFacetedScope = scope
+        return suggestionsByScope[scope]
+            .orEmpty()
+            .filter { suggestion -> suggestion.text.contains(prefix, ignoreCase = true) }
+            .take(limit)
+    }
+
+    override suspend fun quickQuery(kind: QuickQueryKind): Query {
+        return Query(
+            mode = QueryMode.Source(sourceKey),
+            includeTags = emptyList(),
+            excludeTags = emptyList(),
+            sort = SortMode.NEWEST,
+            dateRange = null,
+            minScore = null,
+        )
+    }
+
+    override suspend fun resolvePost(id: PostId): Post? = null
+}
+
+private class RecordingFacetedSuggestionStore : TagSuggestionStore {
+    val facetedSuggestions = mutableListOf<FacetedTagSuggestion>()
+
+    override fun get(source: SourceKey, limit: Int): List<TagSuggestion> = emptyList()
+
+    override fun put(source: SourceKey, suggestions: List<TagSuggestion>) = Unit
+
+    override fun getFaceted(
+        source: SourceKey,
+        limit: Int,
+        scope: FacetedSearchScope,
+    ): List<FacetedTagSuggestion> = facetedSuggestions.take(limit)
+
+    override fun putFaceted(source: SourceKey, suggestions: List<FacetedTagSuggestion>) {
+        facetedSuggestions += suggestions
+    }
 }
 
 private class SearchResolveAdapter(

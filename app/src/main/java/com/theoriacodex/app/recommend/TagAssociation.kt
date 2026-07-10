@@ -42,11 +42,12 @@ fun associatedDisplayTag(
     seedTagsBySource: Map<SourceKey, List<String>>,
     affinityBySource: Map<SourceKey, TagAffinityStats>,
 ): String? {
-    val fallback = post.canonicalTags.firstOrNull()
+    val recommendationTags = recommendationTagsFor(post)
+    val fallback = recommendationTags.firstOrNull()
     val stats = affinityBySource[post.id.source] ?: return fallback
     if (stats.totalDocuments <= 0) return fallback
 
-    val candidates = post.canonicalTags
+    val candidates = recommendationTags
         .mapNotNull { tag ->
             normalizeTagForSource(post.id.source, tag)?.let { normalized ->
                 tag to normalized

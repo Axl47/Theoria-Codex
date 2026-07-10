@@ -4,6 +4,9 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.theoriacodex.domain.adapter.FacetedSearchScope
+import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
+import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -18,6 +21,8 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -34,7 +39,7 @@ class NhentaiSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val gson: Gson = Gson(),
     private val minRequestIntervalMs: Long = 350L,
-) : SourceAdapter, TagCountLookupSourceAdapter {
+) : SourceAdapter, TagCountLookupSourceAdapter, FacetedSearchSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.NHENTAI
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -48,9 +53,20 @@ class NhentaiSourceAdapter(
         requiresCredentials = false,
     )
 
+    override val supportedSearchScopes: Set<FacetedSearchScope> = linkedSetOf(
+        FacetedSearchScope.All,
+        FacetedSearchScope(SearchFacet.TAG, NHENTAI_TAG_NAMESPACE),
+        FacetedSearchScope(SearchFacet.ARTIST, NHENTAI_ARTIST_NAMESPACE),
+        FacetedSearchScope(SearchFacet.CHARACTER, NHENTAI_CHARACTER_NAMESPACE),
+        FacetedSearchScope(SearchFacet.SERIES, NHENTAI_SERIES_NAMESPACE),
+        FacetedSearchScope(SearchFacet.GROUP, NHENTAI_GROUP_NAMESPACE),
+        FacetedSearchScope(SearchFacet.TYPE, NHENTAI_TYPE_NAMESPACE),
+        FacetedSearchScope(SearchFacet.LANGUAGE, NHENTAI_LANGUAGE_NAMESPACE),
+    )
+
     private val throttleMutex = Mutex()
     private var lastRequestAtEpochMs: Long = 0L
-    private val tagInfoByKey = mutableMapOf<String, NhentaiTagInfo>()
+    private val tagInfoByKey = mutableMapOf<String, MutableList<NhentaiTagInfo>>()
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> {
         val directGalleryId = query.directNhentaiGalleryIdCandidate()
@@ -165,6 +181,29 @@ class NhentaiSourceAdapter(
         return requestTagSearch(normalizedPrefix)
             .map(::tagSuggestion)
             .take(limit)
+    }
+
+    override suspend fun autocompleteFaceted(
+        prefix: String,
+        scope: FacetedSearchScope,
+        limit: Int,
+    ): List<FacetedTagSuggestion> {
+        val normalizedPrefix = prefix.trim()
+        if (normalizedPrefix.isBlank() || limit <= 0 || scope !in supportedSearchScopes) {
+            return emptyList()
+        }
+
+        return requestTagSearch(normalizedPrefix)
+            .asSequence()
+            .map(NhentaiTagInfo::toFacetedSuggestion)
+            .filter { suggestion ->
+                scope.isAll || (
+                    suggestion.facet == scope.facet &&
+                        suggestion.sourceNamespace == scope.sourceNamespace
+                    )
+            }
+            .take(limit)
+            .toList()
     }
 
     override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> {
@@ -331,7 +370,6 @@ class NhentaiSourceAdapter(
     private suspend fun requestTagSearch(query: String): List<NhentaiTagInfo> {
         val normalizedQuery = normalizeNhentaiTag(query)
         if (normalizedQuery.isBlank()) return emptyList()
-        tagInfoByKey[tagCacheKey(normalizedQuery)]?.let { return listOf(it) }
 
         val body = gson.toJson(
             mapOf(
@@ -353,12 +391,16 @@ class NhentaiSourceAdapter(
     private suspend fun resolveNhentaiTag(tag: String): NhentaiTagInfo? {
         val normalized = normalizeNhentaiTag(tag)
         if (normalized.isBlank()) return null
-        tagInfoByKey[tagCacheKey(normalized)]?.let { return it }
+        tagInfoByKey[tagCacheKey(normalized)]
+            ?.firstOrNull(NhentaiTagInfo::isGeneralTag)
+            ?.let { return it }
         val normalizedSlug = normalized.toNhentaiSlug()
         return requestTagSearch(normalized)
             .firstOrNull { info ->
-                info.name.equals(normalized, ignoreCase = true) ||
-                    info.slug.equals(normalizedSlug, ignoreCase = true)
+                info.isGeneralTag() && (
+                    info.name.equals(normalized, ignoreCase = true) ||
+                        info.slug.equals(normalizedSlug, ignoreCase = true)
+                    )
             }
     }
 
@@ -433,12 +475,12 @@ class NhentaiSourceAdapter(
             mediaCount = pageCount,
         )
         val metadata = fetchMirrorGalleryMetadata(galleryId)
-        return if (metadata != null && metadata.canonicalTags.isNotEmpty()) {
+        return if (metadata != null && metadata.taxonomy.isNotEmpty()) {
             post.copy(
                 canonicalTags = metadata.canonicalTags,
                 rawTags = metadata.canonicalTags,
                 authorName = metadata.authorName,
-                taxonomy = metadata.canonicalTags.map { value -> PostTaxonomyTerm(value = value) },
+                taxonomy = metadata.taxonomy,
             )
         } else {
             post
@@ -450,7 +492,7 @@ class NhentaiSourceAdapter(
             val response = requestMetadataMirror("$baseUrl/g/$galleryId/")
             if (response != null && response.statusCode in 200..299) {
                 parseMirrorGalleryMetadata(response.body)?.let { metadata ->
-                    if (metadata.canonicalTags.isNotEmpty()) return metadata
+                    if (metadata.taxonomy.isNotEmpty()) return metadata
                 }
             }
         }
@@ -473,26 +515,30 @@ class NhentaiSourceAdapter(
         val tagLinks = document.select(
             "section#tags a.tag, li.tags a.tag_btn"
         )
-        val tags = tagLinks
+        val taxonomy = tagLinks
             .mapNotNull { link ->
                 val href = link.attr("href").trim()
                 if (!href.isNhentaiTaxonomyPath()) return@mapNotNull null
                 val name = link.selectFirst(".name")?.text()?.trim()
                     ?: link.ownText().trim()
-                name.takeIf(String::isNotBlank)
+                val normalizedName = name.takeIf(String::isNotBlank) ?: return@mapNotNull null
+                val mapped = nhentaiTaxonomy(href.nhentaiTaxonomyNamespace())
+                PostTaxonomyTerm(
+                    value = normalizedName,
+                    facet = mapped.first,
+                    sourceNamespace = mapped.second,
+                )
             }
-            .distinctBy { it.lowercase() }
-        if (tags.isEmpty()) return null
+            .distinctBy { term ->
+                Triple(term.facet, term.sourceNamespace, term.value.lowercase())
+            }
+        if (taxonomy.isEmpty()) return null
 
-        val authorName = tagLinks
-            .firstOrNull { link -> link.attr("href").trim().startsWith("/artist/") }
-            ?.let { link ->
-                link.selectFirst(".name")?.text()?.trim()
-                    ?: link.ownText().trim()
-            }
-            ?.takeIf(String::isNotBlank)
+        val authorName = taxonomy
+            .firstOrNull { term -> term.facet == SearchFacet.ARTIST }
+            ?.value
         return NhentaiMirrorMetadata(
-            canonicalTags = tags,
+            taxonomy = taxonomy,
             authorName = authorName,
         )
     }
@@ -677,6 +723,7 @@ class NhentaiSourceAdapter(
             createdAtEpochMs = createdAtEpochMs,
             title = title?.trim()?.takeIf { it.isNotBlank() },
             mediaCount = mediaCount,
+            taxonomy = tags.map(ParsedNhentaiTag::toPostTaxonomyTerm),
         )
     }
 
@@ -750,8 +797,18 @@ class NhentaiSourceAdapter(
     }
 
     private fun cacheTagInfo(info: NhentaiTagInfo) {
-        tagInfoByKey[tagCacheKey(info.name)] = info
-        tagInfoByKey[tagCacheKey(info.slug)] = info
+        listOf(info.name, info.slug)
+            .map(::tagCacheKey)
+            .distinct()
+            .forEach { key ->
+                val bucket = tagInfoByKey.getOrPut(key) { mutableListOf() }
+                val index = bucket.indexOfFirst { cached -> cached.id == info.id }
+                if (index >= 0) {
+                    bucket[index] = info
+                } else {
+                    bucket += info
+                }
+            }
     }
 
     private fun parseMirrorSearchPage(body: String): JsonObject {
@@ -850,9 +907,12 @@ private data class ParsedNhentaiTag(
 )
 
 private data class NhentaiMirrorMetadata(
-    val canonicalTags: List<String>,
+    val taxonomy: List<PostTaxonomyTerm>,
     val authorName: String?,
-)
+) {
+    val canonicalTags: List<String>
+        get() = taxonomy.map(PostTaxonomyTerm::value)
+}
 
 private data class NhentaiTagInfo(
     val id: Int,
@@ -862,15 +922,79 @@ private data class NhentaiTagInfo(
     val count: Int,
 )
 
+private fun NhentaiTagInfo.isGeneralTag(): Boolean {
+    return type == null || type.equals(NHENTAI_TAG_NAMESPACE, ignoreCase = true)
+}
+
+private fun NhentaiTagInfo.toFacetedSuggestion(): FacetedTagSuggestion {
+    val taxonomy = nhentaiTaxonomy(type)
+    return FacetedTagSuggestion(
+        text = name,
+        facet = taxonomy.first,
+        sourceNamespace = taxonomy.second,
+        count = count,
+    )
+}
+
+private fun ParsedNhentaiTag.toPostTaxonomyTerm(): PostTaxonomyTerm {
+    val taxonomy = nhentaiTaxonomy(type)
+    return PostTaxonomyTerm(
+        value = name,
+        facet = taxonomy.first,
+        sourceNamespace = taxonomy.second,
+    )
+}
+
+private fun nhentaiTaxonomy(type: String?): Pair<SearchFacet, String> {
+    return when (type?.trim()?.lowercase()) {
+        NHENTAI_ARTIST_NAMESPACE -> SearchFacet.ARTIST to NHENTAI_ARTIST_NAMESPACE
+        NHENTAI_CHARACTER_NAMESPACE -> SearchFacet.CHARACTER to NHENTAI_CHARACTER_NAMESPACE
+        NHENTAI_SERIES_NAMESPACE -> SearchFacet.SERIES to NHENTAI_SERIES_NAMESPACE
+        NHENTAI_GROUP_NAMESPACE -> SearchFacet.GROUP to NHENTAI_GROUP_NAMESPACE
+        NHENTAI_TYPE_NAMESPACE -> SearchFacet.TYPE to NHENTAI_TYPE_NAMESPACE
+        NHENTAI_LANGUAGE_NAMESPACE -> SearchFacet.LANGUAGE to NHENTAI_LANGUAGE_NAMESPACE
+        else -> SearchFacet.TAG to NHENTAI_TAG_NAMESPACE
+    }
+}
+
 private fun compileNhentaiQuery(query: Query): String {
-    val include = query.includeTags
-        .map(::normalizeNhentaiTag)
-        .filter { it.isNotBlank() }
-    val exclude = query.excludeTags
-        .map(::normalizeNhentaiTag)
-        .filter { it.isNotBlank() }
-        .map { "-$it" }
+    val include = query.includeTerms.mapNotNull(SearchTerm::compileNhentaiTerm)
+    val exclude = query.excludeTerms
+        .mapNotNull(SearchTerm::compileNhentaiTerm)
+        .map { compiled -> "-$compiled" }
     return (include + exclude).take(40).joinToString(" ")
+}
+
+private fun SearchTerm.compileNhentaiTerm(): String? {
+    val normalizedValue = normalizeNhentaiTag(value).takeIf(String::isNotBlank) ?: return null
+    val namespace = resolvedNhentaiNamespace() ?: return normalizedValue.takeIf {
+        facet == SearchFacet.TAG && sourceNamespace == null
+    }
+    return "$namespace:${normalizedValue.quotedNhentaiValue()}"
+}
+
+private fun SearchTerm.resolvedNhentaiNamespace(): String? {
+    val expected = when (facet) {
+        SearchFacet.TAG -> NHENTAI_TAG_NAMESPACE
+        SearchFacet.ARTIST -> NHENTAI_ARTIST_NAMESPACE
+        SearchFacet.CHARACTER -> NHENTAI_CHARACTER_NAMESPACE
+        SearchFacet.SERIES -> NHENTAI_SERIES_NAMESPACE
+        SearchFacet.GROUP -> NHENTAI_GROUP_NAMESPACE
+        SearchFacet.TYPE -> NHENTAI_TYPE_NAMESPACE
+        SearchFacet.LANGUAGE -> NHENTAI_LANGUAGE_NAMESPACE
+    }
+    val explicit = sourceNamespace?.trim()?.lowercase()
+    return when {
+        explicit == null && facet == SearchFacet.TAG -> null
+        explicit == null -> expected
+        explicit == expected -> expected
+        else -> null
+    }
+}
+
+private fun String.quotedNhentaiValue(): String {
+    val escaped = replace("\\", "\\\\").replace("\"", "\\\"")
+    return if (any(Char::isWhitespace)) "\"$escaped\"" else escaped
 }
 
 private fun normalizeNhentaiTag(value: String): String {
@@ -883,28 +1007,34 @@ private fun normalizeNhentaiTag(value: String): String {
 }
 
 private fun Query.directNhentaiGalleryIdCandidate(): String? {
-    if (excludeTags.isNotEmpty()) return null
-    val includes = includeTags
-        .asSequence()
-        .map(String::trim)
-        .filter(String::isNotBlank)
-        .toList()
-    val searchable = includes.filterNot { tag ->
-        normalizeNhentaiFilterTag(tag) in NHENTAI_DIRECT_LOOKUP_FILTER_TAGS
+    if (excludeTerms.isNotEmpty()) return null
+    val searchable = includeTerms.filterNot { term ->
+        term.isNhentaiDirectLookupFilter()
     }
     if (searchable.size != 1) return null
-    return searchable.first().takeIf(String::isDigitsOnly)
+    val candidate = searchable.single()
+    if (!candidate.isPortableGeneralTag) return null
+    return candidate.value.trim().takeIf(String::isDigitsOnly)
 }
 
 private fun Query.singleIncludeTagCandidate(): String? {
-    if (excludeTags.isNotEmpty()) return null
-    val includes = includeTags
-        .asSequence()
-        .map(::normalizeNhentaiTag)
-        .filter(String::isNotBlank)
-        .toList()
-    if (includes.size != 1) return null
-    return includes.first()
+    if (excludeTerms.isNotEmpty() || includeTerms.size != 1) return null
+    val term = includeTerms.single()
+    if (!term.isPortableGeneralTag) return null
+    return normalizeNhentaiTag(term.value).takeIf(String::isNotBlank)
+}
+
+private fun SearchTerm.isNhentaiDirectLookupFilter(): Boolean {
+    val normalized = normalizeNhentaiFilterTag(value)
+    val isLanguage = normalized in NHENTAI_LANGUAGE_FILTER_TAGS && (
+        isPortableGeneralTag ||
+            (facet == SearchFacet.LANGUAGE && sourceNamespace in setOf(null, NHENTAI_LANGUAGE_NAMESPACE))
+        )
+    val isFullColor = normalized == NHENTAI_FULL_COLOR_TAG && (
+        isPortableGeneralTag ||
+            (facet == SearchFacet.TAG && sourceNamespace == NHENTAI_TAG_NAMESPACE)
+        )
+    return isLanguage || isFullColor
 }
 
 private fun normalizeNhentaiFilterTag(value: String): String {
@@ -923,6 +1053,13 @@ private fun String.isNhentaiTaxonomyPath(): Boolean {
         startsWith("/group/") ||
         startsWith("/language/") ||
         startsWith("/category/")
+}
+
+private fun String.nhentaiTaxonomyNamespace(): String? {
+    return trim()
+        .removePrefix("/")
+        .substringBefore('/')
+        .takeIf(String::isNotBlank)
 }
 
 private fun mapSortParam(sortMode: SortMode): String? {
@@ -1101,6 +1238,13 @@ private val NHENTAI_METADATA_MIRROR_HEADERS = mapOf(
 )
 private val NHENTAI_IMAGE_FALLBACK_EXTENSIONS = listOf("webp", "jpg", "png", "gif")
 private const val NHENTAI_FULL_COLOR_TAG = "full color"
+private const val NHENTAI_TAG_NAMESPACE = "tag"
+private const val NHENTAI_ARTIST_NAMESPACE = "artist"
+private const val NHENTAI_CHARACTER_NAMESPACE = "character"
+private const val NHENTAI_SERIES_NAMESPACE = "parody"
+private const val NHENTAI_GROUP_NAMESPACE = "group"
+private const val NHENTAI_TYPE_NAMESPACE = "category"
+private const val NHENTAI_LANGUAGE_NAMESPACE = "language"
 private val NHENTAI_LANGUAGE_FILTER_TAGS = setOf("english", "chinese", "japanese")
 private val NHENTAI_DIRECT_LOOKUP_FILTER_TAGS = NHENTAI_LANGUAGE_FILTER_TAGS + NHENTAI_FULL_COLOR_TAG
 private val NHENTAI_WHITESPACE_REGEX = Regex("\\s+")

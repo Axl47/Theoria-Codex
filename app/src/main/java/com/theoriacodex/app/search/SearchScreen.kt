@@ -52,6 +52,8 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -118,6 +120,8 @@ import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.media.postPreviewImageCandidate
 import com.theoriacodex.app.media.probeRemoteVideoDurationMs
+import com.theoriacodex.app.recommend.recommendationIncludeTags
+import com.theoriacodex.app.recommend.recommendationTagsFor
 import com.theoriacodex.app.creator.CreatorProfileActionButton
 import com.theoriacodex.app.recommend.associatedDisplayTag
 import com.theoriacodex.app.recommend.buildSourceTagAffinity
@@ -131,11 +135,15 @@ import com.theoriacodex.app.viewer.PixivUgoiraPlayer
 import com.theoriacodex.app.viewer.createLoopingExoPlayer
 import com.theoriacodex.app.viewer.createTexturePlayerView
 import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.domain.adapter.FacetedSearchScope
+import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
@@ -265,17 +273,18 @@ fun SearchScreen(
     }
     val displayTagSeedBySource = remember(
         coordinator.appliedQuery.mode,
-        coordinator.appliedQuery.includeTags,
+        coordinator.appliedQuery.includeTerms,
         visibleResults,
     ) {
+        val recommendationTags = coordinator.appliedQuery.recommendationIncludeTags()
         when (val mode = coordinator.appliedQuery.mode) {
-            is QueryMode.Source -> mapOf(mode.source to coordinator.appliedQuery.includeTags)
+            is QueryMode.Source -> mapOf(mode.source to recommendationTags)
             QueryMode.Unified -> {
                 val sources = visibleResults
                     .asSequence()
                     .map { post -> post.id.source }
                     .toSet()
-                sources.associateWith { coordinator.appliedQuery.includeTags }
+                sources.associateWith { recommendationTags }
             }
         }
     }
@@ -283,7 +292,7 @@ fun SearchScreen(
         val documentsBySource = visibleResults
             .groupBy { post -> post.id.source }
             .mapValues { (_, posts) ->
-                posts.map { post -> post.canonicalTags }
+                posts.map(::recommendationTagsFor)
             }
         buildSourceTagAffinity(documentsBySource = documentsBySource)
     }
@@ -330,7 +339,12 @@ fun SearchScreen(
         coordinator.loadTrendingTags()
     }
 
-    LaunchedEffect(coordinator.draftQuery.mode, input, searchFieldFocused) {
+    LaunchedEffect(
+        coordinator.draftQuery.mode,
+        coordinator.selectedSearchScope,
+        input,
+        searchFieldFocused,
+    ) {
         if (!searchFieldFocused) {
             coordinator.clearAutocompleteSuggestions()
             return@LaunchedEffect
@@ -427,6 +441,8 @@ fun SearchScreen(
     }
 
     val autocompleteSuggestions = coordinator.autocompleteSuggestions
+    val facetedAutocompleteSuggestions = coordinator.facetedAutocompleteSuggestions
+    val supportedSearchScopes = coordinator.supportedSearchScopes
     val sourceAuthErrorMessage = remember(coordinator.statuses) {
         buildSourceAuthErrorMessage(coordinator.statuses)
     }
@@ -437,6 +453,7 @@ fun SearchScreen(
     val showSearchControls = searchFieldFocused ||
         input.isNotBlank() ||
         autocompleteSuggestions.isNotEmpty() ||
+        facetedAutocompleteSuggestions.isNotEmpty() ||
         coordinator.hasPendingChanges
 
     fun commitTagInput() {
@@ -505,7 +522,15 @@ fun SearchScreen(
                     { Text(message) }
                 },
                 placeholder = if (!searchFieldFocused) {
-                    { Text("tag or -tag") }
+                    {
+                        Text(
+                            if (supportedSearchScopes.isEmpty()) {
+                                "tag or -tag"
+                            } else {
+                                "tag, artist:, or -tag"
+                            },
+                        )
+                    }
                 } else {
                     null
                 },
@@ -541,7 +566,29 @@ fun SearchScreen(
                 exit = slideOutVertically(targetOffsetY = { fullHeight -> fullHeight / 5 }) + fadeOut(),
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (autocompleteSuggestions.isNotEmpty()) {
+                    if (supportedSearchScopes.isNotEmpty()) {
+                        SearchScopeRow(
+                            scopes = supportedSearchScopes,
+                            selectedScope = coordinator.selectedSearchScope,
+                            onScopeSelected = coordinator::selectSearchScope,
+                        )
+                    }
+
+                    if (facetedAutocompleteSuggestions.isNotEmpty()) {
+                        FacetedAutocompletePanel(
+                            suggestions = facetedAutocompleteSuggestions,
+                            onInclude = { suggestion ->
+                                coordinator.addIncludeSuggestion(suggestion)
+                                coordinator.clearTagInputValidationMessage()
+                                input = ""
+                            },
+                            onExclude = { suggestion ->
+                                coordinator.addExcludeSuggestion(suggestion)
+                                coordinator.clearTagInputValidationMessage()
+                                input = ""
+                            },
+                        )
+                    } else if (autocompleteSuggestions.isNotEmpty()) {
                         AutocompletePanel(
                             suggestions = autocompleteSuggestions,
                             onInclude = { tag ->
@@ -565,10 +612,10 @@ fun SearchScreen(
                     )
 
                     TagRow(
-                        includeTags = coordinator.draftQuery.includeTags,
-                        excludeTags = coordinator.draftQuery.excludeTags,
-                        onRemoveInclude = coordinator::removeIncludeTag,
-                        onRemoveExclude = coordinator::removeExcludeTag,
+                        includeTerms = coordinator.draftQuery.includeTerms,
+                        excludeTerms = coordinator.draftQuery.excludeTerms,
+                        onRemoveInclude = coordinator::removeIncludeTerm,
+                        onRemoveExclude = coordinator::removeExcludeTerm,
                     )
 
                     if (
@@ -1653,6 +1700,119 @@ private fun FavoriteTagSheet(
 }
 
 @Composable
+private fun SearchScopeRow(
+    scopes: List<FacetedSearchScope>,
+    selectedScope: FacetedSearchScope,
+    onScopeSelected: (FacetedSearchScope) -> Boolean,
+) {
+    var moreExpanded by remember { mutableStateOf(false) }
+    val allScope = scopes.firstOrNull(FacetedSearchScope::isAll)
+    val primaryScopes = primarySearchFacets.mapNotNull { facet ->
+        scopes.firstOrNull { scope -> scope.facet == facet }
+    }
+    val secondaryScopes = secondarySearchFacets.mapNotNull { facet ->
+        scopes.firstOrNull { scope -> scope.facet == facet }
+    }
+
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        allScope?.let { scope ->
+            item {
+                FilterChip(
+                    selected = selectedScope.isAll,
+                    onClick = { onScopeSelected(scope) },
+                    label = { Text(searchScopeLabel(scope)) },
+                )
+            }
+        }
+        items(primaryScopes.size) { index ->
+            val scope = primaryScopes[index]
+            FilterChip(
+                selected = selectedScope.facet == scope.facet &&
+                    (selectedScope == scope || scope.facet == SearchFacet.TAG),
+                onClick = { onScopeSelected(scope) },
+                label = { Text(searchScopeLabel(scope)) },
+            )
+        }
+        if (secondaryScopes.isNotEmpty()) {
+            item {
+                Box {
+                    val selectedSecondary = secondaryScopes.firstOrNull { scope ->
+                        scope.facet == selectedScope.facet
+                    }
+                    FilterChip(
+                        selected = selectedSecondary != null,
+                        onClick = { moreExpanded = true },
+                        label = {
+                            Text(selectedSecondary?.let(::searchScopeLabel) ?: "More")
+                        },
+                    )
+                    DropdownMenu(
+                        expanded = moreExpanded,
+                        onDismissRequest = { moreExpanded = false },
+                    ) {
+                        secondaryScopes.forEach { scope ->
+                            DropdownMenuItem(
+                                text = { Text(searchScopeLabel(scope)) },
+                                onClick = {
+                                    onScopeSelected(scope)
+                                    moreExpanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FacetedAutocompletePanel(
+    suggestions: List<FacetedTagSuggestion>,
+    onInclude: (FacetedTagSuggestion) -> Unit,
+    onExclude: (FacetedTagSuggestion) -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 220.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            items(suggestions.size) { index ->
+                val item = suggestions[index]
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = item.text, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = facetedSuggestionMetaLabel(item),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(onClick = { onInclude(item) }) {
+                            Text("+")
+                        }
+                        TextButton(onClick = { onExclude(item) }) {
+                            Text("−")
+                        }
+                    }
+                }
+                if (index != suggestions.lastIndex) {
+                    HorizontalDivider()
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun AutocompletePanel(
     suggestions: List<TagSuggestion>,
     onInclude: (String) -> Unit,
@@ -1873,24 +2033,24 @@ private fun isRule34FamilySource(source: SourceKey): Boolean {
 
 @Composable
 private fun TagRow(
-    includeTags: List<String>,
-    excludeTags: List<String>,
-    onRemoveInclude: (String) -> Unit,
-    onRemoveExclude: (String) -> Unit,
+    includeTerms: List<SearchTerm>,
+    excludeTerms: List<SearchTerm>,
+    onRemoveInclude: (SearchTerm) -> Unit,
+    onRemoveExclude: (SearchTerm) -> Unit,
 ) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(includeTags.size) { index ->
-            val tag = includeTags[index]
+        items(includeTerms.size) { index ->
+            val term = includeTerms[index]
             AssistChip(
-                onClick = { onRemoveInclude(tag) },
-                label = { Text(tag) }
+                onClick = { onRemoveInclude(term) },
+                label = { Text(searchTermChipLabel(term, excluded = false)) }
             )
         }
-        items(excludeTags.size) { index ->
-            val tag = excludeTags[index]
+        items(excludeTerms.size) { index ->
+            val term = excludeTerms[index]
             AssistChip(
-                onClick = { onRemoveExclude(tag) },
-                label = { Text("-$tag") }
+                onClick = { onRemoveExclude(term) },
+                label = { Text(searchTermChipLabel(term, excluded = true)) }
             )
         }
     }
