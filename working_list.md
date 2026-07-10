@@ -1,15 +1,22 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T09:49:18-04:00
+updated_at: 2026-07-10T10:13:04-04:00
 ---
 # Working List
 
 ## Current Task: Implement Hitomi Source, Faceted Search, And Mixed Media
 
 ### In Progress
-- [ ] Phase 7: Add cancellation-safe targeted Hitomi health and app smoke coverage, expose only after the live gate, complete available device acceptance, update README/AGENTS/ExecPlan, run broad validation; commit
 
 ### Done
+- [x] Phase 7: Add targeted health/app smoke, expose Hitomi after the live gate, document current behavior, and close the plan (`./gradlew lint test :app:compileDebugAndroidTestKotlin :app:assembleDebug --rerun-tasks`: 449 tests, 0 failures, 3 opt-in live skips)
+  - [x] Preserve typed artist probes, scoped autocomplete, optional trending, exact diagnostic URLs, and cancellation propagation in provider health
+  - [x] Support both historical and current inverted `gg.js` shard polarity without accepting an ambiguous routing shape
+  - [x] Pass strict targeted provider health with 11/11 Hitomi steps `OK`, including exact galleries and bounded WebP/MP4 ranges
+  - [x] Expose Hitomi only after the health gate, then pass all 5 targeted app-smoke class tests (3 network routes plus 2 harness invariants) for Search, Creator Profile, overview mapping, media headers, cancellation, and source filtering
+  - [x] Update README and AGENTS with faceted search, mixed media, Nozomi, mutable CDN, cancellation, decoder, and video-prefetch contracts
+  - [x] Verify the supplied Hitomi logo remains byte-identical at SHA-256 `a970eb56124e1237e3b4ee18494f2a159e02bc0f9bcd95a910140ec8e852187d`
+  - [x] Record unavailable device execution: no adb device, emulator command, or `$ANDROID_HOME/system-images`; Android instrumentation still compiles
 - [x] Phase 6: Generalize the Viewer Media Overview and support animated WebP/anime video (`./gradlew :core-domain:test :core-data:test :core-sources:test :core-stubs:test :app:testDebugUnitTest :app:processDebugManifest :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin :app:assembleDebug --rerun-tasks`: 435 tests, 0 failures, 2 opt-in live skips)
   - [x] Classify explicit animated images independently from videos and preserve exact ordered media indices
   - [x] Render still, animated, GIF, Ugoira, and video poster/badge tiles without overview autoplay

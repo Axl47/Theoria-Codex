@@ -16,7 +16,33 @@ class HitomiMediaUrlResolverTest {
 
         assertEquals("1783681201/", configuration.basePath)
         assertEquals("1783681201", configuration.version)
-        assertEquals(setOf(2644, 253, 1063), configuration.shardTwoKeys)
+        assertEquals(setOf(2644, 253, 1063), configuration.shardCaseKeys)
+        assertEquals(2, configuration.caseShard)
+    }
+
+    @Test
+    fun `parses current inverted shard routing without reversing its primary host`() = runTest {
+        val configuration = HitomiMediaUrlResolver.parseConfiguration(currentFixture())
+        val resolver = HitomiMediaUrlResolver(QueueHttpClient(currentFixture()))
+
+        assertEquals("1783688401/", configuration.basePath)
+        assertEquals(setOf(1133, 156, 1010), configuration.shardCaseKeys)
+        assertEquals(1, configuration.caseShard)
+
+        val caseHash = "0".repeat(61) + "6d4"
+        val defaultHash = "0".repeat(61) + "54a"
+        assertEquals(1133, caseHash.takeLast(3).let { value ->
+            "${value.last()}${value.take(2)}".toInt(16)
+        })
+        val caseCandidates = resolver.candidates(
+            HitomiMediaFile(hash = caseHash, name = "page.webp", hasAvif = false),
+        )
+        val defaultCandidates = HitomiMediaUrlResolver(QueueHttpClient(currentFixture())).candidates(
+            HitomiMediaFile(hash = defaultHash, name = "page.webp", hasAvif = false),
+        )
+
+        assertEquals(listOf(1, 2, 1, 2), caseCandidates.map(HitomiMediaCandidate::shard))
+        assertEquals(listOf(2, 1, 2, 1), defaultCandidates.map(HitomiMediaCandidate::shard))
     }
 
     @Test
@@ -178,8 +204,10 @@ class HitomiMediaUrlResolverTest {
     fun `rejects malformed configuration and unsafe file inputs`() = runTest {
         val missingShardFunction = "gg = { b: '1783681201/' };"
         val unsafeBase = fixture().replace("1783681201/", "../media/")
+        val sameShardBranches = currentFixture().replace("o = 0; break;", "o = 1; break;")
         assertProtocolFailure { HitomiMediaUrlResolver.parseConfiguration(missingShardFunction) }
         assertProtocolFailure { HitomiMediaUrlResolver.parseConfiguration(unsafeBase) }
+        assertProtocolFailure { HitomiMediaUrlResolver.parseConfiguration(sameShardBranches) }
 
         val resolver = HitomiMediaUrlResolver(QueueHttpClient(fixture(), fixture()))
         val invalidHash = runCatching {
@@ -223,6 +251,10 @@ class HitomiMediaUrlResolverTest {
     private fun fixture(): String = requireNotNull(
         javaClass.getResource("/hitomi/2026-07-10/gg-shape.js"),
     ) { "Missing Hitomi gg.js fixture" }.readText()
+
+    private fun currentFixture(): String = requireNotNull(
+        javaClass.getResource("/hitomi/2026-07-10/gg-current-inverted-shape.js"),
+    ) { "Missing current Hitomi gg.js fixture" }.readText()
 
     private fun assertProtocolFailure(block: () -> Unit) {
         val failure = runCatching(block).exceptionOrNull()

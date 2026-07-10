@@ -14,8 +14,8 @@ class SourceMetadataTest {
 
         assertTrue(SourceKey.IWARA in hidden)
         assertTrue(SourceKey.IWARA in visible)
-        assertFalse(SourceKey.HITOMI in hidden)
-        assertFalse(SourceKey.HITOMI in visible)
+        assertTrue(SourceKey.HITOMI in hidden)
+        assertTrue(SourceKey.HITOMI in visible)
         assertFalse(SourceKey.RULE34XXX in hidden)
         assertTrue(SourceKey.RULE34XXX in visible)
         assertTrue(SourceKey.RULE34PAHEAL in hidden)

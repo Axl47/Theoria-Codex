@@ -25,7 +25,8 @@ data class HitomiMediaFile(
 data class HitomiCdnConfiguration(
     val basePath: String,
     val version: String,
-    val shardTwoKeys: Set<Int>,
+    val shardCaseKeys: Set<Int>,
+    val caseShard: Int,
 )
 
 data class HitomiMediaCandidate(
@@ -167,18 +168,16 @@ class HitomiMediaUrlResolver(
 
         private const val CDN_DOMAIN = "gold-usergeneratedcontent.net"
 
-        private val GG_REQUEST_HEADERS = mapOf(
-            "Accept" to "application/javascript, text/javascript, */*;q=0.8",
-            "Referer" to "https://hitomi.la/",
-            "User-Agent" to "Mozilla/5.0",
-        )
+        private val GG_REQUEST_HEADERS = HitomiProtocol.requestHeaders +
+            ("Accept" to "application/javascript, text/javascript, */*;q=0.8")
         private val BASE_PATH_ASSIGNMENT = Regex("""\bb\s*:\s*['\"]([^'\"]+)['\"]""")
         private val SHARD_FUNCTION = Regex(
             pattern = """\bm\s*:\s*function\s*\([^)]*\)\s*\{(.*?)\}\s*,\s*s\s*:""",
             option = RegexOption.DOT_MATCHES_ALL,
         )
         private val SHARD_CASE = Regex("""\bcase\s+(\d+)\s*:""")
-        private val SHARD_ONE_ASSIGNMENT = Regex("""\bo\s*=\s*1\s*;\s*break\s*;?""")
+        private val DEFAULT_SHARD_ASSIGNMENT = Regex("""\bvar\s+o\s*=\s*([01])\s*;""")
+        private val CASE_SHARD_ASSIGNMENT = Regex("""\bo\s*=\s*([01])\s*;\s*break\s*;?""")
         private val SAFE_BASE_PATH = Regex("""(?:[A-Za-z0-9][A-Za-z0-9._-]*/)+""")
         private val FILE_HASH = Regex("""[0-9a-f]{64}""")
         private val FILE_EXTENSION = Regex("""[A-Za-z0-9]{1,10}""")
@@ -195,23 +194,36 @@ class HitomiMediaUrlResolver(
 
             val shardBody = SHARD_FUNCTION.find(script)?.groupValues?.get(1)
                 ?: throw HitomiProtocolException("Hitomi gg.js did not declare the shard function")
-            if (!SHARD_ONE_ASSIGNMENT.containsMatchIn(shardBody)) {
+            val defaultShard = DEFAULT_SHARD_ASSIGNMENT.find(shardBody)
+                ?.groupValues
+                ?.get(1)
+                ?.toIntOrNull()
+                ?.plus(1)
+                ?: throw HitomiProtocolException("Hitomi gg.js did not declare a supported default shard")
+            val caseAssignments = CASE_SHARD_ASSIGNMENT.findAll(shardBody).toList()
+            if (caseAssignments.size != 1) {
                 throw HitomiProtocolException("Hitomi gg.js shard function used an unsupported shape")
             }
-            val shardTwoKeys = SHARD_CASE.findAll(shardBody)
+            val caseShard = caseAssignments.single().groupValues[1].toIntOrNull()?.plus(1)
+                ?: throw HitomiProtocolException("Hitomi gg.js contained an invalid case shard")
+            if (defaultShard !in 1..2 || caseShard !in 1..2 || defaultShard == caseShard) {
+                throw HitomiProtocolException("Hitomi gg.js shard branches did not select opposite shards")
+            }
+            val shardCaseKeys = SHARD_CASE.findAll(shardBody)
                 .map { match ->
                     match.groupValues[1].toIntOrNull()
                         ?: throw HitomiProtocolException("Hitomi gg.js contained an invalid shard key")
                 }
                 .toSet()
-            if (shardTwoKeys.isEmpty()) {
+            if (shardCaseKeys.isEmpty()) {
                 throw HitomiProtocolException("Hitomi gg.js did not contain any shard routing keys")
             }
 
             return HitomiCdnConfiguration(
                 basePath = basePath,
                 version = basePath.removeSuffix("/"),
-                shardTwoKeys = shardTwoKeys,
+                shardCaseKeys = shardCaseKeys,
+                caseShard = caseShard,
             )
         }
 
@@ -232,7 +244,11 @@ class HitomiMediaUrlResolver(
             }
 
             val routingKey = hashRoutingKey(hash)
-            val primaryShard = if (routingKey in configuration.shardTwoKeys) 2 else 1
+            val primaryShard = if (routingKey in configuration.shardCaseKeys) {
+                configuration.caseShard
+            } else {
+                3 - configuration.caseShard
+            }
             val shards = listOf(primaryShard, 3 - primaryShard)
             val pathNumber = routingKey
             val formats = buildList {

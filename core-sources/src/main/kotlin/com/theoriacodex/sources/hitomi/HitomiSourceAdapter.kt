@@ -704,7 +704,7 @@ class HitomiSourceAdapter(
         return try {
             httpClient.getBytes(
                 url = url,
-                headers = HITOMI_REQUEST_HEADERS,
+                headers = HitomiProtocol.requestHeaders,
                 range = HitomiNozomi.byteRangeForIds(firstIdIndex, idCount),
                 maxBodyBytes = maxBodyBytes,
             )
@@ -741,7 +741,7 @@ class HitomiSourceAdapter(
     }
 
     private suspend fun fetchGallery(galleryId: Int, sparse: Boolean): Post? {
-        val url = "${HitomiProtocol.DATA_BASE_URL}/galleries/$galleryId.js"
+        val url = HitomiProtocol.galleryUrl(galleryId)
         val response = try {
             requestText(url)
         } catch (error: SourceAdapterException) {
@@ -1238,7 +1238,7 @@ class HitomiSourceAdapter(
     }
 
     private suspend fun requestText(url: String) = try {
-        httpClient.get(url = url, headers = HITOMI_REQUEST_HEADERS)
+        httpClient.get(url = url, headers = HitomiProtocol.requestHeaders)
     } catch (error: IOException) {
         throw SourceAdapterException(
             reason = SourceFailureReason.NETWORK,
@@ -1420,10 +1420,6 @@ class HitomiSourceAdapter(
         private const val HITOMI_TYPE_NAMESPACE = "type"
         private const val HITOMI_LANGUAGE_NAMESPACE = "language"
 
-        private val HITOMI_REQUEST_HEADERS = mapOf(
-            "User-Agent" to "Mozilla/5.0",
-            "Referer" to "https://hitomi.la/",
-        )
         private val HITOMI_AVIF_HOST = Regex("""a[12]\.gold-usergeneratedcontent\.net""")
         private val HITOMI_WEBP_HOST = Regex("""w[12]\.gold-usergeneratedcontent\.net""")
         private val HITOMI_ORIGINAL_HOST = Regex("""[12]\.gold-usergeneratedcontent\.net""")

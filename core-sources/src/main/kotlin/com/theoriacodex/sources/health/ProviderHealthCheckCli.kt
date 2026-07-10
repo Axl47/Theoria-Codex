@@ -19,16 +19,31 @@ fun main(args: Array<String>) = runBlocking {
     val strictMode = System.getProperty("theoria.liveSources.strict") == "true"
     val gson = GsonBuilder().setPrettyPrinting().create()
     val report = if (liveEnabled) {
+        val requestedSources = parseRequestedSources(System.getProperty("theoria.liveSources.sources"))
+        val httpClient = DefaultSourceHttpClient(
+            connectTimeoutMs = 8_000,
+            readTimeoutMs = 12_000,
+            maxRetries = 0,
+        )
         val registry = RealAdapterRegistry(
             credentialsProvider = EnvironmentCredentialsProvider,
-            httpClient = DefaultSourceHttpClient(connectTimeoutMs = 8_000, readTimeoutMs = 12_000, maxRetries = 0),
-            exposedSources = SourceKey.entries.toSet(),
+            httpClient = httpClient,
+            exposedSources = requestedSources.ifEmpty { SourceKey.entries.toSet() },
         )
-        val probeCases = loadProbeCases()
-        val probeResults = ProviderProbeRunner(
+        val probeCases = selectProbeCases(loadProbeCases(), requestedSources)
+        val genericResults = ProviderProbeRunner(
             registry = registry,
             credentialedSources = credentialedSourcesFromEnvironment(),
         ).runAll(probeCases)
+        val hitomiResults = if (probeCases.any { probeCase -> probeCase.source == SourceKey.HITOMI }) {
+            val adapter = requireNotNull(registry.adapterFor(SourceKey.HITOMI)) {
+                "Hitomi was selected for provider health but is not exposed by the registry"
+            }
+            HitomiProviderHealthProbe(adapter = adapter, httpClient = httpClient).runAll()
+        } else {
+            emptyList()
+        }
+        val probeResults = genericResults + hitomiResults
         ProviderHealthReport(
             liveProvidersEnabled = true,
             generatedAtEpochMs = System.currentTimeMillis(),
@@ -46,8 +61,47 @@ fun main(args: Array<String>) = runBlocking {
     outputFile.parentFile?.mkdirs()
     outputFile.writeText(gson.toJson(report))
     printSummary(report, outputFile)
-    if (strictMode && report.probeResults.any { it.status == ProviderHealthStatus.FAILED }) {
+    val requestedSources = parseRequestedSources(System.getProperty("theoria.liveSources.sources"))
+    if (liveEnabled && strictMode && shouldFailStrict(report, requestedSources)) {
         error("Strict live source health failed. See report: ${outputFile.absolutePath}")
+    }
+}
+
+internal fun parseRequestedSources(raw: String?): Set<SourceKey> {
+    if (raw.isNullOrBlank()) return emptySet()
+    return raw.split(',')
+        .map(String::trim)
+        .filter(String::isNotEmpty)
+        .map { name ->
+            runCatching { SourceKey.valueOf(name.uppercase()) }
+                .getOrElse { throw IllegalArgumentException("Unknown live source filter: $name") }
+        }
+        .toSet()
+}
+
+internal fun selectProbeCases(
+    cases: List<ProviderProbeCase>,
+    requestedSources: Set<SourceKey>,
+): List<ProviderProbeCase> {
+    if (requestedSources.isEmpty()) return cases
+    val selected = cases.filter { probeCase -> probeCase.source in requestedSources }
+    val missing = requestedSources - selected.mapTo(mutableSetOf(), ProviderProbeCase::source)
+    require(missing.isEmpty()) {
+        "No provider probe case is configured for ${missing.joinToString { it.name }}"
+    }
+    return selected
+}
+
+internal fun shouldFailStrict(
+    report: ProviderHealthReport,
+    requestedSources: Set<SourceKey>,
+): Boolean {
+    if (requestedSources.isEmpty()) {
+        return report.probeResults.any { result -> result.status == ProviderHealthStatus.FAILED }
+    }
+    return requestedSources.any { source ->
+        val sourceResults = report.probeResults.filter { result -> result.source == source }
+        sourceResults.isEmpty() || sourceResults.any { result -> result.status != ProviderHealthStatus.OK }
     }
 }
 
@@ -135,6 +189,7 @@ private fun printSummary(report: ProviderHealthReport, outputFile: File) {
             val suffix = listOfNotNull(
                 "${result.latencyMs}ms",
                 result.failureReason?.name,
+                result.requestUrl,
                 result.message,
             ).joinToString(" | ")
             println("${result.source.name}/${result.checkName}: ${result.status.name}${if (suffix.isBlank()) "" else " ($suffix)"}")

@@ -22,6 +22,18 @@ Explain plans, questions, and completed work in plain system-level language. The
 
 For installed release-build crashes on a connected Android device, use `adb logcat -b crash -d` even when `run-as com.theoriacodex` is unavailable because the package is not debuggable. Viewer background prefetch must treat provider TLS, socket, and stream failures as unavailable media while rethrowing coroutine cancellation; otherwise an adjacent saved video can terminate the whole app.
 
+## Hitomi And Mixed Media
+
+Hitomi Nozomi indexes are binary streams of big-endian 32-bit gallery IDs. Page them with byte ranges aligned to four-byte records, and treat truncated or misaligned responses as protocol failures rather than decoding them as text.
+
+Hitomi's `gg.js` media configuration is mutable. Recovery is only for an exact media HTTP 404: refresh once for the failed configuration version, then try the alternate shard. Never loop, refresh for unrelated failures, or reinterpret cancellation as provider drift.
+
+Cancellation is a control signal across provider health checks and background transport work. Any boundary that catches broad transport failures must rethrow `CancellationException` before degrading the source or treating media as unavailable.
+
+Animated WebP uses the platform decoder on API 28 and newer. API 26/27 uses the bounded fallback, with compressed input and decoded canvas limits enforced before returning a drawable. Media Overview uses Hitomi's WebP candidate and a distinct static-first-frame request/cache path so grid tiles do not autoplay on any supported API.
+
+Viewer video prefetch requests at most the first 16 MiB and caches only a response proven to be a complete small representation. Partial or larger media stays remote and streams through Media3 with source headers; transport failures remain nonfatal and cancellation must propagate.
+
 ## Releases
 
 GitHub prereleases are created only by pushing an annotated `vX.Y.Z` tag. The tagged commit must declare the same `versionName`, its calculated Android `versionCode` (`1_500_000_000 + major * 10_000 + minor * 100 + patch`), and a curated `release-notes/vX.Y.Z.md` file. Do not use a low sequential version code: existing installs and the updater already compare against this high SemVer-derived range.

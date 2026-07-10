@@ -6,7 +6,7 @@ Theoria Codex is an Android-first, local-first, tag-driven media browser and col
 
 The app has five top-level tabs, in bottom-navigation and pager order:
 
-- `Search`: source-specific or Unified search, staged draft/apply behavior, include/exclude tags, source status chips, autocomplete/favorite tag sheets, direct NHentai gallery ID open, and local filters such as `Animated only`, animated duration range, `Hide liked`, and `Hide saved`.
+- `Search`: source-specific or Unified search, staged draft/apply behavior, include/exclude terms, source status chips, autocomplete/favorite tag sheets, direct NHentai gallery ID open, and local filters such as `Animated only`, animated duration range, `Hide liked`, and `Hide saved`. Sources with typed taxonomy expose faceted `Tags`, `Artists`, `Characters`, and `Series` scopes, with `Groups`, `Types`, and `Languages` under `More`.
 - `Recents`: local activity history for watched posts and applied searches. Watched posts reopen Viewer as a static recent-post stream; search history entries reapply their saved query in Search. Watched/search/all filters have independent clear actions.
 - `For You`: recommendation browsing from profile-scoped liked posts and source/tag affinity. Users can blacklist the current recommendation seed and manage blacklisted tag sets in Settings.
 - `Codex`: local saved collections. Codices can be created, renamed, reordered, sorted, deleted, downloaded, exported to JSON, imported from JSON, and used as a source-specific tag search launcher.
@@ -14,17 +14,20 @@ The app has five top-level tabs, in bottom-navigation and pager order:
 
 ## Viewer And Media
 
-Viewer handles still images, videos, GIF-like animated media, Pixiv ugoira, and multi-page posts. Multi-page posts support full-view paging, a two-column Gallery mode, and a persisted scroll-direction toggle. Animated media supports playback-rate controls, scrub/seek affordances, and repeated double-tap seek feedback.
+Viewer handles still images, videos, GIF-like animated media, animated WebP, Pixiv ugoira, and multi-page posts. Multi-page and mixed-media posts support full-view paging, a two-column Media Overview that preserves the exact media order, type badges without grid autoplay, and a persisted scroll-direction toggle. Animated media supports playback-rate controls, scrub/seek affordances, and repeated double-tap seek feedback. Animated WebP uses Android's native decoder on API 28 and newer plus a bounded API 26/27 fallback; Media Overview requests a separate static first frame.
+
+Hitomi image galleries keep each ordered page as a Viewer item, and Viewer download saves only the selected page. A Hitomi anime record with a playable video exposes exactly one MP4 item—the poster remains preview metadata rather than becoming a second page—and downloading it creates one `.mp4` request with the source headers.
 
 Media policy is shared across Search, Viewer, Codex, Creator Profile, and downloads. Source-aware request headers, progressive image URLs, canonical download URLs, lazy media resolution, and filename rules live in app media helpers instead of being duplicated inside screens.
 
 ## Sources
 
-The app currently exposes these real sources:
+The app's real-source set includes:
 
 - Pixiv
 - Gelbooru
 - NHentai
+- Hitomi
 - Iwara
 - Rule34 Paheal
 - Rule34 Video
@@ -69,7 +72,7 @@ Runtime state is local-first and stored under the app files directory in `theori
 
 ## Deep Links And Imports
 
-The Android manifest handles Pixiv auth callbacks, source post/profile links for supported providers, and JSON file/content URIs for Codex import. Codex export files contain the title plus source/post IDs, so imports reconstruct collections from source-backed post identities instead of copying the whole local cache.
+The Android manifest handles Pixiv auth callbacks, source post/profile links for supported providers, and JSON file/content URIs for Codex import. Hitomi routing accepts reader links and gallery paths for anime, CG, doujinshi, manga, artist-CG, game-CG, and image-set posts, plus `artist/<slug>-all.html` creator links. Codex export files contain the title plus source/post IDs, so imports reconstruct collections from source-backed post identities instead of copying the whole local cache.
 
 ## Releases And Updates
 
@@ -118,6 +121,12 @@ Opt-in live provider health report:
 ./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true
 ```
 
+Target only Hitomi's live provider probes:
+
+```sh
+./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true -Ptheoria.liveSources.sources=HITOMI
+```
+
 Strict live provider health report:
 
 ```sh
@@ -128,6 +137,12 @@ Opt-in live app source-route smoke:
 
 ```sh
 ./gradlew :app:testDebugUnitTest -Ptheoria.liveSources=true --tests '*LiveSearchCoordinatorRouteTest*'
+```
+
+Target only the Hitomi app route and media-header smoke:
+
+```sh
+./gradlew :app:testDebugUnitTest -Ptheoria.liveSources=true -Ptheoria.liveSources.sources=HITOMI --tests '*LiveSearchCoordinatorRouteTest*'
 ```
 
 Override provider probe seeds when needed:

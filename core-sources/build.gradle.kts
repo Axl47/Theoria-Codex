@@ -29,6 +29,9 @@ tasks.register<JavaExec>("providerHealthCheck") {
         "theoria.liveSources.strict",
         providers.gradleProperty("theoria.liveSources.strict").orElse("false").get(),
     )
+    providers.gradleProperty("theoria.liveSources.sources").orNull?.let { sources ->
+        systemProperty("theoria.liveSources.sources", sources)
+    }
     providers.gradleProperty("theoria.providerProbeCases").orNull?.let { caseFile ->
         systemProperty("theoria.providerProbeCases", caseFile)
     }

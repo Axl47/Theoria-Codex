@@ -1,5 +1,7 @@
 package com.theoriacodex.sources.health
 
+import com.theoriacodex.domain.adapter.FacetedSearchScope
+import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
@@ -8,8 +10,14 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.hitomi.HitomiNozomi
+import com.theoriacodex.sources.hitomi.HitomiNozomiRequest
+import com.theoriacodex.sources.hitomi.HitomiProtocol
+import kotlinx.coroutines.CancellationException
 import kotlin.system.measureTimeMillis
 
 enum class ProviderHealthStatus {
@@ -39,12 +47,34 @@ data class ProviderHealthReport(
 data class ProviderProbeCase(
     val source: SourceKey,
     val includeTags: List<String> = emptyList(),
+    val includeTerms: List<SearchTerm> = emptyList(),
     val sort: SortMode = SortMode.NEWEST,
     val autocompletePrefix: String? = null,
+    val autocompleteProbes: List<ProviderAutocompleteProbe> = emptyList(),
     val strictTagEcho: Boolean = false,
     val requiresCredentials: Boolean = false,
     val mediaProbe: Boolean = true,
+    val trendingProbe: Boolean = true,
+    val diagnosticUrls: Map<String, String> = emptyMap(),
 )
+
+data class ProviderAutocompleteProbe(
+    val prefix: String,
+    val checkName: String = "autocomplete-tags",
+    val facet: SearchFacet? = null,
+    val sourceNamespace: String? = null,
+) {
+    init {
+        require(prefix.isNotBlank()) { "Provider autocomplete probe prefix must not be blank" }
+        require(checkName.isNotBlank()) { "Provider autocomplete probe check name must not be blank" }
+        require(facet != null || sourceNamespace == null) {
+            "A provider autocomplete namespace requires a facet"
+        }
+    }
+
+    val scope: FacetedSearchScope
+        get() = FacetedSearchScope(facet = facet, sourceNamespace = sourceNamespace)
+}
 
 data class ProviderProbeStepResult(
     val source: SourceKey,
@@ -55,9 +85,11 @@ data class ProviderProbeStepResult(
     val message: String? = null,
     val checkedAtEpochMs: Long,
     val includeTags: List<String> = emptyList(),
+    val includeTerms: List<SearchTerm> = emptyList(),
     val autocompletePrefix: String? = null,
     val itemCount: Int? = null,
     val samplePostId: String? = null,
+    val requestUrl: String? = null,
 )
 
 object ProviderProbeCases {
@@ -85,6 +117,37 @@ object ProviderProbeCases {
             source = SourceKey.NHENTAI,
             includeTags = listOf("english"),
             autocompletePrefix = "eng",
+        ),
+        ProviderProbeCase(
+            source = SourceKey.HITOMI,
+            includeTerms = listOf(
+                SearchTerm(
+                    value = "najar",
+                    facet = SearchFacet.ARTIST,
+                    sourceNamespace = "artist",
+                ),
+            ),
+            autocompleteProbes = listOf(
+                ProviderAutocompleteProbe(
+                    prefix = "tag",
+                    checkName = "autocomplete-global",
+                ),
+                ProviderAutocompleteProbe(
+                    prefix = "kio",
+                    checkName = "autocomplete-artist",
+                    facet = SearchFacet.ARTIST,
+                    sourceNamespace = "artist",
+                ),
+            ),
+            trendingProbe = false,
+            diagnosticUrls = mapOf(
+                "newest-search" to HitomiNozomi.urlFor(HitomiNozomiRequest()),
+                "seeded-search" to HitomiNozomi.urlFor(
+                    HitomiNozomiRequest(area = "artist", tag = "najar"),
+                ),
+                "autocomplete-global" to HitomiProtocol.autocompleteUrl("global", "tag"),
+                "autocomplete-artist" to HitomiProtocol.autocompleteUrl("artist", "kio"),
+            ),
         ),
         ProviderProbeCase(
             source = SourceKey.IWARA,
@@ -120,11 +183,28 @@ object ProviderProbeCases {
             ProviderProbeCase(
                 source = SourceKey.valueOf(record.source),
                 includeTags = record.includeTags.orEmpty(),
+                includeTerms = record.includeTerms.orEmpty().map { term ->
+                    SearchTerm(
+                        value = term.value,
+                        facet = term.facet?.let(SearchFacet::valueOf) ?: SearchFacet.TAG,
+                        sourceNamespace = term.sourceNamespace,
+                    )
+                },
                 sort = record.sort?.let(SortMode::valueOf) ?: SortMode.NEWEST,
                 autocompletePrefix = record.autocompletePrefix,
+                autocompleteProbes = record.autocompleteProbes.orEmpty().map { probe ->
+                    ProviderAutocompleteProbe(
+                        prefix = probe.prefix,
+                        checkName = probe.checkName ?: "autocomplete-tags",
+                        facet = probe.facet?.let(SearchFacet::valueOf),
+                        sourceNamespace = probe.sourceNamespace,
+                    )
+                },
                 strictTagEcho = record.strictTagEcho ?: false,
                 requiresCredentials = record.requiresCredentials ?: false,
                 mediaProbe = record.mediaProbe ?: true,
+                trendingProbe = record.trendingProbe ?: true,
+                diagnosticUrls = record.diagnosticUrls.orEmpty(),
             )
         }
     }
@@ -132,11 +212,28 @@ object ProviderProbeCases {
     private data class ProviderProbeCaseRecord(
         val source: String,
         val includeTags: List<String>? = null,
+        val includeTerms: List<ProviderProbeTermRecord>? = null,
         val sort: String? = null,
         val autocompletePrefix: String? = null,
+        val autocompleteProbes: List<ProviderAutocompleteProbeRecord>? = null,
         val strictTagEcho: Boolean? = null,
         val requiresCredentials: Boolean? = null,
         val mediaProbe: Boolean? = null,
+        val trendingProbe: Boolean? = null,
+        val diagnosticUrls: Map<String, String>? = null,
+    )
+
+    private data class ProviderProbeTermRecord(
+        val value: String,
+        val facet: String? = null,
+        val sourceNamespace: String? = null,
+    )
+
+    private data class ProviderAutocompleteProbeRecord(
+        val prefix: String,
+        val checkName: String? = null,
+        val facet: String? = null,
+        val sourceNamespace: String? = null,
     )
 }
 
@@ -170,6 +267,8 @@ class ProviderHealthChecker(
                 val query = adapter.quickQuery(QuickQueryKind.NEWEST)
                 val page = adapter.search(query, pageToken = null)
                 itemCount = page.items.size
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Throwable) {
                 failure = error
             }
@@ -235,6 +334,7 @@ class ProviderProbeRunner(
         }
 
         val results = mutableListOf<ProviderProbeStepResult>()
+        val includeTerms = probeCase.configuredIncludeTerms()
         results += runStep(probeCase = probeCase, checkName = "newest-search") {
             val query = adapter.quickQuery(QuickQueryKind.NEWEST)
             val page = adapter.search(query, pageToken = null)
@@ -253,8 +353,8 @@ class ProviderProbeRunner(
         results += runStep(probeCase = probeCase, checkName = "seeded-search") {
             val query = Query(
                 mode = QueryMode.Source(probeCase.source),
-                includeTags = probeCase.includeTags,
-                excludeTags = emptyList(),
+                includeTerms = includeTerms,
+                excludeTerms = emptyList(),
                 sort = probeCase.sort,
                 dateRange = null,
                 minScore = null,
@@ -263,23 +363,27 @@ class ProviderProbeRunner(
             seededSample = page.items.firstOrNull()
             val tagEchoMatches = !probeCase.strictTagEcho || page.items.any { post ->
                 val tags = post.canonicalTags + post.rawTags
-                probeCase.includeTags.all { expected ->
+                includeTerms.all { term ->
+                    val expected = term.value
                     tags.any { tag -> tagsMatch(tag, expected) }
                 }
+            }
+            val termsLabel = includeTerms.joinToString { term ->
+                "${term.sourceNamespace?.let { "$it:" }.orEmpty()}${term.value}"
             }
             when {
                 page.items.isEmpty() -> degraded(
                     probeCase = probeCase,
                     checkName = "seeded-search",
                     itemCount = 0,
-                    message = "Reachable but returned no posts for ${probeCase.includeTags.joinToString()}",
+                    message = "Reachable but returned no posts for $termsLabel",
                 )
                 !tagEchoMatches -> degraded(
                     probeCase = probeCase,
                     checkName = "seeded-search",
                     itemCount = page.items.size,
                     samplePost = seededSample,
-                    message = "Returned posts, but none echoed required tags ${probeCase.includeTags.joinToString()}",
+                    message = "Returned posts, but none echoed required terms $termsLabel",
                 )
                 else -> ok(
                     probeCase = probeCase,
@@ -292,15 +396,17 @@ class ProviderProbeRunner(
         }
 
         results += runAutocomplete(probeCase, adapter)
-        results += runStep(probeCase = probeCase, checkName = "trending-tags") {
-            val tags = adapter.trendingTags(limit = 5)
-            okOrDegraded(
-                probeCase = probeCase,
-                checkName = "trending-tags",
-                itemCount = tags.size,
-                okMessage = "Returned ${tags.size} trending tags",
-                emptyMessage = "Reachable but returned no trending tags",
-            )
+        if (probeCase.trendingProbe) {
+            results += runStep(probeCase = probeCase, checkName = "trending-tags") {
+                val tags = adapter.trendingTags(limit = 5)
+                okOrDegraded(
+                    probeCase = probeCase,
+                    checkName = "trending-tags",
+                    itemCount = tags.size,
+                    okMessage = "Returned ${tags.size} trending tags",
+                    emptyMessage = "Reachable but returned no trending tags",
+                )
+            }
         }
 
         val sample = seededSample
@@ -311,13 +417,18 @@ class ProviderProbeRunner(
                 message = "No seeded search sample post to resolve",
             )
         } else {
-            runStep(probeCase = probeCase, checkName = "resolve-post") {
+            runStep(
+                probeCase = probeCase,
+                checkName = "resolve-post",
+                requestUrl = resolveRequestUrl(sample),
+            ) {
                 val resolved = adapter.resolvePost(sample.id)
                 if (resolved == null) {
                     degraded(
                         probeCase = probeCase,
                         checkName = "resolve-post",
                         samplePost = sample,
+                        requestUrl = resolveRequestUrl(sample),
                         message = "Resolve returned null for ${sample.id.sourcePostId}",
                     )
                 } else {
@@ -325,6 +436,7 @@ class ProviderProbeRunner(
                         probeCase = probeCase,
                         checkName = "resolve-post",
                         samplePost = resolved,
+                        requestUrl = resolveRequestUrl(resolved),
                         message = "Resolved ${resolved.id.sourcePostId}",
                     )
                 }
@@ -345,6 +457,7 @@ class ProviderProbeRunner(
                         probeCase = probeCase,
                         checkName = "media-metadata",
                         samplePost = sample,
+                        requestUrl = resolveRequestUrl(sample),
                         message = "Sample post has no media URLs",
                     )
                 } else {
@@ -353,6 +466,7 @@ class ProviderProbeRunner(
                         checkName = "media-metadata",
                         itemCount = mediaUrls.size,
                         samplePost = sample,
+                        requestUrl = mediaUrls.first(),
                         message = "Sample post exposes ${mediaUrls.size} media URLs",
                     )
                 }
@@ -365,39 +479,91 @@ class ProviderProbeRunner(
     private suspend fun runAutocomplete(
         probeCase: ProviderProbeCase,
         adapter: SourceAdapter,
-    ): ProviderProbeStepResult {
-        val prefix = probeCase.autocompletePrefix?.trim().orEmpty()
-        if (prefix.isBlank()) {
-            return skipped(
-                probeCase = probeCase,
-                checkName = "autocomplete-tags",
-                message = "No autocomplete prefix configured",
+    ): List<ProviderProbeStepResult> {
+        val configured = probeCase.autocompleteProbes.ifEmpty {
+            listOfNotNull(
+                probeCase.autocompletePrefix
+                    ?.trim()
+                    ?.takeIf(String::isNotBlank)
+                    ?.let(::ProviderAutocompleteProbe),
             )
         }
-        return runStep(probeCase = probeCase, checkName = "autocomplete-tags") {
-            val tags = adapter.autocompleteTags(prefix = prefix, limit = 5)
-            val prefixMatches = tags.any { suggestion -> tagsMatch(suggestion.text, prefix) }
-            when {
-                tags.isEmpty() -> degraded(
+        if (configured.isEmpty()) {
+            return listOf(
+                skipped(
                     probeCase = probeCase,
                     checkName = "autocomplete-tags",
+                    message = "No autocomplete prefix configured",
+                ),
+            )
+        }
+        return configured.map { autocompleteProbe ->
+            runAutocompleteProbe(
+                probeCase = probeCase,
+                autocompleteProbe = autocompleteProbe,
+                adapter = adapter,
+            )
+        }
+    }
+
+    private suspend fun runAutocompleteProbe(
+        probeCase: ProviderProbeCase,
+        autocompleteProbe: ProviderAutocompleteProbe,
+        adapter: SourceAdapter,
+    ): ProviderProbeStepResult {
+        val prefix = autocompleteProbe.prefix.trim()
+        val checkName = autocompleteProbe.checkName
+        return runStep(
+            probeCase = probeCase,
+            checkName = checkName,
+            autocompletePrefix = prefix,
+        ) {
+            val suggestions = if (adapter is FacetedSearchSourceAdapter) {
+                adapter.autocompleteFaceted(
+                    prefix = prefix,
+                    scope = autocompleteProbe.scope,
+                    limit = 5,
+                ).map { suggestion ->
+                    AutocompleteProbeSuggestion(
+                        text = suggestion.text,
+                        facet = suggestion.facet,
+                        sourceNamespace = suggestion.sourceNamespace,
+                    )
+                }
+            } else {
+                adapter.autocompleteTags(prefix = prefix, limit = 5).map { suggestion ->
+                    AutocompleteProbeSuggestion(text = suggestion.text)
+                }
+            }
+            val matchingSuggestion = suggestions.firstOrNull { suggestion ->
+                tagsMatch(suggestion.text, prefix) &&
+                    (autocompleteProbe.facet == null || suggestion.facet == autocompleteProbe.facet) &&
+                    (
+                        autocompleteProbe.sourceNamespace == null ||
+                            suggestion.sourceNamespace == autocompleteProbe.sourceNamespace
+                        )
+            }
+            when {
+                suggestions.isEmpty() -> degraded(
+                    probeCase = probeCase,
+                    checkName = checkName,
                     autocompletePrefix = prefix,
                     itemCount = 0,
-                    message = "Reachable but returned no autocomplete tags",
+                    message = "Reachable but returned no autocomplete suggestions",
                 )
-                !prefixMatches -> degraded(
+                matchingSuggestion == null -> degraded(
                     probeCase = probeCase,
-                    checkName = "autocomplete-tags",
+                    checkName = checkName,
                     autocompletePrefix = prefix,
-                    itemCount = tags.size,
-                    message = "Returned tags, but none matched prefix $prefix",
+                    itemCount = suggestions.size,
+                    message = "Returned suggestions, but none matched the configured prefix and taxonomy",
                 )
                 else -> ok(
                     probeCase = probeCase,
-                    checkName = "autocomplete-tags",
+                    checkName = checkName,
                     autocompletePrefix = prefix,
-                    itemCount = tags.size,
-                    message = "Returned ${tags.size} autocomplete tags",
+                    itemCount = suggestions.size,
+                    message = "Returned ${suggestions.size} autocomplete suggestions",
                 )
             }
         }
@@ -406,6 +572,8 @@ class ProviderProbeRunner(
     private suspend fun runStep(
         probeCase: ProviderProbeCase,
         checkName: String,
+        autocompletePrefix: String? = probeCase.autocompletePrefix,
+        requestUrl: String? = probeCase.diagnosticUrls[checkName],
         block: suspend () -> ProviderProbeStepResult,
     ): ProviderProbeStepResult {
         var result: ProviderProbeStepResult? = null
@@ -413,6 +581,8 @@ class ProviderProbeRunner(
         val latency = measureTimeMillis {
             try {
                 result = block()
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Throwable) {
                 failure = error
             }
@@ -428,8 +598,10 @@ class ProviderProbeRunner(
                 failureReason = typed?.reason,
                 message = caught.message ?: caught::class.simpleName,
                 checkedAtEpochMs = nowProvider(),
-                includeTags = probeCase.includeTags,
-                autocompletePrefix = probeCase.autocompletePrefix,
+                includeTags = probeCase.configuredIncludeTerms().map(SearchTerm::value),
+                includeTerms = probeCase.configuredIncludeTerms(),
+                autocompletePrefix = autocompletePrefix,
+                requestUrl = requestUrl,
             )
         }
         return requireNotNull(result).copy(latencyMs = latency)
@@ -440,13 +612,14 @@ class ProviderProbeRunner(
         checkName: String,
         itemCount: Int,
         samplePost: Post? = null,
+        requestUrl: String? = null,
         okMessage: String,
         emptyMessage: String,
     ): ProviderProbeStepResult {
         return if (itemCount > 0) {
-            ok(probeCase, checkName, itemCount, samplePost, message = okMessage)
+            ok(probeCase, checkName, itemCount, samplePost, requestUrl = requestUrl, message = okMessage)
         } else {
-            degraded(probeCase, checkName, itemCount, samplePost, message = emptyMessage)
+            degraded(probeCase, checkName, itemCount, samplePost, requestUrl = requestUrl, message = emptyMessage)
         }
     }
 
@@ -456,6 +629,7 @@ class ProviderProbeRunner(
         itemCount: Int? = null,
         samplePost: Post? = null,
         autocompletePrefix: String? = probeCase.autocompletePrefix,
+        requestUrl: String? = null,
         message: String,
     ): ProviderProbeStepResult {
         return result(
@@ -465,6 +639,7 @@ class ProviderProbeRunner(
             itemCount = itemCount,
             samplePost = samplePost,
             autocompletePrefix = autocompletePrefix,
+            requestUrl = requestUrl,
             message = message,
         )
     }
@@ -475,6 +650,7 @@ class ProviderProbeRunner(
         itemCount: Int? = null,
         samplePost: Post? = null,
         autocompletePrefix: String? = probeCase.autocompletePrefix,
+        requestUrl: String? = null,
         message: String,
     ): ProviderProbeStepResult {
         return result(
@@ -484,6 +660,7 @@ class ProviderProbeRunner(
             itemCount = itemCount,
             samplePost = samplePost,
             autocompletePrefix = autocompletePrefix,
+            requestUrl = requestUrl,
             message = message,
         )
     }
@@ -508,6 +685,7 @@ class ProviderProbeRunner(
         itemCount: Int? = null,
         samplePost: Post? = null,
         autocompletePrefix: String? = probeCase.autocompletePrefix,
+        requestUrl: String? = null,
         message: String,
     ): ProviderProbeStepResult {
         return ProviderProbeStepResult(
@@ -517,10 +695,12 @@ class ProviderProbeRunner(
             latencyMs = 0L,
             message = message,
             checkedAtEpochMs = nowProvider(),
-            includeTags = probeCase.includeTags,
+            includeTags = probeCase.configuredIncludeTerms().map(SearchTerm::value),
+            includeTerms = probeCase.configuredIncludeTerms(),
             autocompletePrefix = autocompletePrefix,
             itemCount = itemCount,
             samplePostId = samplePost?.id?.sourcePostId,
+            requestUrl = requestUrl ?: probeCase.diagnosticUrls[checkName],
         )
     }
 
@@ -530,6 +710,18 @@ class ProviderProbeRunner(
             post.full?.url?.takeIf(String::isNotBlank)?.let(::add)
             post.media.mapNotNullTo(this) { media -> media.url?.takeIf(String::isNotBlank) }
         }.distinct()
+    }
+
+    private fun ProviderProbeCase.configuredIncludeTerms(): List<SearchTerm> {
+        return (includeTags.map { value -> SearchTerm(value = value) } + includeTerms).distinct()
+    }
+
+    private fun resolveRequestUrl(post: Post): String? {
+        return if (post.id.source == SourceKey.HITOMI) {
+            post.id.sourcePostId.toIntOrNull()?.let(HitomiProtocol::galleryUrl)
+        } else {
+            post.pageUrl
+        }
     }
 
     private fun tagsMatch(actual: String, expected: String): Boolean {
@@ -546,4 +738,10 @@ class ProviderProbeRunner(
             .replace('_', ' ')
             .replace('-', ' ')
     }
+
+    private data class AutocompleteProbeSuggestion(
+        val text: String,
+        val facet: SearchFacet? = null,
+        val sourceNamespace: String? = null,
+    )
 }

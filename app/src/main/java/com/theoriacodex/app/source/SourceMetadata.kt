@@ -44,6 +44,7 @@ fun exposedRealSources(rule34XxxConfigured: Boolean): Set<SourceKey> {
         add(SourceKey.PIXIV)
         add(SourceKey.GELBOORU)
         add(SourceKey.NHENTAI)
+        add(SourceKey.HITOMI)
         add(SourceKey.IWARA)
         add(SourceKey.RULE34PAHEAL)
         add(SourceKey.RULE34VIDEO)

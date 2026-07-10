@@ -20,6 +20,11 @@ object HitomiProtocol {
     const val MAX_AUTOCOMPLETE_RESPONSE_CHARS: Int = 64 * 1024
     const val MAX_GALLERY_RESPONSE_CHARS: Int = 2 * 1024 * 1024
 
+    val requestHeaders: Map<String, String> = mapOf(
+        "User-Agent" to "Mozilla/5.0",
+        "Referer" to "https://hitomi.la/",
+    )
+
     val autocompleteScopes: Set<String> = setOf(
         "global",
         "tag",
@@ -61,6 +66,13 @@ object HitomiProtocol {
             encodeAutocompleteCharacter(String(Character.toChars(codePoint)))
         }
         return "$TAG_INDEX_BASE_URL/$normalizedScope/$encodedPath.json"
+    }
+
+    fun galleryUrl(galleryId: Int): String {
+        if (galleryId <= 0) {
+            throw HitomiProtocolException("Hitomi gallery ID must be positive")
+        }
+        return "$DATA_BASE_URL/galleries/$galleryId.js"
     }
 
     fun parseAutocomplete(body: String, maxResults: Int = 10): List<HitomiAutocompleteEntry> {

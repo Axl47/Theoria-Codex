@@ -1,5 +1,8 @@
 package com.theoriacodex.sources.health
 
+import com.theoriacodex.domain.adapter.FacetedSearchScope
+import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
+import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -13,9 +16,12 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -55,10 +61,17 @@ class ProviderHealthCheckerTest {
               {
                 "source": "GELBOORU",
                 "includeTags": ["landscape"],
+                "includeTerms": [
+                  {"value": "najar", "facet": "ARTIST", "sourceNamespace": "artist"}
+                ],
                 "sort": "TOP",
                 "autocompletePrefix": "land",
+                "autocompleteProbes": [
+                  {"prefix": "kio", "checkName": "autocomplete-artist", "facet": "ARTIST", "sourceNamespace": "artist"}
+                ],
                 "strictTagEcho": true,
-                "mediaProbe": false
+                "mediaProbe": false,
+                "trendingProbe": false
               }
             ]
             """.trimIndent(),
@@ -67,10 +80,16 @@ class ProviderHealthCheckerTest {
         assertEquals(1, cases.size)
         assertEquals(SourceKey.GELBOORU, cases.single().source)
         assertEquals(listOf("landscape"), cases.single().includeTags)
+        assertEquals(listOf(SearchTerm("najar", SearchFacet.ARTIST, "artist")), cases.single().includeTerms)
         assertEquals(SortMode.TOP, cases.single().sort)
         assertEquals("land", cases.single().autocompletePrefix)
+        assertEquals(
+            listOf(ProviderAutocompleteProbe("kio", "autocomplete-artist", SearchFacet.ARTIST, "artist")),
+            cases.single().autocompleteProbes,
+        )
         assertEquals(true, cases.single().strictTagEcho)
         assertEquals(false, cases.single().mediaProbe)
+        assertEquals(false, cases.single().trendingProbe)
     }
 
     @Test
@@ -135,6 +154,85 @@ class ProviderHealthCheckerTest {
         assertEquals(ProviderHealthStatus.SKIPPED, results.single().status)
     }
 
+    @Test
+    fun `default Hitomi probe preserves typed artist search and skips unsupported trending`() = runTest {
+        val post = samplePost(SourceKey.HITOMI)
+        val adapter = FakeAdapter(
+            sourceKey = SourceKey.HITOMI,
+            page = Page(items = listOf(post), nextPageToken = null),
+            autocomplete = listOf(
+                TagSuggestion(text = "tag", type = "tag", count = 10),
+                TagSuggestion(text = "kio artist", type = "artist", count = 5),
+            ),
+            resolvedPost = post,
+        )
+        val probeCase = ProviderProbeCases.defaults.single { it.source == SourceKey.HITOMI }
+
+        val results = ProviderProbeRunner(FakeRegistry(mapOf(SourceKey.HITOMI to adapter))).runAll(
+            listOf(probeCase),
+        )
+
+        assertEquals(
+            listOf(SearchTerm("najar", SearchFacet.ARTIST, "artist")),
+            adapter.capturedQueries[1].includeTerms,
+        )
+        assertTrue(results.none { result -> result.checkName == "trending-tags" })
+        assertEquals(
+            listOf(
+                FacetedSearchScope.All,
+                FacetedSearchScope(SearchFacet.ARTIST, "artist"),
+            ),
+            adapter.capturedAutocompleteScopes,
+        )
+        assertEquals(
+            setOf("autocomplete-global", "autocomplete-artist"),
+            results.map(ProviderProbeStepResult::checkName)
+                .filter { name -> name.startsWith("autocomplete-") }
+                .toSet(),
+        )
+        assertEquals(
+            probeCase.diagnosticUrls.getValue("seeded-search"),
+            results.single { result -> result.checkName == "seeded-search" }.requestUrl,
+        )
+    }
+
+    @Test
+    fun `health checker rethrows cancellation instead of reporting provider failure`() = runTest {
+        val adapter = FakeAdapter(
+            sourceKey = SourceKey.HITOMI,
+            failure = CancellationException("cancel checker"),
+        )
+
+        val failure = runCatching {
+            ProviderHealthChecker(FakeRegistry(mapOf(SourceKey.HITOMI to adapter))).checkAll()
+        }.exceptionOrNull()
+
+        assertTrue(failure is CancellationException)
+    }
+
+    @Test
+    fun `probe runner rethrows cancellation instead of converting it to a failed step`() = runTest {
+        val adapter = FakeAdapter(
+            sourceKey = SourceKey.HITOMI,
+            failure = CancellationException("cancel probe"),
+        )
+
+        val failure = runCatching {
+            ProviderProbeRunner(FakeRegistry(mapOf(SourceKey.HITOMI to adapter))).runAll(
+                listOf(
+                    ProviderProbeCase(
+                        source = SourceKey.HITOMI,
+                        includeTerms = listOf(SearchTerm("najar", SearchFacet.ARTIST, "artist")),
+                        autocompletePrefix = "tag",
+                        trendingProbe = false,
+                    ),
+                ),
+            )
+        }.exceptionOrNull()
+
+        assertTrue(failure is CancellationException)
+    }
+
     private class FakeRegistry(
         private val adapters: Map<SourceKey, SourceAdapter>,
     ) : SourceAdapterRegistry {
@@ -150,7 +248,10 @@ class ProviderHealthCheckerTest {
         private val trending: List<TagSuggestion> = emptyList(),
         private val autocomplete: List<TagSuggestion> = emptyList(),
         private val resolvedPost: Post? = null,
-    ) : SourceAdapter {
+    ) : SourceAdapter, FacetedSearchSourceAdapter {
+        val capturedQueries = mutableListOf<Query>()
+        val capturedAutocompleteScopes = mutableListOf<FacetedSearchScope>()
+
         override val capabilities = SourceCapabilities(
             supportsSortNewest = true,
             supportsSortPopular = true,
@@ -163,12 +264,34 @@ class ProviderHealthCheckerTest {
         )
 
         override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+            capturedQueries += query
             failure?.let { throw it }
             return page
         }
 
         override suspend fun trendingTags(limit: Int): List<TagSuggestion> = trending.take(limit)
         override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = autocomplete.take(limit)
+        override val supportedSearchScopes: Set<FacetedSearchScope> = setOf(
+            FacetedSearchScope.All,
+            FacetedSearchScope(SearchFacet.ARTIST, "artist"),
+        )
+
+        override suspend fun autocompleteFaceted(
+            prefix: String,
+            scope: FacetedSearchScope,
+            limit: Int,
+        ): List<FacetedTagSuggestion> {
+            capturedAutocompleteScopes += scope
+            return autocomplete.take(limit).map { suggestion ->
+                val namespace = suggestion.type
+                FacetedTagSuggestion(
+                    text = suggestion.text,
+                    facet = if (namespace == "artist") SearchFacet.ARTIST else SearchFacet.TAG,
+                    sourceNamespace = namespace,
+                    count = suggestion.count,
+                )
+            }
+        }
         override suspend fun quickQuery(kind: QuickQueryKind): Query {
             return Query(
                 mode = QueryMode.Source(sourceKey),
