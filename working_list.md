@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T15:36:35-04:00
+updated_at: 2026-07-10T15:51:56-04:00
 ---
 # Working List
 
@@ -9,6 +9,12 @@ updated_at: 2026-07-10T15:36:35-04:00
 ### In Progress
 
 ### Done
+- [x] Fix Hitomi `gamecg` and multi-tag searches on Android's ranged binary transport
+  - [x] Reproduce `gamecg` failure on the physical Galaxy through `HitomiSourceAdapter` as Android gzip `EOFException`
+  - [x] Require identity encoding for every shared binary byte-range request
+  - [x] Keep non-success HTTP responses from reopening a throwing input stream when no error body exists
+  - [x] Pass live `gamecg` and `animated` + `female:x-ray` adapter searches on the physical Android 16 device
+  - [x] Confirm production `com.theoriacodex` and instrumentation target `com.theoriacodex.debug` are separate installed packages
 - [x] Fix the connected-device startup crash caused by Android ICU rejecting the startup-loaded Hitomi gallery-assignment regex
   - [x] Replace the regex with deterministic declaration and object-body scanning
   - [x] Pass the focused Hitomi protocol instrumentation test on a physical Android 16 device

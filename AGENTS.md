@@ -20,11 +20,13 @@ Explain plans, questions, and completed work in plain system-level language. The
 
 ## Runtime Diagnostics
 
-For installed release-build crashes on a connected Android device, use `adb logcat -b crash -d` even when `run-as com.theoriacodex` is unavailable because the package is not debuggable. Viewer background prefetch must treat provider TLS, socket, and stream failures as unavailable media while rethrowing coroutine cancellation; otherwise an adjacent saved video can terminate the whole app.
+For installed release-build crashes on a connected Android device, use `adb logcat -b crash -d` even when `run-as com.theoriacodex` is unavailable because the package is not debuggable. Debug instrumentation installs and exercises the separate `com.theoriacodex.debug` package; use `dumpsys package` and the application flags when evidence must distinguish it from production `com.theoriacodex`. Viewer background prefetch must treat provider TLS, socket, and stream failures as unavailable media while rethrowing coroutine cancellation; otherwise an adjacent saved video can terminate the whole app.
 
 ## Hitomi And Mixed Media
 
 Hitomi Nozomi indexes are binary streams of big-endian 32-bit gallery IDs. Page them with byte ranges aligned to four-byte records, and treat truncated or misaligned responses as protocol failures rather than decoding them as text.
+
+Every binary byte-range request must send `Accept-Encoding: identity`. Android's `HttpURLConnection` otherwise transparently inflates a partial gzip stream, which can fail with a premature EOF or make the decoded body disagree with `Content-Range`. Keep this invariant in the shared HTTP byte-range boundary rather than adding Hitomi-only compensation.
 
 Hitomi's `gg.js` media configuration is mutable. Recovery is only for an exact media HTTP 404: refresh once for the failed configuration version, then try the alternate shard. Never loop, refresh for unrelated failures, or reinterpret cancellation as provider drift.
 

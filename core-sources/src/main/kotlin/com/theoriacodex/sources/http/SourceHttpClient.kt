@@ -68,5 +68,11 @@ internal fun Map<String, String>.withByteRange(range: SourceByteRange?): Map<Str
     require(keys.none { it.equals("Range", ignoreCase = true) }) {
         "Pass either SourceByteRange or a Range header, not both"
     }
-    return this + ("Range" to range.headerValue)
+    // Android's HttpURLConnection transparently inflates gzip responses. A bounded range can end
+    // in the middle of the compressed stream, producing EOF or making Content-Range describe
+    // different bytes than the decoded body. Range consumers require byte-exact identity data.
+    return this + mapOf(
+        "Range" to range.headerValue,
+        "Accept-Encoding" to "identity",
+    )
 }

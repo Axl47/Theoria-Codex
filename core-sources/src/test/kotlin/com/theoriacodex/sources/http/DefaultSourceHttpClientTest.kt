@@ -18,10 +18,12 @@ class DefaultSourceHttpClientTest {
     @Test
     fun `returns exact binary range response and headers`() = runTest {
         var capturedRange: String? = null
+        var capturedEncoding: String? = null
         val expectedBody = byteArrayOf(0, 1, 0xFF.toByte(), 2)
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
             createContext("/range") { exchange ->
                 capturedRange = exchange.requestHeaders.getFirst("Range")
+                capturedEncoding = exchange.requestHeaders.getFirst("Accept-Encoding")
                 exchange.responseHeaders.add("Content-Range", "bytes 4-7/12")
                 exchange.sendResponseHeaders(206, expectedBody.size.toLong())
                 exchange.responseBody.use { output ->
@@ -43,6 +45,7 @@ class DefaultSourceHttpClientTest {
         }
 
         assertEquals("bytes=4-7", capturedRange)
+        assertEquals("identity", capturedEncoding)
         assertEquals(206, response.statusCode)
         assertArrayEquals(expectedBody, response.body)
         assertEquals(

@@ -181,11 +181,7 @@ class DefaultSourceHttpClient(
         }
 
         val status = connection.responseCode
-        val stream = if (status in 200..299) {
-            connection.inputStream
-        } else {
-            connection.errorStream ?: connection.inputStream
-        }
+        val stream = if (status in 200..299) connection.inputStream else connection.errorStream
         val bodyText = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
         val headersMap = connection.headerFields
             .filterKeys { it != null }
@@ -242,11 +238,7 @@ class DefaultSourceHttpClient(
             }
 
             val status = connection.responseCode
-            val stream = if (status in 200..299) {
-                connection.inputStream
-            } else {
-                connection.errorStream ?: connection.inputStream
-            }
+            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val bodyBytes = stream?.use { it.readBoundedBytes(maxBodyBytes) } ?: ByteArray(0)
             val headersMap = connection.headerFields
                 .filterKeys { it != null }
