@@ -1649,7 +1649,6 @@ fun TheoriaApp(
                                     ForYouScreen(
                                         coordinator = forYouCoordinator,
                                         activeProfileId = activeRecommendationProfile.profileId,
-                                        activeProfileName = activeRecommendationProfile.name,
                                         likesCount = activeProfileLikes.size,
                                         likedPostIds = likedPostIds,
                                         pixivUgoiraClient = pixivUgoiraClient,

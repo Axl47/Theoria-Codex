@@ -65,6 +65,12 @@ class ForYouCoordinator(
     var activeProfileLikesCount by mutableStateOf(0)
         private set
 
+    var selectedSource by mutableStateOf<SourceKey?>(null)
+        private set
+
+    val availableSourceSelections: List<SourceKey>
+        get() = allEnabledSources().sortedBy { source -> source.name }
+
     var seedSummaryBySource by mutableStateOf<Map<SourceKey, List<String>>>(emptyMap())
         private set
 
@@ -83,13 +89,18 @@ class ForYouCoordinator(
         val previousRuntime = runtimeSettings.runtime
         val previousProfile = runtimeSettings.activeProfileId
         val previousBlacklist = runtimeSettings.forYouBlacklistByProfile
+        val previousSelectedSource = selectedSource
         runtimeSettings = settings
         activeProfileId = settings.activeProfileId
+        if (selectedSource !in allEnabledSources()) {
+            selectedSource = null
+        }
         return hasExecutedFeed &&
             (
                 previousRuntime != settings.runtime ||
                     previousProfile != settings.activeProfileId ||
-                    previousBlacklist != settings.forYouBlacklistByProfile
+                    previousBlacklist != settings.forYouBlacklistByProfile ||
+                    previousSelectedSource != selectedSource
                 )
     }
 
@@ -102,6 +113,14 @@ class ForYouCoordinator(
         if (sortMode == mode) return
         sortMode = mode
         refresh(shuffle = false)
+    }
+
+    suspend fun setSourceSelection(source: SourceKey?) {
+        if (loading || loadingMore) return
+        val normalizedSource = source?.takeIf { candidate -> candidate in allEnabledSources() }
+        if (selectedSource == normalizedSource) return
+        selectedSource = normalizedSource
+        executeFeed(shuffle = false)
     }
 
     suspend fun blacklistCurrentSeedAndRefresh(): Int {
@@ -435,6 +454,13 @@ class ForYouCoordinator(
     }
 
     private fun effectiveEnabledSources(): Set<SourceKey> {
+        val enabledSources = allEnabledSources()
+        return selectedSource?.let { source ->
+            enabledSources.filterTo(mutableSetOf()) { candidate -> candidate == source }
+        } ?: enabledSources
+    }
+
+    private fun allEnabledSources(): Set<SourceKey> {
         return runtimeSettings.runtime.enabledSources.intersect(registry.availableSources())
     }
 

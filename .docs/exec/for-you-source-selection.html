@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Add For You source selection</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#f5f6f4; --surface:#fff; --text:#20231f; --muted:#626860; --border:#d7dbd4; --accent:#176b5b; --soft:#dff2eb; --risk:#9a4b18; --risk-soft:#ffeadb; --code:#111813; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#151815; --surface:#202520; --text:#edf1ec; --muted:#b7beb5; --border:#3b443b; --accent:#6ee7c5; --soft:#153b31; --risk:#fdba74; --risk-soft:#492812; --code:#0b100c; } }
+    * { box-sizing:border-box; } body { margin:0; font:15px/1.55 system-ui,sans-serif; background:var(--bg); color:var(--text); }
+    header,main { max-width:1080px; margin:auto; padding:24px; } header { padding-top:36px; } h1,h2,h3 { line-height:1.2; margin:0 0 12px; } h2 { margin-top:10px; } p { margin:0 0 12px; }
+    nav { position:sticky; top:0; z-index:2; border-block:1px solid var(--border); background:var(--surface); } nav ul { display:flex; gap:6px; max-width:1080px; margin:auto; padding:8px 24px; list-style:none; overflow:auto; } nav a { color:var(--accent); padding:6px; white-space:nowrap; }
+    section { margin:18px 0; padding:20px; border:1px solid var(--border); border-radius:9px; background:var(--surface); }
+    .meta,.dashboard { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; } .pill,.card { border:1px solid var(--border); border-radius:8px; padding:8px 10px; background:var(--surface); } .card { flex:1 1 210px; } .card strong { display:block; color:var(--muted); font-size:.8rem; text-transform:uppercase; }
+    table { width:100%; border-collapse:collapse; } th,td { padding:9px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; } th { color:var(--muted); }
+    code { font-family:ui-monospace,monospace; } pre { overflow:auto; padding:14px; border-radius:8px; background:var(--code); color:#f5f7f5; }
+    .callout { padding:12px; border-left:4px solid var(--accent); background:var(--soft); border-radius:6px; } .risk { border-left-color:var(--risk); background:var(--risk-soft); }
+    @media print { nav { position:static; } section,.card { break-inside:avoid; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>For You source selection</h1>
+    <p>Replace the recommendation profile subtitle with a source dropdown whose selection controls both recommendation-tag generation and every post returned by the feed.</p>
+    <div class="meta"><span class="pill">Status: Complete (device acceptance pending)</span><span class="pill">Owner: Codex</span><span class="pill">Created: 2026-07-10</span><span class="pill">Updated: 2026-07-10</span></div>
+    <div class="dashboard">
+      <div class="card"><strong>Next action</strong>Verify the interaction on the next connected Android device.</div>
+      <div class="card"><strong>Main risk</strong>A UI-only filter could leave tags or pagination crossing source boundaries.</div>
+      <div class="card"><strong>Validation</strong>Coordinator unit tests, app tests, Kotlin compile, and manual device checks.</div>
+      <div class="card"><strong>Affected areas</strong>ForYouCoordinator, ForYouScreen, TheoriaApp, focused tests.</div>
+    </div>
+  </header>
+  <nav><ul><li><a href="#purpose">Purpose</a></li><li><a href="#context">Context</a></li><li><a href="#phases">Phases</a></li><li><a href="#work">Work plan</a></li><li><a href="#validation">Validation</a></li><li><a href="#log">Living log</a></li><li><a href="#recovery">Recovery</a></li></ul></nav>
+  <main>
+    <section id="purpose"><h2>Purpose / Big Picture</h2><p>The For You header will show <strong>Unified</strong> or the current source with a dropdown arrow. Choosing a source regenerates the feed using only that source's liked or trending tags, queries only that adapter, and keeps pagination inside that source. Choosing Unified restores the existing multi-source behavior.</p></section>
+    <section id="context"><h2>Context And Orientation</h2><p><code>ForYouScreen.kt</code> renders the feed and currently shows the active recommendation profile name under the title. <code>ForYouCoordinator.kt</code> selects per-source tag seeds, calls the unified orchestrator, and owns pagination. <code>TheoriaApp.kt</code> connects the active profile and callbacks. A source means one provider adapter, while Unified means all currently enabled and available adapters.</p>
+      <table><thead><tr><th>File</th><th>Role</th></tr></thead><tbody>
+        <tr><td><code>app/src/main/java/com/theoriacodex/app/recommend/ForYouCoordinator.kt</code></td><td>Own the selection and constrain seeds, searches, affinity, and page tokens.</td></tr>
+        <tr><td><code>app/src/main/java/com/theoriacodex/app/recommend/ForYouScreen.kt</code></td><td>Render the selector in the profile subtitle position.</td></tr>
+        <tr><td><code>app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt</code></td><td>Stop passing profile display copy that the screen no longer shows.</td></tr>
+        <tr><td><code>app/src/test/java/com/theoriacodex/app/recommend/ForYouCoordinatorTest.kt</code></td><td>Prove selection constrains tags and results, and Unified restores all sources.</td></tr>
+      </tbody></table>
+      <p class="callout risk">The feed must be constrained before tag generation and provider execution. Filtering the visible list afterward would leak unrelated tags, waste requests, and allow pagination to repopulate unwanted sources.</p>
+    </section>
+    <section id="phases"><h2>Phases</h2>
+      <h3>1. Coordinator contract</h3><p>Add an in-memory selection defaulting to Unified, expose enabled source options, and refresh through a source-restricted effective source set. Acceptance: seed summaries, results, statuses, and pagination all contain only the selected source.</p>
+      <h3>2. Header interaction</h3><p>Replace the profile subtitle with a dropdown label and arrow. Acceptance: the current choice is visible, available enabled sources are selectable, and selection triggers a feed refresh.</p>
+      <h3>3. Verification</h3><p>Add focused regression tests, run app tests and compile/assemble checks, then record evidence and any remaining manual device acceptance.</p>
+    </section>
+    <section id="work"><h2>Work Plan</h2><ol>
+      <li>Separate all enabled sources from the selection-filtered feed sources in <code>ForYouCoordinator</code>.</li>
+      <li>Add a guarded source-change method that changes selection and rebuilds the feed atomically.</li>
+      <li>Build a compact Compose dropdown in the header using shared source display names.</li>
+      <li>Add fake-adapter tests covering Pixiv-only selection and switching back to Unified.</li>
+      <li>Run validation and update this plan to Complete with actual evidence.</li>
+    </ol></section>
+    <section id="validation"><h2>Validation And Acceptance</h2><table><thead><tr><th>Check</th><th>Command/action</th><th>Expected</th></tr></thead><tbody>
+      <tr><td>Focused tests</td><td><code>./gradlew :app:testDebugUnitTest --tests '*ForYouCoordinatorTest'</code></td><td>Selection tests pass.</td></tr>
+      <tr><td>App regression</td><td><code>./gradlew :app:testDebugUnitTest</code></td><td>All app unit tests pass.</td></tr>
+      <tr><td>Build</td><td><code>./gradlew :app:compileDebugKotlin :app:assembleDebug</code></td><td>Kotlin compiles and debug APK assembles.</td></tr>
+      <tr><td>Manual</td><td>Open For You; choose one source, scroll, shuffle, then return to Unified.</td><td>Header label, tags, cards, and later pages stay in the chosen source; Unified restores mixed sources.</td></tr>
+    </tbody></table></section>
+    <section id="log"><h2>Living Log</h2><h3>Progress</h3><ul><li>[x] 2026-07-10 — Traced header, seed generation, unified execution, and pagination.</li><li>[x] 2026-07-10 — Chose coordinator-owned in-memory selection with Unified default.</li><li>[x] 2026-07-10 — Implemented the coordinator contract and source dropdown.</li><li>[x] 2026-07-10 — Added focused source and pagination coverage.</li><li>[x] 2026-07-10 — Passed app unit tests, Kotlin compilation, debug APK assembly, HTML validation, and diff checks.</li><li>[ ] Manual Android tap-through; no device was connected during implementation.</li></ul>
+      <h3>Surprises And Discoveries</h3><ul><li>The existing coordinator already carries independent per-source query overrides and page tokens, so restricting the source set at its entrance preserves the rest of the feed pipeline.</li><li><code>adb devices</code> returned no connected devices, so user-visible interaction acceptance remains explicitly pending rather than inferred from compilation.</li></ul>
+      <h3>Decision Log</h3><ul><li>Decision: keep source selection session-scoped. Rationale: the request defines feed interaction, not a new persisted setting; Unified remains the safe startup default. Date/Author: 2026-07-10 / Codex.</li><li>Decision: keep recommendation profiles active behind the feed but remove the profile name from this header. Rationale: likes and blacklists remain profile-scoped while the requested surface becomes source-scoped. Date/Author: 2026-07-10 / Codex.</li></ul>
+      <h3>Outcomes And Retrospective</h3><p>The profile subtitle is now a source selector. The coordinator defaults to Unified, rebuilds the feed when the source changes, and uses the selected source as the common boundary for affinity data, seed tags, initial results, shuffle, and later pages. Focused tests prove Unified → Pixiv → paginated Pixiv → Unified behavior. All automated validation passed; only physical/emulated device interaction remains.</p>
+    </section>
+    <section id="recovery"><h2>Idempotence And Recovery</h2><p>All Gradle and HTML checks are safe to rerun. No data migration or destructive operation was introduced. If follow-up work is needed, inspect this plan and <code>git diff</code>; source selection is session-scoped and resets safely to Unified after app restart.</p></section>
+  </main>
+</body>
+</html>
