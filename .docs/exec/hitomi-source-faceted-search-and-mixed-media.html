@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Add Hitomi Faceted Search, Creators, and Mixed Media</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f4;
+      --surface: #ffffff;
+      --text: #202124;
+      --muted: #5f6368;
+      --border: #d7d7d0;
+      --accent: #0f766e;
+      --accent-soft: #dff3ef;
+      --risk: #9a3412;
+      --risk-soft: #ffedd5;
+      --code: #111827;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151716;
+        --surface: #202321;
+        --text: #f0f2ef;
+        --muted: #b8beb7;
+        --border: #3a403c;
+        --accent: #5eead4;
+        --accent-soft: #123b37;
+        --risk: #fdba74;
+        --risk-soft: #43230f;
+        --code: #0b0f0d;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header, main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    header { padding-top: 36px; }
+    h1, h2, h3, h4 { line-height: 1.15; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.2rem); }
+    h2 { margin-top: 36px; font-size: 1.55rem; }
+    h3 { margin-top: 24px; font-size: 1.1rem; }
+    h4 { margin-top: 18px; font-size: 1rem; }
+    p { margin: 0 0 14px; }
+    ul, ol { margin-top: 8px; }
+    li + li { margin-top: 5px; }
+    a { color: var(--accent); }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-block: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(10px);
+    }
+    nav ul {
+      display: flex;
+      gap: 6px;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 8px 24px;
+      list-style: none;
+      overflow-x: auto;
+    }
+    nav li { margin: 0; }
+    nav a {
+      display: block;
+      padding: 6px 10px;
+      border-radius: 6px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    nav a:hover { background: var(--accent-soft); }
+    section {
+      padding: 22px;
+      margin: 18px 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    article + article {
+      margin-top: 26px;
+      padding-top: 18px;
+      border-top: 1px solid var(--border);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 650; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      overflow-x: auto;
+      padding: 14px;
+      border-radius: 8px;
+      background: var(--code);
+      color: #f8fafc;
+    }
+    details {
+      margin: 12px 0;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+    }
+    summary { cursor: pointer; font-weight: 700; }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0;
+      color: var(--muted);
+    }
+    .pill {
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+    }
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin: 18px 0 0;
+    }
+    .card {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    .card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .callout {
+      margin: 14px 0;
+      padding: 12px 14px;
+      border-left: 4px solid var(--accent);
+      background: var(--accent-soft);
+      border-radius: 6px;
+    }
+    .risk {
+      border-left-color: var(--risk);
+      background: var(--risk-soft);
+    }
+    .status-table td:first-child {
+      width: 180px;
+      color: var(--muted);
+      font-weight: 650;
+    }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin: 14px 0;
+    }
+    .flow div {
+      position: relative;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+    }
+    .flow strong { display: block; margin-bottom: 4px; }
+    @media print {
+      nav { position: static; }
+      section, .card { break-inside: avoid; }
+      body { background: #fff; color: #000; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ExecPlan: Add Hitomi Faceted Search, Creators, and Mixed Media</h1>
+    <p>This plan adds Hitomi as a first-class Theoria Codex source and introduces a reusable faceted-search layer shared with NHentai. Users will be able to distinguish tags, artists, characters, series, groups, types, and languages; browse Hitomi artist uploads; open Hitomi links directly in the app; swipe through still and animated gallery pages; and play Hitomi anime MP4s inside the existing Viewer.</p>
+    <div class="meta" role="group" aria-label="Plan metadata">
+      <span class="pill">Status: Proposed</span>
+      <span class="pill">Owner: Codex</span>
+      <span class="pill">Created: 2026-07-10</span>
+      <span class="pill">Updated: 2026-07-10</span>
+      <span class="pill">Plan file: .docs/exec/hitomi-source-faceted-search-and-mixed-media.html</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next Action</strong>Begin Phase 1 by capturing versioned Hitomi protocol fixtures and adding binary byte-range HTTP support without changing user-visible search behavior.</div>
+      <div class="card"><strong>Main Risk</strong>Hitomi search and media URLs depend on binary Nozomi indexes and mutable CDN shard configuration. Protocol parsing, caching, bounded concurrency, and refresh-on-404 behavior must land before UI exposure.</div>
+      <div class="card"><strong>Validation</strong>Deterministic fixtures, opt-in live provider probes, app Search route smoke, API 26 and API 28+ media checks, and the two exact galleries named in this plan.</div>
+      <div class="card"><strong>Affected Areas</strong><code>core-domain</code> query/post models, <code>core-data</code> persistence, <code>core-sources</code> HTTP and adapters, Search, Creator Profile, Viewer, deep links, stubs, health tooling, and current docs.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#status">Status</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#work-plan">Work Plan</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#living-log">Living Log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+      <li><a href="#appendix">Appendix</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>After this plan is complete, Hitomi appears beside the app's other real sources. A user can select Hitomi, type a prefix such as <code>kio</code>, narrow suggestions to Artists, choose an artist without losing that taxonomy, combine the artist with character, series, type, language, and ordinary tag terms, exclude any of those terms, and apply newest, popular-month, top-year, or random ordering.</p>
+      <p>Opening a result resolves it inside Theoria Codex. A multi-page gallery keeps its page order and media count. Animated WebP pages animate rather than appearing as still thumbnails. An anime result plays its MP4 in the same Viewer used by other video sources. The media overview button remains available for any post with multiple media items, even when the current item is seekable, and the overview represents images, animated images, and videos without attempting to play every tile at once.</p>
+      <p>If gallery metadata contains artists, each artist is available as a Creator Profile action and can open a paginated Hitomi artist stream. If metadata reports no artist, the app hides the action instead of displaying <code>N/A</code>. Hitomi gallery, reader, anime, CG, and artist URLs route through app deep links.</p>
+      <div class="callout">
+        <strong>Observable completion:</strong> from a release build, search Hitomi for <code>artist:najar</code> plus <code>type:artistcg</code> ordered by Popular, open gallery <code>4042375</code>, use the media overview and swipe through its animated WebP pages; then open anime <code>7231</code> and play, seek, pause, background, resume, and download its MP4 without leaving the Viewer.
+      </div>
+    </section>
+
+    <section id="status">
+      <h2>Current Status</h2>
+      <table class="status-table">
+        <tbody>
+          <tr><td>Plan state</td><td>Proposed and ready for implementation review.</td></tr>
+          <tr><td>UX state</td><td>Agreed: contextual scope chips under the search field; source-specific facets in the first release; poster/badge tiles in the overview with playback in the main Viewer.</td></tr>
+          <tr><td>Protocol state</td><td>Live route shapes were verified on 2026-07-10. Search and CDN details can drift and therefore have explicit live probes and recovery behavior.</td></tr>
+          <tr><td>First implementation action</td><td>Phase 1 protocol fixtures and byte-range HTTP primitives.</td></tr>
+          <tr><td>Out of scope</td><td>Hitomi account support, WebView scraping, unrestricted title/full-text search, OR expressions, playing every video inside the overview grid, and making artist/series terms cross-source in Unified mode.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+
+      <h3>Current Theoria boundaries</h3>
+      <p>A <em>source adapter</em> implements <code>SourceAdapter</code> and converts one provider into domain <code>Post</code> pages. <code>RealAdapterRegistry</code> constructs adapters, while <code>app/source/SourceMetadata.kt</code> separately decides which adapters are exposed to users. <code>SearchCoordinator</code> owns draft/applied query state, autocomplete, persistence, source-mode execution, Unified execution, and pagination. <code>ViewerScreen</code> renders a post stream, and each post can already contain an ordered <code>media</code> list.</p>
+      <p>The current autocomplete contract is halfway to faceted search: <code>TagSuggestion</code> carries a free-form <code>type</code>, and NHentai already supplies types such as artist, character, parody, group, language, category, and tag. However, <code>AutocompletePanel</code> passes only <code>item.text</code> into <code>SearchCoordinator</code>. <code>Query</code> persists only <code>includeTags: List&lt;String&gt;</code> and <code>excludeTags: List&lt;String&gt;</code>, so choosing an artist or character loses its meaning.</p>
+      <p>The current Viewer can render images, GIFs, Pixiv Ugoira, and videos in its nested media pager. Its media overview is intentionally image-only: <code>viewerGalleryMediaItems</code> removes videos, GIFs, and Ugoira, and <code>galleryAvailable</code> becomes false while the current item is seekable. This plan changes that global overview policy rather than adding a Hitomi-only alternate Viewer.</p>
+
+      <table>
+        <thead>
+          <tr><th>File or module</th><th>Current role</th><th>Required change</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>core-domain/src/main/kotlin/com/theoriacodex/domain/model/Query.kt</code></td><td>Query mode, plain include/exclude strings, sort, date range, and score.</td><td>Add canonical faceted terms while preserving plain-tag compatibility for existing adapters and saved state.</td></tr>
+          <tr><td><code>core-domain/src/main/kotlin/com/theoriacodex/domain/model/Post.kt</code></td><td>Source keys, media references, flat tags, one primary creator, and media count.</td><td>Add <code>HITOMI</code>, typed taxonomy, multiple creator profiles, and explicit animated-image metadata without removing compatibility fields.</td></tr>
+          <tr><td><code>core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceAdapter.kt</code></td><td>Generic search, autocomplete, trending, resolve, and creator-search extension contracts.</td><td>Add an optional faceted-search contract and a suggestion model that retains canonical facet and source namespace.</td></tr>
+          <tr><td><code>core-data/src/main/kotlin/com/theoriacodex/data/repository/FileBackedRepositories.kt</code></td><td>Persists queries, recents, settings, posts, creators, and media as backward-compatible JSON records.</td><td>Read legacy string queries as general tags; persist typed terms, taxonomy, multiple creators, and animated flags with nullable/defaulted record fields.</td></tr>
+          <tr><td><code>core-sources/src/main/kotlin/com/theoriacodex/sources/http/SourceHttpClient.kt</code></td><td>Returns text response bodies for GET and POST.</td><td>Add byte responses and Range-aware GET support for binary Nozomi lists without forcing existing JSON adapters to change.</td></tr>
+          <tr><td><code>core-sources/src/main/kotlin/com/theoriacodex/sources/nhentai/NhentaiSourceAdapter.kt</code></td><td>Already receives taxonomy types but flattens selected searches.</td><td>Implement the shared facet vocabulary and map app Series to NHentai <code>parody</code>, Type to <code>category</code>, and other direct equivalents.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/search/SearchCoordinator.kt</code></td><td>Autocomplete, selection, draft/applied state, source compatibility, pagination, and query history.</td><td>Expose supported scopes, retain the selected suggestion object, parse raw scoped syntax, and keep faceted terms source-specific.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt</code></td><td>Search field, source chips, suggestion rows, selected tag chips, filters, and result cards.</td><td>Add the scope row, typed suggestion/chip labels, Hitomi-specific source badge, and mixed/animated result indicators.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt</code></td><td>Post/media paging, image/video playback, prefetch, controls, and image-only overview.</td><td>Turn the image gallery into a media overview, preserve playback controls, and show poster/badge tiles for seekable media.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/creator/CreatorProfileCoordinator.kt</code></td><td>Dedicated creator stream backed by <code>CreatorPostsSourceAdapter</code>.</td><td>Reuse this flow for Hitomi artists rather than creating an artist-page-specific screen.</td></tr>
+          <tr><td><code>core-sources/src/main/kotlin/com/theoriacodex/sources/health/ProviderHealth.kt</code></td><td>Opt-in live provider route checks.</td><td>Add Hitomi autocomplete, Nozomi, gallery metadata, image, animated WebP, and MP4 probes with actionable URLs.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Canonical taxonomy</h3>
+      <p>A <em>facet</em> is the meaning of a search term, such as Artist or Series. A <em>source namespace</em> is the provider's spelling for that meaning. Store both because providers do not use identical names.</p>
+      <table>
+        <thead>
+          <tr><th>App facet</th><th>Hitomi namespace</th><th>NHentai namespace</th><th>UX placement</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Tag</td><td><code>tag</code>, <code>female</code>, <code>male</code></td><td><code>tag</code></td><td>Main scope. Female/male remain Tag subtypes with a small badge.</td></tr>
+          <tr><td>Artist</td><td><code>artist</code></td><td><code>artist</code></td><td>Main scope and Creator Profile action.</td></tr>
+          <tr><td>Character</td><td><code>character</code></td><td><code>character</code></td><td>Main scope.</td></tr>
+          <tr><td>Series</td><td><code>series</code></td><td><code>parody</code></td><td>Main scope; the app says Series consistently.</td></tr>
+          <tr><td>Group</td><td><code>group</code></td><td><code>group</code></td><td>More scopes; distinct from Artist.</td></tr>
+          <tr><td>Type</td><td><code>type</code></td><td><code>category</code></td><td>More scopes and source filter surfaces.</td></tr>
+          <tr><td>Language</td><td><code>language</code></td><td><code>language</code></td><td>More scopes and source filter surfaces.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Hitomi live protocol</h3>
+      <p>Hitomi's search page is a client for several public data services; it is not server-rendered search HTML. The app should call those data routes directly and must not embed a WebView.</p>
+      <div class="flow" role="group" aria-label="Hitomi request flow">
+        <div><strong>1. Autocomplete</strong><code>tagindex.hitomi.la/{scope}/{encoded characters}.json</code> returns up to ten arrays shaped as name, count, and namespace.</div>
+        <div><strong>2. Candidate IDs</strong>Binary big-endian <code>.nozomi</code> lists return gallery IDs in source order and support byte-range retrieval.</div>
+        <div><strong>3. Gallery metadata</strong><code>ltn.gold-usergeneratedcontent.net/galleries/{id}.js</code> returns a JavaScript assignment wrapping JSON.</div>
+        <div><strong>4. Media URLs</strong>Image/AVIF/WebP hosts are derived from file hashes plus the mutable configuration in <code>gg.js</code>; anime MP4s use the streaming video host.</div>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Contract</th><th>Verified example</th><th>Implementation consequence</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Mixed autocomplete</td><td><code>https://tagindex.hitomi.la/global/t/a/g.json</code> returns text, count, and namespaces including tag, artist, character, and series.</td><td><code>All</code> uses the global endpoint; an explicit scope changes only the endpoint prefix.</td></tr>
+          <tr><td>Scoped autocomplete</td><td><code>https://tagindex.hitomi.la/artist/k/i/o.json</code> returns artist-only results.</td><td>Do not fetch every scope on each keystroke. Debounce one endpoint based on the selected scope.</td></tr>
+          <tr><td>Gallery <code>4042375</code></td><td>Type <code>artistcg</code>, 44 WebP file records, artist <code>najar</code>, series and character metadata; its first WebP contains <code>VP8X</code>, <code>ANIM</code>, and <code>ANMF</code> chunks.</td><td>Represent 44 ordered animated-image items. Do not route them through ExoPlayer or collapse them into one video.</td></tr>
+          <tr><td>Anime <code>7231</code></td><td>Type <code>anime</code>, <code>videofilename=cheat-item-kanrikyoku-no-oshigoto-ex-1.mp4</code>, two WebP records used as cover/poster metadata, and no artist.</td><td>Expose one playable MP4 media item with a WebP poster; do not report the two poster files as a two-page post.</td></tr>
+          <tr><td>Video transport</td><td>The MP4 route returned HTTP 206, <code>video/mp4</code>, and <code>Content-Range: bytes 0-1023/196139272</code>.</td><td>Media3 can seek and resume using byte ranges. Live health must verify range support, not download the entire file.</td></tr>
+          <tr><td>CDN configuration</td><td><code>gg.js</code> provides a changing base path plus a shard function selecting hosts such as <code>w1</code>/<code>w2</code> and <code>a1</code>/<code>a2</code>.</td><td>Parse and cache the live configuration, refresh once on media 404, then try the alternate shard before marking media unavailable.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout risk">
+        <strong>Protocol risk:</strong> the JavaScript assets and CDN base are implementation details maintained by Hitomi and can change without notice. Keep captured fixtures for deterministic tests, but treat the opt-in live health report as the current truth. A parse failure must degrade only Hitomi and include the failing URL/config version.
+      </div>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+
+      <article>
+        <h3>Phase 1: Freeze Protocol Fixtures And Add Binary HTTP Primitives</h3>
+        <p>Create the low-level pieces needed to read Hitomi without changing source exposure or Search UI.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>The source module can fetch text JSON/JavaScript, arbitrary byte ranges, response headers, and binary Nozomi integers deterministically and safely.</td></tr>
+            <tr><td>Specific edits</td><td>Add a byte-response type and <code>getBytes</code> or equivalent Range-aware method to <code>SourceHttpClient.kt</code> and <code>DefaultSourceHttpClient.kt</code>. Preserve existing text APIs as wrappers so all current adapters remain source-compatible. Create <code>sources/hitomi/HitomiProtocol.kt</code>, <code>HitomiNozomi.kt</code>, and fixture helpers for big-endian decoding, JavaScript-assignment JSON extraction, autocomplete path encoding, query-to-Nozomi URL compilation, and bounded size checks.</td></tr>
+            <tr><td>Fixtures</td><td>Capture sanitized, versioned fixtures for global and artist suggestions, a short Nozomi list, gallery <code>4042375</code>, gallery <code>7231</code>, and the relevant <code>gg.js</code> shape. Do not store media payloads.</td></tr>
+            <tr><td>Commands</td><td><code>./gradlew :core-sources:test</code></td></tr>
+            <tr><td>Expected observation</td><td>Existing HTTP tests remain green; new tests prove exact Range headers, 206/200 handling, body-size limits, big-endian IDs, malformed/truncated data rejection, and cancellation propagation.</td></tr>
+            <tr><td>Acceptance</td><td>No Hitomi UI is exposed yet. The protocol layer can decode the fixture IDs and both gallery records without network access.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 2: Introduce Faceted Terms And Backward-Compatible Persistence</h3>
+        <p>Move taxonomy meaning into the domain so suggestions, selected chips, recents, saved posts, and post actions do not flatten Artist or Series into an ordinary tag.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>A query can distinguish <code>Artist: najar</code> from <code>Tag: najar</code>, and old persisted queries still load as ordinary tags.</td></tr>
+            <tr><td>Domain model</td><td>Add <code>SearchFacet</code> and <code>SearchTerm(value, facet, sourceNamespace)</code> under <code>core-domain/.../model/Query.kt</code>. Migrate <code>Query</code> to typed include/exclude terms, with compatibility accessors or helpers for adapters that consume only text. Add <code>PostTaxonomyTerm</code>, <code>creatorProfiles</code>, and explicit animated-media metadata to <code>Post.kt</code> while retaining <code>canonicalTags</code>, <code>rawTags</code>, <code>authorName</code>, and the primary <code>creatorProfile</code>.</td></tr>
+            <tr><td>Suggestion contract</td><td>Add <code>FacetedSearchSourceAdapter</code> with supported facets and faceted autocomplete. Keep the generic <code>SourceAdapter.autocompleteTags</code> path for sources that do not opt in.</td></tr>
+            <tr><td>Persistence</td><td>Extend <code>QueryRecord</code>, post/media records, recent-search records, and Codex share/import models with optional typed fields. If typed query fields are absent, upgrade each legacy include/exclude string to <code>SearchFacet.TAG</code>. Write typed records and retain legacy label lists where useful for safe downgrade/import interoperability.</td></tr>
+            <tr><td>Hashing</td><td>Update <code>QueryHash</code> to include facet, namespace, polarity, and normalized value so terms with identical text do not share scroll state or recents identity.</td></tr>
+            <tr><td>Compatibility boundary</td><td>Unified mode accepts portable general Tag terms only in this release. Artist, Series, Character, Group, Type, and Language terms remain owned by a selected source.</td></tr>
+            <tr><td>Commands</td><td><code>./gradlew :core-domain:test :core-data:test :core-sources:test :app:testDebugUnitTest</code></td></tr>
+            <tr><td>Acceptance</td><td>Legacy query/settings/recents/Codex fixtures load without loss; a typed query round-trips; query hashes distinguish facets; existing non-faceted sources receive the same plain strings as before.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 3: Build Reusable Scoped Autocomplete For Hitomi And NHentai</h3>
+        <p>Add the agreed search interaction before exposing Hitomi results, and prove it against NHentai's existing taxonomy.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>Source mode shows <code>All</code>, <code>Tags</code>, <code>Artists</code>, <code>Characters</code>, <code>Series</code>, and <code>More</code> only when the adapter supports facets.</td></tr>
+            <tr><td>Coordinator</td><td>Expose supported facets and an ephemeral selected autocomplete scope. Pass full suggestion objects into include/exclude actions. Parse raw prefixes such as <code>artist:</code>, <code>series:</code>, <code>female:</code>, and <code>-character:</code>; switch scope automatically; preserve selection meaning; and reset unsupported scope state when mode changes.</td></tr>
+            <tr><td>UI</td><td>Add a horizontally scrollable scope row beneath the input. <code>All</code> uses mixed suggestions with facet/count metadata. Explicit scopes request only one endpoint. Selected chips read, for example, <code>Artist · najar</code>, <code>Series · the idolmaster</code>, or <code>− Female tag · x-ray</code>. <code>More</code> contains Group, Type, and Language.</td></tr>
+            <tr><td>NHentai</td><td>Implement <code>FacetedSearchSourceAdapter</code> in <code>NhentaiSourceAdapter</code> and preserve the API's taxonomy type. Compile app Series to NHentai <code>parody</code> and app Type to <code>category</code>. Retain current language/full-color filter behavior and direct gallery-ID lookup.</td></tr>
+            <tr><td>Cache</td><td>Update <code>TagSuggestionStore</code> to deduplicate by source + facet + namespace + normalized value, not text alone. Migrate old cache rows as general tags.</td></tr>
+            <tr><td>Recommendations</td><td>Only general Tag terms participate in favorite-tag storage, For You training, and tag affinity. Artists, types, languages, series, characters, and groups remain search metadata unless a later plan explicitly broadens recommendations.</td></tr>
+            <tr><td>Commands</td><td><code>./gradlew :core-sources:test :app:testDebugUnitTest --tests '*SearchCoordinatorTest*' --tests '*TagSuggestionStoreTest*'</code></td></tr>
+            <tr><td>Acceptance</td><td>NHentai visibly benefits from the new scopes before Hitomi exposure; selecting the same text as Tag and Artist creates two distinguishable terms; switching to Unified removes or blocks source-only facets without silently excluding sources.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 4: Implement Hitomi Search, Pagination, Metadata, And Media URL Resolution</h3>
+        <p>Add <code>HitomiSourceAdapter</code> and expose it only after deterministic search and resolve behavior is green.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>Hitomi returns stable, paginated <code>Post</code> pages for blank newest, scoped include/exclude combinations, popular month, top year, and random ordering.</td></tr>
+            <tr><td>Source registration</td><td>Add <code>SourceKey.HITOMI</code>; update exhaustive normalization, weights, stubs, source logos/names, request headers, <code>RealAdapterRegistry</code>, app exposure, and all enum tests. Use <code>https://hitomi.la/</code> as the referer.</td></tr>
+            <tr><td>Autocomplete</td><td>Implement the global/scoped tagindex JSON contract with 300 ms app debounce, URL-encoded Unicode characters, ten-result provider limit, input-length bounds, and namespace validation.</td></tr>
+            <tr><td>Nozomi compilation</td><td>Map newest to date-added Nozomi order, Popular to <code>popular/month</code>, Top to <code>popular/year</code>, and Random to a deterministic per-query shuffle seed carried in the page token. Language is encoded into the Nozomi suffix. Female/male namespaces use Hitomi's tag-area path rules.</td></tr>
+            <tr><td>Multiple terms</td><td>Choose the smallest positive list as the primary candidate stream using suggestion counts or Content-Length. Range-read it in chunks. Cache bounded secondary membership sets for remaining include/exclude terms, intersect includes, subtract excludes, and continue reading until a page contains the target number of surviving IDs. Encode query hash, primary byte offset, and random seed in an opaque page token. Reject a token whose query hash does not match.</td></tr>
+            <tr><td>Blank query</td><td>Range-read <code>n/index-all.nozomi</code> rather than downloading the entire multi-megabyte list. Do the equivalent for unfiltered Popular/Top paths.</td></tr>
+            <tr><td>Gallery hydration</td><td>Fetch <code>galleries/{id}.js</code> with bounded concurrency, parse the JavaScript assignment as JSON, and preserve source order while dropping only individually missing/blocked galleries. Search results may remain sparse, but must carry stable title, preview/poster, taxonomy, creator summary, and user-visible media count before opening.</td></tr>
+            <tr><td>CDN helper</td><td>Create <code>HitomiMediaUrlResolver</code> to fetch/parse/cache <code>gg.js</code>, derive AVIF/WebP/original candidates, and return ordered progressive candidates. Cache configuration with its base/version. On 404, refresh once and try the alternate shard; do not retry indefinitely or reinterpret cancellation as provider failure.</td></tr>
+            <tr><td>Capabilities</td><td>Declare exclude support because the adapter performs exact list subtraction. Declare newest/popular/top/random support. Do not claim server-side date range or minimum score support.</td></tr>
+            <tr><td>Commands</td><td><code>./gradlew :core-domain:test :core-sources:test :core-stubs:test :app:testDebugUnitTest</code></td></tr>
+            <tr><td>Acceptance</td><td>A fixture search reproduces <code>type:artistcg artist:najar</code> in Popular/month order, pagination has no duplicate/skipped IDs, malformed galleries do not fail the entire page, and search cards remain visually stable before opening.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 5: Add Creator Browsing, Typed Post Actions, And Deep Links</h3>
+        <p>Connect resolved Hitomi metadata to existing app navigation rather than leaving taxonomy useful only in the search field.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>Artists, characters, series, groups, types, languages, and gendered/general tags retain their meaning when displayed or searched from a post.</td></tr>
+            <tr><td>Post metadata</td><td>Populate typed taxonomy from <code>artists</code>, <code>groups</code>, <code>parodys</code>, <code>characters</code>, <code>type</code>, <code>language</code>, and tag gender flags. Keep <code>canonicalTags</code>/<code>rawTags</code> as a flat compatibility projection for recommendations and existing visibility/tag displays.</td></tr>
+            <tr><td>Creators</td><td>Create one <code>CreatorProfile</code> per artist. Use the first as <code>authorName</code>/<code>creatorProfile</code> for compact existing surfaces and preserve all in <code>creatorProfiles</code>. <code>uploadsQuery</code> carries the canonical artist facet. Hide creator actions when the artist list is null/empty.</td></tr>
+            <tr><td>Artist stream</td><td>Implement <code>CreatorPostsSourceAdapter</code> in <code>HitomiSourceAdapter</code> by delegating to its artist search and page-token logic. Add Hitomi to <code>supportsCreatorBrowsing</code>. Do not scrape the artist HTML page.</td></tr>
+            <tr><td>Post actions</td><td>Update <code>PostTagActionSection</code> and relevant Search/Viewer/Codex/Creator call sites to add typed terms. Present compact grouped sections; favorite long-press remains available only for general Tag entries.</td></tr>
+            <tr><td>Deep links</td><td>Parse Hitomi gallery routes whose final slug segment contains the numeric ID, including <code>/anime/...</code>, <code>/cg/...</code>, other gallery types, and <code>/reader/{id}.html</code>. Parse <code>/artist/{slug}-all.html</code> into a Creator Profile. Add <code>hitomi.la</code> and <code>www.hitomi.la</code> HTTP/HTTPS entries to <code>AndroidManifest.xml</code>. URL fragments such as <code>#1</code> do not change the source post ID.</td></tr>
+            <tr><td>Commands</td><td><code>./gradlew :core-data:test :core-sources:test :app:testDebugUnitTest --tests '*CreatorProfile*' --tests '*ExternalPostDeepLinksTest*'</code></td></tr>
+            <tr><td>Acceptance</td><td>Gallery <code>4042375</code> shows Najar as a tappable creator and opens a paginated artist stream; gallery <code>7231</code> shows no dead creator action; tapping a Series or Character term prepares the correct typed Hitomi search.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 6: Generalize Viewer Media Overview And Support Animated WebP And Anime Video</h3>
+        <p>Make mixed media a Viewer capability, then use it for Hitomi.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>The main Viewer renders every ordered media item using its correct renderer, and the overview can navigate all item kinds.</td></tr>
+            <tr><td>Media classification</td><td>Add an Animated Image classification or explicit <code>ImageRef</code> flag so animated WebP is not inferred as video and is not limited to the current GIF-only check. Propagate it through persistence/download/share. Hitomi may mark files animated from the gallery's animated tag, but tests should also prove WebP animation chunk detection or decoder output when metadata is uncertain.</td></tr>
+            <tr><td>Decoder support</td><td>Retain Coil <code>ImageDecoderDecoder</code> on API 28+, which supports animated WebP through Android's image decoder. Run an API 26/27 spike because the current fallback is <code>GifDecoder</code>. If animated WebP is static there, add a small maintained animated-WebP decoder dependency or a bounded local transcode/cache path; do not silently declare min-SDK support while showing still frames.</td></tr>
+            <tr><td>Gallery mapping</td><td>For non-anime galleries, map each ordered file to one media page with progressive AVIF/WebP/original candidates and source headers. For <code>type=anime</code> with <code>videofilename</code>, map exactly one <code>video/mp4</code> item and use the WebP file record selected by Hitomi's own gallery logic as poster/preview metadata.</td></tr>
+            <tr><td>Overview</td><td>Rename the image-gallery semantics internally to Media Overview. Make it available whenever the selected post has more than one media item, regardless of whether the current item is seekable. Include still thumbnails, animated-image badges, GIF/Ugoira badges, and video poster/play badges. Do not autoplay grid tiles.</td></tr>
+            <tr><td>Playback</td><td>Use the existing Media3 player for MP4, preserving play/pause, seek, double-tap jump, rate controls, cache/prefetch, background cancellation, and release behavior. A provider socket/TLS/stream failure during prefetch must mark media unavailable and must not terminate Viewer; coroutine cancellation must still be rethrown.</td></tr>
+            <tr><td>Download/share</td><td>Downloading an anime saves the MP4 once, with the correct extension and source headers. Downloading a gallery page saves only the selected page using the correct page index/count. Saving to Codex preserves all ordered media metadata.</td></tr>
+            <tr><td>Commands</td><td><code>./gradlew :app:testDebugUnitTest --tests '*PostMediaTest*' --tests '*Viewer*' --tests '*PostDownloadServiceTest*' :app:compileDebugAndroidTestKotlin</code></td></tr>
+            <tr><td>Acceptance</td><td>Gallery <code>4042375</code> animates and pages in order; its overview opens from any page. Anime <code>7231</code> displays one video with poster, plays and seeks in Viewer, and never exposes the poster records as fake gallery pages.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 7: Live Health, Device Acceptance, Documentation, And Closeout</h3>
+        <p>Prove the source across deterministic, live, app-level, and installed-device lanes before declaring the plan complete.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>Hitomi is release-ready, observable when it drifts, and documented as part of the current product.</td></tr>
+            <tr><td>Health probes</td><td>Add a Hitomi probe case for blank newest, <code>artist:najar</code>, global/scoped autocomplete, gallery <code>4042375</code> resolve and animated WebP range, gallery <code>7231</code> resolve and MP4 range, plus current <code>gg.js</code> parsing. Include the failing URL and protocol step in reports.</td></tr>
+            <tr><td>App smoke</td><td>Add Hitomi to <code>LiveSearchCoordinatorRouteTest</code>, source exposure tests, media-header reachability, deep-link tests, and app Search/Creator/Viewer route coverage.</td></tr>
+            <tr><td>Manual devices</td><td>Validate portrait and landscape on one API 28+ physical/emulated device and one API 26/27 device. Exercise background/resume, rapid post/page swipes, overview navigation, network interruption, and installed release-build playback. Use <code>adb logcat -b crash -d</code> for release crashes even when <code>run-as</code> is unavailable.</td></tr>
+            <tr><td>Docs</td><td>Update <code>README.md</code> source/media/search descriptions. Add only durable provider diagnostic or architectural findings to <code>AGENTS.md</code>, especially the binary Nozomi and mutable <code>gg.js</code> contract if implementation confirms it. Keep this ExecPlan's progress, decisions, discoveries, validation evidence, and retrospective current.</td></tr>
+            <tr><td>Commands</td><td><code>./gradlew lint test :app:compileDebugAndroidTestKotlin :app:assembleDebug</code>, live commands in Validation, <code>git diff --check</code>, and HTML validation for this plan.</td></tr>
+            <tr><td>Acceptance</td><td>All deterministic gates pass; Hitomi's live probe is OK; the app-level live route returns and opens media; both media examples pass installed-device acceptance or any unavailable device lane remains explicitly blocked in this plan and <code>working_list.md</code>.</td></tr>
+          </tbody>
+        </table>
+      </article>
+    </section>
+
+    <section id="work-plan">
+      <h2>Work Plan</h2>
+      <p>Implement in phase order. Do not expose Hitomi in <code>SourceMetadata.exposedRealSources()</code> until the adapter, sparse-card stability, resolution, headers, and deterministic source tests pass. Keep each phase independently reviewable and use a user-facing Conventional Commit message after each completed phase.</p>
+      <ol>
+        <li>Add byte-range HTTP support and Hitomi protocol fixtures/tests. Ensure text adapters see no behavioral change.</li>
+        <li>Add typed search/post domain models and persistence migration. Run core-domain and core-data tests before changing Search UI.</li>
+        <li>Build scoped search UX and prove it first with NHentai. This isolates product/model correctness from Hitomi network complexity.</li>
+        <li>Implement Hitomi protocol helpers, adapter, pagination, URL resolution, registry wiring, stub fixtures, and exhaustive enum updates. Keep exposure disabled until this step is green.</li>
+        <li>Add typed post actions, multiple artists, Creator Profile support, and gallery/artist deep links.</li>
+        <li>Generalize the Viewer overview and add animated WebP/API-level support plus anime video mapping.</li>
+        <li>Expose Hitomi, run live/app/device checks, update current-facing docs and this plan, and close only with recorded evidence.</li>
+      </ol>
+
+      <h3>Exact new source files</h3>
+      <ul>
+        <li><code>core-sources/src/main/kotlin/com/theoriacodex/sources/hitomi/HitomiSourceAdapter.kt</code> — adapter orchestration, search, creator search, and resolve.</li>
+        <li><code>core-sources/src/main/kotlin/com/theoriacodex/sources/hitomi/HitomiProtocol.kt</code> — constants, path encoding, gallery assignment parsing, and response validation.</li>
+        <li><code>core-sources/src/main/kotlin/com/theoriacodex/sources/hitomi/HitomiNozomi.kt</code> — binary ID decoding, range paging, intersections, exclusions, and page-token state.</li>
+        <li><code>core-sources/src/main/kotlin/com/theoriacodex/sources/hitomi/HitomiMediaUrlResolver.kt</code> — <code>gg.js</code> config parsing/cache and media candidates.</li>
+        <li><code>core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/HitomiSourceAdapterTest.kt</code> and focused protocol/Nozomi/media-resolver tests.</li>
+        <li><code>core-stubs/src/main/resources/stubs/hitomi/</code> — deterministic search/resolve scenarios without live network use.</li>
+      </ul>
+
+      <h3>Cross-cutting files that must be audited</h3>
+      <p>Adding <code>SourceKey.HITOMI</code> makes Kotlin exhaustive <code>when</code> expressions a useful compile-time checklist. In addition to compiler failures, explicitly inspect:</p>
+      <ul>
+        <li><code>core-sources/src/main/kotlin/com/theoriacodex/sources/RealAdapterRegistry.kt</code></li>
+        <li><code>core-domain/src/main/kotlin/com/theoriacodex/domain/tags/SourceTagNormalization.kt</code></li>
+        <li><code>core-data/src/main/kotlin/com/theoriacodex/data/repository/Repositories.kt</code> and <code>FileBackedRepositories.kt</code></li>
+        <li><code>core-stubs/src/main/kotlin/com/theoriacodex/stubs/StubFixtureLoader.kt</code></li>
+        <li><code>app/src/main/java/com/theoriacodex/app/source/SourceMetadata.kt</code> and <code>ExternalPostDeepLinks.kt</code></li>
+        <li><code>app/src/main/java/com/theoriacodex/app/search/SearchCoordinator.kt</code> and <code>SearchScreen.kt</code></li>
+        <li><code>app/src/main/java/com/theoriacodex/app/media/PostMedia.kt</code>, <code>MediaRequestFactory.kt</code>, and <code>PostDownloadService.kt</code></li>
+        <li><code>app/src/main/java/com/theoriacodex/app/viewer/ViewerSessionCoordinator.kt</code> and <code>ViewerScreen.kt</code></li>
+        <li><code>app/src/main/java/com/theoriacodex/app/creator/CreatorProfileUi.kt</code> and <code>CreatorProfileCoordinator.kt</code></li>
+        <li><code>app/src/main/java/com/theoriacodex/app/recommend/TrainingTags.kt</code> and <code>TagAssociation.kt</code></li>
+        <li><code>app/src/main/AndroidManifest.xml</code>, current source tests, Codex share/import models, and README source lists.</li>
+      </ul>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <p>Run commands from the repository root. Default test lanes must remain network-independent. Live lanes are opt-in and should be interpreted per provider so unrelated source drift does not erase valid Hitomi evidence.</p>
+      <table>
+        <thead>
+          <tr><th>Check</th><th>Command or action</th><th>Expected result</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Domain and persistence</td><td><code>./gradlew :core-domain:test :core-data:test</code></td><td>Legacy and typed queries/posts round-trip; no query-hash collisions; existing JSON fixtures still load.</td></tr>
+          <tr><td>Provider fixtures</td><td><code>./gradlew :core-sources:test :core-stubs:test</code></td><td>Binary, URL, adapter, creator, resolve, registry, and stub contracts pass without network access.</td></tr>
+          <tr><td>App behavior</td><td><code>./gradlew :app:testDebugUnitTest</code></td><td>Search scopes, chips, recents, creator routing, post actions, media classification, overview, downloads, deep links, and source metadata pass.</td></tr>
+          <tr><td>Broad Android gate</td><td><code>./gradlew lint test :app:compileDebugAndroidTestKotlin :app:assembleDebug</code></td><td>Build succeeds with no new lint/test regressions.</td></tr>
+          <tr><td>Live provider report</td><td><code>./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true</code></td><td>Hitomi newest, scoped search, autocomplete, resolve, image, animated WebP, and MP4 range steps report OK with diagnostic URLs.</td></tr>
+          <tr><td>Live app route</td><td><code>./gradlew :app:testDebugUnitTest -Ptheoria.liveSources=true -Ptheoria.liveSources.sources=HITOMI --tests '*LiveSearchCoordinatorRouteTest*'</code></td><td>The real registry and coordinator return Hitomi cards, preserve typed suggestions, resolve both media examples, and reach representative media with app headers.</td></tr>
+          <tr><td>Media transport</td><td>Range-request the resolved MP4 and one resolved WebP using the exact app headers.</td><td>MP4 returns 206 and <code>video/mp4</code>; WebP returns 200/206 and <code>image/webp</code>; no whole-file download is required for the probe.</td></tr>
+          <tr><td>Device: gallery</td><td>Open <code>https://hitomi.la/cg/hana-12-2024-webp-animated-%E6%97%A5%E6%9C%AC%E8%AA%9E-4042375.html#1</code> through Android link handling.</td><td>The app resolves one 44-item post, animates WebP, preserves page order/count, opens the overview on every page, and opens Najar's Creator Profile.</td></tr>
+          <tr><td>Device: anime</td><td>Open <code>https://hitomi.la/anime/cheat-item-kanrikyoku-no-oshigoto-ex-1-english-7231.html#1</code>.</td><td>The app shows one video with poster; playback, seek, pause/resume, rate, background/foreground, download, and back navigation work without fake poster pages or creator action.</td></tr>
+          <tr><td>Minimum SDK</td><td>Repeat the animated gallery on API 26/27.</td><td>Animated WebP moves. If it does not, Phase 6 remains incomplete until a decoder/transcode solution is implemented and tested.</td></tr>
+          <tr><td>Failure behavior</td><td>Interrupt network during adjacent-media prefetch and replay after restoring connectivity.</td><td>The current media remains stable; failed adjacent media becomes unavailable/retryable; cancellation is not swallowed; Viewer does not crash.</td></tr>
+          <tr><td>Documentation integrity</td><td><code>npx --yes html-validate .docs/exec/hitomi-source-faceted-search-and-mixed-media.html</code> and <code>git diff --check</code></td><td>The plan is valid standalone HTML and the diff contains no whitespace errors.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Behavioral acceptance checklist</h3>
+      <ul>
+        <li>Hitomi is visible in source mode and Unified mode only after adapter readiness.</li>
+        <li>All/Tags/Artists/Characters/Series/More suggestions show correct facet and count.</li>
+        <li>Raw scoped input and suggestion selection produce the same typed query.</li>
+        <li>Source-only facets cannot silently remove unrelated Unified sources.</li>
+        <li>Positive and negative facets combine correctly and pagination has no repeats.</li>
+        <li>Popular maps to month and Top maps to year for Hitomi; the UI does not claim unsupported date-range or score filters.</li>
+        <li>Post actions keep taxonomy; recommendations and favorite tags remain general-tag-only.</li>
+        <li>Multiple artists are preserved; absent artists produce no action.</li>
+        <li>Animated galleries, still galleries, and anime video all use the existing Viewer navigation model.</li>
+        <li>Saved/Codex/Recents posts retain taxonomy, creators, media order, animation metadata, and playable video URLs after app restart.</li>
+      </ul>
+    </section>
+
+    <section id="living-log">
+      <h2>Living Log</h2>
+
+      <h3>Progress</h3>
+      <ul>
+        <li>[x] 2026-07-10 — Agreed on scoped chips, source-specific facets, and poster/badge media overview behavior.</li>
+        <li>[x] 2026-07-10 — Inspected current Query, suggestions, persistence, source registry, creator flow, media classification, and Viewer overview boundaries.</li>
+        <li>[x] 2026-07-10 — Verified global/scoped autocomplete, Nozomi lists, gallery JavaScript metadata, mutable CDN configuration, animated WebP chunks, and MP4 byte-range playback.</li>
+        <li>[x] 2026-07-10 — Authored this implementation-ready HTML ExecPlan.</li>
+        <li>[ ] Phase 1 — Protocol fixtures and binary HTTP.</li>
+        <li>[ ] Phase 2 — Faceted domain/persistence migration.</li>
+        <li>[ ] Phase 3 — Shared scoped UX and NHentai reuse.</li>
+        <li>[ ] Phase 4 — Hitomi adapter and source exposure.</li>
+        <li>[ ] Phase 5 — Creators, typed post actions, and deep links.</li>
+        <li>[ ] Phase 6 — Animated WebP, anime video, and Media Overview.</li>
+        <li>[ ] Phase 7 — Live/device validation, docs, and closeout.</li>
+      </ul>
+
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li><strong>Animated example is not a video:</strong> gallery <code>4042375</code> contains 44 WebP file entries, and the sampled file contains WebP animation chunks. This requires an animated-image path, not Media3 video.</li>
+        <li><strong>Anime posters are not pages:</strong> gallery <code>7231</code> has two WebP records plus one top-level <code>videofilename</code>. Hitomi's own gallery logic uses these as cover/poster material and renders one video.</li>
+        <li><strong>Search is binary:</strong> search result HTML is only a shell. Typed searches read big-endian Nozomi ID lists, so the current text-only HTTP abstraction is insufficient.</li>
+        <li><strong>CDN paths move:</strong> the live <code>gg.js</code> base and shard routing are required to construct working image URLs. A hard-coded URL worked on one shard and returned 404 on the other.</li>
+        <li><strong>Existing UX already carries type halfway:</strong> NHentai suggestions retain taxonomy in <code>TagSuggestion.type</code>, but selection discards it. The shared model is therefore a correction of an existing information-loss boundary, not only new Hitomi UI.</li>
+      </ul>
+
+      <h3>Decision Log</h3>
+      <ul>
+        <li><strong>Decision:</strong> build one faceted-search layer and reuse it for Hitomi and NHentai. <strong>Rationale:</strong> both providers expose nearly the same taxonomy with a small Series/parody and Type/category vocabulary mismatch. <strong>Date/Author:</strong> 2026-07-10 / User and Codex.</li>
+        <li><strong>Decision:</strong> source-specific facets are available only in source mode for this release. <strong>Rationale:</strong> cross-source artist/series semantics are not reliable across every enabled adapter, and silent source exclusion would make Unified behavior hard to trust. <strong>Date/Author:</strong> 2026-07-10 / User and Codex.</li>
+        <li><strong>Decision:</strong> the primary scope row is All, Tags, Artists, Characters, Series, and More; female/male are Tag subtypes. <strong>Rationale:</strong> this keeps the common taxonomy visible without creating an unwieldy row. <strong>Date/Author:</strong> 2026-07-10 / User and Codex.</li>
+        <li><strong>Decision:</strong> the overview represents every media kind but does not autoplay tiles. <strong>Rationale:</strong> playback stays focused in the main Viewer and avoids simultaneous decode/network/GPU load. <strong>Date/Author:</strong> 2026-07-10 / User and Codex.</li>
+        <li><strong>Decision:</strong> use Hitomi's data endpoints directly, not a WebView or rendered search-page scraper. <strong>Rationale:</strong> direct autocomplete, Nozomi, gallery metadata, and media contracts are testable and fit <code>SourceAdapter</code>. <strong>Date/Author:</strong> 2026-07-10 / Codex.</li>
+        <li><strong>Decision:</strong> map Hitomi Popular to month and Top to year in v1. <strong>Rationale:</strong> it supports the requested popular-month query without expanding the app-wide sort model during source integration. <strong>Date/Author:</strong> 2026-07-10 / Codex.</li>
+        <li><strong>Decision:</strong> only general Tag terms feed favorites and For You. <strong>Rationale:</strong> search taxonomy and recommendation affinity are different product concepts; broadening training semantics requires separate evidence. <strong>Date/Author:</strong> 2026-07-10 / Codex.</li>
+      </ul>
+
+      <h3>Outcomes And Retrospective</h3>
+      <p>Planning outcome: the work is divided so provider uncertainty is retired before exposure, faceted search is proved with an already-supported source, and Viewer improvements are global rather than Hitomi-specific. Update this section after every phase with the user-visible result, exact validation evidence, remaining risk, and any scope change. At completion, replace this paragraph with the released behavior and the durable provider lessons added to <code>AGENTS.md</code>.</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <p>All planned migrations are additive and should be safe to rerun. No destructive database reset, cache wipe, or history deletion is required.</p>
+      <ul>
+        <li><strong>Interrupted persistence migration:</strong> keep record fields optional and read legacy fields first when typed fields are absent. Never rewrite user files merely by reading them. Normal repository writes can upgrade a record later.</li>
+        <li><strong>Bad page token:</strong> treat opaque token parse/hash/version failure as a fresh first page or a typed source error; never use an offset from a different query.</li>
+        <li><strong>Partial Nozomi response:</strong> reject byte counts not divisible by four, retry according to normal HTTP policy, and preserve the previous Search page if pagination fails.</li>
+        <li><strong>CDN 404:</strong> invalidate the cached <code>gg.js</code> config once, refetch, rebuild candidates, try the alternate shard once, then mark that media unavailable. Do not loop.</li>
+        <li><strong>Gallery hydration failure:</strong> skip or mark only the failed gallery card. Preserve source order and do not fail a whole page because one gallery was removed or blocked.</li>
+        <li><strong>Media failure:</strong> provider TLS/socket/stream failures during background prefetch become unavailable media; coroutine cancellation is rethrown. The current Viewer session remains alive.</li>
+        <li><strong>Animated decoder experiment:</strong> keep API 26/27 support behind focused code and tests. If a trial dependency fails quality or size requirements, remove it cleanly and record the alternative; do not leave two active decoders.</li>
+        <li><strong>Resume after interruption:</strong> read Current Status, Progress, the latest Decision/Discovery entries, and <code>working_list.md</code>. Run the last phase's focused command before continuing.</li>
+        <li><strong>Rollback:</strong> before source exposure, removing the Hitomi registry/exposure entry isolates unfinished protocol work. After typed persistence ships, retain readers for typed fields even if Hitomi exposure is temporarily disabled.</li>
+      </ul>
+    </section>
+
+    <section id="appendix">
+      <h2>Appendix: Evidence And Notes</h2>
+
+      <details open>
+        <summary>Reference URLs verified during planning</summary>
+        <ul>
+          <li><code>https://tagindex.hitomi.la/global/t/a/g.json</code></li>
+          <li><code>https://tagindex.hitomi.la/artist/k/i/o.json</code></li>
+          <li><code>https://hitomi.la/search.html?type%3Aartistcg%20artist%3Anajar%20orderby%3Apopular%20orderbykey%3Amonth</code></li>
+          <li><code>https://ltn.gold-usergeneratedcontent.net/galleries/4042375.js</code></li>
+          <li><code>https://ltn.gold-usergeneratedcontent.net/galleries/7231.js</code></li>
+          <li><code>https://hitomi.la/artist/arisue%20tsukasa-all.html</code></li>
+          <li><code>https://hitomi.la/cg/hana-12-2024-webp-animated-%E6%97%A5%E6%9C%AC%E8%AA%9E-4042375.html#1</code></li>
+          <li><code>https://hitomi.la/anime/cheat-item-kanrikyoku-no-oshigoto-ex-1-english-7231.html#1</code></li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>Concise live evidence from 2026-07-10</summary>
+        <pre><code>Gallery 4042375:
+type=artistcg
+files=44
+artist=najar
+sample WebP chunks=VP8X, ANIM, ANMF
+
+Gallery 7231:
+type=anime
+videofilename=cheat-item-kanrikyoku-no-oshigoto-ex-1.mp4
+files=2 (cover/poster metadata)
+artists=null
+
+MP4 range probe:
+HTTP 206
+Content-Type: video/mp4
+Content-Range: bytes 0-1023/196139272</code></pre>
+      </details>
+
+      <details>
+        <summary>Suggested Conventional Commit sequence</summary>
+        <pre><code>feat(http): add binary range responses for source protocols
+
+feat(search): preserve faceted query terms across persistence
+
+feat(search): add scoped taxonomy suggestions for gallery sources
+
+feat(hitomi): add paginated search and gallery resolution
+
+feat(creators): browse Hitomi artists and typed post metadata
+
+feat(viewer): unify image, animated, and video media overview
+
+test(hitomi): add live source and device acceptance coverage
+
+docs(hitomi): document faceted search and mixed-media source behavior</code></pre>
+      </details>
+
+      <details>
+        <summary>Non-goals and future extensions</summary>
+        <ul>
+          <li>Cross-source artist/series/character matching in Unified mode can be planned later with explicit capability negotiation and visible source participation.</li>
+          <li>Hitomi's unscoped full-text galleries B-tree is not required for v1 because the app is tag/facet-driven. Add it only if title/free-text search becomes a product requirement.</li>
+          <li>Hitomi OR expressions are not represented by the current query model and remain out of scope.</li>
+          <li>Popularity windows beyond the v1 Popular/month and Top/year mapping can be generalized later if the app gains an explicit time-window sort model.</li>
+          <li>Groups are searchable taxonomy, not creator profiles, unless later UX defines a distinct Circle/Group browsing surface.</li>
+        </ul>
+      </details>
+    </section>
+  </main>
+</body>
+</html>

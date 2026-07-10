@@ -1,8 +1,20 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-04T20:58:00Z
+updated_at: 2026-07-10T07:01:55-04:00
 ---
 # Working List
+
+## Current Task: Hitomi Source ExecPlan
+
+### Pending
+
+### In Progress
+
+### Done
+- [x] Verify the new HTML ExecPlan structure, required sections, links, and diff (`npx --yes html-validate`, required-section scan, `git diff --check`)
+- [x] Write the Hitomi source, faceted-search, creator, and mixed-media ExecPlan from live route evidence
+- [x] Confirm the agreed UX direction and inspect the current query, suggestion, creator, source, and Viewer boundaries
+- [x] Create the current-task checklist without removing historical work
 
 ## Pending
 - [ ] Manual device acceptance for Recents behavior
