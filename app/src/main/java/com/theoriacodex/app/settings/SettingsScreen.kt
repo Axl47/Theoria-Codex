@@ -486,14 +486,14 @@ fun SettingsScreen(
 }
 
 private fun formatProviderHealthLine(snapshot: ProviderHealthSnapshot?): String {
-    if (snapshot == null) return "Health: not checked"
+    if (snapshot == null) return "Not checked"
     val latency = snapshot.latencyMs?.let { "${it}ms" }
     val detail = listOfNotNull(latency, snapshot.failureReason, snapshot.message)
         .take(2)
         .joinToString(" - ")
     return if (detail.isBlank()) {
-        "Health: ${snapshot.status.name}"
+        snapshot.status.name
     } else {
-        "Health: ${snapshot.status.name} - $detail"
+        "${snapshot.status.name} - $detail"
     }
 }
