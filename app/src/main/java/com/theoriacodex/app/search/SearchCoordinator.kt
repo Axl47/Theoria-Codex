@@ -76,8 +76,12 @@ class SearchCoordinator(
     private val searchGenerationLock = Any()
     private val appliedPersistenceMutex = Mutex()
     private val scrollPersistenceMutex = Mutex()
+    private val initializationMutex = Mutex()
     private val persistedScrollStateByQuery = mutableMapOf<String, SearchScrollState>()
     private var nextSearchGeneration = 0L
+    @Volatile
+    private var initialized = false
+    private var availableSourcesSnapshot = registry.availableSources()
     private var activeRootSearch: RootSearchRequest? = null
     private var activeRootSearchJob: Job? = null
     private var activeLoadMoreJob: Job? = null
@@ -154,6 +158,9 @@ class SearchCoordinator(
 
     val enabledSourceCount: Int
         get() = effectiveEnabledSources().size
+
+    val isInitialized: Boolean
+        get() = initialized
 
     val appliedQueryHash: String
         get() = QueryHash.from(appliedQuery)
@@ -253,33 +260,39 @@ class SearchCoordinator(
     }
 
     suspend fun initialize() {
-        tagSuggestionStore.awaitLoaded()
-        runtimeSettings = settingsRepository.observeSettings().first()
+        if (initialized) return
+        initializationMutex.withLock {
+            if (initialized) return@withLock
+            tagSuggestionStore.awaitLoaded()
+            runtimeSettings = settingsRepository.observeSettings().first()
+            availableSourcesSnapshot = registry.availableSources()
 
-        modeOptions.forEach { mode ->
-            val stored = queryRepository.observeAppliedQuery(modeKey(mode)).first()
-            if (stored != null && isModeAvailable(stored.mode)) {
-                appliedByMode[modeKey(mode)] = stored
+            modeOptions.forEach { mode ->
+                val stored = queryRepository.observeAppliedQuery(modeKey(mode)).first()
+                if (stored != null && isModeAvailable(stored.mode)) {
+                    appliedByMode[modeKey(mode)] = stored
+                }
             }
-        }
 
-        val lastApplied = queryRepository.observeAppliedQuery(LAST_ACTIVE_QUERY_KEY).first()
-            ?.takeIf { query -> isModeAvailable(query.mode) }
-        val restored = if (lastApplied != null) {
-            appliedByMode[modeKey(lastApplied.mode)] ?: defaultQuery(lastApplied.mode)
-        } else {
-            appliedByMode[modeKey(QueryMode.Unified)] ?: defaultQuery()
+            val lastApplied = queryRepository.observeAppliedQuery(LAST_ACTIVE_QUERY_KEY).first()
+                ?.takeIf { query -> isModeAvailable(query.mode) }
+            val restored = if (lastApplied != null) {
+                appliedByMode[modeKey(lastApplied.mode)] ?: defaultQuery(lastApplied.mode)
+            } else {
+                appliedByMode[modeKey(QueryMode.Unified)] ?: defaultQuery()
+            }
+            val sanitized = restored.forMode(restored.mode)
+            appliedQuery = sanitized.query
+            draftQuery = sanitized.query
+            if (sanitized.removedSourceOwnedTerms) {
+                tagInputValidationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
+            }
+            resetUnsupportedSearchScope()
+            hasExecutedSearch =
+                appliedByMode.containsKey(modeKey(appliedQuery.mode)) ||
+                queryRepository.getScrollOffset(appliedQueryHash) != null
+            initialized = true
         }
-        val sanitized = restored.forMode(restored.mode)
-        appliedQuery = sanitized.query
-        draftQuery = sanitized.query
-        if (sanitized.removedSourceOwnedTerms) {
-            tagInputValidationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
-        }
-        resetUnsupportedSearchScope()
-        hasExecutedSearch =
-            appliedByMode.containsKey(modeKey(appliedQuery.mode)) ||
-            queryRepository.getScrollOffset(appliedQueryHash) != null
     }
 
     fun onSettingsChanged(settings: AppSettings): Boolean {
@@ -295,6 +308,51 @@ class SearchCoordinator(
         }
 
         return hasExecutedSearch && previousRuntime != settings.runtime
+    }
+
+    fun onAvailableSourcesChanged(): Boolean {
+        val currentSources = registry.availableSources()
+        val sourcesChanged = currentSources != availableSourcesSnapshot
+        availableSourcesSnapshot = currentSources
+        val cancelledActiveRequest = if (sourcesChanged) {
+            invalidateActiveRequestsForCapabilityChange()
+        } else {
+            false
+        }
+        var modeChanged = false
+
+        if (!isModeAvailable(draftQuery.mode)) {
+            draftQuery = defaultQuery(QueryMode.Unified)
+            resetUnsupportedSearchScope()
+            modeChanged = true
+        }
+        if (!isModeAvailable(appliedQuery.mode)) {
+            appliedQuery = defaultQuery(QueryMode.Unified)
+            modeChanged = true
+        }
+
+        return cancelledActiveRequest || (hasExecutedSearch && (sourcesChanged || modeChanged))
+    }
+
+    private fun invalidateActiveRequestsForCapabilityChange(): Boolean {
+        val jobs = synchronized(searchGenerationLock) {
+            val rootJob = activeRootSearchJob
+            val pageJob = activeLoadMoreJob
+            val hadActiveRequest = activeRootSearch != null || rootJob != null || pageJob != null
+            nextSearchGeneration += 1L
+            activeRootSearch = null
+            activeRootSearchJob = null
+            activeLoadMoreJob = null
+            loading = false
+            loadingMore = false
+            Triple(rootJob, pageJob, hadActiveRequest)
+        }
+        val cancellation = CancellationException("Search capabilities changed")
+        jobs.first?.cancel(cancellation)
+        if (jobs.second !== jobs.first) {
+            jobs.second?.cancel(cancellation)
+        }
+        return jobs.third
     }
 
     fun addTagInput(input: String) {

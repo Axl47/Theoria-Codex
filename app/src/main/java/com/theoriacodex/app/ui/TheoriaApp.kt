@@ -50,7 +50,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -68,6 +67,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.R
 import com.theoriacodex.app.BuildConfig
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -97,8 +98,10 @@ import com.theoriacodex.app.codex.parseCodexShareFile
 import com.theoriacodex.app.codex.resolveCodexShareImportPost
 import com.theoriacodex.app.codex.sanitizeCodexExportName
 import com.theoriacodex.app.codex.selectCodexShareEntries
+import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.creator.CreatorProfileScreen
 import com.theoriacodex.app.creator.browseableCreatorProfile
+import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.recommend.ForYouScreen
 import com.theoriacodex.app.recommend.trainingTagsFor
 import com.theoriacodex.app.recents.RecentsScreen
@@ -110,7 +113,6 @@ import com.theoriacodex.app.source.ExternalCreatorDeepLink
 import com.theoriacodex.app.source.ExternalPostDeepLink
 import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.source.displayName
-import com.theoriacodex.app.source.exposedRealSources
 import com.theoriacodex.app.source.parseExternalCreatorDeepLink
 import com.theoriacodex.app.source.parseExternalPostDeepLink
 import com.theoriacodex.app.source.requestHeaders
@@ -160,6 +162,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 
 enum class TopLevelDestination(val route: String, val label: String) {
     Search("search", "Search"),
@@ -195,41 +198,47 @@ fun TheoriaApp(
     incomingUri: Uri? = null,
     onIncomingUriConsumed: () -> Unit = {},
 ) {
+    val appContext = LocalContext.current.applicationContext
+    val viewerSessionOwner = viewModel<ViewerSessionRetentionViewModel>()
+    TheoriaAppContent(
+        appContainer = rememberTheoriaAppContainer(appContext),
+        viewerSessionOwner = viewerSessionOwner,
+        incomingUri = incomingUri,
+        onIncomingUriConsumed = onIncomingUriConsumed,
+    )
+}
+
+/** Renderable app-shell boundary with dependencies supplied by the application owner. */
+@Composable
+internal fun TheoriaAppContent(
+    appContainer: TheoriaAppContainer,
+    viewerSessionOwner: ViewerSessionRetentionViewModel,
+    incomingUri: Uri? = null,
+    onIncomingUriConsumed: () -> Unit = {},
+) {
     val navController = rememberNavController()
     val appContext = LocalContext.current.applicationContext
+    val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
-    var rule34XxxConfigured by remember { mutableStateOf(false) }
+    val dataDependencies = appContainer.data
+    val sourceDependencies = appContainer.sources
+    val updateDependencies = appContainer.updates
+    val featureDependencies = appContainer.features
+    val availableRealSources by sourceDependencies.availableSources.collectAsStateWithLifecycle()
+    val credentialRecoveryState by sourceDependencies.accounts.recoveryState.collectAsStateWithLifecycle()
 
-    val appGraph = rememberTheoriaAppGraph(
-        appContext = appContext,
-        rule34XxxConfigured = rule34XxxConfigured,
-    )
-    val storageDirectory = appGraph.storageDirectory
-    val sourceHttpClient = appGraph.sourceHttpClient
-    val credentialsStore = appGraph.credentialsStore
-    val pixivAuthApi = appGraph.pixivAuthApi
-    val pixivAuthController = appGraph.pixivAuthController
-    val pixivUgoiraClient = appGraph.pixivUgoiraClient
-    val availableRealSources = appGraph.availableRealSources
-    val realRegistry = appGraph.realRegistry
-    val updateStateStore = appGraph.updateStateStore
-    val updateFeedClient = appGraph.updateFeedClient
-    val startupUpdater = appGraph.startupUpdater
-    val codexRepository = appGraph.codexRepository
-    val likesRepository = appGraph.likesRepository
-    val recentsRepository = appGraph.recentsRepository
-    val settingsRepository = appGraph.settingsRepository
-    val cacheRepository = appGraph.cacheRepository
-    val uiRestoreRepository = appGraph.uiRestoreRepository
-    val searchCoordinator = appGraph.searchCoordinator
-    val forYouCoordinator = appGraph.forYouCoordinator
-    val creatorProfileCoordinator = appGraph.creatorProfileCoordinator
-    val credentialRecoveryState by credentialsStore.recoveryState.collectAsState()
-
-    val settings by settingsRepository.observeSettings().collectAsState(initial = AppSettings())
-    val recentWatchedPosts by recentsRepository.observeWatchedPosts().collectAsState(initial = emptyList())
-    val recentSearches by recentsRepository.observeSearches().collectAsState(initial = emptyList())
-    val recentActivity by recentsRepository.observeActivity().collectAsState(initial = emptyList())
+    val settings by dataDependencies.settingsRepository
+        .observeSettings()
+        .collectAsStateWithLifecycle(initialValue = AppSettings())
+    val recentWatchedPosts by dataDependencies.recentsRepository
+        .observeWatchedPosts()
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val recentSearches by dataDependencies.recentsRepository
+        .observeSearches()
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val recentActivity by dataDependencies.recentsRepository
+        .observeActivity()
+        .collectAsStateWithLifecycle(initialValue = emptyList())
     val unknownAnimatedDurationPolicy = remember(settings.contentFilters.resolveUnknownAnimatedDurations) {
         if (settings.contentFilters.resolveUnknownAnimatedDurations) {
             UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
@@ -243,12 +252,12 @@ fun TheoriaApp(
             ?: settings.recommendationProfiles.firstOrNull()
             ?: RecommendationProfile(profileId = "profile-main", name = "Main")
     }
-    val likedPostIds by likesRepository
+    val likedPostIds by dataDependencies.likesRepository
         .observeLikedPostIds(activeRecommendationProfile.profileId)
-        .collectAsState(initial = emptySet())
-    val activeProfileLikes by likesRepository
+        .collectAsStateWithLifecycle(initialValue = emptySet())
+    val activeProfileLikes by dataDependencies.likesRepository
         .observeLikes(activeRecommendationProfile.profileId)
-        .collectAsState(initial = emptyList())
+        .collectAsStateWithLifecycle(initialValue = emptyList())
     val activeProfileForYouBlacklist = remember(settings.forYouBlacklistByProfile, activeRecommendationProfile.profileId) {
         settings.forYouBlacklistByProfile[activeRecommendationProfile.profileId]
             .orEmpty()
@@ -263,10 +272,12 @@ fun TheoriaApp(
             .groupBy { entry -> entry.source }
             .mapValues { (_, entries) -> entries.map { entry -> entry.tag } }
     }
-    val cacheSnapshot by cacheRepository.observeSnapshot().collectAsState(
-        initial = CacheSnapshot(thumbnailCount = 0, fullImageCount = 0),
+    val cacheSnapshot by dataDependencies.cacheRepository.observeSnapshot().collectAsStateWithLifecycle(
+        initialValue = CacheSnapshot(thumbnailCount = 0, fullImageCount = 0),
     )
-    val codices by codexRepository.observeCodices().collectAsState(initial = emptyList())
+    val codices by dataDependencies.codexRepository
+        .observeCodices()
+        .collectAsStateWithLifecycle(initialValue = emptyList())
     val saveSheetCodicesByProfile = remember(codices, settings.recommendationProfiles) {
         settings.recommendationProfiles.associate { profile ->
             profile.profileId to codices.filter { codex ->
@@ -280,13 +291,17 @@ fun TheoriaApp(
         }
     }
 
-    var viewerSession by remember { mutableStateOf<ViewerSession?>(null) }
+    val viewerSession by viewerSessionOwner.session
     var showSaveSheet by remember { mutableStateOf(false) }
     var pendingSavePost by remember { mutableStateOf<Post?>(null) }
     var homeTabRoute by rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
     var pendingTopLevelRoute by remember { mutableStateOf<String?>(null) }
     var homeTabRestoreComplete by remember { mutableStateOf(false) }
-    var navReady by remember { mutableStateOf(false) }
+    var navReady by remember(appContainer) {
+        mutableStateOf(
+            featureDependencies.search.isInitialized && featureDependencies.forYou.isInitialized,
+        )
+    }
     var startupUpdateState by remember { mutableStateOf<StartupUpdateState>(StartupUpdateState.Checking) }
     var startupStatusMessage by remember { mutableStateOf("Checking for updates...") }
     var updateChoiceRemote by remember { mutableStateOf<RemoteUpdate?>(null) }
@@ -317,13 +332,13 @@ fun TheoriaApp(
     }
     val addFavoriteTag: (SourceKey, String) -> Unit = remember(
         scope,
-        settingsRepository,
+        dataDependencies.settingsRepository,
         activeRecommendationProfile.profileId,
         appContext,
     ) {
         { source, tag ->
             scope.launch {
-                val added = settingsRepository.addFavoriteTag(
+                val added = dataDependencies.settingsRepository.addFavoriteTag(
                     profileId = activeRecommendationProfile.profileId,
                     source = source,
                     tag = tag,
@@ -339,12 +354,12 @@ fun TheoriaApp(
     }
     val removeFavoriteTag: (SourceKey, String) -> Unit = remember(
         scope,
-        settingsRepository,
+        dataDependencies.settingsRepository,
         activeRecommendationProfile.profileId,
     ) {
         { source, tag ->
             scope.launch {
-                settingsRepository.removeFavoriteTag(
+                dataDependencies.settingsRepository.removeFavoriteTag(
                     profileId = activeRecommendationProfile.profileId,
                     source = source,
                     tag = tag,
@@ -364,19 +379,18 @@ fun TheoriaApp(
     var showCredentialRecoveryDialog by rememberSaveable { mutableStateOf(false) }
 
     suspend fun refreshSourceAccountState() {
-        if (credentialsStore.recoveryState.value == CredentialStoreRecoveryState.ReconnectRequired) {
+        if (sourceDependencies.accounts.recoveryState.value == CredentialStoreRecoveryState.ReconnectRequired) {
             pixivConnected = false
             pixivStatusLabel = CREDENTIAL_RECONNECT_MESSAGE
             gelbooruStatusLabel = CREDENTIAL_RECONNECT_MESSAGE
             gelbooruUserIdInput = ""
             gelbooruApiKeyInput = ""
-            rule34XxxConfigured = false
             rule34XxxStatusLabel = CREDENTIAL_RECONNECT_MESSAGE
             rule34XxxUserIdInput = ""
             rule34XxxApiKeyInput = ""
             return
         }
-        val pixivTokens = credentialsStore.getPixivTokens()
+        val pixivTokens = sourceDependencies.accounts.getPixivTokens()
         pixivStatusLabel = when {
             pixivTokens == null -> {
                 pixivConnected = false
@@ -386,7 +400,7 @@ fun TheoriaApp(
                 pixivStatusLabel = "Connected (refreshing token...)"
                 val refreshResult = withTimeoutOrNull(PIXIV_TOKEN_REFRESH_TIMEOUT_MS) {
                     runCatchingPreservingCancellation {
-                        pixivAuthApi.refresh(pixivTokens.refreshToken)
+                        sourceDependencies.pixivAuthApi.refresh(pixivTokens.refreshToken)
                     }
                 }
                 when {
@@ -395,7 +409,7 @@ fun TheoriaApp(
                         "Connected (refresh timed out, retry on next request)"
                     }
                     refreshResult.isSuccess -> {
-                        credentialsStore.savePixivTokens(requireNotNull(refreshResult.getOrNull()))
+                        sourceDependencies.accounts.savePixivTokens(requireNotNull(refreshResult.getOrNull()))
                         pixivConnected = true
                         "Connected"
                     }
@@ -406,7 +420,7 @@ fun TheoriaApp(
                             (failure.reason == SourceFailureReason.AUTH_EXPIRED ||
                                 failure.reason == SourceFailureReason.AUTH_REQUIRED)
                         ) {
-                            credentialsStore.clearPixivTokens()
+                            sourceDependencies.accounts.clearPixivTokens()
                             pixivConnected = false
                             "Not connected (session expired)"
                         } else {
@@ -422,7 +436,7 @@ fun TheoriaApp(
             }
         }
 
-        val gelbooruCredentials = credentialsStore.getGelbooruCredentials()
+        val gelbooruCredentials = sourceDependencies.accounts.getGelbooruCredentials()
         if (gelbooruCredentials == null) {
             gelbooruStatusLabel = "Not configured"
             gelbooruUserIdInput = ""
@@ -433,8 +447,7 @@ fun TheoriaApp(
             gelbooruApiKeyInput = gelbooruCredentials.apiKey
         }
 
-        val rule34XxxCredentials = credentialsStore.getRule34XxxCredentials()
-        rule34XxxConfigured = rule34XxxCredentials != null
+        val rule34XxxCredentials = sourceDependencies.accounts.getRule34XxxCredentials()
         if (rule34XxxCredentials == null) {
             rule34XxxStatusLabel = "Not configured"
             rule34XxxUserIdInput = ""
@@ -456,7 +469,7 @@ fun TheoriaApp(
     fun requestSaveToDevice(post: Post) {
         scope.launch {
             val resultLabel = if (isPixivUgoiraPost(post)) {
-                pixivUgoiraClient.exportToMp4(
+                sourceDependencies.pixivUgoiraClient.exportToMp4(
                     context = appContext,
                     postId = post.id.sourcePostId,
                     title = post.title,
@@ -468,11 +481,11 @@ fun TheoriaApp(
                 val postToDownload = when {
                     !requiresLazyMediaResolution(post) -> post
                     else -> {
-                        val adapter = realRegistry.adapterFor(post.id.source)
+                        val adapter = sourceDependencies.registry.adapterFor(post.id.source)
                         runCatchingPreservingCancellation {
                             adapter?.resolvePost(post.id)
                         }.getOrNull()?.also { resolved ->
-                            searchCoordinator.rememberResolvedPost(resolved)
+                            featureDependencies.search.rememberResolvedPost(resolved)
                         }
                     }
                 }
@@ -487,10 +500,10 @@ fun TheoriaApp(
     }
 
     suspend fun openCreatorProfile(creator: CreatorProfile) {
-        creatorProfileCoordinator.open(creator)
+        featureDependencies.creatorProfile.open(creator)
         if (navController.currentBackStackEntry?.destination?.route == AppRoute.Viewer) {
-            viewerSession = null
-            searchCoordinator.setViewerLaunchContext(null)
+            viewerSessionOwner.clear()
+            featureDependencies.search.setViewerLaunchContext(null)
             navController.popBackStack(AppRoute.Viewer, inclusive = true)
         }
         navController.navigate(AppRoute.CreatorProfile) {
@@ -506,12 +519,12 @@ fun TheoriaApp(
             .firstOrNull()
             ?: browseableCreatorProfile(post.creatorProfile)
         if (creator == null) {
-            val adapter = realRegistry.adapterFor(post.id.source)
+            val adapter = sourceDependencies.registry.adapterFor(post.id.source)
             val resolved = runCatchingPreservingCancellation {
                 adapter?.resolvePost(post.id)
             }.getOrNull()
             if (resolved != null) {
-                searchCoordinator.rememberResolvedPost(resolved)
+                featureDependencies.search.rememberResolvedPost(resolved)
                 resolvedPost = resolved
                 creator = resolved.creatorProfiles
                     .asSequence()
@@ -525,7 +538,7 @@ fun TheoriaApp(
             return
         }
         openCreatorProfile(creator)
-        viewerSession = viewerSession?.let { session ->
+        viewerSessionOwner.update { session ->
             val index = session.posts.indexOfFirst { current -> current.id == resolvedPost.id }
             if (index < 0) {
                 session
@@ -559,7 +572,7 @@ fun TheoriaApp(
 
             SourceKey.GELBOORU -> {
                 val response = runCatchingPreservingCancellation {
-                    sourceHttpClient.get(
+                    sourceDependencies.httpClient.get(
                         url = "https://gelbooru.com/index.php",
                         query = mapOf(
                             "page" to "account",
@@ -592,25 +605,25 @@ fun TheoriaApp(
         } else {
             "$LIKES_CODEX_NAME (${profile.name})"
         }
-        return codexRepository.ensureCodex(
+        return dataDependencies.codexRepository.ensureCodex(
             codexId = likesCodexIdForProfile(profile.profileId),
             name = codexName,
         ).codexId
     }
 
     suspend fun toggleLikeAndSyncCodex(post: Post) {
-        val nowLiked = likesRepository.toggleLike(
+        val nowLiked = dataDependencies.likesRepository.toggleLike(
             profileId = activeRecommendationProfile.profileId,
             postId = post.id,
             tags = trainingTagsFor(post),
         )
         val likesCodexId = ensureLikesCodexId(activeRecommendationProfile)
         if (nowLiked) {
-            codexRepository.addItem(likesCodexId, post)
+            dataDependencies.codexRepository.addItem(likesCodexId, post)
             return
         }
 
-        codexRepository.removeItem(
+        dataDependencies.codexRepository.removeItem(
             codexId = likesCodexId,
             sourceKey = post.id.source,
             sourcePostId = post.id.sourcePostId,
@@ -618,13 +631,13 @@ fun TheoriaApp(
     }
 
     suspend fun clearProfileLikesAndSyncCodex(profileId: String) {
-        val likesToClear = likesRepository.observeLikes(profileId).first()
-        likesRepository.clearLikes(profileId)
+        val likesToClear = dataDependencies.likesRepository.observeLikes(profileId).first()
+        dataDependencies.likesRepository.clearLikes(profileId)
         if (likesToClear.isEmpty()) return
 
         val likesCodexId = likesCodexIdForProfile(profileId)
         likesToClear.forEach { liked ->
-            codexRepository.removeItem(
+            dataDependencies.codexRepository.removeItem(
                 codexId = likesCodexId,
                 sourceKey = liked.postId.source,
                 sourcePostId = liked.postId.sourcePostId,
@@ -634,8 +647,8 @@ fun TheoriaApp(
 
     suspend fun removeProfileLikesCodex(profileId: String) {
         val codexId = likesCodexIdForProfile(profileId)
-        codexRepository.observeCodex(codexId).first()?.let {
-            codexRepository.deleteCodex(codexId)
+        dataDependencies.codexRepository.observeCodex(codexId).first()?.let {
+            dataDependencies.codexRepository.deleteCodex(codexId)
         }
     }
 
@@ -644,12 +657,12 @@ fun TheoriaApp(
         codices
             .filter { codex -> codex.codexId.startsWith(prefix) }
             .forEach { codex ->
-                codexRepository.deleteCodex(codex.codexId)
+                dataDependencies.codexRepository.deleteCodex(codex.codexId)
             }
     }
 
     suspend fun searchFromCodex(source: SourceKey, includeTags: List<String>) {
-        if (source !in realRegistry.availableSources()) {
+        if (source !in sourceDependencies.registry.availableSources()) {
             Toast.makeText(appContext, "${source.displayName()} source is unavailable", Toast.LENGTH_SHORT).show()
             return
         }
@@ -668,7 +681,7 @@ fun TheoriaApp(
         }
 
         if (
-            !searchCoordinator.prepareTagSearch(
+            !featureDependencies.search.prepareTagSearch(
                 includeTags = normalizedIncludeTags,
                 mode = QueryMode.Source(source),
             )
@@ -677,7 +690,7 @@ fun TheoriaApp(
             return
         }
 
-        searchCoordinator.applyDraft()
+        featureDependencies.search.applyDraft()
         homeTabRoute = TopLevelDestination.Search.route
         pendingTopLevelRoute = TopLevelDestination.Search.route
         navController.navigate(AppRoute.Home) {
@@ -695,7 +708,7 @@ fun TheoriaApp(
     }
 
     suspend fun downloadCodex(codexId: String) {
-        val posts = codexRepository
+        val posts = dataDependencies.codexRepository
             .observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED)
             .first()
         if (posts.isEmpty()) {
@@ -714,15 +727,15 @@ fun TheoriaApp(
     }
 
     suspend fun shareCodex(codexId: String) {
-        val codex = codexRepository.observeCodex(codexId).first()
+        val codex = dataDependencies.codexRepository.observeCodex(codexId).first()
         if (codex == null) {
             Toast.makeText(appContext, "Codex not found", Toast.LENGTH_SHORT).show()
             return
         }
-        val posts = codexRepository.observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED).first()
+        val posts = dataDependencies.codexRepository.observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED).first()
         val export = buildCodexShareFile(title = codex.name, posts = posts)
 
-        val exportsDirectory = storageDirectory.resolve("exports").apply { mkdirs() }
+        val exportsDirectory = dataDependencies.storageDirectory.resolve("exports").apply { mkdirs() }
         val fileName = "${sanitizeCodexExportName(codex.name)}.json"
         val exportFile = exportsDirectory.resolve(fileName)
         runCatching {
@@ -767,7 +780,7 @@ fun TheoriaApp(
         }
 
         val profileId = activeRecommendationProfile.profileId
-        val codex = codexRepository.ensureCodex(
+        val codex = dataDependencies.codexRepository.ensureCodex(
             codexId = profileScopedCodexId(profileId),
             name = title,
         )
@@ -783,7 +796,7 @@ fun TheoriaApp(
 
         var imported = 0
         entries.forEach { (entry, postId) ->
-            val resolvedFromSource = realRegistry.adapterFor(postId.source)?.let { adapter ->
+            val resolvedFromSource = sourceDependencies.registry.adapterFor(postId.source)?.let { adapter ->
                 runCatchingPreservingCancellation {
                     adapter.resolvePost(postId)
                 }.getOrNull()
@@ -791,12 +804,12 @@ fun TheoriaApp(
             val resolved = resolveCodexShareImportPost(
                 entry = entry,
                 resolvedFromSource = resolvedFromSource,
-                storedPost = { codexRepository.getPost(postId) },
+                storedPost = { dataDependencies.codexRepository.getPost(postId) },
             )
                 ?: return@forEach
 
-            codexRepository.addItem(codex.codexId, resolved)
-            cacheRepository.cacheThumbnail(resolved)
+            dataDependencies.codexRepository.addItem(codex.codexId, resolved)
+            dataDependencies.cacheRepository.cacheThumbnail(resolved)
             imported += 1
         }
         val skipped = entries.size - imported
@@ -836,28 +849,29 @@ fun TheoriaApp(
             desired[slot] = codexById.getValue(codexId)
         }
         desired.forEachIndexed { index, codex ->
-            codexRepository.reorderCodex(codex.codexId, index)
+            dataDependencies.codexRepository.reorderCodex(codex.codexId, index)
         }
     }
 
     suspend fun completeAppStartup() {
         if (navReady) return
-        searchCoordinator.initialize()
-        forYouCoordinator.initialize()
+        sourceDependencies.accounts.refreshAvailability()
+        featureDependencies.search.initialize()
+        featureDependencies.forYou.initialize()
         ensureLikesCodexId(activeRecommendationProfile)
         refreshSourceAccountState()
-        val legacyLastTabRoute = settingsRepository
+        val legacyLastTabRoute = dataDependencies.settingsRepository
             .observeSettings()
             .first()
             .lastSelectedTabRoute
-        homeTabRoute = uiRestoreRepository.migrateLegacyLastTab(legacyLastTabRoute)
+        homeTabRoute = dataDependencies.uiRestoreRepository.migrateLegacyLastTab(legacyLastTabRoute)
             ?.takeIf { route -> TopLevelDestination.entries.any { destination -> destination.route == route } }
             ?: TopLevelDestination.Search.route
         navReady = true
         scope.launch {
-            searchCoordinator.restoreLastAppliedSearchIfNeeded()
+            featureDependencies.search.restoreLastAppliedSearchIfNeeded()
         }
-        val updateSnapshot = startupUpdater.pendingSnapshot()
+        val updateSnapshot = updateDependencies.startupUpdater.pendingSnapshot()
         latestInstalledChangelog = updateSnapshot.lastInstalledChangelog
         val pendingChangelog = updateSnapshot.pendingPostInstallChangelog
         if (pendingChangelog != null) {
@@ -866,7 +880,7 @@ fun TheoriaApp(
                 postInstallChangelog = pendingChangelog
                 latestInstalledChangelog = pendingChangelog
                 val merged = mergeReleaseHistory(
-                    remoteHistory = updateFeedClient.mainPrereleaseHistory(limit = 100)
+                    remoteHistory = updateDependencies.feedClient.mainPrereleaseHistory(limit = 100)
                         .getOrElse { emptyList() },
                     localCurrent = pendingChangelog,
                 )
@@ -889,19 +903,19 @@ fun TheoriaApp(
         val streamSource = viewerSession?.context?.streamSource ?: ViewerStreamSource.SEARCH
         if (!requiresViewerPostResolution(post, streamSource)) return
         scope.launch {
-            val adapter = realRegistry.adapterFor(post.id.source) ?: return@launch
+            val adapter = sourceDependencies.registry.adapterFor(post.id.source) ?: return@launch
             val resolved = runCatchingPreservingCancellation {
                 adapter.resolvePost(post.id)
             }.getOrNull() ?: return@launch
             when (viewerSession?.context?.streamSource) {
-                ViewerStreamSource.SEARCH -> searchCoordinator.rememberResolvedPost(resolved)
-                ViewerStreamSource.FOR_YOU -> forYouCoordinator.rememberResolvedPost(resolved)
-                ViewerStreamSource.CREATOR_PROFILE -> creatorProfileCoordinator.rememberResolvedPost(resolved)
-                ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS, null -> codexRepository.updatePost(resolved)
+                ViewerStreamSource.SEARCH -> featureDependencies.search.rememberResolvedPost(resolved)
+                ViewerStreamSource.FOR_YOU -> featureDependencies.forYou.rememberResolvedPost(resolved)
+                ViewerStreamSource.CREATOR_PROFILE -> featureDependencies.creatorProfile.rememberResolvedPost(resolved)
+                ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS, null -> dataDependencies.codexRepository.updatePost(resolved)
             }
-            viewerSession = viewerSession?.let { session ->
+            viewerSessionOwner.update { session ->
                 val index = session.posts.indexOfFirst { current -> current.id == post.id }
-                if (index < 0) return@let session
+                if (index < 0) return@update session
                 session.copy(
                     posts = session.posts.toMutableList().apply {
                         this[index] = resolved
@@ -914,7 +928,7 @@ fun TheoriaApp(
     fun requestViewerMediaRecovery(post: Post, failedMedia: ImageRef) {
         scope.launch {
             val recovered = try {
-                recoverRemoteMedia(realRegistry, post, failedMedia)
+                recoverRemoteMedia(sourceDependencies.registry, post, failedMedia)
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
@@ -923,14 +937,14 @@ fun TheoriaApp(
             val activeSession = viewerSession ?: return@launch
             if (activeSession.posts.none { current -> current.id == post.id }) return@launch
             when (activeSession.context.streamSource) {
-                ViewerStreamSource.SEARCH -> searchCoordinator.rememberResolvedPost(recovered)
-                ViewerStreamSource.FOR_YOU -> forYouCoordinator.rememberResolvedPost(recovered)
-                ViewerStreamSource.CREATOR_PROFILE -> creatorProfileCoordinator.rememberResolvedPost(recovered)
-                ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> codexRepository.updatePost(recovered)
+                ViewerStreamSource.SEARCH -> featureDependencies.search.rememberResolvedPost(recovered)
+                ViewerStreamSource.FOR_YOU -> featureDependencies.forYou.rememberResolvedPost(recovered)
+                ViewerStreamSource.CREATOR_PROFILE -> featureDependencies.creatorProfile.rememberResolvedPost(recovered)
+                ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> dataDependencies.codexRepository.updatePost(recovered)
             }
-            viewerSession = viewerSession?.let { session ->
+            viewerSessionOwner.update { session ->
                 val index = session.posts.indexOfFirst { current -> current.id == post.id }
-                if (index < 0) return@let session
+                if (index < 0) return@update session
                 session.copy(
                     posts = session.posts.toMutableList().apply {
                         this[index] = recovered
@@ -948,15 +962,15 @@ fun TheoriaApp(
         val startIndex = context.startIndex.coerceIn(0, posts.lastIndex)
         val selectedPost = posts[startIndex]
         if (!requiresPrelaunchViewerPostResolution(selectedPost, context.streamSource)) return posts
-        val adapter = realRegistry.adapterFor(selectedPost.id.source) ?: return posts
+        val adapter = sourceDependencies.registry.adapterFor(selectedPost.id.source) ?: return posts
         val resolved = runCatchingPreservingCancellation {
             adapter.resolvePost(selectedPost.id)
         }.getOrNull() ?: return posts
         when (context.streamSource) {
-            ViewerStreamSource.SEARCH -> searchCoordinator.rememberResolvedPost(resolved)
-            ViewerStreamSource.FOR_YOU -> forYouCoordinator.rememberResolvedPost(resolved)
-            ViewerStreamSource.CREATOR_PROFILE -> creatorProfileCoordinator.rememberResolvedPost(resolved)
-            ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> codexRepository.updatePost(resolved)
+            ViewerStreamSource.SEARCH -> featureDependencies.search.rememberResolvedPost(resolved)
+            ViewerStreamSource.FOR_YOU -> featureDependencies.forYou.rememberResolvedPost(resolved)
+            ViewerStreamSource.CREATOR_PROFILE -> featureDependencies.creatorProfile.rememberResolvedPost(resolved)
+            ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> dataDependencies.codexRepository.updatePost(resolved)
         }
         return posts.toMutableList().apply {
             this[startIndex] = resolved
@@ -965,7 +979,7 @@ fun TheoriaApp(
 
     suspend fun recordVisibleViewerPost(post: Post) {
         val context = viewerSession?.context
-        recentsRepository.recordWatchedPost(
+        dataDependencies.recentsRepository.recordWatchedPost(
             post = post,
             origin = context?.streamSource ?: ViewerStreamSource.SEARCH,
             originQueryHash = context?.queryHash,
@@ -984,8 +998,8 @@ fun TheoriaApp(
 
     suspend fun performStartupInstall(remote: RemoteUpdate) {
         startupActionLocked = true
-        startupUpdater.onUserChoseYes(remote)
-        val updateOutcome = startupUpdater.installUpdate(remote) { state ->
+        updateDependencies.startupUpdater.onUserChoseYes(remote)
+        val updateOutcome = updateDependencies.startupUpdater.installUpdate(remote) { state ->
             startupUpdateState = state
             startupStatusMessage = state.messageText()
         }
@@ -1030,7 +1044,7 @@ fun TheoriaApp(
             return
         }
 
-        val remoteResult = startupUpdater.checkForEligibleUpdate { state ->
+        val remoteResult = updateDependencies.startupUpdater.checkForEligibleUpdate { state ->
             startupUpdateState = state
             startupStatusMessage = state.messageText()
         }
@@ -1047,7 +1061,7 @@ fun TheoriaApp(
 
         val installedVersionCode = installedAppVersionCode(appContext)
         val startupHistory = mergeReleaseHistory(
-            remoteHistory = updateFeedClient.mainPrereleaseHistory(limit = 100).getOrElse { emptyList() },
+            remoteHistory = updateDependencies.feedClient.mainPrereleaseHistory(limit = 100).getOrElse { emptyList() },
             localCurrent = latestInstalledChangelog,
         )
             .filter { entry ->
@@ -1066,19 +1080,18 @@ fun TheoriaApp(
     }
 
     LaunchedEffect(Unit) {
-        beginStartupUpdateFlow()
-    }
-
-    LaunchedEffect(searchCoordinator, forYouCoordinator, navReady) {
-        if (!navReady) return@LaunchedEffect
-        searchCoordinator.initialize()
-        forYouCoordinator.initialize()
+        if (navReady) {
+            startupUpdateState = StartupUpdateState.NoUpdate
+            startupStatusMessage = "Ready"
+        } else {
+            beginStartupUpdateFlow()
+        }
     }
 
     LaunchedEffect(incomingUri) {
         val uri = incomingUri ?: return@LaunchedEffect
-        if (pixivAuthController.isAuthorizationCallback(uri)) {
-            val result = pixivAuthController.handleAuthorizationCallback(uri)
+        if (sourceDependencies.pixivAuthController.isAuthorizationCallback(uri)) {
+            val result = sourceDependencies.pixivAuthController.handleAuthorizationCallback(uri)
             if (result.isSuccess) {
                 pixivStatusLabel = "Connected"
                 refreshSourceAccountState()
@@ -1150,7 +1163,7 @@ fun TheoriaApp(
             return@LaunchedEffect
         }
         val requiredDeepLink = requireNotNull(deepLink)
-        val adapter = realRegistry.adapterFor(requiredDeepLink.source)
+        val adapter = sourceDependencies.registry.adapterFor(requiredDeepLink.source)
         if (adapter == null) {
             Toast.makeText(appContext, "${requiredDeepLink.sourceLabel} source is unavailable", Toast.LENGTH_SHORT).show()
             consumePendingUriIfCurrent()
@@ -1180,35 +1193,45 @@ fun TheoriaApp(
             streamSource = ViewerStreamSource.SEARCH,
             scrollOffsetHint = 0,
         )
-        viewerSession = ViewerSession(
-            posts = listOf(resolved),
-            context = context,
-            liveSearchBinding = false,
+        viewerSessionOwner.retain(
+            ViewerSession(
+                posts = listOf(resolved),
+                context = context,
+                liveSearchBinding = false,
+            ),
         )
-        uiRestoreRepository.setViewerLaunchContext(context)
+        dataDependencies.uiRestoreRepository.setViewerLaunchContext(context)
         navController.navigate(AppRoute.Viewer) {
             launchSingleTop = true
         }
         consumePendingUriIfCurrent()
     }
 
-    LaunchedEffect(settings) {
-        val shouldRefreshSearch = searchCoordinator.onSettingsChanged(settings)
-        if (shouldRefreshSearch) {
-            searchCoordinator.retry()
+    LaunchedEffect(settings, availableRealSources) {
+        val searchSettingsChanged = featureDependencies.search.onSettingsChanged(settings)
+        val searchSourcesChanged = featureDependencies.search.onAvailableSourcesChanged()
+        val forYouSettingsChanged = featureDependencies.forYou.onSettingsChanged(settings)
+        val forYouSourcesChanged = featureDependencies.forYou.onAvailableSourcesChanged()
+        val creatorSourcesChanged = featureDependencies.creatorProfile.onAvailableSourcesChanged()
+
+        if (searchSettingsChanged || searchSourcesChanged) {
+            featureDependencies.search.retry()
         }
 
-        val shouldRefreshForYou = forYouCoordinator.onSettingsChanged(settings)
-        if (shouldRefreshForYou) {
+        if (forYouSettingsChanged || forYouSourcesChanged) {
             if (activeProfileLikes.isEmpty()) {
-                forYouCoordinator.clear()
+                featureDependencies.forYou.clear()
             } else {
-                forYouCoordinator.refresh(shuffle = false)
+                featureDependencies.forYou.refresh(shuffle = false)
             }
+        }
+
+        if (creatorSourcesChanged) {
+            featureDependencies.creatorProfile.refresh()
         }
     }
 
-    LaunchedEffect(codices.map { it.codexId }, availableRealSources) {
+    LaunchedEffect(lifecycleOwner, codices.map { it.codexId }, availableRealSources) {
         val activeIds = codices.map { it.codexId }.toSet()
         codexItemCounts.keys
             .filterNot { it in activeIds }
@@ -1231,37 +1254,41 @@ fun TheoriaApp(
             .toList()
             .forEach { savedPostIdsByCodex.remove(it) }
 
-        coroutineScope {
-            codices.forEach { codex ->
-                launch {
-                    codexRepository.observeCodexItems(codex.codexId).collect { items ->
-                        codexItemCounts[codex.codexId] = items.size
-                        savedPostIdsByCodex[codex.codexId] = items
-                            .asSequence()
-                            .map { item -> item.postId }
-                            .toSet()
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            coroutineScope {
+                codices.forEach { codex ->
+                    launch {
+                        dataDependencies.codexRepository.observeCodexItems(codex.codexId).collect { items ->
+                            codexItemCounts[codex.codexId] = items.size
+                            savedPostIdsByCodex[codex.codexId] = items
+                                .asSequence()
+                                .map { item -> item.postId }
+                                .toSet()
+                        }
                     }
-                }
-                launch {
-                    codexRepository.observeCodexPosts(codex.codexId, CodexSortMode.NEWEST_SAVED).collect { posts ->
-                        val coverModel = posts.firstOrNull()?.let { post ->
-                            resolveCodexCoverModel(
-                                storageDirectory = storageDirectory,
-                                post = post,
-                            )
-                        }
-                        codexCoverModels[codex.codexId] = coverModel
-                        val sourceOptions = buildCodexSearchSourceOptions(
-                            posts = posts,
-                            availableSources = availableRealSources,
-                        )
-                        codexSearchSourceOptions[codex.codexId] = sourceOptions
-                        codexSearchTagOptions[codex.codexId] = sourceOptions.associate { option ->
-                            option.source to buildCodexSearchTagOptions(
-                                posts = posts,
-                                source = option.source,
-                            )
-                        }
+                    launch {
+                        dataDependencies.codexRepository
+                            .observeCodexPosts(codex.codexId, CodexSortMode.NEWEST_SAVED)
+                            .collect { posts ->
+                                val coverModel = posts.firstOrNull()?.let { post ->
+                                    resolveCodexCoverModel(
+                                        storageDirectory = dataDependencies.storageDirectory,
+                                        post = post,
+                                    )
+                                }
+                                codexCoverModels[codex.codexId] = coverModel
+                                val sourceOptions = buildCodexSearchSourceOptions(
+                                    posts = posts,
+                                    availableSources = availableRealSources,
+                                )
+                                codexSearchSourceOptions[codex.codexId] = sourceOptions
+                                codexSearchTagOptions[codex.codexId] = sourceOptions.associate { option ->
+                                    option.source to buildCodexSearchTagOptions(
+                                        posts = posts,
+                                        source = option.source,
+                                    )
+                                }
+                            }
                     }
                 }
             }
@@ -1280,7 +1307,6 @@ fun TheoriaApp(
     val configuration = LocalConfiguration.current
     val installedVersionCode = remember(appContext) { installedAppVersionCode(appContext) }
     val hostActivity = remember(currentContext) { currentContext.findActivity() }
-    val lifecycleOwner = LocalLifecycleOwner.current
     val topLevelPagerState = rememberPagerState(
         pageCount = { TopLevelDestination.entries.size },
     )
@@ -1338,7 +1364,7 @@ fun TheoriaApp(
             homeTabRoute = route
         }
         if (persistedHomeTabRoute != route) {
-            uiRestoreRepository.setLastTab(route)
+            dataDependencies.uiRestoreRepository.setLastTab(route)
             persistedHomeTabRoute = route
         }
     }
@@ -1389,7 +1415,7 @@ fun TheoriaApp(
             val remote = pendingInstallRemote
             if (awaitingUnknownSources && remote != null) {
                 scope.launch {
-                    val outcome = startupUpdater.retryPendingInstall(remote) { state ->
+                    val outcome = updateDependencies.startupUpdater.retryPendingInstall(remote) { state ->
                         startupUpdateState = state
                         startupStatusMessage = state.messageText()
                     }
@@ -1450,12 +1476,12 @@ fun TheoriaApp(
     }
 
     LaunchedEffect(
-        searchCoordinator.results,
-        searchCoordinator.displayResultsVersion,
-        forYouCoordinator.results,
-        creatorProfileCoordinator.results,
-        creatorProfileCoordinator.activeQueryHash,
-        searchCoordinator.appliedQueryHash,
+        featureDependencies.search.results,
+        featureDependencies.search.displayResultsVersion,
+        featureDependencies.forYou.results,
+        featureDependencies.creatorProfile.results,
+        featureDependencies.creatorProfile.activeQueryHash,
+        featureDependencies.search.appliedQueryHash,
         viewerSession?.context?.streamSource,
         viewerSession?.liveSearchBinding,
         viewerSession?.searchVisibilityFilters,
@@ -1467,9 +1493,9 @@ fun TheoriaApp(
         if (!session.liveSearchBinding) return@LaunchedEffect
         val incomingForViewer = when (session.context.streamSource) {
             ViewerStreamSource.SEARCH -> {
-                if (session.context.queryHash != searchCoordinator.appliedQueryHash) return@LaunchedEffect
+                if (session.context.queryHash != featureDependencies.search.appliedQueryHash) return@LaunchedEffect
                 filterSearchResults(
-                    results = searchCoordinator.displayResults(),
+                    results = featureDependencies.search.displayResults(),
                     filters = session.searchVisibilityFilters,
                     likedPostIds = likedPostIds,
                     savedPostIds = savedPostIds,
@@ -1480,7 +1506,7 @@ fun TheoriaApp(
             ViewerStreamSource.FOR_YOU -> {
                 if (!session.context.queryHash.startsWith("for_you:")) return@LaunchedEffect
                 filterSearchResults(
-                    results = forYouCoordinator.results,
+                    results = featureDependencies.forYou.results,
                     filters = session.searchVisibilityFilters,
                     likedPostIds = emptySet(),
                     savedPostIds = emptySet(),
@@ -1489,9 +1515,9 @@ fun TheoriaApp(
             }
 
             ViewerStreamSource.CREATOR_PROFILE -> {
-                if (session.context.queryHash != creatorProfileCoordinator.activeQueryHash) return@LaunchedEffect
+                if (session.context.queryHash != featureDependencies.creatorProfile.activeQueryHash) return@LaunchedEffect
                 filterSearchResults(
-                    results = creatorProfileCoordinator.results,
+                    results = featureDependencies.creatorProfile.results,
                     filters = session.searchVisibilityFilters,
                     likedPostIds = likedPostIds,
                     savedPostIds = savedPostIds,
@@ -1503,7 +1529,7 @@ fun TheoriaApp(
         }
         val merged = mergeViewerPosts(session.posts, incomingForViewer)
         if (merged.size != session.posts.size) {
-            viewerSession = session.copy(posts = merged)
+            viewerSessionOwner.retain(session.copy(posts = merged))
         }
     }
 
@@ -1537,7 +1563,7 @@ fun TheoriaApp(
                             if (startupActionLocked) return@StartupUpdatePromptCard
                             scope.launch {
                                 startupActionLocked = true
-                                startupUpdater.onUserChoseNo(promptRemote)
+                                updateDependencies.startupUpdater.onUserChoseNo(promptRemote)
                                 updateChoiceRemote = null
                                 startupUpdateReleaseHistory = emptyList()
                                 startupUpdateState = StartupUpdateState.NoUpdate
@@ -1550,7 +1576,7 @@ fun TheoriaApp(
                             if (startupActionLocked) return@StartupUpdatePromptCard
                             scope.launch {
                                 startupActionLocked = true
-                                startupUpdater.onUserChoseRemindLater(promptRemote)
+                                updateDependencies.startupUpdater.onUserChoseRemindLater(promptRemote)
                                 updateChoiceRemote = null
                                 startupUpdateReleaseHistory = emptyList()
                                 startupUpdateState = StartupUpdateState.NoUpdate
@@ -1656,8 +1682,8 @@ fun TheoriaApp(
                             when (TopLevelDestination.entries[page]) {
                                 TopLevelDestination.Search -> {
                                     SearchScreen(
-                                        coordinator = searchCoordinator,
-                                        pixivUgoiraClient = pixivUgoiraClient,
+                                        coordinator = featureDependencies.search,
+                                        pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                         likedPostIds = likedPostIds,
                                         savedPostIds = savedPostIds,
                                         favoriteTags = activeProfileFavoriteTags,
@@ -1670,13 +1696,15 @@ fun TheoriaApp(
                                         onOpenViewer = { posts, context, visibilityFilters ->
                                             scope.launch {
                                                 val preparedPosts = prepareViewerPostsForLaunch(posts, context)
-                                                viewerSession = ViewerSession(
-                                                    posts = preparedPosts,
-                                                    context = context,
-                                                    liveSearchBinding = true,
-                                                    searchVisibilityFilters = visibilityFilters,
+                                                viewerSessionOwner.retain(
+                                                    ViewerSession(
+                                                        posts = preparedPosts,
+                                                        context = context,
+                                                        liveSearchBinding = true,
+                                                        searchVisibilityFilters = visibilityFilters,
+                                                    ),
                                                 )
-                                                searchCoordinator.setViewerLaunchContext(context)
+                                                featureDependencies.search.setViewerLaunchContext(context)
                                                 navController.navigate(AppRoute.Viewer)
                                             }
                                         },
@@ -1697,14 +1725,14 @@ fun TheoriaApp(
                                         },
                                         onApplySearch = {
                                             scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                val directNhentaiId = searchCoordinator.directNhentaiGalleryIdCandidate()
-                                                searchCoordinator.applyDraft()
+                                                val directNhentaiId = featureDependencies.search.directNhentaiGalleryIdCandidate()
+                                                featureDependencies.search.applyDraft()
                                                 if (directNhentaiId != null) {
-                                                    val resolved = searchCoordinator.results.firstOrNull { post ->
+                                                    val resolved = featureDependencies.search.results.firstOrNull { post ->
                                                         post.id.source == SourceKey.NHENTAI &&
                                                             post.id.sourcePostId == directNhentaiId
                                                     } ?: runCatchingPreservingCancellation {
-                                                        searchCoordinator.resolveNhentaiGalleryById(directNhentaiId)
+                                                        featureDependencies.search.resolveNhentaiGalleryById(directNhentaiId)
                                                     }.getOrNull()
 
                                                     if (resolved != null) {
@@ -1714,12 +1742,14 @@ fun TheoriaApp(
                                                             streamSource = ViewerStreamSource.SEARCH,
                                                             scrollOffsetHint = 0,
                                                         )
-                                                        viewerSession = ViewerSession(
-                                                            posts = listOf(resolved),
-                                                            context = context,
-                                                            liveSearchBinding = false,
+                                                        viewerSessionOwner.retain(
+                                                            ViewerSession(
+                                                                posts = listOf(resolved),
+                                                                context = context,
+                                                                liveSearchBinding = false,
+                                                            ),
                                                         )
-                                                        searchCoordinator.setViewerLaunchContext(context)
+                                                        featureDependencies.search.setViewerLaunchContext(context)
                                                         navController.navigate(AppRoute.Viewer) {
                                                             launchSingleTop = true
                                                         }
@@ -1729,7 +1759,7 @@ fun TheoriaApp(
                                         },
                                         onRetrySearch = {
                                             scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                searchCoordinator.retry()
+                                                featureDependencies.search.retry()
                                             }
                                         },
                                     )
@@ -1737,11 +1767,11 @@ fun TheoriaApp(
 
                                 TopLevelDestination.ForYou -> {
                                     ForYouScreen(
-                                        coordinator = forYouCoordinator,
+                                        coordinator = featureDependencies.forYou,
                                         activeProfileId = activeRecommendationProfile.profileId,
                                         likesCount = activeProfileLikes.size,
                                         likedPostIds = likedPostIds,
-                                        pixivUgoiraClient = pixivUgoiraClient,
+                                        pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                         resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
                                         onToggleLike = { post ->
                                             scope.launch {
@@ -1750,8 +1780,8 @@ fun TheoriaApp(
                                         },
                                         onBlacklistCurrentSeed = {
                                             scope.launch {
-                                                if (forYouCoordinator.loading) return@launch
-                                                val added = forYouCoordinator.blacklistCurrentSeedAndRefresh()
+                                                if (featureDependencies.forYou.loading) return@launch
+                                                val added = featureDependencies.forYou.blacklistCurrentSeedAndRefresh()
                                                 if (added > 0) {
                                                     Toast.makeText(
                                                         appContext,
@@ -1770,13 +1800,15 @@ fun TheoriaApp(
                                         onOpenViewer = { posts, context, visibilityFilters ->
                                             scope.launch {
                                                 val preparedPosts = prepareViewerPostsForLaunch(posts, context)
-                                                viewerSession = ViewerSession(
-                                                    posts = preparedPosts,
-                                                    context = context,
-                                                    liveSearchBinding = true,
-                                                    searchVisibilityFilters = visibilityFilters,
+                                                viewerSessionOwner.retain(
+                                                    ViewerSession(
+                                                        posts = preparedPosts,
+                                                        context = context,
+                                                        liveSearchBinding = true,
+                                                        searchVisibilityFilters = visibilityFilters,
+                                                    ),
                                                 )
-                                                searchCoordinator.setViewerLaunchContext(context)
+                                                featureDependencies.search.setViewerLaunchContext(context)
                                                 navController.navigate(AppRoute.Viewer)
                                             }
                                         },
@@ -1797,7 +1829,7 @@ fun TheoriaApp(
                                         watchedPosts = recentWatchedPosts,
                                         searches = recentSearches,
                                         activity = recentActivity,
-                                        pixivUgoiraClient = pixivUgoiraClient,
+                                        pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                         likedPostIds = likedPostIds,
                                         onToggleLike = { post ->
                                             scope.launch {
@@ -1815,19 +1847,21 @@ fun TheoriaApp(
                                                 )
                                                 scope.launch {
                                                     val preparedPosts = prepareViewerPostsForLaunch(posts, context)
-                                                    viewerSession = ViewerSession(
-                                                        posts = preparedPosts,
-                                                        context = context,
-                                                        liveSearchBinding = false,
+                                                    viewerSessionOwner.retain(
+                                                        ViewerSession(
+                                                            posts = preparedPosts,
+                                                            context = context,
+                                                            liveSearchBinding = false,
+                                                        ),
                                                     )
-                                                    uiRestoreRepository.setViewerLaunchContext(context)
+                                                    dataDependencies.uiRestoreRepository.setViewerLaunchContext(context)
                                                     navController.navigate(AppRoute.Viewer)
                                                 }
                                             }
                                         },
                                         onOpenSearch = { entry ->
                                             scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                val applied = searchCoordinator.applyHistoricalQuery(entry.query)
+                                                val applied = featureDependencies.search.applyHistoricalQuery(entry.query)
                                                 if (!applied) {
                                                     Toast.makeText(
                                                         appContext,
@@ -1852,13 +1886,13 @@ fun TheoriaApp(
                                             }
                                         },
                                         onClearWatched = {
-                                            scope.launch { recentsRepository.clearWatchedPosts() }
+                                            scope.launch { dataDependencies.recentsRepository.clearWatchedPosts() }
                                         },
                                         onClearSearches = {
-                                            scope.launch { recentsRepository.clearSearches() }
+                                            scope.launch { dataDependencies.recentsRepository.clearSearches() }
                                         },
                                         onClearAll = {
-                                            scope.launch { recentsRepository.clearAll() }
+                                            scope.launch { dataDependencies.recentsRepository.clearAll() }
                                         },
                                     )
                                 }
@@ -1898,17 +1932,17 @@ fun TheoriaApp(
                                         },
                                         onCreateCodex = { name ->
                                             scope.launch {
-                                                codexRepository.ensureCodex(
+                                                dataDependencies.codexRepository.ensureCodex(
                                                     codexId = profileScopedCodexId(activeRecommendationProfile.profileId),
                                                     name = name,
                                                 )
                                             }
                                         },
                                         onRenameCodex = { codexId, name ->
-                                            scope.launch { codexRepository.renameCodex(codexId, name) }
+                                            scope.launch { dataDependencies.codexRepository.renameCodex(codexId, name) }
                                         },
                                         onDeleteCodex = { codexId ->
-                                            scope.launch { codexRepository.deleteCodex(codexId) }
+                                            scope.launch { dataDependencies.codexRepository.deleteCodex(codexId) }
                                         },
                                     )
                                 }
@@ -1921,7 +1955,7 @@ fun TheoriaApp(
                                         activeProfileName = activeRecommendationProfile.name,
                                         likesCount = activeProfileLikes.size,
                                         forYouBlacklistEntries = activeProfileForYouBlacklist,
-                                        availableSources = searchCoordinator.availableSources,
+                                        availableSources = featureDependencies.search.availableSources,
                                         cacheSnapshot = cacheSnapshot,
                                         showDeveloperScenarios = false,
                                         pixivStatusLabel = pixivStatusLabel,
@@ -1932,7 +1966,7 @@ fun TheoriaApp(
                                             if (credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired) {
                                                 showCredentialRecoveryDialog = true
                                             } else {
-                                                val authUrl = pixivAuthController.startAuthorizationUri().toString()
+                                                val authUrl = sourceDependencies.pixivAuthController.startAuthorizationUri().toString()
                                                 pixivStatusLabel = "Awaiting authorization callback..."
                                                 pixivConnected = false
                                                 openInBrowser(appContext, authUrl)
@@ -1943,7 +1977,7 @@ fun TheoriaApp(
                                                 showCredentialRecoveryDialog = true
                                             } else {
                                                 scope.launch {
-                                                    credentialsStore.clearPixivTokens()
+                                                    sourceDependencies.accounts.clearPixivTokens()
                                                     refreshSourceAccountState()
                                                 }
                                             }
@@ -1968,7 +2002,7 @@ fun TheoriaApp(
                                                 if (gelbooruUserIdInput.isBlank() || gelbooruApiKeyInput.isBlank()) {
                                                     gelbooruStatusLabel = "Missing user ID or API key"
                                                 } else {
-                                                    credentialsStore.saveGelbooruCredentials(
+                                                    sourceDependencies.accounts.saveGelbooruCredentials(
                                                         GelbooruCredentials(
                                                             userId = gelbooruUserIdInput,
                                                             apiKey = gelbooruApiKeyInput,
@@ -1983,7 +2017,7 @@ fun TheoriaApp(
                                                 showCredentialRecoveryDialog = true
                                             } else {
                                                 scope.launch {
-                                                    credentialsStore.clearGelbooruCredentials()
+                                                    sourceDependencies.accounts.clearGelbooruCredentials()
                                                     refreshSourceAccountState()
                                                 }
                                             }
@@ -2008,7 +2042,7 @@ fun TheoriaApp(
                                                 if (rule34XxxUserIdInput.isBlank() || rule34XxxApiKeyInput.isBlank()) {
                                                     rule34XxxStatusLabel = "Missing user ID or API key"
                                                 } else {
-                                                    credentialsStore.saveRule34XxxCredentials(
+                                                    sourceDependencies.accounts.saveRule34XxxCredentials(
                                                         Rule34XxxCredentials(
                                                             userId = rule34XxxUserIdInput,
                                                             apiKey = rule34XxxApiKeyInput,
@@ -2023,26 +2057,26 @@ fun TheoriaApp(
                                                 showCredentialRecoveryDialog = true
                                             } else {
                                                 scope.launch {
-                                                    credentialsStore.clearRule34XxxCredentials()
+                                                    sourceDependencies.accounts.clearRule34XxxCredentials()
                                                     refreshSourceAccountState()
                                                 }
                                             }
                                         },
                                         onSetEnabledSources = { enabled ->
                                             scope.launch {
-                                                settingsRepository.setEnabledSources(
-                                                    enabled.intersect(searchCoordinator.availableSources.toSet())
+                                                dataDependencies.settingsRepository.setEnabledSources(
+                                                    enabled.intersect(featureDependencies.search.availableSources.toSet())
                                                 )
                                             }
                                         },
                                         onSetSourceWeights = { weights ->
-                                            scope.launch { settingsRepository.setSourceWeights(weights) }
+                                            scope.launch { dataDependencies.settingsRepository.setSourceWeights(weights) }
                                         },
                                         onSetActiveProfile = { profileId ->
-                                            scope.launch { settingsRepository.setActiveProfile(profileId) }
+                                            scope.launch { dataDependencies.settingsRepository.setActiveProfile(profileId) }
                                         },
                                         onAddProfile = { name ->
-                                            scope.launch { settingsRepository.addRecommendationProfile(name) }
+                                            scope.launch { dataDependencies.settingsRepository.addRecommendationProfile(name) }
                                         },
                                         onRemoveProfile = { profileId ->
                                             scope.launch {
@@ -2052,7 +2086,7 @@ fun TheoriaApp(
                                                 clearProfileLikesAndSyncCodex(profileId)
                                                 removeProfileLikesCodex(profileId)
                                                 removeProfileScopedCodices(profileId)
-                                                settingsRepository.removeRecommendationProfile(profileId)
+                                                dataDependencies.settingsRepository.removeRecommendationProfile(profileId)
                                             }
                                         },
                                         onClearLikesForActiveProfile = {
@@ -2060,7 +2094,7 @@ fun TheoriaApp(
                                         },
                                         onRemoveForYouBlacklistEntry = { source, tags ->
                                             scope.launch {
-                                                settingsRepository.removeForYouBlacklistEntry(
+                                                dataDependencies.settingsRepository.removeForYouBlacklistEntry(
                                                     profileId = activeRecommendationProfile.profileId,
                                                     source = source,
                                                     tags = tags,
@@ -2068,26 +2102,26 @@ fun TheoriaApp(
                                             }
                                         },
                                         onSetCacheFullImageOnSave = { enabled ->
-                                            scope.launch { settingsRepository.setCacheFullImageOnSave(enabled) }
+                                            scope.launch { dataDependencies.settingsRepository.setCacheFullImageOnSave(enabled) }
                                         },
                                         onSetResolveUnknownAnimatedDurations = { enabled ->
-                                            scope.launch { settingsRepository.setResolveUnknownAnimatedDurations(enabled) }
+                                            scope.launch { dataDependencies.settingsRepository.setResolveUnknownAnimatedDurations(enabled) }
                                         },
                                         onSetScenarioPreset = { preset ->
-                                            scope.launch { settingsRepository.setScenarioPreset(preset) }
+                                            scope.launch { dataDependencies.settingsRepository.setScenarioPreset(preset) }
                                         },
                                         onClearThumbnailCache = {
-                                            scope.launch { cacheRepository.clearThumbnailCache() }
+                                            scope.launch { dataDependencies.cacheRepository.clearThumbnailCache() }
                                         },
                                         onClearFullImageCache = {
-                                            scope.launch { cacheRepository.clearFullImageCache() }
+                                            scope.launch { dataDependencies.cacheRepository.clearFullImageCache() }
                                         },
                                         changelogLoading = releaseHistoryLoading,
                                         onOpenChangelog = {
                                             if (releaseHistoryLoading) return@SettingsScreen
                                             scope.launch {
                                                 releaseHistoryLoading = true
-                                                val remoteHistory = updateFeedClient.mainPrereleaseHistory(limit = 50)
+                                                val remoteHistory = updateDependencies.feedClient.mainPrereleaseHistory(limit = 50)
                                                     .getOrElse { emptyList() }
                                                 val merged = mergeReleaseHistory(
                                                     remoteHistory = remoteHistory,
@@ -2116,27 +2150,31 @@ fun TheoriaApp(
                     ) { entry ->
                         val codexId = requireNotNull(entry.arguments?.getString("codexId"))
                         var sortMode by rememberSaveable(codexId) { mutableStateOf(CodexSortMode.NEWEST_SAVED) }
-                        val codex by codexRepository.observeCodex(codexId).collectAsState(initial = null)
-                        val posts by codexRepository.observeCodexPosts(codexId, sortMode).collectAsState(initial = emptyList())
+                        val codex by dataDependencies.codexRepository
+                            .observeCodex(codexId)
+                            .collectAsStateWithLifecycle(initialValue = null)
+                        val posts by dataDependencies.codexRepository
+                            .observeCodexPosts(codexId, sortMode)
+                            .collectAsStateWithLifecycle(initialValue = emptyList())
 
                         CodexDetailScreen(
                             codexName = codex?.name,
                             posts = posts,
                             sortMode = sortMode,
-                            pixivUgoiraClient = pixivUgoiraClient,
+                            pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                             tagVideoCountProvider = { source, tag ->
-                                searchCoordinator.tagVideoCount(source, tag)
+                                featureDependencies.search.tagVideoCount(source, tag)
                             },
                             fetchTagVideoCounts = { source, tags ->
-                                searchCoordinator.fetchTagVideoCounts(source, tags)
+                                featureDependencies.search.fetchTagVideoCounts(source, tags)
                             },
                             onSortChange = { sortMode = it },
                             resolvePostById = resolver@{ postId ->
-                                val adapter = realRegistry.adapterFor(postId.source) ?: return@resolver null
+                                val adapter = sourceDependencies.registry.adapterFor(postId.source) ?: return@resolver null
                                 val resolved = runCatchingPreservingCancellation {
                                     adapter.resolvePost(postId)
                                 }.getOrNull() ?: return@resolver null
-                                codexRepository.updatePost(resolved)
+                                dataDependencies.codexRepository.updatePost(resolved)
                                 resolved
                             },
                             onOpenViewer = { index ->
@@ -2148,18 +2186,20 @@ fun TheoriaApp(
                                 )
                                 scope.launch {
                                     val preparedPosts = prepareViewerPostsForLaunch(posts, context)
-                                    viewerSession = ViewerSession(
-                                        posts = preparedPosts,
-                                        context = context,
-                                        liveSearchBinding = false,
+                                    viewerSessionOwner.retain(
+                                        ViewerSession(
+                                            posts = preparedPosts,
+                                            context = context,
+                                            liveSearchBinding = false,
+                                        ),
                                     )
-                                    uiRestoreRepository.setViewerLaunchContext(context)
+                                    dataDependencies.uiRestoreRepository.setViewerLaunchContext(context)
                                     navController.navigate(AppRoute.Viewer)
                                 }
                             },
                             onRemovePost = { post ->
                                 scope.launch {
-                                    codexRepository.removeItem(
+                                    dataDependencies.codexRepository.removeItem(
                                         codexId = codexId,
                                         sourceKey = post.id.source,
                                         sourcePostId = post.id.sourcePostId,
@@ -2176,16 +2216,16 @@ fun TheoriaApp(
                                 scope.launch { openCreatorProfile(post) }
                             },
                             onAddIncludeTerm = { post, term ->
-                                searchCoordinator.addPostIncludeTerm(post, term)
+                                featureDependencies.search.addPostIncludeTerm(post, term)
                             },
                             onAddExcludeTerm = { post, term ->
-                                searchCoordinator.addPostExcludeTerm(post, term)
+                                featureDependencies.search.addPostExcludeTerm(post, term)
                             },
                             onRemoveIncludeTerm = { _, term ->
-                                searchCoordinator.removeIncludeTerm(term)
+                                featureDependencies.search.removeIncludeTerm(term)
                             },
                             onRemoveExcludeTerm = { _, term ->
-                                searchCoordinator.removeExcludeTerm(term)
+                                featureDependencies.search.removeExcludeTerm(term)
                             },
                             onFavoriteTagLongPress = addFavoriteTag,
                             onGoToSearch = {
@@ -2197,7 +2237,7 @@ fun TheoriaApp(
                             },
                             onDeleteCodex = {
                                 scope.launch {
-                                    codexRepository.deleteCodex(codexId)
+                                    dataDependencies.codexRepository.deleteCodex(codexId)
                                     homeTabRoute = TopLevelDestination.Codex.route
                                     navController.popBackStack(AppRoute.Home, inclusive = false)
                                 }
@@ -2206,10 +2246,10 @@ fun TheoriaApp(
                     }
                     composable(AppRoute.CreatorProfile) {
                         CreatorProfileScreen(
-                            coordinator = creatorProfileCoordinator,
+                            coordinator = featureDependencies.creatorProfile,
                             likedPostIds = likedPostIds,
                             savedPostIds = savedPostIds,
-                            pixivUgoiraClient = pixivUgoiraClient,
+                            pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                             resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
                             onToggleLike = { post ->
                                 scope.launch { toggleLikeAndSyncCodex(post) }
@@ -2217,11 +2257,13 @@ fun TheoriaApp(
                             onOpenViewer = { posts, context, visibilityFilters ->
                                 scope.launch {
                                     val preparedPosts = prepareViewerPostsForLaunch(posts, context)
-                                    viewerSession = ViewerSession(
-                                        posts = preparedPosts,
-                                        context = context,
-                                        liveSearchBinding = true,
-                                        searchVisibilityFilters = visibilityFilters,
+                                    viewerSessionOwner.retain(
+                                        ViewerSession(
+                                            posts = preparedPosts,
+                                            context = context,
+                                            liveSearchBinding = true,
+                                            searchVisibilityFilters = visibilityFilters,
+                                        ),
                                     )
                                     navController.navigate(AppRoute.Viewer)
                                 }
@@ -2237,16 +2279,16 @@ fun TheoriaApp(
                                 openInBrowser(appContext, url)
                             },
                             onAddIncludeTerm = { post, term ->
-                                searchCoordinator.addPostIncludeTerm(post, term)
+                                featureDependencies.search.addPostIncludeTerm(post, term)
                             },
                             onAddExcludeTerm = { post, term ->
-                                searchCoordinator.addPostExcludeTerm(post, term)
+                                featureDependencies.search.addPostExcludeTerm(post, term)
                             },
                             onRemoveIncludeTerm = { _, term ->
-                                searchCoordinator.removeIncludeTerm(term)
+                                featureDependencies.search.removeIncludeTerm(term)
                             },
                             onRemoveExcludeTerm = { _, term ->
-                                searchCoordinator.removeExcludeTerm(term)
+                                featureDependencies.search.removeExcludeTerm(term)
                             },
                             onBack = {
                                 navController.popBackStack()
@@ -2264,22 +2306,22 @@ fun TheoriaApp(
                             }
                         } else {
                             val canLoadMoreFromSource = when (session.context.streamSource) {
-                                ViewerStreamSource.SEARCH -> session.liveSearchBinding && searchCoordinator.canLoadMore
-                                ViewerStreamSource.FOR_YOU -> session.liveSearchBinding && forYouCoordinator.canLoadMore
-                                ViewerStreamSource.CREATOR_PROFILE -> session.liveSearchBinding && creatorProfileCoordinator.canLoadMore
+                                ViewerStreamSource.SEARCH -> session.liveSearchBinding && featureDependencies.search.canLoadMore
+                                ViewerStreamSource.FOR_YOU -> session.liveSearchBinding && featureDependencies.forYou.canLoadMore
+                                ViewerStreamSource.CREATOR_PROFILE -> session.liveSearchBinding && featureDependencies.creatorProfile.canLoadMore
                                 ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> false
                             }
                             val loadingMoreFromSource = when (session.context.streamSource) {
-                                ViewerStreamSource.SEARCH -> searchCoordinator.loadingMore
-                                ViewerStreamSource.FOR_YOU -> forYouCoordinator.loadingMore
-                                ViewerStreamSource.CREATOR_PROFILE -> creatorProfileCoordinator.loadingMore
+                                ViewerStreamSource.SEARCH -> featureDependencies.search.loadingMore
+                                ViewerStreamSource.FOR_YOU -> featureDependencies.forYou.loadingMore
+                                ViewerStreamSource.CREATOR_PROFILE -> featureDependencies.creatorProfile.loadingMore
                                 ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> false
                             }
                             val onLoadMoreFromSource = when (session.context.streamSource) {
                                 ViewerStreamSource.SEARCH -> {
                                     if (session.liveSearchBinding) {
                                         {
-                                            scope.launch { searchCoordinator.loadNextPage() }
+                                            scope.launch { featureDependencies.search.loadNextPage() }
                                             Unit
                                         }
                                     } else {
@@ -2290,7 +2332,7 @@ fun TheoriaApp(
                                 ViewerStreamSource.FOR_YOU -> {
                                     if (session.liveSearchBinding) {
                                         {
-                                            scope.launch { forYouCoordinator.loadNextPage() }
+                                            scope.launch { featureDependencies.forYou.loadNextPage() }
                                             Unit
                                         }
                                     } else {
@@ -2301,7 +2343,7 @@ fun TheoriaApp(
                                 ViewerStreamSource.CREATOR_PROFILE -> {
                                     if (session.liveSearchBinding) {
                                         {
-                                            scope.launch { creatorProfileCoordinator.loadNextPage() }
+                                            scope.launch { featureDependencies.creatorProfile.loadNextPage() }
                                             Unit
                                         }
                                     } else {
@@ -2315,12 +2357,12 @@ fun TheoriaApp(
                             ViewerScreen(
                                 posts = session.posts,
                                 launchContext = session.context,
-                                pixivUgoiraClient = pixivUgoiraClient,
+                                pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                 tagVideoCountProvider = { source, tag ->
-                                    searchCoordinator.tagVideoCount(source, tag)
+                                    featureDependencies.search.tagVideoCount(source, tag)
                                 },
                                 fetchTagVideoCounts = { source, tags ->
-                                    searchCoordinator.fetchTagVideoCounts(source, tags)
+                                    featureDependencies.search.fetchTagVideoCounts(source, tags)
                                 },
                                 canLoadMoreFromSource = canLoadMoreFromSource,
                                 loadingMoreFromSource = loadingMoreFromSource,
@@ -2328,7 +2370,7 @@ fun TheoriaApp(
                                 invertMultiImageScrollDirection = settings.viewer.invertMultiImageScrollDirection,
                                 onInvertMultiImageScrollDirectionChange = { enabled ->
                                     scope.launch {
-                                        settingsRepository.setInvertMultiImageScrollDirection(enabled)
+                                        dataDependencies.settingsRepository.setInvertMultiImageScrollDirection(enabled)
                                     }
                                 },
                                 likedPostIds = likedPostIds,
@@ -2343,8 +2385,8 @@ fun TheoriaApp(
                                     scope.launch { recordVisibleViewerPost(post) }
                                 },
                                 onDismiss = {
-                                    viewerSession = null
-                                    scope.launch { searchCoordinator.setViewerLaunchContext(null) }
+                                    viewerSessionOwner.clear()
+                                    scope.launch { featureDependencies.search.setViewerLaunchContext(null) }
                                     navController.popBackStack()
                                 },
                                 onSave = { post ->
@@ -2357,22 +2399,22 @@ fun TheoriaApp(
                                     }
                                 },
                                 onAddIncludeTerm = { post, term ->
-                                    searchCoordinator.addPostIncludeTerm(post, term)
+                                    featureDependencies.search.addPostIncludeTerm(post, term)
                                 },
                                 onAddExcludeTerm = { post, term ->
-                                    searchCoordinator.addPostExcludeTerm(post, term)
+                                    featureDependencies.search.addPostExcludeTerm(post, term)
                                 },
                                 onRemoveIncludeTerm = { _, term ->
-                                    searchCoordinator.removeIncludeTerm(term)
+                                    featureDependencies.search.removeIncludeTerm(term)
                                 },
                                 onRemoveExcludeTerm = { _, term ->
-                                    searchCoordinator.removeExcludeTerm(term)
+                                    featureDependencies.search.removeExcludeTerm(term)
                                 },
                                 onFavoriteTagLongPress = addFavoriteTag,
                                 onGoToSearch = {
-                                    viewerSession = null
+                                    viewerSessionOwner.clear()
                                     homeTabRoute = TopLevelDestination.Search.route
-                                    scope.launch { searchCoordinator.setViewerLaunchContext(null) }
+                                    scope.launch { featureDependencies.search.setViewerLaunchContext(null) }
                                     navController.popBackStack(AppRoute.Viewer, inclusive = true)
                                     navController.navigate(AppRoute.Home) {
                                         popUpTo(navController.graph.findStartDestination().id) {
@@ -2409,14 +2451,14 @@ fun TheoriaApp(
                 codexCoverModels = codexCoverModels,
                 onCreateCodex = { profileId, name ->
                     scope.launch {
-                        val codex = codexRepository.ensureCodex(
+                        val codex = dataDependencies.codexRepository.ensureCodex(
                             codexId = profileScopedCodexId(profileId),
                             name = name,
                         )
-                        codexRepository.addItem(codex.codexId, post)
-                        cacheRepository.cacheThumbnail(post)
+                        dataDependencies.codexRepository.addItem(codex.codexId, post)
+                        dataDependencies.cacheRepository.cacheThumbnail(post)
                         if (settings.cache.cacheFullImageOnSave) {
-                            cacheRepository.cacheFull(post)
+                            dataDependencies.cacheRepository.cacheFull(post)
                         }
                     }
                     showSaveSheet = false
@@ -2424,10 +2466,10 @@ fun TheoriaApp(
                 },
                 onSelectCodex = { codexId ->
                     scope.launch {
-                        codexRepository.addItem(codexId, post)
-                        cacheRepository.cacheThumbnail(post)
+                        dataDependencies.codexRepository.addItem(codexId, post)
+                        dataDependencies.cacheRepository.cacheThumbnail(post)
                         if (settings.cache.cacheFullImageOnSave) {
-                            cacheRepository.cacheFull(post)
+                            dataDependencies.cacheRepository.cacheFull(post)
                         }
                     }
                     showSaveSheet = false
@@ -2452,7 +2494,7 @@ fun TheoriaApp(
                     postInstallChangelog = null
                     postInstallReleaseHistory = emptyList()
                     scope.launch {
-                        updateStateStore.setPendingPostInstallChangelog(null)
+                        updateDependencies.stateStore.setPendingPostInstallChangelog(null)
                     }
                 },
             )
@@ -2477,7 +2519,7 @@ fun TheoriaApp(
                         onClick = {
                             showCredentialRecoveryDialog = false
                             scope.launch {
-                                val reset = credentialsStore.resetAfterReconnectRequired()
+                                val reset = sourceDependencies.accounts.resetAfterReconnectRequired()
                                 refreshSourceAccountState()
                                 if (reset) {
                                     pendingTopLevelRoute = TopLevelDestination.Settings.route

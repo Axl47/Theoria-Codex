@@ -28,7 +28,12 @@ import com.theoriacodex.domain.orchestration.UnifiedSearchResult
 import com.theoriacodex.domain.recommendation.ForYouTagSetGenerator
 import com.theoriacodex.domain.recommendation.TagAffinityStats
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.random.Random
 
 class ForYouCoordinator(
@@ -37,8 +42,15 @@ class ForYouCoordinator(
     private val likesRepository: LikesRepository = InMemoryLikesRepository(),
     private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
 ) {
+    private val initializationMutex = Mutex()
+    private val feedRequestLock = Any()
     private var runtimeSettings: AppSettings = AppSettings()
     private var hasExecutedFeed = false
+    @Volatile
+    private var initialized = false
+    private var availableSourcesSnapshot = registry.availableSources()
+    private var nextFeedGeneration = 0L
+    private var activeFeedRequest: FeedRequest? = null
     private var nextPageTokens: Map<SourceKey, String?> = emptyMap()
     private var queryOverridesBySource: Map<SourceKey, Query> = emptyMap()
     private var affinityStatsBySource: Map<SourceKey, TagAffinityStats> = emptyMap()
@@ -82,9 +94,18 @@ class ForYouCoordinator(
     var sortMode by mutableStateOf(SortMode.NEWEST)
         private set
 
+    val isInitialized: Boolean
+        get() = initialized
+
     suspend fun initialize() {
-        runtimeSettings = settingsRepository.observeSettings().first()
-        activeProfileId = runtimeSettings.activeProfileId
+        if (initialized) return
+        initializationMutex.withLock {
+            if (initialized) return@withLock
+            runtimeSettings = settingsRepository.observeSettings().first()
+            activeProfileId = runtimeSettings.activeProfileId
+            availableSourcesSnapshot = registry.availableSources()
+            initialized = true
+        }
     }
 
     fun onSettingsChanged(settings: AppSettings): Boolean {
@@ -97,13 +118,25 @@ class ForYouCoordinator(
         if (selectedSource !in allEnabledSources()) {
             selectedSource = null
         }
-        return hasExecutedFeed &&
-            (
-                previousRuntime != settings.runtime ||
-                    previousProfile != settings.activeProfileId ||
-                    previousBlacklist != settings.forYouBlacklistByProfile ||
-                    previousSelectedSource != selectedSource
-                )
+        val feedInputsChanged = previousRuntime != settings.runtime ||
+            previousProfile != settings.activeProfileId ||
+            previousBlacklist != settings.forYouBlacklistByProfile ||
+            previousSelectedSource != selectedSource
+        val cancelledActiveRequest = if (feedInputsChanged) invalidateActiveRequest() else false
+        return cancelledActiveRequest || (hasExecutedFeed && feedInputsChanged)
+    }
+
+    fun onAvailableSourcesChanged(): Boolean {
+        val currentSources = registry.availableSources()
+        val sourcesChanged = currentSources != availableSourcesSnapshot
+        availableSourcesSnapshot = currentSources
+        val previousSelectedSource = selectedSource
+        if (selectedSource !in allEnabledSources()) {
+            selectedSource = null
+        }
+        val cancelledActiveRequest = if (sourcesChanged) invalidateActiveRequest() else false
+        return cancelledActiveRequest ||
+            (hasExecutedFeed && (sourcesChanged || previousSelectedSource != selectedSource))
     }
 
     suspend fun refresh(shuffle: Boolean = true) {
@@ -147,6 +180,7 @@ class ForYouCoordinator(
     }
 
     fun clear() {
+        invalidateActiveRequest()
         results = emptyList()
         statuses = emptyList()
         loading = false
@@ -171,8 +205,7 @@ class ForYouCoordinator(
 
     suspend fun loadNextPage() {
         if (loading || loadingMore || !canLoadMore) return
-        loadingMore = true
-        errorMessage = null
+        val request = beginRequest(FeedRequestKind.PAGE)
         try {
             val pageableSources = queryOverridesBySource.keys.filterTo(mutableSetOf()) { source ->
                 !nextPageTokens[source].isNullOrBlank()
@@ -186,6 +219,7 @@ class ForYouCoordinator(
                 sources = pageableSources,
                 pageTokens = nextPageTokens.filterKeys { source -> source in pageableSources },
             )
+            ensureCurrent(request)
             results = mergeResults(results, pageResult.items)
             statuses = pageResult.statuses.sortedBy { it.source.name }
             nextPageTokens = nextPageTokens.toMutableMap().apply {
@@ -195,10 +229,12 @@ class ForYouCoordinator(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
-            errorMessage = error.message ?: "Could not load more recommendations"
-            canLoadMore = false
+            publishIfCurrent(request) {
+                errorMessage = error.message ?: "Could not load more recommendations"
+                canLoadMore = false
+            }
         } finally {
-            loadingMore = false
+            finishRequest(request)
         }
     }
 
@@ -230,16 +266,12 @@ class ForYouCoordinator(
     }
 
     private suspend fun executeFeed(shuffle: Boolean) {
-        loading = true
-        loadingMore = false
-        canLoadMore = false
-        errorMessage = null
-        statuses = emptyList()
-        nextPageTokens = emptyMap()
+        val request = beginRequest(FeedRequestKind.ROOT)
         try {
             val enabledSources = effectiveEnabledSources()
             val blacklistedSeedKeys = blacklistedSeedKeysBySource()
             val likes = likesRepository.observeLikes(activeProfileId).first()
+            ensureCurrent(request)
             activeProfileLikesCount = likes.size
             affinityStatsBySource = buildAffinityBySource(
                 likes = likes,
@@ -261,6 +293,7 @@ class ForYouCoordinator(
                 shuffle = shuffle,
                 blacklistedSeedKeys = blacklistedSeedKeys,
             )
+            ensureCurrent(request)
             val initialSeed = if (personalizedSeed.isNotEmpty()) {
                 personalizedSeed
             } else {
@@ -269,6 +302,7 @@ class ForYouCoordinator(
                     blacklistedSeedKeys = blacklistedSeedKeys,
                 )
             }
+            ensureCurrent(request)
 
             if (initialSeed.isEmpty()) {
                 results = emptyList()
@@ -278,7 +312,8 @@ class ForYouCoordinator(
                 return
             }
 
-            val initialResult = runFeedSeed(initialSeed)
+            val initialResult = runFeedSeed(request, initialSeed)
+            ensureCurrent(request)
             if (initialResult.items.isNotEmpty() || activeProfileLikesCount == 0) {
                 applyFeedResult(seed = initialSeed, result = initialResult)
                 return
@@ -288,8 +323,10 @@ class ForYouCoordinator(
                 enabledSources = enabledSources,
                 blacklistedSeedKeys = blacklistedSeedKeys,
             )
+            ensureCurrent(request)
             if (trendingSeed.isNotEmpty() && trendingSeed != initialSeed) {
-                val trendingResult = runFeedSeed(trendingSeed)
+                val trendingResult = runFeedSeed(request, trendingSeed)
+                ensureCurrent(request)
                 applyFeedResult(seed = trendingSeed, result = trendingResult)
             } else {
                 applyFeedResult(seed = initialSeed, result = initialResult)
@@ -297,21 +334,25 @@ class ForYouCoordinator(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
-            results = emptyList()
-            queryOverridesBySource = emptyMap()
-            seedSummaryBySource = emptyMap()
-            affinityStatsBySource = emptyMap()
-            canLoadMore = false
-            errorMessage = error.message ?: "Could not load recommendations"
+            publishIfCurrent(request) {
+                results = emptyList()
+                queryOverridesBySource = emptyMap()
+                seedSummaryBySource = emptyMap()
+                affinityStatsBySource = emptyMap()
+                canLoadMore = false
+                errorMessage = error.message ?: "Could not load recommendations"
+            }
         } finally {
-            hasExecutedFeed = true
-            loading = false
+            if (isCurrent(request)) hasExecutedFeed = true
+            finishRequest(request)
         }
     }
 
     private suspend fun runFeedSeed(
+        request: FeedRequest,
         seed: Map<SourceKey, List<String>>,
     ): UnifiedSearchResult {
+        ensureCurrent(request)
         queryOverridesBySource = seed.mapValues { (source, includeTags) ->
             sourceQuery(source = source, includeTags = includeTags)
         }
@@ -320,6 +361,82 @@ class ForYouCoordinator(
             pageTokens = emptyMap(),
         )
     }
+
+    private suspend fun beginRequest(kind: FeedRequestKind): FeedRequest {
+        val ownerJob = currentCoroutineContext()[Job]
+        val (request, previous) = synchronized(feedRequestLock) {
+            val request = FeedRequest(
+                generation = ++nextFeedGeneration,
+                kind = kind,
+                ownerJob = ownerJob,
+            )
+            val previous = activeFeedRequest
+            activeFeedRequest = request
+            when (kind) {
+                FeedRequestKind.ROOT -> {
+                    loading = true
+                    loadingMore = false
+                    canLoadMore = false
+                    statuses = emptyList()
+                    nextPageTokens = emptyMap()
+                }
+                FeedRequestKind.PAGE -> loadingMore = true
+            }
+            errorMessage = null
+            request to previous
+        }
+        previous?.ownerJob?.takeIf { it !== request.ownerJob }?.cancel(
+            CancellationException("For You request superseded by generation ${request.generation}")
+        )
+        return request
+    }
+
+    private fun invalidateActiveRequest(): Boolean {
+        val request = synchronized(feedRequestLock) {
+            nextFeedGeneration += 1L
+            activeFeedRequest.also {
+                activeFeedRequest = null
+                loading = false
+                loadingMore = false
+            }
+        }
+        request?.ownerJob?.cancel(CancellationException("For You capabilities changed"))
+        return request != null
+    }
+
+    private suspend fun ensureCurrent(request: FeedRequest) {
+        currentCoroutineContext().ensureActive()
+        if (!isCurrent(request)) {
+            throw CancellationException("Stale For You generation ${request.generation}")
+        }
+    }
+
+    private fun isCurrent(request: FeedRequest): Boolean {
+        return synchronized(feedRequestLock) { activeFeedRequest == request }
+    }
+
+    private inline fun publishIfCurrent(request: FeedRequest, update: () -> Unit) {
+        if (isCurrent(request)) update()
+    }
+
+    private fun finishRequest(request: FeedRequest) {
+        synchronized(feedRequestLock) {
+            if (activeFeedRequest != request) return
+            activeFeedRequest = null
+            when (request.kind) {
+                FeedRequestKind.ROOT -> loading = false
+                FeedRequestKind.PAGE -> loadingMore = false
+            }
+        }
+    }
+
+    private enum class FeedRequestKind { ROOT, PAGE }
+
+    private data class FeedRequest(
+        val generation: Long,
+        val kind: FeedRequestKind,
+        val ownerJob: Job?,
+    )
 
     private fun applyFeedResult(
         seed: Map<SourceKey, List<String>>,

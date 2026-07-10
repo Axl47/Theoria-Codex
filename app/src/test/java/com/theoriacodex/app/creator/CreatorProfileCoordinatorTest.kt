@@ -17,7 +17,12 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import com.theoriacodex.stubs.StubAdapterRegistry
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -154,6 +159,52 @@ class CreatorProfileCoordinatorTest {
         assertEquals(SourceKey.IWARA, coordinator.activeCreator?.source)
     }
 
+    @Test
+    fun `capability removal clears active creator and rejects late source result`() = runTest {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val creator = sampleCreator(source = SourceKey.RULE34XXX, profileId = "rule34-creator")
+        val adapter = FakeCreatorAdapter(
+            adapterSourceKey = SourceKey.RULE34XXX,
+            pages = mapOf(
+                null to Page(
+                    items = listOf(
+                        testPost(
+                            source = SourceKey.RULE34XXX,
+                            sourcePostId = "stale",
+                            creatorProfile = creator,
+                        )
+                    ),
+                    nextPageToken = "next",
+                ),
+            ),
+            searchStarted = started,
+            searchRelease = release,
+        )
+        val capabilities = MutableStateFlow(setOf(SourceKey.RULE34XXX))
+        val coordinator = CreatorProfileCoordinator(
+            registry = mutableRegistry(capabilities, adapter),
+        )
+
+        val staleRequest = backgroundScope.launch { coordinator.open(creator) }
+        started.await()
+
+        capabilities.value = emptySet()
+        assertFalse(coordinator.onAvailableSourcesChanged())
+        assertTrue(coordinator.results.isEmpty())
+        assertFalse(coordinator.loading)
+        assertFalse(coordinator.canLoadMore)
+        assertTrue(coordinator.errorMessage?.contains("not available", ignoreCase = true) == true)
+
+        release.complete(Unit)
+        staleRequest.join()
+
+        assertTrue(coordinator.results.isEmpty())
+        assertFalse(coordinator.canLoadMore)
+        assertTrue(coordinator.errorMessage?.contains("not available", ignoreCase = true) == true)
+        assertEquals(creator, coordinator.activeCreator)
+    }
+
     private fun sampleCreator(
         source: SourceKey = SourceKey.PIXIV,
         profileId: String = "201823",
@@ -176,6 +227,22 @@ class CreatorProfileCoordinatorTest {
         return object : SourceAdapterRegistry {
             override fun availableSources(): Set<SourceKey> = setOf(adapter.sourceKey)
             override fun adapterFor(sourceKey: SourceKey): SourceAdapter? = adapter.takeIf { it.sourceKey == sourceKey }
+            override fun unifiedOrchestrator(): UnifiedSearchOrchestrator = stubRegistry.unifiedOrchestrator()
+        }
+    }
+
+    private fun mutableRegistry(
+        capabilities: MutableStateFlow<Set<SourceKey>>,
+        adapter: SourceAdapter,
+    ): SourceAdapterRegistry {
+        val stubRegistry = StubAdapterRegistry()
+        return object : SourceAdapterRegistry {
+            override fun availableSources(): Set<SourceKey> {
+                return setOf(adapter.sourceKey).intersect(capabilities.value)
+            }
+            override fun adapterFor(sourceKey: SourceKey): SourceAdapter? {
+                return adapter.takeIf { sourceKey == adapter.sourceKey && sourceKey in capabilities.value }
+            }
             override fun unifiedOrchestrator(): UnifiedSearchOrchestrator = stubRegistry.unifiedOrchestrator()
         }
     }
@@ -223,6 +290,8 @@ class CreatorProfileCoordinatorTest {
 private class FakeCreatorAdapter(
     adapterSourceKey: SourceKey,
     val pages: Map<String?, Page<Post>>,
+    private val searchStarted: CompletableDeferred<Unit>? = null,
+    private val searchRelease: CompletableDeferred<Unit>? = null,
 ) : SourceAdapter, CreatorPostsSourceAdapter {
     val requestedTokens = mutableListOf<String?>()
 
@@ -257,6 +326,10 @@ private class FakeCreatorAdapter(
         creator: CreatorProfile,
         pageToken: String?,
     ): Page<Post> {
+        searchStarted?.complete(Unit)
+        searchRelease?.let { gate ->
+            withContext(NonCancellable) { gate.await() }
+        }
         requestedTokens += pageToken
         return pages[pageToken] ?: Page(emptyList(), null)
     }

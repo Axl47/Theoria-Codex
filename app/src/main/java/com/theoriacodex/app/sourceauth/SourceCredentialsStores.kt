@@ -23,7 +23,7 @@ sealed interface CredentialStoreRecoveryState {
 
 class AndroidSecureSourceCredentialsStore(
     context: Context,
-) : SourceCredentialsProvider {
+) : RecoverableSourceCredentialsStore {
     private val appContext = context.applicationContext
     private val preferences = RecoverableCredentialPreferences(
         openPreferences = {
@@ -35,7 +35,7 @@ class AndroidSecureSourceCredentialsStore(
         },
     )
 
-    val recoveryState: StateFlow<CredentialStoreRecoveryState> = preferences.recoveryState
+    override val recoveryState: StateFlow<CredentialStoreRecoveryState> = preferences.recoveryState
 
     override suspend fun getPixivTokens(): PixivAuthTokens? = withContext(Dispatchers.IO) {
         val stored = preferences.read {
@@ -145,7 +145,7 @@ class AndroidSecureSourceCredentialsStore(
      * Clears an unreadable encrypted store only after the user has chosen to reconnect sources.
      * Ordinary startup and reads never delete credential material automatically.
      */
-    suspend fun resetAfterReconnectRequired(): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun resetAfterReconnectRequired(): Boolean = withContext(Dispatchers.IO) {
         preferences.resetAfterReconnectRequired()
     }
 }

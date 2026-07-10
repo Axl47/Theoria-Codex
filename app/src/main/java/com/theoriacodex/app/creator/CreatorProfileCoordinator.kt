@@ -11,11 +11,18 @@ import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 
 class CreatorProfileCoordinator(
     private val registry: SourceAdapterRegistry,
 ) {
+    private val requestLock = Any()
     private var nextPageToken: String? = null
+    private var availableSourcesSnapshot = registry.availableSources()
+    private var nextGeneration = 0L
+    private var activeRequest: CreatorRequest? = null
 
     var activeCreator by mutableStateOf<CreatorProfile?>(null)
         private set
@@ -38,6 +45,25 @@ class CreatorProfileCoordinator(
     val activeQueryHash: String?
         get() = activeCreator?.let(::creatorQueryHash)
 
+    fun onAvailableSourcesChanged(): Boolean {
+        val currentSources = registry.availableSources()
+        val changed = currentSources != availableSourcesSnapshot
+        availableSourcesSnapshot = currentSources
+        if (!changed) return false
+        val creator = activeCreator ?: return false
+        if (creator.source in currentSources) {
+            return errorMessage?.startsWith("Creator browsing is not available") == true
+        }
+        invalidateActiveRequest()
+        results = emptyList()
+        loading = false
+        loadingMore = false
+        canLoadMore = false
+        nextPageToken = null
+        errorMessage = "Creator browsing is not available for ${creator.source.name.lowercase()}."
+        return false
+    }
+
     suspend fun open(creator: CreatorProfile) {
         activeCreator = creator
         refresh()
@@ -55,25 +81,24 @@ class CreatorProfileCoordinator(
             errorMessage = "Creator browsing is not available for ${creator.source.name.lowercase()}."
             return
         }
-        loading = true
-        loadingMore = false
-        canLoadMore = false
-        errorMessage = null
-        nextPageToken = null
+        val request = beginRequest(CreatorRequestKind.ROOT)
         try {
             val page = adapter.searchCreatorPosts(creator = creator, pageToken = null)
+            ensureCurrent(request)
             results = page.items.distinctBy(Post::id)
             nextPageToken = page.nextPageToken
             canLoadMore = !page.nextPageToken.isNullOrBlank()
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
-            results = emptyList()
-            nextPageToken = null
-            canLoadMore = false
-            errorMessage = error.message ?: "Could not load creator uploads"
+            publishIfCurrent(request) {
+                results = emptyList()
+                nextPageToken = null
+                canLoadMore = false
+                errorMessage = error.message ?: "Could not load creator uploads"
+            }
         } finally {
-            loading = false
+            finishRequest(request)
         }
     }
 
@@ -82,22 +107,98 @@ class CreatorProfileCoordinator(
         val token = nextPageToken ?: return
         val adapter = adapterFor(creator)
         if (adapter == null || loading || loadingMore) return
-        loadingMore = true
-        errorMessage = null
+        val request = beginRequest(CreatorRequestKind.PAGE)
         try {
             val page = adapter.searchCreatorPosts(creator = creator, pageToken = token)
+            ensureCurrent(request)
             results = mergeResults(results, page.items)
             nextPageToken = page.nextPageToken
             canLoadMore = !page.nextPageToken.isNullOrBlank()
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
-            canLoadMore = false
-            errorMessage = error.message ?: "Could not load more creator uploads"
+            publishIfCurrent(request) {
+                canLoadMore = false
+                errorMessage = error.message ?: "Could not load more creator uploads"
+            }
         } finally {
-            loadingMore = false
+            finishRequest(request)
         }
     }
+
+    private suspend fun beginRequest(kind: CreatorRequestKind): CreatorRequest {
+        val ownerJob = currentCoroutineContext()[Job]
+        val (request, previous) = synchronized(requestLock) {
+            val request = CreatorRequest(
+                generation = ++nextGeneration,
+                kind = kind,
+                ownerJob = ownerJob,
+            )
+            val previous = activeRequest
+            activeRequest = request
+            when (kind) {
+                CreatorRequestKind.ROOT -> {
+                    loading = true
+                    loadingMore = false
+                    canLoadMore = false
+                    nextPageToken = null
+                }
+                CreatorRequestKind.PAGE -> loadingMore = true
+            }
+            errorMessage = null
+            request to previous
+        }
+        previous?.ownerJob?.takeIf { it !== request.ownerJob }?.cancel(
+            CancellationException("Creator request superseded by generation ${request.generation}")
+        )
+        return request
+    }
+
+    private fun invalidateActiveRequest() {
+        val request = synchronized(requestLock) {
+            nextGeneration += 1L
+            activeRequest.also {
+                activeRequest = null
+                loading = false
+                loadingMore = false
+            }
+        }
+        request?.ownerJob?.cancel(CancellationException("Creator capabilities changed"))
+    }
+
+    private suspend fun ensureCurrent(request: CreatorRequest) {
+        currentCoroutineContext().ensureActive()
+        if (!isCurrent(request)) {
+            throw CancellationException("Stale Creator generation ${request.generation}")
+        }
+    }
+
+    private fun isCurrent(request: CreatorRequest): Boolean {
+        return synchronized(requestLock) { activeRequest == request }
+    }
+
+    private inline fun publishIfCurrent(request: CreatorRequest, update: () -> Unit) {
+        if (isCurrent(request)) update()
+    }
+
+    private fun finishRequest(request: CreatorRequest) {
+        synchronized(requestLock) {
+            if (activeRequest != request) return
+            activeRequest = null
+            when (request.kind) {
+                CreatorRequestKind.ROOT -> loading = false
+                CreatorRequestKind.PAGE -> loadingMore = false
+            }
+        }
+    }
+
+    private enum class CreatorRequestKind { ROOT, PAGE }
+
+    private data class CreatorRequest(
+        val generation: Long,
+        val kind: CreatorRequestKind,
+        val ownerJob: Job?,
+    )
 
     fun buildViewerLaunchContext(
         startIndex: Int,

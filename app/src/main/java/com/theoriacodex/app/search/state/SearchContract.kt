@@ -1,0 +1,162 @@
+package com.theoriacodex.app.search.state
+
+import com.theoriacodex.data.repository.SearchScrollState
+import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.domain.adapter.FacetedSearchScope
+import com.theoriacodex.domain.adapter.FacetedTagSuggestion
+import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.DateRange
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SortMode
+import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.orchestration.SourceRunStatus
+
+/** Platform-free state rendered by the future Search route. */
+data class SearchUiState(
+    val query: SearchQueryUiState = SearchQueryUiState(),
+    val content: SearchContentUiState = SearchContentUiState(),
+    val suggestions: SearchSuggestionsUiState = SearchSuggestionsUiState(),
+    val execution: SearchExecutionUiState = SearchExecutionUiState(),
+    val restoration: SearchRestorationUiState = SearchRestorationUiState.NotStarted,
+) {
+    val loading: Boolean
+        get() = execution.activeKind != null && execution.activeKind != SearchRequestKind.PAGE
+
+    val loadingMore: Boolean
+        get() = execution.activeKind == SearchRequestKind.PAGE
+
+    val hasPendingChanges: Boolean
+        get() = query.draft != query.applied
+}
+
+data class SearchQueryUiState(
+    val draft: Query = emptySearchQuery(),
+    val applied: Query = emptySearchQuery(),
+    val appliedQueryHash: String = "",
+    val availableSources: List<SourceKey> = emptyList(),
+    val modeOptions: List<QueryMode> = listOf(QueryMode.Unified),
+    val enabledSourceCount: Int = 0,
+    val supportedScopes: List<FacetedSearchScope> = emptyList(),
+    val selectedScope: FacetedSearchScope = FacetedSearchScope.All,
+    val validationMessage: String? = null,
+)
+
+data class SearchContentUiState(
+    val results: List<Post> = emptyList(),
+    val statuses: List<SourceRunStatus> = emptyList(),
+    val canLoadMore: Boolean = false,
+    val hasExecutedSearch: Boolean = false,
+    val error: SearchErrorUiState? = null,
+    val displayVersion: Int = 0,
+)
+
+data class SearchSuggestionsUiState(
+    val input: String = "",
+    val trending: List<TagSuggestion> = emptyList(),
+    val autocomplete: List<TagSuggestion> = emptyList(),
+    val facetedAutocomplete: List<FacetedTagSuggestion> = emptyList(),
+)
+
+data class SearchExecutionUiState(
+    val activeRequestId: Long? = null,
+    val activeKind: SearchRequestKind? = null,
+    val submittedQuery: Query? = null,
+    val lastCompletedRequestId: Long? = null,
+    val lastCancelledRequestId: Long? = null,
+)
+
+enum class SearchRequestKind {
+    INITIAL,
+    REPLACE,
+    RETRY,
+    PAGE,
+}
+
+data class SearchErrorUiState(
+    val message: String,
+    val requestKind: SearchRequestKind?,
+    val retryable: Boolean,
+)
+
+sealed interface SearchRestorationUiState {
+    data object NotStarted : SearchRestorationUiState
+    data object Restoring : SearchRestorationUiState
+
+    data class Restored(
+        val restoredQuery: Boolean,
+        val scrollState: SearchScrollState? = null,
+    ) : SearchRestorationUiState
+
+    data class Failed(
+        val message: String,
+    ) : SearchRestorationUiState
+}
+
+/** User intent accepted by the future SearchViewModel. */
+sealed interface SearchAction {
+    data class SelectMode(val mode: QueryMode) : SearchAction
+    data class SelectSort(val sort: SortMode) : SearchAction
+    data class SetDateRange(val range: DateRange?) : SearchAction
+    data class SetMinimumScore(val score: Int?) : SearchAction
+    data class AddIncludeTerm(val term: SearchTerm) : SearchAction
+    data class AddExcludeTerm(val term: SearchTerm) : SearchAction
+    data class RemoveIncludeTerm(val term: SearchTerm) : SearchAction
+    data class RemoveExcludeTerm(val term: SearchTerm) : SearchAction
+    data class SelectSuggestionScope(val scope: FacetedSearchScope) : SearchAction
+    data class AutocompleteChanged(val input: String) : SearchAction
+    data class IncludeSuggestion(val suggestion: FacetedTagSuggestion) : SearchAction
+    data class ExcludeSuggestion(val suggestion: FacetedTagSuggestion) : SearchAction
+    data object ClearAutocomplete : SearchAction
+    data object ApplyDraft : SearchAction
+    data object ResetDraft : SearchAction
+    data object ClearDraft : SearchAction
+    data object Retry : SearchAction
+    data object LoadNextPage : SearchAction
+    data object CancelActiveRequest : SearchAction
+    data object DismissError : SearchAction
+    data object DismissValidation : SearchAction
+    data object Restore : SearchAction
+
+    data class ScrollChanged(
+        val firstVisibleItemIndex: Int,
+        val firstVisibleItemOffsetPx: Int,
+    ) : SearchAction
+
+    data class OpenResult(
+        val postId: PostId,
+        val visibleResults: List<Post>,
+        val scrollOffsetHint: Int,
+    ) : SearchAction
+}
+
+/** One-shot work hosted outside Search rendering. */
+sealed interface SearchEffect {
+    data class OpenViewer(
+        val posts: List<Post>,
+        val context: ViewerLaunchContext,
+    ) : SearchEffect
+
+    data class ShowMessage(
+        val message: String,
+    ) : SearchEffect
+}
+
+data class SearchReduction(
+    val state: SearchUiState,
+    val effects: List<SearchEffect> = emptyList(),
+)
+
+fun emptySearchQuery(mode: QueryMode = QueryMode.Unified): Query {
+    return Query(
+        mode = mode,
+        includeTerms = emptyList(),
+        excludeTerms = emptyList(),
+        sort = SortMode.NEWEST,
+        dateRange = null,
+        minScore = null,
+    )
+}

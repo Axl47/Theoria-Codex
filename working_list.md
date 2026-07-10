@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T18:40:37-04:00
+updated_at: 2026-07-10T20:35:00-04:00
 ---
 # Working List
 
@@ -8,15 +8,37 @@ updated_at: 2026-07-10T18:40:37-04:00
 
 ### In Progress
 
+- [ ] Phase 4: move UI ownership to route-scoped state holders
+  - [ ] 4F: freeze route owner, effect host, saved-state, and feature-factory contracts
+  - [ ] 4A: create the Search route owner and state-driven rendering boundary
+  - [ ] 4B: create the Viewer route owner while keeping platform media handles outside state
+  - [ ] 4C: create For You and Creator route owners with deterministic request ownership
+  - [ ] 4D: extract startup, incoming URI, Codex transfer, likes sync, and Viewer-session workflows
+  - [ ] 4I: integrate route owners/workflows into navigation and remove legacy duplicate ownership
+
 ### Pending
 
-- [ ] Phase 3: establish the application container and immutable UI contracts
-- [ ] Phase 4: move UI ownership to route-scoped state holders
 - [ ] Phase 5: consolidate repeated policy and stable UI primitives
 - [ ] Phase 6: modernize persistence, credentials, and Android tooling in reversible waves
 - [ ] Phase 7: enforce quality budgets, complete system acceptance, and close the program
 
 ### Done
+
+- [x] Phase 3: establish the application container and immutable UI contracts
+  - [x] 3A: define immutable Search state, typed actions/effects, and coordinator mapping
+    - Evidence: 10 pure mapping/reducer tests cover loading, replacement, retry, paging, cancellation, draft preservation, restoration, and Viewer effects
+  - [x] 3B: define immutable Viewer state, typed actions/effects, and platform-handle boundary
+    - Evidence: 11 reducer tests cover mixed media, session replacement, resolution, playback/frame controls, overview, prefetch, typed effects, and same-session stale failures without Android/player handles in state
+  - [x] 3C: define immutable For You and Creator state/action contracts
+    - Evidence: 15 feed-contract tests cover mapping, selection, empty/error lanes, paging, typed failure, cancellation, and generation rejection of stale root/page work
+  - [x] 3D: move concrete construction into one application-owned container with observable source availability
+    - Evidence: application-owned data/source/update/feature bundles retain registry/coordinator identity; credential-gated Rule34 capability hydrates before Search restoration and changes without graph reconstruction
+  - [x] 3I: integrate the container into the app shell and make Flow collection lifecycle-aware
+    - Evidence: shell resolves four dependency bundles, uses lifecycle-aware Flow collection and STARTED-scoped Codex collectors, exposes TheoriaAppContent, retains the Viewer handoff in an Activity-scoped owner, and coordinator initialization is idempotent across configuration notification
+  - [x] 3R: close final integration-review races
+    - Evidence: For You and Creator cancel/supersede active root/page generations before capability or settings replacements; non-cooperative late provider results cannot repopulate unavailable state
+  - [x] Phase 3 gate
+    - Evidence: 110-task deterministic gate passed 895 test executions with 0 failures/errors and 6 opt-in skips; container identity passed earlier on-device, while the compiled recreation/shell tests await a runnable target after USB/ADB disconnected
 
 - [x] Phase 2: bound transport, caches, and disk work
   - [x] 2A: cap text HTTP responses and unify GET/POST cleanup and cancellation

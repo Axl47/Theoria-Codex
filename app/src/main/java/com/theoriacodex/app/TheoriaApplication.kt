@@ -6,19 +6,18 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.GifDecoder
 import coil.decode.ImageDecoderDecoder
+import com.theoriacodex.app.di.DefaultTheoriaAppContainer
+import com.theoriacodex.app.di.TheoriaAppContainer
+import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import com.theoriacodex.app.media.LegacyAnimatedWebPDecoder
-import com.theoriacodex.app.search.FileBackedTagSuggestionStore
-import com.theoriacodex.app.search.TagSuggestionStore
-import com.theoriacodex.app.search.loadSeedTagSuggestions
-import java.io.File
 
-class TheoriaApplication : Application(), ImageLoaderFactory {
-    internal val tagSuggestionStore: TagSuggestionStore by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
-        val storageDirectory = File(filesDir, "theoria_codex")
-        FileBackedTagSuggestionStore(
-            storeFile = File(storageDirectory, "tag_suggestions.json"),
-            seedData = loadSeedTagSuggestions(this),
-        )
+class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContainerOwner {
+    override lateinit var appContainer: TheoriaAppContainer
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        appContainer = DefaultTheoriaAppContainer(this)
     }
 
     override fun newImageLoader(): ImageLoader {

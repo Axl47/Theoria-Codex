@@ -3,6 +3,8 @@ package com.theoriacodex.app.recommend
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.InMemoryLikesRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
+import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.SourceRuntimeSettings
 import com.theoriacodex.data.repository.defaultRecommendationProfiles
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
@@ -18,7 +20,12 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -167,6 +174,92 @@ class ForYouCoordinatorTest {
         assertNull(coordinator.errorMessage)
     }
 
+    @Test
+    fun `capability removal cancels in flight source feed before replacement publishes`() = runTest {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val pixiv = FakeAdapter(SourceKey.PIXIV, "pixiv-current")
+        val rule34 = FakeAdapter(
+            sourceKey = SourceKey.RULE34XXX,
+            postId = "rule34-stale",
+            searchStarted = started,
+            searchRelease = release,
+        )
+        val capabilities = MutableStateFlow(setOf(SourceKey.PIXIV, SourceKey.RULE34XXX))
+        val registry = mutableRegistryOf(capabilities, pixiv, rule34)
+        val likesRepository = InMemoryLikesRepository()
+        val profileId = defaultRecommendationProfiles().first().profileId
+        likesRepository.toggleLike(profileId, PostId(SourceKey.PIXIV, "liked-pixiv"), listOf("pixiv seed"))
+        likesRepository.toggleLike(profileId, PostId(SourceKey.RULE34XXX, "liked-rule34"), listOf("rule34 seed"))
+        val coordinator = ForYouCoordinator(
+            registry = registry,
+            settingsRepository = InMemorySettingsRepository(),
+            likesRepository = likesRepository,
+        )
+        coordinator.initialize()
+
+        val staleRequest = backgroundScope.launch {
+            coordinator.setSourceSelection(SourceKey.RULE34XXX)
+        }
+        started.await()
+
+        capabilities.value = setOf(SourceKey.PIXIV)
+        assertTrue(coordinator.onAvailableSourcesChanged())
+        assertNull(coordinator.selectedSource)
+        assertFalse(coordinator.loading)
+
+        coordinator.refresh(shuffle = false)
+        release.complete(Unit)
+        staleRequest.join()
+
+        assertEquals(listOf(SourceKey.PIXIV), coordinator.results.map { it.id.source }.distinct())
+        assertEquals("pixiv-current", coordinator.results.single().id.sourcePostId)
+        assertFalse(coordinator.loading)
+        assertNull(coordinator.errorMessage)
+    }
+
+    @Test
+    fun `settings change supersedes in flight feed before replacement publishes`() = runTest {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val pixiv = FakeAdapter(SourceKey.PIXIV, "pixiv-current")
+        val rule34 = FakeAdapter(
+            sourceKey = SourceKey.RULE34XXX,
+            postId = "rule34-stale",
+            searchStarted = started,
+            searchRelease = release,
+        )
+        val likesRepository = InMemoryLikesRepository()
+        val profileId = defaultRecommendationProfiles().first().profileId
+        likesRepository.toggleLike(profileId, PostId(SourceKey.PIXIV, "liked-pixiv"), listOf("pixiv seed"))
+        likesRepository.toggleLike(profileId, PostId(SourceKey.RULE34XXX, "liked-rule34"), listOf("rule34 seed"))
+        val coordinator = ForYouCoordinator(
+            registry = registryOf(pixiv, rule34),
+            settingsRepository = InMemorySettingsRepository(),
+            likesRepository = likesRepository,
+        )
+        coordinator.initialize()
+
+        val staleRequest = backgroundScope.launch { coordinator.refresh(shuffle = false) }
+        started.await()
+
+        assertTrue(
+            coordinator.onSettingsChanged(
+                AppSettings(
+                    runtime = SourceRuntimeSettings(enabledSources = setOf(SourceKey.PIXIV)),
+                )
+            )
+        )
+        coordinator.refresh(shuffle = false)
+        release.complete(Unit)
+        staleRequest.join()
+
+        assertEquals(listOf(SourceKey.PIXIV), coordinator.results.map { it.id.source }.distinct())
+        assertEquals("pixiv-current", coordinator.results.single().id.sourcePostId)
+        assertFalse(coordinator.loading)
+        assertNull(coordinator.errorMessage)
+    }
+
     private fun registryOf(vararg adapters: SourceAdapter): SourceAdapterRegistry {
         val adaptersBySource = adapters.associateBy { adapter -> adapter.sourceKey }
         val orchestrator = UnifiedSearchOrchestrator(adaptersBySource)
@@ -177,10 +270,27 @@ class ForYouCoordinatorTest {
         }
     }
 
+    private fun mutableRegistryOf(
+        capabilities: MutableStateFlow<Set<SourceKey>>,
+        vararg adapters: SourceAdapter,
+    ): SourceAdapterRegistry {
+        val adaptersBySource = adapters.associateBy(SourceAdapter::sourceKey)
+        val orchestrator = UnifiedSearchOrchestrator(adaptersBySource)
+        return object : SourceAdapterRegistry {
+            override fun availableSources(): Set<SourceKey> = adaptersBySource.keys.intersect(capabilities.value)
+            override fun adapterFor(sourceKey: SourceKey): SourceAdapter? {
+                return adaptersBySource[sourceKey]?.takeIf { sourceKey in capabilities.value }
+            }
+            override fun unifiedOrchestrator(): UnifiedSearchOrchestrator = orchestrator
+        }
+    }
+
     private class FakeAdapter(
         override val sourceKey: SourceKey,
         postId: String,
         private val failSearch: Boolean = false,
+        private val searchStarted: CompletableDeferred<Unit>? = null,
+        private val searchRelease: CompletableDeferred<Unit>? = null,
     ) : SourceAdapter {
         override val capabilities = SourceCapabilities(
             supportsSortNewest = true,
@@ -211,6 +321,10 @@ class ForYouCoordinatorTest {
 
         override suspend fun search(query: Query, pageToken: String?): Page<Post> {
             if (failSearch) error("$sourceKey failed")
+            searchStarted?.complete(Unit)
+            searchRelease?.let { gate ->
+                withContext(NonCancellable) { gate.await() }
+            }
             lastSearchQuery = query
             requestedPageTokens += pageToken
             val pagePost = if (pageToken == null) {
