@@ -1,16 +1,25 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T07:01:55-04:00
+updated_at: 2026-07-10T07:29:26-04:00
 ---
 # Working List
 
-## Current Task: Hitomi Source ExecPlan
+## Current Task: Implement Hitomi Source, Faceted Search, And Mixed Media
 
 ### Pending
+- [ ] Phase 3: Build reusable scoped autocomplete for NHentai and the Search UI; verify focused source/app tests; commit
+- [ ] Phase 4: Implement and expose Hitomi search, pagination, hydration, and media URL resolution; verify domain/source/stub/app tests; commit
+- [ ] Phase 5: Add creator browsing, typed post actions, and Hitomi deep links; verify data/source/creator/deep-link tests; commit
+- [ ] Phase 6: Generalize the Viewer media overview and support animated WebP/anime video; verify media/viewer/download/device-test compilation; commit
+- [ ] Phase 7: Add live health and app smoke coverage, complete available device acceptance, update README/AGENTS/ExecPlan, run broad validation; commit
 
 ### In Progress
+- [~] Phase 2: Introduce faceted terms and backward-compatible persistence; verify domain, data, source, and app tests; commit
 
 ### Done
+- [x] Phase 1: Freeze Hitomi protocol fixtures and add binary HTTP primitives (`./gradlew :core-sources:test`: 100 tests, 0 failures); commit pending
+- [x] Read `.docs/PLANS.md`, the active Hitomi ExecPlan, repository guidance, and orchestration skills
+- [x] Confirm the implementation worktree is clean before phase edits (`git status --short --branch`)
 - [x] Verify the new HTML ExecPlan structure, required sections, links, and diff (`npx --yes html-validate`, required-section scan, `git diff --check`)
 - [x] Write the Hitomi source, faceted-search, creator, and mixed-media ExecPlan from live route evidence
 - [x] Confirm the agreed UX direction and inspect the current query, suggestion, creator, source, and Viewer boundaries

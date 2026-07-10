@@ -199,14 +199,14 @@
     <h1>ExecPlan: Add Hitomi Faceted Search, Creators, and Mixed Media</h1>
     <p>This plan adds Hitomi as a first-class Theoria Codex source and introduces a reusable faceted-search layer shared with NHentai. Users will be able to distinguish tags, artists, characters, series, groups, types, and languages; browse Hitomi artist uploads; open Hitomi links directly in the app; swipe through still and animated gallery pages; and play Hitomi anime MP4s inside the existing Viewer.</p>
     <div class="meta" role="group" aria-label="Plan metadata">
-      <span class="pill">Status: Proposed</span>
+      <span class="pill">Status: In Progress — Phase 2</span>
       <span class="pill">Owner: Codex</span>
       <span class="pill">Created: 2026-07-10</span>
       <span class="pill">Updated: 2026-07-10</span>
       <span class="pill">Plan file: .docs/exec/hitomi-source-faceted-search-and-mixed-media.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Begin Phase 1 by capturing versioned Hitomi protocol fixtures and adding binary byte-range HTTP support without changing user-visible search behavior.</div>
+      <div class="card"><strong>Next Action</strong>Implement Phase 2 canonical faceted query/post models and additive persistence migration, then verify legacy and typed records across domain, data, source, and app tests.</div>
       <div class="card"><strong>Main Risk</strong>Hitomi search and media URLs depend on binary Nozomi indexes and mutable CDN shard configuration. Protocol parsing, caching, bounded concurrency, and refresh-on-404 behavior must land before UI exposure.</div>
       <div class="card"><strong>Validation</strong>Deterministic fixtures, opt-in live provider probes, app Search route smoke, API 26 and API 28+ media checks, and the two exact galleries named in this plan.</div>
       <div class="card"><strong>Affected Areas</strong><code>core-domain</code> query/post models, <code>core-data</code> persistence, <code>core-sources</code> HTTP and adapters, Search, Creator Profile, Viewer, deep links, stubs, health tooling, and current docs.</div>
@@ -242,10 +242,10 @@
       <h2>Current Status</h2>
       <table class="status-table">
         <tbody>
-          <tr><td>Plan state</td><td>Proposed and ready for implementation review.</td></tr>
+          <tr><td>Plan state</td><td>In progress. Phase 1 is complete and Phase 2 is adding canonical faceted models with backward-compatible persistence.</td></tr>
           <tr><td>UX state</td><td>Agreed: contextual scope chips under the search field; source-specific facets in the first release; poster/badge tiles in the overview with playback in the main Viewer.</td></tr>
           <tr><td>Protocol state</td><td>Live route shapes were verified on 2026-07-10. Search and CDN details can drift and therefore have explicit live probes and recovery behavior.</td></tr>
-          <tr><td>First implementation action</td><td>Phase 1 protocol fixtures and byte-range HTTP primitives.</td></tr>
+          <tr><td>Current implementation action</td><td>Phase 2 faceted query/post models, query hashing, and additive record migration.</td></tr>
           <tr><td>Out of scope</td><td>Hitomi account support, WebView scraping, unrestricted title/full-text search, OR expressions, playing every video inside the overview grid, and making artist/series terms cross-source in Unified mode.</td></tr>
         </tbody>
       </table>
@@ -532,8 +532,8 @@
         <li>[x] 2026-07-10 — Inspected current Query, suggestions, persistence, source registry, creator flow, media classification, and Viewer overview boundaries.</li>
         <li>[x] 2026-07-10 — Verified global/scoped autocomplete, Nozomi lists, gallery JavaScript metadata, mutable CDN configuration, animated WebP chunks, and MP4 byte-range playback.</li>
         <li>[x] 2026-07-10 — Authored this implementation-ready HTML ExecPlan.</li>
-        <li>[ ] Phase 1 — Protocol fixtures and binary HTTP.</li>
-        <li>[ ] Phase 2 — Faceted domain/persistence migration.</li>
+        <li>[x] Phase 1 — Protocol fixtures and binary HTTP. Verified with <code>./gradlew :core-sources:test</code>: 100 tests, 0 failures.</li>
+        <li>[~] Phase 2 — Faceted domain/persistence migration.</li>
         <li>[ ] Phase 3 — Shared scoped UX and NHentai reuse.</li>
         <li>[ ] Phase 4 — Hitomi adapter and source exposure.</li>
         <li>[ ] Phase 5 — Creators, typed post actions, and deep links.</li>
@@ -543,6 +543,7 @@
 
       <h3>Surprises And Discoveries</h3>
       <ul>
+        <li><strong>The captured artist list anchors the acceptance gallery:</strong> the 116-byte <code>artist/najar-all.nozomi</code> fixture decodes to 29 big-endian IDs and begins with <code>4042375</code>. The live endpoint returned HTTP 206 with <code>Content-Range: bytes 0-115/116</code>, proving the same byte path used by deterministic tests.</li>
         <li><strong>Animated example is not a video:</strong> gallery <code>4042375</code> contains 44 WebP file entries, and the sampled file contains WebP animation chunks. This requires an animated-image path, not Media3 video.</li>
         <li><strong>Anime posters are not pages:</strong> gallery <code>7231</code> has two WebP records plus one top-level <code>videofilename</code>. Hitomi's own gallery logic uses these as cover/poster material and renders one video.</li>
         <li><strong>Search is binary:</strong> search result HTML is only a shell. Typed searches read big-endian Nozomi ID lists, so the current text-only HTTP abstraction is insufficient.</li>
@@ -552,6 +553,7 @@
 
       <h3>Decision Log</h3>
       <ul>
+        <li><strong>Decision:</strong> add <code>SourceByteResponse</code> and <code>SourceByteRange</code> as an optional <code>SourceHttpClient</code> path whose default fails explicitly, while <code>DefaultSourceHttpClient</code> reads bounded raw streams directly and disconnects active work on cancellation. <strong>Rationale:</strong> Hitomi receives byte-exact data and Range headers without silently corrupting binary responses through a text-only test double. <strong>Date/Author:</strong> 2026-07-10 / Codex.</li>
         <li><strong>Decision:</strong> build one faceted-search layer and reuse it for Hitomi and NHentai. <strong>Rationale:</strong> both providers expose nearly the same taxonomy with a small Series/parody and Type/category vocabulary mismatch. <strong>Date/Author:</strong> 2026-07-10 / User and Codex.</li>
         <li><strong>Decision:</strong> source-specific facets are available only in source mode for this release. <strong>Rationale:</strong> cross-source artist/series semantics are not reliable across every enabled adapter, and silent source exclusion would make Unified behavior hard to trust. <strong>Date/Author:</strong> 2026-07-10 / User and Codex.</li>
         <li><strong>Decision:</strong> the primary scope row is All, Tags, Artists, Characters, Series, and More; female/male are Tag subtypes. <strong>Rationale:</strong> this keeps the common taxonomy visible without creating an unwieldy row. <strong>Date/Author:</strong> 2026-07-10 / User and Codex.</li>
@@ -562,7 +564,8 @@
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>Planning outcome: the work is divided so provider uncertainty is retired before exposure, faceted search is proved with an already-supported source, and Viewer improvements are global rather than Hitomi-specific. Update this section after every phase with the user-visible result, exact validation evidence, remaining risk, and any scope change. At completion, replace this paragraph with the released behavior and the durable provider lessons added to <code>AGENTS.md</code>.</p>
+      <p><strong>Phase 1 outcome:</strong> the shared HTTP layer now supports bounded binary GETs, exact inclusive Range headers, response headers, retry behavior, 200/206 responses, size rejection, and prompt cancellation of active/retrying reads while preserving the existing text API. Versioned offline fixtures cover mixed/scoped autocomplete, the 29-ID Najar Nozomi list, animated gallery <code>4042375</code>, anime gallery <code>7231</code>, and the mutable <code>gg.js</code> shape. <code>./gradlew :core-sources:test</code> passed 100 tests with no failures. No Hitomi source or UI is exposed yet, as required.</p>
+      <p>Planning outcome: the remaining work stays ordered so faceted search is proved with an already-supported source before Hitomi exposure, and Viewer improvements remain global rather than Hitomi-specific. Update this section after every phase with the user-visible result, exact validation evidence, remaining risk, and any scope change. At completion, replace this paragraph with the released behavior and the durable provider lessons added to <code>AGENTS.md</code>.</p>
     </section>
 
     <section id="recovery">
