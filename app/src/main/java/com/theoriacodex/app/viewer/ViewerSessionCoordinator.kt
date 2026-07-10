@@ -37,7 +37,7 @@ internal fun requiresViewerPostResolution(post: Post, streamSource: ViewerStream
         streamSource == ViewerStreamSource.RECENTS
     ) {
         return post.id.source in REFRESHABLE_REMOTE_VIDEO_SOURCES &&
-            (hasRemotePrimaryMedia(post) || requiresLazyMediaResolution(post))
+            (hasRemoteViewerMedia(post) || requiresLazyMediaResolution(post))
     }
     return requiresLazyMediaResolution(post)
 }
@@ -59,11 +59,12 @@ internal fun requiresLazyMediaResolution(post: Post): Boolean {
     }
 }
 
-private fun hasRemotePrimaryMedia(post: Post): Boolean {
-    return buildList {
+private fun hasRemoteViewerMedia(post: Post): Boolean {
+    val primaryMedia = buildList {
         addAll(post.media)
         post.full?.let { add(it) }
-    }.any { ref ->
+    }.ifEmpty { listOf(post.preview) }
+    return primaryMedia.any { ref ->
         !ref.url.isNullOrBlank() && ref.localPath.isNullOrBlank()
     }
 }

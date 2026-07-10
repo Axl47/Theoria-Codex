@@ -110,6 +110,35 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
+    fun `codex repository durably replaces an existing saved post without changing membership`() = runTest {
+        val dir = tempDir("codex-refresh-post-")
+        val first = FileBackedCodexRepository(dir)
+        val created = first.createCodex("Saved")
+        val stale = samplePost("1", localPath = null, source = SourceKey.GELBOORU)
+        first.addItem(created.codexId, stale)
+        val originalItem = first.observeCodexItems(created.codexId).first().single()
+        val refreshed = stale.copy(
+            preview = ImageRef(
+                url = "https://gelbooru.com/refreshed-preview.jpg",
+                localPath = null,
+                mime = "image/jpeg",
+            ),
+            full = ImageRef(
+                url = "https://gelbooru.com/refreshed-full.jpg",
+                localPath = null,
+                mime = "image/jpeg",
+            ),
+        )
+
+        first.updatePost(refreshed)
+
+        val second = FileBackedCodexRepository(dir)
+        assertEquals(refreshed.preview.url, second.getPost(stale.id)?.preview?.url)
+        assertEquals(refreshed.full?.url, second.getPost(stale.id)?.full?.url)
+        assertEquals(listOf(originalItem), second.observeCodexItems(created.codexId).first())
+    }
+
+    @Test
     fun `codex repository reads legacy post records without creator profile`() = runTest {
         val dir = tempDir("codex-legacy-post-record-")
         val storageFile = dir.resolve("codex_store.json")

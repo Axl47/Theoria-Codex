@@ -93,6 +93,18 @@ class ViewerSessionCoordinatorTest {
     }
 
     @Test
+    fun `codex preview only gelbooru posts refresh before viewer launch`() {
+        val previewOnly = samplePost(
+            source = SourceKey.GELBOORU,
+            full = null,
+            media = emptyList(),
+        )
+
+        assertTrue(requiresViewerPostResolution(previewOnly, ViewerStreamSource.CODEX))
+        assertTrue(requiresViewerPostResolution(previewOnly, ViewerStreamSource.RECENTS))
+    }
+
+    @Test
     fun `codex local cached posts do not refresh by source id`() {
         val cachedGelbooruPost = samplePost(
             source = SourceKey.GELBOORU,

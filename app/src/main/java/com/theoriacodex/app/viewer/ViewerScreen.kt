@@ -136,6 +136,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -1806,63 +1807,75 @@ private suspend fun prefetchVideoMedia(
     context: Context,
     media: ImageRef,
     headers: Map<String, String>,
-): Boolean = withContext(Dispatchers.IO) {
-    val location = media.localPath ?: media.url ?: return@withContext false
-    when {
-        location.startsWith("http://", ignoreCase = true) || location.startsWith("https://", ignoreCase = true) -> {
-            val output = viewerVideoCacheFile(context, location, media.mime)
-            if (output.exists() && output.length() > 0L) {
-                output.setLastModified(System.currentTimeMillis())
-                trimViewerVideoCache(context)
-                return@withContext true
-            }
-            val connection = URL(location).openConnection() as? HttpURLConnection ?: return@withContext false
-            val temp = File(output.absolutePath + ".part")
-            try {
-                connection.instanceFollowRedirects = true
-                connection.connectTimeout = 12_000
-                connection.readTimeout = 24_000
-                headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
-                val statusCode = connection.responseCode
-                if (statusCode !in 200..299) {
-                    false
-                } else {
-                    connection.inputStream.use { input ->
-                        output.parentFile?.mkdirs()
-                        temp.outputStream().use { out ->
-                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                            while (true) {
-                                currentCoroutineContext().ensureActive()
-                                val count = input.read(buffer)
-                                if (count <= 0) break
-                                out.write(buffer, 0, count)
-                            }
-                        }
-                    }
-                    if (temp.length() <= 0L) {
-                        temp.delete()
+): Boolean = nonFatalMediaPrefetch {
+    withContext(Dispatchers.IO) {
+        val location = media.localPath ?: media.url ?: return@withContext false
+        when {
+            location.startsWith("http://", ignoreCase = true) || location.startsWith("https://", ignoreCase = true) -> {
+                val output = viewerVideoCacheFile(context, location, media.mime)
+                if (output.exists() && output.length() > 0L) {
+                    output.setLastModified(System.currentTimeMillis())
+                    trimViewerVideoCache(context)
+                    return@withContext true
+                }
+                val connection = URL(location).openConnection() as? HttpURLConnection ?: return@withContext false
+                val temp = File(output.absolutePath + ".part")
+                try {
+                    connection.instanceFollowRedirects = true
+                    connection.connectTimeout = 12_000
+                    connection.readTimeout = 24_000
+                    headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
+                    val statusCode = connection.responseCode
+                    if (statusCode !in 200..299) {
                         false
                     } else {
-                        if (output.exists()) {
-                            output.delete()
+                        connection.inputStream.use { input ->
+                            output.parentFile?.mkdirs()
+                            temp.outputStream().use { out ->
+                                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                                while (true) {
+                                    currentCoroutineContext().ensureActive()
+                                    val count = input.read(buffer)
+                                    if (count <= 0) break
+                                    out.write(buffer, 0, count)
+                                }
+                            }
                         }
-                        val renamed = temp.renameTo(output)
-                        if (renamed) {
-                            trimViewerVideoCache(context)
+                        if (temp.length() <= 0L) {
+                            temp.delete()
+                            false
+                        } else {
+                            if (output.exists()) {
+                                output.delete()
+                            }
+                            val renamed = temp.renameTo(output)
+                            if (renamed) {
+                                trimViewerVideoCache(context)
+                            }
+                            renamed
                         }
-                        renamed
+                    }
+                } finally {
+                    connection.disconnect()
+                    if (temp.exists() && (!output.exists() || output.length() == 0L)) {
+                        temp.delete()
                     }
                 }
-            } finally {
-                connection.disconnect()
-                if (temp.exists() && (!output.exists() || output.length() == 0L)) {
-                    temp.delete()
-                }
             }
-        }
 
-        location.startsWith("content://", ignoreCase = true) -> true
-        else -> File(location).exists()
+            location.startsWith("content://", ignoreCase = true) -> true
+            else -> File(location).exists()
+        }
+    }
+}
+
+internal suspend fun nonFatalMediaPrefetch(block: suspend () -> Boolean): Boolean {
+    return try {
+        block()
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Exception) {
+        false
     }
 }
 

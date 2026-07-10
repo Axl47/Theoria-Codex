@@ -21,6 +21,7 @@ interface CodexRepository {
     fun observeCodexPosts(codexId: String, sort: CodexSortMode): Flow<List<Post>>
     suspend fun getPost(postId: com.theoriacodex.domain.model.PostId): Post?
     suspend fun addItem(codexId: String, post: Post)
+    suspend fun updatePost(post: Post)
     suspend fun removeItem(codexId: String, sourceKey: SourceKey, sourcePostId: String)
 }
 

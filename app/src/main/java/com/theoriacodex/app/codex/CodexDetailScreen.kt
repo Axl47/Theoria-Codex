@@ -46,6 +46,7 @@ import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -57,6 +58,7 @@ fun CodexDetailScreen(
     pixivUgoiraClient: PixivUgoiraClient? = null,
     onSortChange: (CodexSortMode) -> Unit,
     onOpenViewer: (Int) -> Unit,
+    resolvePostById: suspend (PostId) -> Post? = { null },
     onRemovePost: (Post) -> Unit,
     onSavePostToDevice: (Post) -> Unit,
     onOpenCreatorProfile: (Post) -> Unit,
@@ -155,6 +157,8 @@ fun CodexDetailScreen(
                         post = post,
                         pixivUgoiraClient = pixivUgoiraClient,
                         showSourceBadge = true,
+                        resolvePostById = resolvePostById,
+                        refreshOnPreviewError = true,
                         onClick = { onOpenViewer(index) },
                         onLongPress = { selectedActionPost = post },
                     )

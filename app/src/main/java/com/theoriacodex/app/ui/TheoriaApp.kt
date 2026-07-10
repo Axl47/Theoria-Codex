@@ -83,6 +83,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.PostDownloadService
+import com.theoriacodex.app.media.normalizeMediaUrl
 import com.theoriacodex.app.codex.CodexShareFile
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexListScreen
@@ -839,7 +840,7 @@ fun TheoriaApp(
                 ViewerStreamSource.SEARCH -> searchCoordinator.rememberResolvedPost(resolved)
                 ViewerStreamSource.FOR_YOU -> forYouCoordinator.rememberResolvedPost(resolved)
                 ViewerStreamSource.CREATOR_PROFILE -> creatorProfileCoordinator.rememberResolvedPost(resolved)
-                ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS, null -> Unit
+                ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS, null -> codexRepository.updatePost(resolved)
             }
             viewerSession = viewerSession?.let { session ->
                 val index = session.posts.indexOfFirst { current -> current.id == post.id }
@@ -867,7 +868,7 @@ fun TheoriaApp(
             ViewerStreamSource.SEARCH -> searchCoordinator.rememberResolvedPost(resolved)
             ViewerStreamSource.FOR_YOU -> forYouCoordinator.rememberResolvedPost(resolved)
             ViewerStreamSource.CREATOR_PROFILE -> creatorProfileCoordinator.rememberResolvedPost(resolved)
-            ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> Unit
+            ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> codexRepository.updatePost(resolved)
         }
         return posts.toMutableList().apply {
             this[startIndex] = resolved
@@ -2023,6 +2024,12 @@ fun TheoriaApp(
                                 searchCoordinator.fetchTagVideoCounts(source, tags)
                             },
                             onSortChange = { sortMode = it },
+                            resolvePostById = resolver@{ postId ->
+                                val adapter = realRegistry.adapterFor(postId.source) ?: return@resolver null
+                                val resolved = runCatching { adapter.resolvePost(postId) }.getOrNull() ?: return@resolver null
+                                codexRepository.updatePost(resolved)
+                                resolved
+                            },
                             onOpenViewer = { index ->
                                 val context = ViewerLaunchContext(
                                     queryHash = "codex:$codexId",
@@ -2725,7 +2732,7 @@ private fun resolveCodexCoverModel(
     if (remotePointer.exists()) {
         val remoteUrl = runCatching { remotePointer.readText().trim() }.getOrNull()
         if (!remoteUrl.isNullOrBlank()) {
-            return remoteUrl
+            return normalizeMediaUrl(post.id.source, remoteUrl)
         }
     }
 
@@ -2737,7 +2744,7 @@ private fun resolveCodexCoverModel(
         }
     }
 
-    return post.preview.url
+    return normalizeMediaUrl(post.id.source, post.preview.url)
 }
 
 private fun parseGelbooruProfileOwner(html: String): String? {

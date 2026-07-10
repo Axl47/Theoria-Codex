@@ -249,6 +249,28 @@ class GelbooruSourceAdapterTest {
     }
 
     @Test
+    fun `search canonicalizes numbered video cdn urls with invalid host certificates`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {"post":[{"id":"889","preview_url":"https://video-cdn4.gelbooru.com/preview.jpg","sample_url":"https://video-cdn4.gelbooru.com/sample.jpg","file_url":"https://video-cdn4.gelbooru.com/videos/file.mp4","file_ext":"mp4","tags":"a b"}]}
+                """.trimIndent(),
+            )
+        }
+        val adapter = GelbooruSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = FakeCredentialsProvider(),
+        )
+
+        val post = adapter.search(sampleQuery(), pageToken = null).items.first()
+
+        assertEquals("https://gelbooru.com/preview.jpg", post.preview.url)
+        assertEquals("https://gelbooru.com/videos/file.mp4", post.full?.url)
+        assertEquals(listOf("https://gelbooru.com/sample.jpg"), post.full?.progressiveUrls)
+    }
+
+    @Test
     fun `fetch tag counts batches names lookup and returns counts`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(

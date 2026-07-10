@@ -6,6 +6,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.pixiv.PIXIV_UGOIRA_MIME
+import com.theoriacodex.sources.gelbooru.normalizeGelbooruMediaUrl
 
 enum class PostMediaKind {
     IMAGE,
@@ -162,9 +163,12 @@ fun animatedDurationMs(post: Post): Long? {
 }
 
 fun postMediaItems(post: Post): List<ImageRef> {
-    val explicitMedia = post.media.filter { ref -> ref.hasAnyLocation() }
+    val explicitMedia = post.media
+        .map { ref -> post.normalizeMediaRef(ref) }
+        .filter { ref -> ref.hasAnyLocation() }
     if (explicitMedia.isNotEmpty()) return explicitMedia
-    return listOfNotNull(post.full).ifEmpty { listOf(post.preview) }
+    return listOfNotNull(post.full?.let(post::normalizeMediaRef))
+        .ifEmpty { listOf(post.normalizeMediaRef(post.preview)) }
 }
 
 fun postPreviewImageCandidate(post: Post): PostMediaCandidate? {
@@ -318,15 +322,37 @@ private fun Post.candidate(
     url: String,
     reason: PostMediaSelectionReason,
 ): PostMediaCandidate {
+    val normalizedRef = normalizeMediaRef(ref)
+    val normalizedUrl = normalizeMediaLocation(url) ?: url
     return PostMediaCandidate(
         postId = id,
         source = id.source,
-        ref = ref,
-        url = url,
-        kind = mediaKind(ref),
+        ref = normalizedRef,
+        url = normalizedUrl,
+        kind = mediaKind(normalizedRef),
         requestHeaders = id.source.requestHeaders(),
         reason = reason,
     )
+}
+
+private fun Post.normalizeMediaRef(ref: ImageRef): ImageRef {
+    if (id.source != SourceKey.GELBOORU) return ref
+    return ref.copy(
+        url = normalizeMediaUrl(id.source, ref.url),
+        progressiveUrls = ref.progressiveUrls.mapNotNull { location -> normalizeMediaUrl(id.source, location) },
+    )
+}
+
+private fun Post.normalizeMediaLocation(location: String?): String? {
+    return normalizeMediaUrl(id.source, location)
+}
+
+fun normalizeMediaUrl(source: SourceKey, location: String?): String? {
+    return if (source == SourceKey.GELBOORU) {
+        normalizeGelbooruMediaUrl(location)
+    } else {
+        location
+    }
 }
 
 private fun ImageRef.hasAnyLocation(): Boolean {

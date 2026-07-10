@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Repair Legacy Codex Gelbooru Media</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#f5f6f4; --surface:#fff; --text:#202421; --muted:#626a64; --border:#d7ddd8; --accent:#0f766e; --soft:#dff3ef; --risk:#9a3412; --risk-soft:#ffedd5; --code:#101513; }
+    @media (prefers-color-scheme:dark) { :root { --bg:#151816; --surface:#202421; --text:#eef2ef; --muted:#b5beb7; --border:#39413b; --accent:#5eead4; --soft:#123b37; --risk:#fdba74; --risk-soft:#43230f; --code:#090c0a; } }
+    * { box-sizing:border-box; } body { margin:0; font:15px/1.55 system-ui,sans-serif; background:var(--bg); color:var(--text); }
+    header,main { max-width:1100px; margin:auto; padding:24px; } header { padding-top:36px; } h1,h2,h3 { line-height:1.15; margin:0 0 12px; } h2 { margin-top:28px; } p { margin:0 0 14px; }
+    nav { position:sticky; top:0; z-index:2; border-block:1px solid var(--border); background:var(--surface); } nav ul { max-width:1100px; margin:auto; padding:8px 24px; list-style:none; display:flex; gap:8px; overflow:auto; } nav a { color:var(--accent); white-space:nowrap; }
+    section,.card { background:var(--surface); border:1px solid var(--border); border-radius:9px; } section { margin:18px 0; padding:22px; } .dashboard { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; } .card { padding:14px; } .card strong { display:block; color:var(--muted); font-size:.8rem; text-transform:uppercase; }
+    .meta { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; } .pill { border:1px solid var(--border); border-radius:999px; padding:4px 8px; } table { width:100%; border-collapse:collapse; } th,td { text-align:left; vertical-align:top; padding:9px; border-bottom:1px solid var(--border); } th { color:var(--muted); }
+    code { font-family:ui-monospace,monospace; } pre { overflow:auto; padding:14px; border-radius:8px; background:var(--code); color:#f8fafc; } .callout { border-left:4px solid var(--accent); background:var(--soft); padding:12px 14px; border-radius:6px; } .risk { border-left-color:var(--risk); background:var(--risk-soft); }
+    @media print { nav { position:static; } section,.card { break-inside:avoid; } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Repair legacy Codex Gelbooru media</h1>
+  <p>Saved Gelbooru items with old CDN URLs will recover their previews, refresh durable post data when possible, and degrade to an unavailable state instead of terminating the app when a provider URL or TLS endpoint fails.</p>
+  <div class="meta"><span class="pill">Status: Complete</span><span class="pill">Owner: Codex</span><span class="pill">Created: 2026-07-10</span><span class="pill">Updated: 2026-07-10</span></div>
+  <div class="dashboard">
+    <div class="card"><strong>Confirmed cause</strong>Legacy <code>video-cdn4.gelbooru.com</code> URLs fail hostname verification, and Viewer prefetch lets that exception escape.</div>
+    <div class="card"><strong>Next action</strong>Install the next release normally and confirm the existing private Codex library heals in place.</div>
+    <div class="card"><strong>Validation</strong>Focused regressions, full Gradle test suite, and debug APK assembly passed.</div>
+    <div class="card"><strong>Affected areas</strong>Gelbooru adapter, shared media policy, Codex repository/UI, Viewer prefetch.</div>
+  </div>
+</header>
+<nav><ul><li><a href="#purpose">Purpose</a></li><li><a href="#context">Context</a></li><li><a href="#phases">Phases</a></li><li><a href="#work">Work plan</a></li><li><a href="#validation">Validation</a></li><li><a href="#log">Living log</a></li><li><a href="#recovery">Recovery</a></li></ul></nav>
+<main>
+  <section id="purpose"><h2>Purpose / Big Picture</h2><p>The Codex is a durable library, so saved posts must survive provider URL drift. After this repair, old Gelbooru records use a compatible canonical media host, gray cards can re-resolve themselves by post ID, successful refreshes update the saved record for future launches, and failed prefetches never crash the process.</p></section>
+  <section id="context"><h2>Context And Orientation</h2>
+    <p><code>codex_store.json</code> stores full <code>Post</code> snapshots. <code>CodexDetailScreen</code> renders those snapshots through <code>SearchResultCard</code>. <code>TheoriaApp.prepareViewerPostsForLaunch</code> can resolve one selected post, while <code>ViewerScreen</code> prefetches the current and adjacent videos.</p>
+    <table><thead><tr><th>File</th><th>Role</th></tr></thead><tbody>
+      <tr><td><code>core-sources/.../gelbooru/GelbooruSourceAdapter.kt</code></td><td>Canonicalize provider media URLs returned now and reuse the same rule for legacy URLs.</td></tr>
+      <tr><td><code>app/.../media/PostMedia.kt</code></td><td>Apply canonicalization when old persisted media enters preview, playback, or download selection.</td></tr>
+      <tr><td><code>core-data/.../Repositories.kt</code> and <code>FileBackedRepositories.kt</code></td><td>Allow a refreshed post snapshot to replace and persist an existing saved post without changing Codex membership or saved order.</td></tr>
+      <tr><td><code>app/.../codex/CodexDetailScreen.kt</code> and <code>search/SearchScreen.kt</code></td><td>Retry a failed saved preview through the source adapter and observe the durable replacement.</td></tr>
+      <tr><td><code>app/.../viewer/ViewerScreen.kt</code></td><td>Contain TLS, I/O, malformed URL, and cancellation-safe prefetch failures.</td></tr>
+    </tbody></table>
+    <div class="callout risk"><strong>Runtime evidence:</strong> device logcat on 2026-07-10 shows <code>SSLPeerUnverifiedException</code> for <code>video-cdn4.gelbooru.com</code> escaping <code>prefetchVideoMedia</code> and crashing the main process. The server presents a certificate for <code>gelbooru.com</code>; both hostnames currently resolve to the same server and return the same root response.</div>
+  </section>
+  <section id="phases"><h2>Phases</h2>
+    <h3>1. Compatibility and containment — complete</h3><p>Canonicalized numbered Gelbooru video CDN hostnames before media requests and made Viewer prefetch return failure rather than throw while preserving cancellation.</p>
+    <h3>2. Durable saved-post recovery — complete</h3><p>Added repository replacement semantics, gray-card resolution, click-time persistence, and preview-only legacy refresh eligibility.</p>
+    <h3>3. Integrated validation — automated complete</h3><p>Source, data, media, Viewer, and UI tests pass and the debug APK assembles. Acceptance against the user's private release data remains a post-install check because the installed release is non-debuggable and must not be overwritten during development.</p>
+  </section>
+  <section id="work"><h2>Work Plan</h2><ol>
+    <li>Add a narrowly scoped Gelbooru URL canonicalizer for numbered <code>video-cdn</code> subdomains and cover it with adapter tests.</li>
+    <li>Apply that policy to current adapter output and legacy media candidates without weakening TLS verification.</li>
+    <li>Add <code>updatePost</code> to the Codex repository contract; replace only known saved snapshots and persist every actual replacement.</li>
+    <li>Let Codex cards request resolution after preview failure and have the app update the repository when resolution succeeds.</li>
+    <li>Broaden Codex/Recents refresh eligibility to include preview-only legacy records.</li>
+    <li>Contain prefetch connection/stream exceptions while preserving coroutine cancellation and cleaning partial files.</li>
+  </ol></section>
+  <section id="validation"><h2>Validation And Acceptance</h2><table><thead><tr><th>Check</th><th>Command/action</th><th>Expected result</th></tr></thead><tbody>
+    <tr><td>Focused tests</td><td><code>./gradlew :core-sources:test :core-data:test :app:testDebugUnitTest</code> with focused test filters first</td><td>URL migration, persisted replacement, preview-only refresh, and Viewer failure cases pass.</td></tr>
+    <tr><td>Build</td><td><code>./gradlew :app:assembleDebug</code></td><td>Debug APK assembles successfully.</td></tr>
+    <tr><td>Manual legacy card</td><td>After the fix reaches the installed release, open the affected private Codex and wait for/retry a gray Gelbooru item.</td><td>Pending release-device acceptance: the card resolves or shows a stable fallback.</td></tr>
+    <tr><td>Manual Viewer</td><td>After release installation, open an affected item and inspect <code>adb logcat -b crash -d</code>.</td><td>Pending release-device acceptance: no new fatal media-prefetch exception.</td></tr>
+  </tbody></table></section>
+  <section id="log"><h2>Living Log</h2><h3>Progress</h3><ul><li>[x] 2026-07-10 — Traced persistence, card rendering, viewer launch, and prefetch.</li><li>[x] 2026-07-10 — Captured the real device crash and confirmed the TLS hostname mismatch.</li><li>[x] 2026-07-10 — Implemented compatibility, durable refresh, and regression tests.</li><li>[x] 2026-07-10 — Ran focused tests, the full test suite, and debug APK assembly.</li><li>[ ] Post-release acceptance against the existing private Codex data.</li></ul>
+    <h3>Surprises And Discoveries</h3><ul><li>The visible gray-card bug and fatal Viewer bug share stale provider URLs but are separate failure boundaries: cards never re-resolve Gelbooru, while Viewer prefetch does re-use the stale URL and throws.</li><li>A successful Viewer refresh is currently in-memory only for Codex posts, so it cannot heal the saved library.</li></ul>
+    <h3>Decision Log</h3><ul><li><strong>2026-07-10 / Codex:</strong> Keep certificate verification intact. Rewrite only the known Gelbooru-owned numbered video CDN hosts to the certificate-valid canonical host.</li><li><strong>2026-07-10 / Codex:</strong> Heal saved data through a repository update contract instead of making the Viewer the long-term owner of refreshed posts.</li></ul>
+    <h3>Outcomes And Retrospective</h3><p>The saved-media lifecycle now heals at the Codex boundary instead of only substituting a temporary Viewer item. Known broken Gelbooru CDN hosts are repaired at both current-source parsing and legacy app media boundaries. Network prefetch failures no longer escape the Compose coroutine. Focused regressions passed, followed by <code>./gradlew test :app:assembleDebug</code> with <code>BUILD SUCCESSFUL</code>. The only remaining acceptance item is observing the user's existing release-only data after a normal app update.</p>
+  </section>
+  <section id="recovery"><h2>Idempotence And Recovery</h2><p>All planned tests and builds are safe to rerun. Repository replacement is idempotent for equal posts and must never alter Codex membership or saved timestamps. No destructive migration is planned: legacy JSON remains readable, and URL repair occurs at the media boundary plus on normal successful refresh. If interrupted, resume from the first unchecked progress item and inspect <code>git diff</code>; do not discard unrelated work.</p></section>
+</main>
+</body>
+</html>

@@ -186,6 +186,15 @@ class FileBackedCodexRepository(
         }
     }
 
+    override suspend fun updatePost(post: Post) {
+        mutex.withLock {
+            val existing = postsFlow.value[post.id] ?: return@withLock
+            if (existing == post) return@withLock
+            postsFlow.value = postsFlow.value + (post.id to post)
+            persist()
+        }
+    }
+
     override suspend fun removeItem(codexId: String, sourceKey: SourceKey, sourcePostId: String) {
         mutex.withLock {
             val target = PostId(source = sourceKey, sourcePostId = sourcePostId)

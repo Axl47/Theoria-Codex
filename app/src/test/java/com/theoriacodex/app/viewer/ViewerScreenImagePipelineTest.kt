@@ -5,12 +5,42 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.pixiv.PIXIV_UGOIRA_MIME
+import java.net.SocketException
+import javax.net.ssl.SSLPeerUnverifiedException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ViewerScreenImagePipelineTest {
+    @Test
+    fun `viewer media prefetch treats tls and socket failures as unavailable`() = runTest {
+        assertFalse(
+            nonFatalMediaPrefetch {
+                throw SSLPeerUnverifiedException("video-cdn4 hostname mismatch")
+            },
+        )
+        assertFalse(
+            nonFatalMediaPrefetch {
+                throw SocketException("connection aborted")
+            },
+        )
+    }
+
+    @Test
+    fun `viewer media prefetch preserves coroutine cancellation`() = runTest {
+        var cancelled = false
+        try {
+            nonFatalMediaPrefetch { throw CancellationException("stop") }
+        } catch (_: CancellationException) {
+            cancelled = true
+        }
+
+        assertTrue(cancelled)
+    }
+
     @Test
     fun `pixiv viewer candidates prefer progressive urls before canonical url`() {
         val media = ImageRef(

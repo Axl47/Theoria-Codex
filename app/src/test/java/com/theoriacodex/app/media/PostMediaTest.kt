@@ -115,6 +115,28 @@ class PostMediaTest {
     }
 
     @Test
+    fun `legacy numbered gelbooru video cdn locations use the certificate valid host`() {
+        val legacyVideo = ImageRef(
+            url = "https://video-cdn4.gelbooru.com/videos/file.mp4",
+            localPath = null,
+            mime = "video/mp4",
+        )
+        val post = samplePost(
+            source = SourceKey.GELBOORU,
+            preview = ImageRef(
+                url = "https://video-cdn4.gelbooru.com/preview.jpg",
+                localPath = null,
+                mime = "image/jpeg",
+            ),
+            full = legacyVideo,
+        )
+
+        assertEquals("https://gelbooru.com/videos/file.mp4", postPlaybackMediaCandidate(post)?.url)
+        assertEquals("https://gelbooru.com/videos/file.mp4", postMediaItems(post).single().url)
+        assertEquals("https://gelbooru.com/preview.jpg", postPreviewImageCandidate(post)?.url)
+    }
+
+    @Test
     fun `post media items fall back to full then preview when explicit media is absent`() {
         val full = ImageRef(url = "https://aibooru.online/full.jpg", localPath = null, mime = "image/jpeg")
         val withFull = samplePost(

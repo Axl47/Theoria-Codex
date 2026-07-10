@@ -250,9 +250,9 @@ class GelbooruSourceAdapter(
             ?.map { it.trim() }
             ?.filter { it.isNotBlank() }
             .orEmpty()
-        val fullUrl = raw.get("file_url")?.asString
-        val sampleUrl = raw.get("sample_url")?.asString?.trim()?.takeIf(String::isNotBlank)
-        val previewUrl = raw.get("preview_url")?.asString ?: sampleUrl ?: fullUrl
+        val fullUrl = normalizeGelbooruMediaUrl(raw.get("file_url")?.asString)
+        val sampleUrl = normalizeGelbooruMediaUrl(raw.get("sample_url")?.asString)
+        val previewUrl = normalizeGelbooruMediaUrl(raw.get("preview_url")?.asString) ?: sampleUrl ?: fullUrl
         val fullMime = mimeFromUrlOrExt(fullUrl, raw.get("file_ext")?.asString)
         val previewMime = mimeFromUrlOrExt(previewUrl, null) ?: fullMime
         val createdAt = raw.get("created_at")?.asString?.toLongOrNull()?.times(1000L)
@@ -306,6 +306,11 @@ class GelbooruSourceAdapter(
     }
 }
 
+fun normalizeGelbooruMediaUrl(rawUrl: String?): String? {
+    val url = rawUrl?.trim()?.takeIf(String::isNotBlank) ?: return null
+    return url.replaceFirst(GELBOORU_NUMBERED_VIDEO_CDN_PREFIX, "https://gelbooru.com/")
+}
+
 private fun parseGelbooruDurationMs(raw: JsonObject): Long? {
     return firstDurationMs(
         raw.durationFieldMs("duration_ms", multiplier = 1L),
@@ -338,6 +343,9 @@ private fun looksLikeAuthBlocked(body: String): Boolean {
 private fun normalizeGelbooruTagToken(value: String): String {
     return value.trim().replace(WHITESPACE_REGEX, "_")
 }
+
+private val GELBOORU_NUMBERED_VIDEO_CDN_PREFIX =
+    Regex("^https://video-cdn\\d+\\.gelbooru\\.com/", RegexOption.IGNORE_CASE)
 
 private const val GELBOORU_DAPI_URL = "https://gelbooru.com/index.php"
 private const val GELBOORU_TAG_COUNT_BATCH_SIZE = 50

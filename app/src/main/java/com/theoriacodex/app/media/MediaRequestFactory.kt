@@ -14,7 +14,7 @@ object MediaRequestFactory {
         allowHardware: Boolean = false,
     ): ImageRequest {
         val builder = ImageRequest.Builder(context)
-            .data(url)
+            .data(normalizeMediaUrl(sourceKey, url) ?: url)
             .crossfade(crossfade)
             .allowHardware(allowHardware)
         sourceKey.requestHeaders().forEach { (name, value) ->

@@ -154,6 +154,13 @@ class InMemoryCodexRepository : CodexRepository {
         }
     }
 
+    override suspend fun updatePost(post: Post) {
+        mutex.withLock {
+            if (post.id !in postsById.value) return@withLock
+            postsById.value = postsById.value + (post.id to post)
+        }
+    }
+
     override suspend fun removeItem(codexId: String, sourceKey: SourceKey, sourcePostId: String) {
         mutex.withLock {
             val targetPostId = PostId(source = sourceKey, sourcePostId = sourcePostId)

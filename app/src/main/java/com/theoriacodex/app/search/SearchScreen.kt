@@ -969,6 +969,7 @@ fun SearchResultCard(
     liked: Boolean = false,
     onToggleLike: (() -> Unit)? = null,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
+    refreshOnPreviewError: Boolean = false,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
 ) {
@@ -978,10 +979,14 @@ fun SearchResultCard(
     var resolutionAttempted by remember(post.id) { mutableStateOf(false) }
     val effectivePost = resolvedPostOverride ?: post
 
-    fun requestResolvedRule34CardPreview() {
+    fun requestResolvedCardPreview(force: Boolean = false) {
         if (resolutionAttempted) return
         val resolver = resolvePostById ?: return
-        if (post.id.source != SourceKey.RULE34VIDEO && post.id.source != SourceKey.RULE34GEN) return
+        if (
+            !force &&
+            post.id.source != SourceKey.RULE34VIDEO &&
+            post.id.source != SourceKey.RULE34GEN
+        ) return
         resolutionAttempted = true
         scope.launch {
             val resolved = runCatching { resolver(post.id) }.getOrNull() ?: return@launch
@@ -1030,7 +1035,7 @@ fun SearchResultCard(
 
         LaunchedEffect(effectivePost.id, videoRef?.url, videoRef?.localPath, resolvePostById) {
             if (videoRef == null && resolvedPostOverride == null) {
-                requestResolvedRule34CardPreview()
+                requestResolvedCardPreview()
             }
         }
 
@@ -1057,7 +1062,7 @@ fun SearchResultCard(
                     onPlaybackError = {
                         videoPlaybackFailed = true
                         if (resolvedPostOverride == null) {
-                            requestResolvedRule34CardPreview()
+                            requestResolvedCardPreview(force = refreshOnPreviewError)
                         }
                     },
                 )
@@ -1067,6 +1072,11 @@ fun SearchResultCard(
                     contentDescription = title,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
+                    onError = {
+                        if (resolvedPostOverride == null && refreshOnPreviewError) {
+                            requestResolvedCardPreview(force = true)
+                        }
+                    },
                 )
             } else {
                 Box(
