@@ -1,12 +1,6 @@
----
-created_at: 2026-02-24T18:16
-updated_at: 2026-07-06T00:00
----
 # Theoria Codex
 
 Theoria Codex is an Android-first, local-first, tag-driven media browser and collection app. It is built around a small loop: search real sources, open posts in an immersive viewer, save or like what matters, revisit activity through Recents, and use liked/tag history to drive recommendations.
-
-The long-form product/spec artifact lives at `.docs/TheoriaSpec.md`. It is useful historical context, but this README is the current-facing map of the app because that spec predates several navigation and source-system changes.
 
 ## Current App Shape
 
@@ -88,7 +82,6 @@ Main-channel release publishing lives in `.github/workflows/main-prerelease.yml`
 - `.docs/PLANS.md`: current ExecPlan authoring standard. New plans should be standalone HTML files in `.docs/exec/`.
 - `.docs/exec/*.html`: current executable planning documents for active/modern implementation work.
 - `.docs/exec/execplans/*.md`: older Markdown ExecPlans. Treat these mostly as decision logs unless intentionally resuming one.
-- `.docs/TheoriaSpec.md`: older product/spec artifact and reference material, not a fully current UI inventory.
 
 ## Local Development
 
