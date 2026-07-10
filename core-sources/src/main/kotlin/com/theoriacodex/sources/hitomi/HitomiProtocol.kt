@@ -124,9 +124,9 @@ object HitomiProtocol {
         if (script.length > maxResponseChars) {
             throw HitomiProtocolException("Hitomi gallery response exceeded the size limit")
         }
-        val match = GALLERY_ASSIGNMENT.matchEntire(script)
+        val assignmentBody = galleryAssignmentBody(script)
             ?: throw HitomiProtocolException("Hitomi gallery response was not a galleryinfo assignment")
-        return parseJson(match.groupValues[1], "gallery assignment")
+        return parseJson(assignmentBody, "gallery assignment")
             .takeIf { it.isJsonObject }
             ?.asJsonObject
             ?: throw HitomiProtocolException("Hitomi gallery assignment did not contain an object")
@@ -145,8 +145,31 @@ object HitomiProtocol {
         throw HitomiProtocolException("Hitomi $label was malformed JSON: ${error.message}")
     }
 
-    private val GALLERY_ASSIGNMENT = Regex(
-        pattern = """\s*(?:var|let|const)\s+galleryinfo\s*=\s*(\{.*})\s*;?\s*""",
-        option = RegexOption.DOT_MATCHES_ALL,
-    )
+    /**
+     * Extracts the provider's JavaScript assignment without relying on regex features whose
+     * implementation differs between the desktop JVM and Android's ICU regex engine.
+     */
+    private fun galleryAssignmentBody(script: String): String? {
+        val normalized = script.trim().removeSuffix(";").trimEnd()
+        val equalsIndex = normalized.indexOf('=')
+        if (equalsIndex <= 0) return null
+
+        val declaration = normalized.substring(0, equalsIndex)
+            .trim()
+            .split(' ', '\t', '\r', '\n')
+            .filter(String::isNotEmpty)
+        if (
+            declaration.size != 2 ||
+            declaration[0] !in GALLERY_DECLARATION_KEYWORDS ||
+            declaration[1] != "galleryinfo"
+        ) {
+            return null
+        }
+
+        return normalized.substring(equalsIndex + 1)
+            .trim()
+            .takeIf { body -> body.startsWith('{') && body.endsWith('}') }
+    }
+
+    private val GALLERY_DECLARATION_KEYWORDS = setOf("var", "let", "const")
 }

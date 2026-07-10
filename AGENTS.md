@@ -28,6 +28,8 @@ Hitomi Nozomi indexes are binary streams of big-endian 32-bit gallery IDs. Page 
 
 Hitomi's `gg.js` media configuration is mutable. Recovery is only for an exact media HTTP 404: refresh once for the failed configuration version, then try the alternate shard. Never loop, refresh for unrelated failures, or reinterpret cancellation as provider drift.
 
+Hitomi protocol objects are initialized while the application graph is built, so their static initialization must run on Android itself. Avoid desktop-JVM-only regular-expression assumptions in startup-loaded parsers: Android ICU rejected an escaped object-brace pattern that JVM tests accepted and crashed before the first screen. Prefer deterministic scanning for the `galleryinfo` assignment. Verify that boundary on a connected device with `./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.theoriacodex.app.source.HitomiProtocolDeviceTest`.
+
 Cancellation is a control signal across provider health checks and background transport work. Any boundary that catches broad transport failures must rethrow `CancellationException` before degrading the source or treating media as unavailable.
 
 Animated WebP uses the platform decoder on API 28 and newer. API 26/27 uses the bounded fallback, with compressed input and decoded canvas limits enforced before returning a drawable. Media Overview uses Hitomi's WebP candidate and a distinct static-first-frame request/cache path so grid tiles do not autoplay on any supported API.

@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T10:13:04-04:00
+updated_at: 2026-07-10T15:36:35-04:00
 ---
 # Working List
 
@@ -9,6 +9,11 @@ updated_at: 2026-07-10T10:13:04-04:00
 ### In Progress
 
 ### Done
+- [x] Fix the connected-device startup crash caused by Android ICU rejecting the startup-loaded Hitomi gallery-assignment regex
+  - [x] Replace the regex with deterministic declaration and object-body scanning
+  - [x] Pass the focused Hitomi protocol instrumentation test on a physical Android 16 device
+  - [x] Pass the animated-WebP instrumentation test on the same API 28+ device
+  - [x] Cold-launch `com.theoriacodex/.app.MainActivity`, keep the process alive past 10 seconds, and confirm an empty crash buffer
 - [x] Phase 7: Add targeted health/app smoke, expose Hitomi after the live gate, document current behavior, and close the plan (`./gradlew lint test :app:compileDebugAndroidTestKotlin :app:assembleDebug --rerun-tasks`: 449 tests, 0 failures, 3 opt-in live skips)
   - [x] Preserve typed artist probes, scoped autocomplete, optional trending, exact diagnostic URLs, and cancellation propagation in provider health
   - [x] Support both historical and current inverted `gg.js` shard polarity without accepting an ambiguous routing shape
@@ -16,7 +21,7 @@ updated_at: 2026-07-10T10:13:04-04:00
   - [x] Expose Hitomi only after the health gate, then pass all 5 targeted app-smoke class tests (3 network routes plus 2 harness invariants) for Search, Creator Profile, overview mapping, media headers, cancellation, and source filtering
   - [x] Update README and AGENTS with faceted search, mixed media, Nozomi, mutable CDN, cancellation, decoder, and video-prefetch contracts
   - [x] Verify the supplied Hitomi logo remains byte-identical at SHA-256 `a970eb56124e1237e3b4ee18494f2a159e02bc0f9bcd95a910140ec8e852187d`
-  - [x] Record unavailable device execution: no adb device, emulator command, or `$ANDROID_HOME/system-images`; Android instrumentation still compiles
+  - [x] Complete physical Android 16 startup, Hitomi parser, and animated-WebP acceptance; API 26/27 execution remains unavailable
 - [x] Phase 6: Generalize the Viewer Media Overview and support animated WebP/anime video (`./gradlew :core-domain:test :core-data:test :core-sources:test :core-stubs:test :app:testDebugUnitTest :app:processDebugManifest :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin :app:assembleDebug --rerun-tasks`: 435 tests, 0 failures, 2 opt-in live skips)
   - [x] Classify explicit animated images independently from videos and preserve exact ordered media indices
   - [x] Render still, animated, GIF, Ugoira, and video poster/badge tiles without overview autoplay
@@ -24,7 +29,7 @@ updated_at: 2026-07-10T10:13:04-04:00
   - [x] Decode Hitomi WebP overview posters as separately cached static first frames on every API
   - [x] Cache only complete videos up to 16 MiB and leave large/partial MP4s on Media3 ranged streaming
   - [x] Preserve selected gallery page index/count and save Hitomi anime once as MP4 with source headers
-  - [x] Compile the generated two-frame WebP instrumentation test; runtime execution remains unavailable because no adb device, emulator command, or Android system image is installed
+  - [x] Run the generated two-frame WebP instrumentation test successfully on a physical Android 16 device; API 26/27 fallback execution remains unavailable
 - [x] Phase 5: Add creator browsing, typed post actions, and Hitomi deep links (`./gradlew :core-domain:test :core-data:test :core-sources:test :core-stubs:test :app:testDebugUnitTest :app:processDebugManifest :app:compileDebugKotlin --rerun-tasks`: 421 tests, 0 failures, 2 opt-in live skips)
   - [x] Delegate paginated Hitomi Creator Profile streams to exact typed artist search and preserve every distinct valid artist
   - [x] Share one canonical Unicode-safe Hitomi artist identity contract across provider metadata, persistence-facing UI admission, and deep links

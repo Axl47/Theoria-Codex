@@ -80,6 +80,16 @@ class HitomiProtocolTest {
     }
 
     @Test
+    fun `parses supported gallery declarations without JVM specific regex behavior`() {
+        listOf("var", "let", "const").forEach { keyword ->
+            val gallery = HitomiProtocol.parseGalleryAssignment(
+                "$keyword\n galleryinfo\t=\n{\"id\":4042375};",
+            )
+            assertEquals(4_042_375, gallery.get("id").asInt)
+        }
+    }
+
+    @Test
     fun `rejects oversized truncated or unrelated gallery scripts`() {
         assertProtocolFailure {
             HitomiProtocol.parseGalleryAssignment(
@@ -89,6 +99,8 @@ class HitomiProtocolTest {
         }
         assertProtocolFailure { HitomiProtocol.parseGalleryAssignment("var galleryinfo = {broken};") }
         assertProtocolFailure { HitomiProtocol.parseGalleryAssignment("window.other = {};") }
+        assertProtocolFailure { HitomiProtocol.parseGalleryAssignment("var other galleryinfo = {};") }
+        assertProtocolFailure { HitomiProtocol.parseGalleryAssignment("var galleryinfo = {}; trailing") }
     }
 
     @Test
