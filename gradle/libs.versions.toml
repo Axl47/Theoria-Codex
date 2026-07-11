@@ -25,7 +25,7 @@ robolectric = "4.16.1"
 baselineProfile = "1.4.1"
 benchmark = "1.4.1"
 profileInstaller = "1.4.1"
-uiAutomator = "2.3.0"
+uiAutomator = "2.4.0"
 kover = "0.9.8"
 detekt = "2.0.0-alpha.5"
 
