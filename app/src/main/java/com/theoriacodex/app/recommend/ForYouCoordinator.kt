@@ -41,6 +41,7 @@ class ForYouCoordinator(
     private val settingsRepository: SettingsRepository = InMemorySettingsRepository(),
     private val likesRepository: LikesRepository = InMemoryLikesRepository(),
     private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
+    private val seedSource: () -> Long = System::currentTimeMillis,
 ) {
     private val initializationMutex = Mutex()
     private val feedRequestLock = Any()
@@ -96,6 +97,15 @@ class ForYouCoordinator(
 
     val isInitialized: Boolean
         get() = initialized
+
+    /** Restores compact route controls without starting provider work. */
+    internal fun restoreRouteInputs(
+        source: SourceKey?,
+        sort: SortMode?,
+    ) {
+        selectedSource = source?.takeIf { candidate -> candidate in allEnabledSources() }
+        if (sort != null) sortMode = sort
+    }
 
     suspend fun initialize() {
         if (initialized) return
@@ -470,7 +480,7 @@ class ForYouCoordinator(
         blacklistedSeedKeys: Map<SourceKey, Set<String>>,
     ): Map<SourceKey, List<String>> {
         val random = if (shuffle) {
-            Random(System.currentTimeMillis())
+            Random(seedSource())
         } else {
             Random(0L)
         }

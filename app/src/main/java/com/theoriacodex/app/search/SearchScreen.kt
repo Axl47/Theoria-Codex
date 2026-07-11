@@ -130,13 +130,15 @@ import com.theoriacodex.app.recommend.buildSourceTagAffinity
 import com.theoriacodex.app.R
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.requestHeaders
+import com.theoriacodex.app.search.state.SearchAction
+import com.theoriacodex.app.search.state.SearchRestorationUiState
+import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.tags.FavoriteTagActionGrid
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
 import com.theoriacodex.app.viewer.createLoopingExoPlayer
 import com.theoriacodex.app.viewer.createTexturePlayerView
-import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -145,19 +147,20 @@ import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
+import com.theoriacodex.domain.orchestration.SourceRunStatus
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import coil.decode.SvgDecoder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
@@ -172,16 +175,18 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, FlowPreview::class)
 @Composable
 fun SearchScreen(
-    coordinator: SearchCoordinator,
+    state: SearchUiState,
+    onAction: (SearchAction) -> Unit,
+    resolvePostById: suspend (PostId) -> Post?,
+    recoverPostMedia: suspend (Post, ImageRef) -> Post?,
+    tagVideoCountProvider: (SourceKey, String) -> Int?,
+    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     likedPostIds: Set<PostId> = emptySet(),
     savedPostIds: Set<PostId> = emptySet(),
     favoriteTags: Map<SourceKey, List<String>> = emptyMap(),
     resolveUnknownAnimatedDurations: Boolean = false,
     onToggleLike: ((Post) -> Unit)? = null,
-    onOpenViewer: (List<Post>, ViewerLaunchContext, SearchVisibilityFilters) -> Unit,
-    onApplySearch: () -> Unit,
-    onRetrySearch: () -> Unit,
     onOpenCreatorProfile: (CreatorProfile) -> Unit,
     onOpenLegacyCreatorProfile: (Post) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
@@ -189,7 +194,7 @@ fun SearchScreen(
     onAddFavoriteTag: (SourceKey, String) -> Unit = { _, _ -> },
     onRemoveFavoriteTag: (SourceKey, String) -> Unit = { _, _ -> },
 ) {
-    var input by rememberSaveable { mutableStateOf("") }
+    val input = state.suggestions.input
     var animatedOnly by rememberSaveable { mutableStateOf(false) }
     var hideLiked by rememberSaveable { mutableStateOf(false) }
     var hideSaved by rememberSaveable { mutableStateOf(false) }
@@ -201,12 +206,11 @@ fun SearchScreen(
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var selectedActionPostResolving by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
-    val lifecycleOwner = LocalLifecycleOwner.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
-    val queryHash = coordinator.appliedQueryHash
-    val isNhentaiSourceMode = coordinator.draftQuery.mode == QueryMode.Source(SourceKey.NHENTAI)
+    val queryHash = state.query.appliedQueryHash
+    val isNhentaiSourceMode = state.query.draft.mode == QueryMode.Source(SourceKey.NHENTAI)
     val animatedFilterActive = animatedOnly && !isNhentaiSourceMode
     val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
         AnimatedDurationRange(
@@ -237,8 +241,8 @@ fun SearchScreen(
             UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
         }
     }
-    val displayResults = remember(coordinator.results, coordinator.displayResultsVersion, queryHash) {
-        coordinator.displayResults()
+    val displayResults = remember(state.content.results, state.content.displayVersion, queryHash) {
+        state.content.results
     }
     val visibleResults = remember(displayResults, visibilityFilters, likedPostIds, savedPostIds, unknownAnimatedDurationPolicy) {
         filterSearchResults(
@@ -259,20 +263,20 @@ fun SearchScreen(
             .take(ANIMATED_DURATION_RESOLVE_BATCH_SIZE)
         candidates.forEach { post ->
             val resolved = runCatchingPreservingCancellation {
-                coordinator.resolvePostForSearch(post.id)
+                resolvePostById(post.id)
             }.getOrNull()
             val candidate = resolved ?: post
             if (animatedDurationMs(candidate) == null) {
                 val probedDurationMs = probeRemoteVideoDurationMs(candidate)
                 if (probedDurationMs != null) {
-                    coordinator.rememberResolvedPost(candidate.copy(durationMs = probedDurationMs))
+                    onAction(SearchAction.RememberResolvedPost(candidate.copy(durationMs = probedDurationMs)))
                 }
             }
         }
     }
     fun openPostActionSheet(post: Post) {
         focusManager.clearFocus()
-        val displayPost = coordinator.displayPost(post)
+        val displayPost = state.content.results.firstOrNull { candidate -> candidate.id == post.id } ?: post
         selectedActionPost = displayPost
         selectedActionPostResolving = false
         if (displayPost.hasActionableTags()) return
@@ -280,7 +284,7 @@ fun SearchScreen(
         selectedActionPostResolving = true
         scope.launch {
             val resolved = runCatchingPreservingCancellation {
-                coordinator.resolvePostForSearch(post.id)
+                resolvePostById(post.id)
             }.getOrNull()
             if (selectedActionPost?.id == post.id) {
                 selectedActionPost = resolved ?: displayPost
@@ -289,12 +293,12 @@ fun SearchScreen(
         }
     }
     val displayTagSeedBySource = remember(
-        coordinator.appliedQuery.mode,
-        coordinator.appliedQuery.includeTerms,
+        state.query.applied.mode,
+        state.query.applied.includeTerms,
         visibleResults,
     ) {
-        val recommendationTags = coordinator.appliedQuery.recommendationIncludeTags()
-        when (val mode = coordinator.appliedQuery.mode) {
+        val recommendationTags = state.query.applied.recommendationIncludeTags()
+        when (val mode = state.query.applied.mode) {
             is QueryMode.Source -> mapOf(mode.source to recommendationTags)
             QueryMode.Unified -> {
                 val sources = visibleResults
@@ -326,19 +330,19 @@ fun SearchScreen(
             )
         }
     }
-    val sourceDisplayOrder = remember(coordinator.modeOptions) {
-        coordinator.modeOptions
+    val sourceDisplayOrder = remember(state.query.modeOptions) {
+        state.query.modeOptions
             .mapNotNull { mode -> (mode as? QueryMode.Source)?.source }
     }
-    val favoriteSections = remember(coordinator.draftQuery.mode, favoriteTags, sourceDisplayOrder) {
+    val favoriteSections = remember(state.query.draft.mode, favoriteTags, sourceDisplayOrder) {
         favoriteTagSections(
-            mode = coordinator.draftQuery.mode,
+            mode = state.query.draft.mode,
             favoriteTags = favoriteTags,
             sourceDisplayOrder = sourceDisplayOrder,
         )
     }
-    val favoriteTagEmptyMessage = remember(coordinator.draftQuery.mode) {
-        when (val mode = coordinator.draftQuery.mode) {
+    val favoriteTagEmptyMessage = remember(state.query.draft.mode) {
+        when (val mode = state.query.draft.mode) {
             is QueryMode.Source -> "No favorite tags saved for ${mode.source.displayName()} yet."
             QueryMode.Unified -> "No favorite tags saved yet."
         }
@@ -349,49 +353,14 @@ fun SearchScreen(
                 gridState.scrollToItem(index = 0, scrollOffset = 0)
             }
         }
-        coordinator.persistSearchScrollState(index = 0, offsetPx = 0)
+        onAction(SearchAction.ScrollChanged(0, 0))
     }
 
-    LaunchedEffect(coordinator.draftQuery.mode) {
-        coordinator.loadTrendingTags()
-    }
-
-    LaunchedEffect(
-        coordinator.draftQuery.mode,
-        coordinator.selectedSearchScope,
-        input,
-        searchFieldFocused,
-    ) {
-        if (!searchFieldFocused) {
-            coordinator.clearAutocompleteSuggestions()
-            return@LaunchedEffect
-        }
-        val trimmed = input.trim()
-        if (trimmed.isBlank()) {
-            coordinator.refreshFeaturedFacetedSuggestions()
-            return@LaunchedEffect
-        }
-        delay(300)
-        coordinator.refreshAutocompleteSuggestions(trimmed)
-    }
-
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                scope.launch {
-                    coordinator.restoreLastAppliedSearchIfNeeded()
-                }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
-
-    LaunchedEffect(queryHash, visibleResults.size, animatedFilterActive) {
+    LaunchedEffect(queryHash, visibleResults.size, animatedFilterActive, state.restoration) {
         if (animatedFilterActive) return@LaunchedEffect
-        val restored = coordinator.restoreSearchScrollState() ?: return@LaunchedEffect
+        val restored = (state.restoration as? SearchRestorationUiState.Restored)
+            ?.scrollState
+            ?: return@LaunchedEffect
         if (visibleResults.isNotEmpty()) {
             val lastIndex = visibleResults.lastIndex.coerceAtLeast(0)
             gridState.scrollToItem(
@@ -404,30 +373,27 @@ fun SearchScreen(
     LaunchedEffect(queryHash, animatedFilterActive) {
         if (animatedFilterActive) return@LaunchedEffect
         snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
-            .persistDebouncedSearchScrollStates { (index, offset) ->
-                coordinator.persistSearchScrollState(
-                    queryHash = queryHash,
-                    index = index,
-                    offsetPx = offset,
-                )
+            .distinctUntilChanged()
+            .collect { (index, offset) ->
+                onAction(SearchAction.ScrollChanged(index, offset))
             }
     }
 
     LaunchedEffect(
         queryHash,
         visibleResults.size,
-        coordinator.results.size,
-        coordinator.canLoadMore,
-        coordinator.loading,
-        coordinator.loadingMore,
+        state.content.results.size,
+        state.content.canLoadMore,
+        state.loading,
+        state.loadingMore,
         animatedFilterActive,
         animatedDurationFilterActive,
     ) {
         snapshotFlow {
-            (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to coordinator.loadingMore
+            (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to state.loadingMore
         }.collect { (lastVisibleIndex, loadingMoreState) ->
             if (loadingMoreState) return@collect
-            if (coordinator.loading || coordinator.loadingMore || !coordinator.canLoadMore) return@collect
+            if (state.loading || state.loadingMore || !state.content.canLoadMore) return@collect
 
             val totalVisible = visibleResults.size
             val shouldTriggerByThreshold = if (totalVisible > 0 && lastVisibleIndex >= 0) {
@@ -443,10 +409,10 @@ fun SearchScreen(
             val shouldTriggerForAnimatedBuffer =
                 (animatedFilterActive || animatedDurationFilterActive) &&
                     totalVisible < ANIMATED_PREFETCH_MIN_VISIBLE &&
-                    coordinator.results.isNotEmpty()
+                    state.content.results.isNotEmpty()
 
             if (shouldTriggerByThreshold || shouldTriggerForAnimatedBuffer) {
-                coordinator.loadNextPage()
+                onAction(SearchAction.LoadNextPage)
             }
         }
     }
@@ -461,46 +427,36 @@ fun SearchScreen(
             }
     }
 
-    val autocompleteSuggestions = coordinator.autocompleteSuggestions
-    val facetedAutocompleteSuggestions = coordinator.facetedAutocompleteSuggestions
-    val supportedSearchScopes = coordinator.supportedSearchScopes
-    val sourceAuthErrorMessage = remember(coordinator.statuses) {
-        buildSourceAuthErrorMessage(coordinator.statuses)
+    val autocompleteSuggestions = state.suggestions.autocomplete
+    val facetedAutocompleteSuggestions = state.suggestions.facetedAutocomplete
+    val supportedSearchScopes = state.query.supportedScopes
+    val sourceAuthErrorMessage = remember(state.content.statuses) {
+        buildSourceAuthErrorMessage(state.content.statuses)
     }
-    val sourceFailureMessage = remember(coordinator.statuses) {
-        buildSourceFailureMessage(coordinator.statuses)
+    val sourceFailureMessage = remember(state.content.statuses) {
+        buildSourceFailureMessage(state.content.statuses)
     }
     val clearFocusInteraction = remember { MutableInteractionSource() }
     val showSearchControls = searchFieldFocused ||
         input.isNotBlank() ||
         autocompleteSuggestions.isNotEmpty() ||
         facetedAutocompleteSuggestions.isNotEmpty() ||
-        coordinator.hasPendingChanges
+        state.hasPendingChanges
 
     fun commitTagInput() {
         val typed = input.trim()
-        val committed = coordinator.commitTagInput(input)
-        if (committed) {
-            input = ""
-            focusManager.clearFocus()
-            if (typed.isDigitsOnly() && coordinator.directNhentaiGalleryIdCandidate() != null) {
-                coordinator.clearAutocompleteSuggestions()
-                onApplySearch()
-                scope.launch { resetScrollToTop() }
-            }
+        if (!state.suggestions.canCommitInput) return
+        onAction(SearchAction.CommitTagInput(input))
+        focusManager.clearFocus()
+        if (typed.isDigitsOnly()) {
+            scope.launch { resetScrollToTop() }
         }
     }
 
     fun applyDraftAndResetScroll() {
-        val pendingTyped = input.trim()
-        if (pendingTyped.isDigitsOnly() && coordinator.canCommitTagInput(pendingTyped)) {
-            if (coordinator.commitTagInput(pendingTyped)) {
-                input = ""
-            }
-        }
         focusManager.clearFocus(force = true)
-        coordinator.clearAutocompleteSuggestions()
-        onApplySearch()
+        onAction(SearchAction.ApplyDraft)
+        onAction(SearchAction.ClearAutocomplete)
         scope.launch { resetScrollToTop() }
     }
 
@@ -530,16 +486,21 @@ fun SearchScreen(
                     .fillMaxWidth()
                     .onFocusChanged { state ->
                         searchFieldFocused = state.isFocused
+                        if (state.isFocused) {
+                            onAction(SearchAction.AutocompleteChanged(input))
+                        } else {
+                            onAction(SearchAction.ClearAutocomplete)
+                        }
                     },
                 value = input,
                 onValueChange = {
-                    input = it
-                    coordinator.clearTagInputValidationMessage()
+                    onAction(SearchAction.DismissValidation)
+                    onAction(SearchAction.AutocompleteChanged(it))
                 },
                 shape = RoundedCornerShape(28.dp),
                 singleLine = true,
-                isError = coordinator.tagInputValidationMessage != null,
-                supportingText = coordinator.tagInputValidationMessage?.let { message ->
+                isError = state.query.validationMessage != null,
+                supportingText = state.query.validationMessage?.let { message ->
                     { Text(message) }
                 },
                 placeholder = if (!searchFieldFocused) {
@@ -573,7 +534,7 @@ fun SearchScreen(
                         }
                         TextButton(
                             onClick = { commitTagInput() },
-                            enabled = coordinator.canCommitTagInput(input),
+                            enabled = state.suggestions.canCommitInput,
                         ) {
                             Text("Add")
                         }
@@ -590,8 +551,11 @@ fun SearchScreen(
                     if (supportedSearchScopes.isNotEmpty()) {
                         SearchScopeRow(
                             scopes = supportedSearchScopes,
-                            selectedScope = coordinator.selectedSearchScope,
-                            onScopeSelected = coordinator::selectSearchScope,
+                            selectedScope = state.query.selectedScope,
+                            onScopeSelected = { selected ->
+                                onAction(SearchAction.SelectSuggestionScope(selected))
+                                true
+                            },
                         )
                     }
 
@@ -599,51 +563,47 @@ fun SearchScreen(
                         FacetedAutocompletePanel(
                             suggestions = facetedAutocompleteSuggestions,
                             onInclude = { suggestion ->
-                                coordinator.addIncludeSuggestion(suggestion)
-                                coordinator.clearTagInputValidationMessage()
-                                input = ""
+                                onAction(SearchAction.IncludeSuggestion(suggestion))
+                                onAction(SearchAction.ClearAutocomplete)
                             },
                             onExclude = { suggestion ->
-                                coordinator.addExcludeSuggestion(suggestion)
-                                coordinator.clearTagInputValidationMessage()
-                                input = ""
+                                onAction(SearchAction.ExcludeSuggestion(suggestion))
+                                onAction(SearchAction.ClearAutocomplete)
                             },
                         )
                     } else if (autocompleteSuggestions.isNotEmpty()) {
                         AutocompletePanel(
                             suggestions = autocompleteSuggestions,
                             onInclude = { tag ->
-                                coordinator.addIncludeTag(tag)
-                                coordinator.clearTagInputValidationMessage()
-                                input = ""
+                                onAction(SearchAction.AddIncludeTerm(SearchTerm(tag)))
+                                onAction(SearchAction.ClearAutocomplete)
                             },
                             onExclude = { tag ->
-                                coordinator.addExcludeTag(tag)
-                                coordinator.clearTagInputValidationMessage()
-                                input = ""
+                                onAction(SearchAction.AddExcludeTerm(SearchTerm(tag)))
+                                onAction(SearchAction.ClearAutocomplete)
                             },
                         )
                     }
 
                     ModeRow(
-                        mode = coordinator.draftQuery.mode,
-                        options = coordinator.modeOptions,
-                        unifiedSourceCount = coordinator.enabledSourceCount,
-                        onModeSelected = coordinator::setMode,
+                        mode = state.query.draft.mode,
+                        options = state.query.modeOptions,
+                        unifiedSourceCount = state.query.enabledSourceCount,
+                        onModeSelected = { mode -> onAction(SearchAction.SelectMode(mode)) },
                     )
 
                     TagRow(
-                        includeTerms = coordinator.draftQuery.includeTerms,
-                        excludeTerms = coordinator.draftQuery.excludeTerms,
-                        onRemoveInclude = coordinator::removeIncludeTerm,
-                        onRemoveExclude = coordinator::removeExcludeTerm,
+                        includeTerms = state.query.draft.includeTerms,
+                        excludeTerms = state.query.draft.excludeTerms,
+                        onRemoveInclude = { term -> onAction(SearchAction.RemoveIncludeTerm(term)) },
+                        onRemoveExclude = { term -> onAction(SearchAction.RemoveExcludeTerm(term)) },
                     )
 
                     if (
-                        coordinator.appliedQuery.mode == QueryMode.Unified &&
-                        coordinator.statuses.any { it.state != SourceRunState.SUCCESS }
+                        state.query.applied.mode == QueryMode.Unified &&
+                        state.content.statuses.any { it.state != SourceRunState.SUCCESS }
                     ) {
-                        StatusRow(coordinator = coordinator)
+                        StatusRow(statuses = state.content.statuses)
                     }
 
                     Row(
@@ -653,12 +613,12 @@ fun SearchScreen(
                         TextButton(
                             onClick = {
                                 focusManager.clearFocus()
-                                coordinator.clearDraft()
-                                input = ""
+                                onAction(SearchAction.ClearDraft)
+                                onAction(SearchAction.ClearAutocomplete)
                                 showFilterSheet = false
                                 scope.launch { resetScrollToTop() }
                             },
-                            enabled = coordinator.hasPendingChanges,
+                            enabled = state.hasPendingChanges,
                         ) {
                             Text("Reset")
                         }
@@ -672,7 +632,7 @@ fun SearchScreen(
             }
 
             when {
-                coordinator.loading -> {
+                state.loading -> {
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -686,7 +646,7 @@ fun SearchScreen(
                         CircularProgressIndicator()
                     }
                 }
-                coordinator.errorMessage != null -> {
+                state.content.error != null -> {
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -696,10 +656,10 @@ fun SearchScreen(
                             ) { focusManager.clearFocus() }
                     ) {
                         ErrorBlock(
-                            message = coordinator.errorMessage.orEmpty(),
+                            message = state.content.error.message,
                             onRetry = {
                                 focusManager.clearFocus()
-                                onRetrySearch()
+                                onAction(SearchAction.Retry)
                             },
                         )
                     }
@@ -725,22 +685,22 @@ fun SearchScreen(
                                     message = failureMessage,
                                     onRetry = {
                                         focusManager.clearFocus()
-                                        onRetrySearch()
+                                        onAction(SearchAction.Retry)
                                     },
                                 )
                             }
-                            if (!coordinator.hasAnySearchRun && !animatedFilterActive) {
+                            if (!state.content.hasExecutedSearch && !animatedFilterActive) {
                                 SearchStartSplash(
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             } else {
                                 EmptyBlock(
-                                    hasPendingChanges = coordinator.hasPendingChanges,
+                                    hasPendingChanges = state.hasPendingChanges,
                                     messageOverride = buildEmptySearchMessage(
-                                        sourceResults = coordinator.results,
+                                        sourceResults = state.content.results,
                                         visibilityFilters = visibilityFilters,
-                                        loadingMore = coordinator.loadingMore,
-                                        canLoadMore = coordinator.canLoadMore,
+                                        loadingMore = state.loadingMore,
+                                        canLoadMore = state.content.canLoadMore,
                                     ),
                                 )
                             }
@@ -773,35 +733,35 @@ fun SearchScreen(
                             itemsIndexed(
                                 items = visibleResults,
                                 key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" },
-                            ) { index, post ->
+                            ) { _, post ->
                                 SearchResultCard(
                                     post = post,
                                     pixivUgoiraClient = pixivUgoiraClient,
-                                    showSourceBadge = coordinator.appliedQuery.mode == QueryMode.Unified,
+                                    showSourceBadge = state.query.applied.mode == QueryMode.Unified,
                                     displayTag = displayTagByPostId[post.id],
                                     liked = post.id in likedPostIds,
                                     onToggleLike = onToggleLike?.let { toggle ->
                                         { toggle(post) }
                                     },
-                                    resolvePostById = { postId -> coordinator.resolvePostForSearch(postId) },
+                                    resolvePostById = resolvePostById,
                                     recoverPostMedia = { failedPost, failedMedia ->
-                                        coordinator.recoverPostMedia(failedPost, failedMedia)
+                                        recoverPostMedia(failedPost, failedMedia)
                                     },
                                     onClick = {
                                         focusManager.clearFocus()
-                                        val context = coordinator.buildViewerLaunchContext(
-                                            startIndex = index,
+                                        onAction(SearchAction.OpenResult(
+                                            postId = post.id,
+                                            visibleResults = visibleResults,
                                             scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
-                                        )
-                                        scope.launch { coordinator.setViewerLaunchContext(context) }
-                                        onOpenViewer(visibleResults, context, visibilityFilters)
+                                            visibilityFilters = visibilityFilters,
+                                        ))
                                     },
                                     onLongPress = {
                                         openPostActionSheet(post)
                                     },
                                 )
                             }
-                            if (coordinator.loadingMore) {
+                            if (state.loadingMore) {
                                 item {
                                     Card(
                                         modifier = Modifier
@@ -933,12 +893,18 @@ fun SearchScreen(
                 } else {
                     PostTagActionSection(
                         post = post,
-                        tagVideoCountProvider = coordinator::tagVideoCount,
-                        fetchTagVideoCounts = coordinator::fetchTagVideoCounts,
-                        onAddIncludeTerm = { term -> coordinator.addPostIncludeTerm(post, term) },
-                        onAddExcludeTerm = { term -> coordinator.addPostExcludeTerm(post, term) },
-                        onRemoveIncludeTerm = coordinator::removeIncludeTerm,
-                        onRemoveExcludeTerm = coordinator::removeExcludeTerm,
+                        tagVideoCountProvider = tagVideoCountProvider,
+                        fetchTagVideoCounts = fetchTagVideoCounts,
+                        onAddIncludeTerm = { term ->
+                            onAction(SearchAction.AddPostIncludeTerm(post, term))
+                            true
+                        },
+                        onAddExcludeTerm = { term ->
+                            onAction(SearchAction.AddPostExcludeTerm(post, term))
+                            true
+                        },
+                        onRemoveIncludeTerm = { term -> onAction(SearchAction.RemoveIncludeTerm(term)) },
+                        onRemoveExcludeTerm = { term -> onAction(SearchAction.RemoveExcludeTerm(term)) },
                         onFavoriteTagLongPress = onAddFavoriteTag,
                     )
                 }
@@ -958,11 +924,11 @@ fun SearchScreen(
     if (showFavoriteTagSheet) {
         FavoriteTagSheet(
             sections = favoriteSections,
-            tagVideoCountProvider = coordinator::tagVideoCount,
-            fetchTagVideoCounts = coordinator::fetchTagVideoCounts,
+            tagVideoCountProvider = tagVideoCountProvider,
+            fetchTagVideoCounts = fetchTagVideoCounts,
             emptyMessage = favoriteTagEmptyMessage,
             onAddTag = { tag ->
-                coordinator.addIncludeTag(tag)
+                onAction(SearchAction.AddIncludeTerm(SearchTerm(tag)))
             },
             onRemoveTag = { source, tag ->
                 onRemoveFavoriteTag(source, tag)
@@ -973,7 +939,8 @@ fun SearchScreen(
 
     if (showFilterSheet) {
         FilterSheet(
-            coordinator = coordinator,
+            query = state.query.draft,
+            onAction = onAction,
             animatedOnly = animatedOnly,
             onAnimatedOnlyChange = { animatedOnly = it },
             animatedDurationRange = animatedDurationRange,
@@ -986,14 +953,14 @@ fun SearchScreen(
             onHideLikedChange = { hideLiked = it },
             hideSaved = hideSaved,
             onHideSavedChange = { hideSaved = it },
-            nhentaiFullColorFilter = coordinator.selectedNhentaiFullColorFilter(),
+            nhentaiFullColorFilter = state.query.nhentaiFullColorFilter,
             onNhentaiFullColorFilterChange = { enabled ->
-                coordinator.setNhentaiFullColorFilter(enabled)
+                onAction(SearchAction.SetNhentaiFullColor(enabled))
                 applyDraftAndResetScroll()
             },
-            nhentaiLanguageFilter = coordinator.selectedNhentaiLanguageFilter(),
+            nhentaiLanguageFilter = state.query.nhentaiLanguageFilter,
             onNhentaiLanguageFilterChange = { filter ->
-                coordinator.setNhentaiLanguageFilter(filter)
+                onAction(SearchAction.SetNhentaiLanguage(filter))
                 applyDraftAndResetScroll()
             },
             onSortChanged = { applyDraftAndResetScroll() },
@@ -1473,7 +1440,8 @@ internal fun allowsInlineAutoplayInSearch(post: Post): Boolean {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FilterSheet(
-    coordinator: SearchCoordinator,
+    query: Query,
+    onAction: (SearchAction) -> Unit,
     animatedOnly: Boolean,
     onAnimatedOnlyChange: (Boolean) -> Unit,
     animatedDurationRange: AnimatedDurationRange,
@@ -1491,11 +1459,11 @@ private fun FilterSheet(
     onDismiss: () -> Unit,
     sheetState: androidx.compose.material3.SheetState,
 ) {
-    var minScoreInput by remember(coordinator.draftQuery.minScore) {
-        mutableStateOf(coordinator.draftQuery.minScore?.toString().orEmpty())
+    var minScoreInput by remember(query.minScore) {
+        mutableStateOf(query.minScore?.toString().orEmpty())
     }
-    var selectedPreset by remember(coordinator.draftQuery.dateRange) {
-        mutableStateOf(inferPreset(coordinator.draftQuery.dateRange?.fromEpochMs, coordinator.draftQuery.dateRange?.toEpochMs))
+    var selectedPreset by remember(query.dateRange) {
+        mutableStateOf(inferPreset(query.dateRange?.fromEpochMs, query.dateRange?.toEpochMs))
     }
     val focusManager = LocalFocusManager.current
 
@@ -1584,10 +1552,10 @@ private fun FilterSheet(
                 items(SortMode.entries.size) { index ->
                     val mode = SortMode.entries[index]
                     FilterChip(
-                        selected = coordinator.draftQuery.sort == mode,
+                        selected = query.sort == mode,
                         onClick = {
-                            if (coordinator.draftQuery.sort == mode) return@FilterChip
-                            coordinator.setSort(mode)
+                            if (query.sort == mode) return@FilterChip
+                            onAction(SearchAction.SelectSort(mode))
                             onSortChanged()
                         },
                         label = { Text(mode.name) },
@@ -1610,7 +1578,7 @@ private fun FilterSheet(
                         selected = selectedPreset == preset,
                         onClick = {
                             selectedPreset = preset
-                            coordinator.setDateRangePreset(preset)
+                            onAction(SearchAction.SetDateRangePreset(preset))
                         },
                         label = { Text(label) },
                     )
@@ -1624,7 +1592,7 @@ private fun FilterSheet(
                 value = minScoreInput,
                 onValueChange = { value ->
                     minScoreInput = value.filter { it.isDigit() }
-                    coordinator.setMinScore(minScoreInput.toIntOrNull())
+                    onAction(SearchAction.SetMinimumScore(minScoreInput.toIntOrNull()))
                 },
                 label = { Text("Optional") },
                 singleLine = true,
@@ -1642,7 +1610,7 @@ private fun FilterSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 TextButton(onClick = {
-                    coordinator.resetFilters()
+                    onAction(SearchAction.ResetFilters)
                     selectedPreset = DateRangePreset.NONE
                     minScoreInput = ""
                 }) {
@@ -2139,8 +2107,8 @@ private fun TagRow(
 }
 
 @Composable
-private fun StatusRow(coordinator: SearchCoordinator) {
-    val filtered = coordinator.statuses.filter { it.state != SourceRunState.SUCCESS }
+private fun StatusRow(statuses: List<SourceRunStatus>) {
+    val filtered = statuses.filter { it.state != SourceRunState.SUCCESS }
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(filtered.size) { index ->
             val status = filtered[index]
@@ -2194,13 +2162,6 @@ private fun ErrorBlock(
         }
     }
 }
-
-data class SearchVisibilityFilters(
-    val animatedOnly: Boolean = false,
-    val hideLiked: Boolean = false,
-    val hideSaved: Boolean = false,
-    val animatedDurationRange: AnimatedDurationRange = AnimatedDurationRange.Full,
-)
 
 enum class UnknownAnimatedDurationPolicy {
     HIDE_UNKNOWNS,

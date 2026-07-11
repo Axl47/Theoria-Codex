@@ -1,6 +1,7 @@
 package com.theoriacodex.app.recommend.state
 
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -234,20 +235,30 @@ class ForYouStateContractTest {
     @Test
     fun `open result produces a pure viewer launch intent`() {
         val posts = listOf(testPost(sourcePostId = "1"), testPost(sourcePostId = "2"))
+        val visiblePosts = listOf(posts.last())
+        val filters = SearchVisibilityFilters(animatedOnly = true)
         val state = snapshot(
             likesCount = 2,
             seedId = "PIXIV:sky",
             results = posts,
         ).toUiState()
 
-        val effect = state.reduce(ForYouAction.OpenResult(index = 1, scrollOffsetHint = 80)).effect
+        val effect = state.reduce(
+            ForYouAction.OpenResult(
+                index = 0,
+                scrollOffsetHint = 80,
+                visibleResults = visiblePosts,
+                visibilityFilters = filters,
+            )
+        ).effect
             as ForYouEffect.OpenViewer
 
-        assertEquals(posts, effect.posts)
+        assertEquals(visiblePosts, effect.posts)
         assertEquals("for_you:PIXIV:sky", effect.context.queryHash)
-        assertEquals(1, effect.context.startIndex)
+        assertEquals(0, effect.context.startIndex)
         assertEquals(80, effect.context.scrollOffsetHint)
         assertEquals(ViewerStreamSource.FOR_YOU, effect.context.streamSource)
+        assertEquals(filters, effect.visibilityFilters)
     }
 
     private fun snapshot(

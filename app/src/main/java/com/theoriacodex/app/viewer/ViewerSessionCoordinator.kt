@@ -6,12 +6,14 @@ import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
+import java.util.UUID
 
 internal data class ViewerSession(
     val posts: List<Post>,
     val context: ViewerLaunchContext,
     val liveSearchBinding: Boolean = false,
     val searchVisibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
+    val sessionId: String = UUID.randomUUID().toString(),
 )
 
 private val LAZY_MEDIA_RESOLUTION_SOURCES = setOf(

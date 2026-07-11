@@ -1,6 +1,7 @@
 package com.theoriacodex.app.creator.state
 
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.SourceKey
@@ -201,16 +202,26 @@ class CreatorStateContractTest {
     @Test
     fun `open result produces creator viewer launch intent`() {
         val posts = listOf(testPost(sourcePostId = "1"), testPost(sourcePostId = "2"))
+        val visiblePosts = listOf(posts.last())
+        val filters = SearchVisibilityFilters(hideLiked = true)
         val state = snapshot(creator = creator(), results = posts)
 
-        val effect = state.reduce(CreatorAction.OpenResult(index = 0, scrollOffsetHint = 25)).effect
+        val effect = state.reduce(
+            CreatorAction.OpenResult(
+                index = 0,
+                scrollOffsetHint = 25,
+                visibleResults = visiblePosts,
+                visibilityFilters = filters,
+            )
+        ).effect
             as CreatorEffect.OpenViewer
 
-        assertEquals(posts, effect.posts)
+        assertEquals(visiblePosts, effect.posts)
         assertEquals("creator:PIXIV:artist-id", effect.context.queryHash)
         assertEquals(0, effect.context.startIndex)
         assertEquals(25, effect.context.scrollOffsetHint)
         assertEquals(ViewerStreamSource.CREATOR_PROFILE, effect.context.streamSource)
+        assertEquals(filters, effect.visibilityFilters)
     }
 
     private fun snapshot(

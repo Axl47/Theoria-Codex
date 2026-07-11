@@ -40,12 +40,13 @@ class TheoriaAppContainerDeviceTest {
         assertSame(first.sources, second.sources)
         assertSame(first.updates, second.updates)
         assertSame(first.features, second.features)
+        assertSame(first.workflows, second.workflows)
         assertSame(firstRegistry, second.sources.registry)
         assertSame(firstSearch, second.features.search)
     }
 
     @Test
-    fun activityRecreationRetainsTheActiveViewerSession() {
+    fun activityRecreationRetainsThePendingViewerNavigationPayload() {
         val retainedSession = ViewerSession(
             posts = listOf(
                 Post(

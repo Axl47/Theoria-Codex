@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recommend
 
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,11 +42,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
@@ -53,6 +54,8 @@ import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.animatedDurationMs
 import com.theoriacodex.app.media.probeRemoteVideoDurationMs
+import com.theoriacodex.app.recommend.state.ForYouAction
+import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.SearchVisibilityFilters
@@ -61,28 +64,26 @@ import com.theoriacodex.app.search.animatedDurationResolutionCandidates
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.viewer.PixivUgoiraClient
-import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SortMode
-import kotlinx.coroutines.launch
+import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.flow.collect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ForYouScreen(
-    coordinator: ForYouCoordinator,
-    activeProfileId: String,
-    likesCount: Int,
+    state: ForYouUiState,
     likedPostIds: Set<PostId>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     resolveUnknownAnimatedDurations: Boolean = false,
     onToggleLike: (Post) -> Unit,
-    onBlacklistCurrentSeed: () -> Unit,
-    onOpenViewer: (List<Post>, ViewerLaunchContext, SearchVisibilityFilters) -> Unit,
-    onGoToSearch: () -> Unit,
+    onAction: (ForYouAction) -> Unit,
+    resolvePost: suspend (PostId) -> Post? = { null },
+    rememberResolvedPost: (Post) -> Unit = {},
+    displayTagFor: (Post) -> String? = { null },
 ) {
-    val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
     var showSortSheet by remember { mutableStateOf(false) }
     var showSourceMenu by remember { mutableStateOf(false) }
@@ -109,46 +110,33 @@ fun ForYouScreen(
             UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
         }
     }
-    val visibleResults = remember(coordinator.results, visibilityFilters, unknownAnimatedDurationPolicy) {
+    val visibleResults = remember(state.results, visibilityFilters, unknownAnimatedDurationPolicy) {
         filterSearchResults(
-            results = coordinator.results,
+            results = state.results,
             filters = visibilityFilters,
             likedPostIds = emptySet(),
             savedPostIds = emptySet(),
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
         )
     }
-    val durationResolutionRequests = remember(coordinator.seedId) { mutableSetOf<PostId>() }
-    LaunchedEffect(coordinator.results, visibilityFilters, unknownAnimatedDurationPolicy, coordinator.seedId) {
+    val durationResolutionRequests = remember(state.seedId) { mutableSetOf<PostId>() }
+    LaunchedEffect(state.results, visibilityFilters, unknownAnimatedDurationPolicy, state.seedId) {
         if (unknownAnimatedDurationPolicy != UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND) return@LaunchedEffect
         val candidates = animatedDurationResolutionCandidates(
-            results = coordinator.results,
+            results = state.results,
             filters = visibilityFilters,
         ).filter { post -> durationResolutionRequests.add(post.id) }
             .take(FOR_YOU_DURATION_RESOLVE_BATCH_SIZE)
         candidates.forEach { post ->
             val resolved = runCatchingPreservingCancellation {
-                coordinator.resolvePostForFeed(post.id)
+                resolvePost(post.id)
             }.getOrNull()
             val candidate = resolved ?: post
             if (animatedDurationMs(candidate) == null) {
                 val probedDurationMs = probeRemoteVideoDurationMs(candidate)
                 if (probedDurationMs != null) {
-                    coordinator.rememberResolvedPost(candidate.copy(durationMs = probedDurationMs))
+                    rememberResolvedPost(candidate.copy(durationMs = probedDurationMs))
                 }
-            }
-        }
-    }
-
-    LaunchedEffect(activeProfileId, likesCount) {
-        if (likesCount == 0) {
-            coordinator.clear()
-        } else {
-            val shouldRefresh = coordinator.results.isEmpty() ||
-                coordinator.activeProfileId != activeProfileId ||
-                coordinator.activeProfileLikesCount != likesCount
-            if (shouldRefresh) {
-                coordinator.refresh(shuffle = false)
             }
         }
     }
@@ -156,19 +144,19 @@ fun ForYouScreen(
     LaunchedEffect(
         animatedOnly,
         visibleResults.size,
-        coordinator.loading,
-        coordinator.loadingMore,
-        coordinator.canLoadMore,
+        state.isRefreshing,
+        state.isPaging,
+        state.canLoadMore,
         animatedDurationFilterActive,
     ) {
         snapshotFlow {
-            (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to coordinator.loadingMore
+            (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to state.isPaging
         }.collect { (lastVisibleIndex, loadingMoreState) ->
             if (loadingMoreState) return@collect
-            if (coordinator.loading || coordinator.loadingMore || !coordinator.canLoadMore) return@collect
+            if (state.isRefreshing || state.isPaging || !state.canLoadMore) return@collect
             if (visibleResults.isEmpty() || lastVisibleIndex < 0) {
-                if (animatedDurationFilterActive && coordinator.results.isNotEmpty()) {
-                    coordinator.loadNextPage()
+                if (animatedDurationFilterActive && state.results.isNotEmpty()) {
+                    onAction(ForYouAction.LoadNextPage)
                 }
                 return@collect
             }
@@ -177,7 +165,7 @@ fun ForYouScreen(
                 .toInt()
                 .coerceAtLeast(0)
             if (lastVisibleIndex >= triggerIndex) {
-                coordinator.loadNextPage()
+                onAction(ForYouAction.LoadNextPage)
             }
         }
     }
@@ -185,17 +173,17 @@ fun ForYouScreen(
     LaunchedEffect(
         animatedOnly,
         visibleResults.size,
-        coordinator.results.size,
-        coordinator.loading,
-        coordinator.loadingMore,
-        coordinator.canLoadMore,
+        state.results.size,
+        state.isRefreshing,
+        state.isPaging,
+        state.canLoadMore,
         animatedDurationFilterActive,
     ) {
         if (!animatedOnly && !animatedDurationFilterActive) return@LaunchedEffect
         if (visibleResults.isNotEmpty()) return@LaunchedEffect
-        if (coordinator.results.isEmpty()) return@LaunchedEffect
-        if (coordinator.loading || coordinator.loadingMore || !coordinator.canLoadMore) return@LaunchedEffect
-        coordinator.loadNextPage()
+        if (state.results.isEmpty()) return@LaunchedEffect
+        if (state.isRefreshing || state.isPaging || !state.canLoadMore) return@LaunchedEffect
+        onAction(ForYouAction.LoadNextPage)
     }
 
     Scaffold(
@@ -232,7 +220,7 @@ fun ForYouScreen(
                     Row(
                         modifier = Modifier
                             .clickable(
-                                enabled = !coordinator.loading && !coordinator.loadingMore,
+                                enabled = !state.isRefreshing && !state.isPaging,
                                 onClick = { showSourceMenu = true },
                             )
                             .padding(vertical = 2.dp),
@@ -240,7 +228,7 @@ fun ForYouScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = coordinator.selectedSource?.displayName() ?: "Unified",
+                            text = state.selectedSource?.displayName() ?: "Unified",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -259,15 +247,15 @@ fun ForYouScreen(
                             text = { Text("Unified") },
                             onClick = {
                                 showSourceMenu = false
-                                scope.launch { coordinator.setSourceSelection(null) }
+                                onAction(ForYouAction.SelectSource(null))
                             },
                         )
-                        coordinator.availableSourceSelections.forEach { source ->
+                        state.availableSources.forEach { source ->
                             DropdownMenuItem(
                                 text = { Text(source.displayName()) },
                                 onClick = {
                                     showSourceMenu = false
-                                    scope.launch { coordinator.setSourceSelection(source) }
+                                    onAction(ForYouAction.SelectSource(source))
                                 },
                             )
                         }
@@ -276,8 +264,8 @@ fun ForYouScreen(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 IconButton(
-                    enabled = likesCount > 0 && !coordinator.loading && coordinator.seedSummaryBySource.isNotEmpty(),
-                    onClick = onBlacklistCurrentSeed,
+                    enabled = state.canBlacklistCurrentSeed,
+                    onClick = { onAction(ForYouAction.BlacklistCurrentSeed) },
                 ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
@@ -285,12 +273,8 @@ fun ForYouScreen(
                     )
                 }
                 IconButton(
-                    enabled = likesCount > 0 && !coordinator.loading,
-                    onClick = {
-                        scope.launch {
-                            coordinator.refresh(shuffle = true)
-                        }
-                    },
+                    enabled = state.canRefresh,
+                    onClick = { onAction(ForYouAction.Refresh(shuffle = true)) },
                 ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
@@ -300,9 +284,9 @@ fun ForYouScreen(
             }
         }
 
-        if (coordinator.seedSummaryBySource.isNotEmpty()) {
+        if (state.seedSummaryBySource.isNotEmpty()) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(coordinator.seedSummaryBySource.entries.toList()) { (source, tags) ->
+                items(state.seedSummaryBySource.entries.toList()) { (source, tags) ->
                     Card {
                         Text(
                             text = "${source.name}: ${tags.joinToString(" + ")}",
@@ -315,7 +299,7 @@ fun ForYouScreen(
         }
 
         when {
-            likesCount == 0 -> {
+            state.activeProfileLikesCount == 0 -> {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier
@@ -329,14 +313,14 @@ fun ForYouScreen(
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.bodyMedium,
                         )
-                        TextButton(onClick = onGoToSearch) {
+                        TextButton(onClick = { onAction(ForYouAction.GoToSearch) }) {
                             Text("Go to Search")
                         }
                     }
                 }
             }
 
-            coordinator.loading && visibleResults.isEmpty() -> {
+            state.isRefreshing && visibleResults.isEmpty() -> {
                 Box(
                     modifier = Modifier
                         .fillMaxSize(),
@@ -346,7 +330,7 @@ fun ForYouScreen(
                 }
             }
 
-            coordinator.errorMessage != null && visibleResults.isEmpty() -> {
+            state.errorMessage != null && visibleResults.isEmpty() -> {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier
@@ -354,9 +338,9 @@ fun ForYouScreen(
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text(coordinator.errorMessage.orEmpty())
+                        Text(state.errorMessage.orEmpty())
                         TextButton(onClick = {
-                            scope.launch { coordinator.refresh(shuffle = true) }
+                            onAction(ForYouAction.Refresh(shuffle = true))
                         }) {
                             Text("Retry")
                         }
@@ -367,7 +351,7 @@ fun ForYouScreen(
             visibleResults.isEmpty() -> {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = if (animatedOnly && coordinator.results.isNotEmpty()) {
+                        text = if (animatedOnly && state.results.isNotEmpty()) {
                             if (!visibilityFilters.animatedDurationRange.isFullRange) {
                                 "No animated media found in the selected duration range."
                             } else {
@@ -400,20 +384,23 @@ fun ForYouScreen(
                             post = post,
                             pixivUgoiraClient = pixivUgoiraClient,
                             showSourceBadge = true,
-                            displayTag = coordinator.displayTagFor(post),
+                            displayTag = displayTagFor(post),
                             liked = post.id in likedPostIds,
                             onToggleLike = { onToggleLike(post) },
                             onClick = {
-                                val context = coordinator.buildViewerLaunchContext(
-                                    startIndex = index,
-                                    scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
+                                onAction(
+                                    ForYouAction.OpenResult(
+                                        index = index,
+                                        scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
+                                        visibleResults = visibleResults,
+                                        visibilityFilters = visibilityFilters,
+                                    )
                                 )
-                                onOpenViewer(visibleResults, context, visibilityFilters)
                             },
                         )
                     }
 
-                    if (coordinator.loadingMore) {
+                    if (state.isPaging) {
                         item {
                             Card(
                                 modifier = Modifier
@@ -439,13 +426,11 @@ fun ForYouScreen(
 
     if (showSortSheet) {
         ForYouSortSheet(
-            selectedSort = coordinator.sortMode,
+            selectedSort = state.sortMode,
             animatedOnly = animatedOnly,
             animatedDurationRange = animatedDurationRange,
             onSelectSort = { sort ->
-                scope.launch {
-                    coordinator.setSortMode(sort)
-                }
+                onAction(ForYouAction.SelectSort(sort))
             },
             onAnimatedOnlyChange = { enabled ->
                 animatedOnly = enabled

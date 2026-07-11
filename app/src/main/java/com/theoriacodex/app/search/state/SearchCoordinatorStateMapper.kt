@@ -1,6 +1,7 @@
 package com.theoriacodex.app.search.state
 
 import com.theoriacodex.app.search.SearchCoordinator
+import com.theoriacodex.app.search.NhentaiLanguageFilter
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -32,6 +33,8 @@ data class SearchCoordinatorSnapshot(
     val errorMessage: String?,
     val displayResultsVersion: Int,
     val hasAnySearchRun: Boolean,
+    val nhentaiLanguageFilter: NhentaiLanguageFilter = NhentaiLanguageFilter.ANY,
+    val nhentaiFullColorFilter: Boolean = false,
 )
 
 fun SearchCoordinator.captureSearchCoordinatorSnapshot(): SearchCoordinatorSnapshot {
@@ -56,6 +59,8 @@ fun SearchCoordinator.captureSearchCoordinatorSnapshot(): SearchCoordinatorSnaps
         errorMessage = errorMessage,
         displayResultsVersion = displayResultsVersion,
         hasAnySearchRun = hasAnySearchRun,
+        nhentaiLanguageFilter = selectedNhentaiLanguageFilter(),
+        nhentaiFullColorFilter = selectedNhentaiFullColorFilter(),
     )
 }
 
@@ -90,6 +95,8 @@ fun SearchCoordinatorSnapshot.toSearchUiState(
             supportedScopes = supportedSearchScopes.toList(),
             selectedScope = selectedSearchScope,
             validationMessage = tagInputValidationMessage?.takeIf(String::isNotBlank),
+            nhentaiLanguageFilter = nhentaiLanguageFilter,
+            nhentaiFullColorFilter = nhentaiFullColorFilter,
         ),
         content = SearchContentUiState(
             results = results.toList(),

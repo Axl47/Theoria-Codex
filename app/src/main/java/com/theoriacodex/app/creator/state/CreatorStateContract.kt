@@ -1,6 +1,7 @@
 package com.theoriacodex.app.creator.state
 
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
+import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.CreatorProfile
@@ -51,7 +52,12 @@ sealed interface CreatorAction {
     data class OpenCreator(val creator: CreatorProfile) : CreatorAction
     data object Refresh : CreatorAction
     data object LoadNextPage : CreatorAction
-    data class OpenResult(val index: Int, val scrollOffsetHint: Int = 0) : CreatorAction
+    data class OpenResult(
+        val index: Int,
+        val scrollOffsetHint: Int = 0,
+        val visibleResults: List<Post>? = null,
+        val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
+    ) : CreatorAction
     data object Back : CreatorAction
 
     data class RefreshCompleted(
@@ -99,6 +105,7 @@ sealed interface CreatorEffect {
     data class OpenViewer(
         val posts: List<Post>,
         val context: ViewerLaunchContext,
+        val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
     ) : CreatorEffect {
         override val request: CreatorRequestIdentity? = null
     }
@@ -205,19 +212,21 @@ fun CreatorUiState.reduce(action: CreatorAction): CreatorTransition {
         }
 
         is CreatorAction.OpenResult -> {
-            if (creator == null || action.index !in results.indices) {
+            val viewerResults = action.visibleResults ?: results
+            if (creator == null || action.index !in viewerResults.indices) {
                 unchanged()
             } else {
                 CreatorTransition(
                     state = this,
                     effect = CreatorEffect.OpenViewer(
-                        posts = results.toList(),
+                        posts = viewerResults.toList(),
                         context = ViewerLaunchContext(
                             queryHash = queryHash ?: creatorQueryHash(creator),
                             startIndex = action.index,
                             streamSource = ViewerStreamSource.CREATOR_PROFILE,
                             scrollOffsetHint = action.scrollOffsetHint,
                         ),
+                        visibilityFilters = action.visibilityFilters,
                     ),
                 )
             }

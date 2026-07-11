@@ -329,11 +329,11 @@ class ViewerStateReducerTest {
             reduceViewerState(state, ViewerAction.OpenCreator(creator)).effects.single(),
         )
         assertEquals(
-            ViewerEffect.ApplyTag(session, term, excluded = false),
+            ViewerEffect.ApplyTag(session, postId, term, excluded = false),
             reduceViewerState(state, ViewerAction.IncludeTag(term)).effects.single(),
         )
         assertEquals(
-            ViewerEffect.ApplyTag(session, term, excluded = true),
+            ViewerEffect.ApplyTag(session, postId, term, excluded = true),
             reduceViewerState(state, ViewerAction.ExcludeTag(term)).effects.single(),
         )
     }

@@ -65,8 +65,20 @@ class CreatorProfileCoordinator(
     }
 
     suspend fun open(creator: CreatorProfile) {
-        activeCreator = creator
+        prepare(creator)
         refresh()
+    }
+
+    /** Records a navigation handoff without starting provider work outside the route owner. */
+    fun prepare(creator: CreatorProfile) {
+        invalidateActiveRequest()
+        activeCreator = creator
+        results = emptyList()
+        loading = false
+        loadingMore = false
+        canLoadMore = false
+        nextPageToken = null
+        errorMessage = null
     }
 
     suspend fun refresh() {

@@ -1,6 +1,7 @@
 package com.theoriacodex.app.recommend.state
 
 import com.theoriacodex.app.recommend.ForYouCoordinator
+import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -70,7 +71,12 @@ sealed interface ForYouAction {
     data class SelectSort(val sortMode: SortMode) : ForYouAction
     data object BlacklistCurrentSeed : ForYouAction
     data object LoadNextPage : ForYouAction
-    data class OpenResult(val index: Int, val scrollOffsetHint: Int = 0) : ForYouAction
+    data class OpenResult(
+        val index: Int,
+        val scrollOffsetHint: Int = 0,
+        val visibleResults: List<Post>? = null,
+        val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
+    ) : ForYouAction
     data object GoToSearch : ForYouAction
 
     data class RefreshCompleted(
@@ -134,11 +140,18 @@ sealed interface ForYouEffect {
     data class OpenViewer(
         val posts: List<Post>,
         val context: ViewerLaunchContext,
+        val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
     ) : ForYouEffect {
         override val request: ForYouRequestIdentity? = null
     }
 
     data object NavigateToSearch : ForYouEffect {
+        override val request: ForYouRequestIdentity? = null
+    }
+
+    data class ShowMessage(
+        val message: String,
+    ) : ForYouEffect {
         override val request: ForYouRequestIdentity? = null
     }
 }
@@ -296,19 +309,21 @@ fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
         }
 
         is ForYouAction.OpenResult -> {
-            if (action.index !in results.indices) {
+            val viewerResults = action.visibleResults ?: results
+            if (action.index !in viewerResults.indices) {
                 unchanged()
             } else {
                 ForYouTransition(
                     state = this,
                     effect = ForYouEffect.OpenViewer(
-                        posts = results.toList(),
+                        posts = viewerResults.toList(),
                         context = ViewerLaunchContext(
                             queryHash = "for_you:$seedId",
                             startIndex = action.index,
                             streamSource = ViewerStreamSource.FOR_YOU,
                             scrollOffsetHint = action.scrollOffsetHint,
                         ),
+                        visibilityFilters = action.visibilityFilters,
                     ),
                 )
             }

@@ -122,6 +122,7 @@ object SearchStateReducer {
                 SearchEffect.OpenViewer(
                     posts = action.visibleResults.toList(),
                     context = context,
+                    visibilityFilters = action.visibilityFilters,
                 ),
             ),
         )

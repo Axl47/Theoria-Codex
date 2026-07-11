@@ -47,7 +47,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -72,23 +71,27 @@ import com.theoriacodex.app.media.animatedDurationMs
 import com.theoriacodex.app.media.copyPostTagsToClipboard
 import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.media.probeRemoteVideoDurationMs
-import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.app.creator.state.CreatorAction
+import com.theoriacodex.app.creator.state.CreatorUiState
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
-import kotlinx.coroutines.launch
+import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.flow.collect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreatorProfileScreen(
-    coordinator: CreatorProfileCoordinator,
+    state: CreatorUiState,
     likedPostIds: Set<PostId>,
     savedPostIds: Set<PostId>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     resolveUnknownAnimatedDurations: Boolean = false,
     onToggleLike: (Post) -> Unit,
-    onOpenViewer: (List<Post>, ViewerLaunchContext, SearchVisibilityFilters) -> Unit,
+    onAction: (CreatorAction) -> Unit,
+    resolvePost: suspend (PostId) -> Post? = { null },
+    rememberResolvedPost: (Post) -> Unit = {},
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
     onOpenUrl: (String) -> Unit,
@@ -96,9 +99,8 @@ fun CreatorProfileScreen(
     onAddExcludeTerm: (Post, SearchTerm) -> Boolean = { _, _ -> false },
     onRemoveIncludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
     onRemoveExcludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
-    onBack: () -> Unit,
 ) {
-    val creator = coordinator.activeCreator
+    val creator = state.creator
     val context = LocalContext.current
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showProfileShareMenu by remember { mutableStateOf(false) }
@@ -108,7 +110,6 @@ fun CreatorProfileScreen(
     var hideSaved by rememberSaveable { mutableStateOf(false) }
     var durationMinBucket by rememberSaveable { mutableStateOf(ANIMATED_DURATION_MIN_BUCKET) }
     var durationMaxBucket by rememberSaveable { mutableStateOf(ANIMATED_DURATION_MAX_BUCKET) }
-    val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
     val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
         AnimatedDurationRange(
@@ -133,37 +134,37 @@ fun CreatorProfileScreen(
         }
     }
     val visibleResults = remember(
-        coordinator.results,
+        state.results,
         visibilityFilters,
         likedPostIds,
         savedPostIds,
         unknownAnimatedDurationPolicy,
     ) {
         filterSearchResults(
-            results = coordinator.results,
+            results = state.results,
             filters = visibilityFilters,
             likedPostIds = likedPostIds,
             savedPostIds = savedPostIds,
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
         )
     }
-    val durationResolutionRequests = remember(coordinator.activeQueryHash) { mutableSetOf<PostId>() }
-    LaunchedEffect(coordinator.results, visibilityFilters, unknownAnimatedDurationPolicy, coordinator.activeQueryHash) {
+    val durationResolutionRequests = remember(state.queryHash) { mutableSetOf<PostId>() }
+    LaunchedEffect(state.results, visibilityFilters, unknownAnimatedDurationPolicy, state.queryHash) {
         if (unknownAnimatedDurationPolicy != UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND) return@LaunchedEffect
         val candidates = animatedDurationResolutionCandidates(
-            results = coordinator.results,
+            results = state.results,
             filters = visibilityFilters,
         ).filter { post -> durationResolutionRequests.add(post.id) }
             .take(CREATOR_PROFILE_DURATION_RESOLVE_BATCH_SIZE)
         candidates.forEach { post ->
             val resolved = runCatchingPreservingCancellation {
-                coordinator.resolvePostForCreator(post.id)
+                resolvePost(post.id)
             }.getOrNull()
             val candidate = resolved ?: post
             if (animatedDurationMs(candidate) == null) {
                 val probedDurationMs = probeRemoteVideoDurationMs(candidate)
                 if (probedDurationMs != null) {
-                    coordinator.rememberResolvedPost(candidate.copy(durationMs = probedDurationMs))
+                    rememberResolvedPost(candidate.copy(durationMs = probedDurationMs))
                 }
             }
         }
@@ -171,18 +172,18 @@ fun CreatorProfileScreen(
 
     LaunchedEffect(
         visibleResults.size,
-        coordinator.results.size,
-        coordinator.loading,
-        coordinator.loadingMore,
-        coordinator.canLoadMore,
+        state.results.size,
+        state.isRefreshing,
+        state.isPaging,
+        state.canLoadMore,
         animatedOnly,
         animatedDurationFilterActive,
     ) {
         snapshotFlow {
-            (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to coordinator.loadingMore
+            (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to state.isPaging
         }.collect { (lastVisibleIndex, loadingMoreState) ->
             if (loadingMoreState) return@collect
-            if (coordinator.loading || coordinator.loadingMore || !coordinator.canLoadMore) return@collect
+            if (state.isRefreshing || state.isPaging || !state.canLoadMore) return@collect
 
             val totalVisible = visibleResults.size
             val shouldTriggerByThreshold = if (totalVisible > 0 && lastVisibleIndex >= 0) {
@@ -197,10 +198,10 @@ fun CreatorProfileScreen(
             val shouldTriggerForAnimatedBuffer =
                 (animatedOnly || animatedDurationFilterActive) &&
                     totalVisible < CREATOR_PROFILE_ANIMATED_PREFETCH_MIN_VISIBLE &&
-                    coordinator.results.isNotEmpty()
+                    state.results.isNotEmpty()
 
             if (shouldTriggerByThreshold || shouldTriggerForAnimatedBuffer) {
-                coordinator.loadNextPage()
+                onAction(CreatorAction.LoadNextPage)
             }
         }
     }
@@ -242,7 +243,7 @@ fun CreatorProfileScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = { onAction(CreatorAction.Back) }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
@@ -306,7 +307,7 @@ fun CreatorProfileScreen(
             }
 
             when {
-                coordinator.loading && visibleResults.isEmpty() -> {
+                state.isRefreshing && visibleResults.isEmpty() -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center,
@@ -315,7 +316,7 @@ fun CreatorProfileScreen(
                     }
                 }
 
-                coordinator.errorMessage != null && visibleResults.isEmpty() -> {
+                state.errorMessage != null && visibleResults.isEmpty() -> {
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(
                             modifier = Modifier
@@ -323,10 +324,10 @@ fun CreatorProfileScreen(
                                 .padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Text(coordinator.errorMessage.orEmpty())
+                            Text(state.errorMessage.orEmpty())
                             TextButton(
                                 onClick = {
-                                    scope.launch { coordinator.refresh() }
+                                    onAction(CreatorAction.Refresh)
                                 },
                             ) {
                                 Text("Retry")
@@ -339,7 +340,7 @@ fun CreatorProfileScreen(
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Text(
                             text = if (
-                                coordinator.results.isNotEmpty() &&
+                                state.results.isNotEmpty() &&
                                 !visibilityFilters.animatedDurationRange.isFullRange
                             ) {
                                 "No animated media found in the selected duration range."
@@ -372,13 +373,13 @@ fun CreatorProfileScreen(
                                 liked = post.id in likedPostIds,
                                 onToggleLike = { onToggleLike(post) },
                                 onClick = {
-                                    onOpenViewer(
-                                        visibleResults,
-                                        coordinator.buildViewerLaunchContext(
-                                            startIndex = index,
+                                    onAction(
+                                        CreatorAction.OpenResult(
+                                            index = index,
                                             scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
-                                        ),
-                                        visibilityFilters,
+                                            visibleResults = visibleResults,
+                                            visibilityFilters = visibilityFilters,
+                                        )
                                     )
                                 },
                                 onLongPress = { selectedActionPost = post },

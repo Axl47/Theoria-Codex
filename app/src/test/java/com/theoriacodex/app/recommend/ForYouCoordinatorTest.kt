@@ -34,6 +34,25 @@ import org.junit.Test
 
 class ForYouCoordinatorTest {
     @Test
+    fun `shuffled recommendations use the injected seed source`() = runTest {
+        var seedReads = 0
+        val coordinator = ForYouCoordinator(
+            registry = registryOf(FakeAdapter(SourceKey.PIXIV, "pixiv-post")),
+            settingsRepository = InMemorySettingsRepository(),
+            seedSource = {
+                seedReads += 1
+                42L
+            },
+        )
+
+        coordinator.initialize()
+        coordinator.refresh(shuffle = true)
+        coordinator.refresh(shuffle = false)
+
+        assertEquals(1, seedReads)
+    }
+
+    @Test
     fun `source selection constrains recommendation tags and content then unified restores both sources`() = runTest {
         val pixiv = FakeAdapter(SourceKey.PIXIV, "pixiv-post")
         val gelbooru = FakeAdapter(SourceKey.GELBOORU, "gelbooru-post")

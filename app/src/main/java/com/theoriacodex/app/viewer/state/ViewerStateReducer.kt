@@ -231,14 +231,22 @@ internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): View
             state,
             listOf(ViewerEffect.OpenCreatorProfile(session, action.creator)),
         )
-        is ViewerAction.IncludeTag -> ViewerReduction(
-            state,
-            listOf(ViewerEffect.ApplyTag(session, action.term, excluded = false)),
-        )
-        is ViewerAction.ExcludeTag -> ViewerReduction(
-            state,
-            listOf(ViewerEffect.ApplyTag(session, action.term, excluded = true)),
-        )
+        is ViewerAction.IncludeTag -> state.currentPageEffect { page, _ ->
+            ViewerEffect.ApplyTag(
+                session = session,
+                postId = page.post.id,
+                term = action.term,
+                excluded = false,
+            )
+        }
+        is ViewerAction.ExcludeTag -> state.currentPageEffect { page, _ ->
+            ViewerEffect.ApplyTag(
+                session = session,
+                postId = page.post.id,
+                term = action.term,
+                excluded = true,
+            )
+        }
         ViewerAction.LoadMore -> ViewerReduction(state, listOf(ViewerEffect.LoadMore(session)))
         ViewerAction.Dismiss -> ViewerReduction(state, listOf(ViewerEffect.Dismiss(session)))
     }

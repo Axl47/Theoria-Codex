@@ -1,0 +1,302 @@
+package com.theoriacodex.app.recommend
+
+import androidx.lifecycle.SavedStateHandle
+import com.theoriacodex.app.recommend.state.ForYouAction
+import com.theoriacodex.app.recommend.state.ForYouCoordinatorSnapshot
+import com.theoriacodex.app.recommend.state.ForYouEffect
+import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.ForYouBlacklistEntry
+import com.theoriacodex.data.repository.RecommendationProfile
+import com.theoriacodex.data.repository.defaultRecommendationProfiles
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.SortMode
+import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class ForYouViewModelTest {
+    @Test
+    fun `saved route inputs reconstruct before provider work`() = runTest {
+        val engine = FakeForYouRouteEngine()
+        val savedState = SavedStateHandle(
+            mapOf(
+                ForYouViewModel.KEY_PROFILE_ID to "profile-main",
+                ForYouViewModel.KEY_SELECTED_SOURCE to SourceKey.PIXIV.name,
+                ForYouViewModel.KEY_SORT_MODE to SortMode.TOP.name,
+            )
+        )
+
+        val viewModel = ForYouViewModel(engine, savedState, coroutineScope = this)
+        advanceUntilIdle()
+
+        assertEquals(1, engine.initializeCalls)
+        assertEquals(SourceKey.PIXIV, engine.restoredSource)
+        assertEquals(SortMode.TOP, engine.restoredSort)
+        assertEquals(SourceKey.PIXIV, viewModel.state.value.selectedSource)
+        assertEquals(SortMode.TOP, viewModel.state.value.sortMode)
+    }
+
+    @Test
+    fun `environment refresh publishes results and viewer launch as buffered effect`() = runTest {
+        val engine = FakeForYouRouteEngine().apply {
+            refreshResult = listOf(testPost(sourcePostId = "recommended"))
+        }
+        val viewModel = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        advanceUntilIdle()
+
+        viewModel.synchronizeEnvironment(AppSettings(), activeProfileLikesCount = 1)
+        advanceUntilIdle()
+
+        assertEquals(listOf("recommended"), viewModel.state.value.results.map { it.id.sourcePostId })
+        val effect = async { viewModel.effects.first() }
+        viewModel.onAction(ForYouAction.OpenResult(index = 0, scrollOffsetHint = 24))
+        val open = effect.await() as ForYouEffect.OpenViewer
+        assertEquals("for_you:seed", open.context.queryHash)
+        assertEquals(24, open.context.scrollOffsetHint)
+    }
+
+    @Test
+    fun `sort and source actions are owned by route and persisted`() = runTest {
+        val engine = FakeForYouRouteEngine(
+            availableSources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU),
+        ).apply {
+            refreshResult = listOf(testPost(sourcePostId = "recommended"))
+        }
+        val savedState = SavedStateHandle()
+        val viewModel = ForYouViewModel(engine, savedState, coroutineScope = this)
+        advanceUntilIdle()
+        viewModel.synchronizeEnvironment(AppSettings(), activeProfileLikesCount = 1)
+        advanceUntilIdle()
+
+        viewModel.onAction(ForYouAction.SelectSort(SortMode.TOP))
+        advanceUntilIdle()
+        viewModel.onAction(ForYouAction.SelectSource(SourceKey.GELBOORU))
+        advanceUntilIdle()
+
+        assertEquals(SortMode.TOP, engine.current.sortMode)
+        assertEquals(SourceKey.GELBOORU, engine.current.selectedSource)
+        assertEquals(SortMode.TOP.name, savedState.get<String>(ForYouViewModel.KEY_SORT_MODE))
+        assertEquals(SourceKey.GELBOORU.name, savedState.get<String>(ForYouViewModel.KEY_SELECTED_SOURCE))
+    }
+
+    @Test
+    fun `paging failure preserves current results and clears paging owner`() = runTest {
+        val first = testPost(sourcePostId = "first")
+        val engine = FakeForYouRouteEngine().apply {
+            refreshResult = listOf(first)
+            refreshCanLoadMore = true
+            pageError = "page unavailable"
+        }
+        val viewModel = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        advanceUntilIdle()
+        viewModel.synchronizeEnvironment(AppSettings(), activeProfileLikesCount = 1)
+        advanceUntilIdle()
+
+        viewModel.onAction(ForYouAction.LoadNextPage)
+        advanceUntilIdle()
+
+        assertEquals(listOf(first), viewModel.state.value.results)
+        assertEquals("page unavailable", viewModel.state.value.errorMessage)
+        assertFalse(viewModel.state.value.isPaging)
+    }
+
+    @Test
+    fun `settings replacement cancels old job and rejects its late completion`() = runTest {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val stale = testPost(sourcePostId = "stale")
+        val fresh = testPost(sourcePostId = "fresh")
+        val engine = FakeForYouRouteEngine().apply {
+            firstRefreshStarted = started
+            firstRefreshRelease = release
+            firstRefreshResult = listOf(stale)
+            refreshResult = listOf(fresh)
+        }
+        val viewModel = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        runCurrent()
+
+        viewModel.synchronizeEnvironment(AppSettings(), activeProfileLikesCount = 1)
+        runCurrent()
+        started.await()
+
+        engine.settingsChangedResult = true
+        viewModel.synchronizeEnvironment(AppSettings(), activeProfileLikesCount = 2)
+        runCurrent()
+        assertEquals(listOf("fresh"), viewModel.state.value.results.map { it.id.sourcePostId })
+
+        release.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(listOf("fresh"), viewModel.state.value.results.map { it.id.sourcePostId })
+    }
+
+    @Test
+    fun `blacklist exhaustion emits user result and publishes empty seed`() = runTest {
+        val engine = FakeForYouRouteEngine().apply {
+            val first = testPost(sourcePostId = "first")
+            current = current.copy(
+                activeProfileLikesCount = 1,
+                results = listOf(first),
+                seedSummaryBySource = mapOf(SourceKey.PIXIV to listOf("seed")),
+                seedId = "seed",
+            )
+            refreshResult = listOf(first)
+            blacklistAdditions = 0
+        }
+        val viewModel = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        advanceUntilIdle()
+        viewModel.synchronizeEnvironment(AppSettings(), activeProfileLikesCount = 1)
+        advanceUntilIdle()
+
+        val effect = async { viewModel.effects.first() }
+        viewModel.onAction(ForYouAction.BlacklistCurrentSeed)
+        advanceUntilIdle()
+
+        val message = effect.await() as ForYouEffect.ShowMessage
+        assertTrue(message.message.contains("already blacklisted"))
+        assertEquals("empty-seed", viewModel.state.value.seedId)
+    }
+}
+
+private class FakeForYouRouteEngine(
+    availableSources: List<SourceKey> = listOf(SourceKey.PIXIV),
+) : ForYouRouteEngine {
+    var current = ForYouCoordinatorSnapshot(
+        activeProfileId = defaultRecommendationProfiles().first().profileId,
+        activeProfileLikesCount = 0,
+        availableSources = availableSources,
+        selectedSource = null,
+        sortMode = SortMode.NEWEST,
+        seedId = "init",
+        seedSummaryBySource = emptyMap(),
+        results = emptyList(),
+        statuses = emptyList(),
+        loading = false,
+        loadingMore = false,
+        canLoadMore = false,
+        errorMessage = null,
+    )
+    var initializeCalls = 0
+    var restoredSource: SourceKey? = null
+    var restoredSort: SortMode? = null
+    var refreshResult: List<Post> = emptyList()
+    var refreshCanLoadMore = false
+    var pageError: String? = null
+    var blacklistAdditions = 1
+    var settingsChangedResult = false
+    var firstRefreshStarted: CompletableDeferred<Unit>? = null
+    var firstRefreshRelease: CompletableDeferred<Unit>? = null
+    var firstRefreshResult: List<Post> = emptyList()
+    private var refreshCalls = 0
+
+    override suspend fun initialize() {
+        initializeCalls += 1
+    }
+
+    override fun restoreRouteInputs(source: SourceKey?, sort: SortMode?) {
+        restoredSource = source
+        restoredSort = sort
+        current = current.copy(
+            selectedSource = source,
+            sortMode = sort ?: current.sortMode,
+        )
+    }
+
+    override fun snapshot(
+        profiles: List<RecommendationProfile>,
+        blacklistEntries: List<ForYouBlacklistEntry>,
+    ): ForYouCoordinatorSnapshot = current.copy(
+        profiles = profiles,
+        blacklistEntries = blacklistEntries,
+    )
+
+    override fun onSettingsChanged(settings: AppSettings): Boolean {
+        current = current.copy(activeProfileId = settings.activeProfileId)
+        return settingsChangedResult
+    }
+
+    override fun onAvailableSourcesChanged(): Boolean = false
+
+    override suspend fun refresh(shuffle: Boolean) {
+        refreshCalls += 1
+        val started = firstRefreshStarted
+        val release = firstRefreshRelease
+        if (refreshCalls == 1 && started != null && release != null) {
+            withContext(NonCancellable) {
+                started.complete(Unit)
+                release.await()
+                current = current.copy(
+                    activeProfileLikesCount = 1,
+                    results = firstRefreshResult,
+                    seedId = "stale-seed",
+                    canLoadMore = false,
+                    errorMessage = null,
+                )
+            }
+            return
+        }
+        current = current.copy(
+            activeProfileLikesCount = 1,
+            results = refreshResult,
+            seedId = if (refreshResult.isEmpty()) "empty-seed" else "seed",
+            canLoadMore = refreshCanLoadMore,
+            errorMessage = null,
+        )
+    }
+
+    override suspend fun selectProfile(settings: AppSettings, profileId: String) {
+        current = current.copy(activeProfileId = profileId)
+        refresh(shuffle = false)
+    }
+
+    override suspend fun setSourceSelection(source: SourceKey?) {
+        current = current.copy(selectedSource = source)
+        refresh(shuffle = false)
+    }
+
+    override suspend fun setSortMode(sort: SortMode) {
+        current = current.copy(sortMode = sort)
+        refresh(shuffle = false)
+    }
+
+    override suspend fun blacklistCurrentSeedAndRefresh(): Int {
+        current = current.copy(
+            results = emptyList(),
+            seedSummaryBySource = emptyMap(),
+            seedId = "empty-seed",
+            canLoadMore = false,
+        )
+        return blacklistAdditions
+    }
+
+    override suspend fun loadNextPage() {
+        current = current.copy(errorMessage = pageError, canLoadMore = false)
+    }
+
+    override fun clear() {
+        current = current.copy(
+            activeProfileLikesCount = 0,
+            results = emptyList(),
+            seedId = "empty",
+            seedSummaryBySource = emptyMap(),
+            canLoadMore = false,
+        )
+    }
+
+    override suspend fun resolvePost(postId: PostId): Post? = null
+    override fun rememberResolvedPost(post: Post) = Unit
+    override fun displayTagFor(post: Post): String? = null
+}

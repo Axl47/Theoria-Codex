@@ -401,6 +401,11 @@ class SearchCoordinator(
         tagInputValidationMessage = null
     }
 
+    /** Clears the engine error after the route owner has acknowledged it. */
+    fun clearErrorMessage() {
+        errorMessage = null
+    }
+
     fun clearAutocompleteSuggestions() {
         autocompleteSuggestions = emptyList()
         facetedAutocompleteSuggestions = emptyList()
@@ -523,6 +528,23 @@ class SearchCoordinator(
 
     fun setSort(sort: SortMode) {
         draftQuery = draftQuery.copy(sort = sort)
+    }
+
+    fun setDateRange(range: DateRange?) {
+        draftQuery = draftQuery.copy(dateRange = range)
+    }
+
+    /** Restores compact route input without executing a search or writing search history. */
+    fun restoreDraftQuery(query: Query): Boolean {
+        if (!isModeAvailable(query.mode)) return false
+        val sanitized = query.forMode(query.mode)
+        draftQuery = sanitized.query
+        resetUnsupportedSearchScope()
+        clearTagInputUiState()
+        if (sanitized.removedSourceOwnedTerms) {
+            tagInputValidationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
+        }
+        return true
     }
 
     fun resetDraft() {

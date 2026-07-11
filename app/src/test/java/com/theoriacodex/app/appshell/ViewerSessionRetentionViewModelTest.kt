@@ -2,8 +2,10 @@ package com.theoriacodex.app.appshell
 
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.SavedStateHandle
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.viewer.ViewerSession
+import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.ImageRef
@@ -13,6 +15,7 @@ import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ViewerSessionRetentionViewModelTest {
@@ -67,6 +70,22 @@ class ViewerSessionRetentionViewModelTest {
 
         assertEquals(false, invoked)
         assertNull(holder.session.value)
+    }
+
+    @Test
+    fun `retained navigation payload transfers once into the route owner`() {
+        val holder = ViewerSessionRetentionViewModel()
+        val retained = viewerSession(postId = "bridge")
+        holder.retain(retained)
+        val owner = ViewerViewModel(SavedStateHandle())
+
+        assertTrue(holder.handoffTo(owner))
+
+        assertNull(holder.session.value)
+        assertEquals(retained, owner.session.value)
+        assertEquals(retained.sessionId, owner.state.value.session?.value)
+        assertEquals(retained.posts, owner.state.value.pages.map { page -> page.post })
+        assertEquals(false, holder.handoffTo(owner))
     }
 
     private fun viewerSession(postId: String): ViewerSession {

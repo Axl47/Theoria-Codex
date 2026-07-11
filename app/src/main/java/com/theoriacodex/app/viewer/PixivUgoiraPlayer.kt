@@ -642,10 +642,14 @@ fun PixivUgoiraPlayer(
     contentScale: ContentScale = ContentScale.Fit,
     showProgressBar: Boolean = false,
     isActive: Boolean = true,
+    isPlaying: Boolean? = null,
     seekJumpSerial: Int = 0,
     seekJumpDeltaMs: Long = 0L,
     playbackRate: Float = 1f,
+    restartRequest: Long = 0L,
     onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
+    onTogglePlayback: (() -> Unit)? = null,
+    onProgressChanged: (Long, Long?) -> Unit = { _, _ -> },
 ) {
     var playback by remember(postId, client) { mutableStateOf(client.cached(postId)) }
     var errorMessage by remember(postId) { mutableStateOf<String?>(null) }
@@ -654,6 +658,7 @@ fun PixivUgoiraPlayer(
     var isScrubbing by remember(postId) { mutableStateOf(false) }
     var playbackPaused by remember(postId) { mutableStateOf(false) }
     val effectivePlaybackRate = playbackRate.coerceAtLeast(0.1f)
+    val effectivePlaybackPaused = isPlaying?.not() ?: playbackPaused
 
     LaunchedEffect(postId, client) {
         frameIndex = 0
@@ -715,6 +720,10 @@ fun PixivUgoiraPlayer(
         frameIndex = resolvedIndex
     }
 
+    LaunchedEffect(restartRequest) {
+        if (restartRequest > 0L) seekToPosition(0L)
+    }
+
     LaunchedEffect(seekJumpSerial, seekJumpDeltaMs, maxSeekablePositionMs, isScrubbing, isActive) {
         if (seekJumpSerial <= 0 || seekJumpDeltaMs == 0L || isScrubbing || !isActive) {
             return@LaunchedEffect
@@ -722,8 +731,8 @@ fun PixivUgoiraPlayer(
         seekToPosition(elapsedInLoopMs + seekJumpDeltaMs)
     }
 
-    LaunchedEffect(activePlayback, frameIndex, isScrubbing, playbackPaused, isActive, effectivePlaybackRate) {
-        if (isScrubbing || playbackPaused || !isActive) return@LaunchedEffect
+    LaunchedEffect(activePlayback, frameIndex, isScrubbing, effectivePlaybackPaused, isActive, effectivePlaybackRate) {
+        if (isScrubbing || effectivePlaybackPaused || !isActive) return@LaunchedEffect
         val delayMs = activePlayback.frames[frameIndex].delayMs.toLong().coerceAtLeast(16L)
         val scaledDelayMs = (delayMs / effectivePlaybackRate).toLong().coerceAtLeast(1L)
         delay(scaledDelayMs)
@@ -734,6 +743,7 @@ fun PixivUgoiraPlayer(
         } else {
             (elapsedInLoopMs + delayMs).coerceAtMost(totalDurationMs.toLong())
         }
+        onProgressChanged(elapsedInLoopMs, totalDurationMs.toLong())
     }
 
     val frame = activePlayback.frames[frameIndex]
@@ -763,9 +773,9 @@ fun PixivUgoiraPlayer(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             TimelinePlaybackButton(
-                isPaused = playbackPaused,
+                isPaused = effectivePlaybackPaused,
                 onToggle = {
-                    playbackPaused = !playbackPaused
+                    if (onTogglePlayback != null) onTogglePlayback() else playbackPaused = !playbackPaused
                     onTimelineInteractionActiveChanged(true)
                     onTimelineInteractionActiveChanged(false)
                 },

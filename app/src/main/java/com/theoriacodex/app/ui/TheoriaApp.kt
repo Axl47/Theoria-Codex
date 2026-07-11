@@ -10,7 +10,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
-import com.google.gson.Gson
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -85,30 +84,33 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.PostDownloadService
 import com.theoriacodex.app.media.normalizeMediaUrl
-import com.theoriacodex.app.media.recoverRemoteMedia
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.CodexSearchSourceOption
 import com.theoriacodex.app.codex.CodexSearchTagOption
 import com.theoriacodex.app.codex.SaveToCodexSheet
-import com.theoriacodex.app.codex.buildCodexShareFile
+import com.theoriacodex.app.codex.codexBelongsToProfile
 import com.theoriacodex.app.codex.codexSearchSourceOptions as buildCodexSearchSourceOptions
 import com.theoriacodex.app.codex.codexSearchTagOptions as buildCodexSearchTagOptions
-import com.theoriacodex.app.codex.parseCodexShareFile
-import com.theoriacodex.app.codex.resolveCodexShareImportPost
-import com.theoriacodex.app.codex.sanitizeCodexExportName
-import com.theoriacodex.app.codex.selectCodexShareEntries
+import com.theoriacodex.app.codex.profileScopedCodexId
+import com.theoriacodex.app.codex.PROFILE_CODEX_ID_PREFIX
+import com.theoriacodex.app.codex.transfer.CodexExportResult
+import com.theoriacodex.app.codex.transfer.CodexImportResult
+import com.theoriacodex.app.appshell.AppShellAction
+import com.theoriacodex.app.appshell.AppShellEffect
+import com.theoriacodex.app.appshell.AppShellViewModel
+import com.theoriacodex.app.appshell.IncomingUriKind
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
-import com.theoriacodex.app.creator.CreatorProfileScreen
 import com.theoriacodex.app.creator.browseableCreatorProfile
+import com.theoriacodex.app.creator.state.CreatorAction
+import com.theoriacodex.app.creator.state.CreatorUiState
 import com.theoriacodex.app.di.TheoriaAppContainer
-import com.theoriacodex.app.recommend.ForYouScreen
 import com.theoriacodex.app.recommend.trainingTagsFor
+import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.recents.RecentsScreen
-import com.theoriacodex.app.search.SearchScreen
-import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
-import com.theoriacodex.app.search.filterSearchResults
+import com.theoriacodex.app.search.state.SearchAction
+import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.source.ExternalCreatorDeepLink
 import com.theoriacodex.app.source.ExternalPostDeepLink
 import com.theoriacodex.app.settings.SettingsScreen
@@ -120,19 +122,44 @@ import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
 import com.theoriacodex.app.sourceauth.parseGelbooruCredentialInput
 import com.theoriacodex.app.sourceauth.parseRule34XxxCredentialInput
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
+import com.theoriacodex.app.ui.routes.ViewerRoute
+import com.theoriacodex.app.ui.routes.ViewerRouteDependencies
+import com.theoriacodex.app.ui.routes.ViewerRouteEffectCallbacks
+import com.theoriacodex.app.ui.routes.ViewerRouteLiveSourceSnapshot
+import com.theoriacodex.app.ui.routes.ViewerRouteLiveSourceState
+import com.theoriacodex.app.ui.routes.ViewerRouteOwnerHandle
+import com.theoriacodex.app.ui.routes.ViewerRouteRenderConfig
+import com.theoriacodex.app.ui.routes.ViewerRouteScreenCallbacks
+import com.theoriacodex.app.ui.routes.ViewerRouteWorkflow
+import com.theoriacodex.app.ui.routes.downloadViewerMediaMessage
+import com.theoriacodex.app.ui.routes.shareViewerPostMessage
+import com.theoriacodex.app.ui.routes.SearchRoute
+import com.theoriacodex.app.ui.routes.SearchRouteCallbacks
+import com.theoriacodex.app.ui.routes.SearchRouteConfig
+import com.theoriacodex.app.ui.routes.SearchRouteOwnerHandle
+import com.theoriacodex.app.ui.routes.ForYouRoute
+import com.theoriacodex.app.ui.routes.ForYouRouteCallbacks
+import com.theoriacodex.app.ui.routes.ForYouRouteConfig
+import com.theoriacodex.app.ui.routes.ForYouRouteOwnerHandle
+import com.theoriacodex.app.ui.routes.CreatorRoute
+import com.theoriacodex.app.ui.routes.CreatorRouteCallbacks
+import com.theoriacodex.app.ui.routes.CreatorRouteConfig
+import com.theoriacodex.app.ui.routes.CreatorRouteOwnerHandle
+import com.theoriacodex.app.ui.routes.PendingRouteActions
 import com.theoriacodex.app.update.ChangelogSection
 import com.theoriacodex.app.update.RemoteUpdate
 import com.theoriacodex.app.update.PendingPostInstallChangelog
 import com.theoriacodex.app.update.StartupUpdateOutcome
 import com.theoriacodex.app.update.StartupUpdateState
+import com.theoriacodex.app.update.StartupUpdateWorkflowEvent
+import com.theoriacodex.app.update.StartupUpdateWorkflowEffect
 import com.theoriacodex.app.update.UnknownSourcesPermissionRequiredException
-import com.theoriacodex.app.update.messageText
-import com.theoriacodex.app.viewer.ViewerScreen
 import com.theoriacodex.app.viewer.ViewerSession
-import com.theoriacodex.app.viewer.mergeViewerPosts
+import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
+import com.theoriacodex.app.viewer.ViewerPostResolver
+import com.theoriacodex.app.viewer.prefetchViewerMedia
 import com.theoriacodex.app.viewer.requiresLazyMediaResolution
 import com.theoriacodex.app.viewer.requiresViewerPostResolution
-import com.theoriacodex.app.viewer.requiresPrelaunchViewerPostResolution
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.CodexSortMode
@@ -144,20 +171,21 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.CreatorProfile
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import java.io.File
-import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.lifecycle.Lifecycle
@@ -200,9 +228,11 @@ fun TheoriaApp(
 ) {
     val appContext = LocalContext.current.applicationContext
     val viewerSessionOwner = viewModel<ViewerSessionRetentionViewModel>()
+    val appShellOwner = viewModel<AppShellViewModel>()
     TheoriaAppContent(
         appContainer = rememberTheoriaAppContainer(appContext),
         viewerSessionOwner = viewerSessionOwner,
+        appShellOwner = appShellOwner,
         incomingUri = incomingUri,
         onIncomingUriConsumed = onIncomingUriConsumed,
     )
@@ -213,6 +243,7 @@ fun TheoriaApp(
 internal fun TheoriaAppContent(
     appContainer: TheoriaAppContainer,
     viewerSessionOwner: ViewerSessionRetentionViewModel,
+    appShellOwner: AppShellViewModel,
     incomingUri: Uri? = null,
     onIncomingUriConsumed: () -> Unit = {},
 ) {
@@ -224,8 +255,10 @@ internal fun TheoriaAppContent(
     val sourceDependencies = appContainer.sources
     val updateDependencies = appContainer.updates
     val featureDependencies = appContainer.features
+    val workflowDependencies = appContainer.workflows
     val availableRealSources by sourceDependencies.availableSources.collectAsStateWithLifecycle()
     val credentialRecoveryState by sourceDependencies.accounts.recoveryState.collectAsStateWithLifecycle()
+    val appShellState by appShellOwner.state.collectAsStateWithLifecycle()
 
     val settings by dataDependencies.settingsRepository
         .observeSettings()
@@ -291,32 +324,73 @@ internal fun TheoriaAppContent(
         }
     }
 
-    val viewerSession by viewerSessionOwner.session
+    var searchRouteOwner by remember { mutableStateOf<SearchRouteOwnerHandle?>(null) }
+    var forYouRouteOwner by remember { mutableStateOf<ForYouRouteOwnerHandle?>(null) }
+    var creatorRouteOwner by remember { mutableStateOf<CreatorRouteOwnerHandle?>(null) }
+    var pendingCreatorProfile by remember { mutableStateOf<CreatorProfile?>(null) }
+    val pendingSearchActions = remember { PendingRouteActions<SearchAction>() }
+    val emptySearchRouteState = remember { MutableStateFlow(SearchUiState()) }
+    val emptyForYouRouteState = remember { MutableStateFlow(ForYouUiState()) }
+    val emptyCreatorRouteState = remember { MutableStateFlow(CreatorUiState()) }
+    val searchRouteState by (searchRouteOwner?.state ?: emptySearchRouteState)
+        .collectAsStateWithLifecycle()
+    val forYouRouteState by (forYouRouteOwner?.state ?: emptyForYouRouteState)
+        .collectAsStateWithLifecycle()
+    val creatorRouteState by (creatorRouteOwner?.state ?: emptyCreatorRouteState)
+        .collectAsStateWithLifecycle()
+    val viewerRouteWorkflow = ViewerRouteWorkflow(
+        data = dataDependencies,
+        sources = sourceDependencies,
+        searchOwner = { searchRouteOwner },
+        forYouOwner = { forYouRouteOwner },
+        creatorOwner = { creatorRouteOwner },
+    )
+    var activeViewerOwner by remember { mutableStateOf<ViewerRouteOwnerHandle?>(null) }
+    val emptyViewerSession = remember { MutableStateFlow<ViewerSession?>(null) }
+    val retainedViewerSession by viewerSessionOwner.session
+    val routeViewerSession by (activeViewerOwner?.session ?: emptyViewerSession)
+        .collectAsStateWithLifecycle()
+    val viewerSession = routeViewerSession ?: retainedViewerSession
+    fun dispatchOrQueueSearchAction(action: SearchAction): Boolean {
+        return pendingSearchActions.dispatchOrEnqueue(action) { queuedAction ->
+            searchRouteOwner?.dispatch(queuedAction) == true
+        }
+    }
+    fun addSearchIncludeTerm(post: Post, term: SearchTerm): Boolean {
+        return dispatchOrQueueSearchAction(SearchAction.AddPostIncludeTerm(post, term))
+    }
+    fun addSearchExcludeTerm(post: Post, term: SearchTerm): Boolean {
+        return dispatchOrQueueSearchAction(SearchAction.AddPostExcludeTerm(post, term))
+    }
+    fun removeSearchIncludeTerm(term: SearchTerm) {
+        dispatchOrQueueSearchAction(SearchAction.RemoveIncludeTerm(term))
+    }
+    fun removeSearchExcludeTerm(term: SearchTerm) {
+        dispatchOrQueueSearchAction(SearchAction.RemoveExcludeTerm(term))
+    }
     var showSaveSheet by remember { mutableStateOf(false) }
     var pendingSavePost by remember { mutableStateOf<Post?>(null) }
     var homeTabRoute by rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
     var pendingTopLevelRoute by remember { mutableStateOf<String?>(null) }
     var homeTabRestoreComplete by remember { mutableStateOf(false) }
-    var navReady by remember(appContainer) {
-        mutableStateOf(
-            featureDependencies.search.isInitialized && featureDependencies.forYou.isInitialized,
-        )
-    }
-    var startupUpdateState by remember { mutableStateOf<StartupUpdateState>(StartupUpdateState.Checking) }
-    var startupStatusMessage by remember { mutableStateOf("Checking for updates...") }
-    var updateChoiceRemote by remember { mutableStateOf<RemoteUpdate?>(null) }
+    var navReady by remember(appContainer) { mutableStateOf(appShellState.appReady) }
+    val startupWorkflowState = appShellState.startup
+    val startupUpdateState = startupWorkflowState.updateState
+    val startupStatusMessage = startupWorkflowState.statusMessage
+    val updateChoiceRemote = startupWorkflowState.choice
     var startupUpdateReleaseHistory by remember { mutableStateOf<List<ReleaseChangelogEntry>>(emptyList()) }
     var postInstallChangelog by remember { mutableStateOf<PendingPostInstallChangelog?>(null) }
     var postInstallReleaseHistory by remember { mutableStateOf<List<ReleaseChangelogEntry>>(emptyList()) }
     var latestInstalledChangelog by remember { mutableStateOf<PendingPostInstallChangelog?>(null) }
     var releaseHistoryEntries by remember { mutableStateOf<List<ReleaseChangelogEntry>?>(null) }
     var releaseHistoryLoading by remember { mutableStateOf(false) }
-    var startupActionLocked by remember { mutableStateOf(false) }
-    var pendingInstallRemote by remember { mutableStateOf<RemoteUpdate?>(null) }
-    var awaitingUnknownSources by remember { mutableStateOf(false) }
-    var awaitingInstallerReturn by remember { mutableStateOf(false) }
-    var pendingPostDeepLinkUri by remember { mutableStateOf<Uri?>(null) }
-    var pendingCodexImportUri by remember { mutableStateOf<Uri?>(null) }
+    val startupActionLocked = startupWorkflowState.actionLocked
+    val pendingInstallRemote = startupWorkflowState.pendingInstall
+    val awaitingUnknownSources = startupWorkflowState.awaitingUnknownSources
+    val awaitingInstallerReturn = startupWorkflowState.awaitingInstallerReturn
+    fun updateStartupWorkflow(event: StartupUpdateWorkflowEvent) {
+        appShellOwner.onAction(AppShellAction.UpdateStartup(event))
+    }
     val codexItemCounts = remember { mutableStateMapOf<String, Int>() }
     val codexCoverModels = remember { mutableStateMapOf<String, Any?>() }
     val codexSearchSourceOptions = remember { mutableStateMapOf<String, List<CodexSearchSourceOption>>() }
@@ -485,7 +559,7 @@ internal fun TheoriaAppContent(
                         runCatchingPreservingCancellation {
                             adapter?.resolvePost(post.id)
                         }.getOrNull()?.also { resolved ->
-                            featureDependencies.search.rememberResolvedPost(resolved)
+                            dispatchOrQueueSearchAction(SearchAction.RememberResolvedPost(resolved))
                         }
                     }
                 }
@@ -500,8 +574,9 @@ internal fun TheoriaAppContent(
     }
 
     suspend fun openCreatorProfile(creator: CreatorProfile) {
-        featureDependencies.creatorProfile.open(creator)
+        pendingCreatorProfile = creator
         if (navController.currentBackStackEntry?.destination?.route == AppRoute.Viewer) {
+            activeViewerOwner?.clearSession()
             viewerSessionOwner.clear()
             featureDependencies.search.setViewerLaunchContext(null)
             navController.popBackStack(AppRoute.Viewer, inclusive = true)
@@ -524,7 +599,7 @@ internal fun TheoriaAppContent(
                 adapter?.resolvePost(post.id)
             }.getOrNull()
             if (resolved != null) {
-                featureDependencies.search.rememberResolvedPost(resolved)
+                dispatchOrQueueSearchAction(SearchAction.RememberResolvedPost(resolved))
                 resolvedPost = resolved
                 creator = resolved.creatorProfiles
                     .asSequence()
@@ -600,56 +675,23 @@ internal fun TheoriaAppContent(
     }
 
     suspend fun ensureLikesCodexId(profile: RecommendationProfile): String {
-        val codexName = if (profile.name.equals(DEFAULT_PROFILE_NAME, ignoreCase = true)) {
-            LIKES_CODEX_NAME
-        } else {
-            "$LIKES_CODEX_NAME (${profile.name})"
-        }
-        return dataDependencies.codexRepository.ensureCodex(
-            codexId = likesCodexIdForProfile(profile.profileId),
-            name = codexName,
-        ).codexId
+        return workflowDependencies.likesCodexSync.ensureProfileCodex(profile)
     }
 
     suspend fun toggleLikeAndSyncCodex(post: Post) {
-        val nowLiked = dataDependencies.likesRepository.toggleLike(
-            profileId = activeRecommendationProfile.profileId,
-            postId = post.id,
-            tags = trainingTagsFor(post),
-        )
-        val likesCodexId = ensureLikesCodexId(activeRecommendationProfile)
-        if (nowLiked) {
-            dataDependencies.codexRepository.addItem(likesCodexId, post)
-            return
-        }
-
-        dataDependencies.codexRepository.removeItem(
-            codexId = likesCodexId,
-            sourceKey = post.id.source,
-            sourcePostId = post.id.sourcePostId,
+        workflowDependencies.likesCodexSync.toggle(
+            profile = activeRecommendationProfile,
+            post = post,
+            trainingTags = trainingTagsFor(post),
         )
     }
 
     suspend fun clearProfileLikesAndSyncCodex(profileId: String) {
-        val likesToClear = dataDependencies.likesRepository.observeLikes(profileId).first()
-        dataDependencies.likesRepository.clearLikes(profileId)
-        if (likesToClear.isEmpty()) return
-
-        val likesCodexId = likesCodexIdForProfile(profileId)
-        likesToClear.forEach { liked ->
-            dataDependencies.codexRepository.removeItem(
-                codexId = likesCodexId,
-                sourceKey = liked.postId.source,
-                sourcePostId = liked.postId.sourcePostId,
-            )
-        }
+        workflowDependencies.likesCodexSync.clearProfile(profileId)
     }
 
     suspend fun removeProfileLikesCodex(profileId: String) {
-        val codexId = likesCodexIdForProfile(profileId)
-        dataDependencies.codexRepository.observeCodex(codexId).first()?.let {
-            dataDependencies.codexRepository.deleteCodex(codexId)
-        }
+        workflowDependencies.likesCodexSync.removeProfileCodex(profileId)
     }
 
     suspend fun removeProfileScopedCodices(profileId: String) {
@@ -680,17 +722,12 @@ internal fun TheoriaAppContent(
             return
         }
 
-        if (
-            !featureDependencies.search.prepareTagSearch(
+        dispatchOrQueueSearchAction(
+            SearchAction.ApplyTagSearch(
                 includeTags = normalizedIncludeTags,
                 mode = QueryMode.Source(source),
-            )
-        ) {
-            Toast.makeText(appContext, "${source.displayName()} source is unavailable", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        featureDependencies.search.applyDraft()
+            ),
+        )
         homeTabRoute = TopLevelDestination.Search.route
         pendingTopLevelRoute = TopLevelDestination.Search.route
         navController.navigate(AppRoute.Home) {
@@ -727,19 +764,17 @@ internal fun TheoriaAppContent(
     }
 
     suspend fun shareCodex(codexId: String) {
-        val codex = dataDependencies.codexRepository.observeCodex(codexId).first()
-        if (codex == null) {
+        val export = workflowDependencies.codexTransfer.export(codexId)
+        if (export !is CodexExportResult.Success) {
             Toast.makeText(appContext, "Codex not found", Toast.LENGTH_SHORT).show()
             return
         }
-        val posts = dataDependencies.codexRepository.observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED).first()
-        val export = buildCodexShareFile(title = codex.name, posts = posts)
+        val payload = export.payload
 
         val exportsDirectory = dataDependencies.storageDirectory.resolve("exports").apply { mkdirs() }
-        val fileName = "${sanitizeCodexExportName(codex.name)}.json"
-        val exportFile = exportsDirectory.resolve(fileName)
+        val exportFile = exportsDirectory.resolve(payload.fileName)
         runCatching {
-            exportFile.writeText(Gson().toJson(export))
+            exportFile.writeText(payload.json)
             val contentUri = FileProvider.getUriForFile(
                 appContext,
                 "${appContext.packageName}.fileprovider",
@@ -748,7 +783,7 @@ internal fun TheoriaAppContent(
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/json"
                 putExtra(Intent.EXTRA_STREAM, contentUri)
-                putExtra(Intent.EXTRA_SUBJECT, codex.name)
+                putExtra(Intent.EXTRA_SUBJECT, payload.title)
                 clipData = ClipData.newRawUri("codex_export", contentUri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
@@ -772,52 +807,28 @@ internal fun TheoriaAppContent(
             return
         }
 
-        val parsed = parseCodexShareFile(raw)
-        val title = parsed?.title?.trim().orEmpty()
-        if (title.isBlank()) {
-            Toast.makeText(appContext, "Invalid codex file", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val profileId = activeRecommendationProfile.profileId
-        val codex = dataDependencies.codexRepository.ensureCodex(
-            codexId = profileScopedCodexId(profileId),
-            name = title,
-        )
-
-        val entries = selectCodexShareEntries(parsed?.posts.orEmpty())
-
-        if (entries.isEmpty()) {
-            Toast.makeText(appContext, "Imported codex with no posts", Toast.LENGTH_SHORT).show()
-            return
-        }
-
         refreshSourceAccountState()
-
-        var imported = 0
-        entries.forEach { (entry, postId) ->
-            val resolvedFromSource = sourceDependencies.registry.adapterFor(postId.source)?.let { adapter ->
-                runCatchingPreservingCancellation {
-                    adapter.resolvePost(postId)
-                }.getOrNull()
-            }
-            val resolved = resolveCodexShareImportPost(
-                entry = entry,
-                resolvedFromSource = resolvedFromSource,
-                storedPost = { dataDependencies.codexRepository.getPost(postId) },
+        when (
+            val result = workflowDependencies.codexTransfer.import(
+                raw = raw,
+                targetCodexId = profileScopedCodexId(activeRecommendationProfile.profileId),
             )
-                ?: return@forEach
-
-            dataDependencies.codexRepository.addItem(codex.codexId, resolved)
-            dataDependencies.cacheRepository.cacheThumbnail(resolved)
-            imported += 1
+        ) {
+            CodexImportResult.Unreadable -> {
+                Toast.makeText(appContext, "Could not read codex file", Toast.LENGTH_SHORT).show()
+            }
+            CodexImportResult.Invalid -> {
+                Toast.makeText(appContext, "Invalid codex file", Toast.LENGTH_SHORT).show()
+            }
+            is CodexImportResult.Success -> {
+                val message = if (result.imported == 0 && result.skipped == 0) {
+                    "Imported codex with no posts"
+                } else {
+                    "Imported ${result.imported} posts${if (result.skipped > 0) " (${result.skipped} skipped)" else ""}"
+                }
+                Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
+            }
         }
-        val skipped = entries.size - imported
-        Toast.makeText(
-            appContext,
-            "Imported $imported posts${if (skipped > 0) " ($skipped skipped)" else ""}",
-            Toast.LENGTH_SHORT,
-        ).show()
     }
 
     val importCodexLauncher = rememberLauncherForActivityResult(
@@ -856,8 +867,6 @@ internal fun TheoriaAppContent(
     suspend fun completeAppStartup() {
         if (navReady) return
         sourceDependencies.accounts.refreshAvailability()
-        featureDependencies.search.initialize()
-        featureDependencies.forYou.initialize()
         ensureLikesCodexId(activeRecommendationProfile)
         refreshSourceAccountState()
         val legacyLastTabRoute = dataDependencies.settingsRepository
@@ -867,10 +876,8 @@ internal fun TheoriaAppContent(
         homeTabRoute = dataDependencies.uiRestoreRepository.migrateLegacyLastTab(legacyLastTabRoute)
             ?.takeIf { route -> TopLevelDestination.entries.any { destination -> destination.route == route } }
             ?: TopLevelDestination.Search.route
+        appShellOwner.onAction(AppShellAction.MarkAppReady)
         navReady = true
-        scope.launch {
-            featureDependencies.search.restoreLastAppliedSearchIfNeeded()
-        }
         val updateSnapshot = updateDependencies.startupUpdater.pendingSnapshot()
         latestInstalledChangelog = updateSnapshot.lastInstalledChangelog
         val pendingChangelog = updateSnapshot.pendingPostInstallChangelog
@@ -899,154 +906,64 @@ internal fun TheoriaAppContent(
         }
     }
 
-    fun requestViewerPostResolution(post: Post) {
-        val streamSource = viewerSession?.context?.streamSource ?: ViewerStreamSource.SEARCH
-        if (!requiresViewerPostResolution(post, streamSource)) return
-        scope.launch {
-            val adapter = sourceDependencies.registry.adapterFor(post.id.source) ?: return@launch
-            val resolved = runCatchingPreservingCancellation {
-                adapter.resolvePost(post.id)
-            }.getOrNull() ?: return@launch
-            when (viewerSession?.context?.streamSource) {
-                ViewerStreamSource.SEARCH -> featureDependencies.search.rememberResolvedPost(resolved)
-                ViewerStreamSource.FOR_YOU -> featureDependencies.forYou.rememberResolvedPost(resolved)
-                ViewerStreamSource.CREATOR_PROFILE -> featureDependencies.creatorProfile.rememberResolvedPost(resolved)
-                ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS, null -> dataDependencies.codexRepository.updatePost(resolved)
-            }
-            viewerSessionOwner.update { session ->
-                val index = session.posts.indexOfFirst { current -> current.id == post.id }
-                if (index < 0) return@update session
-                session.copy(
-                    posts = session.posts.toMutableList().apply {
-                        this[index] = resolved
-                    },
-                )
+    LaunchedEffect(appShellOwner) {
+        appShellOwner.effects.collect { effect ->
+            when (effect) {
+                is AppShellEffect.Startup -> when (effect.effect) {
+                    StartupUpdateWorkflowEffect.ContinueToApp -> completeAppStartup()
+                    StartupUpdateWorkflowEffect.OpenUnknownSourcesSettings -> {
+                        openUnknownSourcesSettings(appContext)
+                    }
+                    is StartupUpdateWorkflowEffect.InstallerOpened -> Unit
+                }
             }
         }
-    }
-
-    fun requestViewerMediaRecovery(post: Post, failedMedia: ImageRef) {
-        scope.launch {
-            val recovered = try {
-                recoverRemoteMedia(sourceDependencies.registry, post, failedMedia)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Exception) {
-                null
-            } ?: return@launch
-            val activeSession = viewerSession ?: return@launch
-            if (activeSession.posts.none { current -> current.id == post.id }) return@launch
-            when (activeSession.context.streamSource) {
-                ViewerStreamSource.SEARCH -> featureDependencies.search.rememberResolvedPost(recovered)
-                ViewerStreamSource.FOR_YOU -> featureDependencies.forYou.rememberResolvedPost(recovered)
-                ViewerStreamSource.CREATOR_PROFILE -> featureDependencies.creatorProfile.rememberResolvedPost(recovered)
-                ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> dataDependencies.codexRepository.updatePost(recovered)
-            }
-            viewerSessionOwner.update { session ->
-                val index = session.posts.indexOfFirst { current -> current.id == post.id }
-                if (index < 0) return@update session
-                session.copy(
-                    posts = session.posts.toMutableList().apply {
-                        this[index] = recovered
-                    },
-                )
-            }
-        }
-    }
-
-    suspend fun prepareViewerPostsForLaunch(
-        posts: List<Post>,
-        context: ViewerLaunchContext,
-    ): List<Post> {
-        if (posts.isEmpty()) return posts
-        val startIndex = context.startIndex.coerceIn(0, posts.lastIndex)
-        val selectedPost = posts[startIndex]
-        if (!requiresPrelaunchViewerPostResolution(selectedPost, context.streamSource)) return posts
-        val adapter = sourceDependencies.registry.adapterFor(selectedPost.id.source) ?: return posts
-        val resolved = runCatchingPreservingCancellation {
-            adapter.resolvePost(selectedPost.id)
-        }.getOrNull() ?: return posts
-        when (context.streamSource) {
-            ViewerStreamSource.SEARCH -> featureDependencies.search.rememberResolvedPost(resolved)
-            ViewerStreamSource.FOR_YOU -> featureDependencies.forYou.rememberResolvedPost(resolved)
-            ViewerStreamSource.CREATOR_PROFILE -> featureDependencies.creatorProfile.rememberResolvedPost(resolved)
-            ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> dataDependencies.codexRepository.updatePost(resolved)
-        }
-        return posts.toMutableList().apply {
-            this[startIndex] = resolved
-        }
-    }
-
-    suspend fun recordVisibleViewerPost(post: Post) {
-        val context = viewerSession?.context
-        dataDependencies.recentsRepository.recordWatchedPost(
-            post = post,
-            origin = context?.streamSource ?: ViewerStreamSource.SEARCH,
-            originQueryHash = context?.queryHash,
-        )
     }
 
     suspend fun continueAfterUpdateFailure(message: String) {
-        updateChoiceRemote = null
         startupUpdateReleaseHistory = emptyList()
-        startupActionLocked = false
-        startupUpdateState = StartupUpdateState.Failed(message)
-        startupStatusMessage = message
+        updateStartupWorkflow(StartupUpdateWorkflowEvent.Failed(message))
         delay(1_200)
         completeAppStartup()
     }
 
     suspend fun performStartupInstall(remote: RemoteUpdate) {
-        startupActionLocked = true
+        updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallStarted)
         updateDependencies.startupUpdater.onUserChoseYes(remote)
         val updateOutcome = updateDependencies.startupUpdater.installUpdate(remote) { state ->
-            startupUpdateState = state
-            startupStatusMessage = state.messageText()
+            updateStartupWorkflow(StartupUpdateWorkflowEvent.UpdaterStateChanged(state))
         }
 
         when (updateOutcome) {
             StartupUpdateOutcome.ContinueToApp -> {
-                updateChoiceRemote = null
+                updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallFinished(updateOutcome))
                 startupUpdateReleaseHistory = emptyList()
-                startupActionLocked = false
-                completeAppStartup()
             }
 
             is StartupUpdateOutcome.ContinueToAppWithError -> {
-                startupActionLocked = false
                 continueAfterUpdateFailure(updateOutcome.message)
             }
 
             is StartupUpdateOutcome.AwaitingUnknownSources -> {
-                updateChoiceRemote = null
+                updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallFinished(updateOutcome))
                 startupUpdateReleaseHistory = emptyList()
-                pendingInstallRemote = updateOutcome.remote
-                awaitingUnknownSources = true
-                startupStatusMessage = "Grant install permission to continue update..."
-                openUnknownSourcesSettings(appContext)
             }
 
             is StartupUpdateOutcome.InstallerLaunched -> {
-                updateChoiceRemote = null
+                updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallFinished(updateOutcome))
                 startupUpdateReleaseHistory = emptyList()
-                pendingInstallRemote = updateOutcome.remote
-                awaitingInstallerReturn = true
-                startupStatusMessage = "Installer opened. Complete update to reload app."
             }
         }
     }
 
     suspend fun beginStartupUpdateFlow() {
         if (!BuildConfig.UPDATER_ENABLED) {
-            startupUpdateState = StartupUpdateState.NoUpdate
-            startupStatusMessage = "Loading app..."
-            completeAppStartup()
+            updateStartupWorkflow(StartupUpdateWorkflowEvent.ContinuedToApp("Loading app..."))
             return
         }
 
         val remoteResult = updateDependencies.startupUpdater.checkForEligibleUpdate { state ->
-            startupUpdateState = state
-            startupStatusMessage = state.messageText()
+            updateStartupWorkflow(StartupUpdateWorkflowEvent.UpdaterStateChanged(state))
         }
         val eligibleRemote = remoteResult.getOrElse { error ->
             continueAfterUpdateFailure(error.message ?: "Could not check for updates")
@@ -1055,7 +972,7 @@ internal fun TheoriaAppContent(
 
         if (eligibleRemote == null) {
             startupUpdateReleaseHistory = emptyList()
-            completeAppStartup()
+            updateStartupWorkflow(StartupUpdateWorkflowEvent.NoEligibleUpdate)
             return
         }
 
@@ -1069,20 +986,17 @@ internal fun TheoriaAppContent(
             }
             .sortedWith(releaseChangelogNewestFirstComparator())
 
-        updateChoiceRemote = eligibleRemote
         startupUpdateReleaseHistory = if (startupHistory.isNotEmpty()) {
             startupHistory
         } else {
             listOf(eligibleRemote.toReleaseHistoryEntry())
         }
-        startupUpdateState = StartupUpdateState.AwaitingUserChoice(eligibleRemote)
-        startupStatusMessage = startupUpdateState.messageText()
+        updateStartupWorkflow(StartupUpdateWorkflowEvent.EligibleUpdateFound(eligibleRemote))
     }
 
     LaunchedEffect(Unit) {
         if (navReady) {
-            startupUpdateState = StartupUpdateState.NoUpdate
-            startupStatusMessage = "Ready"
+            updateStartupWorkflow(StartupUpdateWorkflowEvent.ContinuedToApp())
         } else {
             beginStartupUpdateFlow()
         }
@@ -1098,21 +1012,26 @@ internal fun TheoriaAppContent(
             } else {
                 pixivStatusLabel = "Connection failed: ${result.exceptionOrNull()?.message ?: "Unknown error"}"
             }
-        } else if (isCodexImportUri(appContext, uri)) {
-            pendingCodexImportUri = uri
         } else {
-            pendingPostDeepLinkUri = uri
+            appShellOwner.onAction(
+                AppShellAction.AcceptIncomingUri(
+                    uri = uri.toString(),
+                    isPixivAuthorizationCallback = false,
+                    isCodexImport = isCodexImportUri(appContext, uri),
+                )
+            )
         }
         onIncomingUriConsumed()
     }
 
-    LaunchedEffect(navReady, pendingCodexImportUri) {
+    val pendingCodexImport = appShellState.pendingIncomingUri
+        ?.takeIf { pending -> pending.kind == IncomingUriKind.CODEX_IMPORT }
+    LaunchedEffect(navReady, pendingCodexImport) {
         if (!navReady) return@LaunchedEffect
-        val uri = pendingCodexImportUri ?: return@LaunchedEffect
+        val pending = pendingCodexImport ?: return@LaunchedEffect
+        val uri = Uri.parse(pending.value)
         fun consumePendingImportUriIfCurrent() {
-            if (pendingCodexImportUri == uri) {
-                pendingCodexImportUri = null
-            }
+            appShellOwner.onAction(AppShellAction.ConsumeIncomingUri(pending))
         }
         runCatching {
             appContext.contentResolver.takePersistableUriPermission(
@@ -1131,13 +1050,14 @@ internal fun TheoriaAppContent(
         }
     }
 
-    LaunchedEffect(navReady, pendingPostDeepLinkUri) {
+    val pendingExternalContent = appShellState.pendingIncomingUri
+        ?.takeIf { pending -> pending.kind == IncomingUriKind.EXTERNAL_CONTENT }
+    LaunchedEffect(navReady, pendingExternalContent) {
         if (!navReady) return@LaunchedEffect
-        val uri = pendingPostDeepLinkUri ?: return@LaunchedEffect
+        val pending = pendingExternalContent ?: return@LaunchedEffect
+        val uri = Uri.parse(pending.value)
         fun consumePendingUriIfCurrent() {
-            if (pendingPostDeepLinkUri == uri) {
-                pendingPostDeepLinkUri = null
-            }
+            appShellOwner.onAction(AppShellAction.ConsumeIncomingUri(pending))
         }
 
         val deepLink = parseExternalPostDeepLink(uri)
@@ -1205,30 +1125,6 @@ internal fun TheoriaAppContent(
             launchSingleTop = true
         }
         consumePendingUriIfCurrent()
-    }
-
-    LaunchedEffect(settings, availableRealSources) {
-        val searchSettingsChanged = featureDependencies.search.onSettingsChanged(settings)
-        val searchSourcesChanged = featureDependencies.search.onAvailableSourcesChanged()
-        val forYouSettingsChanged = featureDependencies.forYou.onSettingsChanged(settings)
-        val forYouSourcesChanged = featureDependencies.forYou.onAvailableSourcesChanged()
-        val creatorSourcesChanged = featureDependencies.creatorProfile.onAvailableSourcesChanged()
-
-        if (searchSettingsChanged || searchSourcesChanged) {
-            featureDependencies.search.retry()
-        }
-
-        if (forYouSettingsChanged || forYouSourcesChanged) {
-            if (activeProfileLikes.isEmpty()) {
-                featureDependencies.forYou.clear()
-            } else {
-                featureDependencies.forYou.refresh(shuffle = false)
-            }
-        }
-
-        if (creatorSourcesChanged) {
-            featureDependencies.creatorProfile.refresh()
-        }
     }
 
     LaunchedEffect(lifecycleOwner, codices.map { it.codexId }, availableRealSources) {
@@ -1416,39 +1312,25 @@ internal fun TheoriaAppContent(
             if (awaitingUnknownSources && remote != null) {
                 scope.launch {
                     val outcome = updateDependencies.startupUpdater.retryPendingInstall(remote) { state ->
-                        startupUpdateState = state
-                        startupStatusMessage = state.messageText()
+                        updateStartupWorkflow(StartupUpdateWorkflowEvent.UpdaterStateChanged(state))
                     }
                     when (outcome) {
                         StartupUpdateOutcome.ContinueToApp -> {
-                            awaitingUnknownSources = false
-                            pendingInstallRemote = null
-                            startupActionLocked = false
-                            completeAppStartup()
+                            updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallFinished(outcome))
                         }
 
                         is StartupUpdateOutcome.ContinueToAppWithError -> {
-                            awaitingUnknownSources = false
-                            pendingInstallRemote = null
-                            startupActionLocked = false
                             continueAfterUpdateFailure(outcome.message)
                         }
 
                         is StartupUpdateOutcome.AwaitingUnknownSources -> {
-                            awaitingUnknownSources = false
-                            pendingInstallRemote = null
-                            startupActionLocked = false
                             continueAfterUpdateFailure(
                                 "Install permission was not granted. Continuing with current app.",
                             )
                         }
 
                         is StartupUpdateOutcome.InstallerLaunched -> {
-                            awaitingUnknownSources = false
-                            awaitingInstallerReturn = true
-                            pendingInstallRemote = outcome.remote
-                            startupActionLocked = true
-                            startupStatusMessage = "Installer opened. Complete update to reload app."
+                            updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallFinished(outcome))
                         }
                     }
                 }
@@ -1456,14 +1338,11 @@ internal fun TheoriaAppContent(
                 scope.launch {
                     val installedNow = installedAppVersionCode(appContext)
                     if (installedNow >= remote.versionCode) {
-                        awaitingInstallerReturn = false
-                        pendingInstallRemote = null
-                        startupActionLocked = false
-                        startupUpdateState = StartupUpdateState.NoUpdate
-                        startupStatusMessage = "Update installed. Loading app..."
-                        completeAppStartup()
+                        updateStartupWorkflow(
+                            StartupUpdateWorkflowEvent.ContinuedToApp("Update installed. Loading app...")
+                        )
                     } else {
-                        startupStatusMessage = "Installer opened. Complete update to continue, or continue without updating."
+                        updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallerStillPending)
                     }
                 }
             }
@@ -1472,64 +1351,6 @@ internal fun TheoriaAppContent(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
-
-    LaunchedEffect(
-        featureDependencies.search.results,
-        featureDependencies.search.displayResultsVersion,
-        featureDependencies.forYou.results,
-        featureDependencies.creatorProfile.results,
-        featureDependencies.creatorProfile.activeQueryHash,
-        featureDependencies.search.appliedQueryHash,
-        viewerSession?.context?.streamSource,
-        viewerSession?.liveSearchBinding,
-        viewerSession?.searchVisibilityFilters,
-        likedPostIds,
-        savedPostIds,
-        unknownAnimatedDurationPolicy,
-    ) {
-        val session = viewerSession ?: return@LaunchedEffect
-        if (!session.liveSearchBinding) return@LaunchedEffect
-        val incomingForViewer = when (session.context.streamSource) {
-            ViewerStreamSource.SEARCH -> {
-                if (session.context.queryHash != featureDependencies.search.appliedQueryHash) return@LaunchedEffect
-                filterSearchResults(
-                    results = featureDependencies.search.displayResults(),
-                    filters = session.searchVisibilityFilters,
-                    likedPostIds = likedPostIds,
-                    savedPostIds = savedPostIds,
-                    unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
-                )
-            }
-
-            ViewerStreamSource.FOR_YOU -> {
-                if (!session.context.queryHash.startsWith("for_you:")) return@LaunchedEffect
-                filterSearchResults(
-                    results = featureDependencies.forYou.results,
-                    filters = session.searchVisibilityFilters,
-                    likedPostIds = emptySet(),
-                    savedPostIds = emptySet(),
-                    unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
-                )
-            }
-
-            ViewerStreamSource.CREATOR_PROFILE -> {
-                if (session.context.queryHash != featureDependencies.creatorProfile.activeQueryHash) return@LaunchedEffect
-                filterSearchResults(
-                    results = featureDependencies.creatorProfile.results,
-                    filters = session.searchVisibilityFilters,
-                    likedPostIds = likedPostIds,
-                    savedPostIds = savedPostIds,
-                    unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
-                )
-            }
-
-            ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> return@LaunchedEffect
-        }
-        val merged = mergeViewerPosts(session.posts, incomingForViewer)
-        if (merged.size != session.posts.size) {
-            viewerSessionOwner.retain(session.copy(posts = merged))
         }
     }
 
@@ -1562,27 +1383,25 @@ internal fun TheoriaAppContent(
                         onNo = {
                             if (startupActionLocked) return@StartupUpdatePromptCard
                             scope.launch {
-                                startupActionLocked = true
+                                updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallStarted)
                                 updateDependencies.startupUpdater.onUserChoseNo(promptRemote)
-                                updateChoiceRemote = null
                                 startupUpdateReleaseHistory = emptyList()
-                                startupUpdateState = StartupUpdateState.NoUpdate
-                                startupStatusMessage = "Update skipped. Loading app..."
-                                startupActionLocked = false
-                                completeAppStartup()
+                                updateStartupWorkflow(
+                                    StartupUpdateWorkflowEvent.ContinuedToApp("Update skipped. Loading app...")
+                                )
                             }
                         },
                         onRemindLater = {
                             if (startupActionLocked) return@StartupUpdatePromptCard
                             scope.launch {
-                                startupActionLocked = true
+                                updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallStarted)
                                 updateDependencies.startupUpdater.onUserChoseRemindLater(promptRemote)
-                                updateChoiceRemote = null
                                 startupUpdateReleaseHistory = emptyList()
-                                startupUpdateState = StartupUpdateState.NoUpdate
-                                startupStatusMessage = "Update postponed for 24 hours. Loading app..."
-                                startupActionLocked = false
-                                completeAppStartup()
+                                updateStartupWorkflow(
+                                    StartupUpdateWorkflowEvent.ContinuedToApp(
+                                        "Update postponed for 24 hours. Loading app..."
+                                    )
+                                )
                             }
                         },
                     )
@@ -1601,9 +1420,6 @@ internal fun TheoriaAppContent(
                             ),
                             onClick = {
                                 scope.launch {
-                                    awaitingInstallerReturn = false
-                                    pendingInstallRemote = null
-                                    startupActionLocked = false
                                     continueAfterUpdateFailure(
                                         "Update was not completed. Continuing with current app.",
                                     )
@@ -1681,146 +1497,108 @@ internal fun TheoriaAppContent(
                         ) { page ->
                             when (TopLevelDestination.entries[page]) {
                                 TopLevelDestination.Search -> {
-                                    SearchScreen(
+                                    SearchRoute(
                                         coordinator = featureDependencies.search,
                                         pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
-                                        likedPostIds = likedPostIds,
-                                        savedPostIds = savedPostIds,
-                                        favoriteTags = activeProfileFavoriteTags,
-                                        resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
-                                        onToggleLike = { post ->
-                                            scope.launch {
-                                                toggleLikeAndSyncCodex(post)
-                                            }
-                                        },
-                                        onOpenViewer = { posts, context, visibilityFilters ->
-                                            scope.launch {
-                                                val preparedPosts = prepareViewerPostsForLaunch(posts, context)
+                                        config = SearchRouteConfig(
+                                            settings = settings,
+                                            availableSources = availableRealSources,
+                                            likedPostIds = likedPostIds,
+                                            savedPostIds = savedPostIds,
+                                            favoriteTags = activeProfileFavoriteTags,
+                                            resolveUnknownAnimatedDurations =
+                                                settings.contentFilters.resolveUnknownAnimatedDurations,
+                                        ),
+                                        callbacks = SearchRouteCallbacks(
+                                            onOpenViewer = { effect ->
+                                                val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
+                                                    effect.posts,
+                                                    effect.context,
+                                                )
                                                 viewerSessionOwner.retain(
                                                     ViewerSession(
                                                         posts = preparedPosts,
-                                                        context = context,
-                                                        liveSearchBinding = true,
-                                                        searchVisibilityFilters = visibilityFilters,
+                                                        context = effect.context,
+                                                        liveSearchBinding = effect.liveSearchBinding,
+                                                        searchVisibilityFilters = effect.visibilityFilters,
                                                     ),
                                                 )
-                                                featureDependencies.search.setViewerLaunchContext(context)
-                                                navController.navigate(AppRoute.Viewer)
-                                            }
-                                        },
-                                        onRequestSaveToCodex = { post ->
-                                            pendingSavePost = post
-                                            showSaveSheet = true
-                                        },
-                                        onSaveToDevice = { post ->
-                                            requestSaveToDevice(post)
-                                        },
-                                        onAddFavoriteTag = addFavoriteTag,
-                                        onRemoveFavoriteTag = removeFavoriteTag,
-                                        onOpenCreatorProfile = { creator ->
-                                            scope.launch { openCreatorProfile(creator) }
-                                        },
-                                        onOpenLegacyCreatorProfile = { post ->
-                                            scope.launch { openCreatorProfile(post) }
-                                        },
-                                        onApplySearch = {
-                                            scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                val directNhentaiId = featureDependencies.search.directNhentaiGalleryIdCandidate()
-                                                featureDependencies.search.applyDraft()
-                                                if (directNhentaiId != null) {
-                                                    val resolved = featureDependencies.search.results.firstOrNull { post ->
-                                                        post.id.source == SourceKey.NHENTAI &&
-                                                            post.id.sourcePostId == directNhentaiId
-                                                    } ?: runCatchingPreservingCancellation {
-                                                        featureDependencies.search.resolveNhentaiGalleryById(directNhentaiId)
-                                                    }.getOrNull()
-
-                                                    if (resolved != null) {
-                                                        val context = ViewerLaunchContext(
-                                                            queryHash = "nhentai-search-id:$directNhentaiId",
-                                                            startIndex = 0,
-                                                            streamSource = ViewerStreamSource.SEARCH,
-                                                            scrollOffsetHint = 0,
-                                                        )
-                                                        viewerSessionOwner.retain(
-                                                            ViewerSession(
-                                                                posts = listOf(resolved),
-                                                                context = context,
-                                                                liveSearchBinding = false,
-                                                            ),
-                                                        )
-                                                        featureDependencies.search.setViewerLaunchContext(context)
-                                                        navController.navigate(AppRoute.Viewer) {
-                                                            launchSingleTop = true
-                                                        }
-                                                    }
+                                                navController.navigate(AppRoute.Viewer) {
+                                                    launchSingleTop = !effect.liveSearchBinding
                                                 }
-                                            }
-                                        },
-                                        onRetrySearch = {
-                                            scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                featureDependencies.search.retry()
-                                            }
+                                            },
+                                            onShowMessage = { message ->
+                                                Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
+                                            },
+                                            onToggleLike = { post ->
+                                                scope.launch { toggleLikeAndSyncCodex(post) }
+                                            },
+                                            onOpenCreatorProfile = { creator ->
+                                                scope.launch { openCreatorProfile(creator) }
+                                            },
+                                            onOpenLegacyCreatorProfile = { post ->
+                                                scope.launch { openCreatorProfile(post) }
+                                            },
+                                            onRequestSaveToCodex = { post ->
+                                                pendingSavePost = post
+                                                showSaveSheet = true
+                                            },
+                                            onSaveToDevice = ::requestSaveToDevice,
+                                            onAddFavoriteTag = addFavoriteTag,
+                                            onRemoveFavoriteTag = removeFavoriteTag,
+                                        ),
+                                        onOwnerAvailable = { owner ->
+                                            searchRouteOwner = owner
+                                            pendingSearchActions.flush(owner::dispatch)
                                         },
                                     )
                                 }
 
                                 TopLevelDestination.ForYou -> {
-                                    ForYouScreen(
+                                    ForYouRoute(
                                         coordinator = featureDependencies.forYou,
-                                        activeProfileId = activeRecommendationProfile.profileId,
-                                        likesCount = activeProfileLikes.size,
-                                        likedPostIds = likedPostIds,
                                         pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
-                                        resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
-                                        onToggleLike = { post ->
-                                            scope.launch {
-                                                toggleLikeAndSyncCodex(post)
-                                            }
-                                        },
-                                        onBlacklistCurrentSeed = {
-                                            scope.launch {
-                                                if (featureDependencies.forYou.loading) return@launch
-                                                val added = featureDependencies.forYou.blacklistCurrentSeedAndRefresh()
-                                                if (added > 0) {
-                                                    Toast.makeText(
-                                                        appContext,
-                                                        "Blacklisted $added recommendation tag set${if (added > 1) "s" else ""}",
-                                                        Toast.LENGTH_SHORT,
-                                                    ).show()
-                                                } else {
-                                                    Toast.makeText(
-                                                        appContext,
-                                                        "Current recommendation is already blacklisted",
-                                                        Toast.LENGTH_SHORT,
-                                                    ).show()
-                                                }
-                                            }
-                                        },
-                                        onOpenViewer = { posts, context, visibilityFilters ->
-                                            scope.launch {
-                                                val preparedPosts = prepareViewerPostsForLaunch(posts, context)
+                                        config = ForYouRouteConfig(
+                                            settings = settings,
+                                            activeProfileLikesCount = activeProfileLikes.size,
+                                            availableSources = availableRealSources,
+                                            likedPostIds = likedPostIds,
+                                            resolveUnknownAnimatedDurations =
+                                                settings.contentFilters.resolveUnknownAnimatedDurations,
+                                        ),
+                                        callbacks = ForYouRouteCallbacks(
+                                            onOpenViewer = { effect ->
+                                                val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
+                                                    effect.posts,
+                                                    effect.context,
+                                                )
                                                 viewerSessionOwner.retain(
                                                     ViewerSession(
                                                         posts = preparedPosts,
-                                                        context = context,
+                                                        context = effect.context,
                                                         liveSearchBinding = true,
-                                                        searchVisibilityFilters = visibilityFilters,
+                                                        searchVisibilityFilters = effect.visibilityFilters,
                                                     ),
                                                 )
-                                                featureDependencies.search.setViewerLaunchContext(context)
+                                                featureDependencies.search.setViewerLaunchContext(effect.context)
                                                 navController.navigate(AppRoute.Viewer)
-                                            }
-                                        },
-                                        onGoToSearch = {
-                                            val targetIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.Search)
-                                            homeTabRoute = TopLevelDestination.Search.route
-                                            scope.launch {
+                                            },
+                                            onNavigateToSearch = {
+                                                val targetIndex = TopLevelDestination.entries
+                                                    .indexOf(TopLevelDestination.Search)
+                                                homeTabRoute = TopLevelDestination.Search.route
                                                 if (topLevelPagerState.currentPage != targetIndex) {
                                                     topLevelPagerState.animateScrollToPage(targetIndex)
                                                 }
-                                            }
-                                        },
+                                            },
+                                            onShowMessage = { message ->
+                                                Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
+                                            },
+                                            onToggleLike = { post ->
+                                                scope.launch { toggleLikeAndSyncCodex(post) }
+                                            },
+                                        ),
+                                        onOwnerAvailable = { owner -> forYouRouteOwner = owner },
                                     )
                                 }
 
@@ -1846,7 +1624,10 @@ internal fun TheoriaAppContent(
                                                     scrollOffsetHint = 0,
                                                 )
                                                 scope.launch {
-                                                    val preparedPosts = prepareViewerPostsForLaunch(posts, context)
+                                                    val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
+                                                        posts,
+                                                        context,
+                                                    )
                                                     viewerSessionOwner.retain(
                                                         ViewerSession(
                                                             posts = preparedPosts,
@@ -1861,15 +1642,9 @@ internal fun TheoriaAppContent(
                                         },
                                         onOpenSearch = { entry ->
                                             scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                val applied = featureDependencies.search.applyHistoricalQuery(entry.query)
-                                                if (!applied) {
-                                                    Toast.makeText(
-                                                        appContext,
-                                                        "Search source is unavailable",
-                                                        Toast.LENGTH_SHORT,
-                                                    ).show()
-                                                    return@launch
-                                                }
+                                                dispatchOrQueueSearchAction(
+                                                    SearchAction.ApplyHistoricalQuery(entry.query),
+                                                )
                                                 val targetIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.Search)
                                                 homeTabRoute = TopLevelDestination.Search.route
                                                 pendingTopLevelRoute = TopLevelDestination.Search.route
@@ -2185,7 +1960,7 @@ internal fun TheoriaAppContent(
                                     scrollOffsetHint = 0,
                                 )
                                 scope.launch {
-                                    val preparedPosts = prepareViewerPostsForLaunch(posts, context)
+                                    val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(posts, context)
                                     viewerSessionOwner.retain(
                                         ViewerSession(
                                             posts = preparedPosts,
@@ -2216,16 +1991,16 @@ internal fun TheoriaAppContent(
                                 scope.launch { openCreatorProfile(post) }
                             },
                             onAddIncludeTerm = { post, term ->
-                                featureDependencies.search.addPostIncludeTerm(post, term)
+                                addSearchIncludeTerm(post, term)
                             },
                             onAddExcludeTerm = { post, term ->
-                                featureDependencies.search.addPostExcludeTerm(post, term)
+                                addSearchExcludeTerm(post, term)
                             },
                             onRemoveIncludeTerm = { _, term ->
-                                featureDependencies.search.removeIncludeTerm(term)
+                                removeSearchIncludeTerm(term)
                             },
                             onRemoveExcludeTerm = { _, term ->
-                                featureDependencies.search.removeExcludeTerm(term)
+                                removeSearchExcludeTerm(term)
                             },
                             onFavoriteTagLongPress = addFavoriteTag,
                             onGoToSearch = {
@@ -2245,174 +2020,170 @@ internal fun TheoriaAppContent(
                         )
                     }
                     composable(AppRoute.CreatorProfile) {
-                        CreatorProfileScreen(
+                        CreatorRoute(
                             coordinator = featureDependencies.creatorProfile,
-                            likedPostIds = likedPostIds,
-                            savedPostIds = savedPostIds,
                             pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
-                            resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
-                            onToggleLike = { post ->
-                                scope.launch { toggleLikeAndSyncCodex(post) }
-                            },
-                            onOpenViewer = { posts, context, visibilityFilters ->
-                                scope.launch {
-                                    val preparedPosts = prepareViewerPostsForLaunch(posts, context)
+                            config = CreatorRouteConfig(
+                                activeCreator = pendingCreatorProfile,
+                                availableSources = availableRealSources,
+                                likedPostIds = likedPostIds,
+                                savedPostIds = savedPostIds,
+                                resolveUnknownAnimatedDurations =
+                                    settings.contentFilters.resolveUnknownAnimatedDurations,
+                            ),
+                            callbacks = CreatorRouteCallbacks(
+                                onOpenViewer = { effect ->
+                                    val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
+                                        effect.posts,
+                                        effect.context,
+                                    )
                                     viewerSessionOwner.retain(
                                         ViewerSession(
                                             posts = preparedPosts,
-                                            context = context,
+                                            context = effect.context,
                                             liveSearchBinding = true,
-                                            searchVisibilityFilters = visibilityFilters,
+                                            searchVisibilityFilters = effect.visibilityFilters,
                                         ),
                                     )
                                     navController.navigate(AppRoute.Viewer)
-                                }
-                            },
-                            onRequestSaveToCodex = { post ->
-                                pendingSavePost = post
-                                showSaveSheet = true
-                            },
-                            onSaveToDevice = { post ->
-                                requestSaveToDevice(post)
-                            },
-                            onOpenUrl = { url ->
-                                openInBrowser(appContext, url)
-                            },
-                            onAddIncludeTerm = { post, term ->
-                                featureDependencies.search.addPostIncludeTerm(post, term)
-                            },
-                            onAddExcludeTerm = { post, term ->
-                                featureDependencies.search.addPostExcludeTerm(post, term)
-                            },
-                            onRemoveIncludeTerm = { _, term ->
-                                featureDependencies.search.removeIncludeTerm(term)
-                            },
-                            onRemoveExcludeTerm = { _, term ->
-                                featureDependencies.search.removeExcludeTerm(term)
-                            },
-                            onBack = {
-                                navController.popBackStack()
-                            },
+                                },
+                                onNavigateBack = { navController.popBackStack() },
+                                onToggleLike = { post ->
+                                    scope.launch { toggleLikeAndSyncCodex(post) }
+                                },
+                                onRequestSaveToCodex = { post ->
+                                    pendingSavePost = post
+                                    showSaveSheet = true
+                                },
+                                onSaveToDevice = ::requestSaveToDevice,
+                                onOpenUrl = { url -> openInBrowser(appContext, url) },
+                                onAddIncludeTerm = ::addSearchIncludeTerm,
+                                onAddExcludeTerm = ::addSearchExcludeTerm,
+                                onRemoveIncludeTerm = { _, term -> removeSearchIncludeTerm(term) },
+                                onRemoveExcludeTerm = { _, term -> removeSearchExcludeTerm(term) },
+                            ),
+                            onOwnerAvailable = { owner -> creatorRouteOwner = owner },
                         )
                     }
                     composable(AppRoute.Viewer) {
-                        val session = viewerSession
-                        if (session == null) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text("No viewer session")
-                            }
-                        } else {
-                            val canLoadMoreFromSource = when (session.context.streamSource) {
-                                ViewerStreamSource.SEARCH -> session.liveSearchBinding && featureDependencies.search.canLoadMore
-                                ViewerStreamSource.FOR_YOU -> session.liveSearchBinding && featureDependencies.forYou.canLoadMore
-                                ViewerStreamSource.CREATOR_PROFILE -> session.liveSearchBinding && featureDependencies.creatorProfile.canLoadMore
-                                ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> false
-                            }
-                            val loadingMoreFromSource = when (session.context.streamSource) {
-                                ViewerStreamSource.SEARCH -> featureDependencies.search.loadingMore
-                                ViewerStreamSource.FOR_YOU -> featureDependencies.forYou.loadingMore
-                                ViewerStreamSource.CREATOR_PROFILE -> featureDependencies.creatorProfile.loadingMore
-                                ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> false
-                            }
-                            val onLoadMoreFromSource = when (session.context.streamSource) {
-                                ViewerStreamSource.SEARCH -> {
-                                    if (session.liveSearchBinding) {
-                                        {
-                                            scope.launch { featureDependencies.search.loadNextPage() }
-                                            Unit
+                        ViewerRoute(
+                            dependencies = ViewerRouteDependencies(
+                                sessionRetentionOwner = viewerSessionOwner,
+                                postResolver = ViewerPostResolver { identity, postId ->
+                                    val streamSource = identity.streamKey
+                                        ?.let { name ->
+                                            ViewerStreamSource.entries.firstOrNull { source -> source.name == name }
                                         }
-                                    } else {
-                                        null
-                                    }
-                                }
-
-                                ViewerStreamSource.FOR_YOU -> {
-                                    if (session.liveSearchBinding) {
-                                        {
-                                            scope.launch { featureDependencies.forYou.loadNextPage() }
-                                            Unit
-                                        }
-                                    } else {
-                                        null
-                                    }
-                                }
-
-                                ViewerStreamSource.CREATOR_PROFILE -> {
-                                    if (session.liveSearchBinding) {
-                                        {
-                                            scope.launch { featureDependencies.creatorProfile.loadNextPage() }
-                                            Unit
-                                        }
-                                    } else {
-                                        null
-                                    }
-                                }
-
-                                ViewerStreamSource.CODEX, ViewerStreamSource.RECENTS -> null
-                            }
-
-                            ViewerScreen(
-                                posts = session.posts,
-                                launchContext = session.context,
+                                        ?: ViewerStreamSource.SEARCH
+                                    viewerRouteWorkflow.resolvePost(postId, streamSource)
+                                },
+                                mediaPrefetcher = ViewerMediaPrefetcher { _, media ->
+                                    prefetchViewerMedia(appContext, media)
+                                },
+                                restoreSession = viewerRouteWorkflow::restoreSession,
+                            ),
+                            renderConfig = ViewerRouteRenderConfig(
                                 pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
-                                tagVideoCountProvider = { source, tag ->
-                                    featureDependencies.search.tagVideoCount(source, tag)
-                                },
-                                fetchTagVideoCounts = { source, tags ->
-                                    featureDependencies.search.fetchTagVideoCounts(source, tags)
-                                },
-                                canLoadMoreFromSource = canLoadMoreFromSource,
-                                loadingMoreFromSource = loadingMoreFromSource,
-                                onLoadMoreFromSource = onLoadMoreFromSource,
+                                tagVideoCountProvider = featureDependencies.search::tagVideoCount,
+                                fetchTagVideoCounts = featureDependencies.search::fetchTagVideoCounts,
                                 invertMultiImageScrollDirection = settings.viewer.invertMultiImageScrollDirection,
-                                onInvertMultiImageScrollDirectionChange = { enabled ->
-                                    scope.launch {
-                                        dataDependencies.settingsRepository.setInvertMultiImageScrollDirection(enabled)
-                                    }
-                                },
                                 likedPostIds = likedPostIds,
-                                onToggleLike = { post ->
-                                    scope.launch {
-                                        toggleLikeAndSyncCodex(post)
-                                    }
-                                },
-                                onRequestPostResolution = ::requestViewerPostResolution,
-                                onRequestMediaRecovery = ::requestViewerMediaRecovery,
-                                onVisiblePostChanged = { post ->
-                                    scope.launch { recordVisibleViewerPost(post) }
-                                },
-                                onDismiss = {
-                                    viewerSessionOwner.clear()
-                                    scope.launch { featureDependencies.search.setViewerLaunchContext(null) }
-                                    navController.popBackStack()
-                                },
-                                onSave = { post ->
+                            ),
+                            liveSourceState = ViewerRouteLiveSourceState(
+                                search = ViewerRouteLiveSourceSnapshot(
+                                    queryHash = searchRouteState.query.appliedQueryHash
+                                        .takeIf(String::isNotBlank),
+                                    results = searchRouteState.content.results,
+                                    canLoadMore = searchRouteState.content.canLoadMore,
+                                    loadingMore = searchRouteState.loadingMore,
+                                ),
+                                forYou = ViewerRouteLiveSourceSnapshot(
+                                    queryHash = "for_you:${forYouRouteState.seedId}",
+                                    results = forYouRouteState.results,
+                                    canLoadMore = forYouRouteState.canLoadMore,
+                                    loadingMore = forYouRouteState.isPaging,
+                                ),
+                                creatorProfile = ViewerRouteLiveSourceSnapshot(
+                                    queryHash = creatorRouteState.queryHash,
+                                    results = creatorRouteState.results,
+                                    canLoadMore = creatorRouteState.canLoadMore,
+                                    loadingMore = creatorRouteState.isPaging,
+                                ),
+                                likedPostIds = likedPostIds,
+                                savedPostIds = savedPostIds,
+                                unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
+                            ),
+                            effectCallbacks = ViewerRouteEffectCallbacks(
+                                onSavePost = { post ->
                                     pendingSavePost = post
                                     showSaveSheet = true
+                                },
+                                onSharePost = { post ->
+                                    Toast.makeText(
+                                        appContext,
+                                        shareViewerPostMessage(appContext, post),
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                },
+                                onDownloadMedia = { request ->
+                                    val message = downloadViewerMediaMessage(
+                                        context = appContext,
+                                        sources = sourceDependencies,
+                                        request = request,
+                                    )
+                                    Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
+                                },
+                                onToggleLike = ::toggleLikeAndSyncCodex,
+                                onOpenCreatorProfile = ::openCreatorProfile,
+                                onApplyTag = { post, term, excluded ->
+                                    if (excluded) {
+                                        addSearchExcludeTerm(post, term.toSearchTerm())
+                                    } else {
+                                        addSearchIncludeTerm(post, term.toSearchTerm())
+                                    }
+                                },
+                                onRecoverMedia = viewerRouteWorkflow::recoverMedia,
+                                onLoadMore = viewerRouteWorkflow::loadMore,
+                                onDismiss = {
+                                    featureDependencies.search.setViewerLaunchContext(null)
+                                    navController.popBackStack()
+                                },
+                                onRestorationUnavailable = {
+                                    featureDependencies.search.setViewerLaunchContext(null)
+                                    Toast.makeText(
+                                        appContext,
+                                        "Viewer session expired",
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                    navController.popBackStack()
+                                },
+                            ),
+                            screenCallbacks = ViewerRouteScreenCallbacks(
+                                onOwnerChanged = { owner -> activeViewerOwner = owner },
+                                onInvertMultiImageScrollDirectionChange = { enabled ->
+                                    scope.launch {
+                                        dataDependencies.settingsRepository
+                                            .setInvertMultiImageScrollDirection(enabled)
+                                    }
+                                },
+                                onVisiblePostChanged = { post ->
+                                    scope.launch {
+                                        viewerRouteWorkflow.recordVisiblePost(post, viewerSession)
+                                    }
                                 },
                                 onOpenInBrowser = { post ->
                                     post.pageUrl?.takeIf { it.isNotBlank() }?.let { url ->
                                         openInBrowser(appContext, url)
                                     }
                                 },
-                                onAddIncludeTerm = { post, term ->
-                                    featureDependencies.search.addPostIncludeTerm(post, term)
-                                },
-                                onAddExcludeTerm = { post, term ->
-                                    featureDependencies.search.addPostExcludeTerm(post, term)
-                                },
                                 onRemoveIncludeTerm = { _, term ->
-                                    featureDependencies.search.removeIncludeTerm(term)
+                                    removeSearchIncludeTerm(term)
                                 },
                                 onRemoveExcludeTerm = { _, term ->
-                                    featureDependencies.search.removeExcludeTerm(term)
+                                    removeSearchExcludeTerm(term)
                                 },
                                 onFavoriteTagLongPress = addFavoriteTag,
                                 onGoToSearch = {
-                                    viewerSessionOwner.clear()
                                     homeTabRoute = TopLevelDestination.Search.route
                                     scope.launch { featureDependencies.search.setViewerLaunchContext(null) }
                                     navController.popBackStack(AppRoute.Viewer, inclusive = true)
@@ -2428,14 +2199,11 @@ internal fun TheoriaAppContent(
                                         topLevelPagerState.scrollToPage(searchIndex)
                                     }
                                 },
-                                onOpenCreatorProfile = { creator ->
-                                    scope.launch { openCreatorProfile(creator) }
-                                },
-                                onOpenLegacyCreatorProfile = { post ->
+                                onOpenCreatorFallback = { post ->
                                     scope.launch { openCreatorProfile(post) }
                                 },
-                            )
-                        }
+                            ),
+                        )
                     }
                 }
             }
@@ -2923,28 +2691,6 @@ private fun firstChangelogLine(markdown: String): String? {
         .firstOrNull { it.isNotBlank() && !it.startsWith("#") }
 }
 
-private fun likesCodexIdForProfile(profileId: String): String {
-    return if (profileId == DEFAULT_MAIN_PROFILE_ID) {
-        LIKES_CODEX_ID_PREFIX
-    } else {
-        "${LIKES_CODEX_ID_PREFIX}_$profileId"
-    }
-}
-
-private fun profileScopedCodexId(profileId: String): String {
-    return "${PROFILE_CODEX_ID_PREFIX}_${profileId}_${UUID.randomUUID()}"
-}
-
-private fun codexBelongsToProfile(codexId: String, profileId: String): Boolean {
-    if (codexId.startsWith(LIKES_CODEX_ID_PREFIX)) {
-        return codexId == likesCodexIdForProfile(profileId)
-    }
-    if (codexId.startsWith("${PROFILE_CODEX_ID_PREFIX}_")) {
-        return codexId.startsWith("${PROFILE_CODEX_ID_PREFIX}_${profileId}_")
-    }
-    return profileId == DEFAULT_MAIN_PROFILE_ID
-}
-
 private fun resolveCodexCoverModel(
     storageDirectory: File,
     post: Post,
@@ -2992,10 +2738,5 @@ private const val MIN_BOTTOM_BAR_HEIGHT_DP = 68
 private const val MAX_BOTTOM_BAR_HEIGHT_DP = 88
 private const val MIN_BOTTOM_BAR_ICON_DP = 24
 private const val MAX_BOTTOM_BAR_ICON_DP = 30
-private const val DEFAULT_MAIN_PROFILE_ID = "profile-main"
-private const val DEFAULT_PROFILE_NAME = "Main"
-private const val LIKES_CODEX_ID_PREFIX = "system_likes_codex"
-private const val PROFILE_CODEX_ID_PREFIX = "profile_codex"
-private const val LIKES_CODEX_NAME = "Likes"
 private val CODEX_IMPORT_MIME_TYPES = setOf("application/json", "text/json")
 private val GELBOORU_PROFILE_OWNER_REGEX = Regex("""user:([A-Za-z0-9_:-]+)""", RegexOption.IGNORE_CASE)

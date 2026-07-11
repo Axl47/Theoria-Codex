@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T20:35:00-04:00
+updated_at: 2026-07-10T23:30:00-04:00
 ---
 # Working List
 
@@ -8,21 +8,33 @@ updated_at: 2026-07-10T20:35:00-04:00
 
 ### In Progress
 
-- [ ] Phase 4: move UI ownership to route-scoped state holders
-  - [ ] 4F: freeze route owner, effect host, saved-state, and feature-factory contracts
-  - [ ] 4A: create the Search route owner and state-driven rendering boundary
-  - [ ] 4B: create the Viewer route owner while keeping platform media handles outside state
-  - [ ] 4C: create For You and Creator route owners with deterministic request ownership
-  - [ ] 4D: extract startup, incoming URI, Codex transfer, likes sync, and Viewer-session workflows
-  - [ ] 4I: integrate route owners/workflows into navigation and remove legacy duplicate ownership
+- [ ] Phase 5: consolidate repeated policy and stable UI primitives
+  - [ ] 5A: share pure repository policy and run one contract suite across both backends
+  - [ ] 5B: centralize recommendation-tag and source-weight normalization
+  - [ ] 5C: share provider mechanics without hiding provider-specific protocol behavior
+  - [ ] 5D: extract stable post-action, feed-state, grid, and autocomplete UI primitives
+  - [ ] 5E: centralize source presentation and derive operational capability from interfaces
 
 ### Pending
 
-- [ ] Phase 5: consolidate repeated policy and stable UI primitives
 - [ ] Phase 6: modernize persistence, credentials, and Android tooling in reversible waves
 - [ ] Phase 7: enforce quality budgets, complete system acceptance, and close the program
 
 ### Done
+
+- [x] Phase 4: move UI ownership to route-scoped state holders
+  - [x] 4F: freeze route owner, effect host, saved-state, and feature-factory contracts
+    - Evidence: every major route exposes immutable state plus typed actions/effects; narrow weak leases reject work only after their navigation ViewModel is cleared
+  - [x] 4A: create the Search route owner and state-driven rendering boundary
+    - Evidence: Search owns restoration, resume, environment reconciliation, request jobs, effects, and one immutable screen entry; cross-route actions queue until the lazy page is available
+  - [x] 4B: create the Viewer route owner while keeping platform media handles outside state
+    - Evidence: Viewer consumes its Activity handoff once, owns live-source merging/paging and stale-session effect rejection, and fails closed when durable reconstruction is unavailable
+  - [x] 4C: create For You and Creator route owners with deterministic request ownership
+    - Evidence: both routes own refresh/page generations and expose read-only state to Viewer; creator identity is handed to the route rather than prepared as shell-owned coordinator state
+  - [x] 4D: extract startup, incoming URI, Codex transfer, likes sync, and Viewer-session workflows
+    - Evidence: named app-shell/update/Codex services have platform-free tests; Viewer cross-route persistence/restoration policy lives in a dedicated workflow bridge
+  - [x] 4I: integrate route owners/workflows into navigation and remove legacy duplicate ownership
+    - Evidence: `TheoriaApp.kt` fell from the 2,839-line audit baseline to 2,742 lines; the 110-task gate passed 1,005 configured test executions with 0 failures/errors and 6 opt-in skips, lint remained at 120 known issues, and Android-test sources compiled; connected execution is deferred because ADB has no device
 
 - [x] Phase 3: establish the application container and immutable UI contracts
   - [x] 3A: define immutable Search state, typed actions/effects, and coordinator mapping

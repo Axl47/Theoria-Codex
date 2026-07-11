@@ -3,6 +3,8 @@ package com.theoriacodex.app.di
 import android.content.Context
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
+import com.theoriacodex.app.codex.LikesCodexSyncService
+import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.app.recommend.ForYouCoordinator
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
 import com.theoriacodex.app.search.SearchCoordinator
@@ -77,11 +79,17 @@ data class FeatureDependencies(
     val creatorProfile: CreatorProfileCoordinator,
 )
 
+data class WorkflowDependencies(
+    val likesCodexSync: LikesCodexSyncService,
+    val codexTransfer: CodexTransferService,
+)
+
 interface TheoriaAppContainer {
     val data: DataDependencies
     val sources: SourceDependencies
     val updates: UpdateDependencies
     val features: FeatureDependencies
+    val workflows: WorkflowDependencies
 }
 
 interface TheoriaAppContainerOwner {
@@ -193,5 +201,17 @@ internal class DefaultTheoriaAppContainer(
             tagSuggestionStore = tagSuggestionStore,
         ),
         creatorProfile = CreatorProfileCoordinator(registry = sourceRegistry),
+    )
+
+    override val workflows = WorkflowDependencies(
+        likesCodexSync = LikesCodexSyncService(
+            likesRepository = likesRepository,
+            codexRepository = codexRepository,
+        ),
+        codexTransfer = CodexTransferService(
+            codexRepository = codexRepository,
+            cacheRepository = cacheRepository,
+            sourceRegistry = sourceRegistry,
+        ),
     )
 }

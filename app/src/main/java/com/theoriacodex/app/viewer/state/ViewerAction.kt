@@ -124,6 +124,7 @@ internal sealed interface ViewerEffect {
 
     data class ApplyTag(
         override val session: ViewerSessionIdentity,
+        val postId: PostId,
         val term: PostTaxonomyTerm,
         val excluded: Boolean,
     ) : ViewerEffect
