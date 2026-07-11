@@ -19,10 +19,11 @@ updated_at: 2026-07-10T23:59:00-04:00
     - Evidence: `./gradlew lint test :app:assembleDebug :app:compileDebugAndroidTestKotlin --rerun-tasks` passed 110 tasks and 1,099 configured test executions with 0 failures/errors; lint reports 111 known warnings
   - [x] 6E: migrate Kotlin and Compose compiler tooling
     - Evidence: Kotlin 2.0.21, the matching Compose compiler plugin, typed JVM compiler options, and explicit JSpecify compilation passed a clean 110-task gate with 1,099 configured test executions; this is the newest metadata level supported by the current AGP 8.5 lint/R8 boundary
-  - [ ] 6B integration: register Room and move Codex/Likes to one transactional owner
+  - [ ] 6B integration: finish reviewed Room hardening, register the module, and move Codex/Likes to one transactional owner
   - [x] 6F: advance Android packaging to AGP 9.1.1 and Gradle 9.3.1 on JDK 17
     - Evidence: clean lint/tests, debug APK, release APK, and Android-test compilation passed 131 tasks; the wrapper checksum is pinned and the temporary external-Kotlin opt-out is explicit for the mixed Android/JVM graph
-  - [ ] 6E follow-up: advance from the green Kotlin 2.0 rollback point to Kotlin 2.4.0 on the now-compatible AGP toolchain
+  - [x] 6E follow-up: advance from the green Kotlin 2.0 rollback point to Kotlin 2.4.0 on the compatible AGP toolchain
+    - Evidence: JDK 17 clean lint/tests, debug/release packaging, and Android-test compilation passed 131 tasks and 729 configured test executions; AGP lint reads the final metadata and reports 86 warnings
   - [ ] 6D: migrate Android libraries and target SDK after storage integration
   - [ ] 6G: validate release shrinking and startup optimization
 
