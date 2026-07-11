@@ -58,7 +58,10 @@ jobs:
             echo "Pushed tag ${GITHUB_REF_NAME} does not match app version $RELEASE_TAG"
             exit 1
           fi
-          if [ "$(git cat-file -t "$GITHUB_REF")" != "tag" ]; then
+          # actions/checkout resolves a tag push to its commit and overwrites the
+          # local tag ref. Restore the remote tag object before validating it.
+          git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          if [ "$(git cat-file -t "refs/tags/${GITHUB_REF_NAME}")" != "tag" ]; then
             echo "$GITHUB_REF_NAME must be an annotated tag"
             exit 1
           fi
@@ -68,6 +71,10 @@ jobs:
           fi
           if [ ! -s "$RELEASE_NOTES_FILE" ]; then
             echo "Missing curated release notes: $RELEASE_NOTES_FILE"
+            exit 1
+          fi
+          if ! cmp -s <(git tag -l --format='%(contents)' "$RELEASE_TAG") "$RELEASE_NOTES_FILE"; then
+            echo "$RELEASE_TAG annotation must exactly match $RELEASE_NOTES_FILE"
             exit 1
           fi
 
