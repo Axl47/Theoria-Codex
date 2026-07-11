@@ -14,7 +14,7 @@ Treat these files and identifiers as one release unit:
 - `app/build.gradle.kts` declares `versionName = "X.Y.Z"`.
 - `versionCode` equals `1_500_000_000 + major * 10_000 + minor * 100 + patch`.
 - `release-notes/vX.Y.Z.md` contains the user-facing GitHub prerelease body and in-app changelog.
-- The annotated Git tag is `vX.Y.Z`.
+- The annotated Git tag is `vX.Y.Z`, and its annotation exactly matches `release-notes/vX.Y.Z.md`.
 
 Never use a low sequential Android code. Existing releases and the updater compare against the high SemVer-derived range. Never move, delete, reuse, or force-push a release tag.
 
@@ -62,7 +62,7 @@ Publish only when the user explicitly asks to publish the named version.
 2. Create an annotated tag:
 
    ```sh
-   git tag -a vX.Y.Z -m "Theoria Codex vX.Y.Z"
+   git tag -a --cleanup=verbatim vX.Y.Z -F release-notes/vX.Y.Z.md
    ```
 
 3. Push `main` and that exact tag.
