@@ -18,6 +18,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlinx.coroutines.runBlocking
 
 @RunWith(AndroidJUnit4::class)
 class TheoriaAppContainerDeviceTest {
@@ -27,13 +28,13 @@ class TheoriaAppContainerDeviceTest {
             .targetContext
             .applicationContext as TheoriaApplication
 
-        val first = application.appContainer
+        val first = runBlocking { application.awaitAppContainer() }
         val firstSearch = first.features.search
         val firstRegistry = first.sources.registry
 
         application.onConfigurationChanged(Configuration(application.resources.configuration))
 
-        val second = application.appContainer
+        val second = runBlocking { application.awaitAppContainer() }
 
         assertSame(first, second)
         assertSame(first.data, second.data)

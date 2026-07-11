@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T23:55:00-04:00
+updated_at: 2026-07-10T23:59:00-04:00
 ---
 # Working List
 
@@ -9,6 +9,18 @@ updated_at: 2026-07-10T23:55:00-04:00
 ### In Progress
 
 - [ ] Phase 6: modernize persistence, credentials, and Android tooling in reversible waves
+  - [x] 6A: migrate settings and UI restoration to typed asynchronous DataStore files
+    - Evidence: both stores import legacy JSON once with schema/hash/count proofs, archive only after verification, fail closed on newer schemas, bound retained records, and publish the application graph only after readiness without blocking `Application.onCreate`
+  - [ ] 6B: promote the transactional Room Codex/Likes prototype after the Kotlin 2 compiler wave
+    - Evidence: the additive Room 2.8.4 prototype exports schema v1 and proves atomic repository operations; registration and live binding remain intentionally deferred because Kotlin 1.9 cannot read its Kotlin 2.1 metadata
+  - [x] 6C: replace the live credential writer with a versioned Android Keystore envelope
+    - Evidence: AES-256-GCM snapshots are bounded, atomically written, read-back verified, backup-excluded, retry-safe across legacy migration, and never auto-deleted on corruption or key mismatch; Android tests compile while device execution remains queued
+  - [x] Phase 6 storage wave gate
+    - Evidence: `./gradlew lint test :app:assembleDebug :app:compileDebugAndroidTestKotlin --rerun-tasks` passed 110 tasks and 1,099 configured test executions with 0 failures/errors; lint reports 111 known warnings
+  - [ ] 6E: migrate Kotlin and Compose compiler tooling
+  - [ ] 6B integration: register Room and move Codex/Likes to one transactional owner
+  - [ ] 6F/6D: migrate the supported Android toolchain, libraries, and target SDK in separately reversible commits
+  - [ ] 6G: validate release shrinking and startup optimization
 
 ### Pending
 

@@ -47,55 +47,51 @@ class ObservableSourceAccountStore(
     }
 
     override suspend fun getPixivTokens(): PixivAuthTokens? {
-        return delegate.getPixivTokens().also { synchronizeRecoveryState() }
+        return withRecoverySynchronization { delegate.getPixivTokens() }
     }
 
     override suspend fun savePixivTokens(tokens: PixivAuthTokens) {
-        delegate.savePixivTokens(tokens)
-        synchronizeRecoveryState()
+        withRecoverySynchronization { delegate.savePixivTokens(tokens) }
     }
 
     override suspend fun clearPixivTokens() {
-        delegate.clearPixivTokens()
-        synchronizeRecoveryState()
+        withRecoverySynchronization { delegate.clearPixivTokens() }
     }
 
     override suspend fun getGelbooruCredentials(): GelbooruCredentials? {
-        return delegate.getGelbooruCredentials().also { synchronizeRecoveryState() }
+        return withRecoverySynchronization { delegate.getGelbooruCredentials() }
     }
 
     override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) {
-        delegate.saveGelbooruCredentials(credentials)
-        synchronizeRecoveryState()
+        withRecoverySynchronization { delegate.saveGelbooruCredentials(credentials) }
     }
 
     override suspend fun clearGelbooruCredentials() {
-        delegate.clearGelbooruCredentials()
-        synchronizeRecoveryState()
+        withRecoverySynchronization { delegate.clearGelbooruCredentials() }
     }
 
     override suspend fun getRule34XxxCredentials(): Rule34XxxCredentials? {
-        return delegate.getRule34XxxCredentials().also { credentials ->
-            publishRule34XxxAvailability(credentials != null)
-        }
+        val credentials = withRecoverySynchronization { delegate.getRule34XxxCredentials() }
+        publishRule34XxxAvailability(credentials != null)
+        return credentials
     }
 
     override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) {
-        delegate.saveRule34XxxCredentials(credentials)
+        withRecoverySynchronization { delegate.saveRule34XxxCredentials(credentials) }
         publishRule34XxxAvailability(configured = true)
     }
 
     override suspend fun clearRule34XxxCredentials() {
-        delegate.clearRule34XxxCredentials()
+        withRecoverySynchronization { delegate.clearRule34XxxCredentials() }
         publishRule34XxxAvailability(configured = false)
     }
 
     override suspend fun resetAfterReconnectRequired(): Boolean {
-        return delegate.resetAfterReconnectRequired().also { reset ->
-            if (reset) {
-                publishRule34XxxAvailability(configured = false)
-            }
+        val reset = withRecoverySynchronization { delegate.resetAfterReconnectRequired() }
+        if (reset) {
+            publishRule34XxxAvailability(configured = false)
         }
+        return reset
     }
 
     private fun publishRule34XxxAvailability(configured: Boolean) {
@@ -104,8 +100,16 @@ class ObservableSourceAccountStore(
         )
     }
 
+    private suspend fun <T> withRecoverySynchronization(action: suspend () -> T): T {
+        return try {
+            action()
+        } finally {
+            synchronizeRecoveryState()
+        }
+    }
+
     private fun synchronizeRecoveryState() {
-        if (recoveryState.value == CredentialStoreRecoveryState.ReconnectRequired) {
+        if (recoveryState.value != CredentialStoreRecoveryState.Ready) {
             publishRule34XxxAvailability(configured = false)
         }
     }

@@ -868,6 +868,45 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
+    fun `recents repository evicts oldest complete entries to stay within its byte budget`() = runTest {
+        val dir = tempDir("recents-byte-budget-")
+        var now = 1L
+        val maxBytes = 12_000
+        val repository = FileBackedRecentsRepository(
+            baseDirectory = dir,
+            watchedLimit = 200,
+            searchLimit = 100,
+            maxSerializedBytes = maxBytes,
+            clock = { now++ },
+        )
+
+        repeat(10) { index ->
+            repository.recordWatchedPost(
+                post = samplePost("large-$index", localPath = null).copy(
+                    title = "entry-$index-" + "x".repeat(2_000),
+                ),
+                origin = ViewerStreamSource.SEARCH,
+                originQueryHash = "query-$index",
+            )
+        }
+
+        val retained = repository.observeWatchedPosts().first()
+        val storeFile = dir.resolve("recents_store.json")
+        assertTrue("the serialized store must stay bounded", storeFile.length() <= maxBytes)
+        assertTrue("at least one complete entry should fit", retained.isNotEmpty())
+        assertTrue("the byte budget should evict some history", retained.size < 10)
+        assertEquals("large-9", retained.first().post.id.sourcePostId)
+        assertTrue(retained.all { entry -> entry.post.title?.length == 2_008 })
+
+        val reconstructed = FileBackedRecentsRepository(
+            baseDirectory = dir,
+            maxSerializedBytes = maxBytes,
+        )
+        assertEquals(retained, reconstructed.observeWatchedPosts().first())
+        assertTrue(storeFile.length() <= maxBytes)
+    }
+
+    @Test
     fun `recents repository clears watched and search history independently across restarts`() = runTest {
         val dir = tempDir("recents-clear-store-")
         val first = FileBackedRecentsRepository(dir, clock = { 1L })

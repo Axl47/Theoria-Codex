@@ -1,5 +1,7 @@
 package com.theoriacodex.data.repository
 
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.mutateAndPersistWithRollback
 import com.theoriacodex.domain.model.Codex
@@ -33,6 +35,7 @@ import kotlinx.coroutines.withContext
 
 private const val DEFAULT_RECENT_WATCHED_LIMIT = 200
 private const val DEFAULT_RECENT_SEARCH_LIMIT = 100
+private const val DEFAULT_RECENTS_MAX_SERIALIZED_BYTES = 4 * 1024 * 1024
 
 class FileBackedCodexRepository(
     baseDirectory: File,
@@ -300,16 +303,21 @@ class FileBackedRecentsRepository(
     baseDirectory: File,
     private val watchedLimit: Int = DEFAULT_RECENT_WATCHED_LIMIT,
     private val searchLimit: Int = DEFAULT_RECENT_SEARCH_LIMIT,
+    private val maxSerializedBytes: Int = DEFAULT_RECENTS_MAX_SERIALIZED_BYTES,
     private val clock: () -> Long = System::currentTimeMillis,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : RecentsRepository {
     private val mutex = Mutex()
     private val storageFile = baseDirectory.resolve("recents_store.json")
-    private val fileStore = AtomicJsonFileStore(ioDispatcher = ioDispatcher)
+    private val gson: Gson = GsonBuilder().setPrettyPrinting().create()
+    private val fileStore = AtomicJsonFileStore(ioDispatcher = ioDispatcher, gson = gson)
     private val watchedFlow = MutableStateFlow<List<RecentPostEntry>>(emptyList())
     private val searchesFlow = MutableStateFlow<List<RecentSearchEntry>>(emptyList())
 
     init {
+        require(maxSerializedBytes >= encodedSize(RecentsStoreFile())) {
+            "Recents byte limit must fit an empty snapshot"
+        }
         val stored = runBlocking { fileStore.read(storageFile, RecentsStoreFile()) }
         watchedFlow.value = RepositoryPolicies.normalizeRecentWatched(
             entries = stored.watchedPosts.orEmpty().mapNotNull { record -> record.toDomainOrNull() },
@@ -319,6 +327,10 @@ class FileBackedRecentsRepository(
             entries = stored.searches.orEmpty().mapNotNull { record -> record.toDomainOrNull() },
             limit = searchLimit,
         )
+        val normalized = enforceSerializedByteLimit()
+        if (normalized) {
+            runBlocking { writeCurrentSnapshot() }
+        }
     }
 
     override fun observeWatchedPosts(): Flow<List<RecentPostEntry>> {
@@ -404,13 +416,55 @@ class FileBackedRecentsRepository(
     }
 
     private suspend fun persist() {
-        fileStore.write(
-            storageFile,
-            RecentsStoreFile(
-                watchedPosts = watchedFlow.value.map(RecentPostRecord::fromDomain),
-                searches = searchesFlow.value.map(RecentSearchRecord::fromDomain),
-            ),
+        enforceSerializedByteLimit()
+        writeCurrentSnapshot()
+    }
+
+    /**
+     * Count limits do not bound rich gallery snapshots. Evict the oldest complete activity entry
+     * until the UTF-8 JSON fits; never truncate a Post or Query into an unreadable record.
+     */
+    private fun enforceSerializedByteLimit(): Boolean {
+        var watched = watchedFlow.value
+        var searches = searchesFlow.value
+        var changed = false
+        while (encodedSize(snapshot(watched, searches)) > maxSerializedBytes) {
+            val oldestWatched = watched.lastOrNull()
+            val oldestSearch = searches.lastOrNull()
+            if (oldestWatched == null && oldestSearch == null) break
+            if (
+                oldestSearch == null ||
+                (oldestWatched != null && oldestWatched.viewedAtEpochMs <= oldestSearch.searchedAtEpochMs)
+            ) {
+                watched = watched.dropLast(1)
+            } else {
+                searches = searches.dropLast(1)
+            }
+            changed = true
+        }
+        if (changed) {
+            watchedFlow.value = watched
+            searchesFlow.value = searches
+        }
+        return changed
+    }
+
+    private suspend fun writeCurrentSnapshot() {
+        fileStore.write(storageFile, snapshot(watchedFlow.value, searchesFlow.value))
+    }
+
+    private fun snapshot(
+        watched: List<RecentPostEntry>,
+        searches: List<RecentSearchEntry>,
+    ): RecentsStoreFile {
+        return RecentsStoreFile(
+            watchedPosts = watched.map(RecentPostRecord::fromDomain),
+            searches = searches.map(RecentSearchRecord::fromDomain),
         )
+    }
+
+    private fun encodedSize(snapshot: RecentsStoreFile): Int {
+        return gson.toJson(snapshot).toByteArray(Charsets.UTF_8).size
     }
 }
 

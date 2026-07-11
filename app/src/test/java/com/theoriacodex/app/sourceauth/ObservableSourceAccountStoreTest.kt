@@ -68,6 +68,29 @@ class ObservableSourceAccountStoreTest {
 
         assertFalse(SourceKey.RULE34XXX in store.availableSources.value)
     }
+
+    @Test
+    fun `non-ready credential states cannot leave a gated source exposed`() = runTest {
+        val unavailableStates = listOf(
+            CredentialStoreRecoveryState.Migrating,
+            CredentialStoreRecoveryState.TemporarilyUnavailable,
+            CredentialStoreRecoveryState.UnsupportedVersion(2),
+        )
+
+        unavailableStates.forEach { unavailable ->
+            val delegate = FakeRecoverableCredentialsStore(
+                rule34Credentials = Rule34XxxCredentials(userId = "user", apiKey = "key"),
+            )
+            val store = ObservableSourceAccountStore(delegate)
+            store.getRule34XxxCredentials()
+            assertTrue(SourceKey.RULE34XXX in store.availableSources.value)
+
+            delegate.mutableRecoveryState.value = unavailable
+            store.getPixivTokens()
+
+            assertFalse(SourceKey.RULE34XXX in store.availableSources.value)
+        }
+    }
 }
 
 private class FakeRecoverableCredentialsStore(

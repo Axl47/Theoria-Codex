@@ -120,6 +120,7 @@ import com.theoriacodex.app.source.parseExternalCreatorDeepLink
 import com.theoriacodex.app.source.parseExternalPostDeepLink
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
+import com.theoriacodex.app.sourceauth.CredentialStoreUnavailableException
 import com.theoriacodex.app.sourceauth.parseGelbooruCredentialInput
 import com.theoriacodex.app.sourceauth.parseRule34XxxCredentialInput
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
@@ -168,6 +169,7 @@ import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.data.storage.ApplicationDataState
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -230,13 +232,54 @@ fun TheoriaApp(
     val appContext = LocalContext.current.applicationContext
     val viewerSessionOwner = viewModel<ViewerSessionRetentionViewModel>()
     val appShellOwner = viewModel<AppShellViewModel>()
-    TheoriaAppContent(
-        appContainer = rememberTheoriaAppContainer(appContext),
-        viewerSessionOwner = viewerSessionOwner,
-        appShellOwner = appShellOwner,
-        incomingUri = incomingUri,
-        onIncomingUriConsumed = onIncomingUriConsumed,
-    )
+    val containerOwner = rememberTheoriaAppContainerOwner(appContext)
+    val containerState by containerOwner.appContainerState.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(containerOwner) { containerOwner.startAppContainer() }
+    when (val current = containerState) {
+        is ApplicationDataState.Ready -> TheoriaAppContent(
+            appContainer = current.value,
+            viewerSessionOwner = viewerSessionOwner,
+            appShellOwner = appShellOwner,
+            incomingUri = incomingUri,
+            onIncomingUriConsumed = onIncomingUriConsumed,
+        )
+        is ApplicationDataState.Failed -> AppContainerStartupSurface(
+            failed = true,
+            onRetry = {
+                scope.launch { runCatching { containerOwner.retryAppContainer() } }
+            },
+        )
+        ApplicationDataState.Loading,
+        ApplicationDataState.NotStarted,
+        -> AppContainerStartupSurface(failed = false, onRetry = {})
+    }
+}
+
+@Composable
+private fun AppContainerStartupSurface(
+    failed: Boolean,
+    onRetry: () -> Unit,
+) {
+    TheoriaNightTheme {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                if (failed) {
+                    Text("Saved data could not be opened safely.")
+                    Button(onClick = onRetry) { Text("Retry") }
+                } else {
+                    CircularProgressIndicator()
+                    Text("Preparing your library…")
+                }
+            }
+        }
+    }
 }
 
 /** Renderable app-shell boundary with dependencies supplied by the application owner. */
@@ -457,19 +500,64 @@ internal fun TheoriaAppContent(
     var rule34XxxApiKeyInput by rememberSaveable { mutableStateOf("") }
     var showCredentialRecoveryDialog by rememberSaveable { mutableStateOf(false) }
 
-    suspend fun refreshSourceAccountState() {
-        if (sourceDependencies.accounts.recoveryState.value == CredentialStoreRecoveryState.ReconnectRequired) {
-            pixivConnected = false
-            pixivStatusLabel = CREDENTIAL_RECONNECT_MESSAGE
-            gelbooruStatusLabel = CREDENTIAL_RECONNECT_MESSAGE
+    fun credentialRecoveryMessage(state: CredentialStoreRecoveryState): String = when (state) {
+        CredentialStoreRecoveryState.Loading -> "Loading source credentials…"
+        CredentialStoreRecoveryState.Migrating -> "Finishing secure credential upgrade…"
+        CredentialStoreRecoveryState.Ready -> "Source credentials are ready"
+        CredentialStoreRecoveryState.TemporarilyUnavailable ->
+            "Source credentials are temporarily unavailable — try again"
+        CredentialStoreRecoveryState.ReconnectRequired -> CREDENTIAL_RECONNECT_MESSAGE
+        is CredentialStoreRecoveryState.UnsupportedVersion ->
+            "Stored credentials require a newer app version"
+    }
+
+    fun applyCredentialRecoveryStatus(state: CredentialStoreRecoveryState) {
+        if (state == CredentialStoreRecoveryState.Ready) return
+        val message = credentialRecoveryMessage(state)
+        pixivConnected = false
+        pixivStatusLabel = message
+        gelbooruStatusLabel = message
+        rule34XxxStatusLabel = message
+        if (
+            state == CredentialStoreRecoveryState.ReconnectRequired ||
+            state is CredentialStoreRecoveryState.UnsupportedVersion
+        ) {
+            // Never leave a stale secret visible when the authoritative encrypted snapshot cannot
+            // be opened. This only clears transient UI fields; durable data remains untouched.
             gelbooruUserIdInput = ""
             gelbooruApiKeyInput = ""
-            rule34XxxStatusLabel = CREDENTIAL_RECONNECT_MESSAGE
             rule34XxxUserIdInput = ""
             rule34XxxApiKeyInput = ""
+        }
+    }
+
+    fun blockCredentialMutationIfNeeded(): Boolean {
+        val state = sourceDependencies.accounts.recoveryState.value
+        if (state == CredentialStoreRecoveryState.Ready) return false
+        applyCredentialRecoveryStatus(state)
+        if (state == CredentialStoreRecoveryState.ReconnectRequired) {
+            showCredentialRecoveryDialog = true
+        } else {
+            Toast.makeText(appContext, credentialRecoveryMessage(state), Toast.LENGTH_SHORT).show()
+        }
+        return true
+    }
+
+    suspend fun refreshSourceAccountState() {
+        val initialState = sourceDependencies.accounts.recoveryState.value
+        if (
+            initialState == CredentialStoreRecoveryState.ReconnectRequired ||
+            initialState is CredentialStoreRecoveryState.UnsupportedVersion
+        ) {
+            applyCredentialRecoveryStatus(initialState)
             return
         }
         val pixivTokens = sourceDependencies.accounts.getPixivTokens()
+        val loadedState = sourceDependencies.accounts.recoveryState.value
+        if (loadedState != CredentialStoreRecoveryState.Ready) {
+            applyCredentialRecoveryStatus(loadedState)
+            return
+        }
         pixivStatusLabel = when {
             pixivTokens == null -> {
                 pixivConnected = false
@@ -488,9 +576,19 @@ internal fun TheoriaAppContent(
                         "Connected (refresh timed out, retry on next request)"
                     }
                     refreshResult.isSuccess -> {
-                        sourceDependencies.accounts.savePixivTokens(requireNotNull(refreshResult.getOrNull()))
-                        pixivConnected = true
-                        "Connected"
+                        val saved = runCatchingPreservingCancellation {
+                            sourceDependencies.accounts.savePixivTokens(
+                                requireNotNull(refreshResult.getOrNull()),
+                            )
+                        }
+                        if (saved.isSuccess) {
+                            pixivConnected = true
+                            "Connected"
+                        } else {
+                            val state = sourceDependencies.accounts.recoveryState.value
+                            applyCredentialRecoveryStatus(state)
+                            credentialRecoveryMessage(state)
+                        }
                     }
                     else -> {
                         val failure = refreshResult.exceptionOrNull()
@@ -499,9 +597,17 @@ internal fun TheoriaAppContent(
                             (failure.reason == SourceFailureReason.AUTH_EXPIRED ||
                                 failure.reason == SourceFailureReason.AUTH_REQUIRED)
                         ) {
-                            sourceDependencies.accounts.clearPixivTokens()
-                            pixivConnected = false
-                            "Not connected (session expired)"
+                            val cleared = runCatchingPreservingCancellation {
+                                sourceDependencies.accounts.clearPixivTokens()
+                            }
+                            if (cleared.isSuccess) {
+                                pixivConnected = false
+                                "Not connected (session expired)"
+                            } else {
+                                val state = sourceDependencies.accounts.recoveryState.value
+                                applyCredentialRecoveryStatus(state)
+                                credentialRecoveryMessage(state)
+                            }
                         } else {
                             pixivConnected = false
                             "Connected (refresh failed, retry on next request)"
@@ -515,7 +621,18 @@ internal fun TheoriaAppContent(
             }
         }
 
+        val postPixivState = sourceDependencies.accounts.recoveryState.value
+        if (postPixivState != CredentialStoreRecoveryState.Ready) {
+            applyCredentialRecoveryStatus(postPixivState)
+            return
+        }
+
         val gelbooruCredentials = sourceDependencies.accounts.getGelbooruCredentials()
+        val postGelbooruState = sourceDependencies.accounts.recoveryState.value
+        if (postGelbooruState != CredentialStoreRecoveryState.Ready) {
+            applyCredentialRecoveryStatus(postGelbooruState)
+            return
+        }
         if (gelbooruCredentials == null) {
             gelbooruStatusLabel = "Not configured"
             gelbooruUserIdInput = ""
@@ -527,6 +644,11 @@ internal fun TheoriaAppContent(
         }
 
         val rule34XxxCredentials = sourceDependencies.accounts.getRule34XxxCredentials()
+        val postRule34State = sourceDependencies.accounts.recoveryState.value
+        if (postRule34State != CredentialStoreRecoveryState.Ready) {
+            applyCredentialRecoveryStatus(postRule34State)
+            return
+        }
         if (rule34XxxCredentials == null) {
             rule34XxxStatusLabel = "Not configured"
             rule34XxxUserIdInput = ""
@@ -538,9 +660,33 @@ internal fun TheoriaAppContent(
         }
     }
 
+    suspend fun runCredentialMutation(mutation: suspend () -> Unit): Boolean {
+        if (sourceDependencies.accounts.recoveryState.value != CredentialStoreRecoveryState.Ready) {
+            blockCredentialMutationIfNeeded()
+            return false
+        }
+        val result = runCatchingPreservingCancellation { mutation() }
+        val failure = result.exceptionOrNull()
+        if (failure != null && failure !is CredentialStoreUnavailableException) {
+            throw failure
+        }
+        refreshSourceAccountState()
+        if (failure != null) {
+            if (!blockCredentialMutationIfNeeded()) {
+                Toast.makeText(
+                    appContext,
+                    "Could not update source credentials — try again",
+                    Toast.LENGTH_SHORT,
+                ).show()
+            }
+        }
+        return result.isSuccess
+    }
+
     LaunchedEffect(credentialRecoveryState) {
-        if (credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired) {
-            showCredentialRecoveryDialog = true
+        if (credentialRecoveryState != CredentialStoreRecoveryState.Ready) {
+            showCredentialRecoveryDialog =
+                credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired
             refreshSourceAccountState()
         }
     }
@@ -1011,12 +1157,20 @@ internal fun TheoriaAppContent(
     LaunchedEffect(incomingUri) {
         val uri = incomingUri ?: return@LaunchedEffect
         if (sourceDependencies.pixivAuthController.isAuthorizationCallback(uri)) {
-            val result = sourceDependencies.pixivAuthController.handleAuthorizationCallback(uri)
-            if (result.isSuccess) {
-                pixivStatusLabel = "Connected"
-                refreshSourceAccountState()
-            } else {
-                pixivStatusLabel = "Connection failed: ${result.exceptionOrNull()?.message ?: "Unknown error"}"
+            if (!blockCredentialMutationIfNeeded()) {
+                val result = sourceDependencies.pixivAuthController.handleAuthorizationCallback(uri)
+                if (result.isSuccess) {
+                    pixivStatusLabel = "Connected"
+                    refreshSourceAccountState()
+                } else {
+                    val state = sourceDependencies.accounts.recoveryState.value
+                    if (state != CredentialStoreRecoveryState.Ready) {
+                        applyCredentialRecoveryStatus(state)
+                    } else {
+                        pixivStatusLabel =
+                            "Connection failed: ${result.exceptionOrNull()?.message ?: "Unknown error"}"
+                    }
+                }
             }
         } else {
             appShellOwner.onAction(
@@ -1745,9 +1899,7 @@ internal fun TheoriaAppContent(
                                             credentialRecoveryState == CredentialStoreRecoveryState.Ready &&
                                             !pixivStatusLabel.startsWith("Awaiting authorization callback"),
                                         onPixivConnect = {
-                                            if (credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired) {
-                                                showCredentialRecoveryDialog = true
-                                            } else {
+                                            if (!blockCredentialMutationIfNeeded()) {
                                                 val authUrl = sourceDependencies.pixivAuthController.startAuthorizationUri().toString()
                                                 pixivStatusLabel = "Awaiting authorization callback..."
                                                 pixivConnected = false
@@ -1755,12 +1907,11 @@ internal fun TheoriaAppContent(
                                             }
                                         },
                                         onPixivDisconnect = {
-                                            if (credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired) {
-                                                showCredentialRecoveryDialog = true
-                                            } else {
+                                            if (!blockCredentialMutationIfNeeded()) {
                                                 scope.launch {
-                                                    sourceDependencies.accounts.clearPixivTokens()
-                                                    refreshSourceAccountState()
+                                                    runCredentialMutation {
+                                                        sourceDependencies.accounts.clearPixivTokens()
+                                                    }
                                                 }
                                             }
                                         },
@@ -1778,29 +1929,27 @@ internal fun TheoriaAppContent(
                                             }
                                         },
                                         onSaveGelbooruCredentials = {
-                                            if (credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired) {
-                                                showCredentialRecoveryDialog = true
-                                            } else scope.launch {
+                                            if (!blockCredentialMutationIfNeeded()) scope.launch {
                                                 if (gelbooruUserIdInput.isBlank() || gelbooruApiKeyInput.isBlank()) {
                                                     gelbooruStatusLabel = "Missing user ID or API key"
                                                 } else {
-                                                    sourceDependencies.accounts.saveGelbooruCredentials(
-                                                        GelbooruCredentials(
-                                                            userId = gelbooruUserIdInput,
-                                                            apiKey = gelbooruApiKeyInput,
+                                                    runCredentialMutation {
+                                                        sourceDependencies.accounts.saveGelbooruCredentials(
+                                                            GelbooruCredentials(
+                                                                userId = gelbooruUserIdInput,
+                                                                apiKey = gelbooruApiKeyInput,
+                                                            )
                                                         )
-                                                    )
-                                                    refreshSourceAccountState()
+                                                    }
                                                 }
                                             }
                                         },
                                         onClearGelbooruCredentials = {
-                                            if (credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired) {
-                                                showCredentialRecoveryDialog = true
-                                            } else {
+                                            if (!blockCredentialMutationIfNeeded()) {
                                                 scope.launch {
-                                                    sourceDependencies.accounts.clearGelbooruCredentials()
-                                                    refreshSourceAccountState()
+                                                    runCredentialMutation {
+                                                        sourceDependencies.accounts.clearGelbooruCredentials()
+                                                    }
                                                 }
                                             }
                                         },
@@ -1818,29 +1967,27 @@ internal fun TheoriaAppContent(
                                             }
                                         },
                                         onSaveRule34XxxCredentials = {
-                                            if (credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired) {
-                                                showCredentialRecoveryDialog = true
-                                            } else scope.launch {
+                                            if (!blockCredentialMutationIfNeeded()) scope.launch {
                                                 if (rule34XxxUserIdInput.isBlank() || rule34XxxApiKeyInput.isBlank()) {
                                                     rule34XxxStatusLabel = "Missing user ID or API key"
                                                 } else {
-                                                    sourceDependencies.accounts.saveRule34XxxCredentials(
-                                                        Rule34XxxCredentials(
-                                                            userId = rule34XxxUserIdInput,
-                                                            apiKey = rule34XxxApiKeyInput,
+                                                    runCredentialMutation {
+                                                        sourceDependencies.accounts.saveRule34XxxCredentials(
+                                                            Rule34XxxCredentials(
+                                                                userId = rule34XxxUserIdInput,
+                                                                apiKey = rule34XxxApiKeyInput,
+                                                            )
                                                         )
-                                                    )
-                                                    refreshSourceAccountState()
+                                                    }
                                                 }
                                             }
                                         },
                                         onClearRule34XxxCredentials = {
-                                            if (credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired) {
-                                                showCredentialRecoveryDialog = true
-                                            } else {
+                                            if (!blockCredentialMutationIfNeeded()) {
                                                 scope.launch {
-                                                    sourceDependencies.accounts.clearRule34XxxCredentials()
-                                                    refreshSourceAccountState()
+                                                    runCredentialMutation {
+                                                        sourceDependencies.accounts.clearRule34XxxCredentials()
+                                                    }
                                                 }
                                             }
                                         },

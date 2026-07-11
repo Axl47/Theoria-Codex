@@ -30,8 +30,8 @@ import com.theoriacodex.data.repository.FileBackedCodexRepository
 import com.theoriacodex.data.repository.FileBackedLikesRepository
 import com.theoriacodex.data.repository.FileBackedQueryRepository
 import com.theoriacodex.data.repository.FileBackedRecentsRepository
-import com.theoriacodex.data.repository.FileBackedSettingsRepository
-import com.theoriacodex.data.repository.FileBackedUiRestoreRepository
+import com.theoriacodex.data.repository.DataStoreSettingsRepository
+import com.theoriacodex.data.repository.DataStoreUiRestoreRepository
 import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.data.repository.QueryRepository
 import com.theoriacodex.data.repository.RecentsRepository
@@ -44,6 +44,11 @@ import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.pixiv.PixivAuthApi
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.StateFlow
 
 data class DataDependencies(
@@ -93,7 +98,13 @@ interface TheoriaAppContainer {
 }
 
 interface TheoriaAppContainerOwner {
-    val appContainer: TheoriaAppContainer
+    val appContainerState: StateFlow<com.theoriacodex.data.storage.ApplicationDataState<TheoriaAppContainer>>
+
+    fun startAppContainer()
+
+    suspend fun awaitAppContainer(): TheoriaAppContainer
+
+    suspend fun retryAppContainer(): TheoriaAppContainer
 }
 
 internal class DefaultTheoriaAppContainer(
@@ -101,6 +112,7 @@ internal class DefaultTheoriaAppContainer(
 ) : TheoriaAppContainer {
     private val appContext = context.applicationContext
     private val storageDirectory = File(appContext.filesDir, "theoria_codex")
+    private val durableStoreScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val tagSuggestionStore = FileBackedTagSuggestionStore(
         storeFile = File(storageDirectory, "tag_suggestions.json"),
         seedData = loadSeedTagSuggestions(appContext),
@@ -132,9 +144,15 @@ internal class DefaultTheoriaAppContainer(
     private val likesRepository = FileBackedLikesRepository(storageDirectory)
     private val queryRepository = FileBackedQueryRepository(storageDirectory)
     private val recentsRepository = FileBackedRecentsRepository(storageDirectory)
-    private val settingsRepository = FileBackedSettingsRepository(storageDirectory)
+    private val settingsRepository = DataStoreSettingsRepository(
+        baseDirectory = storageDirectory,
+        scope = durableStoreScope,
+    )
     private val cacheRepository = FileBackedCacheRepository(storageDirectory)
-    private val uiRestoreRepository = FileBackedUiRestoreRepository(storageDirectory)
+    private val uiRestoreRepository = DataStoreUiRestoreRepository(
+        baseDirectory = storageDirectory,
+        scope = durableStoreScope,
+    )
 
     private val updateStateStore = FileBackedUpdateStateStore(
         file = File(storageDirectory, "update_state.json"),
@@ -214,4 +232,12 @@ internal class DefaultTheoriaAppContainer(
             sourceRegistry = sourceRegistry,
         ),
     )
+
+    /** Complete typed-store migration before any route can observe default placeholder state. */
+    suspend fun awaitDurableStores() = coroutineScope {
+        val settingsReady = async { settingsRepository.awaitReady() }
+        val uiRestoreReady = async { uiRestoreRepository.awaitReady() }
+        settingsReady.await()
+        uiRestoreReady.await()
+    }
 }
