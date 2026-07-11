@@ -5,6 +5,6 @@
     "audit:duplicates": "jscpd --config .jscpd.json ."
   },
   "devDependencies": {
-    "jscpd": "4.2.5"
+    "jscpd": "5.0.12"
   }
 }
