@@ -3,6 +3,7 @@ package com.theoriacodex.app.codex
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import com.google.gson.annotations.SerializedName
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -12,56 +13,90 @@ import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 
 internal data class CodexShareFile(
+    @field:SerializedName("version")
     val version: Int? = 1,
+    @field:SerializedName("title")
     val title: String? = null,
+    @field:SerializedName("posts")
     val posts: List<CodexSharePost>? = null,
 )
 
 internal data class CodexSharePost(
+    @field:SerializedName("source")
     val source: String? = null,
+    @field:SerializedName("sourcePostId")
     val sourcePostId: String? = null,
+    @field:SerializedName("snapshot")
     val snapshot: CodexSharePostSnapshot? = null,
 )
 
 internal data class CodexSharePostSnapshot(
+    @field:SerializedName("preview")
     val preview: CodexShareImageRef? = null,
+    @field:SerializedName("full")
     val full: CodexShareImageRef? = null,
+    @field:SerializedName("media")
     val media: List<CodexShareImageRef?>? = null,
+    @field:SerializedName("pageUrl")
     val pageUrl: String? = null,
+    @field:SerializedName("width")
     val width: Int? = null,
+    @field:SerializedName("height")
     val height: Int? = null,
+    @field:SerializedName("canonicalTags")
     val canonicalTags: List<String?>? = null,
+    @field:SerializedName("rawTags")
     val rawTags: List<String?>? = null,
+    @field:SerializedName("taxonomy")
     val taxonomy: List<CodexShareTaxonomyTerm?>? = null,
+    @field:SerializedName("authorName")
     val authorName: String? = null,
+    @field:SerializedName("createdAtEpochMs")
     val createdAtEpochMs: Long? = null,
+    @field:SerializedName("title")
     val title: String? = null,
+    @field:SerializedName("creatorProfile")
     val creatorProfile: CodexShareCreatorProfile? = null,
+    @field:SerializedName("creatorProfiles")
     val creatorProfiles: List<CodexShareCreatorProfile?>? = null,
+    @field:SerializedName("durationMs")
     val durationMs: Long? = null,
+    @field:SerializedName("mediaCount")
     val mediaCount: Int? = null,
 )
 
 internal data class CodexShareImageRef(
+    @field:SerializedName("url")
     val url: String? = null,
     @Transient
     val localPath: String? = null,
+    @field:SerializedName("mime")
     val mime: String? = null,
+    @field:SerializedName("progressiveUrls")
     val progressiveUrls: List<String?>? = null,
+    @field:SerializedName("isAnimated")
     val isAnimated: Boolean? = null,
 )
 
 internal data class CodexShareTaxonomyTerm(
+    @field:SerializedName("value")
     val value: String? = null,
+    @field:SerializedName("facet")
     val facet: String? = null,
+    @field:SerializedName("sourceNamespace")
     val sourceNamespace: String? = null,
 )
 
 internal data class CodexShareCreatorProfile(
+    @field:SerializedName("source")
     val source: String? = null,
+    @field:SerializedName("displayName")
     val displayName: String? = null,
+    @field:SerializedName("profileId")
     val profileId: String? = null,
+    @field:SerializedName("profileUrl")
     val profileUrl: String? = null,
+    @field:SerializedName("uploadsQuery")
     val uploadsQuery: String? = null,
 )
 

@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.google.gson.annotations.SerializedName
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
@@ -1460,13 +1461,20 @@ class HitomiSourceAdapter(
     )
 
     private data class HitomiPageToken(
-        val version: Int?,
-        val queryHash: String?,
-        val primaryKey: String?,
-        val primaryOffset: Long?,
-        val randomSeed: Long?,
-        val randomSnapshotFingerprint: String?,
-        val globalIndexVersion: String?,
+        @field:SerializedName("version")
+        val version: Int? = null,
+        @field:SerializedName("queryHash")
+        val queryHash: String? = null,
+        @field:SerializedName("primaryKey")
+        val primaryKey: String? = null,
+        @field:SerializedName("primaryOffset")
+        val primaryOffset: Long? = null,
+        @field:SerializedName("randomSeed")
+        val randomSeed: Long? = null,
+        @field:SerializedName("randomSnapshotFingerprint")
+        val randomSnapshotFingerprint: String? = null,
+        @field:SerializedName("globalIndexVersion")
+        val globalIndexVersion: String? = null,
     )
 
     private data class DecodedHitomiPageToken(

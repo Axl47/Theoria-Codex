@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-11T01:40:00-04:00
+updated_at: 2026-07-11T03:00:00-04:00
 ---
 # Working List
 
@@ -8,7 +8,15 @@ updated_at: 2026-07-11T01:40:00-04:00
 
 ### In Progress
 
-- [ ] Phase 6: modernize persistence, credentials, and Android tooling in reversible waves
+- [ ] Phase 7: enforce quality budgets, complete system acceptance, and close the program
+
+### Pending
+
+- [ ] Final deterministic gate, documentation closeout, and audit comparison
+
+### Done
+
+- [x] Phase 6: modernize persistence, credentials, and Android tooling in reversible waves
   - [x] 6A: migrate settings and UI restoration to typed asynchronous DataStore files
     - Evidence: both stores import legacy JSON once with schema/hash/count proofs, archive only after verification, fail closed on newer schemas, bound retained records, and publish the application graph only after readiness without blocking `Application.onCreate`
   - [x] 6B: promote the transactional Room Codex/Likes prototype after the Kotlin 2 compiler wave
@@ -29,13 +37,8 @@ updated_at: 2026-07-11T01:40:00-04:00
     - Evidence: JDK 17 clean lint/tests, debug/release packaging, and Android-test compilation passed 131 tasks and 729 configured test executions; AGP lint reads the final metadata and reports 86 warnings
   - [x] 6D: migrate Android libraries and target SDK after storage integration
     - Evidence: compile/target SDK 37 and the reviewed stable AndroidX, Compose, DataStore, Room, Media3, Security Crypto, Coroutines, Gson, jsoup, and test versions passed the clean 230-task gate with 750 configured tests, 0 failures/errors, 3 skips, debug/release APKs, Android-test compilation, 75 app lint warnings plus 6 hints, and clean Room lint; the Android 17 behavior review found no production MessageQueue/static-final reflection, LAN, SMS, Contacts, Bluetooth, writable dynamic-native-loading, background-media, or implicit URI-grant dependency, while large-screen orientation cleanup remains assigned to 7B
-  - [ ] 6G: validate release shrinking and startup optimization
-
-### Pending
-
-- [ ] Phase 7: enforce quality budgets, complete system acceptance, and close the program
-
-### Done
+  - [x] 6G: validate release shrinking and startup optimization
+    - Evidence: shipping and acceptance variants share R8/resource rules; both mapping checks retained all 205 durable JSON fields across 40 reachable types and removed 13 unreachable contract types; generated profiles contain 32,360 baseline and 28,852 startup rules; API 37 and API 27 each passed 31 device executions with zero failures and one intentional provider-live skip; the minified non-debuggable acceptance APK passed cold-start and Pixiv-callback launches with an empty crash buffer
 
 - [x] Phase 5: consolidate repeated policy and stable UI primitives
   - [x] 5A: share pure repository policy and run one contract suite across both backends

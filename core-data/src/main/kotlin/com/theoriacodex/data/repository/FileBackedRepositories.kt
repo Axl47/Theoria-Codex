@@ -2,6 +2,7 @@ package com.theoriacodex.data.repository
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.annotations.SerializedName
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
@@ -930,15 +931,21 @@ class FileBackedLikesRepository(
 }
 
 private data class CodexStoreFile(
+    @field:SerializedName("codices")
     val codices: List<CodexRecord> = emptyList(),
+    @field:SerializedName("items")
     val items: Map<String, List<CodexItemRecord>> = emptyMap(),
+    @field:SerializedName("posts")
     val posts: List<PostStorageRecord> = emptyList(),
 )
 
 private data class CodexRecord(
-    val codexId: String,
-    val name: String,
-    val createdAtEpochMs: Long,
+    @field:SerializedName("codexId")
+    val codexId: String = "",
+    @field:SerializedName("name")
+    val name: String = "",
+    @field:SerializedName("createdAtEpochMs")
+    val createdAtEpochMs: Long = 0L,
 ) {
     fun toDomain(): Codex {
         return Codex(codexId = codexId, name = name, createdAtEpochMs = createdAtEpochMs)
@@ -952,10 +959,14 @@ private data class CodexRecord(
 }
 
 private data class CodexItemRecord(
-    val codexId: String,
-    val source: String,
-    val sourcePostId: String,
-    val savedAtEpochMs: Long,
+    @field:SerializedName("codexId")
+    val codexId: String = "",
+    @field:SerializedName("source")
+    val source: String = "",
+    @field:SerializedName("sourcePostId")
+    val sourcePostId: String = "",
+    @field:SerializedName("savedAtEpochMs")
+    val savedAtEpochMs: Long = 0L,
 ) {
     fun toDomainOrNull(): CodexItem? {
         val resolvedSource = source.toSourceKeyOrNull() ?: return null
@@ -979,20 +990,32 @@ private data class CodexItemRecord(
 }
 
 private data class QueryStoreFile(
+    @field:SerializedName("queries")
     val queries: Map<String, QueryRecord> = emptyMap(),
+    @field:SerializedName("scrollOffsets")
     val scrollOffsets: Map<String, Int> = emptyMap(),
 )
 
 private data class QueryRecord(
-    val modeType: String,
-    val modeSource: String?,
-    val includeTags: List<String>,
-    val excludeTags: List<String>,
-    val sort: String,
-    val dateFromEpochMs: Long?,
-    val dateToEpochMs: Long?,
-    val minScore: Int?,
+    @field:SerializedName("modeType")
+    val modeType: String = "unified",
+    @field:SerializedName("modeSource")
+    val modeSource: String? = null,
+    @field:SerializedName("includeTags")
+    val includeTags: List<String> = emptyList(),
+    @field:SerializedName("excludeTags")
+    val excludeTags: List<String> = emptyList(),
+    @field:SerializedName("sort")
+    val sort: String = SortMode.TOP.name,
+    @field:SerializedName("dateFromEpochMs")
+    val dateFromEpochMs: Long? = null,
+    @field:SerializedName("dateToEpochMs")
+    val dateToEpochMs: Long? = null,
+    @field:SerializedName("minScore")
+    val minScore: Int? = null,
+    @field:SerializedName("includeTerms")
     val includeTerms: List<SearchTermRecord?>? = null,
+    @field:SerializedName("excludeTerms")
     val excludeTerms: List<SearchTermRecord?>? = null,
 ) {
     fun toDomain(): Query {
@@ -1046,8 +1069,11 @@ private data class QueryRecord(
 }
 
 private data class SearchTermRecord(
+    @field:SerializedName("value")
     val value: String? = null,
+    @field:SerializedName("facet")
     val facet: String? = null,
+    @field:SerializedName("sourceNamespace")
     val sourceNamespace: String? = null,
 ) {
     fun toDomainOrNull(): SearchTerm? {
@@ -1072,14 +1098,20 @@ private data class SearchTermRecord(
 }
 
 private data class RecentsStoreFile(
+    @field:SerializedName("watchedPosts")
     val watchedPosts: List<RecentPostRecord>? = null,
+    @field:SerializedName("searches")
     val searches: List<RecentSearchRecord>? = null,
 )
 
 private data class RecentPostRecord(
+    @field:SerializedName("post")
     val post: PostStorageRecord? = null,
+    @field:SerializedName("viewedAtEpochMs")
     val viewedAtEpochMs: Long? = null,
+    @field:SerializedName("origin")
     val origin: String? = null,
+    @field:SerializedName("originQueryHash")
     val originQueryHash: String? = null,
 ) {
     fun toDomainOrNull(): RecentPostEntry? {
@@ -1108,8 +1140,11 @@ private data class RecentPostRecord(
 }
 
 private data class RecentSearchRecord(
+    @field:SerializedName("query")
     val query: QueryRecord? = null,
+    @field:SerializedName("queryHash")
     val queryHash: String? = null,
+    @field:SerializedName("searchedAtEpochMs")
     val searchedAtEpochMs: Long? = null,
 ) {
     fun toDomainOrNull(): RecentSearchEntry? {
@@ -1137,19 +1172,33 @@ private data class RecentSearchRecord(
 private const val CURRENT_SOURCE_CATALOG_VERSION = 2
 
 private data class SettingsStoreFile(
+    @field:SerializedName("sourceCatalogVersion")
     val sourceCatalogVersion: Int? = null,
+    @field:SerializedName("enabledSources")
     val enabledSources: List<String> = SourceKey.entries.map { it.name },
+    @field:SerializedName("sourceWeights")
     val sourceWeights: Map<String, Double> = SourceRuntimeSettings().sourceWeights.mapKeys { it.key.name },
+    @field:SerializedName("cacheFullImageOnSave")
     val cacheFullImageOnSave: Boolean = false,
+    @field:SerializedName("resolveUnknownAnimatedDurations")
     val resolveUnknownAnimatedDurations: Boolean = true,
+    @field:SerializedName("invertMultiImageScrollDirection")
     val invertMultiImageScrollDirection: Boolean = false,
+    @field:SerializedName("scenarioPreset")
     val scenarioPreset: String = ScenarioPreset.NORMAL.name,
+    @field:SerializedName("lastSelectedTabRoute")
     val lastSelectedTabRoute: String = "search",
+    @field:SerializedName("recommendationProfiles")
     val recommendationProfiles: List<RecommendationProfileRecord>? = null,
+    @field:SerializedName("activeProfileId")
     val activeProfileId: String? = null,
+    @field:SerializedName("activeProfile")
     val activeProfile: String? = null,
+    @field:SerializedName("forYouBlacklistByProfile")
     val forYouBlacklistByProfile: Map<String, List<ForYouBlacklistEntryRecord>>? = null,
+    @field:SerializedName("favoriteTagsByProfile")
     val favoriteTagsByProfile: Map<String, List<FavoriteTagEntryRecord>>? = null,
+    @field:SerializedName("providerHealth")
     val providerHealth: List<ProviderHealthSnapshotRecord>? = null,
 ) {
     fun toDomain(): AppSettings {
@@ -1248,11 +1297,17 @@ private data class SettingsStoreFile(
 }
 
 private data class ProviderHealthSnapshotRecord(
+    @field:SerializedName("source")
     val source: String? = null,
+    @field:SerializedName("status")
     val status: String? = null,
+    @field:SerializedName("checkedAtEpochMs")
     val checkedAtEpochMs: Long? = null,
+    @field:SerializedName("latencyMs")
     val latencyMs: Long? = null,
+    @field:SerializedName("failureReason")
     val failureReason: String? = null,
+    @field:SerializedName("message")
     val message: String? = null,
 ) {
     fun toDomainOrNull(): ProviderHealthSnapshot? {
@@ -1291,7 +1346,9 @@ private data class ProviderHealthSnapshotRecord(
 }
 
 private data class FavoriteTagEntryRecord(
+    @field:SerializedName("source")
     val source: String? = null,
+    @field:SerializedName("tag")
     val tag: String? = null,
 ) {
     fun toDomainOrNull(): FavoriteTagEntry? {
@@ -1319,7 +1376,9 @@ private data class FavoriteTagEntryRecord(
 }
 
 private data class ForYouBlacklistEntryRecord(
+    @field:SerializedName("source")
     val source: String? = null,
+    @field:SerializedName("tags")
     val tags: List<String>? = null,
 ) {
     fun toDomainOrNull(): ForYouBlacklistEntry? {
@@ -1347,7 +1406,9 @@ private data class ForYouBlacklistEntryRecord(
 }
 
 private data class RecommendationProfileRecord(
+    @field:SerializedName("profileId")
     val profileId: String? = null,
+    @field:SerializedName("name")
     val name: String? = null,
 ) {
     fun toDomainOrNull(): RecommendationProfile? {
@@ -1368,8 +1429,11 @@ private data class RecommendationProfileRecord(
 }
 
 private data class UiRestoreStoreFile(
+    @field:SerializedName("lastTab")
     val lastTab: String? = null,
+    @field:SerializedName("searchScrollStates")
     val searchScrollStates: Map<String, SearchScrollStateRecord> = emptyMap(),
+    @field:SerializedName("viewerLaunchContext")
     val viewerLaunchContext: ViewerLaunchContextRecord? = null,
 )
 
@@ -1380,15 +1444,21 @@ private data class UiRestoreMemoryState(
 )
 
 private data class SearchScrollStateRecord(
-    val firstVisibleItemIndex: Int,
-    val firstVisibleItemOffsetPx: Int,
+    @field:SerializedName("firstVisibleItemIndex")
+    val firstVisibleItemIndex: Int = 0,
+    @field:SerializedName("firstVisibleItemOffsetPx")
+    val firstVisibleItemOffsetPx: Int = 0,
 )
 
 private data class ViewerLaunchContextRecord(
-    val queryHash: String,
-    val startIndex: Int,
-    val streamSource: String,
-    val scrollOffsetHint: Int,
+    @field:SerializedName("queryHash")
+    val queryHash: String = "",
+    @field:SerializedName("startIndex")
+    val startIndex: Int = 0,
+    @field:SerializedName("streamSource")
+    val streamSource: String = ViewerStreamSource.SEARCH.name,
+    @field:SerializedName("scrollOffsetHint")
+    val scrollOffsetHint: Int = 0,
 ) {
     fun toDomain(): ViewerLaunchContext {
         return ViewerLaunchContext(
@@ -1412,15 +1482,22 @@ private data class ViewerLaunchContextRecord(
 }
 
 private data class LikesStoreFile(
+    @field:SerializedName("likes")
     val likes: List<LikedPostRecord>? = null,
 )
 
 private data class LikedPostRecord(
+    @field:SerializedName("profileId")
     val profileId: String? = null,
+    @field:SerializedName("profile")
     val profile: String? = null,
+    @field:SerializedName("source")
     val source: String? = null,
+    @field:SerializedName("sourcePostId")
     val sourcePostId: String? = null,
+    @field:SerializedName("likedAtEpochMs")
     val likedAtEpochMs: Long? = null,
+    @field:SerializedName("tags")
     val tags: List<String>? = null,
 ) {
     companion object {

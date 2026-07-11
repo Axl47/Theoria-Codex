@@ -2,6 +2,7 @@ package com.theoriacodex.app.search
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.annotations.SerializedName
 import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
@@ -394,14 +395,20 @@ internal class FileBackedTagSuggestionStore(
 }
 
 private data class TagStoreSnapshot(
+    @field:SerializedName("sources")
     val sources: Map<String, List<TagStoreEntry>>? = emptyMap(),
 )
 
 private data class TagStoreEntry(
+    @field:SerializedName("text")
     val text: String? = null,
+    @field:SerializedName("facet")
     val facet: String? = null,
+    @field:SerializedName("sourceNamespace")
     val sourceNamespace: String? = null,
+    @field:SerializedName("type")
     val type: String? = null,
+    @field:SerializedName("count")
     val count: Int? = null,
 )
 

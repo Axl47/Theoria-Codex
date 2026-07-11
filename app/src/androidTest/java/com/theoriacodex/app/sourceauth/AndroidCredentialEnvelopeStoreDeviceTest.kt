@@ -21,15 +21,19 @@ class AndroidCredentialEnvelopeStoreDeviceTest {
     private lateinit var store: AndroidCredentialEnvelopeStore
 
     @Before
-    fun setUp() = runBlocking {
-        context = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext
-        store = newStore()
-        store.reset()
+    fun setUp() {
+        runBlocking {
+            context = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext
+            store = newStore()
+            store.reset()
+        }
     }
 
     @After
-    fun tearDown() = runBlocking {
-        store.reset()
+    fun tearDown() {
+        runBlocking {
+            store.reset()
+        }
     }
 
     @Test
@@ -48,6 +52,10 @@ class AndroidCredentialEnvelopeStoreDeviceTest {
 
         assertEquals(CredentialStoreWriteResult.Success, store.writeVerified(snapshot))
 
+        assertEquals(
+            setOf("formatVersion", "keyVersion", "iv", "ciphertext"),
+            JSONObject(envelopeFile().readText()).keySetCompat(),
+        )
         val read = store.read()
         assertTrue(read is CredentialEnvelopeReadResult.Success)
         assertEquals(snapshot, (read as CredentialEnvelopeReadResult.Success).snapshot)
@@ -122,4 +130,9 @@ class AndroidCredentialEnvelopeStoreDeviceTest {
         const val TEST_ENVELOPE_PATH = "credential_device_test/source_credentials.json"
         const val TEST_KEY_ALIAS = "theoria_source_credentials_device_test_v1"
     }
+}
+
+private fun JSONObject.keySetCompat(): Set<String> = buildSet {
+    val iterator = keys()
+    while (iterator.hasNext()) add(iterator.next())
 }

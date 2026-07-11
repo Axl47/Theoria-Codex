@@ -1,8 +1,12 @@
 package com.theoriacodex.app.update
 
+import com.google.gson.annotations.SerializedName
+
 data class ChangelogSection(
-    val title: String,
-    val bullets: List<String>,
+    @field:SerializedName("title")
+    val title: String = "",
+    @field:SerializedName("bullets")
+    val bullets: List<String> = emptyList(),
 )
 
 data class RemoteUpdate(

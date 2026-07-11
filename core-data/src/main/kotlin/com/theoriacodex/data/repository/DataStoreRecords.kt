@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.google.gson.annotations.SerializedName
 import com.theoriacodex.data.storage.LegacyImportProof
 
 const val DATASTORE_SETTINGS_FILE_NAME = "settings_store_v3.json"
@@ -13,8 +14,11 @@ internal const val SETTINGS_DATASTORE_SCHEMA_VERSION = 3
 internal const val UI_RESTORE_DATASTORE_SCHEMA_VERSION = 2
 
 internal data class SettingsDataStoreFile(
+    @field:SerializedName("schemaVersion")
     val schemaVersion: Int = SETTINGS_DATASTORE_SCHEMA_VERSION,
+    @field:SerializedName("settings")
     val settings: LegacySettingsStoreRecord = LegacySettingsStoreRecord.fromDomain(AppSettings()),
+    @field:SerializedName("legacyImports")
     val legacyImports: List<LegacyImportProof> = emptyList(),
 ) {
     fun toDomain(): AppSettings = normalizeDataStoreSettings(settings.toDomain())
@@ -75,8 +79,11 @@ internal fun normalizeDataStoreSettings(settings: AppSettings): AppSettings {
 }
 
 internal data class UiRestoreDataStoreFile(
+    @field:SerializedName("schemaVersion")
     val schemaVersion: Int = UI_RESTORE_DATASTORE_SCHEMA_VERSION,
+    @field:SerializedName("state")
     val state: LegacyUiRestoreStoreRecord = LegacyUiRestoreStoreRecord(),
+    @field:SerializedName("legacyImports")
     val legacyImports: List<LegacyImportProof> = emptyList(),
 ) {
     fun toMemoryState(): PersistedUiRestoreState = normalizeUiRestoreState(state.toMemoryState())

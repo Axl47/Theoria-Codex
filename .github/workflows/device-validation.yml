@@ -1,0 +1,128 @@
+name: Device Validation
+
+on:
+  schedule:
+    - cron: '23 07 * * 6'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: device-validation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  connected-tests:
+    name: Connected tests (API ${{ matrix.api-level }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level:
+          - 27
+          - 37
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run connected device tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: >-
+            -no-snapshot
+            -no-window
+            -gpu swiftshader_indirect
+            -noaudio
+            -no-boot-anim
+          script: ./gradlew :app:connectedDebugAndroidTest --stacktrace
+
+      - name: Upload connected-test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: connected-tests-api-${{ matrix.api-level }}
+          path: |
+            app/build/outputs/androidTest-results/connected/
+            app/build/reports/androidTests/connected/
+          if-no-files-found: warn
+          retention-days: 14
+
+  release-acceptance:
+    name: R8 release acceptance (API 37)
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Build minified release acceptance
+        run: ./gradlew :app:assembleReleaseAcceptance --stacktrace
+
+      - name: Run minified release acceptance
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 37
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: >-
+            -no-snapshot
+            -no-window
+            -gpu swiftshader_indirect
+            -noaudio
+            -no-boot-anim
+          script: scripts/verify_release_acceptance_device.sh
+
+      - name: Upload release-acceptance reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-acceptance-api-37
+          path: |
+            app/build/outputs/apk/releaseAcceptance/
+            app/build/outputs/mapping/releaseAcceptance/
+          if-no-files-found: warn
+          retention-days: 14

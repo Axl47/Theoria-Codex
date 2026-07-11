@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.androidx.baselineprofile)
 }
 
 android {
@@ -48,12 +49,31 @@ android {
             buildConfigField("boolean", "UPDATER_ENABLED", "false")
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             buildConfigField("boolean", "UPDATER_ENABLED", "true")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        create("releaseAcceptance") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".acceptance"
+            versionNameSuffix = "-acceptance"
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+            buildConfigField("boolean", "UPDATER_ENABLED", "false")
+        }
+        // Created and finalized by the Baseline Profile plugin. It retains release R8/resource
+        // behavior while using the debug key for connected profile collection and measurement.
+        create("benchmarkRelease") {
+            signingConfig = signingConfigs.getByName("debug")
+            buildConfigField("boolean", "UPDATER_ENABLED", "false")
+        }
+        create("nonMinifiedRelease") {
+            signingConfig = signingConfigs.getByName("debug")
+            buildConfigField("boolean", "UPDATER_ENABLED", "false")
         }
     }
 
@@ -109,7 +129,10 @@ dependencies {
     }
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
+    implementation(libs.androidx.profileinstaller)
     implementation(libs.gson)
+
+    baselineProfile(project(":baseline-profile"))
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -120,6 +143,11 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+
+baselineProfile {
+    automaticGenerationDuringBuild = false
+    saveInSrc = true
 }
 
 tasks.withType<Test>().configureEach {
@@ -134,3 +162,28 @@ tasks.withType<Test>().configureEach {
         systemProperty("theoria.providerProbeCases", caseFile)
     }
 }
+
+fun registerR8JsonContractVerification(variantName: String) {
+    val capitalizedVariant = variantName.replaceFirstChar(Char::uppercaseChar)
+    val verification = tasks.register<Exec>("verify${capitalizedVariant}JsonContracts") {
+        group = "verification"
+        description = "Verifies stable Gson field names in the $variantName R8 mapping."
+        dependsOn("minify${capitalizedVariant}WithR8")
+        val mappingFile = layout.buildDirectory.file("outputs/mapping/$variantName/mapping.txt")
+        val contractManifest = project.file("src/test/resources/r8-json-contracts.txt")
+        inputs.file(mappingFile)
+        inputs.file(contractManifest)
+        commandLine(
+            "python3",
+            rootProject.file("scripts/verify_r8_json_contract.py"),
+            mappingFile.get().asFile,
+            contractManifest,
+        )
+    }
+    tasks.matching { task -> task.name == "assemble$capitalizedVariant" }.configureEach {
+        finalizedBy(verification)
+    }
+}
+
+registerR8JsonContractVerification("releaseAcceptance")
+registerR8JsonContractVerification("release")

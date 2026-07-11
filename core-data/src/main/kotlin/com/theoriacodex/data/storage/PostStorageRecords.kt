@@ -1,5 +1,6 @@
 package com.theoriacodex.data.storage
 
+import com.google.gson.annotations.SerializedName
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -18,54 +19,96 @@ const val CURRENT_POST_STORAGE_SCHEMA_VERSION: Int = 1
  * the original pre-versioned JSON shape; unknown explicit versions fail closed in the codec.
  */
 data class PostStorageRecord(
-    val source: String,
-    val sourcePostId: String,
-    val previewUrl: String?,
-    val previewLocalPath: String?,
-    val previewMime: String?,
+    @field:SerializedName("source")
+    val source: String = "",
+    @field:SerializedName("sourcePostId")
+    val sourcePostId: String = "",
+    @field:SerializedName("previewUrl")
+    val previewUrl: String? = null,
+    @field:SerializedName("previewLocalPath")
+    val previewLocalPath: String? = null,
+    @field:SerializedName("previewMime")
+    val previewMime: String? = null,
+    @field:SerializedName("previewProgressiveUrls")
     val previewProgressiveUrls: List<String>? = null,
+    @field:SerializedName("previewIsAnimated")
     val previewIsAnimated: Boolean? = null,
-    val fullUrl: String?,
-    val fullLocalPath: String?,
-    val fullMime: String?,
+    @field:SerializedName("fullUrl")
+    val fullUrl: String? = null,
+    @field:SerializedName("fullLocalPath")
+    val fullLocalPath: String? = null,
+    @field:SerializedName("fullMime")
+    val fullMime: String? = null,
+    @field:SerializedName("fullProgressiveUrls")
     val fullProgressiveUrls: List<String>? = null,
+    @field:SerializedName("fullIsAnimated")
     val fullIsAnimated: Boolean? = null,
-    val pageUrl: String?,
-    val width: Int?,
-    val height: Int?,
+    @field:SerializedName("pageUrl")
+    val pageUrl: String? = null,
+    @field:SerializedName("width")
+    val width: Int? = null,
+    @field:SerializedName("height")
+    val height: Int? = null,
+    @field:SerializedName("canonicalTags")
     val canonicalTags: List<String>? = null,
+    @field:SerializedName("rawTags")
     val rawTags: List<String>? = null,
-    val authorName: String?,
-    val createdAtEpochMs: Long?,
+    @field:SerializedName("authorName")
+    val authorName: String? = null,
+    @field:SerializedName("createdAtEpochMs")
+    val createdAtEpochMs: Long? = null,
+    @field:SerializedName("media")
     val media: List<ImageRefStorageRecord?>? = null,
+    @field:SerializedName("title")
     val title: String? = null,
+    @field:SerializedName("creatorProfile")
     val creatorProfile: CreatorProfileStorageRecord? = null,
+    @field:SerializedName("durationMs")
     val durationMs: Long? = null,
+    @field:SerializedName("mediaCount")
     val mediaCount: Int? = null,
+    @field:SerializedName("taxonomy")
     val taxonomy: List<PostTaxonomyTermStorageRecord?>? = null,
+    @field:SerializedName("creatorProfiles")
     val creatorProfiles: List<CreatorProfileStorageRecord?>? = null,
-    val schemaVersion: Int? = CURRENT_POST_STORAGE_SCHEMA_VERSION,
+    @field:SerializedName("schemaVersion")
+    // Gson may invoke the generated no-arg constructor. Null must continue to mean the original
+    // pre-versioned payload; current writers always set the explicit version in the codec.
+    val schemaVersion: Int? = null,
 )
 
 data class PostTaxonomyTermStorageRecord(
+    @field:SerializedName("value")
     val value: String? = null,
+    @field:SerializedName("facet")
     val facet: String? = null,
+    @field:SerializedName("sourceNamespace")
     val sourceNamespace: String? = null,
 )
 
 data class CreatorProfileStorageRecord(
-    val source: String,
-    val displayName: String,
+    @field:SerializedName("source")
+    val source: String = "",
+    @field:SerializedName("displayName")
+    val displayName: String = "",
+    @field:SerializedName("profileId")
     val profileId: String? = null,
+    @field:SerializedName("profileUrl")
     val profileUrl: String? = null,
+    @field:SerializedName("uploadsQuery")
     val uploadsQuery: String? = null,
 )
 
 data class ImageRefStorageRecord(
-    val url: String?,
-    val localPath: String?,
-    val mime: String?,
+    @field:SerializedName("url")
+    val url: String? = null,
+    @field:SerializedName("localPath")
+    val localPath: String? = null,
+    @field:SerializedName("mime")
+    val mime: String? = null,
+    @field:SerializedName("progressiveUrls")
     val progressiveUrls: List<String>? = null,
+    @field:SerializedName("isAnimated")
     val isAnimated: Boolean? = null,
 )
 

@@ -933,6 +933,7 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
+    @Suppress("DEPRECATION") // Verifies the compatibility field remains readable during migration.
     fun `settings repository persists updates`() = runTest {
         val dir = tempDir("settings-store-")
         val first = FileBackedSettingsRepository(dir)

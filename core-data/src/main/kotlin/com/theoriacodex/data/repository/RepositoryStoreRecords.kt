@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.google.gson.annotations.SerializedName
 import com.theoriacodex.domain.model.SourceKey
 
 internal const val SHARED_SOURCE_CATALOG_VERSION = 2
@@ -10,19 +11,33 @@ internal const val SHARED_SOURCE_CATALOG_VERSION = 2
  * drifting away from the repository that originally wrote the file.
  */
 internal data class LegacySettingsStoreRecord(
+    @field:SerializedName("sourceCatalogVersion")
     val sourceCatalogVersion: Int? = null,
+    @field:SerializedName("enabledSources")
     val enabledSources: List<String> = SourceKey.entries.map { it.name },
+    @field:SerializedName("sourceWeights")
     val sourceWeights: Map<String, Double> = SourceRuntimeSettings().sourceWeights.mapKeys { it.key.name },
+    @field:SerializedName("cacheFullImageOnSave")
     val cacheFullImageOnSave: Boolean = false,
+    @field:SerializedName("resolveUnknownAnimatedDurations")
     val resolveUnknownAnimatedDurations: Boolean = true,
+    @field:SerializedName("invertMultiImageScrollDirection")
     val invertMultiImageScrollDirection: Boolean = false,
+    @field:SerializedName("scenarioPreset")
     val scenarioPreset: String = ScenarioPreset.NORMAL.name,
+    @field:SerializedName("lastSelectedTabRoute")
     val lastSelectedTabRoute: String = "search",
+    @field:SerializedName("recommendationProfiles")
     val recommendationProfiles: List<LegacyRecommendationProfileRecord>? = null,
+    @field:SerializedName("activeProfileId")
     val activeProfileId: String? = null,
+    @field:SerializedName("activeProfile")
     val activeProfile: String? = null,
+    @field:SerializedName("forYouBlacklistByProfile")
     val forYouBlacklistByProfile: Map<String, List<LegacyForYouBlacklistEntryRecord>>? = null,
+    @field:SerializedName("favoriteTagsByProfile")
     val favoriteTagsByProfile: Map<String, List<LegacyFavoriteTagEntryRecord>>? = null,
+    @field:SerializedName("providerHealth")
     val providerHealth: List<LegacyProviderHealthSnapshotRecord>? = null,
 ) {
     fun toDomain(): AppSettings {
@@ -128,11 +143,17 @@ internal data class LegacySettingsStoreRecord(
 }
 
 internal data class LegacyProviderHealthSnapshotRecord(
+    @field:SerializedName("source")
     val source: String? = null,
+    @field:SerializedName("status")
     val status: String? = null,
+    @field:SerializedName("checkedAtEpochMs")
     val checkedAtEpochMs: Long? = null,
+    @field:SerializedName("latencyMs")
     val latencyMs: Long? = null,
+    @field:SerializedName("failureReason")
     val failureReason: String? = null,
+    @field:SerializedName("message")
     val message: String? = null,
 ) {
     fun toDomainOrNull(): ProviderHealthSnapshot? {
@@ -171,7 +192,9 @@ internal data class LegacyProviderHealthSnapshotRecord(
 }
 
 internal data class LegacyFavoriteTagEntryRecord(
+    @field:SerializedName("source")
     val source: String? = null,
+    @field:SerializedName("tag")
     val tag: String? = null,
 ) {
     fun toDomainOrNull(): FavoriteTagEntry? {
@@ -196,7 +219,9 @@ internal data class LegacyFavoriteTagEntryRecord(
 }
 
 internal data class LegacyForYouBlacklistEntryRecord(
+    @field:SerializedName("source")
     val source: String? = null,
+    @field:SerializedName("tags")
     val tags: List<String>? = null,
 ) {
     fun toDomainOrNull(): ForYouBlacklistEntry? {
@@ -221,7 +246,9 @@ internal data class LegacyForYouBlacklistEntryRecord(
 }
 
 internal data class LegacyRecommendationProfileRecord(
+    @field:SerializedName("profileId")
     val profileId: String? = null,
+    @field:SerializedName("name")
     val name: String? = null,
 ) {
     fun toDomainOrNull(): RecommendationProfile? {
@@ -239,8 +266,11 @@ internal data class LegacyRecommendationProfileRecord(
 }
 
 internal data class LegacyUiRestoreStoreRecord(
+    @field:SerializedName("lastTab")
     val lastTab: String? = null,
+    @field:SerializedName("searchScrollStates")
     val searchScrollStates: Map<String, LegacySearchScrollStateRecord> = emptyMap(),
+    @field:SerializedName("viewerLaunchContext")
     val viewerLaunchContext: LegacyViewerLaunchContextRecord? = null,
 ) {
     fun toMemoryState(): PersistedUiRestoreState {
@@ -283,8 +313,10 @@ internal data class PersistedUiRestoreState(
 )
 
 internal data class LegacySearchScrollStateRecord(
-    val firstVisibleItemIndex: Int,
-    val firstVisibleItemOffsetPx: Int,
+    @field:SerializedName("firstVisibleItemIndex")
+    val firstVisibleItemIndex: Int = 0,
+    @field:SerializedName("firstVisibleItemOffsetPx")
+    val firstVisibleItemOffsetPx: Int = 0,
 ) {
     fun toDomain(): SearchScrollState {
         return SearchScrollState(
@@ -304,10 +336,14 @@ internal data class LegacySearchScrollStateRecord(
 }
 
 internal data class LegacyViewerLaunchContextRecord(
-    val queryHash: String,
-    val startIndex: Int,
-    val streamSource: String,
-    val scrollOffsetHint: Int,
+    @field:SerializedName("queryHash")
+    val queryHash: String = "",
+    @field:SerializedName("startIndex")
+    val startIndex: Int = 0,
+    @field:SerializedName("streamSource")
+    val streamSource: String = ViewerStreamSource.SEARCH.name,
+    @field:SerializedName("scrollOffsetHint")
+    val scrollOffsetHint: Int = 0,
 ) {
     fun toDomain(): ViewerLaunchContext {
         return ViewerLaunchContext(

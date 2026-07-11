@@ -8,6 +8,7 @@ import android.util.AtomicFile
 import android.util.Base64
 import com.google.gson.Gson
 import com.google.gson.JsonParseException
+import com.google.gson.annotations.SerializedName
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
@@ -271,20 +272,32 @@ private class AndroidKeystoreAesGcm(
 }
 
 private class CredentialEnvelopeRecord(
+    @field:SerializedName("formatVersion")
     val formatVersion: Int = 0,
+    @field:SerializedName("keyVersion")
     val keyVersion: Int = 0,
+    @field:SerializedName("iv")
     val iv: String? = null,
+    @field:SerializedName("ciphertext")
     val ciphertext: String? = null,
 )
 
 private class CredentialPayloadRecord(
+    @field:SerializedName("schemaVersion")
     val schemaVersion: Int = CREDENTIAL_PAYLOAD_SCHEMA_VERSION,
+    @field:SerializedName("pixivAccessToken")
     val pixivAccessToken: String? = null,
+    @field:SerializedName("pixivRefreshToken")
     val pixivRefreshToken: String? = null,
+    @field:SerializedName("pixivExpiresAtEpochMs")
     val pixivExpiresAtEpochMs: Long? = null,
+    @field:SerializedName("gelbooruUserId")
     val gelbooruUserId: String? = null,
+    @field:SerializedName("gelbooruApiKey")
     val gelbooruApiKey: String? = null,
+    @field:SerializedName("rule34XxxUserId")
     val rule34XxxUserId: String? = null,
+    @field:SerializedName("rule34XxxApiKey")
     val rule34XxxApiKey: String? = null,
 ) {
     constructor(snapshot: SourceCredentialSnapshot) : this(

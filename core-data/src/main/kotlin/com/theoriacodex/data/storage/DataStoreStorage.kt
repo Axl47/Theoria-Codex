@@ -4,6 +4,7 @@ import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.Serializer
 import com.google.gson.Gson
 import com.google.gson.JsonParseException
+import com.google.gson.annotations.SerializedName
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -24,11 +25,17 @@ interface AsynchronousStore {
 }
 
 data class LegacyImportProof(
+    @field:SerializedName("sourceFileName")
     val sourceFileName: String = "",
+    @field:SerializedName("sourceSchemaVersion")
     val sourceSchemaVersion: Int = 0,
+    @field:SerializedName("destinationSchemaVersion")
     val destinationSchemaVersion: Int = 0,
+    @field:SerializedName("sourceSha256")
     val sourceSha256: String = "",
+    @field:SerializedName("sourceByteCount")
     val sourceByteCount: Long = 0L,
+    @field:SerializedName("importedCounts")
     val importedCounts: Map<String, Int> = emptyMap(),
 ) {
     internal fun isValidFor(destinationSchema: Int): Boolean {
