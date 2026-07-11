@@ -17,9 +17,11 @@ updated_at: 2026-07-10T23:59:00-04:00
     - Evidence: AES-256-GCM snapshots are bounded, atomically written, read-back verified, backup-excluded, retry-safe across legacy migration, and never auto-deleted on corruption or key mismatch; Android tests compile while device execution remains queued
   - [x] Phase 6 storage wave gate
     - Evidence: `./gradlew lint test :app:assembleDebug :app:compileDebugAndroidTestKotlin --rerun-tasks` passed 110 tasks and 1,099 configured test executions with 0 failures/errors; lint reports 111 known warnings
-  - [ ] 6E: migrate Kotlin and Compose compiler tooling
+  - [x] 6E: migrate Kotlin and Compose compiler tooling
+    - Evidence: Kotlin 2.0.21, the matching Compose compiler plugin, typed JVM compiler options, and explicit JSpecify compilation passed a clean 110-task gate with 1,099 configured test executions; this is the newest metadata level supported by the current AGP 8.5 lint/R8 boundary
   - [ ] 6B integration: register Room and move Codex/Likes to one transactional owner
-  - [ ] 6F/6D: migrate the supported Android toolchain, libraries, and target SDK in separately reversible commits
+  - [ ] 6F: advance AGP/Gradle and then Kotlin to the fully supported 9.1.1/9.3.1/2.4.0 stack before Room registration
+  - [ ] 6D: migrate Android libraries and target SDK after storage integration
   - [ ] 6G: validate release shrinking and startup optimization
 
 ### Pending

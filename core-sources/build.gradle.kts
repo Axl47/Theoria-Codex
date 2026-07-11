@@ -11,6 +11,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.gson)
     implementation(libs.jsoup)
+    compileOnly(libs.jspecify)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 }
