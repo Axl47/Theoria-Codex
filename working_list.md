@@ -1,8 +1,50 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T16:21:59-04:00
+updated_at: 2026-07-10T17:40:21-04:00
 ---
 # Working List
+
+## Current Task: Code Quality And UI Ownership ExecPlan
+
+### In Progress
+
+### Pending
+
+### Done
+
+- [x] Read the repository ExecPlan standard and orchestration skills
+- [x] Preserve the existing release-skill edit and completed audit evidence
+- [x] Define the phased architecture, dependency order, and conflict-safe parallel agent lanes
+- [x] Draft `.docs/exec/code-quality-ui-ownership-modernization.html` with exact files, commands, acceptance criteria, recovery guidance, and a finding-coverage matrix
+- [x] Reconcile independent UI-ownership and quality/testing planning reviews into the plan
+- [x] Validate the ExecPlan with `html-validate`, verify audit-finding coverage, and pass `git diff --check`
+
+## Current Task: Current Code Quality Audit
+
+### In Progress
+
+### Pending
+
+### Done
+
+- [x] Read repository guidance, current system documentation, and orchestration skills
+- [x] Confirm the pre-audit worktree state and preserve the existing release-skill edit
+- [x] Map module boundaries, production hotspots, and recent architectural growth
+  - Evidence: 49,216 Kotlin/Kotlin-script lines across production and tests; the largest ownership boundaries are `TheoriaApp`, `ViewerScreen`, `SearchScreen`, `SearchCoordinator`, `FileBackedRepositories`, and `HitomiSourceAdapter`
+- [x] Audit duplication, repeated policy, and oversized ownership boundaries
+  - Evidence: `jscpd` found 17 production Kotlin clones, 341 duplicated lines (1.02%), and 2,359 duplicated tokens (1.20%) across 99 files; policy drift matters more than bulk copy-paste
+- [x] Audit unit, integration, UI, device, and live-provider test coverage
+  - Evidence: roughly 455 distinct tests, with strong provider fixtures but thin app-shell, updater, authentication, recommendation, and Android platform coverage
+- [x] Run focused static/build/test validation and collect measurable baselines
+  - Evidence: `./gradlew lint test :app:assembleDebug --rerun-tasks` passed all 102 tasks; 681 configured test executions completed with 0 failures, 0 errors, and 6 skips
+- [x] Run the connected Android lane and distinguish deterministic from live coverage
+  - Evidence: three device tests passed, including the Hitomi protocol checks; `TheoriaAppSmokeTest.appShellRendersTopLevelNavigation` failed reproducibly because no Compose hierarchy was available
+- [x] Reconcile findings into a prioritized remediation roadmap
+- [x] Record audit evidence and closeout state without changing production code
+
+### Blocked / Findings
+
+- [!] The connected UI smoke lane is not currently a green, hermetic release signal; repair the Compose test harness and separate offline Android parser coverage from live-provider checks
 
 ## Current Task: Implement Hitomi Source, Faceted Search, And Mixed Media
 

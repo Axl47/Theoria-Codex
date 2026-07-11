@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Harden Code Quality and Clarify UI Ownership</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f4;
+      --surface: #ffffff;
+      --text: #202124;
+      --muted: #5f6368;
+      --border: #d7d7d0;
+      --accent: #0f766e;
+      --accent-soft: #dff3ef;
+      --risk: #9a3412;
+      --risk-soft: #ffedd5;
+      --decision: #1d4ed8;
+      --decision-soft: #dbeafe;
+      --code: #111827;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151716;
+        --surface: #202321;
+        --text: #f0f2ef;
+        --muted: #b8beb7;
+        --border: #3a403c;
+        --accent: #5eead4;
+        --accent-soft: #123b37;
+        --risk: #fdba74;
+        --risk-soft: #43230f;
+        --decision: #93c5fd;
+        --decision-soft: #172554;
+        --code: #0b0f0d;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header, main { max-width: 1240px; margin: 0 auto; padding: 24px; }
+    header { padding-top: 36px; }
+    h1, h2, h3, h4 { line-height: 1.18; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+    h2 { margin-top: 34px; font-size: 1.55rem; }
+    h3 { margin-top: 26px; font-size: 1.18rem; }
+    h4 { margin-top: 18px; font-size: 1rem; }
+    p { margin: 0 0 14px; }
+    ul, ol { margin-top: 8px; }
+    li + li { margin-top: 5px; }
+    a { color: var(--accent); }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-block: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(10px);
+    }
+    nav ul {
+      display: flex;
+      gap: 6px;
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 8px 24px;
+      list-style: none;
+      overflow-x: auto;
+    }
+    nav li { margin: 0; }
+    nav a {
+      display: block;
+      padding: 6px 10px;
+      border-radius: 6px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    nav a:hover { background: var(--accent-soft); }
+    section {
+      padding: 22px;
+      margin: 18px 0;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--surface);
+    }
+    article + article { margin-top: 30px; padding-top: 22px; border-top: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.93rem; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 700; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+    pre { overflow-x: auto; padding: 14px; border-radius: 8px; background: var(--code); color: #f8fafc; }
+    details { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; }
+    summary { cursor: pointer; font-weight: 700; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; color: var(--muted); }
+    .pill { padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
+    .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 18px; }
+    .card { padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    .card strong { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.82rem; text-transform: uppercase; }
+    .callout { margin: 14px 0; padding: 12px 14px; border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 6px; }
+    .risk { border-left-color: var(--risk); background: var(--risk-soft); }
+    .decision { border-left-color: var(--decision); background: var(--decision-soft); }
+    .compact td:first-child { width: 180px; color: var(--muted); font-weight: 700; }
+    .lane { font-weight: 750; white-space: nowrap; }
+    .serial { color: var(--risk); font-weight: 750; }
+    .parallel { color: var(--accent); font-weight: 750; }
+    .diagram { text-align: center; font-family: ui-monospace, monospace; line-height: 1.7; }
+    @media print {
+      nav { position: static; }
+      section, .card { break-inside: avoid; }
+      body { background: #fff; color: #000; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Harden code quality and clarify UI ownership</h1>
+    <p>This plan turns the July 10 code-quality audit into a staged implementation program. It first protects cancellation, persistence, request ordering, and releases; then bounds runtime work; then moves long-lived dependencies out of Compose and gives each route one explicit state owner; finally it consolidates repeated policy, modernizes storage and tooling, and closes the work with measurable quality gates.</p>
+    <div class="meta">
+      <span class="pill">Status: Proposed</span>
+      <span class="pill">Owner: Primary Codex integrator</span>
+      <span class="pill">Created: 2026-07-10</span>
+      <span class="pill">Updated: 2026-07-10</span>
+      <span class="pill">Plan: .docs/exec/code-quality-ui-ownership-modernization.html</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next action</strong>Start Phase 0 by preserving the baseline, creating the verification workflow, and repairing the deterministic Android smoke lane.</div>
+      <div class="card"><strong>Main risk</strong>Concurrent edits to <code>TheoriaApp.kt</code>, <code>TheoriaAppGraph.kt</code>, <code>SearchCoordinator.kt</code>, or repository files can silently undo each other. Those files have explicit single-owner integration lanes.</div>
+      <div class="card"><strong>Primary validation</strong><code>./gradlew lint test :app:assembleDebug</code>, focused module tests, deterministic connected tests, release assembly, and manual navigation/search/viewer checks.</div>
+      <div class="card"><strong>Target outcome</strong>Stable application-scoped services, route-scoped UI state, bounded background work, durable storage, deterministic CI, and staged modern dependencies.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#status">Status</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#ownership">Ownership</a></li>
+      <li><a href="#orchestration">Orchestration</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#coverage">Coverage</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#living-log">Living log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+      <li><a href="#appendix">Appendix</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>Theoria Codex already has meaningful module separation and a substantial test suite. The problem is not a lack of architecture; it is that rapid feature growth has accumulated coordination work at a few junctions. The app shell constructs long-lived services, owns route and workflow state, and launches asynchronous work. Search, Viewer, and For You coordinators combine protocol orchestration with mutable Compose state. Several persistence and HTTP paths are unbounded or have inconsistent durability. The release workflow can publish a tag without first proving that the tagged commit passed the deterministic quality gate.</p>
+      <p>When this plan is complete, the user should see the same product behavior with fewer stale-result races, fewer restart-only data regressions, smoother startup and scrolling, safer long search sessions, and more reliable updates. A developer should be able to change Search, Viewer, For You, Creator Profile, storage, or a source adapter without reopening the entire application shell. A tagged prerelease must be unable to publish until the exact commit passes verification.</p>
+      <div class="callout decision"><strong>Scope decision:</strong> this is an incremental ownership migration, not a rewrite and not a mandatory Hilt conversion. Existing provider-specific protocols and separate file-backed/in-memory repository implementations remain explicit. Shared policy moves; protocol and storage mechanics do not get hidden behind generic base classes.</div>
+    </section>
+
+    <section id="status">
+      <h2>Current Status</h2>
+      <table class="compact"><tbody>
+        <tr><td>Plan state</td><td>Proposed and ready for implementation.</td></tr>
+        <tr><td>Audit baseline</td><td>49,216 Kotlin/Kotlin-script lines across production and tests. Production duplication is 341 lines / 1.02% across 99 Kotlin files.</td></tr>
+        <tr><td>Deterministic baseline</td><td><code>./gradlew lint test :app:assembleDebug --rerun-tasks</code> passed 102 tasks; configured test execution reported zero failures and errors.</td></tr>
+        <tr><td>Device baseline</td><td>Three connected tests passed. <code>TheoriaAppSmokeTest.appShellRendersTopLevelNavigation</code> failed reproducibly because no Compose hierarchy was available. Treat the device lane as not green until Phase 0 proves otherwise.</td></tr>
+        <tr><td>Worktree constraint</td><td>Preserve unrelated user edits. At authoring time <code>.codex/skills/theoria-release/SKILL.md</code> was already modified and is outside this plan.</td></tr>
+        <tr><td>Next action</td><td>Create Phase 0 branches/worktrees or agent scopes, then land one integrated Phase 0 commit after all lanes pass.</td></tr>
+      </tbody></table>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <p>A <em>composition root</em> is the boundary that constructs long-lived dependencies. Today <code>rememberTheoriaAppGraph()</code> performs that work from Compose. A <em>route state owner</em> is a lifecycle-aware object—normally a ViewModel or narrowly scoped state holder—that owns one screen's asynchronous work and immutable UI state. A <em>single-flight request</em> allows one current request for a logical operation and cancels or supersedes older work. A <em>repository contract suite</em> runs the same behavior tests against both in-memory and file-backed implementations.</p>
+      <table>
+        <thead><tr><th>Area</th><th>Current role and risk</th><th>Target boundary</th></tr></thead>
+        <tbody>
+          <tr><td><code>app/.../ui/TheoriaApp.kt</code> (2,839 lines)</td><td>Navigation, system effects, update workflow, deep links, Codex actions, Viewer session state, many Flow collections, and route callbacks converge here.</td><td>Navigation and Android system-effect host only. Route state is supplied by route owners; durable work lives in services/repositories.</td></tr>
+          <tr><td><code>app/.../ui/TheoriaAppGraph.kt</code></td><td>Constructs repositories, source registry, credentials, update services, and coordinators inside composition; changing source configuration can reconstruct coordinators.</td><td>Application-scoped <code>TheoriaAppContainer</code>, created once by <code>TheoriaApplication</code>. Dynamic source availability becomes observable state or a registry update, not graph reconstruction.</td></tr>
+          <tr><td><code>app/.../search/SearchCoordinator.kt</code> (1,954 lines)</td><td>Mutable Compose state, persistence, provider orchestration, paging, resolution, autocomplete, and query restoration share one object. Concurrent requests can overwrite newer state.</td><td>A route-scoped <code>SearchViewModel</code> owns jobs and immutable <code>SearchUiState</code>; a pure/search-domain engine handles query execution and paging.</td></tr>
+          <tr><td><code>app/.../viewer/ViewerScreen.kt</code> (2,545 lines)</td><td>Rendering, playback, resolution, prefetch, controls, and Android effects are tightly coupled.</td><td><code>ViewerViewModel</code> owns session state and work; media-type renderers and control surfaces remain composables with explicit inputs.</td></tr>
+          <tr><td><code>app/.../recommend</code> and <code>app/.../creator</code></td><td>Coordinators expose mutable Compose state directly and depend on graph lifetime.</td><td>Route-scoped ViewModels/state holders with immutable state and injected engines.</td></tr>
+          <tr><td><code>core-data/.../FileBackedRepositories.kt</code> (1,792 lines)</td><td>Multiple repositories, record conversion, normalization, and synchronous file writes share one file; some policy is duplicated in in-memory repositories.</td><td>Shared pure policy and contract tests, injected IO dispatchers, atomic store primitive, then deliberate DataStore/Room migrations only where measured value exists.</td></tr>
+          <tr><td><code>core-sources/.../http/DefaultSourceHttpClient.kt</code></td><td>Binary reads are bounded, but text GET/POST reads are not consistently bounded and POST cleanup differs.</td><td>One cancellable, bounded transport path with endpoint-specific size limits.</td></tr>
+          <tr><td><code>.github/workflows/main-prerelease.yml</code></td><td>Tagged commits assemble, sign, and publish without a required verification job.</td><td>Reusable verification workflow; release publication depends on verification of the same SHA.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="ownership">
+      <h2>Target Ownership Model</h2>
+      <div class="diagram" role="img" aria-label="Target ownership flow from Android application container through route state owners to rendering and data boundaries">
+        TheoriaApplication → TheoriaAppContainer → repositories / source registry / services<br>
+        ↓<br>
+        TheoriaApp navigation host → route ViewModels → immutable UiState + typed actions → screen composables<br>
+        ↓ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ↓<br>
+        Android system-effect hosts &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; domain engines / repositories / adapters
+      </div>
+      <table>
+        <thead><tr><th>Owner</th><th>May own</th><th>Must not own</th></tr></thead>
+        <tbody>
+          <tr><td><code>TheoriaApplication</code> / container</td><td>Application context, repositories, HTTP client, source registry, secure stores, update services, factories for route owners.</td><td>Composable state, navigation controller, current route, dialogs, or activity-scoped launchers.</td></tr>
+          <tr><td><code>TheoriaApp</code></td><td>NavHost, destination wiring, incoming URI handoff, permission/activity-result hosts, top-level app chrome.</td><td>Provider jobs, repository mutation policy, entire feature state machines, or concrete dependency construction.</td></tr>
+          <tr><td>Route ViewModel/state owner</td><td>One route's jobs, saved-state key, immutable UI state, action reduction, refresh/paging cancellation.</td><td>Activity references, raw Compose mutable state exposed as public API, other routes' state, or provider protocol parsing.</td></tr>
+          <tr><td>Composable screen</td><td>Rendering, short-lived presentation state, gestures, focus, animation, callbacks.</td><td>Long-lived repositories, uncancelled provider calls, disk writes, or cross-route session ownership.</td></tr>
+          <tr><td>Repository/service</td><td>Durability, synchronization, data invariants, bounded caches, Android or network side effects behind testable interfaces.</td><td>Navigation and screen-specific wording.</td></tr>
+          <tr><td>Source adapter</td><td>Provider-specific requests, auth, parsing, fallback, paging token semantics, source-owned capabilities.</td><td>App presentation metadata or generic UI policy.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout risk"><strong>UI migration invariant:</strong> each route must have exactly one authoritative state owner at every commit. Do not keep a ViewModel state and legacy coordinator Compose state writable at the same time. Use a temporary adapter only when it is read-only on one side and delete it in the same phase.</div>
+    </section>
+
+    <section id="orchestration">
+      <h2>Subagent Orchestration Contract</h2>
+      <p>The primary integrator owns this ExecPlan, <code>working_list.md</code>, cross-lane decisions, central-file integration, final validation, and commits. Subagents do not edit the plan or working list. Every lane starts from the same commit, reports the exact files changed, runs its focused tests, and stops if it needs a file owned by another lane.</p>
+      <table>
+        <thead><tr><th>Rule</th><th>Execution contract</th></tr></thead>
+        <tbody>
+          <tr><td>Agent choice</td><td>Use Luna Medium for contained implementation and tests, Luna Low for inventories/validation, and Terra High for UI ownership, persistence migration, or build-system decisions. Reserve the primary/Sol context for integration and final validation.</td></tr>
+          <tr><td>Parallel edits</td><td>Only lanes marked <span class="parallel">parallel</span> may run together. Their file sets must remain disjoint. Tests may be shared; production files may not.</td></tr>
+          <tr><td>Central files</td><td><code>TheoriaApp.kt</code>, <code>TheoriaAppGraph.kt</code>, <code>TheoriaApplication.kt</code>, <code>app/build.gradle.kts</code>, <code>gradle/libs.versions.toml</code>, and workflows are integrated by one serialized owner per phase.</td></tr>
+          <tr><td>Handoff evidence</td><td>Each agent returns: summary, changed files, tests and output, unresolved risks, and the next integration action. No “done” report without evidence.</td></tr>
+          <tr><td>Commit shape</td><td>One integrated Conventional Commit per phase by default. If a phase has a risky migration, use one commit per independently revertible wave and record both in the living log.</td></tr>
+          <tr><td>Stop condition</td><td>Stop and report if behavior requires a new product decision, persisted schema cannot be migrated losslessly, a live-provider contract changes, or unrelated dirty files overlap.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+
+      <article id="phase-0">
+        <h3>Phase 0: Establish trustworthy guardrails</h3>
+        <p>Make the current deterministic baseline enforceable before changing ownership. This phase does not refactor production architecture.</p>
+        <table class="compact"><tbody>
+          <tr><td>Observable outcome</td><td>Every PR and main-branch change runs deterministic JVM/lint/build verification. The release workflow cannot publish an unverified tagged SHA. Offline and live Android tests are separately classified, and the current Compose smoke failure has a specific diagnosis and a named test-container seam to be completed in Phase 3.</td></tr>
+          <tr><td>Prerequisite</td><td>None. Preserve the current green JVM baseline and record the failing connected smoke baseline.</td></tr>
+          <tr><td>Phase gate</td><td>CI configuration parses, deterministic Gradle commands pass locally, Android test classes compile, offline protocol tests do not use the network, and the app-shell smoke failure is diagnosed far enough to identify whether dependency alignment, activity setup, or the missing injectable container is the remaining cause. A fully green deterministic shell is a Phase 3 gate.</td></tr>
+          <tr><td>Commit</td><td><code>ci(quality): require deterministic verification before releases</code></td></tr>
+        </tbody></table>
+        <h4>Parallel workstreams</h4>
+        <table>
+          <thead><tr><th>Lane</th><th>Ownership</th><th>Work</th><th>Focused acceptance</th></tr></thead>
+          <tbody>
+            <tr><td class="lane">0A · CI gate<br><span class="parallel">parallel</span></td><td><code>.github/workflows/verify.yml</code>; read-only review of release workflow.</td><td>Create PR/main verification with Java 17 and Gradle caching. Run <code>lint</code>, module tests, <code>:app:testDebugUnitTest</code>, <code>:app:assembleDebug</code>, and <code>:app:compileDebugAndroidTestKotlin</code>. Return the minimal dependency change needed in <code>main-prerelease.yml</code> to the integrator.</td><td>Workflow syntax is valid; commands match local gates; no secrets are needed.</td></tr>
+            <tr><td class="lane">0B · Android harness<br><span class="parallel">parallel</span></td><td><code>app/src/androidTest/**</code> and new test-only fixtures. No Gradle or workflow edits.</td><td>Split <code>HitomiProtocolDeviceTest</code> into offline Android-runtime parsing and explicit live transport classes. Diagnose <code>TheoriaAppSmokeTest</code> dependency/activity setup, preserve a minimal reproduction, and specify the fake-container/content seam Phase 3 must expose. Add navigation, deep-link handoff, Codex import, and Viewer-launch test cases only when they can remain deterministic.</td><td>Offline protocol tests never require provider network access. Live tests run only through an explicit class/property. The shell failure has a concrete cause or a narrowly defined missing seam rather than an undifferentiated “no hierarchy” result.</td></tr>
+            <tr><td class="lane">0C · JVM coverage map<br><span class="parallel">parallel</span></td><td>New tests and test fixtures only under <code>app/src/test</code>, <code>core-*/src/test</code>, or a new <code>core-testing</code> test-fixture module proposal. No production edits.</td><td>Add or specify regression skeletons for updater/installer seams, secure credential recovery, For You edge cases, and repository contracts. Consolidate repeated <code>samplePost</code> builders without changing production API.</td><td>New fixture code compiles and existing tests remain green; missing Android-only seams are listed for later phases.</td></tr>
+            <tr><td class="lane">0I · Integration<br><span class="serial">serialized</span></td><td><code>app/build.gradle.kts</code>, <code>settings.gradle.kts</code>, <code>gradle/libs.versions.toml</code>, <code>.github/workflows/main-prerelease.yml</code>.</td><td>Integrate managed-device or instrumentation dependencies only after 0B proves the harness. Wire release publication to verification of the tagged SHA. Prefer managed API 27 plus the current supported API; keep live provider checks scheduled/manual rather than PR-blocking.</td><td><code>./gradlew lint test :app:assembleDebug :app:compileDebugAndroidTestKotlin</code> passes. Release job has an explicit verify dependency.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article id="phase-1">
+        <h3>Phase 1: Repair correctness invariants</h3>
+        <p>Fix defects that can create stale work, restart-only data loss, or conflicting persisted state before moving code.</p>
+        <table class="compact"><tbody>
+          <tr><td>Observable outcome</td><td>Cancellation always propagates, hydrated Codex posts survive restart, the last selected tab has one durable owner, Search cannot let an older request replace a newer one, and credential material is excluded from backup with explicit recovery behavior.</td></tr>
+          <tr><td>Prerequisite</td><td>Phase 0 deterministic gates are green.</td></tr>
+          <tr><td>Phase gate</td><td>Focused cancellation, Codex reconstruction, tab migration, credential recovery/manifest, and overlapping-search tests pass; full deterministic gate remains green.</td></tr>
+          <tr><td>Commit</td><td><code>fix(runtime): preserve cancellation and durable request state</code></td></tr>
+        </tbody></table>
+        <h4>Wave 1 — parallel invariant fixes</h4>
+        <table>
+          <thead><tr><th>Lane</th><th>Ownership</th><th>Work</th><th>Focused acceptance</th></tr></thead>
+          <tbody>
+            <tr><td class="lane">1A · Cancellation<br><span class="parallel">parallel</span></td><td>New cancellation helper in dependency-safe code; <code>ForYouCoordinator.kt</code>, <code>ForYouScreen.kt</code>, <code>CreatorProfileScreen.kt</code>, <code>PixivUgoiraPlayer.kt</code>, selected source adapters. Exclude <code>SearchCoordinator.kt</code>, <code>SearchScreen.kt</code>, and <code>TheoriaApp.kt</code>.</td><td>Add a cancellation-preserving suspend result helper or explicit <code>catch (CancellationException) { throw }</code>. Migrate suspend <code>runCatching</code> sites while preserving ordinary failure fallback. Add cancellation tests.</td><td>Cancellation tests prove no null/empty degradation and no post-cancel state mutation.</td></tr>
+            <tr><td class="lane">1B · Codex durability<br><span class="parallel">parallel</span></td><td><code>core-data/.../FileBackedRepositories.kt</code> Codex region and <code>FileBackedRepositoriesTest.kt</code>.</td><td>Persist when either membership or the stored post snapshot changes. Add sparse→hydrated→reconstruct regression. Preserve saved order/timestamp and no-op equal updates.</td><td>Hydrated data survives a repository reconstruction and duplicate membership is not created.</td></tr>
+            <tr><td class="lane">1C · Tab ownership<br><span class="parallel">parallel</span></td><td><code>core-data/.../Repositories.kt</code>, settings/UI restore implementations and tests. No <code>TheoriaApp.kt</code>.</td><td>Define <code>UiRestoreRepository</code> as the sole final owner. Add a one-time migration contract from legacy <code>AppSettings.lastSelectedTabRoute</code> when restore is empty. Deprecate the old writer before removal.</td><td>Fresh install defaults to Search; legacy value migrates once; later UI restore wins.</td></tr>
+            <tr><td class="lane">1E · Credential safety<br><span class="parallel">parallel</span></td><td><code>SourceCredentialsStores.kt</code>, <code>AndroidManifest.xml</code>, new backup/data-extraction XML, and credential tests. No dependency-version changes.</td><td>Exclude credential preferences and key material from cloud backup and device transfer immediately. Replace silent delete-and-recreate behavior with an explicit recoverable “reconnect required” state for restore mismatch or corruption. Preserve the current encrypted format until Phase 6.</td><td>Manifest processing proves exclusions are active; corruption cannot crash startup; no token is logged; credential loss is surfaced rather than silently erased.</td></tr>
+          </tbody>
+        </table>
+        <h4>Wave 2 — serialized Search and app-shell integration</h4>
+        <table>
+          <thead><tr><th>Lane</th><th>Ownership</th><th>Work</th><th>Focused acceptance</th></tr></thead>
+          <tbody>
+            <tr><td class="lane">1D · Search ordering<br><span class="serial">serialized</span></td><td><code>SearchCoordinator.kt</code>, <code>SearchCoordinatorTest.kt</code>, then <code>SearchScreen.kt</code> only if interaction gating changes.</td><td>Introduce a monotonically increasing request generation or a single-flight job boundary. Snapshot the applied query for execution; only the current generation may update results, tokens, statuses, errors, or loading flags. Apply the cancellation helper to Search suspend calls. Define whether Apply cancels-and-replaces or is disabled; prefer cancel-and-replace.</td><td>A delayed first query cannot overwrite a fast second query; canceling navigation produces no stale result or loading mutation; paging is tied to the active query generation.</td></tr>
+            <tr><td class="lane">1I · App integration<br><span class="serial">serialized</span></td><td><code>TheoriaApp.kt</code> only.</td><td>Remove the duplicate Settings tab write, invoke legacy migration during restoration, and apply cancellation-preserving behavior to app-shell suspend boundaries. Keep UI behavior unchanged.</td><td>Top-level tab restores correctly across process restart and only one repository is written after migration.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article id="phase-2">
+        <h3>Phase 2: Bound transport, caches, and disk work</h3>
+        <p>Ensure provider input, long search sessions, and frequent UI persistence cannot consume unbounded memory or block the main thread.</p>
+        <table class="compact"><tbody>
+          <tr><td>Observable outcome</td><td>Text responses have explicit limits, connections always close, Hitomi global indexes have a byte budget and single-flight loading, file writes run off-main, and transient UI state is debounced/conflated.</td></tr>
+          <tr><td>Prerequisite</td><td>Phase 1 cancellation semantics are available.</td></tr>
+          <tr><td>Phase gate</td><td>Oversize-response, cache-eviction, concurrent-cache-miss, dispatcher, atomic-write, and scroll-write tests pass. Startup/device log shows no regression and the full gate is green.</td></tr>
+          <tr><td>Commit</td><td><code>perf(runtime): bound network caches and persistence work</code></td></tr>
+        </tbody></table>
+        <h4>Parallel workstreams</h4>
+        <table>
+          <thead><tr><th>Lane</th><th>Ownership</th><th>Work</th><th>Focused acceptance</th></tr></thead>
+          <tbody>
+            <tr><td class="lane">2A · HTTP bounds<br><span class="parallel">parallel</span></td><td><code>core-sources/.../http/**</code> and its tests.</td><td>Add an 8 MiB default text-response ceiling, explicit endpoint override where fixtures justify it, and one cleanup/cancellation path for GET and POST. Reject oversize bodies with a typed transport failure. Preserve byte-range <code>Accept-Encoding: identity</code>.</td><td>GET/POST oversize tests fail predictably, connections disconnect, and cancellation interrupts work without retrying.</td></tr>
+            <tr><td class="lane">2B · Hitomi cache<br><span class="parallel">parallel</span></td><td><code>HitomiSourceAdapter.kt</code>, a new cache helper under the Hitomi package, and Hitomi tests. No shared HTTP edits.</td><td>Replace unbounded <code>ConcurrentHashMap&lt;String, IntArray&gt;</code> with a version-aware, byte-weighted LRU. Start with a strict 32 MiB ceiling, make the limit injectable for tests, and revise it only with device evidence. Coalesce concurrent loads for the same key. Clear/version-separate entries when galleries index version changes.</td><td>Byte cap is never exceeded after eviction; concurrent misses perform one load; active index version cannot reuse stale data.</td></tr>
+            <tr><td class="lane">2C · Repository IO<br><span class="parallel">parallel</span></td><td><code>core-data</code> repository implementations, new atomic store primitive, and tests. Exclude Search/app files.</td><td>Inject an IO dispatcher or file executor into file-backed repositories. Move read/write/atomic move work off-main while keeping in-memory state mutation serialized. Expose a reusable atomic JSON primitive without moving store-specific schemas.</td><td>Dispatcher tests prove file work occurs on the injected lane; concurrent mutations serialize; corruption/partial-temp recovery remains tolerant.</td></tr>
+            <tr><td class="lane">2D · App file stores<br><span class="parallel">parallel</span></td><td><code>FileBackedUpdateStateStore.kt</code>, <code>TagSuggestionStore.kt</code>, and tests. Depend on 2C's atomic primitive; start after its API is agreed or work against a small interface.</td><td>Adopt atomic JSON replacement. Batch/debounce tag suggestion persistence, cap retained suggestions per source and total bytes, and flush on a defined lifecycle/close boundary. Keep reads tolerant.</td><td>Interrupted write preserves the prior file; bursts produce bounded writes; cache remains within policy.</td></tr>
+            <tr><td class="lane">2I · UI persistence integration<br><span class="serial">serialized</span></td><td><code>SearchScreen.kt</code>, <code>SearchCoordinator.kt</code>, <code>TheoriaAppGraph.kt</code>.</td><td>Conflate/debounce scroll and suggestion persistence, inject IO-aware stores, and ensure no disk I/O is initiated directly from a composition read. Do not begin the broader UI ownership migration yet.</td><td>Rapid scroll/search changes persist the final value without a write per frame/event. Existing restoration behavior remains visible after restart.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article id="phase-3">
+        <h3>Phase 3: Establish the application container and UI state contracts</h3>
+        <p>Create the stable ownership foundation before splitting the large screens. This is the architectural pivot of the plan.</p>
+        <table class="compact"><tbody>
+          <tr><td>Observable outcome</td><td>Long-lived dependencies are created once by the Android application, source-configuration changes do not recreate route coordinators, every major route has an immutable UI-state/action contract, and Flow collection is lifecycle-aware.</td></tr>
+          <tr><td>Prerequisite</td><td>Phases 0–2 green. Disk and cancellation behavior must be stable before changing lifetimes.</td></tr>
+          <tr><td>Phase gate</td><td>Container construction tests, configuration-change tests, lifecycle tests, and the deterministic app-shell smoke pass. No route has two writable state owners.</td></tr>
+          <tr><td>Commit</td><td><code>refactor(app): establish stable container and route state contracts</code></td></tr>
+        </tbody></table>
+        <h4>Wave 1 — contracts in parallel</h4>
+        <table>
+          <thead><tr><th>Lane</th><th>Ownership</th><th>Work</th><th>Focused acceptance</th></tr></thead>
+          <tbody>
+            <tr><td class="lane">3A · Search contract<br><span class="parallel">parallel</span></td><td>New files under <code>app/.../search/state/</code> and tests only.</td><td>Define immutable <code>SearchUiState</code>, typed <code>SearchAction</code>, one-shot effect contract, and mapping from existing coordinator state. Include query draft/applied state, results, statuses, suggestions, paging, errors, restoration, and viewer launch.</td><td>Reducer/mapping tests cover loading, replacement, retry, paging, and cancellation states without Compose runtime.</td></tr>
+            <tr><td class="lane">3B · Viewer contract<br><span class="parallel">parallel</span></td><td>New files under <code>app/.../viewer/state/</code> and tests only.</td><td>Define <code>ViewerUiState</code>, actions, effects, media-page state, controls state, overview state, prefetch state, and session identity. Keep platform playback handles out of immutable state.</td><td>State tests cover image/video/animated WebP, page replacement, playback controls, and recoverable media failure.</td></tr>
+            <tr><td class="lane">3C · Feed contracts<br><span class="parallel">parallel</span></td><td>New files under <code>app/.../recommend/state/</code> and <code>app/.../creator/state/</code>.</td><td>Define separate For You and Creator immutable state/action contracts. Include profile/source/sort selection, seed/blacklist, pagination, creator identity, and errors.</td><td>Mapping/reducer tests cover refresh, selection changes, empty/error states, and paging.</td></tr>
+          </tbody>
+        </table>
+        <h4>Wave 2 — serialized container integration</h4>
+        <table>
+          <thead><tr><th>Lane</th><th>Ownership</th><th>Work</th><th>Focused acceptance</th></tr></thead>
+          <tbody>
+            <tr><td class="lane">3D · Container<br><span class="serial">serialized</span></td><td><code>TheoriaApplication.kt</code>, new <code>app/.../di/TheoriaAppContainer.kt</code> or equivalent, <code>TheoriaAppGraph.kt</code>, factories, container tests.</td><td>Move concrete dependency construction out of Compose. Create long-lived repositories/services once. Replace <code>rule34XxxConfigured</code>-keyed reconstruction with an observable credentials/capability update that preserves route state. Keep activity-only launchers and navigation outside the container.</td><td>Repeated recomposition and credential changes retain repository/coordinator identity where required; available-source state updates correctly.</td></tr>
+            <tr><td class="lane">3I · App shell<br><span class="serial">serialized</span></td><td><code>TheoriaApp.kt</code> only after 3D.</td><td>Consume the application container, remove 20-field graph destructuring where a feature dependency bundle is clearer, migrate Flow reads to <code>collectAsStateWithLifecycle</code>, and introduce testable <code>TheoriaAppContent</code> if required by the smoke harness. Keep route behavior unchanged.</td><td>Configuration change and background/foreground transitions do not duplicate work or lose route state. App-shell smoke and navigation remain green.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article id="phase-4">
+        <h3>Phase 4: Move UI ownership to route-scoped state holders</h3>
+        <p>Split the large ownership junctions one route at a time. Parallel agents build route owners in disjoint packages; the app-shell owner integrates them only after their focused tests pass.</p>
+        <table class="compact"><tbody>
+          <tr><td>Observable outcome</td><td>Search, Viewer, For You, and Creator Profile each have one route-scoped owner for jobs and immutable state. Screens render state and emit actions. <code>TheoriaApp.kt</code> owns navigation/system effects rather than feature state machines.</td></tr>
+          <tr><td>Prerequisite</td><td>Phase 3 container and state contracts.</td></tr>
+          <tr><td>Phase gate</td><td>Feature tests, configuration restoration, process-death saved-state where applicable, app-shell smoke, and manual cross-route flows pass. Central file sizes must fall because responsibilities moved, not through formatting.</td></tr>
+          <tr><td>Commit</td><td><code>refactor(ui): give each route a single lifecycle-aware state owner</code></td></tr>
+        </tbody></table>
+        <h4>Wave 1 — route owners in parallel</h4>
+        <table>
+          <thead><tr><th>Lane</th><th>Exclusive ownership</th><th>Work</th><th>Focused acceptance</th></tr></thead>
+          <tbody>
+            <tr><td class="lane">4A · Search<br><span class="parallel">parallel</span></td><td><code>app/.../search/**</code> including <code>SearchCoordinator.kt</code> and <code>SearchScreen.kt</code>. No <code>TheoriaApp.kt</code>.</td><td>Create <code>SearchViewModel</code> with <code>StateFlow&lt;SearchUiState&gt;</code>, saved-state query key, owned refresh/paging/autocomplete jobs, and typed actions. Convert the coordinator into a non-Compose engine/use case or fold it into the ViewModel while keeping provider orchestration testable. Split faceted input, results grid, status, and action sheet into focused composables.</td><td>Delayed/canceled request tests stay green; rotation retains current query/results state as intended; Search screen has no direct repository writes or provider jobs.</td></tr>
+            <tr><td class="lane">4B · Viewer<br><span class="parallel">parallel</span></td><td><code>app/.../viewer/**</code> including <code>ViewerScreen.kt</code>. No <code>TheoriaApp.kt</code>.</td><td>Create <code>ViewerViewModel</code> or state holder for session, resolution, page/prefetch state, overview selection, and one-shot download/share effects. Split image, video, animated WebP, overview, metadata, and controls renderers. Keep ExoPlayer/decoder lifecycle in explicit platform-aware holders.</td><td>Existing video-prefetch, session, state, and image-pipeline tests pass; API 26/27 fallback remains bounded; cancellation still propagates.</td></tr>
+            <tr><td class="lane">4C · Feeds<br><span class="parallel">parallel</span></td><td><code>app/.../recommend/**</code> and <code>app/.../creator/**</code>. No shared Search UI files during this lane.</td><td>Create route ViewModels for For You and Creator Profile. Inject clock/random into recommendations. Add missing empty-seed, fallback, blacklist exhaustion, profile/settings change, source selection, sort, paging failure, and cancellation tests. Keep provider capabilities interface-driven.</td><td>One owner per route, deterministic recommendation tests, preserved viewer launch contexts, and no direct public Compose mutable state from coordinators.</td></tr>
+            <tr><td class="lane">4D · App workflows<br><span class="parallel">parallel</span></td><td>New files under <code>app/.../appshell/</code>, <code>update/</code>, <code>codex/transfer/</code>, and tests. Do not edit <code>TheoriaApp.kt</code>.</td><td>Extract startup update state, deep-link resolution, Codex import/export/share orchestration, likes-to-Codex synchronization, and viewer session merge into named services/state holders. Keep Android launcher calls represented as effects returned to the shell.</td><td>Pure workflow tests cover updater decisions, incoming URI classification, Codex transfer errors, and session merging without Compose.</td></tr>
+          </tbody>
+        </table>
+        <h4>Wave 2 — app-shell integration</h4>
+        <table>
+          <thead><tr><th>Lane</th><th>Ownership</th><th>Work</th><th>Focused acceptance</th></tr></thead>
+          <tbody>
+            <tr><td class="lane">4I · Navigation integration<br><span class="serial">serialized</span></td><td><code>TheoriaApp.kt</code>, destination wiring, ViewModel factories.</td><td>Wire route owners to destinations, host one-shot Android effects, remove migrated <code>remember</code>/<code>LaunchedEffect</code> state, and reduce large parameter lists to feature contracts. Do not move provider or repository logic back into the shell to resolve integration friction.</td><td>Manual flows: cold launch; switch every tab; Search→Viewer; For You→Viewer; Creator→Viewer; Codex save/reopen/import/export; deep link; update prompt. No duplicated jobs after navigation.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article id="phase-5">
+        <h3>Phase 5: Consolidate repeated policy and stable UI primitives</h3>
+        <p>Now that ownership is explicit, remove policy duplication without inventing broad base classes. Production duplication should remain low, but behavior should have one authoritative definition.</p>
+        <table class="compact"><tbody>
+          <tr><td>Observable outcome</td><td>File/in-memory repositories share pure policy and one contract suite; recommendation normalization and source weights have one owner; provider mechanical helpers are shared; stable post-action/feed UI shells are reused; source presentation/capability decisions no longer drift.</td></tr>
+          <tr><td>Prerequisite</td><td>Phase 4 route boundaries, so UI extractions do not fight ownership migration.</td></tr>
+          <tr><td>Phase gate</td><td>Repository contract suite passes for both implementations; provider tests remain green; screenshot/semantics checks show unchanged actions; duplication scan does not increase and intentional duplication is documented.</td></tr>
+          <tr><td>Commit</td><td><code>refactor(quality): centralize shared policy and reusable UI seams</code></td></tr>
+        </tbody></table>
+        <h4>Parallel workstreams</h4>
+        <table>
+          <thead><tr><th>Lane</th><th>Ownership</th><th>Work</th><th>Focused acceptance</th></tr></thead>
+          <tbody>
+            <tr><td class="lane">5A · Repository policy<br><span class="parallel">parallel</span></td><td><code>core-data/**</code> only.</td><td>Create internal pure policy for settings normalization, Codex naming/sorting, list reducers, liked/favorite tag normalization, and source-weight validation. Run a parameterized contract suite against file-backed and in-memory implementations. Do not make one implementation inherit from the other.</td><td>Equivalent operations yield equivalent domain state and persistence-specific behavior remains independently tested.</td></tr>
+            <tr><td class="lane">5B · Domain normalization<br><span class="parallel">parallel</span></td><td><code>core-domain/.../recommendation</code>, tag normalization, and app recommendation mappings.</td><td>Unify recommendation tag normalization used by <code>ForYouTagSetGenerator</code> and <code>TagAssociation</code>. Centralize <code>normalizeSourceWeights()</code>. Keep general Search/storage normalization separate where contracts differ.</td><td>Training and serving paths normalize the same fixture identically; source weights always meet total/range invariants.</td></tr>
+            <tr><td class="lane">5C · Provider mechanics<br><span class="parallel">parallel</span></td><td><code>core-sources/**</code>, excluding Hitomi cache/HTTP files unless coordination is explicit.</td><td>Extend <code>SourceAdapterCommon.kt</code> with safe JSON accessors, common duration/status helpers, network error conversion, and configurable challenge detection. Preserve provider-specific auth, fallback, Pixiv 401 semantics, and mirror parsing. Consolidate strict percent decoding only at a dependency-safe utility boundary.</td><td>All provider fixture tests pass; no generic <code>BaseSourceAdapter</code>; provider-specific failure mappings remain explicit.</td></tr>
+            <tr><td class="lane">5D · UI primitives<br><span class="parallel">parallel</span></td><td>New shared UI files plus Search/For You/Creator/Codex screen call sites. Coordinate one owner for all touched screens.</td><td>Extract a concrete <code>PostActionSheet</code>, feed error/empty/loading tiles, two-column post grid, and autocomplete list shell. Use explicit slots/callbacks; avoid a generic modal framework.</td><td>Save/remove/download/share/creator/tag actions remain available in each route with unchanged semantics and accessibility labels.</td></tr>
+            <tr><td class="lane">5E · Source catalog<br><span class="parallel">parallel</span></td><td><code>app/.../source/SourceMetadata.kt</code>, creator capability UI, deep links, source presentation tests.</td><td>Create a small app-layer presentation catalog for labels, logos/groups, referers, and exposure rules. Derive operational capability from adapter interfaces. Parameterize repeated Gelbooru/Rule34 post-link query parsing. Decide explicitly whether hidden AIBooru remains supported, feature-gated, or removed.</td><td>UI labels/assets and deep links are covered per source; capability comes from interfaces, not hard-coded source allowlists.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article id="phase-6">
+        <h3>Phase 6: Modernize persistence, credentials, and Android tooling safely</h3>
+        <p>Modernization is staged behind the new gates. Do not combine storage migration, Kotlin/AGP migration, and release optimization in one commit.</p>
+        <table class="compact"><tbody>
+          <tr><td>Observable outcome</td><td>High-frequency settings/UI state uses an appropriate asynchronous store, growing relational data has a measured storage decision, credentials are excluded from backup and migrated deliberately, the supported toolchain is current, and release shrinking is proven safe.</td></tr>
+          <tr><td>Prerequisite</td><td>Phases 0–5 green with representative UI/device coverage.</td></tr>
+          <tr><td>Phase gate</td><td>Every migration wave has its own green full gate, upgrade notes, rollback point, and device install/upgrade check. No “all dependencies at once” change.</td></tr>
+        </tbody></table>
+
+        <h4>Wave 1 — storage and credential decisions in parallel</h4>
+        <table>
+          <thead><tr><th>Lane</th><th>Ownership</th><th>Work</th><th>Promotion criteria</th></tr></thead>
+          <tbody>
+            <tr><td class="lane">6A · DataStore prototype<br><span class="parallel">parallel</span></td><td>Prototype/new module or additive repository implementations; no replacement of live files until accepted.</td><td>Prototype Preferences or Proto DataStore for <code>AppSettings</code> and <code>UiRestoreRepository</code>. Measure startup/read/write behavior and prove one-time import of JSON and legacy last-tab state.</td><td>Promote only if migration is lossless, corruption behavior is defined, tests can inject a temp store, and settings/UI restore no longer require full synchronous file rewrites.</td></tr>
+            <tr><td class="lane">6B · Room decision<br><span class="parallel">parallel</span></td><td>Additive benchmark/prototype for Codex, recents, likes, or tag suggestions.</td><td>Measure real/fixture data sizes and mutation patterns. Prototype Room for the high-growth relational stores only. Keep Codex share/import wire models separate from local database entities.</td><td>Promote only if it materially improves bounded growth, queries, or write amplification. Otherwise retain atomic JSON and record the decision with measured limits.</td></tr>
+            <tr><td class="lane">6C · Credentials<br><span class="parallel">parallel</span></td><td><code>SourceCredentialsStores.kt</code>, Phase 1 backup/data-extraction rules, credential tests.</td><td>Build on the already-landed backup exclusions with a versioned Android Keystore-backed replacement for deprecated Security Crypto use. Migrate existing values on read, write and verify the new value before removing the old one, and make interrupted migration retry-safe. Preserve the explicit restore-mismatch/corruption states from Phase 1.</td><td>Upgrade/reinstall/migration device tests prove credentials are retained or fail with explicit recovery; no secret enters backup or logs.</td></tr>
+          </tbody>
+        </table>
+        <h4>Wave 2 — serialized storage integration</h4>
+        <p>The primary integrator chooses the promoted stores from 6A/6B, updates repository bindings in the application container, runs migration tests against copied legacy fixtures, and lands <code>refactor(storage): migrate durable state to bounded asynchronous stores</code>. If Room does not meet the promotion criteria, record the rejection and land only DataStore/atomic JSON improvements.</p>
+
+        <h4>Wave 3 — serialized toolchain upgrades with parallel review</h4>
+        <table>
+          <thead><tr><th>Step</th><th>Serialized edit owner</th><th>Parallel reviewer</th><th>Acceptance</th></tr></thead>
+          <tbody>
+            <tr><td>6D · Safe libraries and target SDK</td><td><code>libs.versions.toml</code>, Android manifests/build files; update AndroidX/test/Media3/jsoup and target/compile SDK with behavior changes handled.</td><td>Luna Low inventories release notes, deprecations, and lint changes without editing.</td><td>Full tests/lint/device smoke; no new unreviewed behavior warning. Commit: <code>build(deps): update Android libraries and target SDK</code>.</td></tr>
+            <tr><td>6E · Kotlin 2 and Compose compiler</td><td>Version catalog and all Gradle plugin declarations.</td><td>Terra reviews compiler/plugin migration and source compatibility.</td><td>Clean build plus all tests; no legacy <code>composeOptions.kotlinCompilerExtensionVersion</code> path remains if the chosen Kotlin plugin replaces it. Commit: <code>build(kotlin): migrate to Kotlin 2 Compose tooling</code>.</td></tr>
+            <tr><td>6F · AGP/Gradle generation</td><td>Wrapper, plugin declarations, module build files, built-in Kotlin migration if required.</td><td>Luna reruns commands and compares APK/test outputs.</td><td>Clean checkout build on Java 17, CI green, tagged-version calculation unchanged. Commit: <code>build(android): migrate to the supported AGP toolchain</code>.</td></tr>
+            <tr><td>6G · Release optimization</td><td><code>app/build.gradle.kts</code>, ProGuard rules, baseline profile/macrobenchmark module if adopted.</td><td>Device-validation agent exercises updater, auth, deep links, Gson persistence/migration, media decoders, and source registry.</td><td>R8/resource shrinking only stays enabled if signed-like release assembly and critical device flows pass. Commit: <code>perf(release): enable verified shrinking and startup profiles</code>.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article id="phase-7">
+        <h3>Phase 7: Make quality budgets durable and close the program</h3>
+        <p>Turn the one-time audit into maintainable signals, clean remaining low-risk warnings, and update current-facing documentation.</p>
+        <table class="compact"><tbody>
+          <tr><td>Observable outcome</td><td>Changed code is covered, complexity/duplication growth is visible, dependencies are monitored, lint warnings are intentionally fixed or baselined, current docs match the new ownership model, and this ExecPlan contains final evidence.</td></tr>
+          <tr><td>Prerequisite</td><td>All promoted Phase 6 migrations/upgrades complete.</td></tr>
+          <tr><td>Phase gate</td><td>All automated and manual acceptance checks pass; docs and developer guidance reflect current runtime truth; no active checklist item remains ambiguous.</td></tr>
+          <tr><td>Commit</td><td><code>chore(quality): enforce maintainability budgets and document ownership</code></td></tr>
+        </tbody></table>
+        <h4>Parallel workstreams</h4>
+        <table>
+          <thead><tr><th>Lane</th><th>Ownership</th><th>Work</th><th>Acceptance</th></tr></thead>
+          <tbody>
+            <tr><td class="lane">7A · Quality tooling<br><span class="parallel">parallel</span></td><td>Gradle quality configuration and CI integration, coordinated with one build owner.</td><td>Add Kover/Jacoco coverage reporting with a baseline and changed-code focus; add Detekt complexity/file-size/coroutine rules rather than formatting churn; automate dependency update visibility; preserve the <code>jscpd</code> audit command or script. Add narrow architecture checks: no ordinary <code>collectAsState</code> in route/app screens, no Compose mutable-state imports in coordinator engines, no file-backed construction in composables, and no suspend provider <code>runCatching</code> outside the cancellation-preserving boundary.</td><td>Signals are actionable, fast enough for CI, and do not fail solely on historical debt. New violations on touched code fail clearly, and the new UI ownership rules cannot silently regress.</td></tr>
+            <tr><td class="lane">7B · Lint/resources<br><span class="parallel">parallel</span></td><td>Lint-reported source/resource/manifest files, excluding central files still owned by integration.</td><td>Resolve unused Rule34 assets, obsolete SDK checks, primitive-state boxing, modifier ordering, manifest data grouping, icon placement/monochrome icon, and orientation policy. Treat dependency/version warnings as resolved by Phase 6, not suppressed.</td><td>Lint warning count falls with no blanket baseline hiding correctness findings.</td></tr>
+            <tr><td class="lane">7C · Final behavior review<br><span class="parallel">parallel</span></td><td>Read-only review plus test additions in disjoint files.</td><td>Audit updater/installer, auth/PKCE, deep links, import/export, Search/For You/Creator paging, Viewer mixed media, API 27 decoder, and release update behavior against the target ownership model.</td><td>No feature relies on legacy duplicate state ownership; gaps become tests or explicit follow-up entries.</td></tr>
+            <tr><td class="lane">7D · Docs and closeout<br><span class="serial">serialized</span></td><td><code>README.md</code>, <code>AGENTS.md</code>, this ExecPlan, <code>working_list.md</code>.</td><td>Update current architecture, test commands, live-provider lane, managed-device commands, storage migrations, release gate, and any non-obvious runtime invariant. Record final metrics, decisions, surprises, and retrospective. Leave historical plans unchanged.</td><td>A new developer can find the application container, route owners, storage contracts, validation lanes, and release process from current docs.</td></tr>
+          </tbody>
+        </table>
+      </article>
+    </section>
+
+    <section id="coverage">
+      <h2>Audit Finding Coverage Matrix</h2>
+      <table>
+        <thead><tr><th>Audit finding</th><th>Primary phase/lane</th><th>Completion evidence</th></tr></thead>
+        <tbody>
+          <tr><td>Suspend <code>runCatching</code> swallows cancellation</td><td>1A, 1D, 1I</td><td>Cancellation tests for Search, For You, Creator, Viewer/ugoira, and provider fallback.</td></tr>
+          <tr><td>No PR/main gate; release publishes without verification</td><td>0A, 0I</td><td>Reusable green workflow and tagged release dependency.</td></tr>
+          <tr><td>Search request race and stale result mutation</td><td>1D, then 4A</td><td>Overlapping request/paging tests and ViewModel-owned jobs.</td></tr>
+          <tr><td>Synchronous full-file writes and composition-time graph work</td><td>2C–2I, 3D</td><td>Injected dispatcher tests, debounced writes, application container.</td></tr>
+          <tr><td>Unbounded Hitomi global index cache</td><td>2B</td><td>Byte-cap, eviction, version, and single-flight tests.</td></tr>
+          <tr><td>Unbounded text HTTP and inconsistent disconnect</td><td>2A</td><td>Oversize/cancellation/cleanup tests.</td></tr>
+          <tr><td>Codex re-add loses hydrated snapshot after restart</td><td>1B</td><td>Sparse→hydrated→reconstruct regression.</td></tr>
+          <tr><td>File/in-memory repository policy duplication</td><td>5A</td><td>Shared pure policy and parameterized contract suite.</td></tr>
+          <tr><td>Oversized Compose/state ownership and unstable graph</td><td>3–4</td><td>Stable container, route ViewModels, lifecycle collection, app-shell smoke/manual flows.</td></tr>
+          <tr><td>Weak device/live-provider test separation</td><td>0B, 0I</td><td>Offline deterministic classes plus explicit live lane and managed-device coverage.</td></tr>
+          <tr><td>For You, updater, auth, and platform seams under-tested</td><td>0C, 4C–4D, 6C, 7C</td><td>Focused deterministic and device tests.</td></tr>
+          <tr><td>Stale toolchain, target SDK, and disabled release shrinking</td><td>6D–6G</td><td>One green migration commit per wave and release-device validation.</td></tr>
+          <tr><td>Deprecated encrypted preferences and backup exposure</td><td>1E, then 6C</td><td>Immediate backup exclusions/recovery state plus versioned Keystore migration tests.</td></tr>
+          <tr><td>Two last-tab persistence owners</td><td>1C, 1I</td><td>One-time migration and sole UiRestore writer.</td></tr>
+          <tr><td>Recommendation normalization and source-weight drift</td><td>5B</td><td>One domain policy and equivalence fixtures.</td></tr>
+          <tr><td>Multiple JSON durability strategies</td><td>2C, 2D</td><td>Shared atomic primitive and interruption tests.</td></tr>
+          <tr><td>Partial provider helper adoption</td><td>5C</td><td>Shared mechanical helpers with all provider fixtures green.</td></tr>
+          <tr><td>Repeated post action sheets, feed states, grids, autocomplete</td><td>5D</td><td>Shared concrete UI primitives and semantics checks.</td></tr>
+          <tr><td>Hard-coded source presentation/capability and deep-link parsing</td><td>5E</td><td>Presentation catalog, interface-derived capability, parameterized links.</td></tr>
+          <tr><td>No coverage/complexity/dependency automation</td><td>7A</td><td>CI reports and changed-code budgets.</td></tr>
+          <tr><td>Lint/resource backlog and hidden AIBooru decision</td><td>5E, 7B</td><td>Explicit source decision and reduced warnings without blanket suppression.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <p>Run commands from the repository root. Start focused, then run the integrated gate at every phase boundary. Live-provider failures do not invalidate deterministic correctness, but must be recorded with source, date, and failure classification.</p>
+      <table>
+        <thead><tr><th>Check</th><th>Command or action</th><th>Expected result</th></tr></thead>
+        <tbody>
+          <tr><td>Core deterministic gate</td><td><code>./gradlew lint test :app:assembleDebug</code></td><td><code>BUILD SUCCESSFUL</code>; no test failures/errors. Warning movement is explained.</td></tr>
+          <tr><td>Focused data</td><td><code>./gradlew :core-data:test</code></td><td>Codex durability, repository contracts, dispatcher, migration, and atomic-write tests pass.</td></tr>
+          <tr><td>Focused sources</td><td><code>./gradlew :core-sources:test</code></td><td>HTTP bounds, cache, cancellation, and all provider fixtures pass.</td></tr>
+          <tr><td>Focused app</td><td><code>./gradlew :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin</code></td><td>Route state, workflows, and instrumentation sources compile/pass.</td></tr>
+          <tr><td>Offline device suite</td><td><code>./gradlew :app:connectedDebugAndroidTest</code> or the configured managed-device task with live classes excluded.</td><td>Navigation, deep-link, Codex, Viewer launch, Android parser, and decoder tests pass without provider network.</td></tr>
+          <tr><td>Legacy decoder device</td><td>Run managed API 27 target.</td><td>Bounded fallback decodes the fixture without excessive allocation or crash.</td></tr>
+          <tr><td>Live provider lane</td><td>Run explicit live class/property outside PR blocking.</td><td>Results are recorded per provider; cancellation and protocol failures are classified, not hidden.</td></tr>
+          <tr><td>Release assembly</td><td><code>./gradlew :app:assembleRelease</code></td><td>Release APK builds; after Phase 6G, R8/resource shrink has no missing-class or reflection failure.</td></tr>
+          <tr><td>Duplication</td><td><code>npx --yes jscpd --min-lines 12 --min-tokens 80 --reporters console --pattern '**/*.kt' --ignore '**/build/**,**/.gradle/**,**/src/test/**,**/src/androidTest/**' .</code></td><td>Production duplicated lines do not materially exceed the 1.02% baseline; remaining clones are intentional or scheduled.</td></tr>
+          <tr><td>Working tree</td><td><code>git diff --check &amp;&amp; git status --short</code></td><td>No whitespace errors and only in-scope files are changed.</td></tr>
+        </tbody>
+      </table>
+      <h3>Manual system acceptance</h3>
+      <ol>
+        <li>Cold launch and background/foreground the app. The selected tab restores once, startup does not duplicate provider/update work, and navigation remains responsive.</li>
+        <li>Run two Search queries quickly, then navigate away during a third. Only the newest query appears; navigation cancellation causes no later result flash or stuck spinner.</li>
+        <li>Open Search, For You, Creator Profile, Codex, and Recents items in Viewer. Image, video, animated WebP, overview, save/share/download, paging, and back navigation preserve the correct stream context.</li>
+        <li>Save a sparse post, resolve it to richer media, restart, and reopen it. The hydrated snapshot remains durable without duplicate Codex membership.</li>
+        <li>Change source credentials while a route is populated. Source availability updates without recreating unrelated route state.</li>
+        <li>Import/export a Codex, exercise Pixiv auth callback and external post deep links, and verify no secret appears in backup/log output.</li>
+        <li>Install an upgrade over a legacy-data fixture after storage/toolchain migrations. Settings, Codex, recents, likes, credentials, and UI restore behave according to migration policy.</li>
+        <li>After release optimization, install the release-like APK and inspect <code>adb logcat -b crash -d</code>. There must be no new startup, decoder, auth, Gson, or provider-registration crash.</li>
+      </ol>
+    </section>
+
+    <section id="living-log">
+      <h2>Living Log</h2>
+      <h3>Progress</h3>
+      <ul>
+        <li>[x] 2026-07-10 — Completed the code-quality audit and measured build, test, lint, duplication, and connected-device baselines.</li>
+        <li>[x] 2026-07-10 — Defined dependency-ordered phases, explicit UI ownership, subagent file boundaries, validation gates, and recovery rules.</li>
+        <li>[ ] Phase 0 — Establish trustworthy guardrails.</li>
+        <li>[ ] Phase 1 — Repair correctness invariants.</li>
+        <li>[ ] Phase 2 — Bound transport, caches, and disk work.</li>
+        <li>[ ] Phase 3 — Establish the application container and UI state contracts.</li>
+        <li>[ ] Phase 4 — Move UI ownership to route-scoped state holders.</li>
+        <li>[ ] Phase 5 — Consolidate repeated policy and UI primitives.</li>
+        <li>[ ] Phase 6 — Modernize persistence, credentials, and Android tooling safely.</li>
+        <li>[ ] Phase 7 — Make quality budgets durable and close the program.</li>
+      </ul>
+
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li>Production copy-paste is already low at 1.02%. The important duplication is policy and ownership drift, so a mechanical DRY rewrite would create more risk than value.</li>
+        <li>The first connected run passed three tests but the only general Compose app-shell smoke failed reproducibly with no hierarchy. The deterministic unit/build baseline is green while the device UI signal is not.</li>
+        <li>The previous quality plan successfully extracted the graph and shared media/download policy, but dependency creation still lives inside composition and feature growth moved orchestration pressure into the graph and route coordinators.</li>
+        <li>Hitomi's global index records can individually approach the configured multi-megabyte bound, making entry-count-only caching insufficient; the cache budget must be byte-weighted.</li>
+      </ul>
+
+      <h3>Decision Log</h3>
+      <ul>
+        <li><strong>2026-07-10 / Codex:</strong> Fix correctness and observability before UI movement. Rationale: cancellation, request ordering, durability, and CI make subsequent ownership changes diagnosable.</li>
+        <li><strong>2026-07-10 / Codex:</strong> Use an application container without requiring Hilt. Rationale: stable lifetime and testable factories solve the current problem; introducing a DI framework is optional and does not itself clarify ownership.</li>
+        <li><strong>2026-07-10 / Codex:</strong> Route owners expose immutable state and typed actions. Rationale: this makes async ownership visible and allows screens to become renderers without losing feature-specific behavior.</li>
+        <li><strong>2026-07-10 / Codex:</strong> Keep provider protocols and storage implementations explicit. Rationale: common policy should be centralized, but a generic base adapter or repository inheritance would hide meaningful differences.</li>
+        <li><strong>2026-07-10 / Codex:</strong> Prototype DataStore/Room before migration. Rationale: the right store depends on measured write patterns and migration safety; modernization alone is not sufficient justification.</li>
+        <li><strong>2026-07-10 / Codex:</strong> Upgrade libraries, Kotlin/Compose, AGP/Gradle, and R8 in separate waves. Rationale: each layer changes failure modes and must remain independently revertible.</li>
+      </ul>
+
+      <h3>Outcomes And Retrospective</h3>
+      <p>Planning outcome: every audit finding is assigned to an implementation lane and behavior-based acceptance check. Update this section after each phase with what changed, exact commands, device observations, metrics, and any rejected prototype. At completion, record final line counts for the main ownership hotspots, duplication percentage, lint warning count, test counts, CI duration, startup/frame evidence, and storage migration results.</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <ul>
+        <li>All Gradle test, lint, compile, assemble, and reporting commands are safe to rerun. Generated <code>build/</code> outputs are disposable; do not delete user data or unrelated worktree changes.</li>
+        <li>At every phase start, run <code>git status --short</code> and record the baseline. Agents must not use destructive reset/checkout commands. If file ownership overlaps, stop and let the primary integrator reconcile.</li>
+        <li>For route migrations, keep one authoritative owner. If integration fails, revert the route wiring commit or restore the legacy owner as a whole; do not leave both owners mutating state.</li>
+        <li>For persistence migrations, copy legacy fixture files before first migration, use version markers, and make migration retry-safe. Never delete the legacy source until the new store commits and verifies its imported record count/checksum. A failed migration must leave the old data readable.</li>
+        <li>For credential migration, retain the old encrypted entry until the new Keystore value is written and read back. Do not log secret values. Backup exclusions may land before the storage replacement and are safe to keep if the replacement is delayed.</li>
+        <li>For toolchain waves, preserve one green commit before each version change. If a wave fails, revert only that wave; do not compensate with broad lint suppressions, disabled tests, or weakened release checks.</li>
+        <li>For R8, keep shrinking disabled until release-like device acceptance is green. If reflection/serialization breaks, add the narrowest keep rule with a regression test and record it in this plan.</li>
+        <li>To resume after interruption, open this file, read Current Status and the Living Log, inspect <code>working_list.md</code>, then continue from the first unchecked lane whose prerequisites are satisfied.</li>
+      </ul>
+    </section>
+
+    <section id="appendix">
+      <h2>Appendix: Evidence, Commands, And Non-Goals</h2>
+      <details open>
+        <summary>Audit evidence snapshot</summary>
+        <pre><code>Production/test Kotlin and KTS: 49,216 lines
+Largest ownership files:
+  TheoriaApp.kt                 2,839
+  ViewerScreen.kt              2,545
+  SearchScreen.kt              2,354
+  SearchCoordinator.kt         1,954
+  FileBackedRepositories.kt    1,792
+  HitomiSourceAdapter.kt       1,712
+
+jscpd production Kotlin:
+  99 files / 33,484 lines
+  17 clones
+  341 duplicated lines (1.02%)
+  2,359 duplicated tokens (1.20%)
+
+Deterministic gate:
+  ./gradlew lint test :app:assembleDebug --rerun-tasks
+  BUILD SUCCESSFUL; 102 tasks
+
+Connected baseline:
+  3 tests passed
+  TheoriaAppSmokeTest.appShellRendersTopLevelNavigation failed:
+  "No compose hierarchies found"</code></pre>
+      </details>
+      <details>
+        <summary>Intentionally preserved duplication and boundaries</summary>
+        <ul>
+          <li>File-backed and in-memory repositories remain separate implementations; only pure policy and contract tests are shared.</li>
+          <li>Local persistence records and Codex share wire snapshots remain separate trust/version boundaries.</li>
+          <li>Provider adapters retain provider-specific requests, auth, fallback, parsing, and health probes.</li>
+          <li>Search and Viewer may retain tiny request wrappers when they intentionally select different animation/crossfade behavior while delegating shared media policy.</li>
+          <li>Pixiv ugoira encoder drain phases remain explicit unless a tested extraction materially improves correctness.</li>
+          <li>Live-provider checks remain outside the deterministic PR gate because third-party availability is not controlled by this repository.</li>
+        </ul>
+      </details>
+      <details>
+        <summary>Explicit non-goals</summary>
+        <ul>
+          <li>No visual redesign, navigation redesign, provider protocol rewrite, or feature removal unless a named audit decision such as AIBooru support requires it.</li>
+          <li>No mandatory Hilt/Koin adoption. A small explicit container is preferred until framework value is demonstrated.</li>
+          <li>No all-at-once Room migration. Only measured, high-value stores migrate.</li>
+          <li>No broad formatting-only rewrite and no arbitrary file-size target achieved by moving code without clarifying ownership.</li>
+          <li>No weakening of TLS, byte-range identity encoding, cancellation propagation, decoder bounds, or release version/tag invariants.</li>
+        </ul>
+      </details>
+      <details>
+        <summary>Phase handoff template for subagents</summary>
+        <pre><code>Objective:
+Owned files/directories:
+Off-limits files:
+Prerequisites and baseline commit:
+Required behavior:
+Focused commands:
+Expected observations:
+Files changed:
+Validation output:
+Risks or decisions needed:
+Stop condition reached: yes/no</code></pre>
+      </details>
+    </section>
+  </main>
+</body>
+</html>

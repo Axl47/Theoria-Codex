@@ -59,13 +59,20 @@ chore(release): prepare vX.Y.Z
 Publish only when the user explicitly asks to publish the named version.
 
 1. Confirm `main` is pushed and the target commit is the approved release commit.
-2. Create an annotated tag:
+2. Create an annotated tag whose message is the checked-in, approved changelog:
 
    ```sh
    git tag -a --cleanup=verbatim vX.Y.Z -F release-notes/vX.Y.Z.md
    ```
 
-3. Push `main` and that exact tag.
-4. Report that GitHub Actions will verify the contract, build/sign the APK, and publish the prerelease.
+3. Before pushing, verify that the tag points to the approved release commit and that its annotation exactly matches `release-notes/vX.Y.Z.md`:
+
+   ```sh
+   test "$(git rev-list -n 1 vX.Y.Z)" = "$(git rev-parse HEAD)"
+   test "$(git tag -l --format='%(contents)' vX.Y.Z)" = "$(cat release-notes/vX.Y.Z.md)"
+   ```
+
+4. Push `main` and that exact tag.
+5. Report that GitHub Actions will verify the contract, build/sign the APK, and publish the prerelease.
 
 If any check fails, stop before tagging. Fix the release commit and prepare a newer version rather than altering a published tag.
