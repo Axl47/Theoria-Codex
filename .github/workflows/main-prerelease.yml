@@ -73,7 +73,7 @@ jobs:
             echo "Missing curated release notes: $RELEASE_NOTES_FILE"
             exit 1
           fi
-          if ! cmp -s <(git tag -l --format='%(contents)' "$RELEASE_TAG") "$RELEASE_NOTES_FILE"; then
+          if [ "$(git tag -l --format='%(contents)' "$RELEASE_TAG")" != "$(cat "$RELEASE_NOTES_FILE")" ]; then
             echo "$RELEASE_TAG annotation must exactly match $RELEASE_NOTES_FILE"
             exit 1
           fi
