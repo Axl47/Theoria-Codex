@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-11T03:00:00-04:00
+updated_at: 2026-07-11T03:33:20-04:00
 ---
 # Working List
 
@@ -8,13 +8,21 @@ updated_at: 2026-07-11T03:00:00-04:00
 
 ### In Progress
 
-- [ ] Phase 7: enforce quality budgets, complete system acceptance, and close the program
-
 ### Pending
 
-- [ ] Final deterministic gate, documentation closeout, and audit comparison
-
 ### Done
+
+- [x] Phase 7: enforce quality budgets, complete system acceptance, and close the program
+  - [x] 7A: make coverage, complexity, duplication, dependency, and architecture budgets durable
+    - Evidence: Kover reports 55.57% aggregate line coverage against a 55% floor and the exact staged core diff passes 85.71% against the 60% changed-line threshold; missing eligible sources fail closed; strict Detekt 15/60/600 thresholds use checked historical baselines; architecture source guards, Dependabot, dependency submission, and the 0.7% duplication ceiling are active
+  - [x] 7B: close lint, manifest, orientation, and resource correctness findings
+    - Evidence: app lint fell from 81 findings to nine dependency-update signals with no remaining source/resource correctness warning or hint; Room lint is clean; obsolete Rule34 assets, resource qualifiers, icon/monochrome metadata, manifest filters, orientation policy, modifier order, and primitive Compose state are corrected
+  - [x] 7C: complete the final behavior and ownership review
+    - Evidence: updater install identity/reconciliation, intent handoff, FileProvider grants, durable one-shot PKCE, cancellation-safe terminal completion, keyed ViewModel route leases, and architecture boundaries have focused JVM/device tests; the final independent staged review found no blocker
+  - [x] 7D: close current-facing documentation and audit metrics
+    - Evidence: README and AGENTS now identify the application container, route owners, production stores/migrations, deterministic/live/device lanes, quality budgets, release optimizer, and retained follow-ups; the ExecPlan records final hotspot, duplication, lint, coverage, test, device, startup, and migration evidence
+  - [x] Phase 7 gate
+    - Evidence: the 307-task integrated Gradle gate passed core/app tests, app and Room lint, Android-test compilation, strict Detekt, aggregate Kover verification, debug/release APKs, and the R8 mapping proof; 772 JVM executions report zero failures/errors and three opt-in skips; production duplication is 206 lines / 0.66%; the final six-test PKCE device class passed on API 37
 
 - [x] Phase 6: modernize persistence, credentials, and Android tooling in reversible waves
   - [x] 6A: migrate settings and UI restoration to typed asynchronous DataStore files

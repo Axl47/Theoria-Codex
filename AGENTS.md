@@ -46,6 +46,12 @@ Main-Viewer animated WebP uses the controllable bounded `awebp` path on every AP
 
 Viewer video prefetch requests at most the first 16 MiB and caches only a response proven to be a complete small representation. Partial or larger media stays remote and streams through Media3 with source headers; transport failures remain nonfatal and cancellation must propagate.
 
+## Architecture And Quality Gates
+
+`TheoriaApplication` owns one asynchronously initialized `TheoriaAppContainer`; Compose must not construct repositories, transports, registries, coordinators, or file-backed stores. Search, Viewer, For You, and Creator each use one navigation-scoped ViewModel for immutable state, asynchronous jobs, paging, and typed effects. Cross-route handles are weak, keyed to the owning ViewModel lifetime, and must not become a second state owner.
+
+The maintainability lane runs Detekt, Kover, `jscpd`, architecture source guards, and coverage-helper tests. Detekt uses normal complexity thresholds plus checked historical baselines; do not raise thresholds or regenerate a baseline to hide a new violation. Aggregate line coverage has a 55% floor. The 60% changed-line gate intentionally names JVM/core modules and fails if an eligible source is absent from Kover; Android/Compose runtime behavior is covered by the per-change API 37 device lane, with API 27 and minified release acceptance in the extended scheduled/manual lane. New platform-free app policy should move into a JVM module and be added to the changed-line gate rather than being excluded as Android code.
+
 ## Releases
 
 GitHub prereleases are created only by pushing an annotated `vX.Y.Z` tag. The tagged commit must declare the same `versionName`, its calculated Android `versionCode` (`1_500_000_000 + major * 10_000 + minor * 100 + patch`), and a curated `release-notes/vX.Y.Z.md` file. Do not use a low sequential version code: existing installs and the updater already compare against this high SemVer-derived range.

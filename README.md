@@ -50,25 +50,30 @@ THEORIA_RULE34XXX_API_KEY
 
 - `app`: Android Compose shell, top-level navigation, viewer/search/codex/settings screens, source account flows, deep links, update UI, and app-level coordinators.
 - `core-domain`: immutable domain models, source adapter contracts, query state, capability gates, unified search orchestration, and recommendation primitives.
-- `core-data`: repository contracts plus file-backed and in-memory implementations for Codex, Search state, Recents, Settings, Likes, cache snapshots, and UI restore.
+- `core-data`: storage-independent repository contracts, shared policy, DataStore-backed Settings/UI restore, and the remaining bounded atomic-file repositories.
+- `core-data-android`: Room ownership for Codex membership, versioned post snapshots, and profile Likes, including verified legacy migration.
 - `core-sources`: real source integrations, HTTP infrastructure, source helper policy, media MIME helpers, and opt-in live provider health tooling.
 - `core-stubs`: fixture-backed source adapters and provider contract tests for deterministic development and CI coverage.
+- `baseline-profile`: connected cold-start and top-level-navigation profile generation for the optimized release app.
 
-`TheoriaApp.kt` remains the main Compose workflow shell. Construction of repositories, source clients, credentials, update services, and coordinators is centralized in `app/src/main/java/com/theoriacodex/app/ui/TheoriaAppGraph.kt`.
+`TheoriaApplication` creates one asynchronous `TheoriaAppContainer` in `app/src/main/java/com/theoriacodex/app/di/TheoriaAppContainer.kt`. That container owns repositories, source clients, credentials, updates, coordinators, and cross-repository workflows; Compose only resolves the ready container.
+
+Search, Viewer, For You, and Creator each have a navigation-scoped ViewModel that owns immutable UI state, request identity, paging, and effects. Their composables render state and forward typed actions. `TheoriaApp.kt` remains the navigation and Android-effect host, and cross-route access uses weak ViewModel-lifetime handles rather than a second mutable state owner.
 
 ## Local Persistence
 
-Runtime state is local-first and stored under the app files directory in `theoria_codex`. Important files and folders include:
+Runtime state is local-first. The production owners are:
 
-- `codex_store.json`: codices, codex items, and saved post records.
-- `query_store.json`: applied queries and scroll offsets.
-- `recents_store.json`: watched posts, applied searches, and combined activity history.
-- `settings_store.json`: source settings, profiles, favorite tags, blacklists, viewer settings, provider health snapshots, and cache preferences.
-- `likes_store.json`: profile-scoped liked posts used by For You.
-- `ui_restore_store.json`: last selected tab, search scroll state, and viewer launch context.
-- `tag_suggestions.json`: learned/cached tag suggestions seeded from the bundled `tag_store.json` asset.
-- `update_state.json`: startup updater state, ignored/remind-later choices, pending install metadata, and changelog state.
-- `cache/thumbnails` and `cache/full`: local media cache folders.
+- `databases/theoria_content.db`: Room owns Codices, ordered membership, reusable versioned post snapshots, profile Likes, and cross-boundary transactions.
+- `theoria_codex/settings_store_v3.json`: typed DataStore file for source settings, profiles, favorites, blacklists, Viewer settings, health snapshots, and cache preferences.
+- `theoria_codex/ui_restore_store_v2.json`: typed DataStore file for the selected tab, Search scroll state, and Viewer launch restoration.
+- `theoria_codex/query_store.json`: applied queries and scroll offsets.
+- `theoria_codex/recents_store.json`: watched posts, applied searches, and combined activity history.
+- `theoria_codex/tag_suggestions.json`: learned/cached tag suggestions seeded from the bundled `tag_store.json` asset.
+- `theoria_codex/update_state.json`: startup updater state, ignored/remind-later choices, pending install metadata, and changelog state.
+- `theoria_codex/cache/thumbnails` and `theoria_codex/cache/full`: local media cache folders.
+
+Legacy `codex_store.json`, `likes_store.json`, `settings_store.json`, and `ui_restore_store.json` files are one-time migration inputs. Migration verifies schemas, keys, relationships, counts, hashes, and destination state before archiving any source; conflict or drift fails closed. Source credentials and pending Pixiv PKCE sessions use separate bounded AES-GCM envelopes under `noBackupFilesDir`, backed by Android Keystore and excluded from device transfer.
 
 ## Deep Links And Imports
 
@@ -77,6 +82,8 @@ The Android manifest handles Pixiv auth callbacks, source post/profile links for
 ## Releases And Updates
 
 Release builds enable the startup updater. The updater reads GitHub prereleases for the `main` channel, expects the fixed APK asset name `theoria-codex-main.apk`, validates version metadata/signature, and launches Android's package installer. Debug builds disable the updater and use `applicationIdSuffix ".debug"` plus `versionNameSuffix "-debug"`, so debug and release installs have separate app storage.
+
+Shipping releases enable R8 and resource shrinking. Durable Gson field names are explicit and every release assembly verifies the optimizer mapping against the checked contract manifest. Checked-in baseline/startup profiles cover cold start and all five top-level destinations. The separate `releaseAcceptance` variant keeps the same optimizer behavior but uses a debug key and updater-disabled package identity for non-debuggable device acceptance.
 
 Main-channel releases are deliberate, not made for every push to `main`. A release commit updates `versionName`, its matching SemVer-derived `versionCode`, and `release-notes/v<major>.<minor>.<patch>.md`; pushing the matching annotated `v<major>.<minor>.<patch>` tag starts `.github/workflows/main-prerelease.yml`. The workflow verifies those three pieces agree, signs the APK, and publishes the checked-in user-facing notes. The Android code uses `1_500_000_000 + major * 10_000 + minor * 100 + patch`, preserving the updater’s existing ordering contract.
 
@@ -92,9 +99,23 @@ From the project root, run the deterministic test lane:
 
 ```sh
 ./gradlew :core-domain:test :core-data:test :core-stubs:test :core-sources:test
-./gradlew :app:testDebugUnitTest
-./gradlew lintDebug
+./gradlew :core-data-android:testDebugUnitTest :core-data-android:lintDebug
+./gradlew :app:testDebugUnitTest :app:lint :app:compileDebugAndroidTestKotlin
 ```
+
+Run the maintainability lane:
+
+```sh
+npm ci
+npm run audit:duplicates
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+./gradlew :app:detektDebug :core-data-android:detektDebug \
+  :core-domain:detektMain :core-data:detektMain \
+  :core-sources:detektMain :core-stubs:detektMain
+./gradlew :koverXmlReport :koverVerify
+```
+
+CI holds total line coverage at 55%, requires at least 60% changed-line coverage in the explicitly listed JVM/core modules, and fails closed if an eligible source is missing from the report. Android/Compose behavior is runtime-validated separately so instrumentation-only code is not mislabeled as uncovered JVM code.
 
 Build before installing or running on a device/emulator:
 
@@ -114,6 +135,8 @@ Run it only when an Android target is attached:
 ```sh
 ./gradlew :app:connectedDebugAndroidTest
 ```
+
+Android-related pull requests and main pushes run the deterministic suite on API 37. The scheduled/manual extended workflow also runs API 27 plus the minified release-acceptance cold-start/callback check. Provider-live instrumentation remains opt-in and is not part of the deterministic device result.
 
 Opt-in live provider health report:
 
