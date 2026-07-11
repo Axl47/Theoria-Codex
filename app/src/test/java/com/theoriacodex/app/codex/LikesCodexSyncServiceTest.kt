@@ -1,9 +1,8 @@
 package com.theoriacodex.app.codex
 
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.app.testing.InMemoryCodexLikesTransactions
 import com.theoriacodex.data.repository.CodexSortMode
-import com.theoriacodex.data.repository.InMemoryCodexRepository
-import com.theoriacodex.data.repository.InMemoryLikesRepository
 import com.theoriacodex.data.repository.RecommendationProfile
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -16,9 +15,10 @@ import org.junit.Test
 class LikesCodexSyncServiceTest {
     @Test
     fun `toggle keeps likes and system Codex membership aligned`() = runTest {
-        val likes = InMemoryLikesRepository()
-        val codices = InMemoryCodexRepository()
-        val service = LikesCodexSyncService(likes, codices)
+        val transactions = InMemoryCodexLikesTransactions()
+        val likes = transactions.likes
+        val codices = transactions.codices
+        val service = LikesCodexSyncService(transactions, codices)
         val profile = RecommendationProfile("profile-main", "Main")
         val post = testPost(sourcePostId = "liked")
 
@@ -42,19 +42,24 @@ class LikesCodexSyncServiceTest {
 
     @Test
     fun `clear and remove profile Codex are idempotent`() = runTest {
-        val likes = InMemoryLikesRepository()
-        val codices = InMemoryCodexRepository()
-        val service = LikesCodexSyncService(likes, codices)
+        val transactions = InMemoryCodexLikesTransactions()
+        val likes = transactions.likes
+        val codices = transactions.codices
+        val service = LikesCodexSyncService(transactions, codices)
         val profile = RecommendationProfile("profile-alt", "Alt")
         service.toggle(profile, testPost(sourcePostId = "one"), listOf("tag"))
         service.toggle(profile, testPost(sourcePostId = "two"), listOf("tag"))
+        val independentlySaved = testPost(sourcePostId = "manual")
+        codices.addItem(likesCodexIdForProfile(profile.profileId), independentlySaved)
 
         service.clearProfile(profile.profileId)
         assertTrue(likes.observeLikes(profile.profileId).first().isEmpty())
-        assertTrue(
-            codices.observeCodexPosts(likesCodexIdForProfile(profile.profileId), CodexSortMode.NEWEST_SAVED)
-                .first()
-                .isEmpty()
+        assertEquals(
+            listOf(independentlySaved.id),
+            codices.observeCodexPosts(
+                likesCodexIdForProfile(profile.profileId),
+                CodexSortMode.NEWEST_SAVED,
+            ).first().map { post -> post.id },
         )
 
         service.removeProfileCodex(profile.profileId)

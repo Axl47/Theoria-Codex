@@ -94,6 +94,82 @@ interface LikesRepository {
     suspend fun clearLikes(profileId: String)
 }
 
+data class CodexBulkImportResult(
+    val codex: Codex,
+    /** Valid unique posts accepted by the transaction, including existing membership. */
+    val acceptedPosts: Int,
+    /** Membership rows newly inserted by this transaction. */
+    val insertedMemberships: Int,
+)
+
+data class CodexBulkReorderResult(
+    /** False when the requested ids were not one complete, duplicate-free permutation. */
+    val applied: Boolean,
+    val movedCodices: Int,
+)
+
+data class CodexLikeSyncResult(
+    val nowLiked: Boolean,
+    /** Whether system-Codex membership changed along with the like. */
+    val membershipChanged: Boolean,
+)
+
+data class CodexLikesClearResult(
+    val clearedLikes: Int,
+    /** Only memberships matching the profile's liked post ids are removed. */
+    val removedMemberships: Int,
+)
+
+data class CodexProfileDeleteResult(
+    val clearedLikes: Int,
+    val systemCodexDeleted: Boolean,
+)
+
+/**
+ * Optional repository capability for operations that cross Codex and Likes ownership.
+ *
+ * Implementations must commit each method atomically. Ordinary [CodexRepository] and
+ * [LikesRepository] remain the narrow read/write contracts for callers touching one aggregate.
+ * Callers can opt into this capability when both repositories are backed by one transactional
+ * store, without making Room or another database part of the domain-facing API.
+ */
+interface CodexLikesTransactions {
+    suspend fun importCodex(
+        codexId: String,
+        name: String,
+        posts: List<Post>,
+    ): CodexBulkImportResult
+
+    /** Applies one complete order in one commit; partial or duplicate orders are rejected. */
+    suspend fun reorderCodices(codexIdsInOrder: List<String>): CodexBulkReorderResult
+
+    suspend fun toggleLikeAndSyncSystemCodex(
+        profileId: String,
+        systemCodexId: String,
+        systemCodexName: String,
+        post: Post,
+        tags: List<String>,
+    ): CodexLikeSyncResult
+
+    /**
+     * Clears a profile's likes and removes only the corresponding system-Codex memberships.
+     * Any independently saved membership in that Codex is retained.
+     */
+    suspend fun clearLikesAndLikedMemberships(
+        profileId: String,
+        systemCodexId: String,
+    ): CodexLikesClearResult
+
+    /** Profile deletion owns both its likes and its entire profile-specific system Codex. */
+    suspend fun clearLikesAndDeleteSystemCodex(
+        profileId: String,
+        systemCodexId: String,
+    ): CodexProfileDeleteResult
+
+    /** Destructive reset used only by an explicit whole-content recovery flow. */
+    suspend fun clearAllContent()
+}
+
 private val DEFAULT_SOURCE_WEIGHTS: Map<SourceKey, Double> = mapOf(
     SourceKey.PIXIV to 0.25,
     SourceKey.GELBOORU to 0.18,

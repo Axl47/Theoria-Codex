@@ -21,8 +21,8 @@ class DataStoreStorageTest {
         live.writeBytes(bytes)
         archive.writeBytes(bytes)
 
-        archiveLegacyFile(live, archive)
-        archiveLegacyFile(live, archive)
+        archiveVerifiedLegacyFile(live, archive)
+        archiveVerifiedLegacyFile(live, archive)
 
         assertFalse(live.exists())
         assertArrayEquals(bytes, archive.readBytes())
@@ -36,7 +36,7 @@ class DataStoreStorageTest {
         live.writeText("live")
         archive.writeText("different")
 
-        assertThrows(IllegalStateException::class.java) { archiveLegacyFile(live, archive) }
+        assertThrows(IllegalStateException::class.java) { archiveVerifiedLegacyFile(live, archive) }
 
         assertTrue(live.isFile)
         assertTrue(archive.isFile)

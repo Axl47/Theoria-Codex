@@ -18,5 +18,6 @@ rootProject.name = "Theoria Codex"
 include(":app")
 include(":core-domain")
 include(":core-data")
+include(":core-data-android")
 include(":core-stubs")
 include(":core-sources")

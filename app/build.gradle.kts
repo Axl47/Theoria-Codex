@@ -83,6 +83,7 @@ kotlin {
 dependencies {
     implementation(project(":core-domain"))
     implementation(project(":core-data"))
+    implementation(project(":core-data-android"))
     implementation(project(":core-sources"))
 
     implementation(libs.androidx.core.ktx)

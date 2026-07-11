@@ -25,9 +25,8 @@ import com.theoriacodex.app.update.UpdateStateStore
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.CodexRepository
+import com.theoriacodex.data.repository.CodexLikesTransactions
 import com.theoriacodex.data.repository.FileBackedCacheRepository
-import com.theoriacodex.data.repository.FileBackedCodexRepository
-import com.theoriacodex.data.repository.FileBackedLikesRepository
 import com.theoriacodex.data.repository.FileBackedQueryRepository
 import com.theoriacodex.data.repository.FileBackedRecentsRepository
 import com.theoriacodex.data.repository.DataStoreSettingsRepository
@@ -37,6 +36,12 @@ import com.theoriacodex.data.repository.QueryRepository
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
+import com.theoriacodex.data.android.room.LegacyArchiveResult
+import com.theoriacodex.data.android.room.LegacyJsonImportResult
+import com.theoriacodex.data.android.room.LegacyJsonMigrationException
+import com.theoriacodex.data.android.room.RoomCodexLikesRepository
+import com.theoriacodex.data.android.room.RoomLegacyJsonImporter
+import com.theoriacodex.data.android.room.TheoriaRoomDatabase
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.RealAdapterRegistry
@@ -140,8 +145,12 @@ internal class DefaultTheoriaAppContainer(
         availableSourceState = accountStore.availableSources,
     )
 
-    private val codexRepository = FileBackedCodexRepository(storageDirectory)
-    private val likesRepository = FileBackedLikesRepository(storageDirectory)
+    private val contentDatabase = TheoriaRoomDatabase.create(appContext)
+    private val contentRepository = RoomCodexLikesRepository(contentDatabase)
+    private val contentImporter = RoomLegacyJsonImporter(contentDatabase)
+    private val codexRepository: CodexRepository = contentRepository
+    private val likesRepository: LikesRepository = contentRepository
+    private val codexLikesTransactions: CodexLikesTransactions = contentRepository
     private val queryRepository = FileBackedQueryRepository(storageDirectory)
     private val recentsRepository = FileBackedRecentsRepository(storageDirectory)
     private val settingsRepository = DataStoreSettingsRepository(
@@ -223,11 +232,12 @@ internal class DefaultTheoriaAppContainer(
 
     override val workflows = WorkflowDependencies(
         likesCodexSync = LikesCodexSyncService(
-            likesRepository = likesRepository,
+            transactions = codexLikesTransactions,
             codexRepository = codexRepository,
         ),
         codexTransfer = CodexTransferService(
             codexRepository = codexRepository,
+            transactions = codexLikesTransactions,
             cacheRepository = cacheRepository,
             sourceRegistry = sourceRegistry,
         ),
@@ -237,7 +247,43 @@ internal class DefaultTheoriaAppContainer(
     suspend fun awaitDurableStores() = coroutineScope {
         val settingsReady = async { settingsRepository.awaitReady() }
         val uiRestoreReady = async { uiRestoreRepository.awaitReady() }
+        val contentReady = async { awaitContentStore() }
         settingsReady.await()
         uiRestoreReady.await()
+        contentReady.await()
+    }
+
+    private suspend fun awaitContentStore() {
+        when (val imported = contentImporter.importIfNeeded(storageDirectory)) {
+            is LegacyJsonImportResult.Imported,
+            is LegacyJsonImportResult.AdoptedVerifiedDestination,
+            is LegacyJsonImportResult.AlreadyImported -> Unit
+
+            is LegacyJsonImportResult.SplitBrain -> throw LegacyJsonMigrationException(
+                "Legacy Codex/Likes data changed after its verified Room migration",
+            )
+            is LegacyJsonImportResult.DestinationConflict -> throw LegacyJsonMigrationException(
+                "Room Codex/Likes data conflicts with the retained legacy snapshot",
+            )
+            is LegacyJsonImportResult.DestinationDrift -> throw LegacyJsonMigrationException(
+                "Room Codex/Likes data no longer matches its verified migration proof",
+            )
+            is LegacyJsonImportResult.InvalidStoredProof -> throw LegacyJsonMigrationException(
+                "Room Codex/Likes migration proof is invalid: ${imported.reason}",
+            )
+        }
+        when (val archived = contentImporter.archiveImportedSources(storageDirectory)) {
+            is LegacyArchiveResult.Complete -> Unit
+            LegacyArchiveResult.NotImported -> throw LegacyJsonMigrationException(
+                "Room Codex/Likes migration completed without a durable proof",
+            )
+            is LegacyArchiveResult.InvalidStoredProof -> throw LegacyJsonMigrationException(
+                "Room Codex/Likes archive proof is invalid: ${archived.reason}",
+            )
+            is LegacyArchiveResult.Partial -> throw LegacyJsonMigrationException(
+                "Room Codex/Likes legacy archive is incomplete for ${archived.blockedFile}: " +
+                    archived.reason,
+            )
+        }
     }
 }

@@ -42,6 +42,7 @@ class TheoriaAppContainerDeviceTest {
         assertSame(first.updates, second.updates)
         assertSame(first.features, second.features)
         assertSame(first.workflows, second.workflows)
+        assertSame(first.data.codexRepository, first.data.likesRepository)
         assertSame(firstRegistry, second.sources.registry)
         assertSame(firstSearch, second.features.search)
     }

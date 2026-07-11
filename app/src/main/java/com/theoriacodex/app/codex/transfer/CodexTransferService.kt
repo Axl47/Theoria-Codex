@@ -7,6 +7,7 @@ import com.theoriacodex.app.codex.resolveCodexShareImportPost
 import com.theoriacodex.app.codex.sanitizeCodexExportName
 import com.theoriacodex.app.codex.selectCodexShareEntries
 import com.theoriacodex.data.repository.CacheRepository
+import com.theoriacodex.data.repository.CodexLikesTransactions
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
@@ -37,6 +38,7 @@ sealed interface CodexImportResult {
 /** Platform-free Codex JSON transfer; ContentResolver/FileProvider remain shell effects. */
 class CodexTransferService internal constructor(
     private val codexRepository: CodexRepository,
+    private val transactions: CodexLikesTransactions,
     private val cacheRepository: CacheRepository,
     private val sourceRegistry: SourceAdapterRegistry,
     private val gson: Gson = Gson(),
@@ -62,9 +64,8 @@ class CodexTransferService internal constructor(
         val title = parsed.title?.trim().orEmpty()
         if (title.isBlank()) return CodexImportResult.Invalid
 
-        val target = codexRepository.ensureCodex(codexId = targetCodexId, name = title)
         val entries = selectCodexShareEntries(parsed.posts.orEmpty())
-        var imported = 0
+        val resolvedPosts = mutableListOf<com.theoriacodex.domain.model.Post>()
         entries.forEach { (entry, postId) ->
             val sourcePost = sourceRegistry.adapterFor(postId.source)?.let { adapter ->
                 runCatchingPreservingCancellation { adapter.resolvePost(postId) }.getOrNull()
@@ -74,14 +75,22 @@ class CodexTransferService internal constructor(
                 resolvedFromSource = sourcePost,
                 storedPost = { codexRepository.getPost(postId) },
             ) ?: return@forEach
-            codexRepository.addItem(target.codexId, resolved)
-            cacheRepository.cacheThumbnail(resolved)
-            imported += 1
+            resolvedPosts += resolved
+        }
+        val committed = transactions.importCodex(
+            codexId = targetCodexId,
+            name = title,
+            posts = resolvedPosts,
+        )
+        resolvedPosts.forEach { resolved ->
+            runCatchingPreservingCancellation {
+                cacheRepository.cacheThumbnail(resolved)
+            }
         }
         return CodexImportResult.Success(
-            codexId = target.codexId,
-            imported = imported,
-            skipped = entries.size - imported,
+            codexId = committed.codex.codexId,
+            imported = committed.acceptedPosts,
+            skipped = entries.size - resolvedPosts.size,
         )
     }
 }

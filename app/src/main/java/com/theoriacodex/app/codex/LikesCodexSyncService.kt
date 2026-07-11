@@ -1,15 +1,14 @@
 package com.theoriacodex.app.codex
 
 import com.theoriacodex.data.repository.CodexRepository
-import com.theoriacodex.data.repository.LikesRepository
+import com.theoriacodex.data.repository.CodexLikesTransactions
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.domain.model.Post
 import java.util.UUID
-import kotlinx.coroutines.flow.first
 
 /** Keeps the system Likes Codex and the profile's LikesRepository membership in one transaction flow. */
 class LikesCodexSyncService internal constructor(
-    private val likesRepository: LikesRepository,
+    private val transactions: CodexLikesTransactions,
     private val codexRepository: CodexRepository,
 ) {
     suspend fun toggle(
@@ -17,53 +16,42 @@ class LikesCodexSyncService internal constructor(
         post: Post,
         trainingTags: List<String>,
     ): Boolean {
-        val nowLiked = likesRepository.toggleLike(
+        return transactions.toggleLikeAndSyncSystemCodex(
             profileId = profile.profileId,
-            postId = post.id,
+            systemCodexId = likesCodexIdForProfile(profile.profileId),
+            systemCodexName = likesCodexNameForProfile(profile),
+            post = post,
             tags = trainingTags,
-        )
-        val codexId = ensureProfileCodex(profile)
-        if (nowLiked) {
-            codexRepository.addItem(codexId, post)
-        } else {
-            codexRepository.removeItem(
-                codexId = codexId,
-                sourceKey = post.id.source,
-                sourcePostId = post.id.sourcePostId,
-            )
-        }
-        return nowLiked
+        ).nowLiked
     }
 
     suspend fun clearProfile(profileId: String) {
-        val likes = likesRepository.observeLikes(profileId).first()
-        likesRepository.clearLikes(profileId)
-        likes.forEach { liked ->
-            codexRepository.removeItem(
-                codexId = likesCodexIdForProfile(profileId),
-                sourceKey = liked.postId.source,
-                sourcePostId = liked.postId.sourcePostId,
-            )
-        }
+        transactions.clearLikesAndLikedMemberships(
+            profileId = profileId,
+            systemCodexId = likesCodexIdForProfile(profileId),
+        )
     }
 
     suspend fun removeProfileCodex(profileId: String) {
-        val codexId = likesCodexIdForProfile(profileId)
-        if (codexRepository.observeCodex(codexId).first() != null) {
-            codexRepository.deleteCodex(codexId)
-        }
+        transactions.clearLikesAndDeleteSystemCodex(
+            profileId = profileId,
+            systemCodexId = likesCodexIdForProfile(profileId),
+        )
     }
 
     suspend fun ensureProfileCodex(profile: RecommendationProfile): String {
-        val name = if (profile.name.equals(DEFAULT_PROFILE_NAME, ignoreCase = true)) {
-            LIKES_CODEX_NAME
-        } else {
-            "$LIKES_CODEX_NAME (${profile.name})"
-        }
         return codexRepository.ensureCodex(
             codexId = likesCodexIdForProfile(profile.profileId),
-            name = name,
+            name = likesCodexNameForProfile(profile),
         ).codexId
+    }
+}
+
+private fun likesCodexNameForProfile(profile: RecommendationProfile): String {
+    return if (profile.name.equals(DEFAULT_PROFILE_NAME, ignoreCase = true)) {
+        LIKES_CODEX_NAME
+    } else {
+        "$LIKES_CODEX_NAME (${profile.name})"
     }
 }
 

@@ -25,24 +25,11 @@ internal object RepositoryPolicies {
         existingCodices: List<Codex>,
         excludeCodexId: String? = null,
     ): String {
-        val baseName = requestedName.trim().ifBlank { "Codex" }
-        val occupiedNames = existingCodices
-            .asSequence()
-            .filter { codex -> codex.codexId != excludeCodexId }
-            .map { codex -> codex.name.trim().lowercase() }
-            .toSet()
-        if (baseName.lowercase() !in occupiedNames) {
-            return baseName
-        }
-
-        var suffix = 2
-        while (true) {
-            val candidate = "$baseName $suffix"
-            if (candidate.lowercase() !in occupiedNames) {
-                return candidate
-            }
-            suffix += 1
-        }
+        return CodexLikesPolicy.resolveUniqueCodexName(
+            requestedName = requestedName,
+            existingCodices = existingCodices,
+            excludeCodexId = excludeCodexId,
+        )
     }
 
     fun reorderCodices(
@@ -400,19 +387,14 @@ internal object RepositoryPolicies {
     }
 
     fun normalizeLikedTags(tags: List<String>): List<String> {
-        return tags
-            .asSequence()
-            .map(String::trim)
-            .filter(String::isNotBlank)
-            .distinctBy(String::lowercase)
-            .toList()
+        return CodexLikesPolicy.normalizeLikedTags(tags)
     }
 
     fun normalizeFavoriteTag(source: SourceKey, tag: String): String {
         return normalizeFavoriteTagForStorage(source, tag)
     }
 
-    fun normalizeProfileId(profileId: String): String = profileId.trim()
+    fun normalizeProfileId(profileId: String): String = CodexLikesPolicy.normalizeProfileId(profileId)
 
     fun toggleLike(
         likesByProfile: Map<String, Map<PostId, LikedPost>>,

@@ -11,15 +11,18 @@ updated_at: 2026-07-10T23:59:00-04:00
 - [ ] Phase 6: modernize persistence, credentials, and Android tooling in reversible waves
   - [x] 6A: migrate settings and UI restoration to typed asynchronous DataStore files
     - Evidence: both stores import legacy JSON once with schema/hash/count proofs, archive only after verification, fail closed on newer schemas, bound retained records, and publish the application graph only after readiness without blocking `Application.onCreate`
-  - [ ] 6B: promote the transactional Room Codex/Likes prototype after the Kotlin 2 compiler wave
-    - Evidence: the additive Room 2.8.4 prototype exports schema v1 and proves atomic repository operations; registration and live binding remain intentionally deferred because Kotlin 1.9 cannot read its Kotlin 2.1 metadata
+  - [x] 6B: promote the transactional Room Codex/Likes prototype after the Kotlin 2 compiler wave
+    - Evidence: Room 2.8.4 owns Codices, Likes, versioned post snapshots, ordering, and migration proofs in one schema-v1 database; 19 Robolectric transaction/migration tests and the exported-schema Android test compile pass
   - [x] 6C: replace the live credential writer with a versioned Android Keystore envelope
     - Evidence: AES-256-GCM snapshots are bounded, atomically written, read-back verified, backup-excluded, retry-safe across legacy migration, and never auto-deleted on corruption or key mismatch; Android tests compile while device execution remains queued
   - [x] Phase 6 storage wave gate
     - Evidence: `./gradlew lint test :app:assembleDebug :app:compileDebugAndroidTestKotlin --rerun-tasks` passed 110 tasks and 1,099 configured test executions with 0 failures/errors; lint reports 111 known warnings
   - [x] 6E: migrate Kotlin and Compose compiler tooling
     - Evidence: Kotlin 2.0.21, the matching Compose compiler plugin, typed JVM compiler options, and explicit JSpecify compilation passed a clean 110-task gate with 1,099 configured test executions; this is the newest metadata level supported by the current AGP 8.5 lint/R8 boundary
-  - [ ] 6B integration: finish reviewed Room hardening, register the module, and move Codex/Likes to one transactional owner
+  - [x] 6B integration: finish reviewed Room hardening, register the module, and move Codex/Likes to one transactional owner
+    - Evidence: application readiness imports and verifies the legacy JSON pair before archiving either source; one repository instance backs both interfaces and cross-boundary workflows, preserving manual Likes-Codex saves while making toggles, clears, profile deletion, reorder, and bulk import atomic
+  - [x] Phase 6 Room gate
+    - Evidence: the normal parallel full gate passed 229 tasks and 747 configured test executions with debug/release APKs, app and Room lint, Room/app Android-test compilation, 0 failures/errors, 86 app warnings, and 1 Room compile-SDK warning; a final lossless-migration review then added a green 10-test importer gate covering every key-bearing row, duplicate, relationship, future schema, and archive crash window
   - [x] 6F: advance Android packaging to AGP 9.1.1 and Gradle 9.3.1 on JDK 17
     - Evidence: clean lint/tests, debug APK, release APK, and Android-test compilation passed 131 tasks; the wrapper checksum is pinned and the temporary external-Kotlin opt-out is explicit for the mixed Android/JVM graph
   - [x] 6E follow-up: advance from the green Kotlin 2.0 rollback point to Kotlin 2.4.0 on the compatible AGP toolchain

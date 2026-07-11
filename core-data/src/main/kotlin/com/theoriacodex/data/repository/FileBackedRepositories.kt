@@ -3,15 +3,14 @@ package com.theoriacodex.data.repository
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.theoriacodex.data.storage.AtomicJsonFileStore
+import com.theoriacodex.data.storage.PostStorageCodec
+import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.data.storage.mutateAndPersistWithRollback
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexItem
-import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.DateRange
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
@@ -52,7 +51,7 @@ class FileBackedCodexRepository(
         val stored = runBlocking { fileStore.read(storageFile, CodexStoreFile()) }
         codicesFlow.value = stored.codices.map { it.toDomain() }
         itemsFlow.value = stored.items.mapValues { entry -> entry.value.mapNotNull { it.toDomainOrNull() } }
-        postsFlow.value = stored.posts.mapNotNull { record -> record.toDomainOrNull() }.associate { post ->
+        postsFlow.value = stored.posts.mapNotNull(PostStorageCodec::decode).associate { post ->
             post.id to post
         }
     }
@@ -236,7 +235,7 @@ class FileBackedCodexRepository(
         val toPersist = CodexStoreFile(
             codices = codicesFlow.value.map { CodexRecord.fromDomain(it) },
             items = itemsFlow.value.mapValues { entry -> entry.value.map { CodexItemRecord.fromDomain(it) } },
-            posts = postsFlow.value.values.map { PostRecord.fromDomain(it) },
+            posts = postsFlow.value.values.map(PostStorageCodec::encode),
         )
         fileStore.write(storageFile, toPersist)
     }
@@ -933,7 +932,7 @@ class FileBackedLikesRepository(
 private data class CodexStoreFile(
     val codices: List<CodexRecord> = emptyList(),
     val items: Map<String, List<CodexItemRecord>> = emptyMap(),
-    val posts: List<PostRecord> = emptyList(),
+    val posts: List<PostStorageRecord> = emptyList(),
 )
 
 private data class CodexRecord(
@@ -974,208 +973,6 @@ private data class CodexItemRecord(
                 source = item.postId.source.name,
                 sourcePostId = item.postId.sourcePostId,
                 savedAtEpochMs = item.savedAtEpochMs,
-            )
-        }
-    }
-}
-
-private data class PostRecord(
-    val source: String,
-    val sourcePostId: String,
-    val previewUrl: String?,
-    val previewLocalPath: String?,
-    val previewMime: String?,
-    val previewProgressiveUrls: List<String>? = null,
-    val previewIsAnimated: Boolean? = null,
-    val fullUrl: String?,
-    val fullLocalPath: String?,
-    val fullMime: String?,
-    val fullProgressiveUrls: List<String>? = null,
-    val fullIsAnimated: Boolean? = null,
-    val pageUrl: String?,
-    val width: Int?,
-    val height: Int?,
-    val canonicalTags: List<String>,
-    val rawTags: List<String>,
-    val authorName: String?,
-    val createdAtEpochMs: Long?,
-    val media: List<ImageRefRecord?>? = null,
-    val title: String? = null,
-    val creatorProfile: CreatorProfileRecord? = null,
-    val durationMs: Long? = null,
-    val mediaCount: Int? = null,
-    val taxonomy: List<PostTaxonomyTermRecord?>? = null,
-    val creatorProfiles: List<CreatorProfileRecord?>? = null,
-) {
-    fun toDomainOrNull(): Post? {
-        val resolvedSource = source.toSourceKeyOrNull() ?: return null
-        val resolvedCreatorProfile = creatorProfile?.toDomainOrNull()
-        return Post(
-            id = PostId(
-                source = resolvedSource,
-                sourcePostId = sourcePostId,
-            ),
-            preview = ImageRef(
-                url = previewUrl,
-                localPath = previewLocalPath,
-                mime = previewMime,
-                progressiveUrls = previewProgressiveUrls.orEmpty(),
-                isAnimated = previewIsAnimated ?: false,
-            ),
-            full = if (
-                fullUrl == null &&
-                fullLocalPath == null &&
-                fullMime == null &&
-                fullProgressiveUrls.isNullOrEmpty() &&
-                fullIsAnimated != true
-            ) {
-                null
-            } else {
-                ImageRef(
-                    url = fullUrl,
-                    localPath = fullLocalPath,
-                    mime = fullMime,
-                    progressiveUrls = fullProgressiveUrls.orEmpty(),
-                    isAnimated = fullIsAnimated ?: false,
-                )
-            },
-            pageUrl = pageUrl,
-            width = width,
-            height = height,
-            canonicalTags = canonicalTags,
-            rawTags = rawTags,
-            authorName = authorName,
-            createdAtEpochMs = createdAtEpochMs,
-            media = media.orEmpty().mapNotNull { record -> record?.toDomain() },
-            title = title,
-            creatorProfile = resolvedCreatorProfile,
-            durationMs = durationMs,
-            mediaCount = mediaCount,
-            taxonomy = taxonomy
-                ?.mapNotNull { record -> record?.toDomainOrNull() }
-                ?: canonicalTags.map { value -> PostTaxonomyTerm(value = value) },
-            creatorProfiles = creatorProfiles
-                ?.mapNotNull { record -> record?.toDomainOrNull() }
-                ?: listOfNotNull(resolvedCreatorProfile),
-        )
-    }
-
-    companion object {
-        fun fromDomain(post: Post): PostRecord {
-            return PostRecord(
-                source = post.id.source.name,
-                sourcePostId = post.id.sourcePostId,
-                previewUrl = post.preview.url,
-                previewLocalPath = post.preview.localPath,
-                previewMime = post.preview.mime,
-                previewProgressiveUrls = post.preview.progressiveUrls,
-                previewIsAnimated = post.preview.isAnimated,
-                fullUrl = post.full?.url,
-                fullLocalPath = post.full?.localPath,
-                fullMime = post.full?.mime,
-                fullProgressiveUrls = post.full?.progressiveUrls,
-                fullIsAnimated = post.full?.isAnimated,
-                pageUrl = post.pageUrl,
-                width = post.width,
-                height = post.height,
-                canonicalTags = post.canonicalTags,
-                rawTags = post.rawTags,
-                authorName = post.authorName,
-                createdAtEpochMs = post.createdAtEpochMs,
-                media = post.media.map(ImageRefRecord::fromDomain),
-                title = post.title,
-                creatorProfile = post.creatorProfile?.let(CreatorProfileRecord::fromDomain),
-                durationMs = post.durationMs,
-                mediaCount = post.mediaCount,
-                taxonomy = post.taxonomy.map(PostTaxonomyTermRecord::fromDomain),
-                creatorProfiles = post.creatorProfiles.map(CreatorProfileRecord::fromDomain),
-            )
-        }
-    }
-}
-
-private data class PostTaxonomyTermRecord(
-    val value: String? = null,
-    val facet: String? = null,
-    val sourceNamespace: String? = null,
-) {
-    fun toDomainOrNull(): PostTaxonomyTerm? {
-        val resolvedValue = value?.trim()?.takeIf(String::isNotBlank) ?: return null
-        val resolvedFacet = facet.toSearchFacetOrNull() ?: return null
-        return PostTaxonomyTerm(
-            value = resolvedValue,
-            facet = resolvedFacet,
-            sourceNamespace = sourceNamespace?.trim()?.takeIf(String::isNotBlank),
-        )
-    }
-
-    companion object {
-        fun fromDomain(term: PostTaxonomyTerm): PostTaxonomyTermRecord {
-            return PostTaxonomyTermRecord(
-                value = term.value,
-                facet = term.facet.name,
-                sourceNamespace = term.sourceNamespace,
-            )
-        }
-    }
-}
-
-private data class CreatorProfileRecord(
-    val source: String,
-    val displayName: String,
-    val profileId: String? = null,
-    val profileUrl: String? = null,
-    val uploadsQuery: String? = null,
-) {
-    fun toDomainOrNull(): CreatorProfile? {
-        val resolvedSource = source.toSourceKeyOrNull() ?: return null
-        return CreatorProfile(
-            source = resolvedSource,
-            displayName = displayName,
-            profileId = profileId,
-            profileUrl = profileUrl,
-            uploadsQuery = uploadsQuery,
-        )
-    }
-
-    companion object {
-        fun fromDomain(profile: CreatorProfile): CreatorProfileRecord {
-            return CreatorProfileRecord(
-                source = profile.source.name,
-                displayName = profile.displayName,
-                profileId = profile.profileId,
-                profileUrl = profile.profileUrl,
-                uploadsQuery = profile.uploadsQuery,
-            )
-        }
-    }
-}
-
-private data class ImageRefRecord(
-    val url: String?,
-    val localPath: String?,
-    val mime: String?,
-    val progressiveUrls: List<String>? = null,
-    val isAnimated: Boolean? = null,
-) {
-    fun toDomain(): ImageRef {
-        return ImageRef(
-            url = url,
-            localPath = localPath,
-            mime = mime,
-            progressiveUrls = progressiveUrls.orEmpty(),
-            isAnimated = isAnimated ?: false,
-        )
-    }
-
-    companion object {
-        fun fromDomain(ref: ImageRef): ImageRefRecord {
-            return ImageRefRecord(
-                url = ref.url,
-                localPath = ref.localPath,
-                mime = ref.mime,
-                progressiveUrls = ref.progressiveUrls,
-                isAnimated = ref.isAnimated,
             )
         }
     }
@@ -1280,13 +1077,13 @@ private data class RecentsStoreFile(
 )
 
 private data class RecentPostRecord(
-    val post: PostRecord? = null,
+    val post: PostStorageRecord? = null,
     val viewedAtEpochMs: Long? = null,
     val origin: String? = null,
     val originQueryHash: String? = null,
 ) {
     fun toDomainOrNull(): RecentPostEntry? {
-        val loadedPost = post?.toDomainOrNull() ?: return null
+        val loadedPost = post?.let(PostStorageCodec::decode) ?: return null
         val loadedOrigin = origin
             ?.let { value -> runCatching { ViewerStreamSource.valueOf(value) }.getOrNull() }
             ?: ViewerStreamSource.SEARCH
@@ -1301,7 +1098,7 @@ private data class RecentPostRecord(
     companion object {
         fun fromDomain(entry: RecentPostEntry): RecentPostRecord {
             return RecentPostRecord(
-                post = PostRecord.fromDomain(entry.post),
+                post = PostStorageCodec.encode(entry.post),
                 viewedAtEpochMs = entry.viewedAtEpochMs,
                 origin = entry.origin.name,
                 originQueryHash = entry.originQueryHash,

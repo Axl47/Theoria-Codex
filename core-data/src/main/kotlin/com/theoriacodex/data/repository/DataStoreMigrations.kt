@@ -5,7 +5,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonParseException
 import com.theoriacodex.data.storage.LegacyFileSnapshot
 import com.theoriacodex.data.storage.LegacyImportProof
-import com.theoriacodex.data.storage.archiveLegacyFile
+import com.theoriacodex.data.storage.archiveVerifiedLegacyFile
 import com.theoriacodex.data.storage.readLegacySnapshot
 import java.io.File
 import java.io.IOException
@@ -45,7 +45,7 @@ internal class SettingsLegacyDataMigration(
     }
 
     override suspend fun cleanUp() {
-        archiveLegacyFile(legacyFile, archiveFile)
+        archiveVerifiedLegacyFile(legacyFile, archiveFile)
     }
 }
 
@@ -114,7 +114,7 @@ internal class UiRestoreLegacyDataMigration(
 
     override suspend fun cleanUp() {
         // Settings owns its own archive because both DataStore migrations may run concurrently.
-        archiveLegacyFile(legacyUiFile, legacyUiArchiveFile)
+        archiveVerifiedLegacyFile(legacyUiFile, legacyUiArchiveFile)
     }
 }
 

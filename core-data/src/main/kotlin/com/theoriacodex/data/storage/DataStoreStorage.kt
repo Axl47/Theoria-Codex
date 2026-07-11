@@ -141,7 +141,7 @@ internal fun readLegacySnapshot(
  * Retains a verified archive and removes the live legacy name only after the archive is durable.
  * Re-running this after a crash is safe, including the state where both files already exist.
  */
-internal fun archiveLegacyFile(liveFile: File, archiveFile: File) {
+fun archiveVerifiedLegacyFile(liveFile: File, archiveFile: File) {
     if (!liveFile.isFile) return
     val liveBytes = liveFile.readBytes()
     if (archiveFile.isFile) {
