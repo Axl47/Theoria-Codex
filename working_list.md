@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T23:30:00-04:00
+updated_at: 2026-07-10T23:55:00-04:00
 ---
 # Working List
 
@@ -8,19 +8,27 @@ updated_at: 2026-07-10T23:30:00-04:00
 
 ### In Progress
 
-- [ ] Phase 5: consolidate repeated policy and stable UI primitives
-  - [ ] 5A: share pure repository policy and run one contract suite across both backends
-  - [ ] 5B: centralize recommendation-tag and source-weight normalization
-  - [ ] 5C: share provider mechanics without hiding provider-specific protocol behavior
-  - [ ] 5D: extract stable post-action, feed-state, grid, and autocomplete UI primitives
-  - [ ] 5E: centralize source presentation and derive operational capability from interfaces
+- [ ] Phase 6: modernize persistence, credentials, and Android tooling in reversible waves
 
 ### Pending
 
-- [ ] Phase 6: modernize persistence, credentials, and Android tooling in reversible waves
 - [ ] Phase 7: enforce quality budgets, complete system acceptance, and close the program
 
 ### Done
+
+- [x] Phase 5: consolidate repeated policy and stable UI primitives
+  - [x] 5A: share pure repository policy and run one contract suite across both backends
+    - Evidence: file-backed and in-memory repositories apply the same pure policy; the parameterized contract suite passed across both backends while durability mechanics remain independent
+  - [x] 5B: centralize recommendation-tag and source-weight normalization
+    - Evidence: training/serving affinity keys and source-weight totals have one owner; explicit zero weights are preserved unless the entire distribution is degenerate
+  - [x] 5C: share provider mechanics without hiding provider-specific protocol behavior
+    - Evidence: safe JSON, HTTP classification, network conversion, challenge matching, duration parsing, and strict decoding are shared while each adapter retains its authentication and fallback semantics
+  - [x] 5D: extract stable post-action, feed-state, grid, and autocomplete UI primitives
+    - Evidence: Search, For You, Creator, and Codex share behavior-equivalent primitives; Viewer playback and fixed Codex collection behavior remain specialized
+  - [x] 5E: centralize source presentation and derive operational capability from interfaces
+    - Evidence: one catalog owns labels/logos/exposure/order, creator browsing is interface-derived, AIBooru is explicitly adapter-only, and production duplication fell from 1.02% to 0.38%
+  - [x] Phase 5 gate
+    - Evidence: 110 tasks passed with 1,052 configured test executions, 0 failures/errors, 6 opt-in skips, 119 known lint issues, and compiled Android-test sources
 
 - [x] Phase 4: move UI ownership to route-scoped state holders
   - [x] 4F: freeze route owner, effect host, saved-state, and feature-factory contracts

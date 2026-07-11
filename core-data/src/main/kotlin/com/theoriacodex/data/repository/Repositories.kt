@@ -94,20 +94,25 @@ interface LikesRepository {
     suspend fun clearLikes(profileId: String)
 }
 
+private val DEFAULT_SOURCE_WEIGHTS: Map<SourceKey, Double> = mapOf(
+    SourceKey.PIXIV to 0.25,
+    SourceKey.GELBOORU to 0.18,
+    SourceKey.RULE34XXX to 0.15,
+    SourceKey.RULE34PAHEAL to 0.12,
+    SourceKey.NHENTAI to 0.10,
+    SourceKey.HITOMI to 0.10,
+    SourceKey.IWARA to 0.08,
+    SourceKey.RULE34VIDEO to 0.07,
+    SourceKey.RULE34GEN to 0.07,
+    SourceKey.AIBOORU to 0.03,
+).let { ratios ->
+    val total = ratios.values.sum()
+    ratios.mapValues { (_, ratio) -> ratio / total }
+}
+
 data class SourceRuntimeSettings(
     val enabledSources: Set<SourceKey> = SourceKey.entries.toSet(),
-    val sourceWeights: Map<SourceKey, Double> = mapOf(
-        SourceKey.PIXIV to 0.25,
-        SourceKey.GELBOORU to 0.18,
-        SourceKey.RULE34XXX to 0.15,
-        SourceKey.RULE34PAHEAL to 0.12,
-        SourceKey.NHENTAI to 0.10,
-        SourceKey.HITOMI to 0.10,
-        SourceKey.IWARA to 0.08,
-        SourceKey.RULE34VIDEO to 0.07,
-        SourceKey.RULE34GEN to 0.07,
-        SourceKey.AIBOORU to 0.03,
-    ),
+    val sourceWeights: Map<SourceKey, Double> = DEFAULT_SOURCE_WEIGHTS,
 )
 
 enum class ProviderHealthSnapshotStatus {

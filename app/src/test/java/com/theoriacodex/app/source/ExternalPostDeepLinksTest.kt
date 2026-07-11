@@ -9,12 +9,50 @@ import org.junit.Test
 
 class ExternalPostDeepLinksTest {
     @Test
+    fun `parses booru query links through the shared route contract`() {
+        listOf(
+            Triple(
+                "https://gelbooru.com/index.php?page=post&s=view&id=9876",
+                SourceKey.GELBOORU,
+                "9876",
+            ),
+            Triple(
+                "http://www.gelbooru.com/?s=VIEW&page=POST&id=9877",
+                SourceKey.GELBOORU,
+                "9877",
+            ),
+            Triple(
+                "https://rule34.xxx/index.php?page=post&s=view&id=12345",
+                SourceKey.RULE34XXX,
+                "12345",
+            ),
+            Triple(
+                "http://www.rule34.xxx/?s=VIEW&id=12346&page=POST",
+                SourceKey.RULE34XXX,
+                "12346",
+            ),
+        ).forEach { (url, source, postId) ->
+            assertDeepLink(url = url, source = source, postId = postId)
+        }
+    }
+
+    @Test
+    fun `rejects malformed or lookalike booru query links`() {
+        listOf(
+            "https://gelbooru.com/posts?page=post&s=view&id=12",
+            "https://gelbooru.example.com/index.php?page=post&s=view&id=12",
+            "https://gelbooru.com/index.php?page=post&s=view&id=abc",
+            "https://gelbooru.com/index.php?page=post&s=view&id=%FF",
+            "https://rule34.xxx/index.php?page=post&s=list&id=12",
+            "https://rule34.xxx/index.php?page=post&s=view&id=%ZZ",
+            "https://rule34.xxx.example.com/index.php?page=post&s=view&id=12",
+        ).forEach { url ->
+            assertNull(url, parseExternalPostDeepLink(url))
+        }
+    }
+
+    @Test
     fun `parses rule34 family deep links`() {
-        assertDeepLink(
-            url = "https://rule34.xxx/index.php?page=post&s=view&id=12345",
-            source = SourceKey.RULE34XXX,
-            postId = "12345",
-        )
         assertDeepLink(
             url = "https://rule34.paheal.net/post/view/5773878",
             source = SourceKey.RULE34PAHEAL,

@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.theoriacodex.app.search.NoOpTagSuggestionStore
 import com.theoriacodex.app.search.TagSuggestionStore
+import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.InMemoryLikesRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
@@ -24,6 +25,7 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunStatus
+import com.theoriacodex.domain.orchestration.SourceWeightNormalization
 import com.theoriacodex.domain.orchestration.UnifiedSearchResult
 import com.theoriacodex.domain.recommendation.ForYouTagSetGenerator
 import com.theoriacodex.domain.recommendation.TagAffinityStats
@@ -84,7 +86,7 @@ class ForYouCoordinator(
         private set
 
     val availableSourceSelections: List<SourceKey>
-        get() = allEnabledSources().sortedBy { source -> source.name }
+        get() = allEnabledSources().inPresentationOrder()
 
     var seedSummaryBySource by mutableStateOf<Map<SourceKey, List<String>>>(emptyMap())
         private set
@@ -598,12 +600,10 @@ class ForYouCoordinator(
     }
 
     private fun effectiveWeights(enabledSources: Set<SourceKey>): Map<SourceKey, Double> {
-        if (enabledSources.isEmpty()) return emptyMap()
-        val raw = enabledSources.associateWith { source ->
-            runtimeSettings.runtime.sourceWeights[source] ?: 1.0
-        }
-        val total = raw.values.sum().takeIf { it > 0.0 } ?: enabledSources.size.toDouble()
-        return raw.mapValues { (_, weight) -> weight / total }
+        return SourceWeightNormalization.normalize(
+            sources = enabledSources,
+            weightsBySource = runtimeSettings.runtime.sourceWeights,
+        )
     }
 
     private fun baseQuery(): Query {

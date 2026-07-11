@@ -115,6 +115,7 @@ import com.theoriacodex.app.source.ExternalCreatorDeepLink
 import com.theoriacodex.app.source.ExternalPostDeepLink
 import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.source.creatorBrowsingSources
 import com.theoriacodex.app.source.parseExternalCreatorDeepLink
 import com.theoriacodex.app.source.parseExternalPostDeepLink
 import com.theoriacodex.app.source.requestHeaders
@@ -257,6 +258,10 @@ internal fun TheoriaAppContent(
     val featureDependencies = appContainer.features
     val workflowDependencies = appContainer.workflows
     val availableRealSources by sourceDependencies.availableSources.collectAsStateWithLifecycle()
+    val creatorBrowsingSources = remember(sourceDependencies.registry, availableRealSources) {
+        sourceDependencies.registry.creatorBrowsingSources()
+            .intersect(availableRealSources)
+    }
     val credentialRecoveryState by sourceDependencies.accounts.recoveryState.collectAsStateWithLifecycle()
     val appShellState by appShellOwner.state.collectAsStateWithLifecycle()
 
@@ -590,9 +595,9 @@ internal fun TheoriaAppContent(
         var resolvedPost = post
         var creator = post.creatorProfiles
             .asSequence()
-            .mapNotNull(::browseableCreatorProfile)
+            .mapNotNull { profile -> browseableCreatorProfile(profile, creatorBrowsingSources) }
             .firstOrNull()
-            ?: browseableCreatorProfile(post.creatorProfile)
+            ?: browseableCreatorProfile(post.creatorProfile, creatorBrowsingSources)
         if (creator == null) {
             val adapter = sourceDependencies.registry.adapterFor(post.id.source)
             val resolved = runCatchingPreservingCancellation {
@@ -603,9 +608,9 @@ internal fun TheoriaAppContent(
                 resolvedPost = resolved
                 creator = resolved.creatorProfiles
                     .asSequence()
-                    .mapNotNull(::browseableCreatorProfile)
+                    .mapNotNull { profile -> browseableCreatorProfile(profile, creatorBrowsingSources) }
                     .firstOrNull()
-                    ?: browseableCreatorProfile(resolved.creatorProfile)
+                    ?: browseableCreatorProfile(resolved.creatorProfile, creatorBrowsingSources)
             }
         }
         if (creator == null) {
@@ -667,6 +672,7 @@ internal fun TheoriaAppContent(
                         profileUrl = deepLink.profileUrl,
                         uploadsQuery = owner?.let { "user:$it" },
                     ),
+                    creatorBrowsingSources,
                 )
             }
 
@@ -1503,6 +1509,7 @@ internal fun TheoriaAppContent(
                                         config = SearchRouteConfig(
                                             settings = settings,
                                             availableSources = availableRealSources,
+                                            creatorBrowsingSources = creatorBrowsingSources,
                                             likedPostIds = likedPostIds,
                                             savedPostIds = savedPostIds,
                                             favoriteTags = activeProfileFavoriteTags,
@@ -1936,6 +1943,7 @@ internal fun TheoriaAppContent(
                             codexName = codex?.name,
                             posts = posts,
                             sortMode = sortMode,
+                            creatorBrowsingSources = creatorBrowsingSources,
                             pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                             tagVideoCountProvider = { source, tag ->
                                 featureDependencies.search.tagVideoCount(source, tag)
@@ -2088,6 +2096,7 @@ internal fun TheoriaAppContent(
                                 fetchTagVideoCounts = featureDependencies.search::fetchTagVideoCounts,
                                 invertMultiImageScrollDirection = settings.viewer.invertMultiImageScrollDirection,
                                 likedPostIds = likedPostIds,
+                                creatorBrowsingSources = creatorBrowsingSources,
                             ),
                             liveSourceState = ViewerRouteLiveSourceState(
                                 search = ViewerRouteLiveSourceSnapshot(

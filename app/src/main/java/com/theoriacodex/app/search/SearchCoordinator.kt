@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.theoriacodex.app.media.recoverRemoteMedia
+import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
@@ -38,6 +39,7 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
+import com.theoriacodex.domain.orchestration.SourceWeightNormalization
 import com.theoriacodex.domain.query.QueryHash
 import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
 import com.theoriacodex.domain.tags.normalizeGelbooruToken
@@ -133,10 +135,7 @@ class SearchCoordinator(
         private set
 
     val availableSources: List<SourceKey>
-        get() = registry.availableSources().toList().sortedWith(
-            compareBy<SourceKey> { source -> sourceDisplayOrderIndex(source) }
-                .thenBy { source -> source.name }
-        )
+        get() = registry.availableSources().inPresentationOrder()
 
     val modeOptions: List<QueryMode>
         get() = listOf(QueryMode.Unified) + availableSources.map(QueryMode::Source)
@@ -1061,7 +1060,10 @@ class SearchCoordinator(
                         query = request.query,
                         enabledSources = pageableSources,
                         pageTokens = loadRequest.unifiedPageTokens.filterKeys { it in pageableSources },
-                        weights = request.weights.filterKeys { it in pageableSources }.renormalizedWeights(),
+                        weights = SourceWeightNormalization.normalize(
+                            sources = pageableSources,
+                            weightsBySource = request.weights,
+                        ),
                         queryOverridesBySource = loadRequest.unifiedQueryOverrides.filterKeys { it in pageableSources },
                     )
                     ensureCurrent(request)
@@ -1898,12 +1900,10 @@ class SearchCoordinator(
     }
 
     private fun effectiveWeights(enabledSources: Set<SourceKey>): Map<SourceKey, Double> {
-        if (enabledSources.isEmpty()) return emptyMap()
-        val raw = enabledSources.associateWith { source ->
-            runtimeSettings.runtime.sourceWeights[source] ?: 1.0
-        }
-        val total = raw.values.sum().takeIf { it > 0.0 } ?: enabledSources.size.toDouble()
-        return raw.mapValues { (_, weight) -> weight / total }
+        return SourceWeightNormalization.normalize(
+            sources = enabledSources,
+            weightsBySource = runtimeSettings.runtime.sourceWeights,
+        )
     }
 
     private fun defaultQuery(mode: QueryMode = QueryMode.Unified): Query {
@@ -1917,9 +1917,6 @@ class SearchCoordinator(
         )
     }
 
-    private fun sourceDisplayOrderIndex(source: SourceKey): Int {
-        return SOURCE_DISPLAY_ORDER.indexOf(source).takeIf { it >= 0 } ?: Int.MAX_VALUE
-    }
 }
 
 enum class DateRangePreset {
@@ -1962,18 +1959,6 @@ private const val RATE_LIMIT_BACKOFF_FIRST_MS = 30_000L
 private const val RATE_LIMIT_BACKOFF_REPEAT_MS = 2L * 60L * 1000L
 private const val RATE_LIMIT_REPEAT_WINDOW_MS = 2L * 60L * 1000L
 private const val LAST_ACTIVE_QUERY_KEY = "last_active"
-private val SOURCE_DISPLAY_ORDER = listOf(
-    SourceKey.GELBOORU,
-    SourceKey.PIXIV,
-    SourceKey.NHENTAI,
-    SourceKey.HITOMI,
-    SourceKey.IWARA,
-    SourceKey.RULE34XXX,
-    SourceKey.RULE34PAHEAL,
-    SourceKey.RULE34VIDEO,
-    SourceKey.RULE34GEN,
-    SourceKey.AIBOORU,
-)
 private val NHENTAI_LANGUAGE_TAG_BY_FILTER = mapOf(
     NhentaiLanguageFilter.ENGLISH to "english",
     NhentaiLanguageFilter.CHINESE to "chinese",
@@ -2191,12 +2176,6 @@ private fun Query.directNhentaiGalleryIdCandidate(): String? {
 
 private fun String.isDigitsOnly(): Boolean {
     return isNotBlank() && all { ch -> ch.isDigit() }
-}
-
-private fun Map<SourceKey, Double>.renormalizedWeights(): Map<SourceKey, Double> {
-    if (isEmpty()) return emptyMap()
-    val total = values.sum().takeIf { value -> value > 0.0 } ?: size.toDouble()
-    return mapValues { (_, weight) -> weight / total }
 }
 
 private data class RootSearchRequest(

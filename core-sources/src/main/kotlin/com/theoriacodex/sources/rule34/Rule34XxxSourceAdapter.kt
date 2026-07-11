@@ -10,14 +10,18 @@ import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
-import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
-import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.common.classifyHttpFailure
+import com.theoriacodex.sources.common.intValue
+import com.theoriacodex.sources.common.isSuccessful
+import com.theoriacodex.sources.common.longValue
+import com.theoriacodex.sources.common.sourceNetworkFailure
+import com.theoriacodex.sources.common.sourceQuickQuery
+import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -108,8 +112,8 @@ class Rule34XxxSourceAdapter(
                 ),
             )
             jsonArrayOfObjects(response, gson, "rule34.xxx tags").forEach tagRecords@{ raw ->
-                val name = raw.get("name")?.asString?.trim().orEmpty()
-                val count = raw.get("count")?.asInt ?: raw.get("post_count")?.asInt ?: return@tagRecords
+                val name = raw.stringValue("name")?.trim().orEmpty()
+                val count = raw.intValue("count") ?: raw.intValue("post_count") ?: return@tagRecords
                 if (name.isNotBlank()) {
                     counts.putIfAbsent(name, count)
                 }
@@ -119,29 +123,7 @@ class Rule34XxxSourceAdapter(
     }
 
     override suspend fun quickQuery(kind: QuickQueryKind): Query {
-        val now = System.currentTimeMillis()
-        val dayMs = 24L * 60L * 60L * 1000L
-        val sort = when (kind) {
-            QuickQueryKind.POPULAR_TODAY -> SortMode.POPULAR
-            QuickQueryKind.TOP_7D -> SortMode.TOP
-            QuickQueryKind.TOP_30D -> SortMode.TOP
-            QuickQueryKind.NEWEST -> SortMode.NEWEST
-            QuickQueryKind.RANDOM -> SortMode.NEWEST
-        }
-        val dateRange = when (kind) {
-            QuickQueryKind.POPULAR_TODAY -> DateRange(now - dayMs, now)
-            QuickQueryKind.TOP_7D -> DateRange(now - (7L * dayMs), now)
-            QuickQueryKind.TOP_30D -> DateRange(now - (30L * dayMs), now)
-            QuickQueryKind.NEWEST, QuickQueryKind.RANDOM -> null
-        }
-        return Query(
-            mode = QueryMode.Source(SourceKey.RULE34XXX),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = sort,
-            dateRange = dateRange,
-            minScore = null,
-        )
+        return sourceQuickQuery(source = SourceKey.RULE34XXX, kind = kind)
     }
 
     override suspend fun resolvePost(id: PostId): Post? {
@@ -167,12 +149,12 @@ class Rule34XxxSourceAdapter(
                 headers = RULE34_BROWSER_HEADERS,
             )
         } catch (error: IOException) {
-            rule34NetworkFailure("rule34.xxx", error)
+            sourceNetworkFailure("rule34.xxx", error)
         }
 
-        if (response.statusCode !in 200..299) {
+        if (!response.isSuccessful()) {
             throw SourceAdapterException(
-                reason = classifyRule34HttpFailure(response.statusCode),
+                reason = classifyHttpFailure(response.statusCode),
                 message = "rule34.xxx request failed (${response.statusCode})",
             )
         }
@@ -193,12 +175,12 @@ class Rule34XxxSourceAdapter(
                 headers = RULE34_BROWSER_HEADERS,
             )
         } catch (error: IOException) {
-            rule34NetworkFailure("rule34.xxx autocomplete", error)
+            sourceNetworkFailure("rule34.xxx autocomplete", error)
         }
 
-        if (response.statusCode !in 200..299) {
+        if (!response.isSuccessful()) {
             throw SourceAdapterException(
-                reason = classifyRule34HttpFailure(response.statusCode),
+                reason = classifyHttpFailure(response.statusCode),
                 message = "rule34.xxx autocomplete failed (${response.statusCode})",
             )
         }
@@ -219,42 +201,42 @@ class Rule34XxxSourceAdapter(
     }
 
     private fun parsePost(raw: JsonObject): Post? {
-        val id = raw.get("id")?.asString?.trim().orEmpty()
+        val id = raw.stringValue("id")?.trim().orEmpty()
         if (id.isBlank()) return null
 
-        val tags = raw.get("tags")?.asString
+        val tags = raw.stringValue("tags")
             ?.split(' ')
             ?.map(String::trim)
             ?.filter(String::isNotBlank)
             .orEmpty()
-        val fullUrl = raw.get("file_url")?.asString
-        val previewUrl = raw.get("preview_url")?.asString ?: raw.get("sample_url")?.asString ?: fullUrl
-        val fullMime = inferMimeFromUrl(fullUrl) ?: mimeFromFileExt(raw.get("file_ext")?.asString)
+        val fullUrl = raw.stringValue("file_url")
+        val previewUrl = raw.stringValue("preview_url") ?: raw.stringValue("sample_url") ?: fullUrl
+        val fullMime = inferMimeFromUrl(fullUrl) ?: mimeFromFileExt(raw.stringValue("file_ext"))
         val previewMime = inferMimeFromUrl(previewUrl) ?: fullMime
-        val createdAt = raw.get("created_at")?.asString?.toLongOrNull()?.times(1000L)
-            ?: raw.get("change")?.asString?.toLongOrNull()?.times(1000L)
+        val createdAt = raw.longValue("created_at")?.times(1000L)
+            ?: raw.longValue("change")?.times(1000L)
 
         return Post(
             id = PostId(source = SourceKey.RULE34XXX, sourcePostId = id),
             preview = ImageRef(url = previewUrl, localPath = null, mime = previewMime),
             full = fullUrl?.let { ImageRef(url = it, localPath = null, mime = fullMime) },
             pageUrl = "$RULE34XXX_SITE_URL/index.php?page=post&s=view&id=$id",
-            width = raw.get("width")?.asInt,
-            height = raw.get("height")?.asInt,
+            width = raw.intValue("width"),
+            height = raw.intValue("height"),
             canonicalTags = tags,
             rawTags = tags,
-            authorName = raw.get("owner")?.asString ?: raw.get("author")?.asString,
+            authorName = raw.stringValue("owner") ?: raw.stringValue("author"),
             createdAtEpochMs = createdAt,
         )
     }
 
     private fun parseTagSuggestion(raw: JsonObject, type: String): TagSuggestion? {
-        val text = raw.get("name")?.asString?.trim().orEmpty()
+        val text = raw.stringValue("name")?.trim().orEmpty()
         if (text.isBlank()) return null
         return TagSuggestion(
             text = text,
             type = type,
-            count = raw.get("count")?.asInt ?: raw.get("post_count")?.asInt,
+            count = raw.intValue("count") ?: raw.intValue("post_count"),
         )
     }
 

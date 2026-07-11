@@ -1,15 +1,12 @@
 package com.theoriacodex.app.source
 
 import android.net.Uri
+import com.theoriacodex.domain.encoding.decodePercentEncodedUtf8Strict
 import com.theoriacodex.domain.model.HITOMI_ARTIST_IDENTITY_MAX_CODE_POINTS
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.canonicalHitomiArtistIdentity
-import java.io.ByteArrayOutputStream
 import java.net.URI
-import java.net.URLDecoder
 import java.net.URLEncoder
-import java.nio.ByteBuffer
-import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 
 data class ExternalPostDeepLink(
@@ -151,51 +148,44 @@ private fun parsePixivCreatorIdFromUri(uri: ParsedExternalUri): String? {
 }
 
 private fun parseGelbooruPostIdFromUri(uri: ParsedExternalUri): String? {
-    val scheme = uri.scheme
-    val host = uri.host
-    if (scheme != "https" && scheme != "http") return null
-    if (host != "www.gelbooru.com" && host != "gelbooru.com") return null
-
-    val path = uri.encodedPath.lowercase()
-    if (path.isNotBlank() && path != "/" && path != "/index.php") return null
-
-    val page = uri.queryParameters["page"]?.lowercase()
-    val section = uri.queryParameters["s"]?.lowercase()
-    val postId = uri.queryParameters["id"]
-    if (page != "post" || section != "view") return null
-    return postId?.takeIf(String::isDigitsOnly)
+    return parseBooruQueryId(
+        uri = uri,
+        hosts = GELBOORU_HOSTS,
+        page = "post",
+        section = "view",
+    )
 }
 
 private fun parseGelbooruCreatorIdFromUri(uri: ParsedExternalUri): String? {
-    val scheme = uri.scheme
-    val host = uri.host
-    if (scheme != "https" && scheme != "http") return null
-    if (host != "www.gelbooru.com" && host != "gelbooru.com") return null
-
-    val path = uri.encodedPath.lowercase()
-    if (path.isNotBlank() && path != "/" && path != "/index.php") return null
-
-    val page = uri.queryParameters["page"]?.lowercase()
-    val section = uri.queryParameters["s"]?.lowercase()
-    val creatorId = uri.queryParameters["id"]
-    if (page != "account" || section != "profile") return null
-    return creatorId?.takeIf(String::isDigitsOnly)
+    return parseBooruQueryId(
+        uri = uri,
+        hosts = GELBOORU_HOSTS,
+        page = "account",
+        section = "profile",
+    )
 }
 
 private fun parseRule34XxxPostIdFromUri(uri: ParsedExternalUri): String? {
-    val scheme = uri.scheme
-    val host = uri.host
-    if (scheme != "https" && scheme != "http") return null
-    if (host != "rule34.xxx" && host != "www.rule34.xxx") return null
+    return parseBooruQueryId(
+        uri = uri,
+        hosts = RULE34XXX_HOSTS,
+        page = "post",
+        section = "view",
+    )
+}
 
+private fun parseBooruQueryId(
+    uri: ParsedExternalUri,
+    hosts: Set<String>,
+    page: String,
+    section: String,
+): String? {
+    if (!uri.isHttpUrlFor(hosts)) return null
     val path = uri.encodedPath.lowercase()
     if (path.isNotBlank() && path != "/" && path != "/index.php") return null
-
-    val page = uri.queryParameters["page"]?.lowercase()
-    val section = uri.queryParameters["s"]?.lowercase()
-    val postId = uri.queryParameters["id"]
-    if (page != "post" || section != "view") return null
-    return postId?.takeIf(String::isDigitsOnly)
+    if (uri.queryParameters["page"]?.lowercase() != page) return null
+    if (uri.queryParameters["s"]?.lowercase() != section) return null
+    return uri.queryParameters["id"]?.takeIf(String::isDigitsOnly)
 }
 
 private fun parseIwaraVideoIdFromUri(uri: ParsedExternalUri): String? {
@@ -279,17 +269,16 @@ private fun parseExternalUri(rawUrl: String): ParsedExternalUri? {
     val scheme = parsed.scheme?.lowercase().orEmpty()
     val host = parsed.host?.lowercase().orEmpty()
     val path = parsed.rawPath.orEmpty()
-    val queryParameters = parsed.rawQuery
-        ?.split('&')
-        ?.mapNotNull { entry ->
-            if (entry.isBlank()) return@mapNotNull null
-            val key = entry.substringBefore('=')
-            if (key.isBlank()) return@mapNotNull null
-            val value = entry.substringAfter('=', "")
-            decodeQueryComponent(key) to decodeQueryComponent(value)
-        }
-        ?.toMap(linkedMapOf())
-        .orEmpty()
+    val queryParameters = linkedMapOf<String, String>()
+    parsed.rawQuery?.split('&')?.forEach { entry ->
+        if (entry.isBlank()) return@forEach
+        val rawKey = entry.substringBefore('=')
+        if (rawKey.isBlank()) return@forEach
+        val rawValue = entry.substringAfter('=', "")
+        val key = decodeQueryComponentStrict(rawKey) ?: return null
+        val value = decodeQueryComponentStrict(rawValue) ?: return null
+        queryParameters[key] = value
+    }
     return ParsedExternalUri(
         scheme = scheme,
         host = host,
@@ -298,38 +287,11 @@ private fun parseExternalUri(rawUrl: String): ParsedExternalUri? {
     )
 }
 
-private fun decodeQueryComponent(value: String): String {
-    return URLDecoder.decode(value, StandardCharsets.UTF_8.name())
+private fun decodeQueryComponentStrict(value: String): String? {
+    return decodePercentEncodedUtf8Strict(value.replace('+', ' '))
 }
 
-private fun decodePathSegmentStrict(value: String): String? {
-    val bytes = ByteArrayOutputStream(value.length)
-    var index = 0
-    while (index < value.length) {
-        val character = value[index]
-        if (character == '%') {
-            if (index + 2 >= value.length) return null
-            val high = value[index + 1].digitToIntOrNull(radix = 16) ?: return null
-            val low = value[index + 2].digitToIntOrNull(radix = 16) ?: return null
-            bytes.write((high shl 4) or low)
-            index += 3
-        } else {
-            val codePoint = value.codePointAt(index)
-            if (codePoint in 0xD800..0xDFFF) return null
-            val encoded = String(Character.toChars(codePoint)).toByteArray(StandardCharsets.UTF_8)
-            bytes.write(encoded)
-            index += Character.charCount(codePoint)
-        }
-    }
-    return runCatching {
-        StandardCharsets.UTF_8
-            .newDecoder()
-            .onMalformedInput(CodingErrorAction.REPORT)
-            .onUnmappableCharacter(CodingErrorAction.REPORT)
-            .decode(ByteBuffer.wrap(bytes.toByteArray()))
-            .toString()
-    }.getOrNull()
-}
+private fun decodePathSegmentStrict(value: String): String? = decodePercentEncodedUtf8Strict(value)
 
 private fun encodePathSegment(value: String): String {
     return URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("+", "%20")
@@ -353,6 +315,8 @@ private fun String.isDigitsOnly(): Boolean {
 private const val MAX_HITOMI_ARTIST_ENCODED_LENGTH = HITOMI_ARTIST_IDENTITY_MAX_CODE_POINTS * 12
 
 private val HITOMI_HOSTS = setOf("hitomi.la", "www.hitomi.la")
+private val GELBOORU_HOSTS = setOf("gelbooru.com", "www.gelbooru.com")
+private val RULE34XXX_HOSTS = setOf("rule34.xxx", "www.rule34.xxx")
 private val HITOMI_READER_PATH = Regex("^/reader/(\\d+)\\.html/?$")
 private val HITOMI_GALLERY_PATH = Regex(
     "^/(?:anime|cg|doujinshi|manga|artistcg|gamecg|imageset)/[^/]+-(\\d+)\\.html/?$",

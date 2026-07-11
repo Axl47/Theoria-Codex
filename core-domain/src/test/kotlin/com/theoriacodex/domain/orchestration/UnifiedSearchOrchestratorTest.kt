@@ -109,6 +109,36 @@ class UnifiedSearchOrchestratorTest {
     }
 
     @Test
+    fun `explicit zero weight is not replaced by an equal share`() = runTest {
+        val orchestrator = UnifiedSearchOrchestrator(
+            adaptersBySource = mapOf(
+                SourceKey.PIXIV to FakeAdapter(
+                    sourceKey = SourceKey.PIXIV,
+                    capabilities = supportedCapabilities(),
+                    posts = listOf(post(SourceKey.PIXIV, "p1"), post(SourceKey.PIXIV, "p2")),
+                ),
+                SourceKey.GELBOORU to FakeAdapter(
+                    sourceKey = SourceKey.GELBOORU,
+                    capabilities = supportedCapabilities(),
+                    posts = listOf(post(SourceKey.GELBOORU, "g1"), post(SourceKey.GELBOORU, "g2")),
+                ),
+            ),
+        )
+
+        val result = orchestrator.search(
+            query = sampleQuery(),
+            enabledSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
+            pageTokens = emptyMap(),
+            weights = mapOf(SourceKey.PIXIV to 1.0, SourceKey.GELBOORU to 0.0),
+        )
+
+        assertEquals(
+            listOf("p1", "p2", "g1", "g2"),
+            result.items.map { post -> post.id.sourcePostId },
+        )
+    }
+
+    @Test
     fun `uses query override only for targeted source`() = runTest {
         val pixivAdapter = FakeAdapter(
             sourceKey = SourceKey.PIXIV,

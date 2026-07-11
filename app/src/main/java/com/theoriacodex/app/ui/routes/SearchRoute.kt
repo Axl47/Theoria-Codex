@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.StateFlow
 internal data class SearchRouteConfig(
     val settings: AppSettings,
     val availableSources: Set<SourceKey>,
+    val creatorBrowsingSources: Set<SourceKey>,
     val likedPostIds: Set<PostId>,
     val savedPostIds: Set<PostId>,
     val favoriteTags: Map<SourceKey, List<String>>,
@@ -185,6 +186,7 @@ internal fun SearchRoute(
 
     SearchScreen(
         state = state,
+        creatorBrowsingSources = config.creatorBrowsingSources,
         onAction = owner::onAction,
         resolvePostById = coordinator::resolvePostForSearch,
         recoverPostMedia = coordinator::recoverPostMedia,

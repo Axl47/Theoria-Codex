@@ -1,7 +1,6 @@
 package com.theoriacodex.sources.gelbooru
 
 import com.google.gson.Gson
-import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
@@ -22,10 +21,15 @@ import com.theoriacodex.sources.common.ambiguousDurationFieldMs
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.durationFieldMs
 import com.theoriacodex.sources.common.firstDurationMs
+import com.theoriacodex.sources.common.intValue
+import com.theoriacodex.sources.common.isSuccessful
+import com.theoriacodex.sources.common.longValue
 import com.theoriacodex.sources.common.mimeFromUrlOrExt
+import com.theoriacodex.sources.common.objectList
 import com.theoriacodex.sources.common.parseJsonElement
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.common.sourceQuickQuery
+import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
 import java.io.IOException
@@ -113,9 +117,9 @@ class GelbooruSourceAdapter(
                 )
             )
             parseTagItems(response).forEach tagItemLoop@{ raw ->
-                val name = raw.get("name")?.asString?.trim().orEmpty()
+                val name = raw.stringValue("name")?.trim().orEmpty()
                 if (name.isBlank()) return@tagItemLoop
-                val count = raw.get("count")?.asInt ?: raw.get("post_count")?.asInt ?: return@tagItemLoop
+                val count = raw.intValue("count") ?: raw.intValue("post_count") ?: return@tagItemLoop
                 countsByName.putIfAbsent(name, count)
             }
         }
@@ -172,7 +176,7 @@ class GelbooruSourceAdapter(
             sourceNetworkFailure("Gelbooru", error)
         }
 
-        if (response.statusCode !in 200..299) {
+        if (!response.isSuccessful()) {
             throw SourceAdapterException(
                 reason = classifyHttpFailure(
                     statusCode = response.statusCode,
@@ -212,53 +216,31 @@ class GelbooruSourceAdapter(
     private fun parsePostItems(body: String): List<JsonObject> {
         val element = parseJsonElement(body = body, gson = gson, errorLabel = "Gelbooru")
 
-        return when {
-            element.isJsonArray -> element.asJsonArray.toList().mapNotNull { it.takeIf(JsonElement::isJsonObject)?.asJsonObject }
-            element.isJsonObject -> {
-                val obj = element.asJsonObject
-                when {
-                    obj.get("post")?.isJsonArray == true -> obj.getAsJsonArray("post").toList().mapNotNull { it.takeIf(JsonElement::isJsonObject)?.asJsonObject }
-                    obj.get("post")?.isJsonObject == true -> listOf(obj.getAsJsonObject("post"))
-                    else -> emptyList()
-                }
-            }
-            else -> emptyList()
-        }
+        return element.objectList("post")
     }
 
     private fun parseTagItems(body: String): List<JsonObject> {
         val element = parseJsonElement(body = body, gson = gson, errorLabel = "Gelbooru tags")
 
-        return when {
-            element.isJsonArray -> element.asJsonArray.toList().mapNotNull { it.takeIf(JsonElement::isJsonObject)?.asJsonObject }
-            element.isJsonObject -> {
-                val obj = element.asJsonObject
-                when {
-                    obj.get("tag")?.isJsonArray == true -> obj.getAsJsonArray("tag").toList().mapNotNull { it.takeIf(JsonElement::isJsonObject)?.asJsonObject }
-                    obj.get("tag")?.isJsonObject == true -> listOf(obj.getAsJsonObject("tag"))
-                    else -> emptyList()
-                }
-            }
-            else -> emptyList()
-        }
+        return element.objectList("tag")
     }
 
     private fun parsePost(raw: JsonObject): Post? {
-        val id = raw.get("id")?.asString?.ifBlank { null } ?: return null
-        val tags = raw.get("tags")?.asString
+        val id = raw.stringValue("id")?.ifBlank { null } ?: return null
+        val tags = raw.stringValue("tags")
             ?.split(" ")
             ?.map { it.trim() }
             ?.filter { it.isNotBlank() }
             .orEmpty()
-        val fullUrl = normalizeGelbooruMediaUrl(raw.get("file_url")?.asString)
-        val sampleUrl = normalizeGelbooruMediaUrl(raw.get("sample_url")?.asString)
-        val previewUrl = normalizeGelbooruMediaUrl(raw.get("preview_url")?.asString) ?: sampleUrl ?: fullUrl
-        val fullMime = mimeFromUrlOrExt(fullUrl, raw.get("file_ext")?.asString)
+        val fullUrl = normalizeGelbooruMediaUrl(raw.stringValue("file_url"))
+        val sampleUrl = normalizeGelbooruMediaUrl(raw.stringValue("sample_url"))
+        val previewUrl = normalizeGelbooruMediaUrl(raw.stringValue("preview_url")) ?: sampleUrl ?: fullUrl
+        val fullMime = mimeFromUrlOrExt(fullUrl, raw.stringValue("file_ext"))
         val previewMime = mimeFromUrlOrExt(previewUrl, null) ?: fullMime
-        val createdAt = raw.get("created_at")?.asString?.toLongOrNull()?.times(1000L)
-            ?: raw.get("change")?.asString?.toLongOrNull()?.times(1000L)
-        val owner = raw.get("owner")?.asString?.trim().orEmpty()
-        val creatorId = raw.get("creator_id")?.asString?.trim().orEmpty()
+        val createdAt = raw.longValue("created_at")?.times(1000L)
+            ?: raw.longValue("change")?.times(1000L)
+        val owner = raw.stringValue("owner")?.trim().orEmpty()
+        val creatorId = raw.stringValue("creator_id")?.trim().orEmpty()
         val creatorDisplayName = owner.ifBlank { creatorId }.ifBlank { null }
         val uploadsQuery = owner.takeIf { it.isNotBlank() }?.let { "user:$it" }
 
@@ -274,8 +256,8 @@ class GelbooruSourceAdapter(
                 )
             },
             pageUrl = "https://gelbooru.com/index.php?page=post&s=view&id=$id",
-            width = raw.get("width")?.asInt,
-            height = raw.get("height")?.asInt,
+            width = raw.intValue("width"),
+            height = raw.intValue("height"),
             canonicalTags = tags,
             rawTags = tags,
             authorName = creatorDisplayName,
@@ -295,9 +277,9 @@ class GelbooruSourceAdapter(
     }
 
     private fun parseTag(raw: JsonObject, type: String): TagSuggestion? {
-        val name = raw.get("name")?.asString?.trim().orEmpty()
+        val name = raw.stringValue("name")?.trim().orEmpty()
         if (name.isBlank()) return null
-        val count = raw.get("count")?.asInt ?: raw.get("post_count")?.asInt
+        val count = raw.intValue("count") ?: raw.intValue("post_count")
         return TagSuggestion(
             text = name,
             type = type,

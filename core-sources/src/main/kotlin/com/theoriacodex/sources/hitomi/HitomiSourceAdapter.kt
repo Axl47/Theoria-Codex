@@ -16,6 +16,7 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.encoding.decodePercentEncodedUtf8Strict
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.HITOMI_ARTIST_QUERY_PREFIX
 import com.theoriacodex.domain.model.ImageRef
@@ -35,12 +36,10 @@ import com.theoriacodex.sources.http.SourceByteResponse
 import com.theoriacodex.sources.http.SourceHttpBodyTooLargeException
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.media.mimeFromFileExt
-import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.URI
 import java.net.URLEncoder
 import java.nio.ByteBuffer
-import java.nio.charset.CodingErrorAction
 import java.security.MessageDigest
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -980,37 +979,8 @@ class HitomiSourceAdapter(
         val path = parsed.rawPath ?: return false
         if (!path.startsWith("/artist/") || !path.endsWith("-all.html")) return false
         val encodedSlug = path.removePrefix("/artist/").removeSuffix("-all.html")
-        val decodedSlug = decodeHitomiArtistPathSegmentStrict(encodedSlug) ?: return false
+        val decodedSlug = decodePercentEncodedUtf8Strict(encodedSlug) ?: return false
         return canonicalHitomiArtistIdentity(decodedSlug) == artistIdentity
-    }
-
-    private fun decodeHitomiArtistPathSegmentStrict(value: String): String? {
-        val bytes = ByteArrayOutputStream(value.length)
-        var index = 0
-        while (index < value.length) {
-            val character = value[index]
-            if (character == '%') {
-                if (index + 2 >= value.length) return null
-                val high = value[index + 1].digitToIntOrNull(radix = 16) ?: return null
-                val low = value[index + 2].digitToIntOrNull(radix = 16) ?: return null
-                bytes.write((high shl 4) or low)
-                index += 3
-            } else {
-                val codePoint = value.codePointAt(index)
-                if (codePoint in 0xD800..0xDFFF) return null
-                val encoded = String(Character.toChars(codePoint)).toByteArray(Charsets.UTF_8)
-                bytes.write(encoded)
-                index += Character.charCount(codePoint)
-            }
-        }
-        return runCatching {
-            Charsets.UTF_8
-                .newDecoder()
-                .onMalformedInput(CodingErrorAction.REPORT)
-                .onUnmappableCharacter(CodingErrorAction.REPORT)
-                .decode(ByteBuffer.wrap(bytes.toByteArray()))
-                .toString()
-        }.getOrNull()
     }
 
     private suspend fun candidatesFor(file: ParsedHitomiFile): List<HitomiMediaCandidate> {

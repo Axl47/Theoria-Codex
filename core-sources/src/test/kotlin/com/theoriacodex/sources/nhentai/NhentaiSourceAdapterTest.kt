@@ -259,6 +259,19 @@ class NhentaiSourceAdapterTest {
     }
 
     @Test
+    fun `non-challenge forbidden response keeps nhentai unknown failure semantics`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(statusCode = 403, body = "forbidden")
+        }
+        val adapter = NhentaiSourceAdapter(httpClient = httpClient)
+
+        val failure = runCatching { adapter.search(multiTagQuery(), pageToken = null) }.exceptionOrNull()
+
+        require(failure is SourceAdapterException)
+        assertEquals(SourceFailureReason.UNKNOWN, failure.reason)
+    }
+
+    @Test
     fun `search resolves direct gallery id without search endpoint`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(

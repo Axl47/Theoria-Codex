@@ -16,6 +16,9 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.common.classifyHttpFailure
+import com.theoriacodex.sources.common.isSuccessful
+import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.http.SourceHttpClient
 import java.io.IOException
 import org.jsoup.Jsoup
@@ -216,16 +219,16 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
                 headers = RULE34_BROWSER_HEADERS + ("Referer" to "$baseUrl/"),
             )
         } catch (error: IOException) {
-            rule34NetworkFailure(baseUrl, error)
+            sourceNetworkFailure(baseUrl, error)
         }
 
         if (allowNotFound && response.statusCode == 404) {
             return ""
         }
         if (response.statusCode == 404) return ""
-        if (response.statusCode !in 200..299) {
+        if (!response.isSuccessful()) {
             throw SourceAdapterException(
-                reason = classifyRule34HttpFailure(response.statusCode),
+                reason = classifyHttpFailure(response.statusCode),
                 message = "$baseUrl request failed (${response.statusCode})",
             )
         }

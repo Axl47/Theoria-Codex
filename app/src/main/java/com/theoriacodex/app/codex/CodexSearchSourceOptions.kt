@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.source.SourcePresentationCatalog
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.sourceTagKey
@@ -27,8 +28,9 @@ fun codexSearchSourceOptions(
         .groupingBy { source -> source }
         .eachCount()
 
-    return SourceKey.entries
-        .mapNotNull { source ->
+    return SourcePresentationCatalog.orderedPresentations()
+        .mapNotNull { presentation ->
+            val source = presentation.source
             val count = countsBySource[source] ?: return@mapNotNull null
             CodexSearchSourceOption(source = source, postCount = count)
         }

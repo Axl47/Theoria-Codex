@@ -13,10 +13,11 @@ object ForYouTagSetGenerator {
     ): List<String> {
         val normalizedDocuments = likedDocuments
             .map { document ->
-                document
-                    .mapNotNull { tag -> normalizeTag(source, tag) }
-                    .distinct()
-                    .take(MAX_TAGS_PER_DOCUMENT)
+                RecommendationTagNormalization.normalizeDistinct(
+                    source = source,
+                    rawTags = document,
+                    limit = MAX_TAGS_PER_DOCUMENT,
+                )
             }
             .filter { it.isNotEmpty() }
 
@@ -90,38 +91,15 @@ object ForYouTagSetGenerator {
         candidates: List<String>,
         random: Random,
     ): String? {
-        val normalized = candidates
-            .mapNotNull { normalizeTag(source, it) }
-            .distinct()
+        val normalized = RecommendationTagNormalization.normalizeDistinct(
+            source = source,
+            rawTags = candidates,
+        )
         if (normalized.isEmpty()) return null
 
         val topSlice = normalized.take(FALLBACK_WINDOW_SIZE)
         if (topSlice.isEmpty()) return normalized.firstOrNull()
         return topSlice[random.nextInt(topSlice.size)]
-    }
-
-    private fun normalizeTag(source: SourceKey, rawTag: String): String? {
-        val cleaned = rawTag
-            .trim()
-            .removePrefix("-")
-            .replace(WHITESPACE_REGEX, " ")
-            .lowercase()
-        if (cleaned.isBlank()) return null
-
-        if (source == SourceKey.PIXIV && (cleaned.contains("users入り") || PIXIV_USERS_TAG_REGEX.matches(cleaned))) {
-            return null
-        }
-
-        return when (source) {
-            SourceKey.GELBOORU, SourceKey.AIBOORU, SourceKey.IWARA, SourceKey.RULE34XXX -> cleaned.replace(' ', '_')
-            SourceKey.PIXIV,
-            SourceKey.NHENTAI,
-            SourceKey.HITOMI,
-            SourceKey.RULE34PAHEAL,
-            SourceKey.RULE34VIDEO,
-            SourceKey.RULE34GEN,
-            -> cleaned
-        }.takeIf { it.isNotBlank() }
     }
 
     private fun minTagCount(totalDocuments: Int): Int {
@@ -179,5 +157,3 @@ private const val MAX_TAGS_PER_DOCUMENT: Int = 15
 private const val FALLBACK_WINDOW_SIZE: Int = 5
 private const val MIN_CONFIDENCE: Double = 0.25
 private const val MIN_LIFT: Double = 2.0
-private val WHITESPACE_REGEX = Regex("\\s+")
-private val PIXIV_USERS_TAG_REGEX = Regex("\\d+users入り")

@@ -1,13 +1,11 @@
 package com.theoriacodex.sources.rule34
 
 import com.google.gson.Gson
-import com.google.gson.JsonArray
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
-import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
@@ -17,6 +15,11 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.common.asStringOrNull
+import com.theoriacodex.sources.common.classifyHttpFailure
+import com.theoriacodex.sources.common.isSuccessful
+import com.theoriacodex.sources.common.parseJsonArray
+import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.media.inferMimeFromUrl
 import com.theoriacodex.sources.media.mimeFromFileExt
@@ -94,9 +97,9 @@ class Rule34PahealSourceAdapter(
             headers = emptyMap(),
         ) ?: return emptyList()
         val root = parseJsonArray(response, gson, "rule34.paheal.net browser search")
-        val values = root.get(1)?.takeIf { it.isJsonArray }?.asJsonArray ?: JsonArray()
+        val values = root.get(1)?.takeIf { it.isJsonArray }?.asJsonArray?.toList().orEmpty()
         return values.mapNotNull { item ->
-            val text = runCatching { item.asString.trim() }.getOrDefault("")
+            val text = item.asStringOrNull()?.trim().orEmpty()
             if (text.isBlank()) null else TagSuggestion(text = text, type = "tag", count = null)
         }.take(limit)
     }
@@ -127,15 +130,15 @@ class Rule34PahealSourceAdapter(
         val response = try {
             httpClient.get(url = url, headers = headers)
         } catch (error: IOException) {
-            rule34NetworkFailure("rule34.paheal.net", error)
+            sourceNetworkFailure("rule34.paheal.net", error)
         }
 
         if (allowNotFound && response.statusCode == 404) {
             return null
         }
-        if (response.statusCode !in 200..299) {
+        if (!response.isSuccessful()) {
             throw SourceAdapterException(
-                reason = classifyRule34HttpFailure(response.statusCode),
+                reason = classifyHttpFailure(response.statusCode),
                 message = "rule34.paheal.net request failed (${response.statusCode})",
             )
         }

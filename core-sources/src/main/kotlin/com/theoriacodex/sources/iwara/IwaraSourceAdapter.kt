@@ -19,10 +19,21 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.common.classifyHttpFailure
+import com.theoriacodex.sources.common.durationFieldMs
+import com.theoriacodex.sources.common.firstDurationMs
+import com.theoriacodex.sources.common.intValue
+import com.theoriacodex.sources.common.isSuccessful
+import com.theoriacodex.sources.common.matchesChallenge
+import com.theoriacodex.sources.common.optionalJsonArray
+import com.theoriacodex.sources.common.optionalJsonObject
+import com.theoriacodex.sources.common.parseJsonElement
+import com.theoriacodex.sources.common.parseJsonObject
+import com.theoriacodex.sources.common.sourceNetworkFailure
+import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.media.inferMimeFromUrl
-import com.theoriacodex.sources.media.mimeFromFileExt
 import java.io.IOException
 import java.net.URI
 import java.net.URLEncoder
@@ -109,14 +120,14 @@ class IwaraSourceAdapter(
                 "page" to "0",
             ),
         )
-        return response.getAsJsonArray("results")
+        return response.optionalJsonArray("results")
             ?.mapNotNull { element ->
-                val tag = element.asJsonObject
-                val text = tag.string("id").orEmpty().trim()
+                val tag = element.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@mapNotNull null
+                val text = tag.stringValue("id").orEmpty().trim()
                 if (text.isBlank()) return@mapNotNull null
                 TagSuggestion(
                     text = text,
-                    type = tag.string("type"),
+                    type = tag.stringValue("type"),
                     count = null,
                 )
             }
@@ -152,15 +163,15 @@ class IwaraSourceAdapter(
             query = emptyMap(),
         )
         if (response.statusCode == 404) return null
-        val root = parseJsonObject(response.body)
+        val root = parseJsonObject(response.body, gson, "Iwara")
         val parsed = parseVideoPost(root) ?: return null
-        val resolvedMedia = root.string("fileUrl")
+        val resolvedMedia = root.stringValue("fileUrl")
             ?.trim()
             ?.takeIf(String::isNotBlank)
             ?.let { fileUrl ->
                 resolvePlayableVideoRef(
                     fileUrl = fileUrl,
-                    fallbackMime = root.objectOrNull("file")?.string("mime"),
+                    fallbackMime = root.optionalJsonObject("file")?.stringValue("mime"),
                 )
             }
         if (resolvedMedia == null) {
@@ -218,7 +229,7 @@ class IwaraSourceAdapter(
         query: Map<String, String>,
     ): JsonObject {
         val response = request(url = url, query = query)
-        return parseJsonObject(response.body)
+        return parseJsonObject(response.body, gson, "Iwara")
     }
 
     private suspend fun request(
@@ -232,20 +243,16 @@ class IwaraSourceAdapter(
                 headers = IWARA_REQUEST_HEADERS,
             )
         } catch (error: IOException) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.NETWORK,
-                message = "Iwara request failed",
-                cause = error,
-            )
+            sourceNetworkFailure("Iwara", error)
         }
         val effectiveResponse = if (shouldUseMirrorFallback(response)) {
             requestMirror(url = url, query = query)
         } else {
             response
         }
-        if (effectiveResponse.statusCode !in 200..299 && effectiveResponse.statusCode != 404) {
+        if (!effectiveResponse.isSuccessful() && effectiveResponse.statusCode != 404) {
             throw SourceAdapterException(
-                reason = classifyFailure(effectiveResponse.statusCode),
+                reason = classifyHttpFailure(effectiveResponse.statusCode),
                 message = "Iwara request failed (${effectiveResponse.statusCode})",
             )
         }
@@ -264,24 +271,13 @@ class IwaraSourceAdapter(
                 headers = JINA_REQUEST_HEADERS,
             )
         } catch (error: IOException) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.NETWORK,
-                message = "Iwara mirror request failed",
-                cause = error,
-            )
+            sourceNetworkFailure("Iwara mirror", error)
         }
         return mirrored.copy(body = extractJsonBody(mirrored.body))
     }
 
     private fun shouldUseMirrorFallback(response: SourceHttpResponse): Boolean {
-        if (response.statusCode != 403) return false
-        val challengeHeader = response.headers.entries.any { (name, values) ->
-            name.equals("cf-mitigated", ignoreCase = true) &&
-                values.any { value -> value.contains("challenge", ignoreCase = true) }
-        }
-        if (challengeHeader) return true
-        val body = response.body.lowercase()
-        return "cloudflare" in body || "cf-mitigated" in body
+        return response.matchesChallenge()
     }
 
     private fun extractJsonBody(body: String): String {
@@ -330,23 +326,23 @@ class IwaraSourceAdapter(
         fallbackMime: String?,
     ): ImageRef? {
         val response = request(url = fileUrl, query = emptyMap())
-        val root = parseJsonElement(response.body)
+        val root = parseJsonElement(response.body, gson, "Iwara")
         if (!root.isJsonArray) return null
         val variants = root.asJsonArray.mapNotNull { element ->
             val variant = element.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@mapNotNull null
-            val src = variant.objectOrNull("src")
-            val resolvedUrl = src?.string("view")
+            val src = variant.optionalJsonObject("src")
+            val resolvedUrl = src?.stringValue("view")
                 ?.trim()
                 ?.takeIf(String::isNotBlank)
                 ?.let(::normalizeVariantUrl)
-                ?: src?.string("download")
+                ?: src?.stringValue("download")
                     ?.trim()
                     ?.takeIf(String::isNotBlank)
                     ?.let(::normalizeVariantUrl)
                 ?: return@mapNotNull null
             ResolvedVariant(
-                name = variant.string("name")?.trim(),
-                mime = variant.string("type")?.trim(),
+                name = variant.stringValue("name")?.trim(),
+                mime = variant.stringValue("type")?.trim(),
                 url = resolvedUrl,
             )
         }
@@ -374,27 +370,10 @@ class IwaraSourceAdapter(
         return digits.toIntOrNull() ?: 0
     }
 
-    private fun parseJsonElement(body: String): JsonElement {
-        return runCatching { gson.fromJson(body, JsonElement::class.java) }.getOrNull()
-            ?: throw SourceAdapterException(
-                reason = SourceFailureReason.PARSE,
-                message = "Iwara returned malformed JSON",
-            )
-    }
-
-    private fun parseJsonObject(body: String): JsonObject {
-        val root = parseJsonElement(body)
-        return root.takeIf(JsonElement::isJsonObject)?.asJsonObject
-            ?: throw SourceAdapterException(
-                reason = SourceFailureReason.PARSE,
-                message = "Iwara returned non-object JSON",
-            )
-    }
-
     private fun parsePagedPosts(root: JsonObject): Page<Post> {
-        val page = root.int("page") ?: 0
-        val limit = root.int("limit") ?: 0
-        val count = root.int("count") ?: 0
+        val page = root.intValue("page") ?: 0
+        val limit = root.intValue("limit") ?: 0
+        val count = root.intValue("count") ?: 0
         val items = parseResultItems(root).mapNotNull(::parseVideoPost)
         val hasMore = limit > 0 && ((page + 1) * limit) < count
         return Page(
@@ -404,52 +383,52 @@ class IwaraSourceAdapter(
     }
 
     private fun parseResultItems(root: JsonObject): List<JsonObject> {
-        return root.getAsJsonArray("results")
+        return root.optionalJsonArray("results")
             ?.mapNotNull { element -> element.takeIf(JsonElement::isJsonObject)?.asJsonObject }
             .orEmpty()
     }
 
     private fun parseVideoPost(raw: JsonObject): Post? {
-        val sourcePostId = raw.string("id")?.trim().takeUnless { it.isNullOrBlank() } ?: return null
-        val slug = raw.string("slug")?.trim().orEmpty()
-        val file = raw.objectOrNull("file")
-        val customThumbnail = raw.objectOrNull("customThumbnail")
-        val embedUrl = raw.string("embedUrl")?.trim().takeUnless { it.isNullOrBlank() }
+        val sourcePostId = raw.stringValue("id")?.trim().takeUnless { it.isNullOrBlank() } ?: return null
+        val slug = raw.stringValue("slug")?.trim().orEmpty()
+        val file = raw.optionalJsonObject("file")
+        val customThumbnail = raw.optionalJsonObject("customThumbnail")
+        val embedUrl = raw.stringValue("embedUrl")?.trim().takeUnless { it.isNullOrBlank() }
         if (file == null && embedUrl != null) return null
         val preview = ImageRef(
             url = customThumbnail?.let(::buildAssetUrl)
-                ?: file?.string("id")?.let { fileId ->
+                ?: file?.stringValue("id")?.let { fileId ->
                     buildVideoThumbnailUrl(
                         fileId = fileId,
-                        thumbnailIndex = raw.int("thumbnail"),
+                        thumbnailIndex = raw.intValue("thumbnail"),
                     )
                 }
                 ?: embedUrl?.let(::buildEmbedThumbnailUrl),
             localPath = null,
-            mime = customThumbnail?.string("mime") ?: "image/jpeg",
+            mime = customThumbnail?.stringValue("mime") ?: "image/jpeg",
         )
         val tags = parseTags(raw)
-        val creatorProfile = parseCreator(raw.objectOrNull("user"))
+        val creatorProfile = parseCreator(raw.optionalJsonObject("user"))
         return Post(
             id = PostId(source = SourceKey.IWARA, sourcePostId = sourcePostId),
             preview = preview,
             full = null,
             media = emptyList(),
             pageUrl = buildVideoPageUrl(sourcePostId = sourcePostId, slug = slug),
-            width = file?.int("width") ?: customThumbnail?.int("width"),
-            height = file?.int("height") ?: customThumbnail?.int("height"),
+            width = file?.intValue("width") ?: customThumbnail?.intValue("width"),
+            height = file?.intValue("height") ?: customThumbnail?.intValue("height"),
             canonicalTags = tags,
             rawTags = tags,
             authorName = creatorProfile?.displayName,
-            createdAtEpochMs = raw.string("createdAt")?.let(::parseEpochMs),
-            title = raw.string("title")?.trim().takeUnless { it.isNullOrBlank() },
+            createdAtEpochMs = raw.stringValue("createdAt")?.let(::parseEpochMs),
+            title = raw.stringValue("title")?.trim().takeUnless { it.isNullOrBlank() },
             creatorProfile = creatorProfile,
             durationMs = parseIwaraDurationMs(raw, file),
         )
     }
 
     private fun parseIwaraDurationMs(raw: JsonObject, file: JsonObject?): Long? {
-        return sequenceOf(
+        return firstDurationMs(
             raw.durationFieldMs("durationMs", multiplier = 1L),
             raw.durationFieldMs("duration", multiplier = 1_000L),
             raw.durationFieldMs("durationSeconds", multiplier = 1_000L),
@@ -458,13 +437,13 @@ class IwaraSourceAdapter(
             file?.durationFieldMs("duration", multiplier = 1_000L),
             file?.durationFieldMs("durationSeconds", multiplier = 1_000L),
             file?.durationFieldMs("length", multiplier = 1_000L),
-        ).filterNotNull().firstOrNull { it > 0L }
+        )
     }
 
     private fun parseTags(raw: JsonObject): List<String> {
-        return raw.getAsJsonArray("tags")
+        return raw.optionalJsonArray("tags")
             ?.mapNotNull { element ->
-                element.takeIf(JsonElement::isJsonObject)?.asJsonObject?.string("id")
+                element.takeIf(JsonElement::isJsonObject)?.asJsonObject?.stringValue("id")
                     ?.trim()
                     ?.takeIf(String::isNotBlank)
             }
@@ -473,11 +452,11 @@ class IwaraSourceAdapter(
 
     private fun parseCreator(user: JsonObject?): CreatorProfile? {
         user ?: return null
-        val displayName = user.string("name")?.trim().takeUnless { it.isNullOrBlank() }
-            ?: user.string("username")?.trim().takeUnless { it.isNullOrBlank() }
+        val displayName = user.stringValue("name")?.trim().takeUnless { it.isNullOrBlank() }
+            ?: user.stringValue("username")?.trim().takeUnless { it.isNullOrBlank() }
             ?: return null
-        val userId = user.string("id")?.trim().takeUnless { it.isNullOrBlank() }
-        val username = user.string("username")?.trim().takeUnless { it.isNullOrBlank() }
+        val userId = user.stringValue("id")?.trim().takeUnless { it.isNullOrBlank() }
+        val username = user.stringValue("username")?.trim().takeUnless { it.isNullOrBlank() }
         return CreatorProfile(
             source = SourceKey.IWARA,
             displayName = displayName,
@@ -488,8 +467,8 @@ class IwaraSourceAdapter(
     }
 
     private fun buildAssetUrl(asset: JsonObject): String? {
-        val assetId = asset.string("id")?.trim().takeUnless { it.isNullOrBlank() } ?: return null
-        val fileExt = asset.string("name")
+        val assetId = asset.stringValue("id")?.trim().takeUnless { it.isNullOrBlank() } ?: return null
+        val fileExt = asset.stringValue("name")
             ?.substringAfterLast('.', "")
             ?.trim()
             ?.lowercase()
@@ -539,58 +518,6 @@ class IwaraSourceAdapter(
         return runCatching { Instant.parse(value).toEpochMilli() }.getOrNull()
     }
 
-    private fun classifyFailure(statusCode: Int): SourceFailureReason {
-        return when (statusCode) {
-            401, 403 -> SourceFailureReason.AUTH_REQUIRED
-            429 -> SourceFailureReason.RATE_LIMITED
-            in 500..599 -> SourceFailureReason.NETWORK
-            else -> SourceFailureReason.UNKNOWN
-        }
-    }
-}
-
-private fun JsonObject.string(name: String): String? {
-    return get(name)?.takeUnless { it.isJsonNull }?.asString
-}
-
-private fun JsonObject.int(name: String): Int? {
-    return get(name)?.takeUnless { it.isJsonNull }?.asInt
-}
-
-private fun JsonObject.durationFieldMs(name: String, multiplier: Long): Long? {
-    val element = get(name)?.takeUnless { it.isJsonNull } ?: return null
-    val raw = when {
-        element.isJsonPrimitive && element.asJsonPrimitive.isNumber -> {
-            runCatching { element.asDouble }.getOrNull()?.let { number ->
-                (number * multiplier).toLong()
-            }
-        }
-        element.isJsonPrimitive && element.asJsonPrimitive.isString -> {
-            parseFlexibleDurationMs(element.asString, multiplier)
-        }
-        else -> null
-    }
-    return raw?.takeIf { it > 0L }
-}
-
-private fun parseFlexibleDurationMs(raw: String, numericMultiplier: Long): Long? {
-    val trimmed = raw.trim()
-    if (trimmed.isBlank()) return null
-    trimmed.toDoubleOrNull()?.let { return (it * numericMultiplier).toLong() }
-    val parts = trimmed.split(':').mapNotNull { part -> part.trim().toLongOrNull() }
-    if (parts.isEmpty()) return null
-    val seconds = when (parts.size) {
-        1 -> parts[0]
-        2 -> parts[0] * 60L + parts[1]
-        else -> parts.takeLast(3).let { (hours, minutes, seconds) ->
-            hours * 3600L + minutes * 60L + seconds
-        }
-    }
-    return seconds * 1_000L
-}
-
-private fun JsonObject.objectOrNull(name: String): JsonObject? {
-    return get(name)?.takeIf(JsonElement::isJsonObject)?.asJsonObject
 }
 
 private data class ResolvedVariant(

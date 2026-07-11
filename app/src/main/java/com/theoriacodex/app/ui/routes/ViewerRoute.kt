@@ -57,6 +57,7 @@ internal data class ViewerRouteRenderConfig(
     },
     val invertMultiImageScrollDirection: Boolean = false,
     val likedPostIds: Set<PostId> = emptySet(),
+    val creatorBrowsingSources: Set<SourceKey>,
 )
 
 /** Immutable source-owner snapshot consumed by a live Viewer session. */
@@ -352,6 +353,7 @@ internal fun ViewerRoute(
 
     ViewerScreen(
         uiState = viewerState,
+        creatorBrowsingSources = renderConfig.creatorBrowsingSources,
         onAction = viewerOwner::onAction,
         pixivUgoiraClient = renderConfig.pixivUgoiraClient,
         tagVideoCountProvider = renderConfig.tagVideoCountProvider,

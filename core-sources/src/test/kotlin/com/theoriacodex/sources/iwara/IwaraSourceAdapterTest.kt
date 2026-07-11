@@ -471,6 +471,21 @@ class IwaraSourceAdapterTest {
     }
 
     @Test
+    fun `non-challenge forbidden response keeps iwara auth-required semantics`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(statusCode = 403, body = "forbidden")
+        }
+        val adapter = IwaraSourceAdapter(httpClient = httpClient)
+
+        val failure = runCatching {
+            adapter.search(sampleQuery(sort = SortMode.POPULAR), pageToken = null)
+        }.exceptionOrNull()
+
+        require(failure is SourceAdapterException)
+        assertEquals(SourceFailureReason.AUTH_REQUIRED, failure.reason)
+    }
+
+    @Test
     fun `cloudflare challenge falls back to jina mirror`() = runTest {
         val httpClient = object : com.theoriacodex.sources.http.SourceHttpClient {
             val requests = mutableListOf<Pair<String, Map<String, String>>>()

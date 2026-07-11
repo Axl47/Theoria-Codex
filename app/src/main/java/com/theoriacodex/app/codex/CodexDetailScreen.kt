@@ -1,31 +1,18 @@
 package com.theoriacodex.app.codex
 
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,15 +21,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.creator.CreatorProfileActionButton
-import com.theoriacodex.app.media.copyPostTagsToClipboard
-import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.tags.PostTagActionSection
+import com.theoriacodex.app.ui.components.FeedEmptyTile
+import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.model.CreatorProfile
@@ -57,6 +40,7 @@ fun CodexDetailScreen(
     codexName: String?,
     posts: List<Post>,
     sortMode: CodexSortMode,
+    creatorBrowsingSources: Set<SourceKey>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     onSortChange: (CodexSortMode) -> Unit,
     onOpenViewer: (Int) -> Unit,
@@ -128,26 +112,11 @@ fun CodexDetailScreen(
         }
 
         if (posts.isEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        text = "This codex is empty",
-                        style = MaterialTheme.typography.titleMedium,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Text(
-                        text = "Browse and save posts",
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
+            FeedEmptyTile(
+                title = "This codex is empty",
+                message = "Browse and save posts",
+                contentPadding = 24.dp,
+            )
         } else {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
@@ -172,93 +141,16 @@ fun CodexDetailScreen(
 
     if (selectedActionPost != null) {
         val post = requireNotNull(selectedActionPost)
-        val context = LocalContext.current
-        val actionSheetHorizontalPadding = 16.dp
-        ModalBottomSheet(
-            onDismissRequest = { selectedActionPost = null },
-            dragHandle = null,
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = actionSheetHorizontalPadding, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    IconButton(
-                        onClick = {
-                            selectedActionPost = null
-                            onSavePostToDevice(post)
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = "Save to device",
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            selectedActionPost = null
-                            onRemovePost(post)
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Remove from Codex",
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            copyPostTagsToClipboard(context, post)
-                            Toast.makeText(context, "Tags copied", Toast.LENGTH_SHORT).show()
-                            selectedActionPost = null
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "Copy tags",
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            val copied = copyPostUrlToClipboard(context, post)
-                            val message = if (copied) {
-                                "Post URL copied"
-                            } else {
-                                "No post URL available"
-                            }
-                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                            selectedActionPost = null
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "Share",
-                        )
-                    }
-                }
-                Text(
-                    text = post.title?.takeIf { it.isNotBlank() } ?: post.id.sourcePostId,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                )
-                CreatorProfileActionButton(
-                    post = post,
-                    onOpenProfile = { profile ->
-                        selectedActionPost = null
-                        onOpenCreatorProfile(profile)
-                    },
-                    onOpenLegacyPost = {
-                        selectedActionPost = null
-                        onOpenLegacyCreatorProfile(post)
-                    },
-                )
-                HorizontalDivider()
+        PostActionSheet(
+            post = post,
+            creatorBrowsingSources = creatorBrowsingSources,
+            onDismiss = { selectedActionPost = null },
+            onSaveToDevice = { onSavePostToDevice(post) },
+            onRemoveFromCodex = { onRemovePost(post) },
+            onOpenCreatorProfile = onOpenCreatorProfile,
+            onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
+            onGoToSearch = onGoToSearch,
+            tagContent = {
                 PostTagActionSection(
                     post = post,
                     tagVideoCountProvider = tagVideoCountProvider,
@@ -269,25 +161,8 @@ fun CodexDetailScreen(
                     onRemoveExcludeTerm = { term -> onRemoveExcludeTerm(post, term) },
                     onFavoriteTagLongPress = onFavoriteTagLongPress,
                 )
-                onGoToSearch?.let { goToSearch ->
-                    TextButton(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = {
-                            selectedActionPost = null
-                            goToSearch()
-                        },
-                    ) {
-                        Text("Go to Search")
-                    }
-                }
-                TextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { selectedActionPost = null },
-                ) {
-                    Text("Cancel")
-                }
-            }
-        }
+            },
+        )
     }
 
     if (showDeleteConfirm) {

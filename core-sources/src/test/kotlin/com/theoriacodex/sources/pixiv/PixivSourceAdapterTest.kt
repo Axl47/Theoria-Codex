@@ -33,6 +33,61 @@ class PixivSourceAdapterTest {
     }
 
     @Test
+    fun `unauthorized search refreshes once and retries with the new access token`() = runTest {
+        val credentials = FakeCredentialsProvider().apply {
+            pixivTokens = PixivAuthTokens(
+                accessToken = "expired-access",
+                refreshToken = "refresh-token",
+                expiresAtEpochMs = Long.MAX_VALUE,
+            )
+        }
+        val authorizationHeaders = mutableListOf<String?>()
+        val httpClient = object : SourceHttpClient {
+            var getCount = 0
+
+            override suspend fun get(
+                url: String,
+                query: Map<String, String>,
+                headers: Map<String, String>,
+            ): SourceHttpResponse {
+                getCount += 1
+                authorizationHeaders += headers["Authorization"]
+                return if (getCount == 1) {
+                    SourceHttpResponse(statusCode = 401, body = "{}")
+                } else {
+                    SourceHttpResponse(statusCode = 200, body = """{"illusts":[]}""")
+                }
+            }
+
+            override suspend fun postForm(
+                url: String,
+                form: Map<String, String>,
+                headers: Map<String, String>,
+            ): SourceHttpResponse {
+                assertEquals("refresh-token", form["refresh_token"])
+                return SourceHttpResponse(
+                    statusCode = 200,
+                    body = """{"access_token":"fresh-access","refresh_token":"fresh-refresh","expires_in":3600}""",
+                )
+            }
+        }
+        val adapter = PixivSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = credentials,
+            minRequestIntervalMs = 0L,
+        )
+
+        val page = adapter.search(sampleQuery(), pageToken = null)
+
+        assertTrue(page.items.isEmpty())
+        assertEquals(
+            listOf("Bearer expired-access", "Bearer fresh-access"),
+            authorizationHeaders,
+        )
+        assertEquals("fresh-access", credentials.pixivTokens?.accessToken)
+    }
+
+    @Test
     fun `search maps response and next offset`() = runTest {
         val credentials = FakeCredentialsProvider().apply {
             pixivTokens = PixivAuthTokens(

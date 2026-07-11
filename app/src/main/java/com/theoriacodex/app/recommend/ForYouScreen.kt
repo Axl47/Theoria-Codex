@@ -1,6 +1,5 @@
 package com.theoriacodex.app.recommend
 
-import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,9 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
-import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -23,7 +19,6 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,7 +41,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
@@ -63,6 +57,10 @@ import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.search.animatedDurationResolutionCandidates
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.ui.components.FeedEmptyTile
+import com.theoriacodex.app.ui.components.FeedErrorTile
+import com.theoriacodex.app.ui.components.FeedLoadingState
+import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
@@ -289,7 +287,7 @@ fun ForYouScreen(
                 items(state.seedSummaryBySource.entries.toList()) { (source, tags) ->
                     Card {
                         Text(
-                            text = "${source.name}: ${tags.joinToString(" + ")}",
+                            text = "${source.displayName()}: ${tags.joinToString(" + ")}",
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                             style = MaterialTheme.typography.labelMedium,
                         )
@@ -321,37 +319,19 @@ fun ForYouScreen(
             }
 
             state.isRefreshing && visibleResults.isEmpty() -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator()
-                }
+                FeedLoadingState()
             }
 
             state.errorMessage != null && visibleResults.isEmpty() -> {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(state.errorMessage.orEmpty())
-                        TextButton(onClick = {
-                            onAction(ForYouAction.Refresh(shuffle = true))
-                        }) {
-                            Text("Retry")
-                        }
-                    }
-                }
+                FeedErrorTile(
+                    message = state.errorMessage.orEmpty(),
+                    onRetry = { onAction(ForYouAction.Refresh(shuffle = true)) },
+                )
             }
 
             visibleResults.isEmpty() -> {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = if (animatedOnly && state.results.isNotEmpty()) {
+                FeedEmptyTile(
+                    message = if (animatedOnly && state.results.isNotEmpty()) {
                             if (!visibilityFilters.animatedDurationRange.isFullRange) {
                                 "No animated media found in the selected duration range."
                             } else {
@@ -360,64 +340,34 @@ fun ForYouScreen(
                         } else {
                             "No recommendations yet. Tap Refresh to try a broader seed."
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        textAlign = TextAlign.Center,
-                    )
-                }
+                )
             }
 
             else -> {
-                LazyVerticalStaggeredGrid(
-                    columns = StaggeredGridCells.Fixed(2),
+                TwoColumnPostStaggeredGrid(
+                    posts = visibleResults,
                     state = gridState,
                     modifier = Modifier.fillMaxSize(),
-                    verticalItemSpacing = 6.dp,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    itemsIndexed(
-                        items = visibleResults,
-                        key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" },
-                    ) { index, post ->
-                        SearchResultCard(
-                            post = post,
-                            pixivUgoiraClient = pixivUgoiraClient,
-                            showSourceBadge = true,
-                            displayTag = displayTagFor(post),
-                            liked = post.id in likedPostIds,
-                            onToggleLike = { onToggleLike(post) },
-                            onClick = {
-                                onAction(
-                                    ForYouAction.OpenResult(
-                                        index = index,
-                                        scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
-                                        visibleResults = visibleResults,
-                                        visibilityFilters = visibilityFilters,
-                                    )
+                    showPagingTile = state.isPaging,
+                ) { index, post ->
+                    SearchResultCard(
+                        post = post,
+                        pixivUgoiraClient = pixivUgoiraClient,
+                        showSourceBadge = true,
+                        displayTag = displayTagFor(post),
+                        liked = post.id in likedPostIds,
+                        onToggleLike = { onToggleLike(post) },
+                        onClick = {
+                            onAction(
+                                ForYouAction.OpenResult(
+                                    index = index,
+                                    scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
+                                    visibleResults = visibleResults,
+                                    visibilityFilters = visibilityFilters,
                                 )
-                            },
-                        )
-                    }
-
-                    if (state.isPaging) {
-                        item {
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 12.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    CircularProgressIndicator()
-                                }
-                            }
-                        }
-                    }
+                            )
+                        },
+                    )
                 }
             }
         }

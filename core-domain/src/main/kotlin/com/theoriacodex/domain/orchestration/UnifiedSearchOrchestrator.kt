@@ -150,7 +150,7 @@ class UnifiedSearchOrchestrator(
         val sources = queues.keys.toList().sortedBy { it.name }
         if (sources.isEmpty()) return emptyList()
 
-        val normalizedWeights = normalizeWeights(sources, weightsBySource)
+        val normalizedWeights = SourceWeightNormalization.normalize(sources, weightsBySource)
         val accumulators = sources.associateWith { 0.0 }.toMutableMap()
         val merged = mutableListOf<Post>()
 
@@ -176,18 +176,6 @@ class UnifiedSearchOrchestrator(
         }
 
         return merged
-    }
-
-    private fun normalizeWeights(
-        sources: List<SourceKey>,
-        weightsBySource: Map<SourceKey, Double>,
-    ): Map<SourceKey, Double> {
-        val raw = sources.associateWith { source ->
-            val weight = weightsBySource[source] ?: 1.0
-            if (weight <= 0.0) 1.0 else weight
-        }
-        val total = raw.values.sum().takeIf { it > 0.0 } ?: sources.size.toDouble()
-        return raw.mapValues { (_, weight) -> weight / total }
     }
 
     private fun mapFailureReason(error: Throwable): SourceFailureReason {

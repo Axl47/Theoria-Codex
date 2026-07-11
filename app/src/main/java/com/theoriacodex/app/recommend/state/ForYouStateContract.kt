@@ -2,6 +2,7 @@ package com.theoriacodex.app.recommend.state
 
 import com.theoriacodex.app.recommend.ForYouCoordinator
 import com.theoriacodex.app.search.SearchVisibilityFilters
+import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -212,7 +213,7 @@ fun ForYouCoordinatorSnapshot.toUiState(): ForYouUiState {
         profiles = profiles.toList(),
         activeProfileId = activeProfileId,
         activeProfileLikesCount = activeProfileLikesCount.coerceAtLeast(0),
-        availableSources = availableSources.distinct().sortedBy(SourceKey::name),
+        availableSources = availableSources.inPresentationOrder(),
         selectedSource = selectedSource,
         sortMode = sortMode,
         seedId = seedId,

@@ -61,6 +61,18 @@ class ForYouTagSetGeneratorTest {
     }
 
     @Test
+    fun `fallback serving uses canonical recommendation keys`() {
+        val generated = ForYouTagSetGenerator.generate(
+            source = SourceKey.GELBOORU,
+            likedDocuments = emptyList(),
+            fallbackCandidates = listOf("  -Cloud   City  "),
+            random = ZeroRandom,
+        )
+
+        assertEquals(listOf("cloud_city"), generated)
+    }
+
+    @Test
     fun `drops pixiv users tags from training data`() {
         val generated = ForYouTagSetGenerator.generate(
             source = SourceKey.PIXIV,

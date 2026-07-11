@@ -6,8 +6,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.tags.normalizeFavoriteTagForStorage
-import com.theoriacodex.domain.tags.sourceTagKey
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,7 +35,7 @@ class InMemoryCodexRepository : CodexRepository {
         return mutex.withLock {
             val current = codices.value
             val existing = current.firstOrNull { it.codexId == codexId }
-            val resolvedName = resolveUniqueCodexName(
+            val resolvedName = RepositoryPolicies.resolveUniqueCodexName(
                 requestedName = name,
                 existingCodices = current,
                 excludeCodexId = codexId,
@@ -66,7 +64,7 @@ class InMemoryCodexRepository : CodexRepository {
 
     override suspend fun createCodex(name: String): Codex {
         return mutex.withLock {
-            val resolvedName = resolveUniqueCodexName(
+            val resolvedName = RepositoryPolicies.resolveUniqueCodexName(
                 requestedName = name,
                 existingCodices = codices.value,
             )
@@ -82,18 +80,11 @@ class InMemoryCodexRepository : CodexRepository {
 
     override suspend fun reorderCodex(codexId: String, targetIndex: Int) {
         mutex.withLock {
-            val current = codices.value
-            if (current.isEmpty()) return@withLock
-            val sourceIndex = current.indexOfFirst { codex -> codex.codexId == codexId }
-            if (sourceIndex < 0) return@withLock
-
-            val clampedTarget = targetIndex.coerceIn(0, current.lastIndex)
-            if (sourceIndex == clampedTarget) return@withLock
-
-            val reordered = current.toMutableList()
-            val moved = reordered.removeAt(sourceIndex)
-            reordered.add(clampedTarget, moved)
-            codices.value = reordered
+            codices.value = RepositoryPolicies.reorderCodices(
+                codices = codices.value,
+                codexId = codexId,
+                targetIndex = targetIndex,
+            )
         }
     }
 
@@ -101,7 +92,7 @@ class InMemoryCodexRepository : CodexRepository {
         mutex.withLock {
             val current = codices.value
             val existing = current.firstOrNull { it.codexId == codexId } ?: return@withLock
-            val resolvedName = resolveUniqueCodexName(
+            val resolvedName = RepositoryPolicies.resolveUniqueCodexName(
                 requestedName = name,
                 existingCodices = current,
                 excludeCodexId = codexId,
@@ -129,7 +120,7 @@ class InMemoryCodexRepository : CodexRepository {
             val pairs = items[codexId].orEmpty().mapNotNull { item ->
                 posts[item.postId]?.let { post -> item to post }
             }
-            sortCodexPairs(pairs, sort).map { it.second }
+            RepositoryPolicies.sortCodexPairs(pairs, sort).map { it.second }
         }
     }
 
@@ -140,15 +131,18 @@ class InMemoryCodexRepository : CodexRepository {
     override suspend fun addItem(codexId: String, post: Post) {
         mutex.withLock {
             if (codices.value.none { it.codexId == codexId }) return@withLock
-            postsById.value = postsById.value + (post.id to post)
             val existing = itemsByCodex.value[codexId].orEmpty()
-            val contains = existing.any { it.postId == post.id }
-            if (!contains) {
-                val updated = existing + CodexItem(
-                    codexId = codexId,
-                    postId = post.id,
-                    savedAtEpochMs = System.currentTimeMillis(),
-                )
+            val updated = RepositoryPolicies.addCodexItem(
+                items = existing,
+                codexId = codexId,
+                postId = post.id,
+                savedAtEpochMs = System.currentTimeMillis(),
+            )
+            val postChanged = postsById.value[post.id] != post
+            if (postChanged) {
+                postsById.value = postsById.value + (post.id to post)
+            }
+            if (updated != existing) {
                 itemsByCodex.value = itemsByCodex.value + (codexId to updated)
             }
         }
@@ -164,7 +158,10 @@ class InMemoryCodexRepository : CodexRepository {
     override suspend fun removeItem(codexId: String, sourceKey: SourceKey, sourcePostId: String) {
         mutex.withLock {
             val targetPostId = PostId(source = sourceKey, sourcePostId = sourcePostId)
-            val updated = itemsByCodex.value[codexId].orEmpty().filterNot { it.postId == targetPostId }
+            val updated = RepositoryPolicies.removeCodexItem(
+                items = itemsByCodex.value[codexId].orEmpty(),
+                postId = targetPostId,
+            )
             itemsByCodex.value = itemsByCodex.value + (codexId to updated)
         }
     }
@@ -215,24 +212,22 @@ class InMemoryRecentsRepository(
 
     override fun observeActivity(): Flow<List<RecentActivityEntry>> {
         return combine(watched, searches) { watchedPosts, searchEntries ->
-            buildList {
-                watchedPosts.forEach { entry -> add(RecentActivityEntry.Watched(entry)) }
-                searchEntries.forEach { entry -> add(RecentActivityEntry.Search(entry)) }
-            }.sortedByDescending { entry -> entry.occurredAtEpochMs }
+            RepositoryPolicies.mergeRecentActivity(watchedPosts, searchEntries)
         }
     }
 
     override suspend fun recordWatchedPost(post: Post, origin: ViewerStreamSource, originQueryHash: String?) {
         mutex.withLock {
-            watched.value = (listOf(
-                RecentPostEntry(
+            watched.value = RepositoryPolicies.recordWatched(
+                entries = watched.value,
+                entry = RecentPostEntry(
                     post = post,
                     viewedAtEpochMs = clock(),
                     origin = origin,
                     originQueryHash = originQueryHash,
-                )
-            ) + watched.value.filterNot { entry -> entry.post.id == post.id })
-                .take(watchedLimit.coerceAtLeast(0))
+                ),
+                limit = watchedLimit,
+            )
         }
     }
 
@@ -240,14 +235,15 @@ class InMemoryRecentsRepository(
         val normalizedHash = queryHash.trim()
         if (normalizedHash.isBlank()) return
         mutex.withLock {
-            searches.value = (listOf(
-                RecentSearchEntry(
+            searches.value = RepositoryPolicies.recordSearch(
+                entries = searches.value,
+                entry = RecentSearchEntry(
                     query = query,
                     queryHash = normalizedHash,
                     searchedAtEpochMs = clock(),
-                )
-            ) + searches.value.filterNot { entry -> entry.queryHash == normalizedHash })
-                .take(searchLimit.coerceAtLeast(0))
+                ),
+                limit = searchLimit,
+            )
         }
     }
 
@@ -272,209 +268,129 @@ class InMemoryRecentsRepository(
 }
 
 class InMemorySettingsRepository : SettingsRepository {
-    private val settings = MutableStateFlow(AppSettings())
+    private val mutex = Mutex()
+    private val settings = MutableStateFlow(RepositoryPolicies.normalizeSettings(AppSettings()))
 
     override fun observeSettings(): Flow<AppSettings> {
         return settings
     }
 
     override suspend fun updateSettings(transform: (AppSettings) -> AppSettings) {
-        settings.value = normalizeSettings(transform(settings.value))
+        mutateSettings { current ->
+            RepositoryPolicies.Result(state = transform(current), value = Unit)
+        }
     }
 
     override suspend fun setEnabledSources(enabledSources: Set<SourceKey>) {
-        settings.value = normalizeSettings(
-            settings.value.copy(
-                runtime = settings.value.runtime.copy(enabledSources = enabledSources),
+        updateSettings { current ->
+            current.copy(
+                runtime = current.runtime.copy(enabledSources = enabledSources),
             )
-        )
+        }
     }
 
     override suspend fun setSourceWeights(sourceWeights: Map<SourceKey, Double>) {
-        settings.value = normalizeSettings(
-            settings.value.copy(
-                runtime = settings.value.runtime.copy(sourceWeights = sourceWeights),
+        updateSettings { current ->
+            current.copy(
+                runtime = current.runtime.copy(sourceWeights = sourceWeights),
             )
-        )
+        }
     }
 
     override suspend fun setCacheFullImageOnSave(enabled: Boolean) {
-        settings.value = settings.value.copy(cache = settings.value.cache.copy(cacheFullImageOnSave = enabled))
+        updateSettings { current ->
+            current.copy(cache = current.cache.copy(cacheFullImageOnSave = enabled))
+        }
     }
 
     override suspend fun setResolveUnknownAnimatedDurations(enabled: Boolean) {
-        settings.value = settings.value.copy(
-            contentFilters = settings.value.contentFilters.copy(resolveUnknownAnimatedDurations = enabled),
-        )
+        updateSettings { current ->
+            current.copy(
+                contentFilters = current.contentFilters.copy(resolveUnknownAnimatedDurations = enabled),
+            )
+        }
     }
 
     override suspend fun setInvertMultiImageScrollDirection(enabled: Boolean) {
-        settings.value = settings.value.copy(
-            viewer = settings.value.viewer.copy(invertMultiImageScrollDirection = enabled),
-        )
+        updateSettings { current ->
+            current.copy(viewer = current.viewer.copy(invertMultiImageScrollDirection = enabled))
+        }
     }
 
     override suspend fun setScenarioPreset(preset: ScenarioPreset) {
-        settings.value = settings.value.copy(scenarioPreset = preset)
+        updateSettings { current -> current.copy(scenarioPreset = preset) }
     }
 
     @Deprecated("Last-tab state is owned by UiRestoreRepository; retain this writer only for compatibility.")
     override suspend fun setLastTab(route: String) {
-        settings.value = settings.value.copy(lastSelectedTabRoute = route)
+        updateSettings { current -> current.copy(lastSelectedTabRoute = route) }
     }
 
     override suspend fun setActiveProfile(profileId: String) {
-        settings.value = normalizeSettings(settings.value.copy(activeProfileId = profileId))
+        updateSettings { current -> current.copy(activeProfileId = profileId) }
     }
 
     override suspend fun addRecommendationProfile(name: String): RecommendationProfile {
-        val profileName = name.trim().ifBlank {
-            "Profile ${settings.value.recommendationProfiles.size + 1}"
+        val profileId = UUID.randomUUID().toString()
+        return mutateSettings { current ->
+            RepositoryPolicies.addRecommendationProfile(current, name, profileId)
         }
-        val created = RecommendationProfile(
-            profileId = UUID.randomUUID().toString(),
-            name = profileName,
-        )
-        settings.value = normalizeSettings(
-            settings.value.copy(
-                recommendationProfiles = settings.value.recommendationProfiles + created,
-                activeProfileId = created.profileId,
-            )
-        )
-        return created
     }
 
     override suspend fun removeRecommendationProfile(profileId: String): Boolean {
-        val current = settings.value
-        if (current.recommendationProfiles.size <= 1) return false
-        if (current.recommendationProfiles.none { it.profileId == profileId }) return false
-
-        val remaining = current.recommendationProfiles.filterNot { it.profileId == profileId }
-        val nextActive = if (current.activeProfileId == profileId) {
-            remaining.first().profileId
-        } else {
-            current.activeProfileId
+        return mutateSettings { current ->
+            RepositoryPolicies.removeRecommendationProfile(current, profileId)
         }
-        settings.value = normalizeSettings(
-            current.copy(
-                recommendationProfiles = remaining,
-                activeProfileId = nextActive,
-                forYouBlacklistByProfile = current.forYouBlacklistByProfile - profileId,
-                favoriteTagsByProfile = current.favoriteTagsByProfile - profileId,
-            )
-        )
-        return true
     }
 
     override suspend fun addForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean {
-        val normalizedTags = normalizeBlacklistTags(tags)
-        if (normalizedTags.isEmpty()) return false
-        val current = settings.value
-        val existing = current.forYouBlacklistByProfile[profileId].orEmpty()
-        val alreadyPresent = existing.any { entry ->
-            entry.source == source && normalizeBlacklistTags(entry.tags) == normalizedTags
+        return mutateSettings { current ->
+            RepositoryPolicies.addBlacklistEntry(current, profileId, source, tags)
         }
-        if (alreadyPresent) return false
-        val updated = existing + ForYouBlacklistEntry(
-            source = source,
-            tags = normalizedTags,
-        )
-        settings.value = normalizeSettings(
-            current.copy(
-                forYouBlacklistByProfile = current.forYouBlacklistByProfile + (profileId to updated),
-            )
-        )
-        return true
     }
 
     override suspend fun removeForYouBlacklistEntry(profileId: String, source: SourceKey, tags: List<String>): Boolean {
-        val normalizedTags = normalizeBlacklistTags(tags)
-        if (normalizedTags.isEmpty()) return false
-        val current = settings.value
-        val existing = current.forYouBlacklistByProfile[profileId].orEmpty()
-        if (existing.isEmpty()) return false
-        val updated = existing.filterNot { entry ->
-            entry.source == source && normalizeBlacklistTags(entry.tags) == normalizedTags
+        return mutateSettings { current ->
+            RepositoryPolicies.removeBlacklistEntry(current, profileId, source, tags)
         }
-        if (updated.size == existing.size) return false
-        val updatedMap = current.forYouBlacklistByProfile.toMutableMap()
-        if (updated.isEmpty()) {
-            updatedMap.remove(profileId)
-        } else {
-            updatedMap[profileId] = updated
-        }
-        settings.value = normalizeSettings(
-            current.copy(
-                forYouBlacklistByProfile = updatedMap,
-            )
-        )
-        return true
     }
 
     override suspend fun addFavoriteTag(profileId: String, source: SourceKey, tag: String): Boolean {
-        val normalizedTag = normalizeFavoriteTagForStorage(source, tag)
-        if (normalizedTag.isBlank()) return false
-        val current = settings.value
-        val existing = current.favoriteTagsByProfile[profileId].orEmpty()
-        val alreadyPresent = existing.any { entry ->
-            entry.source == source && sourceTagKey(source, entry.tag) == sourceTagKey(source, normalizedTag)
+        return mutateSettings { current ->
+            RepositoryPolicies.addFavoriteTag(current, profileId, source, tag)
         }
-        if (alreadyPresent) return false
-
-        val updated = existing + FavoriteTagEntry(
-            source = source,
-            tag = normalizedTag,
-        )
-        settings.value = normalizeSettings(
-            current.copy(
-                favoriteTagsByProfile = current.favoriteTagsByProfile + (profileId to updated),
-            )
-        )
-        return true
     }
 
     override suspend fun removeFavoriteTag(profileId: String, source: SourceKey, tag: String): Boolean {
-        val normalizedKey = sourceTagKey(source, tag)
-        if (normalizedKey.isBlank()) return false
-        val current = settings.value
-        val existing = current.favoriteTagsByProfile[profileId].orEmpty()
-        if (existing.isEmpty()) return false
-
-        val updated = existing.filterNot { entry ->
-            entry.source == source && sourceTagKey(source, entry.tag) == normalizedKey
+        return mutateSettings { current ->
+            RepositoryPolicies.removeFavoriteTag(current, profileId, source, tag)
         }
-        if (updated.size == existing.size) return false
-
-        val updatedMap = current.favoriteTagsByProfile.toMutableMap()
-        if (updated.isEmpty()) {
-            updatedMap.remove(profileId)
-        } else {
-            updatedMap[profileId] = updated
-        }
-        settings.value = normalizeSettings(
-            current.copy(
-                favoriteTagsByProfile = updatedMap,
-            )
-        )
-        return true
     }
 
     override suspend fun setProviderHealthSnapshots(snapshots: List<ProviderHealthSnapshot>) {
-        val merged = settings.value.providerHealth.toMutableMap()
-        snapshots.forEach { snapshot ->
-            merged[snapshot.source] = snapshot
+        updateSettings { current -> RepositoryPolicies.mergeProviderHealth(current, snapshots) }
+    }
+
+    private suspend fun <T> mutateSettings(
+        policy: (AppSettings) -> RepositoryPolicies.Result<AppSettings, T>,
+    ): T {
+        return mutex.withLock {
+            val result = policy(settings.value)
+            settings.value = RepositoryPolicies.normalizeSettings(result.state)
+            result.value
         }
-        settings.value = normalizeSettings(settings.value.copy(providerHealth = merged))
     }
 }
 
-class InMemoryLikesRepository : LikesRepository {
+class InMemoryLikesRepository(
+    private val clock: () -> Long = System::currentTimeMillis,
+) : LikesRepository {
     private val mutex = Mutex()
     private val likesByProfile = MutableStateFlow<Map<String, Map<PostId, LikedPost>>>(emptyMap())
 
     override fun observeLikes(profileId: String): Flow<List<LikedPost>> {
         return likesByProfile.map { byProfile ->
-            byProfile[profileId]
+            byProfile[RepositoryPolicies.normalizeProfileId(profileId)]
                 .orEmpty()
                 .values
                 .sortedByDescending { it.likedAtEpochMs }
@@ -483,34 +399,27 @@ class InMemoryLikesRepository : LikesRepository {
 
     override fun observeLikedPostIds(profileId: String): Flow<Set<PostId>> {
         return likesByProfile.map { byProfile ->
-            byProfile[profileId].orEmpty().keys
+            byProfile[RepositoryPolicies.normalizeProfileId(profileId)].orEmpty().keys
         }
     }
 
     override suspend fun toggleLike(profileId: String, postId: PostId, tags: List<String>): Boolean {
         return mutex.withLock {
-            val profileLikes = likesByProfile.value[profileId].orEmpty().toMutableMap()
-            val existing = profileLikes[postId]
-            if (existing != null) {
-                profileLikes -= postId
-                likesByProfile.value = likesByProfile.value + (profileId to profileLikes)
-                false
-            } else {
-                profileLikes[postId] = LikedPost(
-                    profileId = profileId,
-                    postId = postId,
-                    likedAtEpochMs = System.currentTimeMillis(),
-                    tags = normalizeLikedTags(tags),
-                )
-                likesByProfile.value = likesByProfile.value + (profileId to profileLikes)
-                true
-            }
+            val result = RepositoryPolicies.toggleLike(
+                likesByProfile = likesByProfile.value,
+                profileId = profileId,
+                postId = postId,
+                tags = tags,
+                likedAtEpochMs = clock(),
+            )
+            likesByProfile.value = result.state
+            result.value
         }
     }
 
     override suspend fun clearLikes(profileId: String) {
         mutex.withLock {
-            likesByProfile.value = likesByProfile.value - profileId
+            likesByProfile.value = likesByProfile.value - RepositoryPolicies.normalizeProfileId(profileId)
         }
     }
 }
@@ -603,158 +512,5 @@ class InMemoryUiRestoreRepository : UiRestoreRepository {
 
     override suspend fun setViewerLaunchContext(context: ViewerLaunchContext?) {
         viewerLaunchContext.value = context
-    }
-}
-
-private fun normalizeLikedTags(tags: List<String>): List<String> {
-    return tags
-        .asSequence()
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinctBy { it.lowercase() }
-        .toList()
-}
-
-private fun resolveUniqueCodexName(
-    requestedName: String,
-    existingCodices: List<Codex>,
-    excludeCodexId: String? = null,
-): String {
-    val baseName = requestedName.trim().ifBlank { "Codex" }
-    val occupiedNames = existingCodices
-        .asSequence()
-        .filter { codex -> codex.codexId != excludeCodexId }
-        .map { codex -> normalizeCodexNameKey(codex.name) }
-        .toSet()
-    if (normalizeCodexNameKey(baseName) !in occupiedNames) {
-        return baseName
-    }
-
-    var suffix = 2
-    while (true) {
-        val candidate = "$baseName $suffix"
-        if (normalizeCodexNameKey(candidate) !in occupiedNames) {
-            return candidate
-        }
-        suffix += 1
-    }
-}
-
-private fun normalizeCodexNameKey(name: String): String {
-    return name.trim().lowercase()
-}
-
-private fun normalizeSettings(settings: AppSettings): AppSettings {
-    val normalizedWeights = normalizeWeights(
-        enabledSources = settings.runtime.enabledSources,
-        rawWeights = settings.runtime.sourceWeights,
-    )
-    val normalizedProfiles = settings.recommendationProfiles
-        .asSequence()
-        .map { profile ->
-            RecommendationProfile(
-                profileId = profile.profileId.trim(),
-                name = profile.name.trim(),
-            )
-        }
-        .filter { profile -> profile.profileId.isNotBlank() && profile.name.isNotBlank() }
-        .distinctBy { profile -> profile.profileId }
-        .toList()
-        .ifEmpty { defaultRecommendationProfiles() }
-    val activeProfileId = settings.activeProfileId
-        .takeIf { active -> normalizedProfiles.any { profile -> profile.profileId == active } }
-        ?: normalizedProfiles.first().profileId
-    val profileIds = normalizedProfiles.mapTo(mutableSetOf()) { profile -> profile.profileId }
-    val normalizedBlacklist = settings.forYouBlacklistByProfile
-        .mapNotNull { (profileId, entries) ->
-            val normalizedProfileId = profileId.trim()
-            if (normalizedProfileId !in profileIds) return@mapNotNull null
-            val normalizedEntries = entries
-                .asSequence()
-                .mapNotNull { entry ->
-                    val normalizedTags = normalizeBlacklistTags(entry.tags)
-                    if (normalizedTags.isEmpty()) {
-                        null
-                    } else {
-                        ForYouBlacklistEntry(source = entry.source, tags = normalizedTags)
-                    }
-                }
-                .distinctBy { entry -> "${entry.source.name}:${entry.tags.joinToString("+")}" }
-                .toList()
-            normalizedProfileId to normalizedEntries
-        }
-        .toMap()
-        .filterValues { entries -> entries.isNotEmpty() }
-    val normalizedFavoriteTags = settings.favoriteTagsByProfile
-        .mapNotNull { (profileId, entries) ->
-            val normalizedProfileId = profileId.trim()
-            if (normalizedProfileId !in profileIds) return@mapNotNull null
-            val normalizedEntries = entries
-                .asSequence()
-                .mapNotNull { entry ->
-                    val normalizedTag = normalizeFavoriteTagForStorage(entry.source, entry.tag)
-                    if (normalizedTag.isBlank()) {
-                        null
-                    } else {
-                        FavoriteTagEntry(source = entry.source, tag = normalizedTag)
-                    }
-                }
-                .distinctBy { entry -> "${entry.source.name}:${sourceTagKey(entry.source, entry.tag)}" }
-                .toList()
-            normalizedProfileId to normalizedEntries
-        }
-        .toMap()
-        .filterValues { entries -> entries.isNotEmpty() }
-    val normalizedProviderHealth = settings.providerHealth
-        .mapValues { (source, snapshot) ->
-            snapshot.copy(source = source)
-        }
-        .filterValues { snapshot -> snapshot.checkedAtEpochMs >= 0L }
-    return settings.copy(
-        runtime = settings.runtime.copy(sourceWeights = normalizedWeights),
-        recommendationProfiles = normalizedProfiles,
-        activeProfileId = activeProfileId,
-        forYouBlacklistByProfile = normalizedBlacklist,
-        favoriteTagsByProfile = normalizedFavoriteTags,
-        providerHealth = normalizedProviderHealth,
-    )
-}
-
-private fun normalizeBlacklistTags(tags: List<String>): List<String> {
-    return tags
-        .asSequence()
-        .map { it.trim().lowercase() }
-        .filter { it.isNotBlank() }
-        .distinct()
-        .sorted()
-        .toList()
-}
-
-private fun normalizeWeights(
-    enabledSources: Set<SourceKey>,
-    rawWeights: Map<SourceKey, Double>,
-): Map<SourceKey, Double> {
-    if (enabledSources.isEmpty()) return emptyMap()
-    val defaults = SourceRuntimeSettings().sourceWeights
-    val positiveWeights = enabledSources.associateWith { source ->
-        val raw = rawWeights[source] ?: defaults[source] ?: 1.0
-        raw.coerceAtLeast(0.0)
-    }
-    val total = positiveWeights.values.sum().takeIf { it > 0.0 } ?: enabledSources.size.toDouble()
-    return positiveWeights.mapValues { (_, weight) -> weight / total }
-}
-
-private fun sortCodexPairs(
-    pairs: List<Pair<CodexItem, Post>>,
-    sort: CodexSortMode,
-): List<Pair<CodexItem, Post>> {
-    return when (sort) {
-        CodexSortMode.NEWEST_SAVED -> pairs.sortedByDescending { it.first.savedAtEpochMs }
-        CodexSortMode.OLDEST_SAVED -> pairs.sortedBy { it.first.savedAtEpochMs }
-        CodexSortMode.BY_SOURCE -> pairs.sortedWith(
-            compareBy<Pair<CodexItem, Post>> { it.second.id.source.name }
-                .thenByDescending { it.first.savedAtEpochMs }
-                .thenBy { it.second.id.sourcePostId }
-        )
     }
 }

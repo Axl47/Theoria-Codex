@@ -1,15 +1,19 @@
 package com.theoriacodex.sources.rule34
 
 import com.google.gson.Gson
-import com.google.gson.JsonArray
-import com.google.gson.JsonElement
 import com.google.gson.JsonObject
-import com.theoriacodex.domain.adapter.SourceAdapterException
-import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
-import java.io.IOException
+import com.theoriacodex.sources.common.asStringOrNull
+import com.theoriacodex.sources.common.elementsOrEmpty
+import com.theoriacodex.sources.common.intValue
+import com.theoriacodex.sources.common.objectList
+import com.theoriacodex.sources.common.optionalJsonArray
+import com.theoriacodex.sources.common.parseJsonArray
+import com.theoriacodex.sources.common.parseJsonElement
+import com.theoriacodex.sources.common.parseJsonObject
+import com.theoriacodex.sources.common.stringValue
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.ZonedDateTime
@@ -21,71 +25,8 @@ internal val RULE34_BROWSER_HEADERS = mapOf(
     "User-Agent" to "Mozilla/5.0",
 )
 
-internal fun classifyRule34HttpFailure(statusCode: Int): SourceFailureReason {
-    return when (statusCode) {
-        401, 403 -> SourceFailureReason.AUTH_REQUIRED
-        404 -> SourceFailureReason.UNKNOWN
-        429 -> SourceFailureReason.RATE_LIMITED
-        in 500..599 -> SourceFailureReason.NETWORK
-        else -> SourceFailureReason.UNKNOWN
-    }
-}
-
-internal fun rule34NetworkFailure(siteLabel: String, error: IOException): Nothing {
-    throw SourceAdapterException(
-        reason = SourceFailureReason.NETWORK,
-        message = "$siteLabel request failed",
-        cause = error,
-    )
-}
-
-internal fun parseJsonObject(body: String, gson: Gson, errorLabel: String): JsonObject {
-    return runCatching { gson.fromJson(body, JsonObject::class.java) }.getOrNull()
-        ?: throw SourceAdapterException(
-            reason = SourceFailureReason.PARSE,
-            message = "$errorLabel returned malformed JSON object",
-        )
-}
-
-internal fun parseJsonArray(body: String, gson: Gson, errorLabel: String): JsonArray {
-    return runCatching { gson.fromJson(body, JsonArray::class.java) }.getOrNull()
-        ?: throw SourceAdapterException(
-            reason = SourceFailureReason.PARSE,
-            message = "$errorLabel returned malformed JSON array",
-        )
-}
-
 internal fun jsonArrayOfObjects(body: String, gson: Gson, errorLabel: String): List<JsonObject> {
-    val element = runCatching { gson.fromJson(body, JsonElement::class.java) }.getOrNull()
-        ?: throw SourceAdapterException(
-            reason = SourceFailureReason.PARSE,
-            message = "$errorLabel returned malformed JSON",
-        )
-
-    return when {
-        element.isJsonArray -> element.asJsonArray.mapNotNull { item ->
-            item.takeIf(JsonElement::isJsonObject)?.asJsonObject
-        }
-
-        element.isJsonObject -> {
-            val obj = element.asJsonObject
-            sequenceOf("post", "tag")
-                .mapNotNull { key ->
-                    when {
-                        obj.get(key)?.isJsonArray == true -> obj.getAsJsonArray(key).mapNotNull { item ->
-                            item.takeIf(JsonElement::isJsonObject)?.asJsonObject
-                        }
-
-                        obj.get(key)?.isJsonObject == true -> listOf(obj.getAsJsonObject(key))
-                        else -> null
-                    }
-                }
-                .firstOrNull()
-                .orEmpty()
-        }
-
-        else -> emptyList()
-    }
+    return parseJsonElement(body, gson, errorLabel).objectList("post", "tag")
 }
 
 internal fun compileRule34BooruTags(query: Query): String {
@@ -129,18 +70,14 @@ internal fun parseTagSuggestionsFromSelect2(
     defaultType: String,
 ): List<TagSuggestion> {
     val root = parseJsonObject(body, gson, "Rule34 video tag lookup")
-    val items = when {
-        root.get("items")?.isJsonArray == true -> root.getAsJsonArray("items")
-        else -> JsonArray()
-    }
-    return items.mapNotNull { item ->
-        val obj = item.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@mapNotNull null
-        val text = obj.get("title")?.asString?.trim().orEmpty()
+    return root.optionalJsonArray("items").elementsOrEmpty().mapNotNull { item ->
+        val obj = item.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+        val text = obj.stringValue("title")?.trim().orEmpty()
         if (text.isBlank()) return@mapNotNull null
         TagSuggestion(
             text = text,
             type = defaultType,
-            count = obj.get("total")?.asString?.toIntOrNull() ?: obj.get("total")?.asInt,
+            count = obj.stringValue("total")?.toIntOrNull() ?: obj.intValue("total"),
         )
     }
 }
@@ -151,13 +88,13 @@ internal fun parseRule34XxxAutocompleteSuggestions(
 ): List<TagSuggestion> {
     val items = parseJsonArray(body, gson, "rule34.xxx autocomplete")
     return items.mapNotNull { item ->
-        val obj = item.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@mapNotNull null
-        val text = obj.get("value")?.asString?.trim().orEmpty()
+        val obj = item.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+        val text = obj.stringValue("value")?.trim().orEmpty()
         if (text.isBlank()) return@mapNotNull null
         TagSuggestion(
             text = text,
             type = "tag",
-            count = parseTrailingCount(obj.get("label")?.asString),
+            count = parseTrailingCount(obj.get("label").asStringOrNull()),
         )
     }
 }

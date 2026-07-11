@@ -83,6 +83,41 @@ class GelbooruSourceAdapterTest {
     }
 
     @Test
+    fun `search accepts direct arrays and ignores malformed optional values`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    [
+                      null,
+                      "not-a-post",
+                      {
+                        "id":123,
+                        "preview_url":{},
+                        "file_url":"https://gelbooru.com/full.jpg",
+                        "tags":[],
+                        "width":"wide",
+                        "created_at":"not-a-timestamp"
+                      }
+                    ]
+                """.trimIndent(),
+            )
+        }
+        val adapter = GelbooruSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = FakeCredentialsProvider(),
+        )
+
+        val post = adapter.search(sampleQuery(), pageToken = null).items.single()
+
+        assertEquals("123", post.id.sourcePostId)
+        assertEquals("https://gelbooru.com/full.jpg", post.preview.url)
+        assertNull(post.width)
+        assertNull(post.createdAtEpochMs)
+        assertEquals(emptyList<String>(), post.canonicalTags)
+    }
+
+    @Test
     fun `search maps creator metadata`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(

@@ -21,6 +21,36 @@ class SourceMetadataTest {
         assertTrue(SourceKey.RULE34PAHEAL in hidden)
         assertTrue(SourceKey.RULE34VIDEO in hidden)
         assertTrue(SourceKey.RULE34GEN in hidden)
+        assertFalse(SourceKey.AIBOORU in hidden)
+        assertFalse(SourceKey.AIBOORU in visible)
+    }
+
+    @Test
+    fun `catalog covers every source with stable ordering and explicit exposure`() {
+        val presentations = SourcePresentationCatalog.orderedPresentations()
+
+        assertEquals(SourceKey.entries.toSet(), presentations.map { it.source }.toSet())
+        assertEquals(presentations.indices.toList(), presentations.map { it.order })
+        assertEquals(
+            listOf(
+                SourceKey.GELBOORU,
+                SourceKey.PIXIV,
+                SourceKey.NHENTAI,
+                SourceKey.HITOMI,
+                SourceKey.IWARA,
+                SourceKey.RULE34XXX,
+                SourceKey.RULE34PAHEAL,
+                SourceKey.RULE34VIDEO,
+                SourceKey.RULE34GEN,
+                SourceKey.AIBOORU,
+            ),
+            presentations.map { it.source },
+        )
+        assertEquals(SourceExposure.ADAPTER_ONLY, SourceKey.AIBOORU.presentation().exposure)
+        assertEquals(SourceExposure.CREDENTIAL_GATED, SourceKey.RULE34XXX.presentation().exposure)
+        assertEquals(SourcePresentationGroup.RULE34, SourceKey.RULE34VIDEO.presentation().group)
+        assertTrue(SourceKey.RULE34VIDEO.isRule34Family())
+        assertFalse(SourceKey.PIXIV.isRule34Family())
     }
 
     @Test

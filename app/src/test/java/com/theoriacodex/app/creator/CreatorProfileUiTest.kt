@@ -12,6 +12,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CreatorProfileUiTest {
+    private val creatorBrowsingSources = setOf(
+        SourceKey.PIXIV,
+        SourceKey.GELBOORU,
+        SourceKey.HITOMI,
+        SourceKey.IWARA,
+    )
+
     @Test
     fun `creatorButtonLabel uses browseable creator profile name when present`() {
         val post = samplePost(
@@ -25,7 +32,7 @@ class CreatorProfileUiTest {
             ),
         )
 
-        assertEquals("profile_name", creatorButtonLabel(post))
+        assertEquals("profile_name", creatorButtonLabel(post, creatorBrowsingSources))
     }
 
     @Test
@@ -36,7 +43,7 @@ class CreatorProfileUiTest {
             creatorProfile = null,
         )
 
-        assertEquals("saved_author", creatorButtonLabel(post))
+        assertEquals("saved_author", creatorButtonLabel(post, creatorBrowsingSources))
     }
 
     @Test
@@ -47,7 +54,7 @@ class CreatorProfileUiTest {
             creatorProfile = null,
         )
 
-        assertNull(creatorButtonLabel(post))
+        assertNull(creatorButtonLabel(post, creatorBrowsingSources))
     }
 
     @Test
@@ -59,7 +66,7 @@ class CreatorProfileUiTest {
             uploadsQuery = null,
         )
 
-        assertNull(browseableCreatorProfile(profile))
+        assertNull(browseableCreatorProfile(profile, creatorBrowsingSources))
     }
 
     @Test
@@ -72,7 +79,26 @@ class CreatorProfileUiTest {
             uploadsQuery = "2f2a6a22-0000-4000-8000-111111111111",
         )
 
-        assertEquals(profile, browseableCreatorProfile(profile))
+        assertEquals(profile, browseableCreatorProfile(profile, creatorBrowsingSources))
+    }
+
+    @Test
+    fun `creator presentation follows the supplied operational capability set`() {
+        val profile = CreatorProfile(
+            source = SourceKey.PIXIV,
+            displayName = "Creator",
+            profileId = "42",
+            uploadsQuery = "42",
+        )
+        val post = samplePost(
+            source = SourceKey.PIXIV,
+            authorName = "Creator",
+            creatorProfile = profile,
+        )
+
+        assertNull(browseableCreatorProfile(profile, emptySet()))
+        assertTrue(creatorProfileActions(post, emptySet()).isEmpty())
+        assertEquals("Creator", creatorButtonLabel(post, setOf(SourceKey.PIXIV)))
     }
 
     @Test
@@ -96,12 +122,12 @@ class CreatorProfileUiTest {
             creatorProfiles = listOf(first, second, first),
         )
 
-        val actions = creatorProfileActions(post)
+        val actions = creatorProfileActions(post, creatorBrowsingSources)
 
         assertEquals(listOf(first, second), actions.map(CreatorProfileAction::profile))
         assertEquals(listOf("Artist One", "Artist Two"), actions.map(CreatorProfileAction::label))
         assertTrue(actions.none(CreatorProfileAction::requiresLegacyResolution))
-        assertTrue(supportsCreatorBrowsing(SourceKey.HITOMI))
+        assertTrue(SourceKey.HITOMI in creatorBrowsingSources)
     }
 
     @Test
@@ -120,9 +146,9 @@ class CreatorProfileUiTest {
             valid.copy(profileId = malformedUnicode, uploadsQuery = "artist:$malformedUnicode"),
         )
 
-        assertEquals(valid, browseableCreatorProfile(valid))
+        assertEquals(valid, browseableCreatorProfile(valid, creatorBrowsingSources))
         invalidProfiles.forEach { profile ->
-            assertNull(profile.toString(), browseableCreatorProfile(profile))
+            assertNull(profile.toString(), browseableCreatorProfile(profile, creatorBrowsingSources))
         }
 
         val post = samplePost(
@@ -131,7 +157,7 @@ class CreatorProfileUiTest {
             creatorProfile = null,
             creatorProfiles = invalidProfiles,
         )
-        assertTrue(creatorProfileActions(post).isEmpty())
+        assertTrue(creatorProfileActions(post, creatorBrowsingSources).isEmpty())
     }
 
     @Test
@@ -149,9 +175,9 @@ class CreatorProfileUiTest {
             creatorProfiles = emptyList(),
         )
 
-        assertEquals("Legacy Artist", creatorProfileActions(legacy).single().label)
-        assertTrue(creatorProfileActions(legacy).single().requiresLegacyResolution)
-        assertTrue(creatorProfileActions(empty).isEmpty())
+        assertEquals("Legacy Artist", creatorProfileActions(legacy, creatorBrowsingSources).single().label)
+        assertTrue(creatorProfileActions(legacy, creatorBrowsingSources).single().requiresLegacyResolution)
+        assertTrue(creatorProfileActions(empty, creatorBrowsingSources).isEmpty())
     }
 
     @Test
@@ -169,8 +195,11 @@ class CreatorProfileUiTest {
             ),
         )
 
-        assertTrue(creatorProfileActions(post).isEmpty())
-        assertFalse(creatorProfileActions(post).any(CreatorProfileAction::requiresLegacyResolution))
+        assertTrue(creatorProfileActions(post, creatorBrowsingSources).isEmpty())
+        assertFalse(
+            creatorProfileActions(post, creatorBrowsingSources)
+                .any(CreatorProfileAction::requiresLegacyResolution),
+        )
     }
 
     private fun samplePost(

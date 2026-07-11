@@ -3,8 +3,6 @@
 package com.theoriacodex.app.search
 
 import android.content.Context
-import android.net.Uri
-import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -29,29 +27,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
-import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.BookmarkAdd
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
@@ -94,7 +82,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.viewinterop.AndroidView
@@ -113,8 +100,6 @@ import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.animatedDurationBucketLabel
 import com.theoriacodex.app.media.animatedDurationMs
 import com.theoriacodex.app.media.animatedDurationRangeLabel
-import com.theoriacodex.app.media.copyPostTagsToClipboard
-import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.media.isHttpNotFound
 import com.theoriacodex.app.media.isPixivUgoiraPost
@@ -124,12 +109,19 @@ import com.theoriacodex.app.media.postPreviewImageCandidate
 import com.theoriacodex.app.media.probeRemoteVideoDurationMs
 import com.theoriacodex.app.recommend.recommendationIncludeTags
 import com.theoriacodex.app.recommend.recommendationTagsFor
-import com.theoriacodex.app.creator.CreatorProfileActionButton
 import com.theoriacodex.app.recommend.associatedDisplayTag
 import com.theoriacodex.app.recommend.buildSourceTagAffinity
 import com.theoriacodex.app.R
+import com.theoriacodex.app.source.SourceLogo
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.source.isRule34Family
 import com.theoriacodex.app.source.requestHeaders
+import com.theoriacodex.app.ui.components.AutocompleteListShell
+import com.theoriacodex.app.ui.components.FeedEmptyTile
+import com.theoriacodex.app.ui.components.FeedErrorTile
+import com.theoriacodex.app.ui.components.FeedLoadingState
+import com.theoriacodex.app.ui.components.PostActionSheet
+import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchUiState
@@ -157,7 +149,6 @@ import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import coil.decode.SvgDecoder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.NonCancellable
@@ -176,6 +167,7 @@ import kotlin.math.roundToInt
 @Composable
 fun SearchScreen(
     state: SearchUiState,
+    creatorBrowsingSources: Set<SourceKey>,
     onAction: (SearchAction) -> Unit,
     resolvePostById: suspend (PostId) -> Post?,
     recoverPostMedia: suspend (Post, ImageRef) -> Post?,
@@ -633,7 +625,7 @@ fun SearchScreen(
 
             when {
                 state.loading -> {
-                    Box(
+                    FeedLoadingState(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
@@ -641,10 +633,7 @@ fun SearchScreen(
                                 interactionSource = clearFocusInteraction,
                                 indication = null,
                             ) { focusManager.clearFocus() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
+                    )
                 }
                 state.content.error != null -> {
                     Box(
@@ -723,62 +712,36 @@ fun SearchScreen(
                                 message = authMessage,
                             )
                         }
-                        LazyVerticalStaggeredGrid(
-                            columns = StaggeredGridCells.Fixed(2),
+                        TwoColumnPostStaggeredGrid(
+                            posts = visibleResults,
                             state = gridState,
                             modifier = Modifier.weight(1f),
-                            verticalItemSpacing = 6.dp,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            itemsIndexed(
-                                items = visibleResults,
-                                key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" },
-                            ) { _, post ->
-                                SearchResultCard(
-                                    post = post,
-                                    pixivUgoiraClient = pixivUgoiraClient,
-                                    showSourceBadge = state.query.applied.mode == QueryMode.Unified,
-                                    displayTag = displayTagByPostId[post.id],
-                                    liked = post.id in likedPostIds,
-                                    onToggleLike = onToggleLike?.let { toggle ->
-                                        { toggle(post) }
-                                    },
-                                    resolvePostById = resolvePostById,
-                                    recoverPostMedia = { failedPost, failedMedia ->
-                                        recoverPostMedia(failedPost, failedMedia)
-                                    },
-                                    onClick = {
-                                        focusManager.clearFocus()
-                                        onAction(SearchAction.OpenResult(
-                                            postId = post.id,
-                                            visibleResults = visibleResults,
-                                            scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
-                                            visibilityFilters = visibilityFilters,
-                                        ))
-                                    },
-                                    onLongPress = {
-                                        openPostActionSheet(post)
-                                    },
-                                )
-                            }
-                            if (state.loadingMore) {
-                                item {
-                                    Card(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 8.dp),
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 12.dp),
-                                            contentAlignment = Alignment.Center,
-                                        ) {
-                                            CircularProgressIndicator()
-                                        }
-                                    }
-                                }
-                            }
+                            showPagingTile = state.loadingMore,
+                        ) { _, post ->
+                            SearchResultCard(
+                                post = post,
+                                pixivUgoiraClient = pixivUgoiraClient,
+                                showSourceBadge = state.query.applied.mode == QueryMode.Unified,
+                                displayTag = displayTagByPostId[post.id],
+                                liked = post.id in likedPostIds,
+                                onToggleLike = onToggleLike?.let { toggle ->
+                                    { toggle(post) }
+                                },
+                                resolvePostById = resolvePostById,
+                                recoverPostMedia = { failedPost, failedMedia ->
+                                    recoverPostMedia(failedPost, failedMedia)
+                                },
+                                onClick = {
+                                    focusManager.clearFocus()
+                                    onAction(SearchAction.OpenResult(
+                                        postId = post.id,
+                                        visibleResults = visibleResults,
+                                        scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
+                                        visibilityFilters = visibilityFilters,
+                                    ))
+                                },
+                                onLongPress = { openPostActionSheet(post) },
+                            )
                         }
                     }
                 }
@@ -788,102 +751,18 @@ fun SearchScreen(
 
     if (selectedActionPost != null) {
         val post = requireNotNull(selectedActionPost)
-        val context = LocalContext.current
-        val actionSheetHorizontalPadding = 16.dp
-        ModalBottomSheet(
-            onDismissRequest = {
+        PostActionSheet(
+            post = post,
+            creatorBrowsingSources = creatorBrowsingSources,
+            onDismiss = {
                 selectedActionPost = null
                 selectedActionPostResolving = false
             },
-            dragHandle = null,
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = actionSheetHorizontalPadding, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    IconButton(
-                        onClick = {
-                            selectedActionPost = null
-                            selectedActionPostResolving = false
-                            onSaveToDevice(post)
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = "Save to device",
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            selectedActionPost = null
-                            selectedActionPostResolving = false
-                            onRequestSaveToCodex(post)
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.BookmarkAdd,
-                            contentDescription = "Save to Codex",
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            copyPostTagsToClipboard(context, post)
-                            Toast.makeText(context, "Tags copied", Toast.LENGTH_SHORT).show()
-                            selectedActionPost = null
-                            selectedActionPostResolving = false
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "Copy tags",
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            val copied = copyPostUrlToClipboard(context, post)
-                            val message = if (copied) {
-                                "Post URL copied"
-                            } else {
-                                "No post URL available"
-                            }
-                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                            selectedActionPost = null
-                            selectedActionPostResolving = false
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "Share",
-                        )
-                    }
-                }
-                Text(
-                    text = post.title?.takeIf { it.isNotBlank() } ?: post.id.sourcePostId,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                )
-                CreatorProfileActionButton(
-                    post = post,
-                    onOpenProfile = { profile ->
-                        selectedActionPost = null
-                        selectedActionPostResolving = false
-                        onOpenCreatorProfile(profile)
-                    },
-                    onOpenLegacyPost = {
-                        selectedActionPost = null
-                        selectedActionPostResolving = false
-                        onOpenLegacyCreatorProfile(post)
-                    },
-                )
-                HorizontalDivider()
+            onSaveToDevice = { onSaveToDevice(post) },
+            onSaveToCodex = { onRequestSaveToCodex(post) },
+            onOpenCreatorProfile = onOpenCreatorProfile,
+            onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
+            tagContent = {
                 if (selectedActionPostResolving && !post.hasActionableTags()) {
                     Text(
                         text = "Loading tags...",
@@ -908,17 +787,8 @@ fun SearchScreen(
                         onFavoriteTagLongPress = onAddFavoriteTag,
                     )
                 }
-                TextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = {
-                        selectedActionPost = null
-                        selectedActionPostResolving = false
-                    },
-                ) {
-                    Text("Cancel")
-                }
-            }
-        }
+            },
+        )
     }
 
     if (showFavoriteTagSheet) {
@@ -1813,40 +1683,29 @@ private fun FacetedAutocompletePanel(
     onInclude: (FacetedTagSuggestion) -> Unit,
     onExclude: (FacetedTagSuggestion) -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        LazyColumn(
+    AutocompleteListShell(
+        items = suggestions,
+    ) { item ->
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 220.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            items(suggestions.size) { index ->
-                val item = suggestions[index]
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = item.text, style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            text = facetedSuggestionMetaLabel(item),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TextButton(onClick = { onInclude(item) }) {
-                            Text("+")
-                        }
-                        TextButton(onClick = { onExclude(item) }) {
-                            Text("−")
-                        }
-                    }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = item.text, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = facetedSuggestionMetaLabel(item),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = { onInclude(item) }) {
+                    Text("+")
                 }
-                if (index != suggestions.lastIndex) {
-                    HorizontalDivider()
+                TextButton(onClick = { onExclude(item) }) {
+                    Text("−")
                 }
             }
         }
@@ -1859,40 +1718,29 @@ private fun AutocompletePanel(
     onInclude: (String) -> Unit,
     onExclude: (String) -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        LazyColumn(
+    AutocompleteListShell(
+        items = suggestions,
+    ) { item ->
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 220.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            items(suggestions.size) { index ->
-                val item = suggestions[index]
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = item.text, style = MaterialTheme.typography.bodyMedium)
-                        val meta = listOfNotNull(item.type, item.count?.toString()).joinToString(" • ")
-                        if (meta.isNotBlank()) {
-                            Text(text = meta, style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        TextButton(onClick = { onInclude(item.text) }) {
-                            Text("+")
-                        }
-                        TextButton(onClick = { onExclude(item.text) }) {
-                            Text("-")
-                        }
-                    }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = item.text, style = MaterialTheme.typography.bodyMedium)
+                val meta = listOfNotNull(item.type, item.count?.toString()).joinToString(" • ")
+                if (meta.isNotBlank()) {
+                    Text(text = meta, style = MaterialTheme.typography.bodySmall)
                 }
-                if (index != suggestions.lastIndex) {
-                    HorizontalDivider()
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = { onInclude(item.text) }) {
+                    Text("+")
+                }
+                TextButton(onClick = { onExclude(item.text) }) {
+                    Text("-")
                 }
             }
         }
@@ -1936,113 +1784,11 @@ private fun ModeRow(
                         }
                     } else {
                         val source = (option as QueryMode.Source).source
-                        SourceChipLogo(source = source)
+                        SourceLogo(source = source, size = 18.dp)
                     }
                 }
             )
         }
-    }
-}
-
-@Composable
-private fun SourceChipLogo(source: SourceKey) {
-    SourceChipLogo(
-        source = source,
-        size = 18.dp,
-    )
-}
-
-@Composable
-private fun SourceChipLogo(
-    source: SourceKey,
-    size: Dp,
-    modifier: Modifier = Modifier,
-) {
-    @Composable
-    fun svgLogo(rawResId: Int, contentDescription: String) {
-        val context = LocalContext.current
-        val model = remember(context, rawResId) {
-            ImageRequest.Builder(context)
-                .data(Uri.parse("android.resource://${context.packageName}/$rawResId"))
-                .decoderFactory(SvgDecoder.Factory())
-                .build()
-        }
-        AsyncImage(
-            model = model,
-            contentDescription = contentDescription,
-            modifier = modifier.height(size),
-            contentScale = ContentScale.Fit,
-        )
-    }
-
-    when (source) {
-        SourceKey.PIXIV -> {
-            Image(
-                painter = painterResource(id = R.drawable.pixiv_logo),
-                contentDescription = "Pixiv",
-                modifier = modifier.height(size),
-                contentScale = ContentScale.Fit,
-            )
-        }
-
-        SourceKey.GELBOORU -> {
-            svgLogo(R.raw.gelbooru_logo, "Gelbooru")
-        }
-
-        SourceKey.NHENTAI -> {
-            svgLogo(R.raw.nhentai_logo, "NHentai")
-        }
-
-        SourceKey.HITOMI -> {
-            Image(
-                painter = painterResource(id = R.drawable.hitomi_logo),
-                contentDescription = "Hitomi",
-                modifier = modifier.size(size),
-                contentScale = ContentScale.Fit,
-            )
-        }
-
-        SourceKey.RULE34XXX -> {
-            Text(
-                text = source.displayName(),
-                modifier = modifier,
-                style = MaterialTheme.typography.labelMedium,
-                color = Color.White,
-                maxLines = 1,
-            )
-        }
-
-        SourceKey.RULE34PAHEAL -> {
-            Text(
-                text = source.displayName(),
-                modifier = modifier,
-                style = MaterialTheme.typography.labelMedium,
-                color = Color.White,
-                maxLines = 1,
-            )
-        }
-
-        SourceKey.RULE34VIDEO -> {
-            Text(
-                text = source.displayName(),
-                modifier = modifier,
-                style = MaterialTheme.typography.labelMedium,
-                color = Color.White,
-                maxLines = 1,
-            )
-        }
-
-        SourceKey.RULE34GEN -> {
-            Text(
-                text = source.displayName(),
-                modifier = modifier,
-                style = MaterialTheme.typography.labelMedium,
-                color = Color.White,
-                maxLines = 1,
-            )
-        }
-
-        else -> Text(source.displayName())
     }
 }
 
@@ -2053,7 +1799,7 @@ private fun SourceBadge(
 ) {
     Surface(
         modifier = modifier,
-        color = if (isRule34FamilySource(source)) {
+        color = if (source.isRule34Family()) {
             Color.Transparent
         } else {
             Color.Black.copy(alpha = 0.55f)
@@ -2066,19 +1812,12 @@ private fun SourceBadge(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
             contentAlignment = Alignment.Center,
         ) {
-            SourceChipLogo(
+            SourceLogo(
                 source = source,
-                size = if (isRule34FamilySource(source)) 0.dp else 12.dp,
+                size = if (source.isRule34Family()) 0.dp else 12.dp,
             )
         }
     }
-}
-
-private fun isRule34FamilySource(source: SourceKey): Boolean {
-    return source == SourceKey.RULE34XXX ||
-        source == SourceKey.RULE34PAHEAL ||
-        source == SourceKey.RULE34VIDEO ||
-        source == SourceKey.RULE34GEN
 }
 
 @Composable
@@ -2123,19 +1862,14 @@ private fun EmptyBlock(
     hasPendingChanges: Boolean,
     messageOverride: String? = null,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = messageOverride ?: if (hasPendingChanges) {
+    FeedEmptyTile(
+        message = messageOverride ?: if (hasPendingChanges) {
                 "Draft updated. Press Apply to refresh results."
             } else {
                 "No results yet. Add tags and press Apply to start searching."
             },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            textAlign = TextAlign.Center,
-        )
-    }
+        contentPadding = 24.dp,
+    )
 }
 
 @Composable
@@ -2145,22 +1879,12 @@ private fun ErrorBlock(
     title: String = "Could not load results",
     actionLabel: String = "Retry",
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(message, style = MaterialTheme.typography.bodySmall)
-            if (onRetry != null) {
-                Text(
-                    text = actionLabel,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.clickable(onClick = onRetry),
-                )
-            }
-        }
-    }
+    FeedErrorTile(
+        message = message,
+        title = title,
+        actionLabel = actionLabel,
+        onRetry = onRetry,
+    )
 }
 
 enum class UnknownAnimatedDurationPolicy {

@@ -153,6 +153,7 @@ import kotlin.math.abs
 @Composable
 internal fun ViewerScreen(
     uiState: ViewerUiState,
+    creatorBrowsingSources: Set<SourceKey>,
     onAction: (ViewerAction) -> Unit,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
@@ -1108,6 +1109,7 @@ internal fun ViewerScreen(
                 if (onOpenCreatorFallback != null) {
                     CreatorProfileActionButton(
                         post = post,
+                        creatorBrowsingSources = creatorBrowsingSources,
                         onOpenProfile = { profile ->
                             setPlaybackEnabled(false)
                             onAction(ViewerAction.OpenCreator(profile))

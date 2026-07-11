@@ -26,6 +26,19 @@ import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.common.asBooleanOrNull
+import com.theoriacodex.sources.common.asIntOrNull
+import com.theoriacodex.sources.common.asLongOrNull
+import com.theoriacodex.sources.common.asStringOrNull
+import com.theoriacodex.sources.common.classifyHttpFailure
+import com.theoriacodex.sources.common.elementsOrEmpty
+import com.theoriacodex.sources.common.isSuccessful
+import com.theoriacodex.sources.common.matchesChallenge
+import com.theoriacodex.sources.common.optionalJsonArray
+import com.theoriacodex.sources.common.optionalJsonObject
+import com.theoriacodex.sources.common.parseJsonArray as parseSourceJsonArray
+import com.theoriacodex.sources.common.parseJsonObject as parseSourceJsonObject
+import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.media.mimeFromFileExt
@@ -121,7 +134,7 @@ class NhentaiSourceAdapter(
             pageIndex = pageIndex,
             useAllEndpoint = useAllEndpoint,
         )
-        val galleries = root.optionalJsonArray("result").orEmpty()
+        val galleries = root.optionalJsonArray("result").elementsOrEmpty()
         val posts = galleries.mapNotNull { element ->
             element.takeIf(JsonElement::isJsonObject)
                 ?.asJsonObject
@@ -149,7 +162,7 @@ class NhentaiSourceAdapter(
             query = mapOf("page" to "1"),
         ))
         val galleryIds = root.optionalJsonArray("result")
-            .orEmpty()
+            .elementsOrEmpty()
             .asSequence()
             .mapNotNull { element ->
                 element
@@ -256,7 +269,7 @@ class NhentaiSourceAdapter(
         if (shouldUseMirrorFallback(response)) {
             return resolvePostFromMirrorPage(galleryId)
         }
-        if (response.statusCode !in 200..299) {
+        if (!response.isSuccessful()) {
             throw SourceAdapterException(
                 reason = mapHttpFailure(response.statusCode),
                 message = "NHentai request failed (${response.statusCode})",
@@ -284,7 +297,7 @@ class NhentaiSourceAdapter(
                 useAllEndpoint = useAllEndpoint,
             )
         }
-        if (response.statusCode !in 200..299) {
+        if (!response.isSuccessful()) {
             throw SourceAdapterException(
                 reason = mapHttpFailure(response.statusCode),
                 message = "NHentai request failed (${response.statusCode})",
@@ -304,7 +317,7 @@ class NhentaiSourceAdapter(
             return null
         }
 
-        if (response.statusCode !in 200..299) {
+        if (!response.isSuccessful()) {
             throw SourceAdapterException(
                 reason = mapHttpFailure(response.statusCode),
                 message = "NHentai request failed (${response.statusCode})",
@@ -319,7 +332,7 @@ class NhentaiSourceAdapter(
         body: String,
     ): JsonArray {
         val response = requestJsonPost(url = url, body = body)
-        if (response.statusCode !in 200..299) {
+        if (!response.isSuccessful()) {
             throw SourceAdapterException(
                 reason = mapHttpFailure(response.statusCode),
                 message = "NHentai request failed (${response.statusCode})",
@@ -340,11 +353,7 @@ class NhentaiSourceAdapter(
                 headers = NHENTAI_DEFAULT_HEADERS,
             )
         } catch (error: IOException) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.NETWORK,
-                message = "NHentai request failed",
-                cause = error,
-            )
+            sourceNetworkFailure("NHentai", error)
         }
     }
 
@@ -360,11 +369,7 @@ class NhentaiSourceAdapter(
                 headers = NHENTAI_JSON_POST_HEADERS,
             )
         } catch (error: IOException) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.NETWORK,
-                message = "NHentai request failed",
-                cause = error,
-            )
+            sourceNetworkFailure("NHentai", error)
         }
     }
 
@@ -553,13 +558,9 @@ class NhentaiSourceAdapter(
                 headers = JINA_REQUEST_HEADERS,
             )
         } catch (error: IOException) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.NETWORK,
-                message = "NHentai mirror request failed",
-                cause = error,
-            )
+            sourceNetworkFailure("NHentai mirror", error)
         }
-        if (response.statusCode !in 200..299) {
+        if (!response.isSuccessful()) {
             throw SourceAdapterException(
                 reason = mapHttpFailure(response.statusCode),
                 message = "NHentai mirror request failed (${response.statusCode})",
@@ -588,11 +589,7 @@ class NhentaiSourceAdapter(
             )
         }
 
-        return runCatching { gson.fromJson(trimmed, JsonObject::class.java) }.getOrNull()
-            ?: throw SourceAdapterException(
-                reason = SourceFailureReason.PARSE,
-                message = "NHentai returned malformed JSON",
-            )
+        return parseSourceJsonObject(trimmed, gson, "NHentai")
     }
 
     private fun parseJsonArray(body: String): JsonArray {
@@ -604,11 +601,7 @@ class NhentaiSourceAdapter(
             )
         }
 
-        return runCatching { gson.fromJson(trimmed, JsonArray::class.java) }.getOrNull()
-            ?: throw SourceAdapterException(
-                reason = SourceFailureReason.PARSE,
-                message = "NHentai returned malformed JSON",
-            )
+        return parseSourceJsonArray(trimmed, gson, "NHentai")
     }
 
     private fun parseGallery(raw: JsonObject): Post? {
@@ -621,8 +614,8 @@ class NhentaiSourceAdapter(
         val oldImages = raw.optionalJsonObject("images")
         val oldThumbnail = oldImages?.optionalJsonObject("thumbnail")
         val oldCover = oldImages?.optionalJsonObject("cover")
-        val oldPages = oldImages?.optionalJsonArray("pages").orEmpty()
-        val newPages = raw.optionalJsonArray("pages").orEmpty()
+        val oldPages = oldImages?.optionalJsonArray("pages").elementsOrEmpty()
+        val newPages = raw.optionalJsonArray("pages").elementsOrEmpty()
         val pages = if (newPages.isNotEmpty()) newPages else oldPages
 
         val oldThumbExt = imageExtension(oldThumbnail?.get("t").asStringOrNull())
@@ -655,7 +648,7 @@ class NhentaiSourceAdapter(
             mime = mimeFromFileExt(newCoverPath?.substringAfterLast('.') ?: oldCoverExt),
         )
 
-        val mirrorSparse = raw.get("mirror_sparse").asBooleanOrFalse()
+        val mirrorSparse = raw.get("mirror_sparse").asBooleanOrNull() ?: false
         val mediaRefs = if (mirrorSparse) {
             emptyList()
         } else if (pageRefs.isNotEmpty()) {
@@ -673,7 +666,7 @@ class NhentaiSourceAdapter(
             mime = mimeFromFileExt(newThumbnailPath?.substringAfterLast('.') ?: oldThumbExt) ?: fullRef?.mime,
         )
 
-        val tags = raw.optionalJsonArray("tags").orEmpty().mapNotNull { tagElement ->
+        val tags = raw.optionalJsonArray("tags").elementsOrEmpty().mapNotNull { tagElement ->
             val tag = tagElement.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@mapNotNull null
             val name = tag.get("name").asStringOrNull()?.trim().orEmpty()
             if (name.isBlank()) return@mapNotNull null
@@ -739,7 +732,7 @@ class NhentaiSourceAdapter(
 
         galleries.forEach galleriesLoop@{ galleryElement ->
             val gallery = galleryElement.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@galleriesLoop
-            val tags = gallery.optionalJsonArray("tags").orEmpty()
+            val tags = gallery.optionalJsonArray("tags").elementsOrEmpty()
             tags.forEach tagLoop@{ tagElement ->
                 val tag = tagElement.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@tagLoop
                 val name = tag.get("name").asStringOrNull()?.trim().orEmpty()
@@ -891,14 +884,9 @@ class NhentaiSourceAdapter(
     }
 
     private fun shouldUseMirrorFallback(response: SourceHttpResponse): Boolean {
-        if (response.statusCode != 403) return false
-        val challengeHeader = response.headers.entries.any { (name, values) ->
-            name.equals("cf-mitigated", ignoreCase = true) &&
-                values.any { value -> value.contains("challenge", ignoreCase = true) }
-        }
-        if (challengeHeader) return true
-        val body = response.body.lowercase()
-        return "cloudflare" in body || "cf-mitigated" in body || "attention required" in body
+        return response.matchesChallenge(
+            bodyMarkers = setOf("cloudflare", "cf-mitigated", "attention required"),
+        )
     }
 }
 
@@ -1091,11 +1079,11 @@ private fun mapMirrorSortParam(sortMode: SortMode): String? {
 }
 
 private fun mapHttpFailure(statusCode: Int): SourceFailureReason {
-    return when (statusCode) {
-        429 -> SourceFailureReason.RATE_LIMITED
-        in 500..599 -> SourceFailureReason.NETWORK
-        else -> SourceFailureReason.UNKNOWN
-    }
+    return classifyHttpFailure(
+        statusCode = statusCode,
+        unauthorizedReason = SourceFailureReason.UNKNOWN,
+        forbiddenReason = SourceFailureReason.UNKNOWN,
+    )
 }
 
 private fun imageExtension(type: String?): String {
@@ -1112,18 +1100,6 @@ private fun imageUrlCandidates(baseUrl: String, page: Int, primaryExt: String): 
     return (listOf(primaryExt) + NHENTAI_IMAGE_FALLBACK_EXTENSIONS)
         .distinct()
         .map { ext -> "$baseUrl/$page.$ext" }
-}
-
-private fun JsonObject.optionalJsonArray(name: String): JsonArray? {
-    return get(name)?.takeIf { it.isJsonArray }?.asJsonArray
-}
-
-private fun JsonObject.optionalJsonObject(name: String): JsonObject? {
-    return get(name)?.takeIf { it.isJsonObject }?.asJsonObject
-}
-
-private fun JsonArray?.orEmpty(): List<JsonElement> {
-    return this?.toList().orEmpty()
 }
 
 private fun List<JsonElement>.sortedWithPageNumber(): List<JsonElement> {
@@ -1146,45 +1122,6 @@ private fun sourceImageUrl(baseUrl: String, path: String?): String? {
         return normalizedPath
     }
     return "${baseUrl.trimEnd('/')}/$normalizedPath"
-}
-
-private fun JsonElement?.asIntOrNull(): Int? {
-    if (this == null || this.isJsonNull) return null
-    val primitive = this.asJsonPrimitive
-    return runCatching {
-        when {
-            primitive.isNumber -> primitive.asInt
-            primitive.isString -> primitive.asString.trim().toInt()
-            else -> null
-        }
-    }.getOrNull()
-}
-
-private fun JsonElement?.asLongOrNull(): Long? {
-    if (this == null || this.isJsonNull) return null
-    val primitive = this.asJsonPrimitive
-    return runCatching {
-        when {
-            primitive.isNumber -> primitive.asLong
-            primitive.isString -> primitive.asString.trim().toLong()
-            else -> null
-        }
-    }.getOrNull()
-}
-
-private fun JsonElement?.asStringOrNull(): String? {
-    if (this == null || this.isJsonNull) return null
-    if (!this.isJsonPrimitive) return null
-    val primitive = this.asJsonPrimitive
-    if (!primitive.isString && !primitive.isNumber && !primitive.isBoolean) return null
-    return runCatching { primitive.asString }.getOrNull()
-}
-
-private fun JsonElement?.asBooleanOrFalse(): Boolean {
-    if (this == null || this.isJsonNull) return false
-    val primitive = this.asJsonPrimitive
-    if (!primitive.isBoolean && !primitive.isString) return false
-    return runCatching { primitive.asBoolean }.getOrDefault(false)
 }
 
 private fun String.isDigitsOnly(): Boolean {

@@ -1,6 +1,8 @@
 package com.theoriacodex.sources.common
 
 import com.google.gson.Gson
+import com.google.gson.JsonArray
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapterException
@@ -8,6 +10,7 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.http.SourceHttpResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -76,5 +79,93 @@ class SourceAdapterCommonTest {
                 "api key" in body
             },
         )
+        assertEquals(
+            SourceFailureReason.AUTH_EXPIRED,
+            classifyHttpFailure(
+                statusCode = 401,
+                unauthorizedReason = SourceFailureReason.AUTH_EXPIRED,
+            ),
+        )
+        assertTrue(SourceHttpResponse(statusCode = 204, body = "").isSuccessful())
+    }
+
+    @Test
+    fun `safe json accessors tolerate nulls wrong shapes and numeric strings`() {
+        val root = Gson().fromJson(
+            """
+            {
+              "id": "42",
+              "count": 7,
+              "enabled": "true",
+              "disabled": "FALSE",
+              "unknown": "unknown",
+              "nested": {"name": "example"},
+              "items": [{"id": 1}],
+              "wrong": []
+            }
+            """.trimIndent(),
+            JsonObject::class.java,
+        )
+
+        assertEquals("42", root.get("id").asStringOrNull())
+        assertEquals(42L, root.get("id").asLongOrNull())
+        assertEquals(7, root.get("count").asIntOrNull())
+        assertEquals(true, root.get("enabled").asBooleanOrNull())
+        assertEquals(false, root.get("disabled").asBooleanOrNull())
+        assertNull(root.get("unknown").asBooleanOrNull())
+        assertEquals("example", root.optionalJsonObject("nested")?.get("name").asStringOrNull())
+        assertEquals(1, root.optionalJsonArray("items")?.size())
+        assertNull(root.optionalJsonObject("wrong"))
+        assertNull(root.get("items").asLongOrNull())
+        assertEquals(emptyList<JsonElement>(), (null as JsonArray?).elementsOrEmpty())
+    }
+
+    @Test
+    fun `duration helpers reject non-finite and overflowed values`() {
+        val root = Gson().fromJson(
+            """
+            {
+              "infiniteNumber": 1e309,
+              "infiniteString": "Infinity",
+              "nanString": "NaN",
+              "overflowedSeconds": "1e309"
+            }
+            """.trimIndent(),
+            JsonObject::class.java,
+        )
+
+        assertNull(root.durationFieldMs("infiniteNumber", multiplier = 1_000L))
+        assertNull(root.durationFieldMs("infiniteString", multiplier = 1_000L))
+        assertNull(root.durationFieldMs("nanString", multiplier = 1_000L))
+        assertNull(root.ambiguousDurationFieldMs("infiniteNumber"))
+        assertNull(parseFlexibleDurationMs("1e309"))
+        assertNull(parseFlexibleDurationMs("9223372036854775807:00"))
+    }
+
+    @Test
+    fun `object list accepts direct arrays and named envelopes`() {
+        val gson = Gson()
+        val direct = gson.fromJson("""[{"id":1},null,"skip"]""", JsonElement::class.java)
+        val enveloped = gson.fromJson("""{"post":{"id":2}}""", JsonElement::class.java)
+
+        assertEquals(listOf(1), direct.objectList("post").mapNotNull { it.get("id").asIntOrNull() })
+        assertEquals(listOf(2), enveloped.objectList("post").mapNotNull { it.get("id").asIntOrNull() })
+    }
+
+    @Test
+    fun `challenge matching is case insensitive and provider configurable`() {
+        val headerChallenge = SourceHttpResponse(
+            statusCode = 403,
+            body = "",
+            headers = mapOf("CF-Mitigated" to listOf("Challenge")),
+        )
+        val bodyChallenge = SourceHttpResponse(
+            statusCode = 403,
+            body = "Attention Required",
+        )
+
+        assertTrue(headerChallenge.matchesChallenge())
+        assertTrue(bodyChallenge.matchesChallenge(bodyMarkers = setOf("attention required")))
+        assertTrue(!bodyChallenge.matchesChallenge(bodyMarkers = setOf("cloudflare")))
     }
 }

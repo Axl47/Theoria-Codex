@@ -2,8 +2,10 @@ package com.theoriacodex.sources.pixiv
 
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.testing.FakeHttpClient
+import java.io.IOException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -65,5 +67,33 @@ class PixivAuthApiTest {
 
         require(failure is SourceAdapterException)
         assertEquals(SourceFailureReason.AUTH_EXPIRED, failure.reason)
+    }
+
+    @Test
+    fun `token transport failures become typed network failures`() = runTest {
+        val expected = IOException("offline")
+        val authApi = PixivAuthApi(
+            httpClient = object : SourceHttpClient {
+                override suspend fun get(
+                    url: String,
+                    query: Map<String, String>,
+                    headers: Map<String, String>,
+                ): SourceHttpResponse = error("unused")
+
+                override suspend fun postForm(
+                    url: String,
+                    form: Map<String, String>,
+                    headers: Map<String, String>,
+                ): SourceHttpResponse {
+                    throw expected
+                }
+            },
+        )
+
+        val failure = runCatching { authApi.refresh("refresh-token") }.exceptionOrNull()
+
+        require(failure is SourceAdapterException)
+        assertEquals(SourceFailureReason.NETWORK, failure.reason)
+        assertTrue(failure.cause === expected)
     }
 }

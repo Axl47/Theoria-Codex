@@ -2,6 +2,7 @@ package com.theoriacodex.app.recommend
 
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.recommendation.RecommendationTagNormalization
 import com.theoriacodex.domain.recommendation.TagAffinityBuilder
 import com.theoriacodex.domain.recommendation.TagAffinityStats
 import kotlin.math.pow
@@ -15,10 +16,11 @@ fun buildSourceTagAffinity(
             val normalized = documents
                 .asSequence()
                 .map { tags ->
-                    tags
-                        .mapNotNull { tag -> normalizeTagForSource(source, tag) }
-                        .distinct()
-                        .take(maxTagsPerDocument)
+                    RecommendationTagNormalization.normalizeDistinct(
+                        source = source,
+                        rawTags = tags,
+                        limit = maxTagsPerDocument,
+                    )
                 }
                 .filter { tags -> tags.isNotEmpty() }
                 .toList()
@@ -49,7 +51,7 @@ fun associatedDisplayTag(
 
     val candidates = recommendationTags
         .mapNotNull { tag ->
-            normalizeTagForSource(post.id.source, tag)?.let { normalized ->
+            RecommendationTagNormalization.normalize(post.id.source, tag)?.let { normalized ->
                 tag to normalized
             }
         }
@@ -58,7 +60,7 @@ fun associatedDisplayTag(
 
     val seedTags = seedTagsBySource[post.id.source]
         .orEmpty()
-        .mapNotNull { tag -> normalizeTagForSource(post.id.source, tag) }
+        .mapNotNull { tag -> RecommendationTagNormalization.normalize(post.id.source, tag) }
         .distinct()
 
     if (seedTags.isEmpty()) {
@@ -79,37 +81,6 @@ fun associatedDisplayTag(
         } ?: 0.0
         associationScore + frequencyScore
     }?.first ?: fallback
-}
-
-fun normalizeTagForSource(
-    source: SourceKey,
-    rawTag: String,
-): String? {
-    val cleaned = rawTag
-        .trim()
-        .removePrefix("-")
-        .replace(TAG_WHITESPACE_REGEX, " ")
-        .lowercase()
-    if (cleaned.isBlank()) return null
-
-    if (source == SourceKey.PIXIV && (cleaned.contains("users入り") || PIXIV_USERS_TAG_REGEX.matches(cleaned))) {
-        return null
-    }
-
-    return when (source) {
-        SourceKey.GELBOORU,
-        SourceKey.AIBOORU,
-        SourceKey.IWARA,
-        SourceKey.RULE34XXX,
-        -> cleaned.replace(' ', '_')
-        SourceKey.PIXIV,
-        SourceKey.NHENTAI,
-        SourceKey.HITOMI,
-        SourceKey.RULE34PAHEAL,
-        SourceKey.RULE34VIDEO,
-        SourceKey.RULE34GEN,
-        -> cleaned
-    }.takeIf { it.isNotBlank() }
 }
 
 private fun associationScore(
@@ -136,5 +107,3 @@ private fun associationScore(
 private const val MAX_AFFINITY_TAGS_PER_DOCUMENT = 15
 private const val DIRECT_SEED_MATCH_BONUS = 2.25
 private const val TAG_FREQUENCY_WEIGHT = 0.15
-private val TAG_WHITESPACE_REGEX = Regex("\\s+")
-private val PIXIV_USERS_TAG_REGEX = Regex("\\d+users入り")

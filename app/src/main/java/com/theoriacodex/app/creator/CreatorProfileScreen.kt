@@ -13,28 +13,18 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
-import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -53,7 +43,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
@@ -65,11 +54,15 @@ import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.search.animatedDurationResolutionCandidates
 import com.theoriacodex.app.search.filterSearchResults
+import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.PostTagActionSection
+import com.theoriacodex.app.ui.components.FeedEmptyTile
+import com.theoriacodex.app.ui.components.FeedErrorTile
+import com.theoriacodex.app.ui.components.FeedLoadingState
+import com.theoriacodex.app.ui.components.PostActionSheet
+import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.media.animatedDurationMs
-import com.theoriacodex.app.media.copyPostTagsToClipboard
-import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.media.probeRemoteVideoDurationMs
 import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.creator.state.CreatorUiState
@@ -257,7 +250,7 @@ fun CreatorProfileScreen(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            text = creator.source.name,
+                            text = creator.source.displayName(),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -308,38 +301,19 @@ fun CreatorProfileScreen(
 
             when {
                 state.isRefreshing && visibleResults.isEmpty() -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        CircularProgressIndicator()
-                    }
+                    FeedLoadingState()
                 }
 
                 state.errorMessage != null && visibleResults.isEmpty() -> {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(state.errorMessage.orEmpty())
-                            TextButton(
-                                onClick = {
-                                    onAction(CreatorAction.Refresh)
-                                },
-                            ) {
-                                Text("Retry")
-                            }
-                        }
-                    }
+                    FeedErrorTile(
+                        message = state.errorMessage.orEmpty(),
+                        onRetry = { onAction(CreatorAction.Refresh) },
+                    )
                 }
 
                 visibleResults.isEmpty() -> {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = if (
+                    FeedEmptyTile(
+                        message = if (
                                 state.results.isNotEmpty() &&
                                 !visibilityFilters.animatedDurationRange.isFullRange
                             ) {
@@ -347,44 +321,32 @@ fun CreatorProfileScreen(
                             } else {
                                 "No uploads found for this creator."
                             },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(20.dp),
-                            textAlign = TextAlign.Center,
-                        )
-                    }
+                    )
                 }
 
                 else -> {
-                    LazyVerticalStaggeredGrid(
-                        columns = StaggeredGridCells.Fixed(2),
+                    TwoColumnPostStaggeredGrid(
+                        posts = visibleResults,
                         modifier = Modifier.fillMaxSize(),
                         state = gridState,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalItemSpacing = 6.dp,
-                    ) {
-                        itemsIndexed(
-                            items = visibleResults,
-                            key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" },
-                        ) { index, post ->
-                            SearchResultCard(
-                                post = post,
-                                pixivUgoiraClient = pixivUgoiraClient,
-                                liked = post.id in likedPostIds,
-                                onToggleLike = { onToggleLike(post) },
-                                onClick = {
-                                    onAction(
-                                        CreatorAction.OpenResult(
-                                            index = index,
-                                            scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
-                                            visibleResults = visibleResults,
-                                            visibilityFilters = visibilityFilters,
-                                        )
+                    ) { index, post ->
+                        SearchResultCard(
+                            post = post,
+                            pixivUgoiraClient = pixivUgoiraClient,
+                            liked = post.id in likedPostIds,
+                            onToggleLike = { onToggleLike(post) },
+                            onClick = {
+                                onAction(
+                                    CreatorAction.OpenResult(
+                                        index = index,
+                                        scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
+                                        visibleResults = visibleResults,
+                                        visibilityFilters = visibilityFilters,
                                     )
-                                },
-                                onLongPress = { selectedActionPost = post },
-                            )
-                        }
+                                )
+                            },
+                            onLongPress = { selectedActionPost = post },
+                        )
                     }
                 }
             }
@@ -441,76 +403,12 @@ fun CreatorProfileScreen(
 
     if (selectedActionPost != null) {
         val post = requireNotNull(selectedActionPost)
-        ModalBottomSheet(
-            onDismissRequest = { selectedActionPost = null },
-            dragHandle = null,
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    IconButton(
-                        onClick = {
-                            selectedActionPost = null
-                            onSaveToDevice(post)
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = "Save to device",
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            selectedActionPost = null
-                            onRequestSaveToCodex(post)
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.BookmarkAdd,
-                            contentDescription = "Save to Codex",
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            copyPostTagsToClipboard(context, post)
-                            Toast.makeText(context, "Tags copied", Toast.LENGTH_SHORT).show()
-                            selectedActionPost = null
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "Copy tags",
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            val copied = copyPostUrlToClipboard(context, post)
-                            val message = if (copied) "Post URL copied" else "No post URL available"
-                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                            selectedActionPost = null
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "Share",
-                        )
-                    }
-                }
-                Text(
-                    text = post.title?.takeIf { it.isNotBlank() } ?: post.id.sourcePostId,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                )
-                HorizontalDivider()
+        PostActionSheet(
+            post = post,
+            onDismiss = { selectedActionPost = null },
+            onSaveToDevice = { onSaveToDevice(post) },
+            onSaveToCodex = { onRequestSaveToCodex(post) },
+            tagContent = {
                 PostTagActionSection(
                     post = post,
                     onAddIncludeTerm = { term -> onAddIncludeTerm(post, term) },
@@ -518,14 +416,8 @@ fun CreatorProfileScreen(
                     onRemoveIncludeTerm = { term -> onRemoveIncludeTerm(post, term) },
                     onRemoveExcludeTerm = { term -> onRemoveExcludeTerm(post, term) },
                 )
-                TextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { selectedActionPost = null },
-                ) {
-                    Text("Cancel")
-                }
-            }
-        }
+            },
+        )
     }
 }
 

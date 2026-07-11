@@ -24,8 +24,8 @@ class CodexSearchSourceOptionsTest {
 
         assertEquals(
             listOf(
-                CodexSearchSourceOption(source = SourceKey.PIXIV, postCount = 1),
                 CodexSearchSourceOption(source = SourceKey.GELBOORU, postCount = 2),
+                CodexSearchSourceOption(source = SourceKey.PIXIV, postCount = 1),
             ),
             options,
         )

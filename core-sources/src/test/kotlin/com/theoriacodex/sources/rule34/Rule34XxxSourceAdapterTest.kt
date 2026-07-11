@@ -12,6 +12,7 @@ import com.theoriacodex.sources.testing.FakeCredentialsProvider
 import com.theoriacodex.sources.testing.FakeHttpClient
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -70,6 +71,41 @@ class Rule34XxxSourceAdapterTest {
         assertEquals("genshin_impact", suggestions.first().text)
         assertEquals(237880, suggestions.first().count)
         assertEquals("genshin", suggestions[1].text)
+    }
+
+    @Test
+    fun `search skips non-object records and tolerates malformed optional values`() = runTest {
+        val credentials = FakeCredentialsProvider().apply {
+            rule34XxxCredentials = Rule34XxxCredentials(userId = "42", apiKey = "secret")
+        }
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    [
+                      null,
+                      "not-a-post",
+                      {
+                        "id":123456,
+                        "preview_url":{},
+                        "file_url":"https://img.rule34.xxx/full.jpg",
+                        "tags":[],
+                        "width":"wide",
+                        "created_at":"not-a-timestamp"
+                      }
+                    ]
+                """.trimIndent(),
+            )
+        }
+        val adapter = Rule34XxxSourceAdapter(httpClient = httpClient, credentialsProvider = credentials)
+
+        val post = adapter.search(sampleQuery(), pageToken = null).items.single()
+
+        assertEquals("123456", post.id.sourcePostId)
+        assertEquals("https://img.rule34.xxx/full.jpg", post.preview.url)
+        assertNull(post.width)
+        assertNull(post.createdAtEpochMs)
+        assertEquals(emptyList<String>(), post.canonicalTags)
     }
 
     @Test

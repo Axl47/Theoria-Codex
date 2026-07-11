@@ -18,11 +18,15 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.common.classifyHttpFailure
+import com.theoriacodex.sources.common.intValue
+import com.theoriacodex.sources.common.isSuccessful
+import com.theoriacodex.sources.common.longValue
 import com.theoriacodex.sources.common.mimeFromUrlOrExt
 import com.theoriacodex.sources.common.parseJsonArray
 import com.theoriacodex.sources.common.parseJsonObject
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.common.sourceQuickQuery
+import com.theoriacodex.sources.common.stringValue
 import java.io.IOException
 
 class AibooruSourceAdapter(
@@ -54,7 +58,7 @@ class AibooruSourceAdapter(
             ),
         )
         val items = parsePostsArray(response).mapNotNull { element ->
-            parsePost(element.asJsonObject)
+            element.takeIf(JsonElement::isJsonObject)?.asJsonObject?.let(::parsePost)
         }
         val nextPageToken = if (items.size >= limit) (page + 1).toString() else null
         return Page(items = items, nextPageToken = nextPageToken)
@@ -110,7 +114,7 @@ class AibooruSourceAdapter(
             sourceNetworkFailure("AIBooru", error)
         }
 
-        if (response.statusCode !in 200..299) {
+        if (!response.isSuccessful()) {
             throw SourceAdapterException(
                 reason = classifyHttpFailure(response.statusCode),
                 message = "AIBooru request failed (${response.statusCode})",
@@ -132,38 +136,37 @@ class AibooruSourceAdapter(
     }
 
     private fun parsePost(raw: JsonObject): Post? {
-        val id = raw.get("id")?.asLong?.toString() ?: return null
-        val tags = raw.get("tag_string")?.asString
+        val id = raw.longValue("id")?.toString() ?: return null
+        val tags = raw.stringValue("tag_string")
             ?.split(" ")
             ?.map { it.trim() }
             ?.filter { it.isNotBlank() }
             .orEmpty()
-        val preview = raw.get("preview_file_url")?.asString
-        val fullUrl = raw.get("file_url")?.asString ?: raw.get("large_file_url")?.asString
-        val fullMime = mimeFromUrlOrExt(fullUrl, raw.get("file_ext")?.asString)
+        val preview = raw.stringValue("preview_file_url")
+        val fullUrl = raw.stringValue("file_url") ?: raw.stringValue("large_file_url")
+        val fullMime = mimeFromUrlOrExt(fullUrl, raw.stringValue("file_ext"))
         val previewMime = mimeFromUrlOrExt(preview, null) ?: fullMime
-        val created = raw.get("created_at")?.asString?.toLongOrNull()
-            ?: raw.get("created_at")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asLong
+        val created = raw.longValue("created_at")
 
         return Post(
             id = PostId(SourceKey.AIBOORU, id),
             preview = ImageRef(url = preview, localPath = null, mime = previewMime),
             full = fullUrl?.let { ImageRef(url = it, localPath = null, mime = fullMime) },
             pageUrl = "$AIBOORU_BASE_URL/posts/$id",
-            width = raw.get("image_width")?.asInt,
-            height = raw.get("image_height")?.asInt,
+            width = raw.intValue("image_width"),
+            height = raw.intValue("image_height"),
             canonicalTags = tags,
             rawTags = tags,
-            authorName = raw.get("uploader_name")?.asString,
+            authorName = raw.stringValue("uploader_name"),
             createdAtEpochMs = created?.times(1000L),
         )
     }
 
     private fun parseTagSuggestion(raw: JsonElement, type: String): TagSuggestion? {
         val obj = raw.takeIf { it.isJsonObject }?.asJsonObject ?: return null
-        val name = obj.get("name")?.asString?.trim().orEmpty()
+        val name = obj.stringValue("name")?.trim().orEmpty()
         if (name.isBlank()) return null
-        val count = obj.get("post_count")?.asInt ?: obj.get("count")?.asInt
+        val count = obj.intValue("post_count") ?: obj.intValue("count")
         return TagSuggestion(
             text = name,
             type = type,

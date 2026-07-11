@@ -20,15 +20,11 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.canonicalHitomiArtistIdentity
 
-fun supportsCreatorBrowsing(source: SourceKey): Boolean {
-    return source == SourceKey.PIXIV ||
-        source == SourceKey.GELBOORU ||
-        source == SourceKey.HITOMI ||
-        source == SourceKey.IWARA
-}
-
-fun browseableCreatorProfile(profile: CreatorProfile?): CreatorProfile? {
-    if (profile == null || !supportsCreatorBrowsing(profile.source)) return null
+fun browseableCreatorProfile(
+    profile: CreatorProfile?,
+    creatorBrowsingSources: Set<SourceKey>,
+): CreatorProfile? {
+    if (profile == null || profile.source !in creatorBrowsingSources) return null
     if (profile.uploadsQuery.isNullOrBlank()) return null
     if (profile.source == SourceKey.HITOMI && profile.canonicalHitomiArtistIdentity() == null) {
         return null
@@ -36,8 +32,8 @@ fun browseableCreatorProfile(profile: CreatorProfile?): CreatorProfile? {
     return profile
 }
 
-fun creatorButtonLabel(post: Post): String? {
-    return creatorProfileActions(post).firstOrNull()?.label
+fun creatorButtonLabel(post: Post, creatorBrowsingSources: Set<SourceKey>): String? {
+    return creatorProfileActions(post, creatorBrowsingSources).firstOrNull()?.label
 }
 
 internal data class CreatorProfileAction(
@@ -48,11 +44,14 @@ internal data class CreatorProfileAction(
         get() = profile == null
 }
 
-internal fun creatorProfileActions(post: Post): List<CreatorProfileAction> {
-    if (!supportsCreatorBrowsing(post.id.source)) return emptyList()
+internal fun creatorProfileActions(
+    post: Post,
+    creatorBrowsingSources: Set<SourceKey>,
+): List<CreatorProfileAction> {
+    if (post.id.source !in creatorBrowsingSources) return emptyList()
 
     val explicitProfiles = post.creatorProfiles
-        .mapNotNull(::browseableCreatorProfile)
+        .mapNotNull { profile -> browseableCreatorProfile(profile, creatorBrowsingSources) }
         .distinct()
     if (explicitProfiles.isNotEmpty()) {
         return explicitProfiles.map { profile ->
@@ -75,11 +74,12 @@ internal fun creatorProfileActions(post: Post): List<CreatorProfileAction> {
 @Composable
 fun CreatorProfileActionButton(
     post: Post,
+    creatorBrowsingSources: Set<SourceKey>,
     onOpenProfile: (CreatorProfile) -> Unit,
     onOpenLegacyPost: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val actions = creatorProfileActions(post)
+    val actions = creatorProfileActions(post, creatorBrowsingSources)
     if (actions.isEmpty()) return
     Column(
         modifier = modifier.fillMaxWidth(),
