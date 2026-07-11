@@ -8,7 +8,7 @@ kotlin {
 
 dependencies {
     implementation(project(":core-domain"))
-    implementation("androidx.datastore:datastore-core:1.1.7")
+    implementation(libs.androidx.datastore.core)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.gson)
     testImplementation(libs.kotlinx.coroutines.test)

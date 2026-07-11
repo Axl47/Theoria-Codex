@@ -9,7 +9,7 @@ plugins {
 
 android {
     namespace = "com.theoriacodex.app"
-    compileSdk = 35
+    compileSdk = 37
 
     val versionCodeOverride = providers.gradleProperty("theoria.versionCode")
         .orNull
@@ -19,7 +19,7 @@ android {
     defaultConfig {
         applicationId = "com.theoriacodex"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 37
         // Keep this calculation aligned with MainReleaseTagParser and the release workflow:
         // 1_500_000_000 + major * 10_000 + minor * 100 + patch.
         versionCode = 1_500_000_603

@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-10T23:59:00-04:00
+updated_at: 2026-07-11T01:40:00-04:00
 ---
 # Working List
 
@@ -27,7 +27,8 @@ updated_at: 2026-07-10T23:59:00-04:00
     - Evidence: clean lint/tests, debug APK, release APK, and Android-test compilation passed 131 tasks; the wrapper checksum is pinned and the temporary external-Kotlin opt-out is explicit for the mixed Android/JVM graph
   - [x] 6E follow-up: advance from the green Kotlin 2.0 rollback point to Kotlin 2.4.0 on the compatible AGP toolchain
     - Evidence: JDK 17 clean lint/tests, debug/release packaging, and Android-test compilation passed 131 tasks and 729 configured test executions; AGP lint reads the final metadata and reports 86 warnings
-  - [ ] 6D: migrate Android libraries and target SDK after storage integration
+  - [x] 6D: migrate Android libraries and target SDK after storage integration
+    - Evidence: compile/target SDK 37 and the reviewed stable AndroidX, Compose, DataStore, Room, Media3, Security Crypto, Coroutines, Gson, jsoup, and test versions passed the clean 230-task gate with 750 configured tests, 0 failures/errors, 3 skips, debug/release APKs, Android-test compilation, 75 app lint warnings plus 6 hints, and clean Room lint; the Android 17 behavior review found no production MessageQueue/static-final reflection, LAN, SMS, Contacts, Bluetooth, writable dynamic-native-loading, background-media, or implicit URI-grant dependency, while large-screen orientation cleanup remains assigned to 7B
   - [ ] 6G: validate release shrinking and startup optimization
 
 ### Pending
