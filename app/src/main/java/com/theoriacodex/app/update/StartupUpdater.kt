@@ -39,6 +39,8 @@ class StartupUpdater(
         onState: (StartupUpdateState) -> Unit,
     ): Result<RemoteUpdate?> {
         onState(StartupUpdateState.Checking)
+        val installedVersionCode = currentInstalledVersionCode()
+        reconcilePendingInstallation(installedVersionCode)
         val remoteResult = withTimeoutOrNull(updateCheckTimeoutMs) {
             feedClient.latestMainPrerelease()
         } ?: return Result.failure(IOException("Update check timed out"))
@@ -51,7 +53,6 @@ class StartupUpdater(
             return Result.success(null)
         }
 
-        val installedVersionCode = installedVersionCodeProvider?.invoke() ?: readInstalledVersionCode(context)
         if (remote.versionCode <= installedVersionCode) {
             onState(StartupUpdateState.NoUpdate)
             stateStore.update { current ->
@@ -205,7 +206,7 @@ class StartupUpdater(
         return if (result.isSuccess) {
             val changelog = PendingPostInstallChangelog(
                 releaseId = remote.releaseId,
-                fromVersionCode = readInstalledVersionCode(context),
+                fromVersionCode = currentInstalledVersionCode(),
                 versionCode = remote.versionCode,
                 tagName = remote.tagName,
                 commitShaShort = remote.commitShaShort,
@@ -215,9 +216,7 @@ class StartupUpdater(
             )
             stateStore.update { current ->
                 current.copy(
-                    lastSeenReleaseId = remote.releaseId,
                     pendingPostInstallChangelog = changelog,
-                    lastInstalledChangelog = changelog,
                 )
             }
             StartupUpdateOutcome.InstallerLaunched(remote = remote, apkFile = apkFile)
@@ -232,6 +231,45 @@ class StartupUpdater(
                 )
             }
         }
+    }
+
+    private suspend fun reconcilePendingInstallation(installedVersionCode: Int) {
+        val snapshot = stateStore.snapshot()
+        val pending = snapshot.pendingPostInstallChangelog ?: return
+        val alreadyPromoted =
+            snapshot.lastInstalledChangelog == pending &&
+                snapshot.lastSeenReleaseId == pending.releaseId &&
+                snapshot.pendingInstallReleaseId == null &&
+                snapshot.pendingInstallVersionCode == null
+        if (installedVersionCode < pending.versionCode ||
+            (installedVersionCode == pending.versionCode && alreadyPromoted)
+        ) {
+            return
+        }
+
+        stateStore.update { current ->
+            val currentPending = current.pendingPostInstallChangelog ?: return@update current
+            when {
+                installedVersionCode == currentPending.versionCode -> current.copy(
+                    lastSeenReleaseId = currentPending.releaseId,
+                    pendingInstallReleaseId = null,
+                    pendingInstallVersionCode = null,
+                    lastInstalledChangelog = currentPending,
+                )
+
+                installedVersionCode > currentPending.versionCode -> current.copy(
+                    pendingInstallReleaseId = null,
+                    pendingInstallVersionCode = null,
+                    pendingPostInstallChangelog = null,
+                )
+
+                else -> current
+            }
+        }
+    }
+
+    private fun currentInstalledVersionCode(): Int {
+        return installedVersionCodeProvider?.invoke() ?: readInstalledVersionCode(context)
     }
 
     private fun readInstalledVersionCode(context: Context): Int {

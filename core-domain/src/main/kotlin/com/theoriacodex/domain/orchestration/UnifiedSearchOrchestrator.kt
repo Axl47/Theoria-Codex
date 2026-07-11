@@ -4,6 +4,7 @@ import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
@@ -84,7 +85,7 @@ class UnifiedSearchOrchestrator(
                     } else {
                         sourceBaseQuery
                     }
-                    source to runCatching {
+                    source to runCatchingPreservingCancellation {
                         adapter.search(sourceQuery, pageTokens[source]).let { page ->
                             if (source in clientSideExcludeSources) {
                                 page.copy(

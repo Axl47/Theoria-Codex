@@ -6,6 +6,7 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.net.URL
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -158,6 +159,8 @@ class DefaultSourceHttpClient(
                     )
                 }
                 continuation.resumeWith(Result.success(response))
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Throwable) {
                 continuation.resumeWith(Result.failure(error))
             }

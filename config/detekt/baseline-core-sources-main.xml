@@ -1,0 +1,19 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>CognitiveComplexMethod:HitomiSourceAdapter.kt:HitomiSourceAdapter$private suspend fun JsonObject.toPost: Post</ID>
+    <ID>CognitiveComplexMethod:HitomiSourceAdapter.kt:HitomiSourceAdapter$private suspend fun searchInternal: Page&lt;Post&gt;</ID>
+    <ID>CognitiveComplexMethod:NhentaiSourceAdapter.kt:NhentaiSourceAdapter$private fun collectTagSuggestions: List&lt;TagSuggestion&gt;</ID>
+    <ID>CognitiveComplexMethod:ProviderHealth.kt:ProviderProbeRunner$private suspend fun runCase: List&lt;ProviderProbeStepResult&gt;</ID>
+    <ID>LargeClass:HitomiSourceAdapter.kt:HitomiSourceAdapter : SourceAdapterFacetedSearchSourceAdapterCreatorPostsSourceAdapterMediaRecoverySourceAdapter</ID>
+    <ID>LargeClass:NhentaiSourceAdapter.kt:NhentaiSourceAdapter : SourceAdapterTagCountLookupSourceAdapterFacetedSearchSourceAdapter</ID>
+    <ID>LongMethod:HitomiSourceAdapter.kt:HitomiSourceAdapter$private suspend fun JsonObject.toPost: Post</ID>
+    <ID>LongMethod:HitomiSourceAdapter.kt:HitomiSourceAdapter$private suspend fun compileQuery: CompiledHitomiQuery</ID>
+    <ID>LongMethod:HitomiSourceAdapter.kt:HitomiSourceAdapter$private suspend fun searchInternal: Page&lt;Post&gt;</ID>
+    <ID>LongMethod:NhentaiSourceAdapter.kt:NhentaiSourceAdapter$override suspend fun search: Page&lt;Post&gt;</ID>
+    <ID>LongMethod:NhentaiSourceAdapter.kt:NhentaiSourceAdapter$private fun parseGallery: Post?</ID>
+    <ID>LongMethod:PixivSourceAdapter.kt:PixivSourceAdapter$private fun parseIllust: Post?</ID>
+    <ID>LongMethod:ProviderHealth.kt:ProviderProbeRunner$private suspend fun runCase: List&lt;ProviderProbeStepResult&gt;</ID>
+  </CurrentIssues>
+</SmellBaseline>

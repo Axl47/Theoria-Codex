@@ -1,7 +1,7 @@
 package com.theoriacodex.app
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.lifecycle.Lifecycle
 import org.junit.Assert.assertEquals

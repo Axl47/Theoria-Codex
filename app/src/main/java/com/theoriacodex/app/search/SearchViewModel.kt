@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -376,13 +377,14 @@ internal class SearchViewModel(
                 if (completeRequest(requestId, kind)) onSuccess()
                 persistDraftQuery()
             } catch (error: CancellationException) {
-                cancelRequestIfCurrent(requestId)
                 throw error
             } catch (error: Throwable) {
                 failRequestIfCurrent(
                     requestId = requestId,
                     message = error.message ?: "Search failed",
                 )
+            } finally {
+                if (!isActive) cancelRequestIfCurrent(requestId)
             }
         }
         activeRequestJob = job

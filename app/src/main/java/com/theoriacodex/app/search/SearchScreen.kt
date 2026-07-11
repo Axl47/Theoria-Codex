@@ -190,8 +190,8 @@ fun SearchScreen(
     var animatedOnly by rememberSaveable { mutableStateOf(false) }
     var hideLiked by rememberSaveable { mutableStateOf(false) }
     var hideSaved by rememberSaveable { mutableStateOf(false) }
-    var durationMinBucket by rememberSaveable { mutableStateOf(ANIMATED_DURATION_MIN_BUCKET) }
-    var durationMaxBucket by rememberSaveable { mutableStateOf(ANIMATED_DURATION_MAX_BUCKET) }
+    var durationMinBucket by rememberSaveable { mutableIntStateOf(ANIMATED_DURATION_MIN_BUCKET) }
+    var durationMaxBucket by rememberSaveable { mutableIntStateOf(ANIMATED_DURATION_MAX_BUCKET) }
     var searchFieldFocused by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var showFavoriteTagSheet by remember { mutableStateOf(false) }
@@ -1127,8 +1127,8 @@ fun SearchResultCard(
 private fun SearchVideoPreview(
     media: ImageRef,
     sourceKey: SourceKey,
-    previewModel: Any? = null,
     modifier: Modifier = Modifier,
+    previewModel: Any? = null,
     onPlaybackError: () -> Unit = {},
 ) {
     val context = LocalContext.current

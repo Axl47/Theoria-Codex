@@ -398,10 +398,10 @@ fun TagSelectionSurface(
 
 @Composable
 private fun TagActionPill(
-    label: String? = null,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    label: String? = null,
     icon: (@Composable () -> Unit)? = null,
 ) {
     val accent = MaterialTheme.colorScheme.primary

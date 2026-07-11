@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /** Non-Compose execution boundary used by the navigation-scoped route owner. */
@@ -288,10 +289,11 @@ internal class ForYouViewModel(
                 operation()
                 onAction(ForYouAction.RefreshCompleted(request, snapshot()))
             } catch (error: CancellationException) {
-                onAction(ForYouAction.RequestCancelled(request))
                 throw error
             } catch (error: Throwable) {
                 onAction(ForYouAction.RefreshFailed(request, error.message ?: "Could not load recommendations"))
+            } finally {
+                if (!isActive) onAction(ForYouAction.RequestCancelled(request))
             }
         }
     }
@@ -316,10 +318,11 @@ internal class ForYouViewModel(
                     onAction(ForYouAction.PageFailed(request, error))
                 }
             } catch (error: CancellationException) {
-                onAction(ForYouAction.RequestCancelled(request))
                 throw error
             } catch (error: Throwable) {
                 onAction(ForYouAction.PageFailed(request, error.message ?: "Could not load more recommendations"))
+            } finally {
+                if (!isActive) onAction(ForYouAction.RequestCancelled(request))
             }
         }
     }

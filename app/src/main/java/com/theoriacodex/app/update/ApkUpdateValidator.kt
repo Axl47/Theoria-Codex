@@ -18,29 +18,24 @@ class ApkUpdateValidator(
         val packageManager = context.packageManager
         val archiveInfo = packageManager.getArchivePackageInfoCompat(apkFile)
             ?: error("Downloaded update APK is unreadable")
-        if (archiveInfo.packageName != context.packageName) {
-            error("Downloaded APK package does not match installed app")
-        }
-
         val archiveVersion = PackageInfoCompat.getLongVersionCode(archiveInfo)
-        if (archiveVersion.toInt() != expectedVersionCode) {
-            error("Downloaded APK version does not match release metadata")
-        }
-
         val installedInfo = packageManager.getInstalledPackageInfoCompat(context.packageName)
         val installedVersion = PackageInfoCompat.getLongVersionCode(installedInfo)
-        if (archiveVersion <= installedVersion) {
-            error("Downloaded APK is not newer than installed version")
-        }
-
         val archiveSignatures = archiveInfo.signatureDigests()
         val installedSignatures = installedInfo.signatureDigests()
-        if (archiveSignatures.isEmpty() || installedSignatures.isEmpty()) {
-            error("Could not verify APK signatures")
-        }
-        if (archiveSignatures.intersect(installedSignatures).isEmpty()) {
-            error("Downloaded APK signature does not match installed app (release key mismatch)")
-        }
+        validateApkIdentityPolicy(
+            installed = ApkIdentity(
+                packageName = context.packageName,
+                versionCode = installedVersion,
+                signatureDigests = installedSignatures,
+            ),
+            archive = ApkIdentity(
+                packageName = archiveInfo.packageName,
+                versionCode = archiveVersion,
+                signatureDigests = archiveSignatures,
+            ),
+            expectedVersionCode = expectedVersionCode.toLong(),
+        ).getOrThrow()
     }
 
     private fun PackageManager.getArchivePackageInfoCompat(apkFile: File): PackageInfo? {
@@ -95,5 +90,34 @@ class ApkUpdateValidator(
         return signatureBytes.map { bytes ->
             digest.digest(bytes).joinToString(separator = "") { b -> "%02x".format(b) }
         }.toSet()
+    }
+}
+
+internal data class ApkIdentity(
+    val packageName: String,
+    val versionCode: Long,
+    val signatureDigests: Set<String>,
+)
+
+/** Pure release policy; Android package parsing remains a thin boundary above it. */
+internal fun validateApkIdentityPolicy(
+    installed: ApkIdentity,
+    archive: ApkIdentity,
+    expectedVersionCode: Long,
+): Result<Unit> = runCatching {
+    if (archive.packageName != installed.packageName) {
+        error("Downloaded APK package does not match installed app")
+    }
+    if (archive.versionCode != expectedVersionCode) {
+        error("Downloaded APK version does not match release metadata")
+    }
+    if (archive.versionCode <= installed.versionCode) {
+        error("Downloaded APK is not newer than installed version")
+    }
+    if (archive.signatureDigests.isEmpty() || installed.signatureDigests.isEmpty()) {
+        error("Could not verify APK signatures")
+    }
+    if (archive.signatureDigests.intersect(installed.signatureDigests).isEmpty()) {
+        error("Downloaded APK signature does not match installed app (release key mismatch)")
     }
 }

@@ -1,6 +1,5 @@
 package com.theoriacodex.app.source
 
-import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
@@ -16,6 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.core.net.toUri
 import coil.compose.AsyncImage
 import coil.decode.SvgDecoder
 import coil.request.ImageRequest
@@ -43,7 +43,7 @@ fun SourceLogo(
             val context = LocalContext.current
             val model = remember(context, logo.resourceId) {
                 ImageRequest.Builder(context)
-                    .data(Uri.parse("android.resource://${context.packageName}/${logo.resourceId}"))
+                    .data("android.resource://${context.packageName}/${logo.resourceId}".toUri())
                     .decoderFactory(SvgDecoder.Factory())
                     .build()
             }

@@ -11,6 +11,7 @@ import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.loadSeedTagSuggestions
 import com.theoriacodex.app.source.exposedRealSources
 import com.theoriacodex.app.sourceauth.AndroidSecureSourceCredentialsStore
+import com.theoriacodex.app.sourceauth.AndroidPixivPkceSessionStore
 import com.theoriacodex.app.sourceauth.ObservableSourceAccountStore
 import com.theoriacodex.app.sourceauth.PixivPkceController
 import com.theoriacodex.app.sourceauth.SourceAccountStore
@@ -130,6 +131,7 @@ internal class DefaultTheoriaAppContainer(
     private val pixivAuthController = PixivPkceController(
         authApi = pixivAuthApi,
         credentialsProvider = accountStore,
+        sessionStore = AndroidPixivPkceSessionStore(appContext),
     )
     private val pixivUgoiraClient = PixivUgoiraClient(
         credentialsProvider = accountStore,

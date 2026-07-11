@@ -345,11 +345,11 @@ internal fun ViewerRoute(
         return
     }
 
-    val sourceState = liveSourceState.forSource(activeSession.context.streamSource)
-    val liveSourceMatches = sourceState?.queryHash == activeSession.context.queryHash
+    val matchingSourceState = liveSourceState
+        .forSource(activeSession.context.streamSource)
+        ?.takeIf { sourceState -> sourceState.queryHash == activeSession.context.queryHash }
     val canLoadMoreFromSource = activeSession.liveSearchBinding &&
-        liveSourceMatches &&
-        sourceState?.canLoadMore == true
+        matchingSourceState?.canLoadMore == true
 
     ViewerScreen(
         uiState = viewerState,
@@ -359,7 +359,7 @@ internal fun ViewerRoute(
         tagVideoCountProvider = renderConfig.tagVideoCountProvider,
         fetchTagVideoCounts = renderConfig.fetchTagVideoCounts,
         canLoadMoreFromSource = canLoadMoreFromSource,
-        loadingMoreFromSource = liveSourceMatches && sourceState?.loadingMore == true,
+        loadingMoreFromSource = matchingSourceState?.loadingMore == true,
         invertMultiImageScrollDirection = renderConfig.invertMultiImageScrollDirection,
         onInvertMultiImageScrollDirectionChange =
             screenCallbacks.onInvertMultiImageScrollDirectionChange,

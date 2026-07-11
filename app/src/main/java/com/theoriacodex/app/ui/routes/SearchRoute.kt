@@ -62,11 +62,16 @@ internal data class SearchRouteCallbacks(
  */
 internal class SearchRouteOwnerHandle(
     owner: SearchViewModel,
-) {
+) : ObservableRouteOwnerHandle {
     private val ownerLease = owner.createRouteOwnerLease()
 
-    /** Read-only state while this handle is published by the composed destination. */
-    val state: StateFlow<SearchUiState> = owner.state
+    /** Read-only state while the navigation-owned ViewModel remains alive. */
+    val state: StateFlow<SearchUiState>?
+        get() = ownerLease.withOwner { activeOwner -> activeOwner.state }
+
+    override fun invokeOnOwnerCleared(listener: () -> Unit): Closeable {
+        return ownerLease.invokeOnClose(listener)
+    }
 
     fun dispatch(action: SearchAction): Boolean {
         return ownerLease.withOwner { activeOwner ->
@@ -88,21 +93,128 @@ internal class SearchRouteOwnerHandle(
 internal class WeakRouteOwnerLease<Owner : Any>(owner: Owner) : Closeable {
     private val lock = Any()
     private var ownerReference: WeakReference<Owner>? = WeakReference(owner)
+    private var closed = false
+    private var nextCloseListenerId = 0L
+    private val closeListeners = linkedMapOf<Long, () -> Unit>()
 
     fun <Result> withOwner(block: (Owner) -> Result): Result? = synchronized(lock) {
         ownerReference?.get()?.let(block)
     }
 
-    override fun close() {
-        synchronized(lock) {
-            ownerReference?.clear()
-            ownerReference = null
+    /**
+     * Observes the deterministic ViewModel-owned close signal.
+     *
+     * A listener registered after closure is invoked immediately. The returned registration removes
+     * only that listener and never closes the owner lease itself.
+     */
+    fun invokeOnClose(listener: () -> Unit): Closeable {
+        var listenerId: Long? = null
+        val invokeImmediately = synchronized(lock) {
+            if (closed) {
+                true
+            } else {
+                listenerId = nextCloseListenerId++
+                closeListeners[requireNotNull(listenerId)] = listener
+                false
+            }
         }
+        if (invokeImmediately) listener()
+        return Closeable {
+            listenerId?.let { id ->
+                synchronized(lock) {
+                    closeListeners.remove(id)
+                }
+            }
+        }
+    }
+
+    override fun close() {
+        val listeners = synchronized(lock) {
+            if (closed) {
+                emptyList()
+            } else {
+                closed = true
+                ownerReference?.clear()
+                ownerReference = null
+                closeListeners.values.toList().also { closeListeners.clear() }
+            }
+        }
+        listeners.forEach { listener -> listener() }
     }
 }
 
+/**
+ * Returns the single weak route-owner lease attached to this ViewModel lifetime.
+ *
+ * A navigation entry can leave and re-enter composition without clearing its ViewModel. Reusing a
+ * keyed closeable prevents each newly remembered route handle from accumulating another closeable
+ * while preserving the ViewModel as the only lifetime owner.
+ */
 internal fun <Owner : ViewModel> Owner.createRouteOwnerLease(): WeakRouteOwnerLease<Owner> {
-    return WeakRouteOwnerLease(this).also { lease -> addCloseable(lease) }
+    return synchronized(this) {
+        getCloseable<WeakRouteOwnerLease<Owner>>(ROUTE_OWNER_LEASE_KEY)
+            ?: WeakRouteOwnerLease(this).also { lease ->
+                addCloseable(ROUTE_OWNER_LEASE_KEY, lease)
+            }
+    }
+}
+
+/** A route handle whose lifetime ends only when its navigation-owned ViewModel is cleared. */
+internal interface ObservableRouteOwnerHandle {
+    fun invokeOnOwnerCleared(listener: () -> Unit): Closeable
+}
+
+/**
+ * Keeps one shell-visible route handle and removes it only when that exact owner is cleared.
+ *
+ * Publishing a replacement unsubscribes the previous listener. The identity check also protects a
+ * newer owner from an old close callback that was already in flight when replacement occurred.
+ */
+internal class RouteOwnerHandleBinding<Handle : ObservableRouteOwnerHandle>(
+    private val onHandleChanged: (Handle?) -> Unit,
+) : Closeable {
+    private var currentHandle: Handle? = null
+    private var currentCloseRegistration: Closeable? = null
+
+    val current: Handle?
+        get() = currentHandle
+
+    fun publish(handle: Handle) {
+        if (currentHandle === handle) return
+
+        currentCloseRegistration?.close()
+        currentCloseRegistration = null
+        currentHandle = handle
+        onHandleChanged(handle)
+
+        val registration = handle.invokeOnOwnerCleared {
+            clearIfCurrent(handle)
+        }
+        if (currentHandle === handle) {
+            currentCloseRegistration = registration
+        } else {
+            // The owner may already have been closed when the listener was registered.
+            registration.close()
+        }
+    }
+
+    private fun clearIfCurrent(expected: Handle) {
+        if (currentHandle !== expected) return
+
+        currentCloseRegistration?.close()
+        currentCloseRegistration = null
+        currentHandle = null
+        onHandleChanged(null)
+    }
+
+    override fun close() {
+        currentCloseRegistration?.close()
+        currentCloseRegistration = null
+        if (currentHandle != null) {
+            currentHandle = null
+            onHandleChanged(null)
+        }
+    }
 }
 
 /** Delivers one Search resume action for each lifecycle resume period. */
@@ -208,3 +320,4 @@ internal fun SearchRoute(
 }
 
 private const val SEARCH_ROUTE_OWNER_KEY = "search-route-owner"
+private const val ROUTE_OWNER_LEASE_KEY = "route-owner-lease"

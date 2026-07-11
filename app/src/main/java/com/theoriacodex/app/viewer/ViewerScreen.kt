@@ -3,8 +3,9 @@ package com.theoriacodex.app.viewer
 import android.content.res.Configuration
 import android.content.Context
 import android.graphics.Movie
-import android.net.Uri
 import android.os.SystemClock
+import androidx.core.graphics.withTranslation
+import androidx.core.net.toUri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -134,6 +135,7 @@ import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaError
 import com.theoriacodex.app.viewer.state.ViewerUiState
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -506,7 +508,7 @@ internal fun ViewerScreen(
                 pageSpacing = if (isLandscape) 0.dp else 8.dp,
             ) { mediaPage ->
                 val media = postMedia[mediaPage]
-                val transformState = rememberTransformableState { zoomChange, panChange, _ ->
+                val transformState = rememberTransformableState { _, zoomChange, panChange, _ ->
                     viewerState = viewerState.transform(
                         zoomChange = zoomChange,
                         panChangeX = panChange.x,
@@ -699,7 +701,7 @@ internal fun ViewerScreen(
                             imageLoadFailed = false
                             return@LaunchedEffect
                         }
-                        val result = runCatching {
+                        val result = runCatchingPreservingCancellation {
                             context.imageLoader.execute(
                                 buildViewerImageRequest(
                                     context = context,
@@ -1854,6 +1856,7 @@ private tailrec fun android.graphics.drawable.Drawable.unwrapWebPDrawable(): Web
     }
 }
 
+@Suppress("DEPRECATION") // Movie is the API 26-compatible controllable GIF timeline backend.
 @Composable
 private fun ViewerGifPlayer(
     sourceKey: SourceKey,
@@ -1952,20 +1955,19 @@ private fun ViewerGifPlayer(
         ) {
             val movieWidth = activeMovie.width().toFloat().coerceAtLeast(1f)
             val movieHeight = activeMovie.height().toFloat().coerceAtLeast(1f)
-            val scale = minOf(size.width / movieWidth, size.height / movieHeight)
-            val drawWidth = movieWidth * scale
-            val drawHeight = movieHeight * scale
+            val movieScale = minOf(size.width / movieWidth, size.height / movieHeight)
+            val drawWidth = movieWidth * movieScale
+            val drawHeight = movieHeight * movieScale
             val offsetX = (size.width - drawWidth) / 2f
             val offsetY = (size.height - drawHeight) / 2f
 
             drawIntoCanvas { canvas ->
                 val nativeCanvas = canvas.nativeCanvas
-                nativeCanvas.save()
-                nativeCanvas.translate(offsetX, offsetY)
-                nativeCanvas.scale(scale, scale)
-                activeMovie.setTime(positionMs.toInt())
-                activeMovie.draw(nativeCanvas, 0f, 0f)
-                nativeCanvas.restore()
+                nativeCanvas.withTranslation(offsetX, offsetY) {
+                    scale(movieScale, movieScale)
+                    activeMovie.setTime(positionMs.toInt())
+                    activeMovie.draw(this, 0f, 0f)
+                }
             }
         }
 
@@ -2032,6 +2034,7 @@ private fun ViewerPlaybackFooter(
     }
 }
 
+@Suppress("DEPRECATION") // Paired with ViewerGifPlayer until the minimum API has a seekable decoder.
 private suspend fun loadGifMovie(
     context: Context,
     location: String,
@@ -2057,7 +2060,7 @@ private suspend fun loadGifMovie(
         }
 
         location.startsWith("content://", ignoreCase = true) -> {
-            context.contentResolver.openInputStream(Uri.parse(location))?.use { input ->
+            context.contentResolver.openInputStream(location.toUri())?.use { input ->
                 input.readBytes()
             }
         }

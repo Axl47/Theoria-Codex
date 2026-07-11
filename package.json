@@ -1,0 +1,10 @@
+{
+  "name": "theoria-codex-quality",
+  "private": true,
+  "scripts": {
+    "audit:duplicates": "jscpd --config .jscpd.json ."
+  },
+  "devDependencies": {
+    "jscpd": "4.2.5"
+  }
+}

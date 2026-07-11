@@ -1,8 +1,9 @@
 package com.theoriacodex.app.media
 
 import android.graphics.Bitmap
-import android.graphics.drawable.BitmapDrawable
 import android.os.Build
+import androidx.core.graphics.drawable.toDrawable
+import androidx.core.graphics.scale
 import coil.ImageLoader
 import coil.decode.DecodeResult
 import coil.decode.Decoder
@@ -68,7 +69,7 @@ internal class LegacyAnimatedWebPDecoder(
                         frame.recycle()
                         isSampled = true
                     }
-                    BitmapDrawable(options.context.resources, scaledFrame)
+                    scaledFrame.toDrawable(options.context.resources)
                 } catch (error: Throwable) {
                     if (!frame.isRecycled) frame.recycle()
                     throw error
@@ -226,7 +227,7 @@ private fun Bitmap.scaledToward(options: Options): Bitmap {
     if (scale >= 1f) return this
     val scaledWidth = (width * scale).roundToInt().coerceAtLeast(1)
     val scaledHeight = (height * scale).roundToInt().coerceAtLeast(1)
-    return Bitmap.createScaledBitmap(this, scaledWidth, scaledHeight, true)
+    return scale(scaledWidth, scaledHeight, filter = true)
 }
 
 internal const val MAX_ANIMATED_WEBP_BYTES = 64L * 1024L * 1024L

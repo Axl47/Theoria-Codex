@@ -1,7 +1,11 @@
 .nexus
 .gradle
+.kotlin
 /build
 **/build
+node_modules
+__pycache__/
+*.py[cod]
 local.properties
 .idea
 *.iml

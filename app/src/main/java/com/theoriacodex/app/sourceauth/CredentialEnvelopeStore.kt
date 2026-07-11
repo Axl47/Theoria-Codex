@@ -1,24 +1,19 @@
 package com.theoriacodex.app.sourceauth
 
 import android.content.Context
-import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyPermanentlyInvalidatedException
-import android.security.keystore.KeyProperties
 import android.util.AtomicFile
 import android.util.Base64
 import com.google.gson.Gson
 import com.google.gson.JsonParseException
 import com.google.gson.annotations.SerializedName
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.security.InvalidKeyException
 import java.security.KeyStore
 import java.security.UnrecoverableKeyException
 import javax.crypto.AEADBadTagException
-import javax.crypto.Cipher
-import javax.crypto.KeyGenerator
-import javax.crypto.SecretKey
+import kotlin.coroutines.cancellation.CancellationException
 
 internal class AndroidCredentialEnvelopeStore(
     context: Context,
@@ -46,7 +41,11 @@ internal class AndroidCredentialEnvelopeStore(
             if (!envelopeFile.hasCommittedAtomicData()) {
                 return CredentialEnvelopeReadResult.Missing
             }
-            val raw = atomicFile.readBounded(MAX_CREDENTIAL_ENVELOPE_BYTES)
+            val raw = atomicFile.readBounded(MAX_CREDENTIAL_ENVELOPE_BYTES) {
+                CredentialEnvelopeCorruptException(
+                    IllegalArgumentException("Credential envelope exceeds its bounded storage limit"),
+                )
+            }
             val envelope = gson.fromJson(
                 raw.toString(Charsets.UTF_8),
                 CredentialEnvelopeRecord::class.java,
@@ -86,6 +85,8 @@ internal class AndroidCredentialEnvelopeStore(
                 return CredentialEnvelopeReadResult.UnsupportedVersion(payload.schemaVersion)
             }
             CredentialEnvelopeReadResult.Success(payload.toSnapshot())
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             error.toCredentialReadFailure()
         }
@@ -124,6 +125,8 @@ internal class AndroidCredentialEnvelopeStore(
                     CredentialStoreWriteResult.ReconnectRequired
                 else -> CredentialStoreWriteResult.TemporarilyUnavailable
             }
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             when (error.toCredentialReadFailure()) {
                 CredentialEnvelopeReadResult.ReconnectRequired ->
@@ -209,66 +212,13 @@ internal class AndroidLegacyCredentialStore(
         !legacyFile.exists() && !legacyBackupFile.exists()
     }.getOrDefault(false)
 
+    @Suppress("DEPRECATION") // Migration-only lookup for the retired Security Crypto alias.
     private fun legacyMasterKeyExists(): Boolean {
         return KeyStore.getInstance("AndroidKeyStore").run {
             load(null)
             containsAlias(androidx.security.crypto.MasterKey.DEFAULT_MASTER_KEY_ALIAS)
         }
     }
-}
-
-private class AndroidKeystoreAesGcm(
-    private val alias: String,
-    private val additionalAuthenticatedData: ByteArray,
-) {
-    fun hasKey(): Boolean = keyStore().containsAlias(alias)
-
-    fun encrypt(plaintext: ByteArray): EncryptedCredentialBytes {
-        val cipher = Cipher.getInstance(CREDENTIAL_CIPHER_TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
-        cipher.updateAAD(additionalAuthenticatedData)
-        return EncryptedCredentialBytes(
-            iv = cipher.iv.copyOf(),
-            ciphertext = cipher.doFinal(plaintext),
-        )
-    }
-
-    fun decrypt(iv: ByteArray, ciphertext: ByteArray): ByteArray {
-        val key = keyStore().getKey(alias, null) as? SecretKey
-            ?: throw UnrecoverableKeyException("Credential key is unavailable")
-        val cipher = Cipher.getInstance(CREDENTIAL_CIPHER_TRANSFORMATION)
-        cipher.init(Cipher.DECRYPT_MODE, key, javax.crypto.spec.GCMParameterSpec(128, iv))
-        cipher.updateAAD(additionalAuthenticatedData)
-        return cipher.doFinal(ciphertext)
-    }
-
-    fun deleteKey(): Boolean = runCatching {
-        keyStore().apply {
-            if (containsAlias(alias)) deleteEntry(alias)
-        }
-        true
-    }.getOrDefault(false)
-
-    private fun getOrCreateKey(): SecretKey {
-        val existing = keyStore().getKey(alias, null) as? SecretKey
-        if (existing != null) return existing
-        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").run {
-            init(
-                KeyGenParameterSpec.Builder(
-                    alias,
-                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
-                )
-                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                    .setKeySize(256)
-                    .setRandomizedEncryptionRequired(true)
-                    .build(),
-            )
-            generateKey()
-        }
-    }
-
-    private fun keyStore(): KeyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
 }
 
 private class CredentialEnvelopeRecord(
@@ -323,11 +273,6 @@ private class CredentialPayloadRecord(
     override fun toString(): String = "CredentialPayloadRecord([REDACTED])"
 }
 
-private data class EncryptedCredentialBytes(
-    val iv: ByteArray,
-    val ciphertext: ByteArray,
-)
-
 private fun Exception.toCredentialReadFailure(): CredentialEnvelopeReadResult {
     val causes = generateSequence(this as Throwable?) { error -> error.cause }.toList()
     return when {
@@ -345,45 +290,6 @@ private fun Exception.toCredentialReadFailure(): CredentialEnvelopeReadResult {
     }
 }
 
-private fun AtomicFile.readBounded(maxBytes: Int): ByteArray {
-    return openRead().use { input ->
-        val output = ByteArrayOutputStream(minOf(maxBytes, 8 * 1024))
-        val buffer = ByteArray(4 * 1024)
-        var total = 0
-        while (true) {
-            val read = input.read(buffer)
-            if (read < 0) break
-            total += read
-            if (total > maxBytes) {
-                throw CredentialEnvelopeCorruptException(
-                    IllegalArgumentException("Credential envelope exceeds its bounded storage limit"),
-                )
-            }
-            output.write(buffer, 0, read)
-        }
-        output.toByteArray()
-    }
-}
-
-private fun AtomicFile.writeFully(bytes: ByteArray) {
-    val output = startWrite()
-    try {
-        output.write(bytes)
-        output.flush()
-        output.fd.sync()
-        finishWrite(output)
-    } catch (error: Throwable) {
-        failWrite(output)
-        throw error
-    }
-}
-
-private fun File.hasCommittedAtomicData(): Boolean =
-    exists() || File(path + ".bak").exists()
-
-private fun File.hasAtomicArtifacts(): Boolean =
-    hasCommittedAtomicData() || File(path + ".new").exists()
-
 private fun ByteArray.encodeBase64(): String = Base64.encodeToString(this, Base64.NO_WRAP)
 
 private fun String.decodeCredentialBase64(): ByteArray = try {
@@ -400,7 +306,6 @@ private const val CREDENTIAL_PAYLOAD_SCHEMA_VERSION = 1
 internal const val CREDENTIAL_KEY_ALIAS = "theoria_source_credentials_aes_gcm_v1"
 internal const val CREDENTIAL_ENVELOPE_RELATIVE_PATH =
     "theoria_codex/source_credentials_v1.json"
-private const val CREDENTIAL_CIPHER_TRANSFORMATION = "AES/GCM/NoPadding"
 private const val MAX_CREDENTIAL_ENVELOPE_BYTES = 64 * 1024
 private const val GCM_IV_BYTES = 12
 private const val GCM_TAG_BYTES = 16

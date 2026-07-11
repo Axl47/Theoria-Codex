@@ -51,6 +51,7 @@ class AndroidSecureSourceCredentialsStore(
         delegate.resetAfterReconnectRequired()
 }
 
+@Suppress("DEPRECATION") // Read-only migration seam for installs created before the Keystore envelope.
 internal fun createEncryptedPrefs(context: Context): SharedPreferences {
     return EncryptedSharedPreferences.create(
         context,
@@ -73,6 +74,7 @@ internal fun Exception.isRecoverableEncryptedPrefsFailure(): Boolean {
         }
 }
 
+@Suppress("DEPRECATION") // Removes the retired Security Crypto alias after verified migration.
 internal fun deleteLegacyMasterKey(): Boolean {
     return runCatching {
         KeyStore.getInstance("AndroidKeyStore").apply {

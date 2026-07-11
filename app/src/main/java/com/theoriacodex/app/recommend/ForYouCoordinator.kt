@@ -1,8 +1,5 @@
 package com.theoriacodex.app.recommend
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import com.theoriacodex.app.search.NoOpTagSuggestionStore
 import com.theoriacodex.app.search.TagSuggestionStore
 import com.theoriacodex.app.source.inPresentationOrder
@@ -58,43 +55,43 @@ class ForYouCoordinator(
     private var queryOverridesBySource: Map<SourceKey, Query> = emptyMap()
     private var affinityStatsBySource: Map<SourceKey, TagAffinityStats> = emptyMap()
 
-    var results by mutableStateOf<List<Post>>(emptyList())
+    var results: List<Post> = emptyList()
         private set
 
-    var statuses by mutableStateOf<List<SourceRunStatus>>(emptyList())
+    var statuses: List<SourceRunStatus> = emptyList()
         private set
 
-    var loading by mutableStateOf(false)
+    var loading = false
         private set
 
-    var loadingMore by mutableStateOf(false)
+    var loadingMore = false
         private set
 
-    var canLoadMore by mutableStateOf(false)
+    var canLoadMore = false
         private set
 
-    var errorMessage by mutableStateOf<String?>(null)
+    var errorMessage: String? = null
         private set
 
-    var activeProfileId by mutableStateOf(defaultRecommendationProfiles().first().profileId)
+    var activeProfileId = defaultRecommendationProfiles().first().profileId
         private set
 
-    var activeProfileLikesCount by mutableStateOf(0)
+    var activeProfileLikesCount = 0
         private set
 
-    var selectedSource by mutableStateOf<SourceKey?>(null)
+    var selectedSource: SourceKey? = null
         private set
 
     val availableSourceSelections: List<SourceKey>
         get() = allEnabledSources().inPresentationOrder()
 
-    var seedSummaryBySource by mutableStateOf<Map<SourceKey, List<String>>>(emptyMap())
+    var seedSummaryBySource: Map<SourceKey, List<String>> = emptyMap()
         private set
 
-    var seedId by mutableStateOf("init")
+    var seedId = "init"
         private set
 
-    var sortMode by mutableStateOf(SortMode.NEWEST)
+    var sortMode: SortMode = SortMode.NEWEST
         private set
 
     val isInitialized: Boolean

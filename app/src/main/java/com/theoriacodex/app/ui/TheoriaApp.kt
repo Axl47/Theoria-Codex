@@ -62,6 +62,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -79,6 +81,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.core.content.pm.PackageInfoCompat
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.media.isPixivUgoiraPost
@@ -148,6 +151,7 @@ import com.theoriacodex.app.ui.routes.CreatorRouteCallbacks
 import com.theoriacodex.app.ui.routes.CreatorRouteConfig
 import com.theoriacodex.app.ui.routes.CreatorRouteOwnerHandle
 import com.theoriacodex.app.ui.routes.PendingRouteActions
+import com.theoriacodex.app.ui.routes.RouteOwnerHandleBinding
 import com.theoriacodex.app.update.ChangelogSection
 import com.theoriacodex.app.update.RemoteUpdate
 import com.theoriacodex.app.update.PendingPostInstallChangelog
@@ -247,7 +251,9 @@ fun TheoriaApp(
         is ApplicationDataState.Failed -> AppContainerStartupSurface(
             failed = true,
             onRetry = {
-                scope.launch { runCatching { containerOwner.retryAppContainer() } }
+                scope.launch {
+                    runCatchingPreservingCancellation { containerOwner.retryAppContainer() }
+                }
             },
         )
         ApplicationDataState.Loading,
@@ -375,6 +381,24 @@ internal fun TheoriaAppContent(
     var searchRouteOwner by remember { mutableStateOf<SearchRouteOwnerHandle?>(null) }
     var forYouRouteOwner by remember { mutableStateOf<ForYouRouteOwnerHandle?>(null) }
     var creatorRouteOwner by remember { mutableStateOf<CreatorRouteOwnerHandle?>(null) }
+    // These bindings outlive individual destination compositions. Viewer can keep paging through a
+    // still-live back-stack owner; only ViewModel lease closure removes the matching handle.
+    val searchRouteOwnerBinding = remember {
+        RouteOwnerHandleBinding<SearchRouteOwnerHandle> { owner -> searchRouteOwner = owner }
+    }
+    val forYouRouteOwnerBinding = remember {
+        RouteOwnerHandleBinding<ForYouRouteOwnerHandle> { owner -> forYouRouteOwner = owner }
+    }
+    val creatorRouteOwnerBinding = remember {
+        RouteOwnerHandleBinding<CreatorRouteOwnerHandle> { owner -> creatorRouteOwner = owner }
+    }
+    DisposableEffect(searchRouteOwnerBinding, forYouRouteOwnerBinding, creatorRouteOwnerBinding) {
+        onDispose {
+            searchRouteOwnerBinding.close()
+            forYouRouteOwnerBinding.close()
+            creatorRouteOwnerBinding.close()
+        }
+    }
     var pendingCreatorProfile by remember { mutableStateOf<CreatorProfile?>(null) }
     val pendingSearchActions = remember { PendingRouteActions<SearchAction>() }
     val emptySearchRouteState = remember { MutableStateFlow(SearchUiState()) }
@@ -1156,32 +1180,47 @@ internal fun TheoriaAppContent(
 
     LaunchedEffect(incomingUri) {
         val uri = incomingUri ?: return@LaunchedEffect
-        if (sourceDependencies.pixivAuthController.isAuthorizationCallback(uri)) {
-            if (!blockCredentialMutationIfNeeded()) {
-                val result = sourceDependencies.pixivAuthController.handleAuthorizationCallback(uri)
-                if (result.isSuccess) {
-                    pixivStatusLabel = "Connected"
-                    refreshSourceAccountState()
-                } else {
-                    val state = sourceDependencies.accounts.recoveryState.value
-                    if (state != CredentialStoreRecoveryState.Ready) {
-                        applyCredentialRecoveryStatus(state)
-                    } else {
-                        pixivStatusLabel =
-                            "Connection failed: ${result.exceptionOrNull()?.message ?: "Unknown error"}"
-                    }
-                }
-            }
-        } else {
-            appShellOwner.onAction(
-                AppShellAction.AcceptIncomingUri(
-                    uri = uri.toString(),
-                    isPixivAuthorizationCallback = false,
-                    isCodexImport = isCodexImportUri(appContext, uri),
-                )
+        appShellOwner.onAction(
+            AppShellAction.AcceptIncomingUri(
+                uri = uri.toString(),
+                isPixivAuthorizationCallback = sourceDependencies.pixivAuthController
+                    .isAuthorizationCallback(uri),
+                isCodexImport = isCodexImportUri(appContext, uri),
             )
-        }
+        )
+        // The AppShell SavedStateHandle now owns the handoff. Clear the Activity's underlying
+        // singleTask intent so recreation cannot enqueue the same URI a second time.
         onIncomingUriConsumed()
+    }
+
+    val pendingPixivCallback = appShellState.pendingIncomingUri
+        ?.takeIf { pending -> pending.kind == IncomingUriKind.PIXIV_AUTH_CALLBACK }
+    LaunchedEffect(credentialRecoveryState, pendingPixivCallback) {
+        val pending = pendingPixivCallback ?: return@LaunchedEffect
+        if (credentialRecoveryState != CredentialStoreRecoveryState.Ready) {
+            applyCredentialRecoveryStatus(credentialRecoveryState)
+            return@LaunchedEffect
+        }
+
+        val result = sourceDependencies.pixivAuthController.handleAuthorizationCallback(
+            pending.value.toUri(),
+        )
+        // A returned Result is terminal for this Activity handoff. Cancellation before the
+        // controller's durable terminal commit still escapes and leaves the callback pending;
+        // cancellation after that boundary cannot hide success from this collector.
+        appShellOwner.onAction(AppShellAction.ConsumeIncomingUri(pending))
+        if (result.isSuccess) {
+            pixivStatusLabel = "Connected"
+            refreshSourceAccountState()
+        } else {
+            val state = sourceDependencies.accounts.recoveryState.value
+            if (state != CredentialStoreRecoveryState.Ready) {
+                applyCredentialRecoveryStatus(state)
+            } else {
+                pixivStatusLabel =
+                    "Connection failed: ${result.exceptionOrNull()?.message ?: "Unknown error"}"
+            }
+        }
     }
 
     val pendingCodexImport = appShellState.pendingIncomingUri
@@ -1189,7 +1228,7 @@ internal fun TheoriaAppContent(
     LaunchedEffect(navReady, pendingCodexImport) {
         if (!navReady) return@LaunchedEffect
         val pending = pendingCodexImport ?: return@LaunchedEffect
-        val uri = Uri.parse(pending.value)
+        val uri = pending.value.toUri()
         fun consumePendingImportUriIfCurrent() {
             appShellOwner.onAction(AppShellAction.ConsumeIncomingUri(pending))
         }
@@ -1215,7 +1254,7 @@ internal fun TheoriaAppContent(
     LaunchedEffect(navReady, pendingExternalContent) {
         if (!navReady) return@LaunchedEffect
         val pending = pendingExternalContent ?: return@LaunchedEffect
-        val uri = Uri.parse(pending.value)
+        val uri = pending.value.toUri()
         fun consumePendingUriIfCurrent() {
             appShellOwner.onAction(AppShellAction.ConsumeIncomingUri(pending))
         }
@@ -1361,6 +1400,7 @@ internal fun TheoriaAppContent(
     val showBottomBar = currentRoute == AppRoute.Home
     val currentContext = LocalContext.current
     val configuration = LocalConfiguration.current
+    val windowHeightDp = LocalWindowInfo.current.containerSize.height / LocalDensity.current.density
     val installedVersionCode = remember(appContext) { installedAppVersionCode(appContext) }
     val hostActivity = remember(currentContext) { currentContext.findActivity() }
     val topLevelPagerState = rememberPagerState(
@@ -1369,8 +1409,8 @@ internal fun TheoriaAppContent(
     val selectedTopLevelIndex = topLevelPagerState.currentPage
         .coerceIn(0, TopLevelDestination.entries.lastIndex)
     var persistedHomeTabRoute by rememberSaveable { mutableStateOf<String?>(null) }
-    val bottomBarHeightDp = remember(configuration.screenHeightDp) {
-        (configuration.screenHeightDp * BOTTOM_BAR_HEIGHT_RATIO)
+    val bottomBarHeightDp = remember(windowHeightDp) {
+        (windowHeightDp * BOTTOM_BAR_HEIGHT_RATIO)
             .toInt()
             .coerceIn(MIN_BOTTOM_BAR_HEIGHT_DP, MAX_BOTTOM_BAR_HEIGHT_DP)
     }
@@ -1429,10 +1469,10 @@ internal fun TheoriaAppContent(
         hostActivity?.requestedOrientation = if (currentRoute == AppRoute.Viewer) {
             ActivityInfo.SCREEN_ORIENTATION_FULL_USER
         } else {
-            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
         onDispose {
-            hostActivity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            hostActivity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
 
@@ -1709,7 +1749,7 @@ internal fun TheoriaAppContent(
                                             onRemoveFavoriteTag = removeFavoriteTag,
                                         ),
                                         onOwnerAvailable = { owner ->
-                                            searchRouteOwner = owner
+                                            searchRouteOwnerBinding.publish(owner)
                                             pendingSearchActions.flush(owner::dispatch)
                                         },
                                     )
@@ -1759,7 +1799,7 @@ internal fun TheoriaAppContent(
                                                 scope.launch { toggleLikeAndSyncCodex(post) }
                                             },
                                         ),
-                                        onOwnerAvailable = { owner -> forYouRouteOwner = owner },
+                                        onOwnerAvailable = forYouRouteOwnerBinding::publish,
                                     )
                                 }
 
@@ -1900,10 +1940,20 @@ internal fun TheoriaAppContent(
                                             !pixivStatusLabel.startsWith("Awaiting authorization callback"),
                                         onPixivConnect = {
                                             if (!blockCredentialMutationIfNeeded()) {
-                                                val authUrl = sourceDependencies.pixivAuthController.startAuthorizationUri().toString()
-                                                pixivStatusLabel = "Awaiting authorization callback..."
-                                                pixivConnected = false
-                                                openInBrowser(appContext, authUrl)
+                                                scope.launch {
+                                                    val authorization = runCatchingPreservingCancellation {
+                                                        sourceDependencies.pixivAuthController
+                                                            .startAuthorizationUri()
+                                                    }
+                                                    authorization.onSuccess { authUri ->
+                                                        pixivStatusLabel = "Awaiting authorization callback..."
+                                                        pixivConnected = false
+                                                        openInBrowser(appContext, authUri.toString())
+                                                    }.onFailure {
+                                                        pixivStatusLabel =
+                                                            "Could not start Pixiv authorization — try again"
+                                                    }
+                                                }
                                             }
                                         },
                                         onPixivDisconnect = {
@@ -2217,7 +2267,7 @@ internal fun TheoriaAppContent(
                                 onRemoveIncludeTerm = { _, term -> removeSearchIncludeTerm(term) },
                                 onRemoveExcludeTerm = { _, term -> removeSearchExcludeTerm(term) },
                             ),
-                            onOwnerAvailable = { owner -> creatorRouteOwner = owner },
+                            onOwnerAvailable = creatorRouteOwnerBinding::publish,
                         )
                     }
                     composable(AppRoute.Viewer) {
@@ -2698,7 +2748,7 @@ private fun ReleaseChangelogEntryContent(
 
 private fun openInBrowser(context: Context, url: String) {
     runCatching {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+        val intent = Intent(Intent.ACTION_VIEW, url.toUri()).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
@@ -2737,11 +2787,10 @@ private fun ChangelogBulletText(bullet: String) {
 }
 
 private fun openUnknownSourcesSettings(context: Context) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
     runCatching {
         val intent = Intent(
             android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-            Uri.parse("package:${context.packageName}"),
+            "package:${context.packageName}".toUri(),
         ).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }

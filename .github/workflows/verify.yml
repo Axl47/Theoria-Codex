@@ -17,14 +17,16 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  verify:
-    name: Lint, test, and assemble
+  core-tests:
+    name: Core module tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -42,11 +44,122 @@ jobs:
           :core-data:test
           :core-sources:test
           :core-stubs:test
+          --warning-mode=all
+
+  android:
+    name: Android lint, tests, and assemblies
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify Android data ownership
+        run: >-
+          ./gradlew
+          :core-data-android:testDebugUnitTest
+          :core-data-android:lintDebug
+          :core-data-android:compileDebugAndroidTestKotlin
+          --warning-mode=all
 
       - name: Verify Android app
         run: >-
           ./gradlew
-          lint
+          :app:lint
           :app:testDebugUnitTest
           :app:compileDebugAndroidTestKotlin
           :app:assembleDebug
+          :app:assembleRelease
+          --warning-mode=all
+
+  maintainability:
+    name: Maintainability
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install quality tooling
+        run: npm ci
+
+      - name: Enforce production duplication budget
+        run: npm run audit:duplicates
+
+      - name: Verify quality helper tests
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+
+      - name: Enforce production complexity and coroutine rules
+        run: >-
+          ./gradlew
+          :app:detektDebug
+          :core-data-android:detektDebug
+          :core-domain:detektMain
+          :core-data:detektMain
+          :core-sources:detektMain
+          :core-stubs:detektMain
+          --warning-mode=all
+
+      - name: Generate aggregate coverage report
+        run: ./gradlew :koverXmlReport :koverVerify --warning-mode=all
+
+      - name: Enforce changed production coverage
+        env:
+          COVERAGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+        run: |
+          base="$COVERAGE_BASE"
+          if [[ "$base" =~ ^0+$ ]]; then
+            base="$(git rev-parse HEAD^ 2>/dev/null || true)"
+          fi
+          python3 scripts/check_changed_coverage.py \
+            --xml build/reports/kover/quality.xml \
+            --base "$base" \
+            --include-module core-domain \
+            --include-module core-data \
+            --include-module core-data-android \
+            --include-module core-sources \
+            --include-module core-stubs \
+            --minimum 60
+
+      - name: Upload maintainability reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maintainability-reports
+          path: |
+            build/reports/jscpd/
+            build/reports/kover/
+            app/build/reports/detekt/
+            core-*/build/reports/detekt/
+          if-no-files-found: warn
+          retention-days: 14

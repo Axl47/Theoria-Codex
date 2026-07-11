@@ -16,11 +16,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        incomingUri = resolveIncomingUri(intent)
+        incomingUri = intent?.incomingPayloadUri()
         setContent {
             TheoriaApp(
                 incomingUri = incomingUri,
-                onIncomingUriConsumed = { incomingUri = null },
+                onIncomingUriConsumed = {
+                    incomingUri = null
+                    intent?.clearConsumedIncomingPayload()
+                },
             )
         }
     }
@@ -28,23 +31,28 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        incomingUri = resolveIncomingUri(intent)
+        incomingUri = intent.incomingPayloadUri()
     }
+}
 
-    private fun resolveIncomingUri(intent: Intent?): Uri? {
-        if (intent == null) return null
-        intent.data?.let { return it }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)?.let { return it }
-        } else {
-            @Suppress("DEPRECATION")
-            intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { return it }
-        }
-        intent.clipData?.let { clip ->
-            for (index in 0 until clip.itemCount) {
-                clip.getItemAt(index).uri?.let { return it }
-            }
-        }
-        return null
+internal fun Intent.incomingPayloadUri(): Uri? {
+    data?.let { return it }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)?.let { return it }
+    } else {
+        @Suppress("DEPRECATION")
+        getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { return it }
     }
+    clipData?.let { clip ->
+        for (index in 0 until clip.itemCount) {
+            clip.getItemAt(index).uri?.let { return it }
+        }
+    }
+    return null
+}
+
+internal fun Intent.clearConsumedIncomingPayload() {
+    data = null
+    removeExtra(Intent.EXTRA_STREAM)
+    clipData = null
 }

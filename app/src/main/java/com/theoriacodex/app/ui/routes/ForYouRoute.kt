@@ -19,6 +19,7 @@ import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import java.io.Closeable
 import kotlinx.coroutines.flow.StateFlow
 
 /** App-level inputs rendered by For You or used to reconcile recommendation inputs. */
@@ -41,11 +42,16 @@ internal data class ForYouRouteCallbacks(
 /** Non-owning access used by Viewer and other destinations while Home owns the ViewModel. */
 internal class ForYouRouteOwnerHandle(
     owner: ForYouViewModel,
-) {
+) : ObservableRouteOwnerHandle {
     private val ownerLease = owner.createRouteOwnerLease()
 
-    /** Read-only state while this handle is published by the composed destination. */
-    val state: StateFlow<ForYouUiState> = owner.state
+    /** Read-only state while the navigation-owned ViewModel remains alive. */
+    val state: StateFlow<ForYouUiState>?
+        get() = ownerLease.withOwner { activeOwner -> activeOwner.state }
+
+    override fun invokeOnOwnerCleared(listener: () -> Unit): Closeable {
+        return ownerLease.invokeOnClose(listener)
+    }
 
     fun dispatch(action: ForYouAction): Boolean {
         return ownerLease.withOwner { activeOwner ->

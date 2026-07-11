@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>CognitiveComplexMethod:RoomLegacyJsonImporter.kt:RoomLegacyJsonImporter$private fun archiveOneUnchecked: ArchiveFileOutcome</ID>
+    <ID>CognitiveComplexMethod:RoomLegacyJsonImporter.kt:RoomLegacyJsonImporter$private fun prepare: PreparedLegacyData</ID>
+    <ID>CognitiveComplexMethod:RoomLegacyJsonImporter.kt:RoomLegacyJsonImporter$suspend fun importIfNeeded: LegacyJsonImportResult</ID>
+    <ID>LongMethod:RoomLegacyJsonImporter.kt:RoomLegacyJsonImporter$private fun prepare: PreparedLegacyData</ID>
+    <ID>LongMethod:RoomLegacyJsonImporter.kt:RoomLegacyJsonImporter$suspend fun importIfNeeded: LegacyJsonImportResult</ID>
+  </CurrentIssues>
+</SmellBaseline>

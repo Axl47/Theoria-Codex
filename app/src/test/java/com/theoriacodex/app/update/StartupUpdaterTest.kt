@@ -3,8 +3,10 @@ package com.theoriacodex.app.update
 import android.content.Context
 import android.content.ContextWrapper
 import java.io.File
+import java.io.IOException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -218,6 +220,162 @@ class StartupUpdaterTest {
         assertEquals(14, store.snapshot().pendingInstallVersionCode)
     }
 
+    @Test
+    fun `canceled installer remains pending and does not claim the release was installed`() = runTest {
+        val context = TempFilesContext(tempFolder.newFolder("cancelled-installer"))
+        val store = FakeUpdateStateStore().apply {
+            setPendingInstall(releaseId = 701L, versionCode = 15)
+        }
+        val installedVersionCode = 14
+        val feed = FakeFeedClient()
+        val updater = buildUpdater(
+            feedClient = feed,
+            stateStore = store,
+            nowProvider = { 1_000L },
+            installedVersionCode = installedVersionCode,
+            installedVersionCodeProvider = { installedVersionCode },
+            context = context,
+        )
+        writeUpdateFile(context)
+        val remote = sampleRemote(releaseId = 701L, versionCode = 15)
+
+        val outcome = updater.retryPendingInstall(remote) { }
+
+        assertTrue(outcome is StartupUpdateOutcome.InstallerLaunched)
+        val launchedSnapshot = store.snapshot()
+        assertEquals(701L, launchedSnapshot.pendingInstallReleaseId)
+        assertEquals(15, launchedSnapshot.pendingInstallVersionCode)
+        assertEquals(15, launchedSnapshot.pendingPostInstallChangelog?.versionCode)
+        assertEquals(14, launchedSnapshot.pendingPostInstallChangelog?.fromVersionCode)
+        assertNull(launchedSnapshot.lastInstalledChangelog)
+        assertNull(launchedSnapshot.lastSeenReleaseId)
+
+        feed.result = Result.success(null)
+        updater.checkForEligibleUpdate { }
+
+        val cancelledSnapshot = store.snapshot()
+        assertEquals(701L, cancelledSnapshot.pendingInstallReleaseId)
+        assertEquals(15, cancelledSnapshot.pendingInstallVersionCode)
+        assertNotNull(cancelledSnapshot.pendingPostInstallChangelog)
+        assertNull(cancelledSnapshot.lastInstalledChangelog)
+    }
+
+    @Test
+    fun `confirmed installed version promotes pending changelog before feed failure`() = runTest {
+        val pending = PendingPostInstallChangelog(
+            releaseId = 702L,
+            fromVersionCode = 15,
+            versionCode = 16,
+            tagName = "v0.0.16",
+            commitShaShort = "def5678",
+        )
+        val store = FakeUpdateStateStore().apply {
+            snapshot = snapshot.copy(
+                pendingInstallReleaseId = pending.releaseId,
+                pendingInstallVersionCode = pending.versionCode,
+                pendingPostInstallChangelog = pending,
+            )
+        }
+        val feed = FakeFeedClient().apply {
+            result = Result.failure(IOException("offline"))
+        }
+        val updater = buildUpdater(
+            feedClient = feed,
+            stateStore = store,
+            nowProvider = { 1_000L },
+            installedVersionCode = pending.versionCode,
+        )
+
+        val result = updater.checkForEligibleUpdate { }
+
+        assertTrue(result.isFailure)
+        val reconciled = store.snapshot()
+        assertEquals(pending, reconciled.pendingPostInstallChangelog)
+        assertEquals(pending, reconciled.lastInstalledChangelog)
+        assertEquals(pending.releaseId, reconciled.lastSeenReleaseId)
+        assertNull(reconciled.pendingInstallReleaseId)
+        assertNull(reconciled.pendingInstallVersionCode)
+    }
+
+    @Test
+    fun `newer installed version discards superseded pending changelog without promotion`() = runTest {
+        val previous = PendingPostInstallChangelog(
+            releaseId = 710L,
+            versionCode = 14,
+            tagName = "v0.0.14",
+            commitShaShort = "old1234",
+        )
+        val superseded = PendingPostInstallChangelog(
+            releaseId = 711L,
+            fromVersionCode = 14,
+            versionCode = 15,
+            tagName = "v0.0.15",
+            commitShaShort = "mid1234",
+        )
+        val store = FakeUpdateStateStore().apply {
+            snapshot = snapshot.copy(
+                pendingInstallReleaseId = superseded.releaseId,
+                pendingInstallVersionCode = superseded.versionCode,
+                pendingPostInstallChangelog = superseded,
+                lastInstalledChangelog = previous,
+            )
+        }
+        val updater = buildUpdater(
+            feedClient = FakeFeedClient(),
+            stateStore = store,
+            nowProvider = { 1_000L },
+            installedVersionCode = 16,
+        )
+
+        updater.checkForEligibleUpdate { }
+
+        val reconciled = store.snapshot()
+        assertNull(reconciled.pendingPostInstallChangelog)
+        assertNull(reconciled.pendingInstallReleaseId)
+        assertNull(reconciled.pendingInstallVersionCode)
+        assertEquals(previous, reconciled.lastInstalledChangelog)
+    }
+
+    @Test
+    fun `failed installer launch never creates or promotes a changelog`() = runTest {
+        val context = TempFilesContext(tempFolder.newFolder("failed-installer"))
+        val previous = PendingPostInstallChangelog(
+            releaseId = 720L,
+            versionCode = 14,
+            tagName = "v0.0.14",
+            commitShaShort = "old1234",
+        )
+        val store = FakeUpdateStateStore().apply {
+            snapshot = snapshot.copy(
+                pendingInstallReleaseId = 721L,
+                pendingInstallVersionCode = 15,
+                lastInstalledChangelog = previous,
+            )
+        }
+        val updater = buildUpdater(
+            feedClient = FakeFeedClient(),
+            stateStore = store,
+            nowProvider = { 1_000L },
+            installedVersionCode = 14,
+            context = context,
+            installer = object : ApkInstaller {
+                override fun launchInstaller(apkFile: File): Result<Unit> {
+                    return Result.failure(IOException("installer unavailable"))
+                }
+            },
+        )
+        writeUpdateFile(context)
+
+        val outcome = updater.retryPendingInstall(sampleRemote(721L, 15)) { }
+
+        assertTrue(outcome is StartupUpdateOutcome.ContinueToAppWithError)
+        val failed = store.snapshot()
+        assertNull(failed.pendingPostInstallChangelog)
+        assertEquals(previous, failed.lastInstalledChangelog)
+        assertNull(failed.pendingInstallReleaseId)
+        assertNull(failed.pendingInstallVersionCode)
+    }
+
     private fun buildUpdater(
         feedClient: UpdateFeedClient,
         stateStore: FakeUpdateStateStore,
@@ -227,6 +385,7 @@ class StartupUpdaterTest {
         installer: ApkInstaller = object : ApkInstaller {
             override fun launchInstaller(apkFile: File): Result<Unit> = Result.success(Unit)
         },
+        installedVersionCodeProvider: (() -> Int)? = null,
     ): StartupUpdater {
         return StartupUpdater(
             context = context,
@@ -236,7 +395,7 @@ class StartupUpdaterTest {
             installer = installer,
             stateStore = stateStore,
             updateCheckTimeoutMs = 3_000L,
-            installedVersionCodeProvider = { installedVersionCode },
+            installedVersionCodeProvider = installedVersionCodeProvider ?: { installedVersionCode },
             nowProvider = nowProvider,
         )
     }
@@ -282,5 +441,14 @@ class StartupUpdaterTest {
         private val root: File,
     ) : ContextWrapper(null) {
         override fun getFilesDir(): File = root
+    }
+
+    private fun writeUpdateFile(context: Context) {
+        val outputFile = ApkDownloadManager(
+            context = context,
+            outputFileName = "theoria-codex-main.apk",
+        ).outputFile()
+        outputFile.parentFile?.mkdirs()
+        outputFile.writeBytes(byteArrayOf(1, 2, 3))
     }
 }

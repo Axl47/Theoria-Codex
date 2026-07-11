@@ -1,0 +1,9 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>CognitiveComplexMethod:UnifiedSearchOrchestrator.kt:UnifiedSearchOrchestrator$suspend fun search: UnifiedSearchResult</ID>
+    <ID>LongMethod:ForYouTagSetGenerator.kt:ForYouTagSetGenerator$fun generate: List&lt;String&gt;</ID>
+    <ID>LongMethod:UnifiedSearchOrchestrator.kt:UnifiedSearchOrchestrator$suspend fun search: UnifiedSearchResult</ID>
+  </CurrentIssues>
+</SmellBaseline>

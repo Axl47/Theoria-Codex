@@ -41,24 +41,23 @@ internal class HitomiGlobalIndexCache(
         }
         if (!ownsLoad) return flight.await()
 
+        var loadFailure: Throwable? = null
         try {
             val loaded = loader()
             mutex.withLock {
                 if (activeVersion == version) {
                     put(key, loaded)
                 }
-                if (inFlight[versionedKey] === flight) {
-                    inFlight.remove(versionedKey)
-                }
             }
             flight.complete(loaded)
             return loaded
         } catch (error: CancellationException) {
-            finishFailedLoad(versionedKey, flight, error)
             throw error
         } catch (error: Throwable) {
-            finishFailedLoad(versionedKey, flight, error)
+            loadFailure = error
             throw error
+        } finally {
+            finishLoad(versionedKey, flight, loadFailure)
         }
     }
 
@@ -71,17 +70,20 @@ internal class HitomiGlobalIndexCache(
         )
     }
 
-    private suspend fun finishFailedLoad(
+    private suspend fun finishLoad(
         key: VersionedKey,
         flight: CompletableDeferred<IntArray>,
-        error: Throwable,
+        failure: Throwable?,
     ) = withContext(NonCancellable) {
         mutex.withLock {
             if (inFlight[key] === flight) {
                 inFlight.remove(key)
             }
         }
-        flight.completeExceptionally(error)
+        when {
+            failure != null -> flight.completeExceptionally(failure)
+            !flight.isCompleted -> flight.cancel()
+        }
     }
 
     private fun activateVersion(version: String) {

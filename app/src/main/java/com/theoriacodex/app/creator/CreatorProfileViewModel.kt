@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /** Non-Compose execution boundary used by the Creator route owner. */
@@ -173,7 +174,6 @@ internal class CreatorProfileViewModel(
                     )
                 }
             } catch (error: CancellationException) {
-                onAction(CreatorAction.RequestCancelled(request))
                 throw error
             } catch (error: Throwable) {
                 onAction(
@@ -182,6 +182,8 @@ internal class CreatorProfileViewModel(
                         message = error.message ?: "Could not load creator uploads",
                     )
                 )
+            } finally {
+                if (!isActive) onAction(CreatorAction.RequestCancelled(request))
             }
         }
     }
@@ -211,7 +213,6 @@ internal class CreatorProfileViewModel(
                     )
                 }
             } catch (error: CancellationException) {
-                onAction(CreatorAction.RequestCancelled(request))
                 throw error
             } catch (error: Throwable) {
                 onAction(
@@ -220,6 +221,8 @@ internal class CreatorProfileViewModel(
                         message = error.message ?: "Could not load more creator uploads",
                     )
                 )
+            } finally {
+                if (!isActive) onAction(CreatorAction.RequestCancelled(request))
             }
         }
     }

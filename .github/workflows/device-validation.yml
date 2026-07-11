@@ -1,6 +1,30 @@
 name: Device Validation
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'app/**'
+      - 'core-*/**'
+      - 'baseline-profile/**'
+      - 'gradle/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'scripts/verify_release_acceptance_device.sh'
+      - '.github/workflows/device-validation.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'app/**'
+      - 'core-*/**'
+      - 'baseline-profile/**'
+      - 'gradle/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - 'scripts/verify_release_acceptance_device.sh'
+      - '.github/workflows/device-validation.yml'
   schedule:
     - cron: '23 07 * * 6'
   workflow_dispatch:
@@ -21,9 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api-level:
-          - 27
-          - 37
+        api-level: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '[27,37]' || '[37]') }}
 
     steps:
       - name: Checkout
@@ -74,6 +96,7 @@ jobs:
 
   release-acceptance:
     name: R8 release acceptance (API 37)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 75
 

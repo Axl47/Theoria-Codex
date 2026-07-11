@@ -1,0 +1,15 @@
+{
+  "threshold": 0.7,
+  "minLines": 12,
+  "minTokens": 80,
+  "reporters": ["console", "json"],
+  "output": "build/reports/jscpd",
+  "pattern": "**/*.kt",
+  "ignore": [
+    "**/build/**",
+    "**/.gradle/**",
+    "**/.kotlin/**",
+    "**/src/test/**",
+    "**/src/androidTest/**"
+  ]
+}

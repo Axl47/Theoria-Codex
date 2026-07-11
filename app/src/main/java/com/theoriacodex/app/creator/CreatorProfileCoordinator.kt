@@ -1,8 +1,5 @@
 package com.theoriacodex.app.creator
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
@@ -24,22 +21,22 @@ class CreatorProfileCoordinator(
     private var nextGeneration = 0L
     private var activeRequest: CreatorRequest? = null
 
-    var activeCreator by mutableStateOf<CreatorProfile?>(null)
+    var activeCreator: CreatorProfile? = null
         private set
 
-    var results by mutableStateOf<List<Post>>(emptyList())
+    var results: List<Post> = emptyList()
         private set
 
-    var loading by mutableStateOf(false)
+    var loading = false
         private set
 
-    var loadingMore by mutableStateOf(false)
+    var loadingMore = false
         private set
 
-    var canLoadMore by mutableStateOf(false)
+    var canLoadMore = false
         private set
 
-    var errorMessage by mutableStateOf<String?>(null)
+    var errorMessage: String? = null
         private set
 
     val activeQueryHash: String?

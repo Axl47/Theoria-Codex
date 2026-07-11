@@ -1,8 +1,5 @@
 package com.theoriacodex.app.search
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import com.theoriacodex.app.media.recoverRemoteMedia
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.data.repository.AppSettings
@@ -88,50 +85,50 @@ class SearchCoordinator(
     private var activeRootSearchJob: Job? = null
     private var activeLoadMoreJob: Job? = null
 
-    var draftQuery by mutableStateOf(defaultQuery())
+    var draftQuery = defaultQuery()
         private set
 
-    var appliedQuery by mutableStateOf(defaultQuery())
+    var appliedQuery = defaultQuery()
         private set
 
-    var results by mutableStateOf<List<Post>>(emptyList())
+    var results: List<Post> = emptyList()
         private set
 
-    var statuses by mutableStateOf<List<SourceRunStatus>>(emptyList())
+    var statuses: List<SourceRunStatus> = emptyList()
         private set
 
-    var trendingTags by mutableStateOf<List<TagSuggestion>>(emptyList())
+    var trendingTags: List<TagSuggestion> = emptyList()
         private set
 
-    var autocompleteSuggestions by mutableStateOf<List<TagSuggestion>>(emptyList())
+    var autocompleteSuggestions: List<TagSuggestion> = emptyList()
         private set
 
     /**
      * The lossless suggestion lane used by faceted sources. The legacy suggestion list above
      * remains available for sources that only expose general tags.
      */
-    var facetedAutocompleteSuggestions by mutableStateOf<List<FacetedTagSuggestion>>(emptyList())
+    var facetedAutocompleteSuggestions: List<FacetedTagSuggestion> = emptyList()
         private set
 
-    var selectedSearchScope by mutableStateOf(FacetedSearchScope.All)
+    var selectedSearchScope: FacetedSearchScope = FacetedSearchScope.All
         private set
 
-    var tagInputValidationMessage by mutableStateOf<String?>(null)
+    var tagInputValidationMessage: String? = null
         private set
 
-    var loading by mutableStateOf(false)
+    var loading = false
         private set
 
-    var loadingMore by mutableStateOf(false)
+    var loadingMore = false
         private set
 
-    var canLoadMore by mutableStateOf(false)
+    var canLoadMore = false
         private set
 
-    var errorMessage by mutableStateOf<String?>(null)
+    var errorMessage: String? = null
         private set
 
-    var displayResultsVersion by mutableStateOf(0)
+    var displayResultsVersion = 0
         private set
 
     val availableSources: List<SourceKey>

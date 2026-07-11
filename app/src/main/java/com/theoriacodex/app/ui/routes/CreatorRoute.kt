@@ -20,6 +20,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
+import java.io.Closeable
 import kotlinx.coroutines.flow.StateFlow
 
 /** App-level inputs rendered by Creator or used to reconcile source capability. */
@@ -48,11 +49,16 @@ internal data class CreatorRouteCallbacks(
 /** Non-owning access used by Viewer while the Creator back-stack entry owns the ViewModel. */
 internal class CreatorRouteOwnerHandle(
     owner: CreatorProfileViewModel,
-) {
+) : ObservableRouteOwnerHandle {
     private val ownerLease = owner.createRouteOwnerLease()
 
-    /** Read-only state while this handle is published by the composed destination. */
-    val state: StateFlow<CreatorUiState> = owner.state
+    /** Read-only state while the navigation-owned ViewModel remains alive. */
+    val state: StateFlow<CreatorUiState>?
+        get() = ownerLease.withOwner { activeOwner -> activeOwner.state }
+
+    override fun invokeOnOwnerCleared(listener: () -> Unit): Closeable {
+        return ownerLease.invokeOnClose(listener)
+    }
 
     fun dispatch(action: CreatorAction): Boolean {
         return ownerLease.withOwner { activeOwner ->

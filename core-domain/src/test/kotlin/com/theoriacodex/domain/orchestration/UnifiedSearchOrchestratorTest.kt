@@ -17,6 +17,7 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.CapabilityExclusionReason
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -278,6 +279,35 @@ class UnifiedSearchOrchestratorTest {
         val status = result.statuses.single()
         assertEquals(SourceRunState.FAILED, status.state)
         assertEquals(SourceFailureReason.AUTH_REQUIRED, status.failureReason)
+    }
+
+    @Test
+    fun `propagates source cancellation instead of publishing a failed source`() = runTest {
+        val expected = CancellationException("search superseded")
+        val orchestrator = UnifiedSearchOrchestrator(
+            adaptersBySource = mapOf(
+                SourceKey.PIXIV to FakeAdapter(
+                    sourceKey = SourceKey.PIXIV,
+                    capabilities = supportedCapabilities(),
+                    posts = emptyList(),
+                    error = expected,
+                ),
+            ),
+        )
+
+        var thrown: CancellationException? = null
+        try {
+            orchestrator.search(
+                query = sampleQuery(),
+                enabledSources = setOf(SourceKey.PIXIV),
+                pageTokens = emptyMap(),
+                weights = mapOf(SourceKey.PIXIV to 1.0),
+            )
+        } catch (error: CancellationException) {
+            thrown = error
+        }
+
+        assertEquals(expected.message, thrown?.message)
     }
 
     private fun sampleQuery(): Query {

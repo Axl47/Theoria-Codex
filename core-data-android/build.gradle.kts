@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.androidx.room)
+    alias(libs.plugins.kover)
+    alias(libs.plugins.detekt)
 }
 
 android {

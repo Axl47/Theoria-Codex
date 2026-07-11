@@ -5,6 +5,8 @@ package com.theoriacodex.app.viewer
 import android.content.Context
 import android.net.Uri
 import android.view.LayoutInflater
+import android.widget.FrameLayout
+import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -20,7 +22,7 @@ import java.io.File
 
 internal fun createTexturePlayerView(context: Context): PlayerView {
     return LayoutInflater.from(context)
-        .inflate(R.layout.player_view_texture, null, false) as PlayerView
+        .inflate(R.layout.player_view_texture, FrameLayout(context), false) as PlayerView
 }
 
 internal fun createLoopingExoPlayer(
@@ -72,8 +74,8 @@ private fun videoLocationToUri(location: String): Uri {
     return when {
         location.startsWith("http://", ignoreCase = true) ||
             location.startsWith("https://", ignoreCase = true) ||
-            location.startsWith("content://", ignoreCase = true) -> Uri.parse(location)
+            location.startsWith("content://", ignoreCase = true) -> location.toUri()
 
-        else -> Uri.fromFile(File(location))
+        else -> File(location).toUri()
     }
 }

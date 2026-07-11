@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
+import androidx.core.graphics.scale
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -292,7 +293,7 @@ class PixivUgoiraClient(
             var presentationTimeUs = 0L
             playback.frames.forEach { frame ->
                 val sizedBitmap = if (frame.bitmap.width != width || frame.bitmap.height != height) {
-                    Bitmap.createScaledBitmap(frame.bitmap, width, height, true)
+                    frame.bitmap.scale(width, height, filter = true)
                 } else {
                     frame.bitmap
                 }
