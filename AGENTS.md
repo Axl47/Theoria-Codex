@@ -20,6 +20,11 @@ Explain plans, questions, and completed work in plain system-level language. The
 
 ## Runtime Diagnostics
 
+The app container and startup workflow initialize asynchronously after `MainActivity` reaches
+`RESUMED`. Device smoke tests must wait for a shell semantics node (for example, the Search
+bottom-bar action) before asserting top-level navigation, because a cold CI emulator may still be
+showing the startup surface at the first assertion.
+
 Recents separates Viewer history by launch origin: `CODEX` entries appear under Codex, while every other origin appears under Watched. Opening an entry back through Recents must preserve its previous origin so it does not move between those sections merely because it was reopened from history.
 
 For installed release-build crashes on a connected Android device, use `adb logcat -b crash -d` even when `run-as com.theoriacodex` is unavailable because the package is not debuggable. Debug instrumentation installs and exercises the separate `com.theoriacodex.debug` package; use `dumpsys package` and the application flags when evidence must distinguish it from production `com.theoriacodex`. Viewer background prefetch must treat provider TLS, socket, and stream failures as unavailable media while rethrowing coroutine cancellation; otherwise an adjacent saved video can terminate the whole app.
