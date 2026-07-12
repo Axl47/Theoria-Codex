@@ -1,8 +1,5 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.androidx.room)
     alias(libs.plugins.kover)
     alias(libs.plugins.detekt)
@@ -27,14 +24,8 @@ android {
         unitTests.isIncludeAndroidResources = true
     }
 
-    sourceSets {
-        getByName("androidTest").assets.srcDir("$projectDir/schemas")
-    }
-}
-
-kotlin {
-    compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_17)
+    sourceSets.named("androidTest") {
+        assets.srcDir("$projectDir/schemas")
     }
 }
 

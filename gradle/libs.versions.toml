@@ -22,7 +22,7 @@ jspecify = "1.0.0"
 room = "2.8.4"
 androidxTestCore = "1.7.0"
 robolectric = "4.16.1"
-baselineProfile = "1.4.1"
+baselineProfile = "1.5.0-alpha07"
 benchmark = "1.4.1"
 profileInstaller = "1.4.1"
 uiAutomator = "2.3.0"
@@ -76,7 +76,6 @@ androidx-test-uiautomator = { group = "androidx.test.uiautomator", name = "uiaut
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 android-test = { id = "com.android.test", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 androidx-room = { id = "androidx.room", version.ref = "room" }
