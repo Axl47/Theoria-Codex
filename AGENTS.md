@@ -56,6 +56,8 @@ Viewer video prefetch requests at most the first 16 MiB and caches only a respon
 
 The maintainability lane runs Detekt, Kover, `jscpd`, architecture source guards, and coverage-helper tests. Detekt uses normal complexity thresholds plus checked historical baselines; do not raise thresholds or regenerate a baseline to hide a new violation. Aggregate line coverage has a 55% floor. The 60% changed-line gate intentionally names JVM/core modules and fails if an eligible source is absent from Kover; Android/Compose runtime behavior is covered by the per-change API 37 device lane, with API 27 and minified release acceptance in the extended scheduled/manual lane. New platform-free app policy should move into a JVM module and be added to the changed-line gate rather than being excluded as Android code.
 
+The launcher identity is the full-color illustrated `theoria_app_icon`. Do not add an adaptive-icon `<monochrome>` layer merely to silence lint: Android uses that layer instead of the custom artwork when themed icons are enabled. A themed replacement requires explicit product/design approval; the missing-monochrome lint signal is intentionally suppressed at the launcher resource boundary.
+
 AGP 9 uses built-in Kotlin for Android modules; do not reapply `org.jetbrains.kotlin.android` or restore the `android.builtInKotlin=false` / `android.newDsl=false` compatibility flags. The Baseline Profile Gradle Plugin must remain on the 1.5 line or newer because 1.4.1 cannot recognize AGP 9's new Android module model.
 
 ## Releases
