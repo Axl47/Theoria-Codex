@@ -72,6 +72,8 @@ interface RecentsRepository {
     suspend fun recordWatchedPost(post: Post, origin: ViewerStreamSource, originQueryHash: String?)
     suspend fun recordSearch(query: Query, queryHash: String)
     suspend fun clearWatchedPosts()
+    suspend fun clearWatchedPosts(origin: ViewerStreamSource)
+    suspend fun clearWatchedPostsExcept(origin: ViewerStreamSource)
     suspend fun clearSearches()
     suspend fun clearAll()
 }

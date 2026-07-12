@@ -20,6 +20,8 @@ Explain plans, questions, and completed work in plain system-level language. The
 
 ## Runtime Diagnostics
 
+Recents separates Viewer history by launch origin: `CODEX` entries appear under Codex, while every other origin appears under Watched. Opening an entry back through Recents must preserve its previous origin so it does not move between those sections merely because it was reopened from history.
+
 For installed release-build crashes on a connected Android device, use `adb logcat -b crash -d` even when `run-as com.theoriacodex` is unavailable because the package is not debuggable. Debug instrumentation installs and exercises the separate `com.theoriacodex.debug` package; use `dumpsys package` and the application flags when evidence must distinguish it from production `com.theoriacodex`. Viewer background prefetch must treat provider TLS, socket, and stream failures as unavailable media while rethrowing coroutine cancellation; otherwise an adjacent saved video can terminate the whole app.
 
 When a saved post is refreshed, update its durable Post and keyed thumbnail cache entry together. Cache replacement must remove every older file representation for that key before writing the new local file or URL pointer, because Codex covers prefer local cache files. An adapter returning `null` from `resolvePost` means the post no longer exists and should become the terminal Viewer message `Post was deleted`; thrown provider or transport failures remain recoverable and must not be collapsed into that missing-post result.

@@ -218,13 +218,17 @@ class InMemoryRecentsRepository(
 
     override suspend fun recordWatchedPost(post: Post, origin: ViewerStreamSource, originQueryHash: String?) {
         mutex.withLock {
+            val previousEntry = watched.value.firstOrNull { entry -> entry.post.id == post.id }
+            val effectiveOrigin = previousEntry?.origin.takeIf { origin == ViewerStreamSource.RECENTS } ?: origin
+            val effectiveQueryHash = previousEntry?.originQueryHash.takeIf { origin == ViewerStreamSource.RECENTS }
+                ?: originQueryHash
             watched.value = RepositoryPolicies.recordWatched(
                 entries = watched.value,
                 entry = RecentPostEntry(
                     post = post,
                     viewedAtEpochMs = clock(),
-                    origin = origin,
-                    originQueryHash = originQueryHash,
+                    origin = effectiveOrigin,
+                    originQueryHash = effectiveQueryHash,
                 ),
                 limit = watchedLimit,
             )
@@ -250,6 +254,18 @@ class InMemoryRecentsRepository(
     override suspend fun clearWatchedPosts() {
         mutex.withLock {
             watched.value = emptyList()
+        }
+    }
+
+    override suspend fun clearWatchedPosts(origin: ViewerStreamSource) {
+        mutex.withLock {
+            watched.value = watched.value.filterNot { entry -> entry.origin == origin }
+        }
+    }
+
+    override suspend fun clearWatchedPostsExcept(origin: ViewerStreamSource) {
+        mutex.withLock {
+            watched.value = watched.value.filter { entry -> entry.origin == origin }
         }
     }
 

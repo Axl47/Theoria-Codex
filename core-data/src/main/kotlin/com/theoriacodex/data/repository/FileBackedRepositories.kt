@@ -350,13 +350,17 @@ class FileBackedRecentsRepository(
     override suspend fun recordWatchedPost(post: Post, origin: ViewerStreamSource, originQueryHash: String?) {
         mutex.withLock {
             commitMutation {
+                val previousEntry = watchedFlow.value.firstOrNull { entry -> entry.post.id == post.id }
+                val effectiveOrigin = previousEntry?.origin.takeIf { origin == ViewerStreamSource.RECENTS } ?: origin
+                val effectiveQueryHash = previousEntry?.originQueryHash.takeIf { origin == ViewerStreamSource.RECENTS }
+                    ?: originQueryHash
                 watchedFlow.value = RepositoryPolicies.recordWatched(
                     entries = watchedFlow.value,
                     entry = RecentPostEntry(
                         post = post,
                         viewedAtEpochMs = clock(),
-                        origin = origin,
-                        originQueryHash = originQueryHash,
+                        origin = effectiveOrigin,
+                        originQueryHash = effectiveQueryHash,
                     ),
                     limit = watchedLimit,
                 )
@@ -385,6 +389,22 @@ class FileBackedRecentsRepository(
     override suspend fun clearWatchedPosts() {
         mutex.withLock {
             commitMutation { watchedFlow.value = emptyList() }
+        }
+    }
+
+    override suspend fun clearWatchedPosts(origin: ViewerStreamSource) {
+        mutex.withLock {
+            commitMutation {
+                watchedFlow.value = watchedFlow.value.filterNot { entry -> entry.origin == origin }
+            }
+        }
+    }
+
+    override suspend fun clearWatchedPostsExcept(origin: ViewerStreamSource) {
+        mutex.withLock {
+            commitMutation {
+                watchedFlow.value = watchedFlow.value.filter { entry -> entry.origin == origin }
+            }
         }
     }
 

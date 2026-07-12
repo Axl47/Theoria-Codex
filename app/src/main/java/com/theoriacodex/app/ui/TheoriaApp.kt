@@ -320,6 +320,12 @@ internal fun TheoriaAppContent(
     val recentWatchedPosts by dataDependencies.recentsRepository
         .observeWatchedPosts()
         .collectAsStateWithLifecycle(initialValue = emptyList())
+    val recentCodexPosts = remember(recentWatchedPosts) {
+        recentWatchedPosts.filter { entry -> entry.origin == ViewerStreamSource.CODEX }
+    }
+    val recentExternalWatchedPosts = remember(recentWatchedPosts) {
+        recentWatchedPosts.filterNot { entry -> entry.origin == ViewerStreamSource.CODEX }
+    }
     val recentSearches by dataDependencies.recentsRepository
         .observeSearches()
         .collectAsStateWithLifecycle(initialValue = emptyList())
@@ -1811,7 +1817,8 @@ internal fun TheoriaAppContent(
 
                                 TopLevelDestination.Recents -> {
                                     RecentsScreen(
-                                        watchedPosts = recentWatchedPosts,
+                                        watchedPosts = recentExternalWatchedPosts,
+                                        codexPosts = recentCodexPosts,
                                         searches = recentSearches,
                                         activity = recentActivity,
                                         pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
@@ -1822,7 +1829,7 @@ internal fun TheoriaAppContent(
                                             }
                                         },
                                         onOpenWatchedPost = { index ->
-                                            val posts = recentWatchedPosts.map { entry -> entry.post }
+                                            val posts = recentExternalWatchedPosts.map { entry -> entry.post }
                                             if (posts.isNotEmpty()) {
                                                 val context = ViewerLaunchContext(
                                                     queryHash = "recents:watched",
@@ -1835,6 +1842,29 @@ internal fun TheoriaAppContent(
                                                         posts,
                                                         context,
                                                     )
+                                                    viewerSessionOwner.retain(
+                                                        ViewerSession(
+                                                            posts = preparedPosts,
+                                                            context = context,
+                                                            liveSearchBinding = false,
+                                                        ),
+                                                    )
+                                                    dataDependencies.uiRestoreRepository.setViewerLaunchContext(context)
+                                                    navController.navigate(AppRoute.Viewer)
+                                                }
+                                            }
+                                        },
+                                        onOpenCodexPost = { index ->
+                                            val posts = recentCodexPosts.map { entry -> entry.post }
+                                            if (posts.isNotEmpty()) {
+                                                val context = ViewerLaunchContext(
+                                                    queryHash = "recents:codex",
+                                                    startIndex = index.coerceIn(0, posts.lastIndex),
+                                                    streamSource = ViewerStreamSource.RECENTS,
+                                                    scrollOffsetHint = 0,
+                                                )
+                                                scope.launch {
+                                                    val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(posts, context)
                                                     viewerSessionOwner.retain(
                                                         ViewerSession(
                                                             posts = preparedPosts,
@@ -1868,7 +1898,18 @@ internal fun TheoriaAppContent(
                                             }
                                         },
                                         onClearWatched = {
-                                            scope.launch { dataDependencies.recentsRepository.clearWatchedPosts() }
+                                            scope.launch {
+                                                dataDependencies.recentsRepository.clearWatchedPostsExcept(
+                                                    ViewerStreamSource.CODEX,
+                                                )
+                                            }
+                                        },
+                                        onClearCodex = {
+                                            scope.launch {
+                                                dataDependencies.recentsRepository.clearWatchedPosts(
+                                                    ViewerStreamSource.CODEX,
+                                                )
+                                            }
                                         },
                                         onClearSearches = {
                                             scope.launch { dataDependencies.recentsRepository.clearSearches() }

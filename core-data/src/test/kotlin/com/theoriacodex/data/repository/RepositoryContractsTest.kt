@@ -112,6 +112,38 @@ class RepositoryContractTest(
     }
 
     @Test
+    fun `recents preserves a posts section when it is reopened from history`() = runTest {
+        var now = 100L
+        val repository = createRecentsRepository(clock = { now++ })
+        val codexPost = repositoryTestPost(id = "codex-post")
+        val watchedPost = repositoryTestPost(id = "watched-post")
+
+        repository.recordWatchedPost(codexPost, ViewerStreamSource.CODEX, "codex:art")
+        repository.recordWatchedPost(watchedPost, ViewerStreamSource.SEARCH, "search:art")
+        repository.recordWatchedPost(codexPost, ViewerStreamSource.RECENTS, "recents:codex")
+        repository.recordWatchedPost(watchedPost, ViewerStreamSource.RECENTS, "recents:watched")
+
+        val watched = repository.observeWatchedPosts().first()
+        assertEquals(ViewerStreamSource.SEARCH, watched.first { it.post.id == watchedPost.id }.origin)
+        assertEquals(ViewerStreamSource.CODEX, watched.first { it.post.id == codexPost.id }.origin)
+        assertEquals("codex:art", watched.first { it.post.id == codexPost.id }.originQueryHash)
+    }
+
+    @Test
+    fun `recents clears codex and external watched sections independently`() = runTest {
+        var now = 100L
+        val repository = createRecentsRepository(clock = { now++ })
+        repository.recordWatchedPost(repositoryTestPost(id = "codex-post"), ViewerStreamSource.CODEX, null)
+        repository.recordWatchedPost(repositoryTestPost(id = "watched-post"), ViewerStreamSource.SEARCH, null)
+
+        repository.clearWatchedPostsExcept(ViewerStreamSource.CODEX)
+        assertEquals(listOf(ViewerStreamSource.CODEX), repository.observeWatchedPosts().first().map { it.origin })
+
+        repository.clearWatchedPosts(ViewerStreamSource.CODEX)
+        assertTrue(repository.observeWatchedPosts().first().isEmpty())
+    }
+
+    @Test
     fun `settings starts with a complete normalized source catalog`() = runTest {
         val settings = createSettingsRepository().observeSettings().first()
 

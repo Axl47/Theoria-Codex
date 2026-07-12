@@ -38,6 +38,7 @@ import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentSearchEntry
+import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
@@ -48,14 +49,17 @@ import java.util.Locale
 @Composable
 fun RecentsScreen(
     watchedPosts: List<RecentPostEntry>,
+    codexPosts: List<RecentPostEntry>,
     searches: List<RecentSearchEntry>,
     activity: List<RecentActivityEntry>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     likedPostIds: Set<PostId> = emptySet(),
     onToggleLike: ((Post) -> Unit)? = null,
     onOpenWatchedPost: (Int) -> Unit,
+    onOpenCodexPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
     onClearWatched: () -> Unit,
+    onClearCodex: () -> Unit,
     onClearSearches: () -> Unit,
     onClearAll: () -> Unit,
 ) {
@@ -63,6 +67,7 @@ fun RecentsScreen(
     val now = remember(watchedPosts, searches, activity) { System.currentTimeMillis() }
     val hasContent = when (filter) {
         RecentsFilter.WATCHED -> watchedPosts.isNotEmpty()
+        RecentsFilter.CODEX -> codexPosts.isNotEmpty()
         RecentsFilter.SEARCHES -> searches.isNotEmpty()
         RecentsFilter.ALL -> activity.isNotEmpty()
     }
@@ -84,6 +89,7 @@ fun RecentsScreen(
                 onClick = {
                     when (filter) {
                         RecentsFilter.WATCHED -> onClearWatched()
+                        RecentsFilter.CODEX -> onClearCodex()
                         RecentsFilter.SEARCHES -> onClearSearches()
                         RecentsFilter.ALL -> onClearAll()
                     }
@@ -116,6 +122,16 @@ fun RecentsScreen(
                 onOpenWatchedPost = onOpenWatchedPost,
             )
 
+            RecentsFilter.CODEX -> WatchedGrid(
+                watchedPosts = codexPosts,
+                now = now,
+                pixivUgoiraClient = pixivUgoiraClient,
+                likedPostIds = likedPostIds,
+                onToggleLike = onToggleLike,
+                onOpenWatchedPost = onOpenCodexPost,
+                emptyMessage = "Posts appear here after you open them from Codex.",
+            )
+
             RecentsFilter.SEARCHES -> SearchHistoryList(
                 searches = searches,
                 now = now,
@@ -125,8 +141,10 @@ fun RecentsScreen(
             RecentsFilter.ALL -> ActivityList(
                 activity = activity,
                 watchedPosts = watchedPosts,
+                codexPosts = codexPosts,
                 now = now,
                 onOpenWatchedPost = onOpenWatchedPost,
+                onOpenCodexPost = onOpenCodexPost,
                 onOpenSearch = onOpenSearch,
             )
         }
@@ -141,9 +159,10 @@ private fun WatchedGrid(
     likedPostIds: Set<PostId>,
     onToggleLike: ((Post) -> Unit)?,
     onOpenWatchedPost: (Int) -> Unit,
+    emptyMessage: String = "Posts appear here after you open them in Viewer.",
 ) {
     if (watchedPosts.isEmpty()) {
-        EmptyRecentState("Posts appear here after you open them in Viewer.")
+        EmptyRecentState(emptyMessage)
         return
     }
 
@@ -208,8 +227,10 @@ private fun SearchHistoryList(
 private fun ActivityList(
     activity: List<RecentActivityEntry>,
     watchedPosts: List<RecentPostEntry>,
+    codexPosts: List<RecentPostEntry>,
     now: Long,
     onOpenWatchedPost: (Int) -> Unit,
+    onOpenCodexPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
 ) {
     if (activity.isEmpty()) {
@@ -227,8 +248,13 @@ private fun ActivityList(
                     entry = entry.entry,
                     now = now,
                     onClick = {
-                        val index = watchedPosts.indexOfFirst { watched -> watched.post.id == entry.entry.post.id }
-                        if (index >= 0) onOpenWatchedPost(index)
+                        if (entry.entry.origin == ViewerStreamSource.CODEX) {
+                            val index = codexPosts.indexOfFirst { watched -> watched.post.id == entry.entry.post.id }
+                            if (index >= 0) onOpenCodexPost(index)
+                        } else {
+                            val index = watchedPosts.indexOfFirst { watched -> watched.post.id == entry.entry.post.id }
+                            if (index >= 0) onOpenWatchedPost(index)
+                        }
                     },
                 )
 
@@ -353,6 +379,7 @@ private fun EmptyRecentState(message: String) {
 
 private enum class RecentsFilter(val label: String) {
     WATCHED("Watched"),
+    CODEX("Codex"),
     SEARCHES("Searches"),
     ALL("All"),
 }
