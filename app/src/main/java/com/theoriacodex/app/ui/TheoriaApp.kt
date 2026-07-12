@@ -465,6 +465,7 @@ internal fun TheoriaAppContent(
     }
     val codexItemCounts = remember { mutableStateMapOf<String, Int>() }
     val codexCoverModels = remember { mutableStateMapOf<String, Any?>() }
+    var thumbnailCacheGeneration by rememberSaveable { mutableStateOf(0) }
     val codexSearchSourceOptions = remember { mutableStateMapOf<String, List<CodexSearchSourceOption>>() }
     val codexSearchTagOptions = remember { mutableStateMapOf<String, Map<SourceKey, List<CodexSearchTagOption>>>() }
     val savedPostIdsByCodex = remember { mutableStateMapOf<String, Set<PostId>>() }
@@ -1326,7 +1327,12 @@ internal fun TheoriaAppContent(
         consumePendingUriIfCurrent()
     }
 
-    LaunchedEffect(lifecycleOwner, codices.map { it.codexId }, availableRealSources) {
+    LaunchedEffect(
+        lifecycleOwner,
+        codices.map { it.codexId },
+        availableRealSources,
+        thumbnailCacheGeneration,
+    ) {
         val activeIds = codices.map { it.codexId }.toSet()
         codexItemCounts.keys
             .filterNot { it in activeIds }
@@ -2090,7 +2096,10 @@ internal fun TheoriaAppContent(
                                             scope.launch { dataDependencies.settingsRepository.setScenarioPreset(preset) }
                                         },
                                         onClearThumbnailCache = {
-                                            scope.launch { dataDependencies.cacheRepository.clearThumbnailCache() }
+                                            scope.launch {
+                                                dataDependencies.cacheRepository.clearThumbnailCache()
+                                                thumbnailCacheGeneration += 1
+                                            }
                                         },
                                         onClearFullImageCache = {
                                             scope.launch { dataDependencies.cacheRepository.clearFullImageCache() }
@@ -2149,13 +2158,8 @@ internal fun TheoriaAppContent(
                                 featureDependencies.search.fetchTagVideoCounts(source, tags)
                             },
                             onSortChange = { sortMode = it },
-                            resolvePostById = resolver@{ postId ->
-                                val adapter = sourceDependencies.registry.adapterFor(postId.source) ?: return@resolver null
-                                val resolved = runCatchingPreservingCancellation {
-                                    adapter.resolvePost(postId)
-                                }.getOrNull() ?: return@resolver null
-                                dataDependencies.codexRepository.updatePost(resolved)
-                                resolved
+                            resolvePostById = { postId ->
+                                viewerRouteWorkflow.resolvePost(postId, ViewerStreamSource.CODEX)
                             },
                             onOpenViewer = { index ->
                                 val context = ViewerLaunchContext(

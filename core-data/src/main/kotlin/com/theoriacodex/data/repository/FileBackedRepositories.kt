@@ -702,6 +702,12 @@ class FileBackedCacheRepository(
         localPath: String?,
         fallbackUrl: String?,
     ) {
+        targetDirectory
+            .listFiles()
+            .orEmpty()
+            .filter { file -> file.isFile && file.name.startsWith("$key.") }
+            .forEach(File::delete)
+
         if (localPath != null) {
             val localFile = File(localPath)
             if (localFile.exists()) {

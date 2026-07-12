@@ -268,6 +268,7 @@ class ViewerStateReducerTest {
 
         assertEquals(ViewerResolutionStatus.FAILED, failedPage.resolution.status)
         assertEquals("background resolution failed", failedPage.resolution.message)
+        assertTrue(failedPage.resolution.recoverable)
         assertNull(failed.mediaError)
         assertTrue(failed.controls.playback.playing)
         assertEquals(current.id, failed.currentPage?.post?.id)

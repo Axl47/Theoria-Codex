@@ -1204,6 +1204,28 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
+    fun `cache repository replaces stale local thumbnail with refreshed remote pointer`() = runTest {
+        val dir = tempDir("cache-thumbnail-refresh-")
+        val sourceFile = File(dir, "stale-thumb.jpg").apply { writeText("stale-image") }
+        val repository = FileBackedCacheRepository(dir)
+        val stalePost = samplePost("1", sourceFile.absolutePath)
+        repository.cacheThumbnail(stalePost)
+
+        val refreshedPost = stalePost.copy(
+            preview = stalePost.preview.copy(
+                url = "https://example.com/refreshed-thumb.webp",
+                localPath = null,
+                mime = "image/webp",
+            ),
+        )
+        repository.cacheThumbnail(refreshedPost)
+
+        val entries = dir.resolve("cache/thumbnails").listFiles().orEmpty()
+        assertEquals(listOf("PIXIV_1.url"), entries.map(File::getName))
+        assertEquals("https://example.com/refreshed-thumb.webp", entries.single().readText())
+    }
+
+    @Test
     fun `ui restore repository persists tab scroll and viewer context`() = runTest {
         val dir = tempDir("ui-restore-store-")
         val first = FileBackedUiRestoreRepository(dir)

@@ -375,7 +375,11 @@ private fun ViewerUiState.requestResolution(session: ViewerSessionIdentity): Vie
         return ViewerReduction(this)
     }
     val updated = updateResolution(page.post.id) { current ->
-        current.copy(status = ViewerResolutionStatus.REQUESTED, message = null)
+        current.copy(
+            status = ViewerResolutionStatus.REQUESTED,
+            message = null,
+            recoverable = true,
+        )
     }
     return ViewerReduction(
         state = updated,
@@ -392,6 +396,7 @@ private fun ViewerUiState.replaceResolvedPost(post: Post): ViewerUiState {
         resolution = previous.resolution.copy(
             status = ViewerResolutionStatus.RESOLVED,
             message = null,
+            recoverable = true,
         ),
     )
     val updatedPages = pages.toMutableList().also { values -> values[pageIndex] = replacement }
@@ -411,7 +416,11 @@ private fun ViewerUiState.replaceResolvedPost(post: Post): ViewerUiState {
 
 private fun ViewerUiState.resolutionFailed(action: ViewerAction.ResolutionFailed): ViewerUiState {
     val updated = updateResolution(action.postId) { current ->
-        current.copy(status = ViewerResolutionStatus.FAILED, message = action.message)
+        current.copy(
+            status = ViewerResolutionStatus.FAILED,
+            message = action.message,
+            recoverable = action.recoverable,
+        )
     }
     if (action.postId != currentPage?.post?.id) return updated
 

@@ -178,8 +178,8 @@ internal class ViewerViewModel(
                         ViewerAction.ResolutionFailed(
                             session = effect.session,
                             postId = effect.postId,
-                            message = "Could not resolve this post",
-                            recoverable = true,
+                            message = "Post was deleted",
+                            recoverable = false,
                         )
                     )
                 } else {

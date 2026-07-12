@@ -52,15 +52,20 @@ internal class ViewerRouteWorkflow(
             }
             ViewerStreamSource.CODEX,
             ViewerStreamSource.RECENTS,
-            -> data.codexRepository.updatePost(post)
+            -> {
+                data.codexRepository.updatePost(post)
+                runCatchingPreservingCancellation {
+                    data.cacheRepository.cacheThumbnail(post)
+                }
+            }
         }
     }
 
     suspend fun resolvePost(postId: PostId, streamSource: ViewerStreamSource): Post? {
-        val adapter = sources.registry.adapterFor(postId.source) ?: return null
-        val resolved = runCatchingPreservingCancellation {
-            adapter.resolvePost(postId)
-        }.getOrNull() ?: return null
+        val adapter = checkNotNull(sources.registry.adapterFor(postId.source)) {
+            "${postId.source.name} is unavailable"
+        }
+        val resolved = adapter.resolvePost(postId) ?: return null
         persistResolvedPost(resolved, streamSource)
         return resolved
     }
@@ -101,7 +106,9 @@ internal class ViewerRouteWorkflow(
         val startIndex = context.startIndex.coerceIn(0, posts.lastIndex)
         val selectedPost = posts[startIndex]
         if (!requiresPrelaunchViewerPostResolution(selectedPost, context.streamSource)) return posts
-        val resolved = resolvePost(selectedPost.id, context.streamSource) ?: return posts
+        val resolved = runCatchingPreservingCancellation {
+            resolvePost(selectedPost.id, context.streamSource)
+        }.getOrNull() ?: return posts
         return posts.toMutableList().apply { this[startIndex] = resolved }
     }
 

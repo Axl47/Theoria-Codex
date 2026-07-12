@@ -175,6 +175,66 @@ class ViewerViewModelTest {
     }
 
     @Test
+    fun `missing resolved post becomes a terminal deleted post state`() = runTest {
+        val owner = ViewerViewModel(
+            savedStateHandle = SavedStateHandle(),
+            postResolver = ViewerPostResolver { _, _ -> null },
+            scopeOverride = this,
+        )
+        owner.replaceSession(
+            session(
+                id = "deleted",
+                posts = listOf(
+                    post(
+                        "deleted",
+                        source = SourceKey.GELBOORU,
+                        media = listOf(video("deleted.mp4")),
+                    ),
+                ),
+            )
+        )
+
+        owner.onAction(ViewerAction.RequestCurrentPageResolution)
+        advanceUntilIdle()
+
+        val resolution = requireNotNull(owner.state.value.currentPage?.resolution)
+        assertEquals(ViewerResolutionStatus.FAILED, resolution.status)
+        assertEquals("Post was deleted", resolution.message)
+        assertFalse(resolution.recoverable)
+        val error = owner.state.value.mediaError as ViewerMediaError.Fatal
+        assertEquals("Post was deleted", error.message)
+    }
+
+    @Test
+    fun `provider resolution failure remains recoverable and distinct from deletion`() = runTest {
+        val owner = ViewerViewModel(
+            savedStateHandle = SavedStateHandle(),
+            postResolver = ViewerPostResolver { _, _ -> error("Provider unavailable") },
+            scopeOverride = this,
+        )
+        owner.replaceSession(
+            session(
+                id = "provider-failure",
+                posts = listOf(
+                    post(
+                        "provider-failure",
+                        source = SourceKey.GELBOORU,
+                        media = listOf(video("provider-failure.mp4")),
+                    ),
+                ),
+            )
+        )
+
+        owner.onAction(ViewerAction.RequestCurrentPageResolution)
+        advanceUntilIdle()
+
+        val resolution = requireNotNull(owner.state.value.currentPage?.resolution)
+        assertEquals(ViewerResolutionStatus.FAILED, resolution.status)
+        assertEquals("Provider unavailable", resolution.message)
+        assertTrue(resolution.recoverable)
+    }
+
+    @Test
     fun `session replacement cancels owned resolution work without publishing failure`() = runTest {
         val started = CompletableDeferred<Unit>()
         val cancelled = CompletableDeferred<Unit>()

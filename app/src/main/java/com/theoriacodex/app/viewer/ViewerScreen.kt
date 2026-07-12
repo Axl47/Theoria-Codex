@@ -298,7 +298,8 @@ internal fun ViewerScreen(
         val status = uiState.currentPage?.resolution?.status
         if (
             status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.IDLE ||
-            status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.FAILED
+            status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.FAILED &&
+            uiState.currentPage?.resolution?.recoverable == true
         ) {
             onAction(ViewerAction.RequestCurrentPageResolution)
         }
@@ -420,6 +421,14 @@ internal fun ViewerScreen(
                 modifier = Modifier.fillMaxSize(),
             ) { postPage ->
             val post = posts[postPage]
+            val terminalResolutionMessage = uiState.pages
+                .getOrNull(postPage)
+                ?.resolution
+                ?.takeIf { resolution ->
+                    resolution.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.FAILED &&
+                        !resolution.recoverable
+                }
+                ?.message
             val postMedia = remember(post) { viewerMediaItems(post) }
             val mediaPagerReverseLayout = viewerMediaPagerReverseLayout(
                 mediaCount = postMedia.size,
@@ -752,6 +761,7 @@ internal fun ViewerScreen(
                             ViewerVideoPlayer(
                                 media = media,
                                 sourceKey = post.id.source,
+                                terminalMessage = terminalResolutionMessage,
                                 modifier = Modifier.fillMaxSize(),
                                 mediaModifier = mediaTransformModifier,
                                 showTimeline = chromeVisible && isCurrentMediaPage,
@@ -1407,6 +1417,7 @@ private fun SeekJumpFeedbackOverlay(
 private fun ViewerVideoPlayer(
     media: ImageRef,
     sourceKey: SourceKey,
+    terminalMessage: String? = null,
     modifier: Modifier = Modifier,
     mediaModifier: Modifier = Modifier,
     showTimeline: Boolean = false,
@@ -1422,6 +1433,15 @@ private fun ViewerVideoPlayer(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    if (!terminalMessage.isNullOrBlank()) {
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            Text(
+                text = terminalMessage,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+        }
+        return
+    }
     val playbackLocation = remember(media.localPath, media.url, media.mime) {
         resolveViewerVideoPlaybackLocation(context, media)
     }

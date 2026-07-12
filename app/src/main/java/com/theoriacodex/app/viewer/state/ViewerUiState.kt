@@ -58,6 +58,7 @@ internal data class ViewerResolutionState(
     val status: ViewerResolutionStatus = ViewerResolutionStatus.NOT_REQUIRED,
     val attempt: Int = 0,
     val message: String? = null,
+    val recoverable: Boolean = true,
 ) {
     init {
         require(attempt >= 0) { "Viewer resolution attempt must not be negative" }
