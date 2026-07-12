@@ -243,29 +243,64 @@ private fun ActivityList(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(activity, key = { entry -> activityKey(entry) }) { entry ->
-            when (entry) {
-                is RecentActivityEntry.Watched -> RecentWatchedRow(
-                    entry = entry.entry,
-                    now = now,
-                    onClick = {
-                        if (entry.entry.origin == ViewerStreamSource.CODEX) {
-                            val index = codexPosts.indexOfFirst { watched -> watched.post.id == entry.entry.post.id }
-                            if (index >= 0) onOpenCodexPost(index)
-                        } else {
-                            val index = watchedPosts.indexOfFirst { watched -> watched.post.id == entry.entry.post.id }
-                            if (index >= 0) onOpenWatchedPost(index)
-                        }
-                    },
-                )
-
-                is RecentActivityEntry.Search -> RecentSearchRow(
-                    entry = entry.entry,
-                    now = now,
-                    onClick = { onOpenSearch(entry.entry) },
-                )
-            }
+            RecentActivityRow(
+                entry = entry,
+                watchedPosts = watchedPosts,
+                codexPosts = codexPosts,
+                now = now,
+                onOpenWatchedPost = onOpenWatchedPost,
+                onOpenCodexPost = onOpenCodexPost,
+                onOpenSearch = onOpenSearch,
+            )
         }
     }
+}
+
+@Composable
+private fun RecentActivityRow(
+    entry: RecentActivityEntry,
+    watchedPosts: List<RecentPostEntry>,
+    codexPosts: List<RecentPostEntry>,
+    now: Long,
+    onOpenWatchedPost: (Int) -> Unit,
+    onOpenCodexPost: (Int) -> Unit,
+    onOpenSearch: (RecentSearchEntry) -> Unit,
+) {
+    when (entry) {
+        is RecentActivityEntry.Watched -> RecentWatchedRow(
+            entry = entry.entry,
+            now = now,
+            onClick = {
+                openRecentPost(
+                    postEntry = entry.entry,
+                    watchedPosts = watchedPosts,
+                    codexPosts = codexPosts,
+                    onOpenWatchedPost = onOpenWatchedPost,
+                    onOpenCodexPost = onOpenCodexPost,
+                )
+            },
+        )
+
+        is RecentActivityEntry.Search -> RecentSearchRow(
+            entry = entry.entry,
+            now = now,
+            onClick = { onOpenSearch(entry.entry) },
+        )
+    }
+}
+
+private fun openRecentPost(
+    postEntry: RecentPostEntry,
+    watchedPosts: List<RecentPostEntry>,
+    codexPosts: List<RecentPostEntry>,
+    onOpenWatchedPost: (Int) -> Unit,
+    onOpenCodexPost: (Int) -> Unit,
+) {
+    val isCodex = postEntry.origin == ViewerStreamSource.CODEX
+    val sourcePosts = if (isCodex) codexPosts else watchedPosts
+    val index = sourcePosts.indexOfFirst { candidate -> candidate.post.id == postEntry.post.id }
+    if (index < 0) return
+    if (isCodex) onOpenCodexPost(index) else onOpenWatchedPost(index)
 }
 
 @Composable

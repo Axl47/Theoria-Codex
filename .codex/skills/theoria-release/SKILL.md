@@ -39,10 +39,13 @@ Proceed only after the user approves the version and release-note wording.
 3. Verify all of the following:
 
    ```sh
+   ./gradlew :app:detektDebug --stacktrace
+   ./gradlew :app:connectedDebugAndroidTest --stacktrace
    ./gradlew :app:testDebugUnitTest
    ./gradlew :app:assembleRelease
    ```
 
+   Run the connected test command against the same supported API 35 Android emulator/device lane used by CI; an attached or running target is required, and unit/build success does not replace instrumentation coverage. Stop and report if no target is available. Confirm Detekt reports no new issues before continuing.
    Confirm `app/build/outputs/apk/release/output-metadata.json` reports the same name and code. Also confirm the working tree contains only intended release changes and the new version is greater than the prior release.
 
 4. Show the final diff, the exact commit message, and the exact tag that would be created.

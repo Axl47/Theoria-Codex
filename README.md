@@ -136,7 +136,7 @@ Run it only when an Android target is attached:
 ./gradlew :app:connectedDebugAndroidTest
 ```
 
-Android-related pull requests and main pushes run the deterministic suite on API 37. The scheduled/manual extended workflow also runs API 27 plus the minified release-acceptance cold-start/callback check. Provider-live instrumentation remains opt-in and is not part of the deterministic device result.
+Android-related pull requests and main pushes run the deterministic suite on API 35 while the app continues to compile and target SDK 37. The scheduled/manual extended workflow also runs API 27 plus the minified release-acceptance cold-start/callback check on API 35. Provider-live instrumentation remains opt-in and is not part of the deterministic device result.
 
 Opt-in live provider health report:
 

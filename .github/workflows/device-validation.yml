@@ -45,7 +45,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api-level: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '[27,37]' || '[37]') }}
+        # Hosted runners expose the stable API 35 platform package; the app still compiles and targets SDK 37.
+        api-level: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '[27,35]' || '[35]') }}
 
     steps:
       - name: Checkout
@@ -95,7 +96,7 @@ jobs:
           retention-days: 14
 
   release-acceptance:
-    name: R8 release acceptance (API 37)
+    name: R8 release acceptance (API 35)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 75
@@ -126,7 +127,7 @@ jobs:
       - name: Run minified release acceptance
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 37
+          api-level: 35
           target: google_apis
           arch: x86_64
           profile: pixel_6
