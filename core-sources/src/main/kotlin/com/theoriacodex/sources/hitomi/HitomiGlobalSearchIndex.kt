@@ -104,8 +104,6 @@ internal class HitomiGlobalSearchIndex(
             throw HitomiProtocolException("global search gallery record had an invalid length")
         }
         return IntArray(count) { buffer.int }
-            .distinct()
-            .toIntArray()
     }
 
     private suspend fun rangedGet(url: String, start: Long, length: Int, maxBodyBytes: Int): ByteArray {

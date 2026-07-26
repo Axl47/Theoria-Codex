@@ -1,8 +1,27 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-26T05:29:43-04:00
+updated_at: 2026-07-26T06:12:08-04:00
 ---
 # Working List
+
+## Current Task: Complete Hitomi Character Search Crash Repair
+
+### In Progress
+
+### Pending
+
+### Done
+
+- [x] Reproduce the still-failing search from current device state.
+  - Evidence: the persisted debug query is `character:klee`; fresh logs again show duplicate canonical key `HITOMI:4076681`, and the live route reproduced 25 hydrated cards with only 24 unique identities.
+- [x] Move uniqueness enforcement to Hitomi's shared hydrated-post boundary.
+  - Evidence: all Hitomi search routes now remove repeated canonical `Post.id` values after metadata hydration, covering global index, typed Nozomi facets, random ordering, and creator/search callers without changing raw-record pagination offsets.
+- [x] Add exact deterministic and live regression coverage.
+  - Evidence: a fixture models both repeated raw IDs and distinct raw IDs hydrating to `HITOMI:4076681`; the live `character:klee` route now publishes only unique post identities.
+- [x] Verify the installed app against the saved failing query.
+  - Evidence: installed `app-debug.apk` over `com.theoriacodex.debug`, cold-started into the persisted Klee result grid, scrolled repeatedly, and confirmed the same process remained alive with no `AndroidRuntime` exception.
+- [x] Complete the final regression and integrity batch.
+  - Validation: full `:core-sources:test` and `:app:testDebugUnitTest` passed within a combined 598 tests, 0 failures, 0 errors, and 3 opt-in skips; the exact opt-in live Hitomi route, `:app:assembleDebug`, HTML validation, and `git diff --check` also passed.
 
 ## Current Task: Restore Search Chip Styling And Fix Hitomi Crash
 
@@ -16,7 +35,7 @@ updated_at: 2026-07-26T05:29:43-04:00
   - Evidence: `ModeRow` renders the original `FilterChip`; a transparent sibling owns tap and source-only long press without replacing Material colors, borders, shape, or padding. `SearchSourceChipDeviceTest` passed 1/1 on SM-S926U (Android 16), including physical tap timing and long-press isolation.
 - [x] Capture and repair the one-tag Hitomi crash at the provider boundary.
   - Evidence: `com.theoriacodex.debug` throws `IllegalArgumentException: Key "HITOMI:4076681" was already used` while measuring the Search staggered grid, proving duplicate Hitomi `PostId` values reached the keyed UI list.
-  - Repair: preserve the provider's first-seen ordering while deduplicating gallery IDs as the Hitomi global-index record is decoded, before metadata hydration or UI publication.
+  - Initial repair: deduplicated gallery IDs inside the global-index record. Follow-up evidence proved this was insufficient because the actual saved query used typed Nozomi data and separate raw IDs could hydrate to one canonical identity; the current task records the complete repair.
 - [x] Add deterministic and live regression coverage.
   - Evidence: the fixture global-index test proves `[4, 3, 4, 2]` becomes `[4, 3, 2]`; the opt-in live `girl` route completed successfully and asserted unique post identities.
 - [x] Complete the bounded regression batch.

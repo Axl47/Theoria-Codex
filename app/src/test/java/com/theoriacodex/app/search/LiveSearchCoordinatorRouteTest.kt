@@ -232,6 +232,18 @@ class LiveSearchCoordinatorRouteTest {
             global.results.map { post -> post.id }.distinct().size,
         )
 
+        val character = searchCoordinator(registry, "hitomi-character-klee")
+        character.initialize()
+        character.setMode(QueryMode.Source(SourceKey.HITOMI))
+        assertTrue("Hitomi rejected character:klee", character.commitTagInput("character:klee"))
+        character.applyDraft()
+        assertCoordinatorSucceeded("Hitomi character:klee", character)
+        assertEquals(
+            "Hitomi character:klee returned duplicate post identities",
+            character.results.size,
+            character.results.map { post -> post.id }.distinct().size,
+        )
+
         val typed = searchCoordinator(registry, "hitomi-typed")
         typed.initialize()
         typed.setMode(QueryMode.Source(SourceKey.HITOMI))

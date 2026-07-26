@@ -800,7 +800,9 @@ class HitomiSourceAdapter(
                     }
                 }
             }
-        }.awaitAll().filterNotNull()
+        }.awaitAll()
+            .filterNotNull()
+            .distinctBy(Post::id)
     }
 
     private suspend fun fetchGallery(galleryId: Int, sparse: Boolean): Post? {

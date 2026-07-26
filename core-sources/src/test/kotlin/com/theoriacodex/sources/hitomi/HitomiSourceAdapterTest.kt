@@ -78,6 +78,33 @@ class HitomiSourceAdapterTest {
     }
 
     @Test
+    fun `typed character search removes duplicate gallery ids from Nozomi`() = runTest {
+        val characterUrl = HitomiNozomi.urlFor(
+            HitomiNozomiRequest(area = "character", tag = "klee", language = "all"),
+        )
+        val http = RoutingHitomiHttpClient().apply {
+            binaryIndexes[characterUrl] = listOf(4_076_681, 4_076_680, 4_076_681)
+            galleryBodies[4_076_680] = galleryWithFiles(
+                id = 4_076_681,
+                files = """[{"name":"1.jpg","hash":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","width":800,"height":1200,"hasavif":1}]""",
+            )
+        }
+        val adapter = adapter(http, pageSize = 3)
+
+        val page = adapter.search(
+            query(
+                include = listOf(
+                    SearchTerm("klee", SearchFacet.CHARACTER, "character"),
+                ),
+            ),
+            null,
+        )
+
+        assertEquals(listOf("4076681"), page.items.map { post -> post.id.sourcePostId })
+        assertEquals(page.items.size, page.items.map { post -> post.id }.distinct().size)
+    }
+
+    @Test
     fun `global search cache switches atomically to the current galleries index version`() = runTest {
         val versionUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/version"
         val v1IndexUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/galleries.100.index"
