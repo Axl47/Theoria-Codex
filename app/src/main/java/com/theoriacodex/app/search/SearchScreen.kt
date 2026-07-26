@@ -10,6 +10,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -80,6 +82,10 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -124,6 +130,7 @@ import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchRestorationUiState
+import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.tags.FavoriteTagActionGrid
 import com.theoriacodex.app.tags.PostTagActionSection
@@ -578,10 +585,13 @@ fun SearchScreen(
                     }
 
                     ModeRow(
-                        mode = state.query.draft.mode,
+                        draftSourceScope = state.query.draftSourceScope,
                         options = state.query.modeOptions,
                         unifiedSourceCount = state.query.enabledSourceCount,
                         onModeSelected = { mode -> onAction(SearchAction.SelectMode(mode)) },
+                        onTemporarySourceToggled = { source ->
+                            onAction(SearchAction.ToggleTemporarySource(source))
+                        },
                     )
 
                     TagRow(
@@ -592,7 +602,7 @@ fun SearchScreen(
                     )
 
                     if (
-                        state.query.applied.mode == QueryMode.Unified &&
+                        state.query.appliedSourceScope !is SearchSourceScope.Single &&
                         state.content.statuses.any { it.state != SourceRunState.SUCCESS }
                     ) {
                         StatusRow(statuses = state.content.statuses)
@@ -721,7 +731,7 @@ fun SearchScreen(
                             SearchResultCard(
                                 post = post,
                                 pixivUgoiraClient = pixivUgoiraClient,
-                                showSourceBadge = state.query.applied.mode == QueryMode.Unified,
+                                showSourceBadge = state.query.appliedSourceScope !is SearchSourceScope.Single,
                                 displayTag = displayTagByPostId[post.id],
                                 liked = post.id in likedPostIds,
                                 onToggleLike = onToggleLike?.let { toggle ->
@@ -1748,47 +1758,103 @@ private fun AutocompletePanel(
 }
 
 @Composable
-private fun ModeRow(
-    mode: QueryMode,
+internal fun ModeRow(
+    draftSourceScope: SearchSourceScope,
     options: List<QueryMode>,
     unifiedSourceCount: Int,
     onModeSelected: (QueryMode) -> Unit,
+    onTemporarySourceToggled: (SourceKey) -> Unit,
 ) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(options.size) { index ->
             val option = options[index]
-            FilterChip(
-                selected = option == mode,
+            val source = (option as? QueryMode.Source)?.source
+            val selected = when {
+                option == QueryMode.Unified -> draftSourceScope is SearchSourceScope.GlobalUnified
+                source != null -> source in draftSourceScope.explicitSources
+                else -> false
+            }
+            SourceModeChip(
+                label = option.sourceChipLabel(),
+                selected = selected,
                 onClick = { onModeSelected(option) },
-                label = {
-                    if (option == QueryMode.Unified) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text("Unified")
-                            Box(
-                                modifier = Modifier
-                                    .background(
-                                        color = MaterialTheme.colorScheme.primary,
-                                        shape = CircleShape,
-                                    )
-                                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                            ) {
-                                Text(
-                                    text = unifiedSourceCount.toString(),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                )
-                            }
-                        }
-                    } else {
-                        val source = (option as QueryMode.Source).source
-                        SourceLogo(source = source, size = 18.dp)
+                onLongClick = source?.let { selectedSource ->
+                    { onTemporarySourceToggled(selectedSource) }
+                },
+            ) {
+                if (option == QueryMode.Unified) {
+                    Text("Unified")
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                color = MaterialTheme.colorScheme.primary,
+                                shape = CircleShape,
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = unifiedSourceCount.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
                     }
+                } else {
+                    SourceLogo(source = requireNotNull(source), size = 18.dp)
                 }
-            )
+            }
         }
+    }
+}
+
+@Composable
+private fun SourceModeChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
+    content: @Composable RowScope.() -> Unit,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    Surface(
+        modifier = Modifier
+            .combinedClickable(
+                role = Role.Checkbox,
+                onClickLabel = "Select $label",
+                onLongClickLabel = onLongClick?.let {
+                    "Add or remove $label from temporary source search"
+                },
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
+            .semantics(mergeDescendants = true) {
+                contentDescription = label
+                this.selected = selected
+            },
+        shape = RoundedCornerShape(999.dp),
+        color = if (selected) {
+            accent.copy(alpha = 0.16f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+        },
+        contentColor = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (selected) accent else MaterialTheme.colorScheme.outline,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
+    }
+}
+
+private fun QueryMode.sourceChipLabel(): String {
+    return when (this) {
+        QueryMode.Unified -> "Unified"
+        is QueryMode.Source -> source.displayName()
     }
 }
 

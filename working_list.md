@@ -4,6 +4,11 @@ updated_at: 2026-07-26T00:00:00-04:00
 ---
 # Working List
 
+## Phase 3: Temporary multi-source Search UI
+
+- [x] Render source chips directly from `draftSourceScope` with one combined click/long-click accessibility owner.
+  - Evidence: `SearchSourceChipDeviceTest` passed on the connected SM-S926U (Android 16); 1 test, 0 failures. Focused JVM Search coverage passed 71 tests (59 `SearchCoordinatorTest`, 12 `SearchStateContractTest`); Android-test compilation, debug assembly, and `git diff --check` also passed.
+
 ## Current Task: Implement Phases 1 And 2 Of Temporary Multi-Source Search
 
 ### In Progress

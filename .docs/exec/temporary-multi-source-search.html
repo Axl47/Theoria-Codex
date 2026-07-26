@@ -461,6 +461,11 @@ SearchStateContractTest
   selection-only edits count as pending changes</code></pre>
       </details>
     </section>
+    <section id="phase-3-evidence">
+      <h2>Phase 3 Evidence</h2>
+      <p>Phase 3 owns the Search chip surface only. Each chip derives selected state from the route-level draft source scope. Unified is selected only for global Unified; an explicit temporary scope highlights each selected source independently and leaves Unified unselected. Each chip exposes one checkbox-role combined click/long-click owner, while Unified has no long-click action.</p>
+      <p><code>SearchScreen.kt</code> renders selected state from <code>draftSourceScope</code> and delegates normal tap and source-only long press through one <code>Surface</code> combined-clickable owner. <code>SearchSourceChipDeviceTest</code> passed on SM-S926U (Android 16), 1 test with 0 failures. Focused JVM Search coverage passed 71 tests (59 coordinator and 12 state-contract tests); <code>compileDebugAndroidTestKotlin</code>, <code>assembleDebug</code>, and <code>git diff --check</code> passed.</p>
+    </section>
   </main>
 </body>
 </html>
