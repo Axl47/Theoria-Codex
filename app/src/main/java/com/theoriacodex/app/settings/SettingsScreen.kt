@@ -171,7 +171,49 @@ fun SettingsScreen(
         }
 
         SettingsSection(
-            title = "For You blacklist",
+            title = "Unified Mode",
+            expanded = unifiedModeExpanded,
+            onToggle = { unifiedModeExpanded = !unifiedModeExpanded },
+        ) {
+            availableSources.forEach { source ->
+                val isEnabled = source in settings.runtime.enabledSources
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(source.displayName())
+                    Switch(
+                        checked = isEnabled,
+                        onCheckedChange = { checked ->
+                            val updated = settings.runtime.enabledSources
+                                .intersect(availableSources.toSet())
+                                .toMutableSet()
+                            if (checked) {
+                                updated += source
+                            } else {
+                                updated -= source
+                            }
+                            onSetEnabledSources(updated)
+                        },
+                    )
+                }
+                val weight = settings.runtime.sourceWeights[source]?.toFloat() ?: 0f
+                Slider(
+                    value = weight,
+                    onValueChange = { raw ->
+                        val updated = settings.runtime.sourceWeights.toMutableMap()
+                        updated[source] = raw.toDouble()
+                        onSetSourceWeights(updated)
+                    },
+                    valueRange = 0f..1f,
+                )
+                Text("Weight: %.2f".format(weight), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
+        SettingsSection(
+            title = "For You Blacklist",
             expanded = blacklistExpanded,
             onToggle = { blacklistExpanded = !blacklistExpanded },
         ) {
@@ -203,48 +245,6 @@ fun SettingsScreen(
                             }
                         }
                     }
-                }
-        }
-
-        SettingsSection(
-            title = "Unified mode",
-            expanded = unifiedModeExpanded,
-            onToggle = { unifiedModeExpanded = !unifiedModeExpanded },
-        ) {
-                availableSources.forEach { source ->
-                    val isEnabled = source in settings.runtime.enabledSources
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(source.displayName())
-                        Switch(
-                            checked = isEnabled,
-                            onCheckedChange = { checked ->
-                                val updated = settings.runtime.enabledSources
-                                    .intersect(availableSources.toSet())
-                                    .toMutableSet()
-                                if (checked) {
-                                    updated += source
-                                } else {
-                                    updated -= source
-                                }
-                                onSetEnabledSources(updated)
-                            },
-                        )
-                    }
-                    val weight = settings.runtime.sourceWeights[source]?.toFloat() ?: 0f
-                    Slider(
-                        value = weight,
-                        onValueChange = { raw ->
-                            val updated = settings.runtime.sourceWeights.toMutableMap()
-                            updated[source] = raw.toDouble()
-                            onSetSourceWeights(updated)
-                        },
-                        valueRange = 0f..1f,
-                    )
-                    Text("Weight: %.2f".format(weight), style = MaterialTheme.typography.bodySmall)
                 }
         }
 
@@ -328,7 +328,29 @@ fun SettingsScreen(
         }
 
         SettingsSection(
-            title = "Storage & caching",
+            title = "Updates",
+            expanded = updatesExpanded,
+            onToggle = { updatesExpanded = !updatesExpanded },
+            contentSpacing = 8.dp,
+        ) {
+            Text(
+                if (changelogLoading) {
+                    "Loading release history..."
+                } else {
+                    "View changelog history for available pre-releases."
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Button(
+                onClick = onOpenChangelog,
+                enabled = !changelogLoading,
+            ) {
+                Text("Open changelog")
+            }
+        }
+
+        SettingsSection(
+            title = "Storage & Caching",
             expanded = storageExpanded,
             onToggle = { storageExpanded = !storageExpanded },
             contentSpacing = 8.dp,
@@ -388,28 +410,6 @@ fun SettingsScreen(
                             Text("Clear full image cache")
                         }
                     }
-                }
-        }
-
-        SettingsSection(
-            title = "Updates",
-            expanded = updatesExpanded,
-            onToggle = { updatesExpanded = !updatesExpanded },
-            contentSpacing = 8.dp,
-        ) {
-                Text(
-                    if (changelogLoading) {
-                        "Loading release history..."
-                    } else {
-                        "View changelog history for available pre-releases."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Button(
-                    onClick = onOpenChangelog,
-                    enabled = !changelogLoading,
-                ) {
-                    Text("Open changelog")
                 }
         }
 

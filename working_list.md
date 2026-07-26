@@ -4,6 +4,21 @@ updated_at: 2026-07-26T06:12:08-04:00
 ---
 # Working List
 
+## Current Task: Reorder Settings Sections
+
+### In Progress
+
+-
+
+### Pending
+
+### Done
+
+- [x] Reorder the Settings sections and apply the requested capitalization.
+  - Evidence: the UI order is Recommendation Profiles, Unified Mode, For You Blacklist, Source Accounts, Updates, and Storage & Caching; optional Developer scenarios remains last.
+- [x] Validate locally without connected-device testing.
+  - Evidence: `:app:compileDebugKotlin` passed.
+
 ## Current Task: Make Settings Sections Collapsible
 
 ### In Progress
