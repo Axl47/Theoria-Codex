@@ -1,15 +1,22 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-26T00:00:00-04:00
+updated_at: 2026-07-26T05:12:54-04:00
 ---
 # Working List
 
-## Phase 3: Temporary multi-source Search UI
+## Feature Closeout: Temporary multi-source Search
+
+- [x] Complete the final verification and docs-only closeout.
+  - Evidence: cherry-picked `ef6b012`, `2539a00`, and `654ff683` in order; the complete diff was independently reviewed against `.docs/exec/temporary-multi-source-search.html` with no product defect found and no production file changed during closeout.
+  - Validation: focused state/ViewModel tests 22/22; focused `SearchCoordinatorTest` 59/59; full `:app:testDebugUnitTest` 409 tests, 0 failures, 0 errors, 3 opt-in skips; `:app:compileDebugAndroidTestKotlin`; `:app:assembleDebug`; working-tree and committed-range `git diff --check`; `npx --yes html-validate .docs/exec/temporary-multi-source-search.html`; and connected `SearchSourceChipDeviceTest` 1/1 on SM-S926U (Android 16).
+
+- [x] Normalize the ten baseline-only ExecPlan HTML findings.
+  - Evidence: compared against baseline `8540503`; normalized the lowercase doctype, self-closing void tags, and invalid `aria-label` uses in `.docs/exec/temporary-multi-source-search.html` only. HTML validation now passes.
 
 - [x] Render source chips directly from `draftSourceScope` with one combined click/long-click accessibility owner.
-  - Evidence: `SearchSourceChipDeviceTest` passed on the connected SM-S926U (Android 16); 1 test, 0 failures. Focused JVM Search coverage passed 71 tests (59 `SearchCoordinatorTest`, 12 `SearchStateContractTest`); Android-test compilation, debug assembly, and `git diff --check` also passed.
+  - Evidence: `SearchSourceChipDeviceTest` passed on the connected SM-S926U (Android 16); 1 test, 0 failures. Focused JVM Search coverage passed 81 tests (59 `SearchCoordinatorTest`, 10 `SearchViewModelTest`, 12 `SearchStateContractTest`); Android-test compilation, debug assembly, whitespace, and HTML validation also passed.
 
-## Current Task: Implement Phases 1 And 2 Of Temporary Multi-Source Search
+## Implementation History: Phases 1 And 2 Of Temporary Multi-Source Search
 
 ### In Progress
 

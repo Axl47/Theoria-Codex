@@ -1,8 +1,8 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ExecPlan: Add Temporary Multi-Source Search</title>
   <style>
     :root {
@@ -159,15 +159,15 @@
   <header>
     <h1>Temporary multi-source Search</h1>
     <p>Let a user start from one Search source, long-press other source chips to build a temporary explicit source set, and run that set through the existing Unified search engine while keeping each chosen source visibly highlighted.</p>
-    <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Phases 1-2 complete</span>
+    <div class="meta">
+      <span class="pill">Status: Complete</span>
       <span class="pill">Owner: Codex</span>
       <span class="pill">Created: 2026-07-26</span>
       <span class="pill">Updated: 2026-07-26</span>
       <span class="pill">Plan: .docs/exec/temporary-multi-source-search.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next action</strong>Render independently highlighted source chips in the later UI phase.</div>
+      <div class="card"><strong>Next action</strong>Feature closed after automated and connected-device verification.</div>
       <div class="card"><strong>Main risk</strong>A temporary search could silently widen to all globally enabled sources during retry, paging, autocomplete, or Viewer continuation.</div>
       <div class="card"><strong>Validation</strong>Focused coordinator/state tests, app unit tests, Android-test compilation, debug assembly, and one device interaction pass.</div>
       <div class="card"><strong>Affected areas</strong>Search contract, coordinator, ViewModel, mode chips, state mapping, and focused Search tests.</div>
@@ -201,9 +201,9 @@
       <h2>Current Status</h2>
       <table>
         <tbody>
-          <tr><th>Status</th><td>Phases 1 and 2 complete; UI chip rendering and integrated device validation remain later plan phases.</td></tr>
-          <tr><th>Next action</th><td>Render independently highlighted source chips without moving source-selection truth into Compose.</td></tr>
-          <tr><th>Implementation state</th><td>Search now freezes temporary source scopes into root/retry/paging execution, uses draft scopes for autocomplete/trending, sanitizes source-owned terms on activation, keeps selected sources independent of global Settings enablement, and excludes temporary runs from durable query/history persistence. Compose, Settings, QueryMode, and repository schemas remain unchanged.</td></tr>
+          <tr><th>Status</th><td>Complete; temporary multi-source Search is implemented and independently verified.</td></tr>
+          <tr><th>Next action</th><td>No further implementation action is required for this feature.</td></tr>
+          <tr><th>Implementation state</th><td>Search freezes temporary source scopes into root/retry/paging execution, uses draft scopes for autocomplete/trending, sanitizes source-owned terms on activation, keeps selected sources independent of global Settings enablement, excludes temporary runs from durable query/history persistence, and renders independent accessible source chips. Compose, Settings, QueryMode, and repository schemas remain unchanged.</td></tr>
           <tr><th>Open product questions</th><td>None required for the first pass. The interaction rules below choose reversible, route-scoped behavior consistent with “temporary.”</td></tr>
         </tbody>
       </table>
@@ -214,12 +214,12 @@
       <p><strong>Single-source mode</strong> means <code>QueryMode.Source(source)</code>; the coordinator calls that source adapter directly and ignores the source’s global Unified toggle. <strong>Global Unified</strong> means <code>QueryMode.Unified</code>; the coordinator asks <code>UnifiedSearchOrchestrator</code> to search the currently enabled and available Settings sources. <strong>Temporary multi-source scope</strong> will mean an explicit set of two or more available sources that borrows the global Unified execution path without changing the global enabled-source set.</p>
       <p><code>SearchViewModel</code> is the navigation-scoped owner. It receives typed actions, schedules search jobs, publishes immutable <code>SearchUiState</code>, and survives ordinary Activity recreation. <code>SearchCoordinator</code> owns query rules and provider execution. This plan keeps the temporary selection in that route/coordinator boundary; it does not put UI-only selection logic in Compose and does not change <code>AppSettings</code>.</p>
 
-      <div class="flow" aria-label="Temporary multi-source data flow">
-        <div><strong>1. Gesture</strong><br />Long-press a different source chip.</div>
-        <div><strong>2. Draft scope</strong><br />ViewModel sends a typed action; coordinator adds the source and sanitizes the query for cross-source use.</div>
-        <div><strong>3. Apply</strong><br />Coordinator freezes the exact source set into the root request.</div>
-        <div><strong>4. Execution</strong><br />Unified orchestrator searches only that set and returns per-source statuses/tokens.</div>
-        <div><strong>5. Continuation</strong><br />Retry, paging, result badges, and Viewer handoff retain the same applied scope.</div>
+      <div class="flow">
+        <div><strong>1. Gesture</strong><br>Long-press a different source chip.</div>
+        <div><strong>2. Draft scope</strong><br>ViewModel sends a typed action; coordinator adds the source and sanitizes the query for cross-source use.</div>
+        <div><strong>3. Apply</strong><br>Coordinator freezes the exact source set into the root request.</div>
+        <div><strong>4. Execution</strong><br>Unified orchestrator searches only that set and returns per-source statuses/tokens.</div>
+        <div><strong>5. Continuation</strong><br>Retry, paging, result badges, and Viewer handoff retain the same applied scope.</div>
       </div>
 
       <table>
@@ -350,7 +350,7 @@
 
     <section id="validation">
       <h2>Validation And Acceptance</h2>
-      <p>Run commands from the repository root: <code>/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex</code>.</p>
+      <p>Run commands from the repository root. This verification used <code>/Users/axel/.synara/worktrees/162d2a62ba8d</code> with <code>ANDROID_SDK_ROOT=/Users/axel/Library/Android/sdk</code>.</p>
       <table>
         <thead><tr><th>Check</th><th>Command or action</th><th>Expected result</th></tr></thead>
         <tbody>
@@ -392,8 +392,8 @@
         <li>[x] 2026-07-26 — Authored and structurally validated this standalone ExecPlan.</li>
         <li>[x] 2026-07-26 — Implemented Phase 1 route-level source-scope contract; focused state/ViewModel tests pass.</li>
         <li>[x] 2026-07-26 — Implemented Phase 2 exact-source coordinator execution, sanitation, continuation freezing, scope-aware identity, availability reconciliation, and temporary persistence isolation; 59 focused coordinator tests and the combined Search regression lane pass.</li>
-        <li>[ ] Implement Phase 3 independently highlighted source chips.</li>
-        <li>[ ] Complete Phase 4 automated and device validation.</li>
+        <li>[x] 2026-07-26 — Implemented Phase 3 independently highlighted source chips with one combined accessibility owner; the focused connected test passed.</li>
+        <li>[x] 2026-07-26 — Completed Phase 4 automated and connected-device validation; all requested product and integrity gates passed.</li>
       </ul>
 
       <h3>Surprises And Discoveries</h3>
@@ -401,6 +401,7 @@
         <li>Observation: <code>RootSearchRequest</code> already freezes enabled sources, weights, previous results, and statuses, so the temporary subset can reuse the existing cancellation-safe Unified execution instead of adding another orchestrator. Evidence: <code>SearchCoordinator.beginRootSearch</code>, <code>executeSearch</code>, and <code>loadNextPage</code>.</li>
         <li>Observation: the current durable <code>Query</code>, query codec, and Recent Search entry cannot represent an explicit source subset. Evidence: <code>QueryMode</code> has only <code>Unified</code> and one <code>Source</code>; <code>RecentSearchEntry</code> stores only <code>Query</code> plus its hash.</li>
         <li>Observation: source-specific terms are deliberately blocked or removed when entering Unified mode. A temporary cross-source search must reuse that rule or another provider could receive a facet it cannot interpret. Evidence: <code>Query.forMode</code> call sites and existing validation messages in <code>SearchCoordinator</code>.</li>
+        <li>Observation: the baseline plan at commit <code>8540503</code> already failed the repository HTML validator on ten documentation-only findings: lowercase doctype, two self-closing meta tags, two invalid <code>aria-label</code> uses, and five self-closing <code>br</code> tags. The closeout normalized those tags and reran <code>html-validate</code> successfully; no production file was changed for this finding.</li>
       </ul>
 
       <h3>Decision Log</h3>
@@ -410,10 +411,11 @@
         <li><strong>Decision:</strong> explicit selected sources bypass global Unified enablement but never adapter availability. <strong>Rationale:</strong> a directly selected source already works outside Unified toggles, and the temporary set must behave like several deliberate direct selections without mutating Settings. <strong>Date/Author:</strong> 2026-07-26 / Codex.</li>
         <li><strong>Decision:</strong> do not persist or record temporary subset searches in the first pass. <strong>Rationale:</strong> existing persistence would replay them inaccurately as all-source Unified or one source. A later durable feature needs a versioned source-scope contract. <strong>Date/Author:</strong> 2026-07-26 / Codex.</li>
         <li><strong>Decision:</strong> use normal taps as deterministic exits and long press as add/remove. <strong>Rationale:</strong> this preserves existing mode selection, makes the feature discoverable through visible highlighting, and prevents users becoming trapped in a pseudo mode. <strong>Date/Author:</strong> 2026-07-26 / Codex.</li>
+        <li><strong>Decision:</strong> normalize pre-existing ExecPlan HTML findings during closeout. <strong>Rationale:</strong> the ten validator findings were unchanged from baseline and belonged to the explicitly permitted docs-only scope; production code remained untouched. <strong>Date/Author:</strong> 2026-07-26 / Codex.</li>
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>Phases 1 and 2 are complete inside the Search route/coordinator boundary. Typed route state expresses global, single, and temporary scopes; draft and applied scopes remain independent; long-press intent stays a ViewModel action; exact selected sources are frozen into root/retry/paging; draft scopes drive autocomplete/trending; source-owned terms are removed before cross-source execution; and temporary runs do not write durable applied queries, recents, or scroll state. No UI, domain, Settings, or repository schema changed. Evidence: the Phase 1 lane passed 22 tests with 0 failures; the Phase 2 coordinator lane passed 59 tests with 0 failures; the combined Search lane passed 81 tests with 0 failures. All commands used <code>ANDROID_SDK_ROOT=/Users/axel/Library/Android/sdk</code> because this checkout has no <code>local.properties</code>. Update this paragraph after the remaining UI and integrated validation phases.</p>
+      <p>The feature is complete inside the Search route/coordinator boundary. Typed route state expresses global, single, and temporary scopes; draft and applied scopes remain independent; normal taps preserve existing QueryMode behavior; long-press intent stays a source-only ViewModel action; exact selected sources are frozen into root/retry/paging; draft scopes drive autocomplete/trending; source-owned terms are removed before cross-source execution; per-source statuses and result badges follow the applied scope; accessible chips expose one combined click/long-click owner; and temporary runs do not write durable applied queries, recents, or scroll state. The final diff review found no product defect and no production file was changed during closeout. Evidence: focused state/ViewModel tests passed 22/22, focused coordinator tests passed 59/59, full <code>:app:testDebugUnitTest</code> passed 409 tests with 0 failures, 0 errors, and 3 opt-in skips, <code>:app:compileDebugAndroidTestKotlin</code> and <code>:app:assembleDebug</code> passed, both working-tree and committed-range <code>git diff --check</code> passed, <code>html-validate</code> passed after the baseline-only markup normalization, and <code>SearchSourceChipDeviceTest</code> passed 1/1 on SM-S926U (Android 16). The connected lane emitted a non-failing <code>androidx.test.services</code> appops warning with no UID; the task still completed successfully.</p>
     </section>
 
     <section id="recovery">
@@ -464,7 +466,7 @@ SearchStateContractTest
     <section id="phase-3-evidence">
       <h2>Phase 3 Evidence</h2>
       <p>Phase 3 owns the Search chip surface only. Each chip derives selected state from the route-level draft source scope. Unified is selected only for global Unified; an explicit temporary scope highlights each selected source independently and leaves Unified unselected. Each chip exposes one checkbox-role combined click/long-click owner, while Unified has no long-click action.</p>
-      <p><code>SearchScreen.kt</code> renders selected state from <code>draftSourceScope</code> and delegates normal tap and source-only long press through one <code>Surface</code> combined-clickable owner. <code>SearchSourceChipDeviceTest</code> passed on SM-S926U (Android 16), 1 test with 0 failures. Focused JVM Search coverage passed 71 tests (59 coordinator and 12 state-contract tests); <code>compileDebugAndroidTestKotlin</code>, <code>assembleDebug</code>, and <code>git diff --check</code> passed.</p>
+      <p><code>SearchScreen.kt</code> renders selected state from <code>draftSourceScope</code> and delegates normal tap and source-only long press through one <code>Surface</code> combined-clickable owner. <code>SearchSourceChipDeviceTest</code> passed on SM-S926U (Android 16), 1 test with 0 failures. Focused JVM Search coverage passed 81 tests (59 coordinator, 10 ViewModel, and 12 state-contract tests); the full app unit lane passed 409 tests with 0 failures, 0 errors, and 3 opt-in skips. <code>compileDebugAndroidTestKotlin</code>, <code>assembleDebug</code>, both <code>git diff --check</code> lanes, and <code>html-validate</code> passed.</p>
     </section>
   </main>
 </body>
