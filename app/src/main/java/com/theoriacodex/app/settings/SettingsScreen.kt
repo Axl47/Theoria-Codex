@@ -43,6 +43,26 @@ import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ScenarioPreset
 import com.theoriacodex.domain.model.SourceKey
 
+enum class SettingsSectionKey {
+    RECOMMENDATION_PROFILES,
+    UNIFIED_MODE,
+    FOR_YOU_BLACKLIST,
+    SOURCE_ACCOUNTS,
+    UPDATES,
+    STORAGE_AND_CACHING,
+    DEVELOPER_SCENARIOS,
+}
+
+data class SettingsSectionExpansionState(
+    val recommendationProfiles: Boolean = true,
+    val unifiedMode: Boolean = true,
+    val forYouBlacklist: Boolean = true,
+    val sourceAccounts: Boolean = true,
+    val updates: Boolean = true,
+    val storageAndCaching: Boolean = true,
+    val developerScenarios: Boolean = true,
+)
+
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
@@ -86,17 +106,12 @@ fun SettingsScreen(
     onClearFullImageCache: () -> Unit,
     changelogLoading: Boolean,
     onOpenChangelog: () -> Unit,
+    sectionExpansion: SettingsSectionExpansionState,
+    onSectionExpansionChanged: (SettingsSectionKey, Boolean) -> Unit,
 ) {
     var showClearCacheOptions by rememberSaveable { mutableStateOf(false) }
     var newProfileName by remember { mutableStateOf("") }
     var profileDeleteTarget by remember { mutableStateOf<RecommendationProfile?>(null) }
-    var profilesExpanded by rememberSaveable { mutableStateOf(true) }
-    var blacklistExpanded by rememberSaveable { mutableStateOf(true) }
-    var unifiedModeExpanded by rememberSaveable { mutableStateOf(true) }
-    var sourceAccountsExpanded by rememberSaveable { mutableStateOf(true) }
-    var storageExpanded by rememberSaveable { mutableStateOf(true) }
-    var updatesExpanded by rememberSaveable { mutableStateOf(true) }
-    var developerScenariosExpanded by rememberSaveable { mutableStateOf(true) }
 
     Column(
         modifier = Modifier
@@ -115,8 +130,13 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "Recommendation Profiles",
-            expanded = profilesExpanded,
-            onToggle = { profilesExpanded = !profilesExpanded },
+            expanded = sectionExpansion.recommendationProfiles,
+            onToggle = {
+                onSectionExpansionChanged(
+                    SettingsSectionKey.RECOMMENDATION_PROFILES,
+                    !sectionExpansion.recommendationProfiles,
+                )
+            },
         ) {
                 recommendationProfiles.forEach { profile ->
                     Row(
@@ -172,8 +192,13 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "Unified Mode",
-            expanded = unifiedModeExpanded,
-            onToggle = { unifiedModeExpanded = !unifiedModeExpanded },
+            expanded = sectionExpansion.unifiedMode,
+            onToggle = {
+                onSectionExpansionChanged(
+                    SettingsSectionKey.UNIFIED_MODE,
+                    !sectionExpansion.unifiedMode,
+                )
+            },
         ) {
             availableSources.forEach { source ->
                 val isEnabled = source in settings.runtime.enabledSources
@@ -214,8 +239,13 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "For You Blacklist",
-            expanded = blacklistExpanded,
-            onToggle = { blacklistExpanded = !blacklistExpanded },
+            expanded = sectionExpansion.forYouBlacklist,
+            onToggle = {
+                onSectionExpansionChanged(
+                    SettingsSectionKey.FOR_YOU_BLACKLIST,
+                    !sectionExpansion.forYouBlacklist,
+                )
+            },
         ) {
                 Text(
                     text = "Hidden tag sets for $activeProfileName",
@@ -250,8 +280,13 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "Source Accounts",
-            expanded = sourceAccountsExpanded,
-            onToggle = { sourceAccountsExpanded = !sourceAccountsExpanded },
+            expanded = sectionExpansion.sourceAccounts,
+            onToggle = {
+                onSectionExpansionChanged(
+                    SettingsSectionKey.SOURCE_ACCOUNTS,
+                    !sectionExpansion.sourceAccounts,
+                )
+            },
         ) {
 
                 Text("Pixiv", style = MaterialTheme.typography.titleSmall)
@@ -329,8 +364,13 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "Updates",
-            expanded = updatesExpanded,
-            onToggle = { updatesExpanded = !updatesExpanded },
+            expanded = sectionExpansion.updates,
+            onToggle = {
+                onSectionExpansionChanged(
+                    SettingsSectionKey.UPDATES,
+                    !sectionExpansion.updates,
+                )
+            },
             contentSpacing = 8.dp,
         ) {
             Text(
@@ -351,8 +391,13 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "Storage & Caching",
-            expanded = storageExpanded,
-            onToggle = { storageExpanded = !storageExpanded },
+            expanded = sectionExpansion.storageAndCaching,
+            onToggle = {
+                onSectionExpansionChanged(
+                    SettingsSectionKey.STORAGE_AND_CACHING,
+                    !sectionExpansion.storageAndCaching,
+                )
+            },
             contentSpacing = 8.dp,
         ) {
                 Row(
@@ -416,8 +461,13 @@ fun SettingsScreen(
         if (showDeveloperScenarios) {
             SettingsSection(
                 title = "Developer scenarios",
-                expanded = developerScenariosExpanded,
-                onToggle = { developerScenariosExpanded = !developerScenariosExpanded },
+                expanded = sectionExpansion.developerScenarios,
+                onToggle = {
+                    onSectionExpansionChanged(
+                        SettingsSectionKey.DEVELOPER_SCENARIOS,
+                        !sectionExpansion.developerScenarios,
+                    )
+                },
                 contentSpacing = 8.dp,
             ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

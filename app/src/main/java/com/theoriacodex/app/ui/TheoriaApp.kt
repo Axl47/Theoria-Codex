@@ -116,6 +116,8 @@ import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.source.ExternalCreatorDeepLink
 import com.theoriacodex.app.source.ExternalPostDeepLink
+import com.theoriacodex.app.settings.SettingsSectionExpansionState
+import com.theoriacodex.app.settings.SettingsSectionKey
 import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.creatorBrowsingSources
@@ -449,6 +451,22 @@ internal fun TheoriaAppContent(
     var showSaveSheet by remember { mutableStateOf(false) }
     var pendingSavePost by remember { mutableStateOf<Post?>(null) }
     var homeTabRoute by rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
+    var settingsProfilesExpanded by rememberSaveable { mutableStateOf(true) }
+    var settingsUnifiedModeExpanded by rememberSaveable { mutableStateOf(true) }
+    var settingsForYouBlacklistExpanded by rememberSaveable { mutableStateOf(true) }
+    var settingsSourceAccountsExpanded by rememberSaveable { mutableStateOf(true) }
+    var settingsUpdatesExpanded by rememberSaveable { mutableStateOf(true) }
+    var settingsStorageExpanded by rememberSaveable { mutableStateOf(true) }
+    var settingsDeveloperScenariosExpanded by rememberSaveable { mutableStateOf(true) }
+    val settingsSectionExpansion = SettingsSectionExpansionState(
+        recommendationProfiles = settingsProfilesExpanded,
+        unifiedMode = settingsUnifiedModeExpanded,
+        forYouBlacklist = settingsForYouBlacklistExpanded,
+        sourceAccounts = settingsSourceAccountsExpanded,
+        updates = settingsUpdatesExpanded,
+        storageAndCaching = settingsStorageExpanded,
+        developerScenarios = settingsDeveloperScenariosExpanded,
+    )
     var pendingTopLevelRoute by remember { mutableStateOf<String?>(null) }
     var homeTabRestoreComplete by remember { mutableStateOf(false) }
     var navReady by remember(appContainer) { mutableStateOf(appShellState.appReady) }
@@ -1981,6 +1999,32 @@ internal fun TheoriaAppContent(
                                         availableSources = featureDependencies.search.availableSources,
                                         cacheSnapshot = cacheSnapshot,
                                         showDeveloperScenarios = false,
+                                        sectionExpansion = settingsSectionExpansion,
+                                        onSectionExpansionChanged = { section, expanded ->
+                                            when (section) {
+                                                SettingsSectionKey.RECOMMENDATION_PROFILES -> {
+                                                    settingsProfilesExpanded = expanded
+                                                }
+                                                SettingsSectionKey.UNIFIED_MODE -> {
+                                                    settingsUnifiedModeExpanded = expanded
+                                                }
+                                                SettingsSectionKey.FOR_YOU_BLACKLIST -> {
+                                                    settingsForYouBlacklistExpanded = expanded
+                                                }
+                                                SettingsSectionKey.SOURCE_ACCOUNTS -> {
+                                                    settingsSourceAccountsExpanded = expanded
+                                                }
+                                                SettingsSectionKey.UPDATES -> {
+                                                    settingsUpdatesExpanded = expanded
+                                                }
+                                                SettingsSectionKey.STORAGE_AND_CACHING -> {
+                                                    settingsStorageExpanded = expanded
+                                                }
+                                                SettingsSectionKey.DEVELOPER_SCENARIOS -> {
+                                                    settingsDeveloperScenariosExpanded = expanded
+                                                }
+                                            }
+                                        },
                                         pixivStatusLabel = pixivStatusLabel,
                                         pixivConnectEnabled = !pixivConnected &&
                                             credentialRecoveryState == CredentialStoreRecoveryState.Ready &&

@@ -4,6 +4,21 @@ updated_at: 2026-07-26T06:12:08-04:00
 ---
 # Working List
 
+## Current Task: Preserve Settings Collapse State
+
+### In Progress
+
+-
+
+### Pending
+
+### Done
+
+- [x] Lift Settings section expansion state to the app-shell owner.
+  - Evidence: `TheoriaAppContent` owns seven `rememberSaveable` flags and passes the state/update boundary into `SettingsScreen`, so top-level page recreation no longer resets sections to expanded.
+- [x] Validate locally without connected-device testing.
+  - Evidence: `:app:compileDebugKotlin`, `:app:testDebugUnitTest`, and `git diff --check` passed.
+
 ## Current Task: Reorder Settings Sections
 
 ### In Progress

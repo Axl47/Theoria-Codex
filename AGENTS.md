@@ -40,7 +40,7 @@ The Search route applies persisted scroll position once when the route is restor
 
 ## Settings Sections
 
-Settings cards use the shared `SettingsSection` composable with independently persisted expanded state. New settings groups should use the same header and right-side chevron pattern rather than introducing another section-specific collapse control.
+Settings cards use the shared `SettingsSection` composable with independently persisted expanded state owned by `TheoriaAppContent`, so leaving and returning to the top-level Settings page does not reset the user's choices. New settings groups should use the same header and right-side chevron pattern rather than introducing another section-specific collapse control.
 
 ## Releases
 
