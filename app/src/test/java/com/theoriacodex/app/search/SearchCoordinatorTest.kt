@@ -31,6 +31,7 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
+import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.stubs.StubAdapterRegistry
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
@@ -421,6 +422,170 @@ class SearchCoordinatorTest {
                 status.source == SourceKey.GELBOORU && status.state == SourceRunState.EXCLUDED
             }
         )
+    }
+
+    @Test
+    fun `temporary search executes selected sources without settings or durable history`() = runTest {
+        val pixivAdapter = RecordingAdapter(SourceKey.PIXIV)
+        val gelbooruAdapter = RecordingAdapter(SourceKey.GELBOORU)
+        val hitomiAdapter = RecordingAdapter(SourceKey.HITOMI)
+        val settingsRepository = InMemorySettingsRepository()
+        settingsRepository.setEnabledSources(setOf(SourceKey.PIXIV, SourceKey.HITOMI))
+        val queryRepository = InMemoryQueryRepository()
+        val recentsRepository = InMemoryRecentsRepository()
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(
+                mapOf(
+                    SourceKey.PIXIV to pixivAdapter,
+                    SourceKey.GELBOORU to gelbooruAdapter,
+                    SourceKey.HITOMI to hitomiAdapter,
+                ),
+            ),
+            queryRepository = queryRepository,
+            settingsRepository = settingsRepository,
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+            recentsRepository = recentsRepository,
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
+        coordinator.addIncludeTag("landscape")
+        coordinator.addIncludeTerm(
+            SearchTerm("portrait artist", SearchFacet.ARTIST, "artist"),
+        )
+        assertTrue(coordinator.toggleTemporarySource(SourceKey.GELBOORU))
+
+        assertEquals(
+            SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)),
+            coordinator.draftSourceScopeSnapshot,
+        )
+        assertEquals(listOf("landscape"), coordinator.draftQuery.includeTags)
+        assertEquals(QueryMode.Unified, coordinator.draftQuery.mode)
+
+        coordinator.applyDraft()
+
+        assertEquals(listOf("landscape"), pixivAdapter.lastSearchQuery?.includeTags)
+        assertEquals(listOf("landscape"), gelbooruAdapter.lastSearchQuery?.includeTags)
+        assertNull(hitomiAdapter.lastSearchQuery)
+        assertEquals(
+            setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
+            coordinator.statuses.mapTo(mutableSetOf()) { status -> status.source },
+        )
+        assertEquals(SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)), coordinator.appliedSourceScopeSnapshot)
+        assertTrue(coordinator.appliedQueryHash.contains("temporary-sources:"))
+        assertEquals(setOf(SourceKey.PIXIV, SourceKey.HITOMI), settingsRepository.observeSettings().first().runtime.enabledSources)
+        assertTrue(recentsRepository.observeSearches().first().isEmpty())
+        assertNull(queryRepository.observeAppliedQuery("unified").first())
+    }
+
+    @Test
+    fun `temporary root retry and paging retain the exact selected source set`() = runTest {
+        val pixivAdapter = RecordingAdapter(
+            sourceKey = SourceKey.PIXIV,
+            pagesByToken = mapOf(
+                null to Page(listOf(samplePost(SourceKey.PIXIV, "pixiv-root")), "next"),
+                "next" to Page(listOf(samplePost(SourceKey.PIXIV, "pixiv-page")), null),
+            ),
+        )
+        val gelbooruAdapter = RecordingAdapter(
+            sourceKey = SourceKey.GELBOORU,
+            pagesByToken = mapOf(
+                null to Page(listOf(samplePost(SourceKey.GELBOORU, "gelbooru-root")), "next"),
+                "next" to Page(listOf(samplePost(SourceKey.GELBOORU, "gelbooru-page")), null),
+            ),
+        )
+        val unrelatedAdapter = RecordingAdapter(SourceKey.HITOMI)
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(
+                mapOf(
+                    SourceKey.PIXIV to pixivAdapter,
+                    SourceKey.GELBOORU to gelbooruAdapter,
+                    SourceKey.HITOMI to unrelatedAdapter,
+                ),
+            ),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
+        coordinator.toggleTemporarySource(SourceKey.GELBOORU)
+        coordinator.applyDraft()
+        coordinator.loadNextPage()
+        coordinator.retry()
+
+        assertEquals(listOf(null, "next", null), pixivAdapter.searchPageTokens)
+        assertEquals(listOf(null, "next", null), gelbooruAdapter.searchPageTokens)
+        assertTrue(unrelatedAdapter.searchPageTokens.isEmpty())
+        assertEquals(
+            setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
+            coordinator.statuses.mapTo(mutableSetOf()) { status -> status.source },
+        )
+    }
+
+    @Test
+    fun `temporary autocomplete follows the draft explicit source set`() = runTest {
+        val pixivAdapter = RecordingAdapter(SourceKey.PIXIV)
+        val gelbooruAdapter = RecordingAdapter(SourceKey.GELBOORU)
+        val unrelatedAdapter = RecordingAdapter(SourceKey.HITOMI)
+        val coordinator = SearchCoordinator(
+            registry = CompatibilityRegistry(
+                mapOf(
+                    SourceKey.PIXIV to pixivAdapter,
+                    SourceKey.GELBOORU to gelbooruAdapter,
+                    SourceKey.HITOMI to unrelatedAdapter,
+                ),
+            ),
+        )
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
+        coordinator.toggleTemporarySource(SourceKey.GELBOORU)
+
+        coordinator.refreshAutocompleteSuggestions("land")
+
+        assertEquals("land", pixivAdapter.lastAutocompletePrefix)
+        assertEquals("land", gelbooruAdapter.lastAutocompletePrefix)
+        assertNull(unrelatedAdapter.lastAutocompletePrefix)
+
+        coordinator.loadTrendingTags(forceRefresh = true)
+
+        assertEquals(1, pixivAdapter.trendingCallCount)
+        assertEquals(1, gelbooruAdapter.trendingCallCount)
+        assertEquals(0, unrelatedAdapter.trendingCallCount)
+    }
+
+    @Test
+    fun `removing a temporary source collapses to one source and preserves portable terms`() = runTest {
+        val coordinator = coordinator()
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
+        coordinator.addIncludeTag("portable")
+        coordinator.toggleTemporarySource(SourceKey.GELBOORU)
+
+        assertTrue(coordinator.toggleTemporarySource(SourceKey.GELBOORU))
+
+        assertEquals(SearchSourceScope.Single(SourceKey.PIXIV), coordinator.draftSourceScopeSnapshot)
+        assertEquals(QueryMode.Source(SourceKey.PIXIV), coordinator.draftQuery.mode)
+        assertEquals(listOf("portable"), coordinator.draftQuery.includeTags)
+    }
+
+    @Test
+    fun `unavailable source is removed from applied temporary scope and collapses safely`() = runTest {
+        val registry = MutableCompatibilityRegistry(
+            mapOf(
+                SourceKey.PIXIV to RecordingAdapter(SourceKey.PIXIV),
+                SourceKey.GELBOORU to RecordingAdapter(SourceKey.GELBOORU),
+            ),
+        )
+        val coordinator = SearchCoordinator(registry = registry)
+        coordinator.initialize()
+        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
+        coordinator.toggleTemporarySource(SourceKey.GELBOORU)
+        coordinator.applyDraft()
+
+        registry.remove(SourceKey.GELBOORU)
+        assertTrue(coordinator.onAvailableSourcesChanged())
+
+        assertEquals(SearchSourceScope.Single(SourceKey.PIXIV), coordinator.draftSourceScopeSnapshot)
+        assertEquals(SearchSourceScope.Single(SourceKey.PIXIV), coordinator.appliedSourceScopeSnapshot)
+        assertEquals(QueryMode.Source(SourceKey.PIXIV), coordinator.appliedQuery.mode)
+        assertFalse(coordinator.hasPendingChanges)
     }
 
     @Test
@@ -1656,6 +1821,24 @@ private class CompatibilityRegistry(
     override fun unifiedOrchestrator(): UnifiedSearchOrchestrator = orchestrator
 }
 
+private class MutableCompatibilityRegistry(
+    initialAdapters: Map<SourceKey, SourceAdapter>,
+) : SourceAdapterRegistry {
+    private var adapters: Map<SourceKey, SourceAdapter> = initialAdapters
+
+    fun remove(source: SourceKey) {
+        adapters = adapters - source
+    }
+
+    override fun availableSources(): Set<SourceKey> = adapters.keys
+
+    override fun adapterFor(sourceKey: SourceKey): SourceAdapter? = adapters[sourceKey]
+
+    override fun unifiedOrchestrator(): UnifiedSearchOrchestrator {
+        return UnifiedSearchOrchestrator(adapters)
+    }
+}
+
 private class GenerationControlledAdapter(
     override val sourceKey: SourceKey,
 ) : SourceAdapter {
@@ -1731,10 +1914,13 @@ private class RecordingAdapter(
     private val autocompleteByPrefix: Map<String, List<String>> = emptyMap(),
     private val autocompleteTagsByPrefix: Map<String, List<TagSuggestion>> = emptyMap(),
     private val tagCountsByName: Map<String, Int> = emptyMap(),
+    private val pagesByToken: Map<String?, Page<Post>> = emptyMap(),
 ) : SourceAdapter, TagCountLookupSourceAdapter {
     var lastSearchQuery: Query? = null
     var lastAutocompletePrefix: String? = null
     var batchTagLookupCount: Int = 0
+    var trendingCallCount: Int = 0
+    val searchPageTokens = mutableListOf<String?>()
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
         supportsSortNewest = true,
@@ -1749,10 +1935,14 @@ private class RecordingAdapter(
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> {
         lastSearchQuery = query
-        return Page(items = emptyList(), nextPageToken = null)
+        searchPageTokens += pageToken
+        return pagesByToken[pageToken] ?: Page(items = emptyList(), nextPageToken = null)
     }
 
-    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
+    override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
+        trendingCallCount += 1
+        return emptyList()
+    }
 
     override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
         lastAutocompletePrefix = prefix

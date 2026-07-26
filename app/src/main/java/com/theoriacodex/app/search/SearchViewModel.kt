@@ -445,6 +445,11 @@ internal class SearchViewModel(
                 )
             },
         )
+        mutableState.value = mutableState.value.copy(
+            query = mutableState.value.query.copy(
+                appliedQueryHash = snapshot.appliedQueryHash,
+            ),
+        )
         return true
     }
 

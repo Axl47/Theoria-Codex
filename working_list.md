@@ -4,15 +4,18 @@ updated_at: 2026-07-26T00:00:00-04:00
 ---
 # Working List
 
-## Current Task: Plan Temporary Multi-Source Search
+## Current Task: Implement Phases 1 And 2 Of Temporary Multi-Source Search
 
 ### In Progress
 
 ### Pending
 
-- [ ] Phase 2: Route the frozen temporary source set through exact Unified execution
 
 ### Done
+
+- [x] Phase 2: Route the frozen temporary source set through exact Unified execution
+  - Evidence: root/retry/paging use the applied scope captured in `RootSearchRequest`; autocomplete/trending use the draft explicit scope; selected sources bypass global enablement without Settings mutation; source-owned terms are sanitized; unavailable sources collapse safely; temporary query/history/scroll persistence is skipped; scope-aware execution identity is preserved through Viewer/hash state.
+  - Validation: `ANDROID_SDK_ROOT=/Users/axel/Library/Android/sdk ./gradlew :app:testDebugUnitTest --tests '*SearchCoordinatorTest'` — 59 tests, 0 failures. Combined focused Search lane — 81 tests, 0 failures.
 
 - [x] Trace Search mode selection, route state, coordinator execution, paging, restoration, and persistence boundaries
   - Evidence: `ModeRow` currently emits only `SelectMode`; `SearchCoordinator` owns both single-source and Unified execution, while `RootSearchRequest` already freezes the enabled source set for root search and paging.

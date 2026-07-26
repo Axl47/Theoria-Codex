@@ -160,14 +160,14 @@
     <h1>Temporary multi-source Search</h1>
     <p>Let a user start from one Search source, long-press other source chips to build a temporary explicit source set, and run that set through the existing Unified search engine while keeping each chosen source visibly highlighted.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: In progress</span>
+      <span class="pill">Status: Phases 1-2 complete</span>
       <span class="pill">Owner: Codex</span>
       <span class="pill">Created: 2026-07-26</span>
       <span class="pill">Updated: 2026-07-26</span>
       <span class="pill">Plan: .docs/exec/temporary-multi-source-search.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next action</strong>Implement the route/coordinator selection contract before changing the chips.</div>
+      <div class="card"><strong>Next action</strong>Render independently highlighted source chips in the later UI phase.</div>
       <div class="card"><strong>Main risk</strong>A temporary search could silently widen to all globally enabled sources during retry, paging, autocomplete, or Viewer continuation.</div>
       <div class="card"><strong>Validation</strong>Focused coordinator/state tests, app unit tests, Android-test compilation, debug assembly, and one device interaction pass.</div>
       <div class="card"><strong>Affected areas</strong>Search contract, coordinator, ViewModel, mode chips, state mapping, and focused Search tests.</div>
@@ -201,9 +201,9 @@
       <h2>Current Status</h2>
       <table>
         <tbody>
-          <tr><th>Status</th><td>Phase 1 complete; Phase 2 is the next bounded implementation slice.</td></tr>
-          <tr><th>Next action</th><td>Route the frozen temporary source set through the existing Unified engine and continuation paths.</td></tr>
-          <tr><th>Implementation state</th><td>Phase 1 now exposes separate draft/applied route scopes, typed long-press intent, canonical source selection, and selection-aware pending state. Compose, Settings, QueryMode, and repositories remain unchanged.</td></tr>
+          <tr><th>Status</th><td>Phases 1 and 2 complete; UI chip rendering and integrated device validation remain later plan phases.</td></tr>
+          <tr><th>Next action</th><td>Render independently highlighted source chips without moving source-selection truth into Compose.</td></tr>
+          <tr><th>Implementation state</th><td>Search now freezes temporary source scopes into root/retry/paging execution, uses draft scopes for autocomplete/trending, sanitizes source-owned terms on activation, keeps selected sources independent of global Settings enablement, and excludes temporary runs from durable query/history persistence. Compose, Settings, QueryMode, and repository schemas remain unchanged.</td></tr>
           <tr><th>Open product questions</th><td>None required for the first pass. The interaction rules below choose reversible, route-scoped behavior consistent with “temporary.”</td></tr>
         </tbody>
       </table>
@@ -391,7 +391,7 @@
         <li>[x] 2026-07-26 — Defined interaction, sanitation, exact-source continuation, source-loss, persistence, accessibility, and validation behavior.</li>
         <li>[x] 2026-07-26 — Authored and structurally validated this standalone ExecPlan.</li>
         <li>[x] 2026-07-26 — Implemented Phase 1 route-level source-scope contract; focused state/ViewModel tests pass.</li>
-        <li>[ ] Implement Phase 2 exact-source coordinator execution.</li>
+        <li>[x] 2026-07-26 — Implemented Phase 2 exact-source coordinator execution, sanitation, continuation freezing, scope-aware identity, availability reconciliation, and temporary persistence isolation; 59 focused coordinator tests and the combined Search regression lane pass.</li>
         <li>[ ] Implement Phase 3 independently highlighted source chips.</li>
         <li>[ ] Complete Phase 4 automated and device validation.</li>
       </ul>
@@ -413,7 +413,7 @@
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>The planning phase and Phase 1 contract slice are complete. Phase 1 is intentionally contained inside Search: typed route state expresses the source set, draft and applied scopes are independent, long-press intent remains a ViewModel action, and no UI, domain, Settings, or repository schema changed. Phase 1 evidence: <code>ANDROID_SDK_ROOT=/Users/axel/Library/Android/sdk ./gradlew :app:testDebugUnitTest --tests '*SearchStateContractTest' --tests '*SearchViewModelTest'</code> passed with 22 tests and 0 failures. Update this paragraph after each remaining phase with actual behavior and evidence.</p>
+      <p>Phases 1 and 2 are complete inside the Search route/coordinator boundary. Typed route state expresses global, single, and temporary scopes; draft and applied scopes remain independent; long-press intent stays a ViewModel action; exact selected sources are frozen into root/retry/paging; draft scopes drive autocomplete/trending; source-owned terms are removed before cross-source execution; and temporary runs do not write durable applied queries, recents, or scroll state. No UI, domain, Settings, or repository schema changed. Evidence: the Phase 1 lane passed 22 tests with 0 failures; the Phase 2 coordinator lane passed 59 tests with 0 failures; the combined Search lane passed 81 tests with 0 failures. All commands used <code>ANDROID_SDK_ROOT=/Users/axel/Library/Android/sdk</code> because this checkout has no <code>local.properties</code>. Update this paragraph after the remaining UI and integrated validation phases.</p>
     </section>
 
     <section id="recovery">

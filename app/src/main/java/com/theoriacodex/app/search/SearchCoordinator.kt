@@ -155,6 +155,9 @@ class SearchCoordinator(
     val isTemporarySourceScope: Boolean
         get() = draftSourceScope is SearchSourceScope.Temporary
 
+    val isAppliedTemporarySourceScope: Boolean
+        get() = appliedSourceScope is SearchSourceScope.Temporary
+
     val draftSourceScopeSnapshot: SearchSourceScope
         get() = draftSourceScope
 
@@ -165,13 +168,13 @@ class SearchCoordinator(
         get() = hasExecutedSearch
 
     val enabledSourceCount: Int
-        get() = effectiveEnabledSources().size
+        get() = effectiveEnabledSources(draftSourceScope).size
 
     val isInitialized: Boolean
         get() = initialized
 
     val appliedQueryHash: String
-        get() = QueryHash.from(appliedQuery)
+        get() = executionKey(appliedQuery, appliedSourceScope)
 
     fun tagVideoCount(source: SourceKey, tag: String): Int? {
         val normalized = tag.trim().lowercase()
@@ -311,10 +314,12 @@ class SearchCoordinator(
 
         if (!isModeAvailable(draftQuery.mode)) {
             draftQuery = defaultQuery(QueryMode.Unified)
+            draftSourceScope = SearchSourceScope.GlobalUnified
             resetUnsupportedSearchScope()
         }
         if (!isModeAvailable(appliedQuery.mode)) {
             appliedQuery = defaultQuery(QueryMode.Unified)
+            appliedSourceScope = SearchSourceScope.GlobalUnified
         }
 
         return hasExecutedSearch && previousRuntime != settings.runtime
@@ -333,11 +338,28 @@ class SearchCoordinator(
 
         if (!isModeAvailable(draftQuery.mode)) {
             draftQuery = defaultQuery(QueryMode.Unified)
+            draftSourceScope = SearchSourceScope.GlobalUnified
             resetUnsupportedSearchScope()
             modeChanged = true
         }
         if (!isModeAvailable(appliedQuery.mode)) {
             appliedQuery = defaultQuery(QueryMode.Unified)
+            appliedSourceScope = SearchSourceScope.GlobalUnified
+            modeChanged = true
+        }
+
+        val reconciledDraftScope = reconcileSourceScope(draftSourceScope, currentSources)
+        if (reconciledDraftScope != draftSourceScope) {
+            draftSourceScope = reconciledDraftScope
+            draftQuery = draftQuery.forMode(reconciledDraftScope.queryMode()).query
+            resetUnsupportedSearchScope()
+            clearTagInputUiState()
+            modeChanged = true
+        }
+        val reconciledAppliedScope = reconcileSourceScope(appliedSourceScope, currentSources)
+        if (reconciledAppliedScope != appliedSourceScope) {
+            appliedSourceScope = reconciledAppliedScope
+            appliedQuery = appliedQuery.forMode(reconciledAppliedScope.queryMode()).query
             modeChanged = true
         }
 
@@ -1032,12 +1054,17 @@ class SearchCoordinator(
     }
 
     suspend fun applyDraft() {
-        val sanitized = draftQuery.forMode(draftQuery.mode)
-        val request = beginRootSearch(sanitized.query)
+        val sourceScope = draftSourceScope
+        val sanitized = draftQuery.forMode(sourceScope.queryMode())
+        val request = beginRootSearch(sanitized.query, sourceScope)
         publishIfCurrent(request) {
             draftQuery = request.query
             appliedQuery = request.query
-            appliedByMode[modeKey(request.query.mode)] = request.query
+            draftSourceScope = request.sourceScope
+            appliedSourceScope = request.sourceScope
+            if (request.sourceScope !is SearchSourceScope.Temporary) {
+                appliedByMode[modeKey(request.query.mode)] = request.query
+            }
             if (sanitized.removedSourceOwnedTerms) {
                 tagInputValidationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
             }
@@ -1061,7 +1088,7 @@ class SearchCoordinator(
 
     suspend fun retry() {
         runRootSearch(
-            request = beginRootSearch(appliedQuery),
+            request = beginRootSearch(appliedQuery, appliedSourceScope),
             shouldPersistAppliedQuery = false,
         )
     }
@@ -1071,7 +1098,7 @@ class SearchCoordinator(
         if (hasPendingChanges) return
         if (results.isNotEmpty()) return
         runRootSearch(
-            request = beginRootSearch(appliedQuery),
+            request = beginRootSearch(appliedQuery, appliedSourceScope),
             shouldPersistAppliedQuery = false,
         )
     }
@@ -1083,15 +1110,7 @@ class SearchCoordinator(
             when (val mode = request.query.mode) {
                 QueryMode.Unified -> {
                     val enabledSources = request.enabledSources
-                    val disabledStatuses = request.availableSources
-                        .filterNot { it in enabledSources }
-                        .map { source ->
-                            SourceRunStatus(
-                                source = source,
-                                state = SourceRunState.EXCLUDED,
-                                errorMessage = "Disabled in settings",
-                            )
-                    }
+                    val disabledStatuses = excludedStatuses(request)
                     if (enabledSources.isEmpty()) {
                         publishIfCurrent(request) {
                             canLoadMore = false
@@ -1174,6 +1193,7 @@ class SearchCoordinator(
         offsetPx: Int,
         queryHash: String = appliedQueryHash,
     ) {
+        if (isAppliedTemporarySourceScope) return
         val state = SearchScrollState(
             firstVisibleItemIndex = index,
             firstVisibleItemOffsetPx = offsetPx,
@@ -1189,6 +1209,7 @@ class SearchCoordinator(
     }
 
     suspend fun restoreSearchScrollState(): SearchScrollState? {
+        if (isAppliedTemporarySourceScope) return null
         val hash = appliedQueryHash
         val restored = uiRestoreRepository.getSearchScrollState(hash)
             ?: queryRepository.getScrollOffset(hash)?.let { offset ->
@@ -1273,17 +1294,21 @@ class SearchCoordinator(
         return record.reason == SourceFailureReason.RATE_LIMITED && now < record.backoffUntilMs
     }
 
-    private suspend fun beginRootSearch(query: Query): RootSearchRequest {
+    private suspend fun beginRootSearch(
+        query: Query,
+        sourceScope: SearchSourceScope = SearchSourceScope.fromQuery(query),
+    ): RootSearchRequest {
         val context = currentCoroutineContext()
         context.ensureActive()
         val ownerJob = context[Job]
         val start = synchronized(searchGenerationLock) {
             nextSearchGeneration += 1L
-            val enabledSources = effectiveEnabledSources()
+            val enabledSources = effectiveEnabledSources(sourceScope)
             val request = RootSearchRequest(
                 generation = nextSearchGeneration,
                 query = query,
-                queryHash = QueryHash.from(query),
+                queryHash = executionKey(query, sourceScope),
+                sourceScope = sourceScope,
                 enabledSources = enabledSources,
                 availableSources = availableSources,
                 weights = effectiveWeights(enabledSources),
@@ -1324,6 +1349,7 @@ class SearchCoordinator(
     }
 
     private suspend fun persistAppliedQuery(request: RootSearchRequest) {
+        if (request.sourceScope is SearchSourceScope.Temporary) return
         appliedPersistenceMutex.withLock {
             ensureCurrent(request)
             queryRepository.upsertAppliedQuery(modeKey(request.query.mode), request.query)
@@ -1430,15 +1456,7 @@ class SearchCoordinator(
             when (val mode = request.query.mode) {
                 QueryMode.Unified -> {
                     val enabledSources = request.enabledSources
-                    val disabledStatuses = request.availableSources
-                        .filterNot { it in enabledSources }
-                        .map { source ->
-                            SourceRunStatus(
-                                source = source,
-                                state = SourceRunState.EXCLUDED,
-                                errorMessage = "Disabled in settings",
-                            )
-                        }
+                    val disabledStatuses = excludedStatuses(request)
                     if (enabledSources.isEmpty()) {
                         publishIfCurrent(request) {
                             results = emptyList()
@@ -1723,8 +1741,52 @@ class SearchCoordinator(
         }
     }
 
-    private fun effectiveEnabledSources(): Set<SourceKey> {
-        return runtimeSettings.runtime.enabledSources.intersect(registry.availableSources())
+    private fun effectiveEnabledSources(
+        sourceScope: SearchSourceScope = draftSourceScope,
+    ): Set<SourceKey> {
+        val available = registry.availableSources()
+        return when (sourceScope) {
+            SearchSourceScope.GlobalUnified -> runtimeSettings.runtime.enabledSources.intersect(available)
+            is SearchSourceScope.Single -> setOf(sourceScope.source).intersect(available)
+            is SearchSourceScope.Temporary -> sourceScope.sources.toSet().intersect(available)
+        }
+    }
+
+    private fun reconcileSourceScope(
+        sourceScope: SearchSourceScope,
+        availableSources: Set<SourceKey>,
+    ): SearchSourceScope {
+        return when (sourceScope) {
+            SearchSourceScope.GlobalUnified -> sourceScope
+            is SearchSourceScope.Single -> SearchSourceScope.fromSources(
+                listOf(sourceScope.source).filter { source -> source in availableSources },
+            )
+            is SearchSourceScope.Temporary -> SearchSourceScope.fromSources(
+                sourceScope.sources.filter { source -> source in availableSources },
+            )
+        }
+    }
+
+    private fun excludedStatuses(request: RootSearchRequest): List<SourceRunStatus> {
+        if (request.sourceScope != SearchSourceScope.GlobalUnified) return emptyList()
+        return request.availableSources
+            .filterNot { source -> source in request.enabledSources }
+            .map { source ->
+                SourceRunStatus(
+                    source = source,
+                    state = SourceRunState.EXCLUDED,
+                    errorMessage = "Disabled in settings",
+                )
+            }
+    }
+
+    private fun executionKey(
+        query: Query,
+        sourceScope: SearchSourceScope,
+    ): String {
+        val queryHash = QueryHash.from(query)
+        val temporary = sourceScope as? SearchSourceScope.Temporary ?: return queryHash
+        return "$queryHash|temporary-sources:${temporary.sources.joinToString(",") { source -> source.name }}"
     }
 
     private fun rememberResolveFailure(postId: PostId, reason: SourceFailureReason) {
@@ -1879,6 +1941,7 @@ class SearchCoordinator(
             includeTerms = draftQuery.includeTerms.filter(SearchTerm::isPortableGeneralTag),
             excludeTerms = draftQuery.excludeTerms.filter(SearchTerm::isPortableGeneralTag),
         )
+        draftSourceScope = SearchSourceScope.Single(post.id.source)
         resetUnsupportedSearchScope()
         clearTagInputUiState()
         return true
@@ -2242,6 +2305,7 @@ private data class RootSearchRequest(
     val generation: Long,
     val query: Query,
     val queryHash: String,
+    val sourceScope: SearchSourceScope,
     val enabledSources: Set<SourceKey>,
     val availableSources: List<SourceKey>,
     val weights: Map<SourceKey, Double>,
