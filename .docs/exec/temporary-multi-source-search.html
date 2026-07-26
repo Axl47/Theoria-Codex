@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ExecPlan: Add Temporary Multi-Source Search</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f7f4;
+      --surface: #ffffff;
+      --text: #20231f;
+      --muted: #626860;
+      --border: #d7dbd4;
+      --accent: #176b5b;
+      --accent-soft: #dff2eb;
+      --risk: #9a4b18;
+      --risk-soft: #ffeadb;
+      --code: #111813;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151815;
+        --surface: #202520;
+        --text: #edf1ec;
+        --muted: #b7beb5;
+        --border: #3b443b;
+        --accent: #6ee7c5;
+        --accent-soft: #153b31;
+        --risk: #fdba74;
+        --risk-soft: #492812;
+        --code: #0b100c;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header, main { max-width: 1120px; margin: 0 auto; padding: 24px; }
+    header { padding-top: 36px; }
+    h1, h2, h3 { line-height: 1.18; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.2rem); }
+    h2 { margin-top: 8px; font-size: 1.5rem; }
+    h3 { margin-top: 24px; font-size: 1.1rem; }
+    p { margin: 0 0 14px; }
+    a { color: var(--accent); }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-block: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 94%, transparent);
+      backdrop-filter: blur(10px);
+    }
+    nav ul {
+      display: flex;
+      gap: 6px;
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 8px 24px;
+      list-style: none;
+      overflow-x: auto;
+    }
+    nav a {
+      display: block;
+      padding: 6px 9px;
+      border-radius: 6px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    nav a:hover { background: var(--accent-soft); }
+    section {
+      margin: 18px 0;
+      padding: 22px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--surface);
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0;
+      color: var(--muted);
+    }
+    .pill, .card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    .pill { padding: 5px 9px; }
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+    }
+    .card { padding: 14px; }
+    .card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: .8rem;
+      text-transform: uppercase;
+    }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    th { color: var(--muted); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .92em; }
+    pre {
+      overflow-x: auto;
+      padding: 14px;
+      border-radius: 8px;
+      background: var(--code);
+      color: #f5f7f5;
+    }
+    li { margin: 6px 0; }
+    .callout {
+      margin: 14px 0;
+      padding: 12px 14px;
+      border-left: 4px solid var(--accent);
+      border-radius: 6px;
+      background: var(--accent-soft);
+    }
+    .risk { border-left-color: var(--risk); background: var(--risk-soft); }
+    details {
+      margin: 12px 0;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    summary { cursor: pointer; font-weight: 700; }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 10px;
+      margin: 14px 0;
+    }
+    .flow div {
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    @media print {
+      nav { position: static; }
+      section, .card { break-inside: avoid; }
+      body { background: #fff; color: #000; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Temporary multi-source Search</h1>
+    <p>Let a user start from one Search source, long-press other source chips to build a temporary explicit source set, and run that set through the existing Unified search engine while keeping each chosen source visibly highlighted.</p>
+    <div class="meta" aria-label="Plan metadata">
+      <span class="pill">Status: Proposed</span>
+      <span class="pill">Owner: Codex</span>
+      <span class="pill">Created: 2026-07-26</span>
+      <span class="pill">Updated: 2026-07-26</span>
+      <span class="pill">Plan: .docs/exec/temporary-multi-source-search.html</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next action</strong>Implement the route/coordinator selection contract before changing the chips.</div>
+      <div class="card"><strong>Main risk</strong>A temporary search could silently widen to all globally enabled sources during retry, paging, autocomplete, or Viewer continuation.</div>
+      <div class="card"><strong>Validation</strong>Focused coordinator/state tests, app unit tests, Android-test compilation, debug assembly, and one device interaction pass.</div>
+      <div class="card"><strong>Affected areas</strong>Search contract, coordinator, ViewModel, mode chips, state mapping, and focused Search tests.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#status">Status</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#behavior">Behavior</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#work-plan">Work Plan</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#living-log">Living Log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+      <li><a href="#appendix">Appendix</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>Today Search has two mutually exclusive choices: one source, or global Unified using the sources enabled in Settings. After this change, a user in a single-source mode can long-press another source to create a temporary multi-source scope. The source chips themselves remain selected, the Unified chip remains unselected, and Apply searches exactly those sources through the existing <code>UnifiedSearchOrchestrator</code>.</p>
+      <p>The feature does not edit Settings and does not introduce a third permanent Search mode. It is a short-lived way to compare or combine a deliberate subset of sources. A normal tap on any source collapses back to that one source; a normal tap on Unified returns to the existing global Unified behavior.</p>
+      <div class="callout"><strong>Observable outcome:</strong> select Pixiv, long-press Gelbooru, and both logos become highlighted. Applying a query returns only Pixiv and Gelbooru results. Loading another page and retrying retain that exact pair.</div>
+    </section>
+
+    <section id="status">
+      <h2>Current Status</h2>
+      <table>
+        <tbody>
+          <tr><th>Status</th><td>Proposed; repository flow traced and implementation boundaries selected.</td></tr>
+          <tr><th>Next action</th><td>Add a coordinator-owned draft/applied execution scope and expose it through immutable Search state.</td></tr>
+          <tr><th>Implementation state</th><td>No production code has been changed by this planning turn.</td></tr>
+          <tr><th>Open product questions</th><td>None required for the first pass. The interaction rules below choose reversible, route-scoped behavior consistent with “temporary.”</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <p><strong>Single-source mode</strong> means <code>QueryMode.Source(source)</code>; the coordinator calls that source adapter directly and ignores the source’s global Unified toggle. <strong>Global Unified</strong> means <code>QueryMode.Unified</code>; the coordinator asks <code>UnifiedSearchOrchestrator</code> to search the currently enabled and available Settings sources. <strong>Temporary multi-source scope</strong> will mean an explicit set of two or more available sources that borrows the global Unified execution path without changing the global enabled-source set.</p>
+      <p><code>SearchViewModel</code> is the navigation-scoped owner. It receives typed actions, schedules search jobs, publishes immutable <code>SearchUiState</code>, and survives ordinary Activity recreation. <code>SearchCoordinator</code> owns query rules and provider execution. This plan keeps the temporary selection in that route/coordinator boundary; it does not put UI-only selection logic in Compose and does not change <code>AppSettings</code>.</p>
+
+      <div class="flow" aria-label="Temporary multi-source data flow">
+        <div><strong>1. Gesture</strong><br />Long-press a different source chip.</div>
+        <div><strong>2. Draft scope</strong><br />ViewModel sends a typed action; coordinator adds the source and sanitizes the query for cross-source use.</div>
+        <div><strong>3. Apply</strong><br />Coordinator freezes the exact source set into the root request.</div>
+        <div><strong>4. Execution</strong><br />Unified orchestrator searches only that set and returns per-source statuses/tokens.</div>
+        <div><strong>5. Continuation</strong><br />Retry, paging, result badges, and Viewer handoff retain the same applied scope.</div>
+      </div>
+
+      <table>
+        <thead><tr><th>File or module</th><th>Current role and planned responsibility</th></tr></thead>
+        <tbody>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt</code></td><td><code>ModeRow</code> currently renders one selected <code>FilterChip</code>. It will render independent source selection, expose long-click semantics, and derive result/status visibility from the applied execution scope.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/search/state/SearchContract.kt</code></td><td>Defines immutable query state and typed actions. It will define a small route-level source-selection value plus the long-press action; pending-change calculation must include source-scope changes.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/search/SearchViewModel.kt</code></td><td>Schedules route actions. It will dispatch scope changes through the coordinator, refresh suggestions, cancel stale work when necessary, and keep draft persistence behavior explicit.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/search/SearchCoordinator.kt</code></td><td>Owns draft/applied queries, root generations, settings reconciliation, Unified execution, retry, and paging. It will own draft/applied temporary source sets and freeze the applied set into <code>RootSearchRequest</code>.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/search/state/SearchCoordinatorStateMapper.kt</code></td><td>Copies coordinator state into immutable UI state. It will expose draft and applied scope without allowing Compose to infer execution behavior from chip colors.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/search/SearchSavedState.kt</code></td><td>Currently stores only the compact draft query. It remains unchanged in the first pass because the explicit multi-source scope is intentionally route-lifetime state, not durable query state.</td></tr>
+          <tr><td><code>core-domain/src/main/kotlin/com/theoriacodex/domain/orchestration/UnifiedSearchOrchestrator.kt</code></td><td>Already accepts an exact <code>enabledSources</code> set. It should not change; the app coordinator supplies the temporary set.</td></tr>
+          <tr><td><code>core-domain/src/main/kotlin/com/theoriacodex/domain/model/Query.kt</code></td><td><code>QueryMode</code> remains <code>Unified</code> or one <code>Source</code>. No permanent multi-source domain mode is added.</td></tr>
+          <tr><td><code>app/src/test/java/com/theoriacodex/app/search/SearchCoordinatorTest.kt</code></td><td>Primary execution coverage: activation, exact-source routing, portable-term sanitation, paging, retry, Settings isolation, and source removal.</td></tr>
+          <tr><td><code>app/src/test/java/com/theoriacodex/app/search/SearchViewModelTest.kt</code></td><td>Typed-action and request ownership coverage, including pending state and stale-request cancellation.</td></tr>
+          <tr><td><code>app/src/test/java/com/theoriacodex/app/search/state/SearchStateContractTest.kt</code></td><td>Pure mapping and pending-change coverage for global, single, and temporary multi-source states.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout risk"><strong>Critical invariant:</strong> the explicit source set must be frozen into the same root request that owns results and page tokens. Recomputing it from current chip state during paging would allow draft changes to corrupt an already-applied result stream.</div>
+    </section>
+
+    <section id="behavior">
+      <h2>Interaction And State Contract</h2>
+      <table>
+        <thead><tr><th>User action or event</th><th>Required result</th></tr></thead>
+        <tbody>
+          <tr><td>Long-press another source while one source is selected</td><td>Create a draft temporary set containing the current source and long-pressed source. Highlight both source chips; do not highlight Unified. Do not execute until the existing Apply action is used.</td></tr>
+          <tr><td>Long-press more unselected sources</td><td>Add each available source to the draft set. Suggestions and eventual execution use exactly the draft set.</td></tr>
+          <tr><td>Long-press a selected source in a temporary set</td><td>Remove it. If one source remains, collapse cleanly to that source while preserving portable terms and filters. Never allow an empty explicit set.</td></tr>
+          <tr><td>Normal-tap any source</td><td>Exit temporary scope and use the existing single-source mode for the tapped source.</td></tr>
+          <tr><td>Normal-tap Unified</td><td>Exit temporary scope and restore existing global Unified behavior using Settings-enabled sources.</td></tr>
+          <tr><td>Long-press while global Unified is selected</td><td>No temporary scope is created. Global Unified is already a multi-source mode; normal-tap a source first to establish the explicit selection anchor.</td></tr>
+          <tr><td>First entry into temporary scope</td><td>Convert the draft to Unified-compatible portable terms using the existing sanitation rule. Remove source-owned facets/filters that cannot safely cross providers and surface the existing validation message.</td></tr>
+          <tr><td>Apply</td><td>Promote the draft source set to the applied scope and run the Unified engine against exactly that set. Selected sources participate even if disabled for global Unified; Settings are not modified.</td></tr>
+          <tr><td>Reset</td><td>Restore both the applied query and the applied source scope, so chip highlighting and query fields return together.</td></tr>
+          <tr><td>Clear</td><td>Clear terms/filters but retain the current draft source scope, matching existing mode-preserving Clear behavior.</td></tr>
+          <tr><td>Retry or load more</td><td>Use the applied source set frozen in the root request. Never widen to the current Settings set.</td></tr>
+          <tr><td>A selected adapter becomes unavailable</td><td>Cancel stale work and remove it. Keep temporary scope if at least two remain; collapse to single source if one remains. Show the ordinary capability-change behavior rather than retaining an unavailable highlighted chip.</td></tr>
+          <tr><td>Settings enabled-source toggles change</td><td>Do not rewrite the explicit temporary set. Those toggles govern only global Unified; adapter availability still governs whether a source can run.</td></tr>
+          <tr><td>Leave and recreate the Search route/process</td><td>Discard the temporary set and restore the last durable normal query. Ordinary Activity recreation keeps it because the navigation-scoped ViewModel survives; process recreation does not promote it into a permanent preference.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Persistence boundary</h3>
+      <p>Temporary multi-source runs must not be written as a normal global Unified applied query or Recent Search because the current durable <code>Query</code> format cannot encode the explicit subset. Recording it as Unified would later replay against every globally enabled source, which is false history. The first pass therefore keeps the temporary query, its scope-aware execution key, and scroll/results ownership inside the active Search route. Durable subset history is explicitly out of scope and would require a separate versioned persistence design.</p>
+
+      <h3>Execution identity</h3>
+      <p>Create one helper that derives an execution key from the sanitized query hash plus a canonical, presentation-independent ordering of the explicit source names. Use it for temporary result override caches, scroll ownership, and Viewer launch context. This prevents a Pixiv+Gelbooru run from colliding with a global Unified run containing the same terms. Normal single-source and global Unified hashes remain backward compatible.</p>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+
+      <article>
+        <h3>Phase 1: Freeze the route-level source-scope contract</h3>
+        <p>Add the smallest immutable source-selection model needed to distinguish global Unified, one source, and a temporary explicit set. Add draft/applied scope to the coordinator snapshot and UI state, and a typed long-press action. Update <code>hasPendingChanges</code> so a scope change enables Apply even when query text is unchanged.</p>
+        <table>
+          <tbody>
+            <tr><th>Files</th><td><code>SearchContract.kt</code>, <code>SearchCoordinatorStateMapper.kt</code>, <code>SearchViewModel.kt</code>, and their focused tests.</td></tr>
+            <tr><th>Command</th><td><code>./gradlew :app:testDebugUnitTest --tests '*SearchStateContractTest' --tests '*SearchViewModelTest'</code></td></tr>
+            <tr><th>Expected observation</th><td>Pure state distinguishes global Unified from explicit sources; long-press changes only the draft scope and marks the state pending.</td></tr>
+            <tr><th>Acceptance</th><td>No Compose code owns source-selection truth, and no Settings value is changed.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 2: Route exact selected sources through the Unified engine</h3>
+        <p>Teach <code>SearchCoordinator</code> to add/remove explicit sources, sanitize source-owned terms on activation, promote draft scope on Apply, and freeze the applied set and scope-aware execution key into <code>RootSearchRequest</code>. Reuse the existing Unified execution and query-override code for initial search and paging. Autocomplete/trending must use the draft explicit set while result execution uses the applied frozen set.</p>
+        <table>
+          <tbody>
+            <tr><th>Files</th><td><code>SearchCoordinator.kt</code> and <code>SearchCoordinatorTest.kt</code>.</td></tr>
+            <tr><th>Command</th><td><code>./gradlew :app:testDebugUnitTest --tests '*SearchCoordinatorTest'</code></td></tr>
+            <tr><th>Expected observation</th><td>Fake adapters show calls only to selected sources for root, retry, and next page; global enabled-source settings are unchanged and unrelated disabled statuses are absent.</td></tr>
+            <tr><th>Acceptance</th><td>The temporary selection cannot widen during any continuation path, and source-specific terms cannot leak into another adapter.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 3: Render independent highlighted chips with accessible long press</h3>
+        <p>Refactor <code>ModeRow</code> so each source chip is selected from the draft source scope, while Unified is selected only for global Unified. Use one click surface per chip with both click and long-click semantics; avoid nested competing click handlers. Provide spoken labels that state the source and the long-press action. Use the applied scope to decide whether result source badges and multi-source status UI are visible.</p>
+        <table>
+          <tbody>
+            <tr><th>Files</th><td><code>SearchScreen.kt</code>; add a narrow Android Compose test only if the mode row can be exercised without constructing the full Search route.</td></tr>
+            <tr><th>Command</th><td><code>./gradlew :app:compileDebugAndroidTestKotlin :app:assembleDebug</code></td></tr>
+            <tr><th>Expected observation</th><td>Two or more source chips can appear selected simultaneously; Unified is not selected; normal taps and accessibility click actions still work once.</td></tr>
+            <tr><th>Acceptance</th><td>The visual state is a direct rendering of route state and TalkBack exposes both tap and long-press meaning.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 4: Integrated validation and plan closeout</h3>
+        <p>Run one bounded regression batch, then perform one device/emulator interaction pass covering activation, addition, removal, Apply, paging, normal-tap exits, and Settings isolation. Record exact evidence in this plan and update its status to Complete or Complete with a named device gap.</p>
+        <table>
+          <tbody>
+            <tr><th>Command</th><td><code>./gradlew :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:assembleDebug</code></td></tr>
+            <tr><th>Expected observation</th><td>All app unit tests pass, Android tests compile, and the debug APK assembles.</td></tr>
+            <tr><th>Acceptance</th><td>Automated exact-source proofs and the manual visible interaction agree; no unrelated source or persistent Settings mutation appears.</td></tr>
+          </tbody>
+        </table>
+      </article>
+    </section>
+
+    <section id="work-plan">
+      <h2>Work Plan</h2>
+      <ol>
+        <li>In <code>SearchContract.kt</code>, add an immutable route-level selection type with constructors/invariants for global Unified, single source, and temporary explicit sources. Keep source sets canonical and require at least two entries for the temporary case.</li>
+        <li>Add draft and applied selection fields to <code>SearchQueryUiState</code>. Change <code>SearchUiState.hasPendingChanges</code> to compare both query and selection. Add a typed action such as <code>ToggleTemporarySource(source)</code>; do not pass raw gesture callbacks beyond the UI boundary.</li>
+        <li>In <code>SearchCoordinator</code>, own draft and applied selection alongside the corresponding queries. Normal <code>setMode</code> calls clear temporary scope. A new toggle method creates, grows, shrinks, or collapses the temporary set and returns whether state changed.</li>
+        <li>On temporary activation, sanitize the current draft through the existing Unified portability rule, reset unsupported facets, clear autocomplete state, and reuse the existing source-term removal message. Preserve portable sort/date/min-score values.</li>
+        <li>Centralize effective source calculation: draft suggestions use the explicit draft set when present; a temporary root request uses the applied explicit set; global Unified uses Settings-enabled available sources; single-source mode continues to call its adapter directly.</li>
+        <li>Extend <code>RootSearchRequest</code> with an explicit execution-scope marker and scope-aware execution key. Store exactly the selected sources in the request so root results, retry, page tokens, query overrides, resolved-post overrides, scroll state, and Viewer binding share one identity.</li>
+        <li>Keep temporary runs out of <code>QueryRepository</code> and <code>RecentsRepository</code>. They cannot truthfully encode the subset today. Continue normal persistence unchanged for single-source and global Unified runs.</li>
+        <li>Reconcile adapter availability against both draft and applied explicit sets. Invalidate active generations before changing the set. Collapse two-to-one without leaving a fake multi-source state.</li>
+        <li>In <code>SearchViewModel</code>, handle the typed toggle action through the coordinator, cancel stale autocomplete, publish state, and refresh suggestions. Applying, resetting, retrying, and paging continue through existing scheduled request paths.</li>
+        <li>In <code>SearchCoordinatorStateMapper.kt</code>, copy selection values defensively into immutable state. Do not derive applied execution from current Settings in the mapper.</li>
+        <li>Refactor <code>ModeRow</code> in <code>SearchScreen.kt</code> to accept draft selection and separate tap/long-press callbacks. Use one accessible combined-click surface, retain logos and the Unified source-count badge, and highlight every explicitly selected source.</li>
+        <li>Change multi-source-only UI conditions—source badges and status rows—to use the applied execution scope rather than only <code>applied.mode == QueryMode.Unified</code>.</li>
+        <li>Add focused tests before the final batch. Prefer deterministic fake adapters and repositories; do not add live-provider dependence to this feature’s acceptance lane.</li>
+        <li>Run the bounded validation batch once, perform the manual device pass once, update this plan’s living log/outcome, and stop when the stated evidence is sufficient.</li>
+      </ol>
+
+      <div class="callout risk"><strong>Out of scope:</strong> changing Settings UI, saving named source groups, durable multi-source Recent Search replay, provider ranking changes, a new domain <code>QueryMode</code>, or redesigning the Search filter sheet.</div>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <p>Run commands from the repository root: <code>/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex</code>.</p>
+      <table>
+        <thead><tr><th>Check</th><th>Command or action</th><th>Expected result</th></tr></thead>
+        <tbody>
+          <tr><td>State contract</td><td><code>./gradlew :app:testDebugUnitTest --tests '*SearchStateContractTest' --tests '*SearchViewModelTest'</code></td><td>Draft/applied selection, pending changes, cancellation, and typed action tests pass.</td></tr>
+          <tr><td>Coordinator routing</td><td><code>./gradlew :app:testDebugUnitTest --tests '*SearchCoordinatorTest'</code></td><td>Exact-source root/retry/page tests pass, including Settings-disabled selected sources and adapter removal.</td></tr>
+          <tr><td>App regression</td><td><code>./gradlew :app:testDebugUnitTest</code></td><td>All app JVM tests pass with no existing Search behavior regression.</td></tr>
+          <tr><td>Android/build gate</td><td><code>./gradlew :app:compileDebugAndroidTestKotlin :app:assembleDebug</code></td><td>Android test sources compile and a debug APK assembles.</td></tr>
+          <tr><td>Repository integrity</td><td><code>git diff --check</code></td><td>No whitespace errors.</td></tr>
+          <tr><td>Activation</td><td>Open Search, normal-tap Pixiv, then long-press Gelbooru.</td><td>Pixiv and Gelbooru are highlighted; Unified is not; Apply becomes enabled without executing early.</td></tr>
+          <tr><td>Exact execution</td><td>Apply a portable tag that returns results in both sources.</td><td>Only selected sources appear in cards/statuses. An unrelated globally enabled source does not run or appear as excluded.</td></tr>
+          <tr><td>Continuation</td><td>Scroll until the next page loads, then trigger Retry if available.</td><td>Every continuation remains limited to the applied source set.</td></tr>
+          <tr><td>Add/remove/collapse</td><td>Long-press a third source, remove it, then remove one of the original pair.</td><td>Highlighting follows the draft set; one remaining source collapses to ordinary single-source mode without an empty state.</td></tr>
+          <tr><td>Exit paths</td><td>Recreate a pair, normal-tap one source, then normal-tap Unified.</td><td>Normal source tap selects only that source; Unified selects the global chip and uses Settings-enabled sources.</td></tr>
+          <tr><td>Settings isolation</td><td>Compare enabled-source Settings before and after the temporary search.</td><td>No toggle or weight changes.</td></tr>
+          <tr><td>Accessibility</td><td>With TalkBack or Compose semantics inspection, focus a source chip.</td><td>The source name, selected state, click action, and long-click add/remove action are announced.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Behavior-based acceptance criteria</h3>
+      <ul>
+        <li>A temporary selection begins only from non-Unified mode and always contains at least two available sources.</li>
+        <li>Every selected source is visibly highlighted; the Unified chip is not highlighted during temporary scope.</li>
+        <li>Apply, retry, paging, autocomplete, status, result badges, and Viewer continuation never widen beyond the correct draft/applied set.</li>
+        <li>Selected sources can participate without changing or being blocked by their global Unified Settings toggle.</li>
+        <li>Source-owned facets are removed before cross-source execution with honest user feedback.</li>
+        <li>Normal single-source and global Unified search behavior and persistence remain unchanged.</li>
+        <li>Temporary subset state is not persisted or misrepresented as a replayable global Unified Recent Search.</li>
+      </ul>
+    </section>
+
+    <section id="living-log">
+      <h2>Living Log</h2>
+
+      <h3>Progress</h3>
+      <ul>
+        <li>[x] 2026-07-26 — Traced <code>ModeRow</code>, immutable Search state, ViewModel request ownership, coordinator root/paging paths, Settings reconciliation, saved draft query, query history, and Viewer query-hash handoff.</li>
+        <li>[x] 2026-07-26 — Defined temporary explicit selection as route-scoped execution state rather than a Settings mutation or permanent <code>QueryMode</code>.</li>
+        <li>[x] 2026-07-26 — Defined interaction, sanitation, exact-source continuation, source-loss, persistence, accessibility, and validation behavior.</li>
+        <li>[x] 2026-07-26 — Authored and structurally validated this standalone ExecPlan.</li>
+        <li>[ ] Implement Phase 1 route-level source-scope contract.</li>
+        <li>[ ] Implement Phase 2 exact-source coordinator execution.</li>
+        <li>[ ] Implement Phase 3 independently highlighted source chips.</li>
+        <li>[ ] Complete Phase 4 automated and device validation.</li>
+      </ul>
+
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li>Observation: <code>RootSearchRequest</code> already freezes enabled sources, weights, previous results, and statuses, so the temporary subset can reuse the existing cancellation-safe Unified execution instead of adding another orchestrator. Evidence: <code>SearchCoordinator.beginRootSearch</code>, <code>executeSearch</code>, and <code>loadNextPage</code>.</li>
+        <li>Observation: the current durable <code>Query</code>, query codec, and Recent Search entry cannot represent an explicit source subset. Evidence: <code>QueryMode</code> has only <code>Unified</code> and one <code>Source</code>; <code>RecentSearchEntry</code> stores only <code>Query</code> plus its hash.</li>
+        <li>Observation: source-specific terms are deliberately blocked or removed when entering Unified mode. A temporary cross-source search must reuse that rule or another provider could receive a facet it cannot interpret. Evidence: <code>Query.forMode</code> call sites and existing validation messages in <code>SearchCoordinator</code>.</li>
+      </ul>
+
+      <h3>Decision Log</h3>
+      <ul>
+        <li><strong>Decision:</strong> keep temporary multi-source selection in the Search route/coordinator, not Settings or <code>QueryMode</code>. <strong>Rationale:</strong> the request describes temporary execution and separate chip highlighting; Settings and durable query semantics should remain truthful. <strong>Date/Author:</strong> 2026-07-26 / Codex.</li>
+        <li><strong>Decision:</strong> maintain separate draft and applied source scopes. <strong>Rationale:</strong> Search already uses Apply/Reset semantics; result paging must follow the applied set while the user may edit the next draft set. <strong>Date/Author:</strong> 2026-07-26 / Codex.</li>
+        <li><strong>Decision:</strong> explicit selected sources bypass global Unified enablement but never adapter availability. <strong>Rationale:</strong> a directly selected source already works outside Unified toggles, and the temporary set must behave like several deliberate direct selections without mutating Settings. <strong>Date/Author:</strong> 2026-07-26 / Codex.</li>
+        <li><strong>Decision:</strong> do not persist or record temporary subset searches in the first pass. <strong>Rationale:</strong> existing persistence would replay them inaccurately as all-source Unified or one source. A later durable feature needs a versioned source-scope contract. <strong>Date/Author:</strong> 2026-07-26 / Codex.</li>
+        <li><strong>Decision:</strong> use normal taps as deterministic exits and long press as add/remove. <strong>Rationale:</strong> this preserves existing mode selection, makes the feature discoverable through visible highlighting, and prevents users becoming trapped in a pseudo mode. <strong>Date/Author:</strong> 2026-07-26 / Codex.</li>
+      </ul>
+
+      <h3>Outcomes And Retrospective</h3>
+      <p>The planning phase is complete. The implementation is intentionally contained inside Search: typed route state expresses the source set, the coordinator freezes it into the existing Unified request pipeline, and Compose only renders and emits gestures. The highest-risk continuation and persistence paths have explicit acceptance checks. Update this paragraph after each phase with actual behavior and evidence.</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <p>All planned Gradle and Git checks are safe to rerun. No database migration, Settings rewrite, tag, release, or destructive command is required. Implement phases in order because later UI work depends on the source-scope contract.</p>
+      <ul>
+        <li>If Phase 1 is interrupted, inspect <code>git diff</code>, finish the immutable state/action/mapping contract, and rerun only the two focused test classes before continuing.</li>
+        <li>If a root search widens unexpectedly, inspect the source set captured in <code>RootSearchRequest</code>; do not patch individual adapters or filter results after execution.</li>
+        <li>If paging differs from the root results, repair the common applied-scope/request identity used by both paths rather than adding a paging-only selection.</li>
+        <li>If source chips double-fire, remove competing nested click surfaces and keep one combined click/long-click semantic owner.</li>
+        <li>If a selected source disappears at runtime, invalidate the active generation before collapsing the explicit set so a stale completion cannot republish removed-source results.</li>
+        <li>To abandon the feature before merge, revert only the files named in this plan. There are no generated data files or migrations to clean.</li>
+      </ul>
+    </section>
+
+    <section id="appendix">
+      <h2>Appendix: Evidence And Notes</h2>
+      <details>
+        <summary>Repository facts used to design the plan</summary>
+        <ul>
+          <li><code>ModeRow</code> currently receives <code>mode</code>, <code>modeOptions</code>, and one <code>onModeSelected</code> callback.</li>
+          <li><code>UnifiedSearchOrchestrator.search</code> already accepts an exact <code>enabledSources</code> set, page tokens, source weights, and per-source query overrides.</li>
+          <li><code>SearchCoordinator.effectiveEnabledSources</code> currently intersects Settings-enabled sources with available adapters only for global Unified.</li>
+          <li><code>RootSearchRequest</code> is retained as <code>activeRootSearch</code> and reused by <code>beginLoadMore</code>, making it the correct applied-scope boundary.</li>
+          <li><code>SearchSavedQueryCodec</code> serializes only <code>Query</code>; <code>RecentSearchEntry</code> also stores only <code>Query</code> and a query hash.</li>
+        </ul>
+      </details>
+      <details>
+        <summary>Suggested focused test names</summary>
+        <pre><code>SearchCoordinatorTest
+  long press adds a second source without changing settings
+  temporary scope removes source-owned terms before unified execution
+  temporary root retry and paging retain exact selected sources
+  removing sources collapses a temporary scope to one source
+  unavailable adapter is removed from draft and applied temporary scopes
+  temporary search does not overwrite durable unified query or recents
+
+SearchViewModelTest
+  temporary source action updates draft scope and pending state
+  applying temporary scope promotes it without stale request publication
+  reset restores applied query and source scope together
+
+SearchStateContractTest
+  global unified and temporary explicit sources map to different selection state
+  selection-only edits count as pending changes</code></pre>
+      </details>
+    </section>
+  </main>
+</body>
+</html>

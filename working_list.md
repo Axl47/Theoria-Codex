@@ -1,10 +1,27 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-11T03:33:20-04:00
+updated_at: 2026-07-26T00:00:00-04:00
 ---
 # Working List
 
-## Current Task: Implement Code Quality And UI Ownership Modernization
+## Current Task: Plan Temporary Multi-Source Search
+
+### In Progress
+
+### Pending
+
+### Done
+
+- [x] Trace Search mode selection, route state, coordinator execution, paging, restoration, and persistence boundaries
+  - Evidence: `ModeRow` currently emits only `SelectMode`; `SearchCoordinator` owns both single-source and Unified execution, while `RootSearchRequest` already freezes the enabled source set for root search and paging.
+- [x] Define the temporary multi-source interaction and lifecycle
+  - Evidence: the plan keeps explicit source selection route-scoped, uses the unified orchestrator without mutating settings, and defines normal tap, long-press add/remove, collapse, reset, retry, source-loss, and process-recreation behavior.
+- [x] Create the standalone implementation ExecPlan
+  - Evidence: `.docs/exec/temporary-multi-source-search.html` contains exact file ownership, phased work, automated and manual acceptance, recovery, and living-log sections.
+- [x] Validate the planning artifacts
+  - Evidence: HTML structure, required section anchors, referenced repository paths, and whitespace integrity were checked locally.
+
+## Previous Task: Implement Code Quality And UI Ownership Modernization
 
 ### In Progress
 
