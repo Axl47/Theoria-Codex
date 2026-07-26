@@ -328,6 +328,8 @@ interface UiRestoreRepository {
     suspend fun migrateLegacyLastTab(legacyRoute: String?): String?
     suspend fun setSearchScrollState(queryHash: String, state: SearchScrollState)
     suspend fun getSearchScrollState(queryHash: String): SearchScrollState?
+    suspend fun setSettingsSectionExpansion(expansion: Map<String, Boolean>)
+    suspend fun getSettingsSectionExpansion(): Map<String, Boolean>
     fun observeViewerLaunchContext(): Flow<ViewerLaunchContext?>
     suspend fun setViewerLaunchContext(context: ViewerLaunchContext?)
 }

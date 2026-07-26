@@ -360,6 +360,14 @@ class DataStoreUiRestoreRepository(
         return records.first().toMemoryState().scrollStates[queryHash.trim()]
     }
 
+    override suspend fun setSettingsSectionExpansion(expansion: Map<String, Boolean>) {
+        mutateState { current -> current.copy(settingsSectionExpansion = expansion) }
+    }
+
+    override suspend fun getSettingsSectionExpansion(): Map<String, Boolean> {
+        return records.first().toMemoryState().settingsSectionExpansion
+    }
+
     override fun observeViewerLaunchContext(): Flow<ViewerLaunchContext?> {
         return records
             .map { stored -> stored.toMemoryState().viewerLaunchContext }

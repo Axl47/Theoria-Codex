@@ -763,6 +763,7 @@ class FileBackedUiRestoreRepository(
     private val fileStore = AtomicJsonFileStore(ioDispatcher = ioDispatcher)
     private val viewerContextFlow = MutableStateFlow<ViewerLaunchContext?>(null)
     private val scrollStates = mutableMapOf<String, SearchScrollState>()
+    private var settingsSectionExpansion: Map<String, Boolean> = emptyMap()
     private var lastTab: String? = null
 
     init {
@@ -776,6 +777,7 @@ class FileBackedUiRestoreRepository(
                 )
             }
         )
+        settingsSectionExpansion = stored.settingsSectionExpansion
         viewerContextFlow.value = stored.viewerLaunchContext?.toDomain()
     }
 
@@ -811,6 +813,16 @@ class FileBackedUiRestoreRepository(
         return scrollStates[queryHash]
     }
 
+    override suspend fun setSettingsSectionExpansion(expansion: Map<String, Boolean>) {
+        mutex.withLock {
+            commitMutation { settingsSectionExpansion = expansion.toMap() }
+        }
+    }
+
+    override suspend fun getSettingsSectionExpansion(): Map<String, Boolean> {
+        return settingsSectionExpansion
+    }
+
     override fun observeViewerLaunchContext(): Flow<ViewerLaunchContext?> {
         return viewerContextFlow
     }
@@ -827,6 +839,7 @@ class FileBackedUiRestoreRepository(
                 UiRestoreMemoryState(
                     lastTab = lastTab,
                     scrollStates = scrollStates.toMap(),
+                    settingsSectionExpansion = settingsSectionExpansion,
                     viewerLaunchContext = viewerContextFlow.value,
                 )
             },
@@ -834,6 +847,7 @@ class FileBackedUiRestoreRepository(
                 lastTab = state.lastTab
                 scrollStates.clear()
                 scrollStates.putAll(state.scrollStates)
+                settingsSectionExpansion = state.settingsSectionExpansion
                 viewerContextFlow.value = state.viewerLaunchContext
             },
             mutate = mutate,
@@ -852,6 +866,7 @@ class FileBackedUiRestoreRepository(
                         firstVisibleItemOffsetPx = state.firstVisibleItemOffsetPx,
                     )
                 },
+                settingsSectionExpansion = settingsSectionExpansion,
                 viewerLaunchContext = viewerContextFlow.value?.let(ViewerLaunchContextRecord::fromDomain),
             ),
         )
@@ -1459,6 +1474,8 @@ private data class UiRestoreStoreFile(
     val lastTab: String? = null,
     @field:SerializedName("searchScrollStates")
     val searchScrollStates: Map<String, SearchScrollStateRecord> = emptyMap(),
+    @field:SerializedName("settingsSectionExpansion")
+    val settingsSectionExpansion: Map<String, Boolean> = emptyMap(),
     @field:SerializedName("viewerLaunchContext")
     val viewerLaunchContext: ViewerLaunchContextRecord? = null,
 )
@@ -1466,6 +1483,7 @@ private data class UiRestoreStoreFile(
 private data class UiRestoreMemoryState(
     val lastTab: String?,
     val scrollStates: Map<String, SearchScrollState>,
+    val settingsSectionExpansion: Map<String, Boolean>,
     val viewerLaunchContext: ViewerLaunchContext?,
 )
 

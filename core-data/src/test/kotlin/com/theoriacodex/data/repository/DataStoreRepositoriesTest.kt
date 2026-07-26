@@ -303,6 +303,26 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
+    fun `ui restore reconstructs settings section expansion after reopening`() = runTest {
+        val directory = tempFolder.newFolder("ui-settings-expansion")
+        val firstScope = newScope()
+        val first = DataStoreUiRestoreRepository(directory, firstScope)
+        val expansion = mapOf(
+            "UNIFIED_MODE" to false,
+            "STORAGE_AND_CACHING" to false,
+        )
+
+        first.setSettingsSectionExpansion(expansion)
+        closeScope(firstScope)
+
+        val secondScope = newScope()
+        val reconstructed = DataStoreUiRestoreRepository(directory, secondScope)
+
+        assertEquals(expansion, reconstructed.getSettingsSectionExpansion())
+        closeScope(secondScope)
+    }
+
+    @Test
     fun `newer ui schema fails closed without corruption replacement`() = runTest {
         val directory = tempFolder.newFolder("ui-future-schema")
         val destination = directory.resolve(DATASTORE_UI_RESTORE_FILE_NAME)

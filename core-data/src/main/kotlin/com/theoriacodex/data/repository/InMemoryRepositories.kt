@@ -490,6 +490,7 @@ class InMemoryUiRestoreRepository : UiRestoreRepository {
     private val mutex = Mutex()
     private val lastTab = MutableStateFlow<String?>(null)
     private val scrollStates = MutableStateFlow<Map<String, SearchScrollState>>(emptyMap())
+    private val settingsSectionExpansion = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     private val viewerLaunchContext = MutableStateFlow<ViewerLaunchContext?>(null)
 
     override suspend fun setLastTab(route: String) {
@@ -520,6 +521,16 @@ class InMemoryUiRestoreRepository : UiRestoreRepository {
 
     override suspend fun getSearchScrollState(queryHash: String): SearchScrollState? {
         return scrollStates.value[queryHash]
+    }
+
+    override suspend fun setSettingsSectionExpansion(expansion: Map<String, Boolean>) {
+        mutex.withLock {
+            settingsSectionExpansion.value = expansion.toMap()
+        }
+    }
+
+    override suspend fun getSettingsSectionExpansion(): Map<String, Boolean> {
+        return settingsSectionExpansion.value
     }
 
     override fun observeViewerLaunchContext(): Flow<ViewerLaunchContext?> {

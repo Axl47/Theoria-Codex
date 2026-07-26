@@ -119,6 +119,8 @@ import com.theoriacodex.app.source.ExternalPostDeepLink
 import com.theoriacodex.app.settings.SettingsSectionExpansionState
 import com.theoriacodex.app.settings.SettingsSectionKey
 import com.theoriacodex.app.settings.SettingsScreen
+import com.theoriacodex.app.settings.toPersistenceMap
+import com.theoriacodex.app.settings.toSettingsSectionExpansionState
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.creatorBrowsingSources
 import com.theoriacodex.app.source.parseExternalCreatorDeepLink
@@ -458,6 +460,20 @@ internal fun TheoriaAppContent(
     var settingsUpdatesExpanded by rememberSaveable { mutableStateOf(true) }
     var settingsStorageExpanded by rememberSaveable { mutableStateOf(true) }
     var settingsDeveloperScenariosExpanded by rememberSaveable { mutableStateOf(true) }
+    LaunchedEffect(dataDependencies.uiRestoreRepository) {
+        val restored = runCatching {
+            dataDependencies.uiRestoreRepository
+                .getSettingsSectionExpansion()
+                .toSettingsSectionExpansionState()
+        }.getOrDefault(SettingsSectionExpansionState())
+        settingsProfilesExpanded = restored.recommendationProfiles
+        settingsUnifiedModeExpanded = restored.unifiedMode
+        settingsForYouBlacklistExpanded = restored.forYouBlacklist
+        settingsSourceAccountsExpanded = restored.sourceAccounts
+        settingsUpdatesExpanded = restored.updates
+        settingsStorageExpanded = restored.storageAndCaching
+        settingsDeveloperScenariosExpanded = restored.developerScenarios
+    }
     val settingsSectionExpansion = SettingsSectionExpansionState(
         recommendationProfiles = settingsProfilesExpanded,
         unifiedMode = settingsUnifiedModeExpanded,
@@ -467,6 +483,43 @@ internal fun TheoriaAppContent(
         storageAndCaching = settingsStorageExpanded,
         developerScenarios = settingsDeveloperScenariosExpanded,
     )
+    fun updateSettingsSectionExpansion(section: SettingsSectionKey, expanded: Boolean) {
+        val updated = when (section) {
+            SettingsSectionKey.RECOMMENDATION_PROFILES -> {
+                settingsSectionExpansion.copy(recommendationProfiles = expanded)
+            }
+            SettingsSectionKey.UNIFIED_MODE -> {
+                settingsSectionExpansion.copy(unifiedMode = expanded)
+            }
+            SettingsSectionKey.FOR_YOU_BLACKLIST -> {
+                settingsSectionExpansion.copy(forYouBlacklist = expanded)
+            }
+            SettingsSectionKey.SOURCE_ACCOUNTS -> {
+                settingsSectionExpansion.copy(sourceAccounts = expanded)
+            }
+            SettingsSectionKey.UPDATES -> {
+                settingsSectionExpansion.copy(updates = expanded)
+            }
+            SettingsSectionKey.STORAGE_AND_CACHING -> {
+                settingsSectionExpansion.copy(storageAndCaching = expanded)
+            }
+            SettingsSectionKey.DEVELOPER_SCENARIOS -> {
+                settingsSectionExpansion.copy(developerScenarios = expanded)
+            }
+        }
+        when (section) {
+            SettingsSectionKey.RECOMMENDATION_PROFILES -> settingsProfilesExpanded = expanded
+            SettingsSectionKey.UNIFIED_MODE -> settingsUnifiedModeExpanded = expanded
+            SettingsSectionKey.FOR_YOU_BLACKLIST -> settingsForYouBlacklistExpanded = expanded
+            SettingsSectionKey.SOURCE_ACCOUNTS -> settingsSourceAccountsExpanded = expanded
+            SettingsSectionKey.UPDATES -> settingsUpdatesExpanded = expanded
+            SettingsSectionKey.STORAGE_AND_CACHING -> settingsStorageExpanded = expanded
+            SettingsSectionKey.DEVELOPER_SCENARIOS -> settingsDeveloperScenariosExpanded = expanded
+        }
+        scope.launch {
+            dataDependencies.uiRestoreRepository.setSettingsSectionExpansion(updated.toPersistenceMap())
+        }
+    }
     var pendingTopLevelRoute by remember { mutableStateOf<String?>(null) }
     var homeTabRestoreComplete by remember { mutableStateOf(false) }
     var navReady by remember(appContainer) { mutableStateOf(appShellState.appReady) }
@@ -2000,31 +2053,7 @@ internal fun TheoriaAppContent(
                                         cacheSnapshot = cacheSnapshot,
                                         showDeveloperScenarios = false,
                                         sectionExpansion = settingsSectionExpansion,
-                                        onSectionExpansionChanged = { section, expanded ->
-                                            when (section) {
-                                                SettingsSectionKey.RECOMMENDATION_PROFILES -> {
-                                                    settingsProfilesExpanded = expanded
-                                                }
-                                                SettingsSectionKey.UNIFIED_MODE -> {
-                                                    settingsUnifiedModeExpanded = expanded
-                                                }
-                                                SettingsSectionKey.FOR_YOU_BLACKLIST -> {
-                                                    settingsForYouBlacklistExpanded = expanded
-                                                }
-                                                SettingsSectionKey.SOURCE_ACCOUNTS -> {
-                                                    settingsSourceAccountsExpanded = expanded
-                                                }
-                                                SettingsSectionKey.UPDATES -> {
-                                                    settingsUpdatesExpanded = expanded
-                                                }
-                                                SettingsSectionKey.STORAGE_AND_CACHING -> {
-                                                    settingsStorageExpanded = expanded
-                                                }
-                                                SettingsSectionKey.DEVELOPER_SCENARIOS -> {
-                                                    settingsDeveloperScenariosExpanded = expanded
-                                                }
-                                            }
-                                        },
+                                        onSectionExpansionChanged = ::updateSettingsSectionExpansion,
                                         pixivStatusLabel = pixivStatusLabel,
                                         pixivConnectEnabled = !pixivConnected &&
                                             credentialRecoveryState == CredentialStoreRecoveryState.Ready &&

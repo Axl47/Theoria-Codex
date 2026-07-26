@@ -16,8 +16,10 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 - [x] Lift Settings section expansion state to the app-shell owner.
   - Evidence: `TheoriaAppContent` owns seven `rememberSaveable` flags and passes the state/update boundary into `SettingsScreen`, so top-level page recreation no longer resets sections to expanded.
+- [x] Persist Settings section expansion across app relaunches.
+  - Evidence: `UiRestoreRepository` stores the section expansion map in the DataStore-backed UI restore record, with in-memory and file-backed contract coverage.
 - [x] Validate locally without connected-device testing.
-  - Evidence: `:app:compileDebugKotlin`, `:app:testDebugUnitTest`, and `git diff --check` passed.
+  - Evidence: `:core-data:test --tests 'com.theoriacodex.data.repository.RepositoryContractTest' --tests 'com.theoriacodex.data.repository.DataStoreRepositoriesTest'`, `:app:compileDebugKotlin`, `:app:testDebugUnitTest`, and `git diff --check` passed.
 
 ## Current Task: Reorder Settings Sections
 

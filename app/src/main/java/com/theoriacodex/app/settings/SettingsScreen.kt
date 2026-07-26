@@ -63,6 +63,30 @@ data class SettingsSectionExpansionState(
     val developerScenarios: Boolean = true,
 )
 
+fun SettingsSectionExpansionState.toPersistenceMap(): Map<String, Boolean> {
+    return mapOf(
+        SettingsSectionKey.RECOMMENDATION_PROFILES.name to recommendationProfiles,
+        SettingsSectionKey.UNIFIED_MODE.name to unifiedMode,
+        SettingsSectionKey.FOR_YOU_BLACKLIST.name to forYouBlacklist,
+        SettingsSectionKey.SOURCE_ACCOUNTS.name to sourceAccounts,
+        SettingsSectionKey.UPDATES.name to updates,
+        SettingsSectionKey.STORAGE_AND_CACHING.name to storageAndCaching,
+        SettingsSectionKey.DEVELOPER_SCENARIOS.name to developerScenarios,
+    )
+}
+
+fun Map<String, Boolean>.toSettingsSectionExpansionState(): SettingsSectionExpansionState {
+    return SettingsSectionExpansionState(
+        recommendationProfiles = this[SettingsSectionKey.RECOMMENDATION_PROFILES.name] ?: true,
+        unifiedMode = this[SettingsSectionKey.UNIFIED_MODE.name] ?: true,
+        forYouBlacklist = this[SettingsSectionKey.FOR_YOU_BLACKLIST.name] ?: true,
+        sourceAccounts = this[SettingsSectionKey.SOURCE_ACCOUNTS.name] ?: true,
+        updates = this[SettingsSectionKey.UPDATES.name] ?: true,
+        storageAndCaching = this[SettingsSectionKey.STORAGE_AND_CACHING.name] ?: true,
+        developerScenarios = this[SettingsSectionKey.DEVELOPER_SCENARIOS.name] ?: true,
+    )
+}
+
 @Composable
 fun SettingsScreen(
     settings: AppSettings,

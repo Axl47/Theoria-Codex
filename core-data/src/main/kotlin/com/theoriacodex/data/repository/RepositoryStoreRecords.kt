@@ -270,6 +270,8 @@ internal data class LegacyUiRestoreStoreRecord(
     val lastTab: String? = null,
     @field:SerializedName("searchScrollStates")
     val searchScrollStates: Map<String, LegacySearchScrollStateRecord> = emptyMap(),
+    @field:SerializedName("settingsSectionExpansion")
+    val settingsSectionExpansion: Map<String, Boolean> = emptyMap(),
     @field:SerializedName("viewerLaunchContext")
     val viewerLaunchContext: LegacyViewerLaunchContextRecord? = null,
 ) {
@@ -281,6 +283,7 @@ internal data class LegacyUiRestoreStoreRecord(
                     normalizedHash to record.toDomain()
                 }
             }.toMap(),
+            settingsSectionExpansion = settingsSectionExpansion,
             viewerLaunchContext = viewerLaunchContext?.toDomain(),
         )
     }
@@ -289,6 +292,7 @@ internal data class LegacyUiRestoreStoreRecord(
         return linkedMapOf(
             "lastTab" to if (lastTab.isNullOrBlank()) 0 else 1,
             "searchScrollStates" to searchScrollStates.size,
+            "settingsSectionExpansion" to settingsSectionExpansion.size,
             "viewerLaunchContext" to if (viewerLaunchContext == null) 0 else 1,
         )
     }
@@ -300,6 +304,7 @@ internal data class LegacyUiRestoreStoreRecord(
                 searchScrollStates = state.scrollStates.mapValues { (_, value) ->
                     LegacySearchScrollStateRecord.fromDomain(value)
                 },
+                settingsSectionExpansion = state.settingsSectionExpansion,
                 viewerLaunchContext = state.viewerLaunchContext?.let(LegacyViewerLaunchContextRecord::fromDomain),
             )
         }
@@ -309,6 +314,7 @@ internal data class LegacyUiRestoreStoreRecord(
 internal data class PersistedUiRestoreState(
     val lastTab: String?,
     val scrollStates: Map<String, SearchScrollState>,
+    val settingsSectionExpansion: Map<String, Boolean>,
     val viewerLaunchContext: ViewerLaunchContext?,
 )
 

@@ -284,6 +284,19 @@ class RepositoryContractTest(
         assertEquals("settings", repository.getLastTab())
     }
 
+    @Test
+    fun `ui restore persists settings section expansion`() = runTest {
+        val repository = createUiRestoreRepository()
+        val expansion = mapOf(
+            "UNIFIED_MODE" to false,
+            "STORAGE_AND_CACHING" to false,
+        )
+
+        repository.setSettingsSectionExpansion(expansion)
+
+        assertEquals(expansion, repository.getSettingsSectionExpansion())
+    }
+
     private fun createCodexRepository(): CodexRepository {
         return when (backend) {
             Backend.IN_MEMORY -> InMemoryCodexRepository()
