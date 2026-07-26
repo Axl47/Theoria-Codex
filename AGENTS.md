@@ -34,6 +34,10 @@ For page-number providers, derive continuation from authoritative provider metad
 
 Provider pages must publish unique canonical `Post.id` values after hydration. Raw provider IDs can repeat, and distinct raw IDs can resolve to the same canonical post identity; deduplicate only after hydration while continuing to advance pagination from the raw provider records.
 
+## Search Scroll Restoration
+
+The Search route applies persisted scroll position once when the route is restored or re-entered. Page appends must not retrigger that restoration from a changed result count, or pagination will replay the initial saved position and jump the grid to the top. Keep route-entry restoration separate from page-loading state.
+
 ## Releases
 
 GitHub prereleases are created only by pushing an annotated `vX.Y.Z` tag. The tagged commit must declare the same `versionName`, its calculated Android `versionCode` (`1_500_000_000 + major * 10_000 + minor * 100 + patch`), and a curated `release-notes/vX.Y.Z.md` file. Do not use a low sequential version code: existing installs and the updater already compare against this high SemVer-derived range.

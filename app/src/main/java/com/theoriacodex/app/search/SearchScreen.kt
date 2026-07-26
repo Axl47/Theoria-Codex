@@ -209,6 +209,7 @@ fun SearchScreen(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
+    var pendingScrollRestoration by remember { mutableStateOf(false) }
     val queryHash = state.query.appliedQueryHash
     val isNhentaiSourceMode = state.query.draft.mode == QueryMode.Source(SourceKey.NHENTAI)
     val animatedFilterActive = animatedOnly && !isNhentaiSourceMode
@@ -356,17 +357,28 @@ fun SearchScreen(
         onAction(SearchAction.ScrollChanged(0, 0))
     }
 
-    LaunchedEffect(queryHash, visibleResults.size, animatedFilterActive, state.restoration) {
-        if (animatedFilterActive) return@LaunchedEffect
-        val restored = (state.restoration as? SearchRestorationUiState.Restored)
-            ?.scrollState
-            ?: return@LaunchedEffect
+    LaunchedEffect(state.restoration) {
+        if (state.restoration is SearchRestorationUiState.Restored) {
+            // Restoration is a route-entry concern. Keep it pending until the first result set is
+            // available, but never make later page appends eligible to replay the old position.
+            pendingScrollRestoration = true
+        }
+    }
+
+    LaunchedEffect(pendingScrollRestoration, visibleResults.size, animatedFilterActive) {
+        if (!pendingScrollRestoration || animatedFilterActive) return@LaunchedEffect
+        val restored = (state.restoration as? SearchRestorationUiState.Restored)?.scrollState
+        if (restored == null) {
+            pendingScrollRestoration = false
+            return@LaunchedEffect
+        }
         if (visibleResults.isNotEmpty()) {
             val lastIndex = visibleResults.lastIndex.coerceAtLeast(0)
             gridState.scrollToItem(
                 index = restored.firstVisibleItemIndex.coerceIn(0, lastIndex),
                 scrollOffset = restored.firstVisibleItemOffsetPx.coerceAtLeast(0),
             )
+            pendingScrollRestoration = false
         }
     }
 

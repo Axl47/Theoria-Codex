@@ -4,6 +4,23 @@ updated_at: 2026-07-26T06:12:08-04:00
 ---
 # Working List
 
+## Current Task: Preserve Search Scroll During Universal Pagination
+
+### In Progress
+
+-
+
+### Pending
+
+### Done
+
+- [x] Trace the result-grid, route restoration, and page-append flow.
+  - Evidence: `SearchScreen` keyed scroll restoration to `visibleResults.size`, causing every appended page to replay the persisted route-entry position for all sources.
+- [x] Separate one-time route restoration from pagination updates.
+  - Evidence: restoration remains pending until results exist, then is consumed; result-count changes cannot replay it.
+- [x] Validate the source-agnostic fix.
+  - Evidence: `:app:testDebugUnitTest` focused Search ViewModel/state tests, `:app:compileDebugAndroidTestKotlin`, `:app:assembleDebug`, and connected `SearchSourceChipDeviceTest` on SM-S926U / Android 16 all passed.
+
 ## Current Task: Complete Hitomi Character Search Crash Repair
 
 ### In Progress
