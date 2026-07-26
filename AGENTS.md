@@ -38,6 +38,10 @@ Provider pages must publish unique canonical `Post.id` values after hydration. R
 
 The Search route applies persisted scroll position once when the route is restored or re-entered. Page appends must not retrigger that restoration from a changed result count, or pagination will replay the initial saved position and jump the grid to the top. Keep route-entry restoration separate from page-loading state. Unified execution may retain `EXCLUDED` source statuses for orchestration diagnostics, but the UI status row should only render actionable provider failures.
 
+## Settings Sections
+
+Settings cards use the shared `SettingsSection` composable with independently persisted expanded state. New settings groups should use the same header and right-side chevron pattern rather than introducing another section-specific collapse control.
+
 ## Releases
 
 GitHub prereleases are created only by pushing an annotated `vX.Y.Z` tag. The tagged commit must declare the same `versionName`, its calculated Android `versionCode` (`1_500_000_000 + major * 10_000 + minor * 100 + patch`), and a curated `release-notes/vX.Y.Z.md` file. Do not use a low sequential version code: existing installs and the updater already compare against this high SemVer-derived range.

@@ -1,31 +1,39 @@
 package com.theoriacodex.app.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.data.repository.AppSettings
@@ -79,9 +87,16 @@ fun SettingsScreen(
     changelogLoading: Boolean,
     onOpenChangelog: () -> Unit,
 ) {
-    var showClearCacheOptions by remember { mutableStateOf(false) }
+    var showClearCacheOptions by rememberSaveable { mutableStateOf(false) }
     var newProfileName by remember { mutableStateOf("") }
     var profileDeleteTarget by remember { mutableStateOf<RecommendationProfile?>(null) }
+    var profilesExpanded by rememberSaveable { mutableStateOf(true) }
+    var blacklistExpanded by rememberSaveable { mutableStateOf(true) }
+    var unifiedModeExpanded by rememberSaveable { mutableStateOf(true) }
+    var sourceAccountsExpanded by rememberSaveable { mutableStateOf(true) }
+    var storageExpanded by rememberSaveable { mutableStateOf(true) }
+    var updatesExpanded by rememberSaveable { mutableStateOf(true) }
+    var developerScenariosExpanded by rememberSaveable { mutableStateOf(true) }
 
     Column(
         modifier = Modifier
@@ -98,14 +113,11 @@ fun SettingsScreen(
             Text("Settings", style = MaterialTheme.typography.titleLarge)
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text("Recommendation Profiles", style = MaterialTheme.typography.titleMedium)
+        SettingsSection(
+            title = "Recommendation Profiles",
+            expanded = profilesExpanded,
+            onToggle = { profilesExpanded = !profilesExpanded },
+        ) {
                 recommendationProfiles.forEach { profile ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -156,17 +168,13 @@ fun SettingsScreen(
                 ) {
                     Text("Clear active profile likes")
                 }
-            }
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text("For You blacklist", style = MaterialTheme.typography.titleMedium)
+        SettingsSection(
+            title = "For You blacklist",
+            expanded = blacklistExpanded,
+            onToggle = { blacklistExpanded = !blacklistExpanded },
+        ) {
                 Text(
                     text = "Hidden tag sets for $activeProfileName",
                     style = MaterialTheme.typography.bodySmall,
@@ -196,17 +204,13 @@ fun SettingsScreen(
                         }
                     }
                 }
-            }
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text("Unified mode", style = MaterialTheme.typography.titleMedium)
+        SettingsSection(
+            title = "Unified mode",
+            expanded = unifiedModeExpanded,
+            onToggle = { unifiedModeExpanded = !unifiedModeExpanded },
+        ) {
                 availableSources.forEach { source ->
                     val isEnabled = source in settings.runtime.enabledSources
                     Row(
@@ -242,17 +246,13 @@ fun SettingsScreen(
                     )
                     Text("Weight: %.2f".format(weight), style = MaterialTheme.typography.bodySmall)
                 }
-            }
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text("Source Accounts", style = MaterialTheme.typography.titleMedium)
+        SettingsSection(
+            title = "Source Accounts",
+            expanded = sourceAccountsExpanded,
+            onToggle = { sourceAccountsExpanded = !sourceAccountsExpanded },
+        ) {
 
                 Text("Pixiv", style = MaterialTheme.typography.titleSmall)
                 Text(pixivStatusLabel, style = MaterialTheme.typography.bodySmall)
@@ -325,17 +325,14 @@ fun SettingsScreen(
                         Text("Clear")
                     }
                 }
-            }
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text("Storage & caching", style = MaterialTheme.typography.titleMedium)
+        SettingsSection(
+            title = "Storage & caching",
+            expanded = storageExpanded,
+            onToggle = { storageExpanded = !storageExpanded },
+            contentSpacing = 8.dp,
+        ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -392,17 +389,14 @@ fun SettingsScreen(
                         }
                     }
                 }
-            }
         }
 
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text("Updates", style = MaterialTheme.typography.titleMedium)
+        SettingsSection(
+            title = "Updates",
+            expanded = updatesExpanded,
+            onToggle = { updatesExpanded = !updatesExpanded },
+            contentSpacing = 8.dp,
+        ) {
                 Text(
                     if (changelogLoading) {
                         "Loading release history..."
@@ -417,18 +411,15 @@ fun SettingsScreen(
                 ) {
                     Text("Open changelog")
                 }
-            }
         }
 
         if (showDeveloperScenarios) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text("Developer scenarios", style = MaterialTheme.typography.titleMedium)
+            SettingsSection(
+                title = "Developer scenarios",
+                expanded = developerScenariosExpanded,
+                onToggle = { developerScenariosExpanded = !developerScenariosExpanded },
+                contentSpacing = 8.dp,
+            ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ScenarioPreset.entries.forEach { scenario ->
                             val label = when (scenario) {
@@ -444,7 +435,6 @@ fun SettingsScreen(
                             )
                         }
                     }
-                }
             }
         }
 
@@ -474,6 +464,47 @@ fun SettingsScreen(
                     }
                 },
             )
+        }
+    }
+}
+
+@Composable
+private fun SettingsSection(
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    contentSpacing: Dp = 10.dp,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggle)
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = title,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Collapse $title" else "Expand $title",
+                )
+            }
+            if (expanded) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(contentSpacing),
+                    content = content,
+                )
+            }
         }
     }
 }

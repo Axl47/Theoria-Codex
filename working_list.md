@@ -4,6 +4,21 @@ updated_at: 2026-07-26T06:12:08-04:00
 ---
 # Working List
 
+## Current Task: Make Settings Sections Collapsible
+
+### In Progress
+
+-
+
+### Pending
+
+### Done
+
+- [x] Wrap every Settings section in the shared collapsible header pattern.
+  - Evidence: Recommendation Profiles, For You blacklist, Unified mode, Source Accounts, Storage & caching, Updates, and Developer scenarios each have independent `rememberSaveable` expanded state and a right-aligned chevron.
+- [x] Validate locally without connected-device testing.
+  - Evidence: `:app:compileDebugKotlin`, `:app:testDebugUnitTest`, and `git diff --check` passed.
+
 ## Current Task: Hide Unified Excluded Source Chips
 
 ### In Progress
