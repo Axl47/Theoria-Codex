@@ -226,6 +226,11 @@ class LiveSearchCoordinatorRouteTest {
         assertTrue("Hitomi rejected global girl search", global.commitTagInput("girl"))
         global.applyDraft()
         assertCoordinatorSucceeded("Hitomi global girl", global)
+        assertEquals(
+            "Hitomi global girl returned duplicate post identities",
+            global.results.size,
+            global.results.map { post -> post.id }.distinct().size,
+        )
 
         val typed = searchCoordinator(registry, "hitomi-typed")
         typed.initialize()

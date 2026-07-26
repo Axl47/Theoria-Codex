@@ -1,8 +1,26 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-26T05:12:54-04:00
+updated_at: 2026-07-26T05:29:43-04:00
 ---
 # Working List
+
+## Current Task: Restore Search Chip Styling And Fix Hitomi Crash
+
+### In Progress
+
+### Pending
+
+### Done
+
+- [x] Restore the original Material `FilterChip` styling without changing the temporary multi-source interaction.
+  - Evidence: `ModeRow` renders the original `FilterChip`; a transparent sibling owns tap and source-only long press without replacing Material colors, borders, shape, or padding. `SearchSourceChipDeviceTest` passed 1/1 on SM-S926U (Android 16), including physical tap timing and long-press isolation.
+- [x] Capture and repair the one-tag Hitomi crash at the provider boundary.
+  - Evidence: `com.theoriacodex.debug` throws `IllegalArgumentException: Key "HITOMI:4076681" was already used` while measuring the Search staggered grid, proving duplicate Hitomi `PostId` values reached the keyed UI list.
+  - Repair: preserve the provider's first-seen ordering while deduplicating gallery IDs as the Hitomi global-index record is decoded, before metadata hydration or UI publication.
+- [x] Add deterministic and live regression coverage.
+  - Evidence: the fixture global-index test proves `[4, 3, 4, 2]` becomes `[4, 3, 2]`; the opt-in live `girl` route completed successfully and asserted unique post identities.
+- [x] Complete the bounded regression batch.
+  - Validation: full `:core-sources:test` and `:app:testDebugUnitTest` passed within a combined 597 tests, 0 failures, 0 errors, and 3 opt-in skips; `:app:compileDebugAndroidTestKotlin`; `:app:assembleDebug`; connected `SearchSourceChipDeviceTest`; live Hitomi route test; and `git diff --check` passed.
 
 ## Feature Closeout: Temporary multi-source Search
 

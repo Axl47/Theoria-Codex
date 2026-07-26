@@ -11,8 +11,7 @@ import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.domain.model.QueryMode
@@ -63,8 +62,16 @@ class SearchSourceChipDeviceTest {
         assertCombinedOwner(pixiv, hasLongClick = true)
         assertCombinedOwner(unified, hasLongClick = false)
 
-        pixiv.performClick()
-        gelbooru.performSemanticsAction(SemanticsActions.OnLongClick)
+        pixiv.performTouchInput {
+            down(center)
+            advanceEventTime(100)
+            up()
+        }
+        gelbooru.performTouchInput {
+            down(center)
+            advanceEventTime(1_000)
+            up()
+        }
         composeRule.runOnIdle {
             assertEquals(listOf(QueryMode.Source(SourceKey.PIXIV)), clicked)
             assertEquals(listOf(SourceKey.GELBOORU), toggled)

@@ -10,7 +10,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
@@ -24,7 +23,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -47,6 +45,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -75,6 +74,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
@@ -83,6 +83,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -1774,80 +1775,61 @@ internal fun ModeRow(
                 source != null -> source in draftSourceScope.explicitSources
                 else -> false
             }
-            SourceModeChip(
-                label = option.sourceChipLabel(),
-                selected = selected,
-                onClick = { onModeSelected(option) },
-                onLongClick = source?.let { selectedSource ->
-                    { onTemporarySourceToggled(selectedSource) }
-                },
-            ) {
-                if (option == QueryMode.Unified) {
-                    Text("Unified")
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                color = MaterialTheme.colorScheme.primary,
-                                shape = CircleShape,
-                            )
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                    ) {
-                        Text(
-                            text = unifiedSourceCount.toString(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onPrimary,
+            val label = option.sourceChipLabel()
+            Box {
+                FilterChip(
+                    selected = selected,
+                    modifier = Modifier.clearAndSetSemantics {},
+                    onClick = {},
+                    label = {
+                        if (option == QueryMode.Unified) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text("Unified")
+                                Box(
+                                    modifier = Modifier
+                                        .background(
+                                            color = MaterialTheme.colorScheme.primary,
+                                            shape = CircleShape,
+                                        )
+                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                ) {
+                                    Text(
+                                        text = unifiedSourceCount.toString(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                    )
+                                }
+                            }
+                        } else {
+                            SourceLogo(source = requireNotNull(source), size = 18.dp)
+                        }
+                    },
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(FilterChipDefaults.shape)
+                        .combinedClickable(
+                            role = Role.Checkbox,
+                            onClickLabel = "Select $label",
+                            onLongClickLabel = source?.let {
+                                "Add or remove $label from temporary source search"
+                            },
+                            onClick = { onModeSelected(option) },
+                            onLongClick = source?.let { selectedSource ->
+                                { onTemporarySourceToggled(selectedSource) }
+                            },
                         )
-                    }
-                } else {
-                    SourceLogo(source = requireNotNull(source), size = 18.dp)
-                }
+                        .semantics {
+                            this.selected = selected
+                            contentDescription = label
+                        },
+                )
             }
         }
-    }
-}
-
-@Composable
-private fun SourceModeChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    onLongClick: (() -> Unit)?,
-    content: @Composable RowScope.() -> Unit,
-) {
-    val accent = MaterialTheme.colorScheme.primary
-    Surface(
-        modifier = Modifier
-            .combinedClickable(
-                role = Role.Checkbox,
-                onClickLabel = "Select $label",
-                onLongClickLabel = onLongClick?.let {
-                    "Add or remove $label from temporary source search"
-                },
-                onClick = onClick,
-                onLongClick = onLongClick,
-            )
-            .semantics(mergeDescendants = true) {
-                contentDescription = label
-                this.selected = selected
-            },
-        shape = RoundedCornerShape(999.dp),
-        color = if (selected) {
-            accent.copy(alpha = 0.16f)
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-        },
-        contentColor = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (selected) accent else MaterialTheme.colorScheme.outline,
-        ),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            content = content,
-        )
     }
 }
 

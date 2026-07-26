@@ -60,6 +60,24 @@ class HitomiSourceAdapterTest {
     }
 
     @Test
+    fun `All search removes duplicate gallery ids from the provider global index`() = runTest {
+        val version = "12345"
+        val indexUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/galleries.$version.index"
+        val dataUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/galleries.$version.data"
+        val http = RoutingHitomiHttpClient().apply {
+            textRoutes["https://ltn.gold-usergeneratedcontent.net/galleriesindex/version"] = version
+            rawFullBodies[indexUrl] = globalIndexNode("girl", dataLength = 20)
+            rawFullBodies[dataUrl] = globalGalleryRecord(listOf(4, 3, 4, 2))
+        }
+        val adapter = adapter(http, pageSize = 4)
+
+        val page = adapter.search(query(include = listOf(SearchTerm("girl"))), null)
+
+        assertEquals(listOf("4", "3", "2"), page.items.map { post -> post.id.sourcePostId })
+        assertEquals(page.items.size, page.items.map { post -> post.id }.distinct().size)
+    }
+
+    @Test
     fun `global search cache switches atomically to the current galleries index version`() = runTest {
         val versionUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/version"
         val v1IndexUrl = "https://ltn.gold-usergeneratedcontent.net/galleriesindex/galleries.100.index"
