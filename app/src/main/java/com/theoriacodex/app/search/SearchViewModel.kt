@@ -79,6 +79,23 @@ internal class SearchViewModel(
                 refreshTrending()
             }
 
+            is SearchAction.ToggleTemporarySource -> {
+                val input = mutableState.value.suggestions.input
+                if (coordinator.toggleTemporarySource(action.source)) {
+                    cancelAutocomplete()
+                    coordinator.clearAutocompleteSuggestions()
+                    clearSuggestionState()
+                    publishCoordinatorState()
+                    persistDraftQuery()
+                    if (input.isBlank()) {
+                        refreshTrending()
+                        refreshAutocomplete(input)
+                    } else {
+                        refreshAutocomplete(input)
+                    }
+                }
+            }
+
             is SearchAction.SelectSort -> mutateDraft {
                 coordinator.setSort(action.sort)
             }
@@ -556,6 +573,7 @@ internal class SearchViewModel(
     }
 
     private fun persistDraftQuery() {
+        if (coordinator.isTemporarySourceScope) return
         savedStateHandle[SearchSavedStateKeys.DRAFT_QUERY] =
             SearchSavedQueryCodec.encode(coordinator.draftQuery)
     }

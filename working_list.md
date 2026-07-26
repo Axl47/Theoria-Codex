@@ -10,6 +10,8 @@ updated_at: 2026-07-26T00:00:00-04:00
 
 ### Pending
 
+- [ ] Phase 2: Route the frozen temporary source set through exact Unified execution
+
 ### Done
 
 - [x] Trace Search mode selection, route state, coordinator execution, paging, restoration, and persistence boundaries
@@ -269,6 +271,10 @@ updated_at: 2026-07-26T00:00:00-04:00
 ## In Progress
 
 ## Done
+
+- [x] Phase 1: Add the route-level draft/applied source-scope contract
+  - Evidence: `SearchSourceScope` distinguishes global Unified, single source, and canonical temporary sets; typed `ToggleTemporarySource` updates draft state and selection-only edits enable Apply without changing Compose, Settings, `QueryMode`, or repositories.
+  - Validation: `ANDROID_SDK_ROOT=/Users/axel/Library/Android/sdk ./gradlew :app:testDebugUnitTest --tests '*SearchStateContractTest' --tests '*SearchViewModelTest'` — 22 tests, 0 failures.
 - [x] Run final live source verification (`./gradlew :core-sources:test`, `./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true`, `./gradlew :app:testDebugUnitTest -Ptheoria.liveSources=true --tests '*LiveSearchCoordinatorRouteTest*'`, `./gradlew lint test :app:compileDebugAndroidTestKotlin`)
 - [x] Fix Rule34Video live trending degradation (`./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true`)
 - [x] Fix NHentai live trending degradation (`./gradlew :core-sources:providerHealthCheck -Ptheoria.liveProviders=true`)

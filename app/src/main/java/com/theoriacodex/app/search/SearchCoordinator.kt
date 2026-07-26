@@ -44,6 +44,7 @@ import com.theoriacodex.domain.tags.normalizeMatchToken
 import com.theoriacodex.domain.tags.sourceTagKey
 import com.theoriacodex.domain.tags.sourceTagsMatch
 import com.theoriacodex.app.recommend.recommendationTaxonomyFor
+import com.theoriacodex.app.search.state.SearchSourceScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -84,6 +85,8 @@ class SearchCoordinator(
     private var activeRootSearch: RootSearchRequest? = null
     private var activeRootSearchJob: Job? = null
     private var activeLoadMoreJob: Job? = null
+    private var draftSourceScope: SearchSourceScope = SearchSourceScope.GlobalUnified
+    private var appliedSourceScope: SearchSourceScope = SearchSourceScope.GlobalUnified
 
     var draftQuery = defaultQuery()
         private set
@@ -147,7 +150,16 @@ class SearchCoordinator(
         }
 
     val hasPendingChanges: Boolean
-        get() = draftQuery != appliedQuery
+        get() = draftQuery != appliedQuery || draftSourceScope != appliedSourceScope
+
+    val isTemporarySourceScope: Boolean
+        get() = draftSourceScope is SearchSourceScope.Temporary
+
+    val draftSourceScopeSnapshot: SearchSourceScope
+        get() = draftSourceScope
+
+    val appliedSourceScopeSnapshot: SearchSourceScope
+        get() = appliedSourceScope
 
     val hasAnySearchRun: Boolean
         get() = hasExecutedSearch
@@ -280,6 +292,8 @@ class SearchCoordinator(
             val sanitized = restored.forMode(restored.mode)
             appliedQuery = sanitized.query
             draftQuery = sanitized.query
+            appliedSourceScope = SearchSourceScope.fromQuery(appliedQuery)
+            draftSourceScope = appliedSourceScope
             if (sanitized.removedSourceOwnedTerms) {
                 tagInputValidationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
             }
@@ -512,6 +526,7 @@ class SearchCoordinator(
         val restored = appliedByMode[modeKey(resolvedMode)] ?: defaultQuery(resolvedMode)
         val sanitized = restored.copy(mode = resolvedMode).forMode(resolvedMode)
         draftQuery = sanitized.query
+        draftSourceScope = SearchSourceScope.fromQuery(sanitized.query)
         resetUnsupportedSearchScope()
         clearTagInputUiState()
         if (
@@ -520,6 +535,42 @@ class SearchCoordinator(
         ) {
             tagInputValidationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
         }
+    }
+
+    /** Adds or removes one available source from the temporary route scope. */
+    fun toggleTemporarySource(source: SourceKey): Boolean {
+        if (source !in registry.availableSources()) return false
+
+        val nextScope = when (val current = draftSourceScope) {
+            SearchSourceScope.GlobalUnified -> return false
+            is SearchSourceScope.Single -> {
+                if (current.source == source) return false
+                SearchSourceScope.fromSources(listOf(current.source, source))
+            }
+
+            is SearchSourceScope.Temporary -> {
+                SearchSourceScope.fromSources(
+                    if (source in current.sources) {
+                        current.sources - source
+                    } else {
+                        current.sources + source
+                    },
+                )
+            }
+        }
+        if (nextScope == draftSourceScope) return false
+
+        val sanitized = draftQuery.forMode(nextScope.queryMode())
+        draftSourceScope = nextScope
+        draftQuery = sanitized.query
+        resetUnsupportedSearchScope()
+        clearAutocompleteSuggestions()
+        tagInputValidationMessage = if (sanitized.removedSourceOwnedTerms) {
+            UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
+        } else {
+            null
+        }
+        return true
     }
 
     fun setSort(sort: SortMode) {
@@ -535,6 +586,7 @@ class SearchCoordinator(
         if (!isModeAvailable(query.mode)) return false
         val sanitized = query.forMode(query.mode)
         draftQuery = sanitized.query
+        draftSourceScope = SearchSourceScope.fromQuery(sanitized.query)
         resetUnsupportedSearchScope()
         clearTagInputUiState()
         if (sanitized.removedSourceOwnedTerms) {
@@ -545,12 +597,13 @@ class SearchCoordinator(
 
     fun resetDraft() {
         draftQuery = appliedQuery
+        draftSourceScope = appliedSourceScope
         resetUnsupportedSearchScope()
         clearTagInputUiState()
     }
 
     fun clearDraft() {
-        val mode = draftQuery.mode.takeIf(::isModeAvailable) ?: QueryMode.Unified
+        val mode = draftSourceScope.queryMode().takeIf(::isModeAvailable) ?: QueryMode.Unified
         draftQuery = defaultQuery(mode)
         resetUnsupportedSearchScope()
         clearTagInputUiState()
@@ -576,6 +629,7 @@ class SearchCoordinator(
             includeTerms = normalizedInclude.map { value -> SearchTerm(value = value) },
             excludeTerms = normalizedExclude.map { value -> SearchTerm(value = value) },
         )
+        draftSourceScope = SearchSourceScope.fromQuery(draftQuery)
         clearSearchResultsForRetry()
         statuses = emptyList()
         errorMessage = null
@@ -995,6 +1049,7 @@ class SearchCoordinator(
         if (!isModeAvailable(query.mode)) return false
         val sanitized = query.forMode(query.mode)
         draftQuery = sanitized.query
+        draftSourceScope = SearchSourceScope.fromQuery(sanitized.query)
         resetUnsupportedSearchScope()
         clearTagInputUiState()
         if (sanitized.removedSourceOwnedTerms) {
@@ -2079,6 +2134,14 @@ private fun SearchTerm.normalizedOrNull(): SearchTerm? {
 
 private fun Query.hasSourceOwnedTerms(): Boolean {
     return (includeTerms + excludeTerms).any { term -> !term.isPortableGeneralTag }
+}
+
+private fun SearchSourceScope.queryMode(): QueryMode {
+    return when (this) {
+        SearchSourceScope.GlobalUnified -> QueryMode.Unified
+        is SearchSourceScope.Single -> QueryMode.Source(source)
+        is SearchSourceScope.Temporary -> QueryMode.Unified
+    }
 }
 
 private fun Query.forMode(mode: QueryMode): ModeQuerySanitization {

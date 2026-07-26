@@ -5,6 +5,7 @@ import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchEffect
 import com.theoriacodex.app.search.state.SearchRestorationUiState
+import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -134,6 +135,29 @@ class SearchViewModelTest {
 
             assertTrue(viewModel.state.value.content.results.isEmpty())
             assertFalse(viewModel.state.value.loading)
+        }
+
+    @Test
+    fun `temporary source action updates draft scope and pending state`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val viewModel = viewModel(
+                adapter = ViewModelSearchAdapter(SourceKey.PIXIV),
+                additionalAdapters = listOf(ViewModelSearchAdapter(SourceKey.GELBOORU)),
+            )
+            restore(viewModel)
+
+            viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+            viewModel.onAction(SearchAction.ToggleTemporarySource(SourceKey.GELBOORU))
+            advanceUntilIdle()
+
+            val query = viewModel.state.value.query
+            assertEquals(
+                SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)),
+                query.draftSourceScope,
+            )
+            assertEquals(SearchSourceScope.GlobalUnified, query.appliedSourceScope)
+            assertEquals(QueryMode.Unified, query.draft.mode)
+            assertTrue(viewModel.state.value.hasPendingChanges)
         }
 
     @Test
@@ -304,9 +328,12 @@ class SearchViewModelTest {
         adapter: ViewModelSearchAdapter,
         savedState: SavedStateHandle = SavedStateHandle(),
         autocompleteDelayMs: Long = 0L,
+        additionalAdapters: List<SourceAdapter> = emptyList(),
     ): SearchViewModel {
         return SearchViewModel(
-            coordinator = SearchCoordinator(ViewModelSearchRegistry(adapter)),
+            coordinator = SearchCoordinator(
+                ViewModelSearchRegistry(adapter, *additionalAdapters.toTypedArray()),
+            ),
             savedStateHandle = savedState,
             autocompleteDelayMs = autocompleteDelayMs,
             scrollPersistenceDelayMs = 0L,
@@ -332,14 +359,18 @@ class SearchMainDispatcherRule(
 }
 
 private class ViewModelSearchRegistry(
-    private val adapter: SourceAdapter,
+    adapter: SourceAdapter,
+    vararg additionalAdapters: SourceAdapter,
 ) : SourceAdapterRegistry {
-    private val orchestrator = UnifiedSearchOrchestrator(mapOf(adapter.sourceKey to adapter))
+    private val adapters = listOf(adapter) + additionalAdapters
+    private val orchestrator = UnifiedSearchOrchestrator(
+        adapters.associateBy(SourceAdapter::sourceKey),
+    )
 
-    override fun availableSources(): Set<SourceKey> = setOf(adapter.sourceKey)
+    override fun availableSources(): Set<SourceKey> = adapters.mapTo(mutableSetOf(), SourceAdapter::sourceKey)
 
     override fun adapterFor(sourceKey: SourceKey): SourceAdapter? {
-        return adapter.takeIf { sourceKey == adapter.sourceKey }
+        return adapters.firstOrNull { adapter -> adapter.sourceKey == sourceKey }
     }
 
     override fun unifiedOrchestrator(): UnifiedSearchOrchestrator = orchestrator

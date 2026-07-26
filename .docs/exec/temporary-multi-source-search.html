@@ -160,7 +160,7 @@
     <h1>Temporary multi-source Search</h1>
     <p>Let a user start from one Search source, long-press other source chips to build a temporary explicit source set, and run that set through the existing Unified search engine while keeping each chosen source visibly highlighted.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Proposed</span>
+      <span class="pill">Status: In progress</span>
       <span class="pill">Owner: Codex</span>
       <span class="pill">Created: 2026-07-26</span>
       <span class="pill">Updated: 2026-07-26</span>
@@ -201,9 +201,9 @@
       <h2>Current Status</h2>
       <table>
         <tbody>
-          <tr><th>Status</th><td>Proposed; repository flow traced and implementation boundaries selected.</td></tr>
-          <tr><th>Next action</th><td>Add a coordinator-owned draft/applied execution scope and expose it through immutable Search state.</td></tr>
-          <tr><th>Implementation state</th><td>No production code has been changed by this planning turn.</td></tr>
+          <tr><th>Status</th><td>Phase 1 complete; Phase 2 is the next bounded implementation slice.</td></tr>
+          <tr><th>Next action</th><td>Route the frozen temporary source set through the existing Unified engine and continuation paths.</td></tr>
+          <tr><th>Implementation state</th><td>Phase 1 now exposes separate draft/applied route scopes, typed long-press intent, canonical source selection, and selection-aware pending state. Compose, Settings, QueryMode, and repositories remain unchanged.</td></tr>
           <tr><th>Open product questions</th><td>None required for the first pass. The interaction rules below choose reversible, route-scoped behavior consistent with “temporary.”</td></tr>
         </tbody>
       </table>
@@ -390,7 +390,7 @@
         <li>[x] 2026-07-26 — Defined temporary explicit selection as route-scoped execution state rather than a Settings mutation or permanent <code>QueryMode</code>.</li>
         <li>[x] 2026-07-26 — Defined interaction, sanitation, exact-source continuation, source-loss, persistence, accessibility, and validation behavior.</li>
         <li>[x] 2026-07-26 — Authored and structurally validated this standalone ExecPlan.</li>
-        <li>[ ] Implement Phase 1 route-level source-scope contract.</li>
+        <li>[x] 2026-07-26 — Implemented Phase 1 route-level source-scope contract; focused state/ViewModel tests pass.</li>
         <li>[ ] Implement Phase 2 exact-source coordinator execution.</li>
         <li>[ ] Implement Phase 3 independently highlighted source chips.</li>
         <li>[ ] Complete Phase 4 automated and device validation.</li>
@@ -413,7 +413,7 @@
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>The planning phase is complete. The implementation is intentionally contained inside Search: typed route state expresses the source set, the coordinator freezes it into the existing Unified request pipeline, and Compose only renders and emits gestures. The highest-risk continuation and persistence paths have explicit acceptance checks. Update this paragraph after each phase with actual behavior and evidence.</p>
+      <p>The planning phase and Phase 1 contract slice are complete. Phase 1 is intentionally contained inside Search: typed route state expresses the source set, draft and applied scopes are independent, long-press intent remains a ViewModel action, and no UI, domain, Settings, or repository schema changed. Phase 1 evidence: <code>ANDROID_SDK_ROOT=/Users/axel/Library/Android/sdk ./gradlew :app:testDebugUnitTest --tests '*SearchStateContractTest' --tests '*SearchViewModelTest'</code> passed with 22 tests and 0 failures. Update this paragraph after each remaining phase with actual behavior and evidence.</p>
     </section>
 
     <section id="recovery">

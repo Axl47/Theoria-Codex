@@ -33,12 +33,61 @@ data class SearchUiState(
         get() = execution.activeKind == SearchRequestKind.PAGE
 
     val hasPendingChanges: Boolean
-        get() = query.draft != query.applied
+        get() = query.draft != query.applied ||
+            query.draftSourceScope != query.appliedSourceScope
+}
+
+/** Route-scoped source selection; it is intentionally separate from the durable QueryMode. */
+sealed interface SearchSourceScope {
+    val explicitSources: List<SourceKey>
+
+    data object GlobalUnified : SearchSourceScope {
+        override val explicitSources: List<SourceKey> = emptyList()
+    }
+
+    data class Single(
+        val source: SourceKey,
+    ) : SearchSourceScope {
+        override val explicitSources: List<SourceKey> = listOf(source)
+    }
+
+    data class Temporary(
+        val sources: List<SourceKey>,
+    ) : SearchSourceScope {
+        init {
+            require(sources.size >= 2) { "Temporary source scope requires at least two sources" }
+            require(sources == sources.distinct().sortedBy { it.name }) {
+                "Temporary source scope sources must be canonical and distinct"
+            }
+        }
+
+        override val explicitSources: List<SourceKey> = sources
+    }
+
+    companion object {
+        fun fromQuery(query: Query): SearchSourceScope {
+            return when (val mode = query.mode) {
+                QueryMode.Unified -> GlobalUnified
+                is QueryMode.Source -> Single(mode.source)
+            }
+        }
+
+        fun fromSources(sources: Iterable<SourceKey>): SearchSourceScope {
+            val canonical = sources.distinct().sortedBy { it.name }
+            return when (canonical.size) {
+                0 -> GlobalUnified
+                1 -> Single(canonical.single())
+                else -> Temporary(canonical)
+            }
+        }
+    }
 }
 
 data class SearchQueryUiState(
     val draft: Query = emptySearchQuery(),
     val applied: Query = emptySearchQuery(),
+    val draftSourceScope: SearchSourceScope = SearchSourceScope.GlobalUnified,
+    val appliedSourceScope: SearchSourceScope = SearchSourceScope.GlobalUnified,
     val appliedQueryHash: String = "",
     val availableSources: List<SourceKey> = emptyList(),
     val modeOptions: List<QueryMode> = listOf(QueryMode.Unified),
@@ -105,6 +154,7 @@ sealed interface SearchRestorationUiState {
 /** User intent accepted by the future SearchViewModel. */
 sealed interface SearchAction {
     data class SelectMode(val mode: QueryMode) : SearchAction
+    data class ToggleTemporarySource(val source: SourceKey) : SearchAction
     data class SelectSort(val sort: SortMode) : SearchAction
     data class SetDateRange(val range: DateRange?) : SearchAction
     data class SetMinimumScore(val score: Int?) : SearchAction

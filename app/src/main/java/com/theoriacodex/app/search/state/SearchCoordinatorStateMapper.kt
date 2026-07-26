@@ -15,6 +15,8 @@ import com.theoriacodex.domain.orchestration.SourceRunStatus
 data class SearchCoordinatorSnapshot(
     val draftQuery: Query,
     val appliedQuery: Query,
+    val draftSourceScope: SearchSourceScope = SearchSourceScope.GlobalUnified,
+    val appliedSourceScope: SearchSourceScope = SearchSourceScope.GlobalUnified,
     val appliedQueryHash: String,
     val results: List<Post>,
     val statuses: List<SourceRunStatus>,
@@ -41,6 +43,8 @@ fun SearchCoordinator.captureSearchCoordinatorSnapshot(): SearchCoordinatorSnaps
     return SearchCoordinatorSnapshot(
         draftQuery = draftQuery,
         appliedQuery = appliedQuery,
+        draftSourceScope = draftSourceScopeSnapshot,
+        appliedSourceScope = appliedSourceScopeSnapshot,
         appliedQueryHash = appliedQueryHash,
         results = displayResults(),
         statuses = statuses,
@@ -88,6 +92,8 @@ fun SearchCoordinatorSnapshot.toSearchUiState(
         query = SearchQueryUiState(
             draft = draftQuery,
             applied = appliedQuery,
+            draftSourceScope = draftSourceScope,
+            appliedSourceScope = appliedSourceScope,
             appliedQueryHash = appliedQueryHash,
             availableSources = availableSources.toList(),
             modeOptions = modeOptions.toList(),

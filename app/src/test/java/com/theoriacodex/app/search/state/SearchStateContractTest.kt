@@ -39,6 +39,39 @@ class SearchStateContractTest {
     }
 
     @Test
+    fun `source scope distinguishes global single and canonical temporary selections`() {
+        assertEquals(
+            SearchSourceScope.GlobalUnified,
+            SearchSourceScope.fromSources(emptyList()),
+        )
+        assertEquals(
+            SearchSourceScope.Single(SourceKey.PIXIV),
+            SearchSourceScope.fromSources(listOf(SourceKey.PIXIV)),
+        )
+        assertEquals(
+            SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)),
+            SearchSourceScope.fromSources(listOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.PIXIV)),
+        )
+    }
+
+    @Test
+    fun `selection-only edits count as pending changes`() {
+        val applied = query("same")
+        val state = SearchUiState(
+            query = SearchQueryUiState(
+                draft = applied,
+                applied = applied,
+                draftSourceScope = SearchSourceScope.Temporary(
+                    listOf(SourceKey.GELBOORU, SourceKey.PIXIV),
+                ),
+                appliedSourceScope = SearchSourceScope.GlobalUnified,
+            ),
+        )
+
+        assertTrue(state.hasPendingChanges)
+    }
+
+    @Test
     fun `coordinator snapshot maps all renderable search lanes`() {
         val applied = query("applied")
         val draft = query("draft")
@@ -50,6 +83,10 @@ class SearchStateContractTest {
         val snapshot = SearchCoordinatorSnapshot(
             draftQuery = draft,
             appliedQuery = applied,
+            draftSourceScope = SearchSourceScope.Temporary(
+                listOf(SourceKey.GELBOORU, SourceKey.PIXIV),
+            ),
+            appliedSourceScope = SearchSourceScope.GlobalUnified,
             appliedQueryHash = QueryHash.from(applied),
             results = mutableResults,
             statuses = mutableStatuses,
@@ -83,6 +120,11 @@ class SearchStateContractTest {
 
         assertEquals(draft, state.query.draft)
         assertEquals(applied, state.query.applied)
+        assertEquals(
+            SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)),
+            state.query.draftSourceScope,
+        )
+        assertEquals(SearchSourceScope.GlobalUnified, state.query.appliedSourceScope)
         assertEquals(listOf(result), state.content.results)
         assertEquals(listOf(status), state.content.statuses)
         assertEquals(scope, state.query.selectedScope)
