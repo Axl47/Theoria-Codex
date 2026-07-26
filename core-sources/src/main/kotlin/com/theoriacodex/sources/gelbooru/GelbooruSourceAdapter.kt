@@ -64,8 +64,9 @@ class GelbooruSourceAdapter(
                 "tags" to compileTags(query),
             ),
         )
-        val posts = parsePostItems(response).mapNotNull { parsePost(it) }
-        val next = if (posts.size >= limit) (pageIndex + 1).toString() else null
+        val rawPosts = parsePostItems(response)
+        val posts = rawPosts.mapNotNull { parsePost(it) }
+        val next = if (rawPosts.size >= limit) (pageIndex + 1).toString() else null
         return Page(items = posts, nextPageToken = next)
     }
 
@@ -161,8 +162,9 @@ class GelbooruSourceAdapter(
                 "tags" to uploadsQuery,
             ),
         )
-        val posts = parsePostItems(response).mapNotNull(::parsePost)
-        val next = if (posts.size >= limit) (pageIndex + 1).toString() else null
+        val rawPosts = parsePostItems(response)
+        val posts = rawPosts.mapNotNull(::parsePost)
+        val next = if (rawPosts.size >= limit) (pageIndex + 1).toString() else null
         return Page(items = posts, nextPageToken = next)
     }
 

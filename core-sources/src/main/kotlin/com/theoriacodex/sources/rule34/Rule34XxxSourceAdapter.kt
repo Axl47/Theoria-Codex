@@ -61,9 +61,9 @@ class Rule34XxxSourceAdapter(
                 "tags" to compileRule34BooruTags(query),
             ),
         )
-        val posts = jsonArrayOfObjects(response, gson, "rule34.xxx posts")
-            .mapNotNull(::parsePost)
-        val next = if (posts.size >= limit) (pageIndex + 1).toString() else null
+        val rawPosts = jsonArrayOfObjects(response, gson, "rule34.xxx posts")
+        val posts = rawPosts.mapNotNull(::parsePost)
+        val next = if (rawPosts.size >= limit) (pageIndex + 1).toString() else null
         return Page(items = posts, nextPageToken = next)
     }
 

@@ -74,6 +74,36 @@ class Rule34XxxSourceAdapterTest {
     }
 
     @Test
+    fun `search keeps pagination when a full provider page contains an unparseable post`() = runTest {
+        val credentials = FakeCredentialsProvider().apply {
+            rule34XxxCredentials = Rule34XxxCredentials(userId = "42", apiKey = "secret")
+        }
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = buildString {
+                    append("[")
+                    repeat(40) { index ->
+                        if (index > 0) append(",")
+                        if (index == 39) {
+                            append("""{"id":null,"tags":"malformed"}""")
+                        } else {
+                            append("""{"id":"${index + 1}","tags":"tag${index}"}""")
+                        }
+                    }
+                    append("]")
+                },
+            )
+        }
+        val adapter = Rule34XxxSourceAdapter(httpClient = httpClient, credentialsProvider = credentials)
+
+        val page = adapter.search(sampleQuery(), pageToken = "1")
+
+        assertEquals(39, page.items.size)
+        assertEquals("2", page.nextPageToken)
+    }
+
+    @Test
     fun `search skips non-object records and tolerates malformed optional values`() = runTest {
         val credentials = FakeCredentialsProvider().apply {
             rule34XxxCredentials = Rule34XxxCredentials(userId = "42", apiKey = "secret")

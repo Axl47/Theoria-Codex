@@ -57,10 +57,11 @@ class AibooruSourceAdapter(
                 "tags" to compileTags(query),
             ),
         )
-        val items = parsePostsArray(response).mapNotNull { element ->
+        val rawItems = parsePostsArray(response)
+        val items = rawItems.mapNotNull { element ->
             element.takeIf(JsonElement::isJsonObject)?.asJsonObject?.let(::parsePost)
         }
-        val nextPageToken = if (items.size >= limit) (page + 1).toString() else null
+        val nextPageToken = if (rawItems.size() >= limit) (page + 1).toString() else null
         return Page(items = items, nextPageToken = nextPageToken)
     }
 

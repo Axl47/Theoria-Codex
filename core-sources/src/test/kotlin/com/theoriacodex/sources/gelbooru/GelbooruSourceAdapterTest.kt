@@ -83,6 +83,51 @@ class GelbooruSourceAdapterTest {
     }
 
     @Test
+    fun `search keeps pagination when a full provider page contains an unparseable post`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = fullProviderPageWithMalformedPost(),
+            )
+        }
+        val adapter = GelbooruSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = FakeCredentialsProvider(),
+        )
+
+        val page = adapter.search(sampleQuery(), pageToken = "1")
+
+        assertEquals(39, page.items.size)
+        assertEquals("2", page.nextPageToken)
+    }
+
+    @Test
+    fun `creator search keeps pagination when a full provider page contains an unparseable post`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = fullProviderPageWithMalformedPost(),
+            )
+        }
+        val adapter = GelbooruSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = FakeCredentialsProvider(),
+        )
+
+        val page = adapter.searchCreatorPosts(
+            creator = CreatorProfile(
+                source = SourceKey.GELBOORU,
+                displayName = "artist",
+                uploadsQuery = "user:artist",
+            ),
+            pageToken = "2",
+        )
+
+        assertEquals(39, page.items.size)
+        assertEquals("3", page.nextPageToken)
+    }
+
+    @Test
     fun `search accepts direct arrays and ignores malformed optional values`() = runTest {
         val httpClient = FakeHttpClient().apply {
             nextGetResponse = SourceHttpResponse(
@@ -343,5 +388,18 @@ class GelbooruSourceAdapterTest {
             dateRange = null,
             minScore = null,
         )
+    }
+
+    private fun fullProviderPageWithMalformedPost(): String = buildString {
+        append("{\"post\":[")
+        repeat(40) { index ->
+            if (index > 0) append(",")
+            if (index == 39) {
+                append("""{"id":null,"tags":"malformed"}""")
+            } else {
+                append("""{"id":"${index + 1}","tags":"tag${index}"}""")
+            }
+        }
+        append("]}")
     }
 }
