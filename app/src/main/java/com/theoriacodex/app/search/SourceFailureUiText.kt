@@ -13,6 +13,14 @@ internal fun sourceStatusChipText(status: SourceRunStatus): String {
     }
 }
 
+internal fun visibleSourceStatusChipStatuses(
+    statuses: List<SourceRunStatus>,
+): List<SourceRunStatus> {
+    return statuses.filter { status ->
+        status.state != SourceRunState.SUCCESS && status.state != SourceRunState.EXCLUDED
+    }
+}
+
 internal fun buildSourceAuthErrorMessage(statuses: List<SourceRunStatus>): String? {
     val authSources = statuses
         .filter { status ->

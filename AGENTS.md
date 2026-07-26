@@ -36,7 +36,7 @@ Provider pages must publish unique canonical `Post.id` values after hydration. R
 
 ## Search Scroll Restoration
 
-The Search route applies persisted scroll position once when the route is restored or re-entered. Page appends must not retrigger that restoration from a changed result count, or pagination will replay the initial saved position and jump the grid to the top. Keep route-entry restoration separate from page-loading state.
+The Search route applies persisted scroll position once when the route is restored or re-entered. Page appends must not retrigger that restoration from a changed result count, or pagination will replay the initial saved position and jump the grid to the top. Keep route-entry restoration separate from page-loading state. Unified execution may retain `EXCLUDED` source statuses for orchestration diagnostics, but the UI status row should only render actionable provider failures.
 
 ## Releases
 

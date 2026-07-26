@@ -4,6 +4,21 @@ updated_at: 2026-07-26T06:12:08-04:00
 ---
 # Working List
 
+## Current Task: Hide Unified Excluded Source Chips
+
+### In Progress
+
+-
+
+### Pending
+
+### Done
+
+- [x] Keep disabled-source diagnostics in Unified execution state while removing their non-actionable chips from the Search UI.
+  - Evidence: `visibleSourceStatusChipStatuses` filters `EXCLUDED` statuses while retaining provider failures, with focused unit coverage.
+- [x] Validate locally without connected-device testing.
+  - Evidence: `SourceFailureUiTextTest`, `:app:compileDebugKotlin`, and `git diff --check` passed.
+
 ## Current Task: Preserve Search Scroll During Universal Pagination
 
 ### In Progress

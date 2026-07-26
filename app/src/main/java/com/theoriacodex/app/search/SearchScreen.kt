@@ -448,6 +448,9 @@ fun SearchScreen(
     val sourceFailureMessage = remember(state.content.statuses) {
         buildSourceFailureMessage(state.content.statuses)
     }
+    val sourceStatusChips = remember(state.content.statuses) {
+        visibleSourceStatusChipStatuses(state.content.statuses)
+    }
     val clearFocusInteraction = remember { MutableInteractionSource() }
     val showSearchControls = searchFieldFocused ||
         input.isNotBlank() ||
@@ -616,9 +619,9 @@ fun SearchScreen(
 
                     if (
                         state.query.appliedSourceScope !is SearchSourceScope.Single &&
-                        state.content.statuses.any { it.state != SourceRunState.SUCCESS }
+                        sourceStatusChips.isNotEmpty()
                     ) {
-                        StatusRow(statuses = state.content.statuses)
+                        StatusRow(statuses = sourceStatusChips)
                     }
 
                     Row(
@@ -1907,10 +1910,9 @@ private fun TagRow(
 
 @Composable
 private fun StatusRow(statuses: List<SourceRunStatus>) {
-    val filtered = statuses.filter { it.state != SourceRunState.SUCCESS }
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(filtered.size) { index ->
-            val status = filtered[index]
+        items(statuses.size) { index ->
+            val status = statuses[index]
             val text = sourceStatusChipText(status)
             AssistChip(onClick = {}, label = { Text(text) })
         }

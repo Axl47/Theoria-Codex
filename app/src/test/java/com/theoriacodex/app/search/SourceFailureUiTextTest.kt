@@ -102,6 +102,30 @@ class SourceFailureUiTextTest {
     }
 
     @Test
+    fun `status chips omit sources disabled in Unified settings`() {
+        val failed = SourceRunStatus(
+            source = SourceKey.NHENTAI,
+            state = SourceRunState.FAILED,
+            failureReason = SourceFailureReason.NETWORK,
+        )
+        val excluded = SourceRunStatus(
+            source = SourceKey.PIXIV,
+            state = SourceRunState.EXCLUDED,
+        )
+
+        assertEquals(
+            listOf(failed),
+            visibleSourceStatusChipStatuses(
+                listOf(
+                    SourceRunStatus(source = SourceKey.GELBOORU, state = SourceRunState.SUCCESS),
+                    excluded,
+                    failed,
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun `success and auth-only statuses do not produce failure banners`() {
         assertNull(
             buildSourceFailureMessage(
