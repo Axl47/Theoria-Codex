@@ -461,11 +461,15 @@ internal fun TheoriaAppContent(
     var settingsStorageExpanded by rememberSaveable { mutableStateOf(true) }
     var settingsDeveloperScenariosExpanded by rememberSaveable { mutableStateOf(true) }
     LaunchedEffect(dataDependencies.uiRestoreRepository) {
-        val restored = runCatching {
+        val restored = try {
             dataDependencies.uiRestoreRepository
                 .getSettingsSectionExpansion()
                 .toSettingsSectionExpansionState()
-        }.getOrDefault(SettingsSectionExpansionState())
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            SettingsSectionExpansionState()
+        }
         settingsProfilesExpanded = restored.recommendationProfiles
         settingsUnifiedModeExpanded = restored.unifiedMode
         settingsForYouBlacklistExpanded = restored.forYouBlacklist

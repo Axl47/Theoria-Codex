@@ -1783,68 +1783,97 @@ internal fun ModeRow(
 ) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(options.size) { index ->
-            val option = options[index]
-            val source = (option as? QueryMode.Source)?.source
-            val selected = when {
-                option == QueryMode.Unified -> draftSourceScope is SearchSourceScope.GlobalUnified
-                source != null -> source in draftSourceScope.explicitSources
-                else -> false
-            }
-            val label = option.sourceChipLabel()
-            Box {
-                FilterChip(
-                    selected = selected,
-                    modifier = Modifier.clearAndSetSemantics {},
-                    onClick = {},
-                    label = {
-                        if (option == QueryMode.Unified) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text("Unified")
-                                Box(
-                                    modifier = Modifier
-                                        .background(
-                                            color = MaterialTheme.colorScheme.primary,
-                                            shape = CircleShape,
-                                        )
-                                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                                ) {
-                                    Text(
-                                        text = unifiedSourceCount.toString(),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onPrimary,
-                                    )
-                                }
-                            }
-                        } else {
-                            SourceLogo(source = requireNotNull(source), size = 18.dp)
-                        }
+            ModeChip(
+                option = options[index],
+                draftSourceScope = draftSourceScope,
+                unifiedSourceCount = unifiedSourceCount,
+                onModeSelected = onModeSelected,
+                onTemporarySourceToggled = onTemporarySourceToggled,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ModeChip(
+    option: QueryMode,
+    draftSourceScope: SearchSourceScope,
+    unifiedSourceCount: Int,
+    onModeSelected: (QueryMode) -> Unit,
+    onTemporarySourceToggled: (SourceKey) -> Unit,
+) {
+    val source = (option as? QueryMode.Source)?.source
+    val selected = when {
+        option == QueryMode.Unified -> draftSourceScope is SearchSourceScope.GlobalUnified
+        source != null -> source in draftSourceScope.explicitSources
+        else -> false
+    }
+    val label = option.sourceChipLabel()
+    Box {
+        FilterChip(
+            selected = selected,
+            modifier = Modifier.clearAndSetSemantics {},
+            onClick = {},
+            label = {
+                ModeChipLabel(
+                    option = option,
+                    source = source,
+                    unifiedSourceCount = unifiedSourceCount,
+                )
+            },
+        )
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clip(FilterChipDefaults.shape)
+                .combinedClickable(
+                    role = Role.Checkbox,
+                    onClickLabel = "Select $label",
+                    onLongClickLabel = source?.let {
+                        "Add or remove $label from temporary source search"
+                    },
+                    onClick = { onModeSelected(option) },
+                    onLongClick = source?.let { selectedSource ->
+                        { onTemporarySourceToggled(selectedSource) }
                     },
                 )
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clip(FilterChipDefaults.shape)
-                        .combinedClickable(
-                            role = Role.Checkbox,
-                            onClickLabel = "Select $label",
-                            onLongClickLabel = source?.let {
-                                "Add or remove $label from temporary source search"
-                            },
-                            onClick = { onModeSelected(option) },
-                            onLongClick = source?.let { selectedSource ->
-                                { onTemporarySourceToggled(selectedSource) }
-                            },
-                        )
-                        .semantics {
-                            this.selected = selected
-                            contentDescription = label
-                        },
+                .semantics {
+                    this.selected = selected
+                    contentDescription = label
+                },
+        )
+    }
+}
+
+@Composable
+private fun ModeChipLabel(
+    option: QueryMode,
+    source: SourceKey?,
+    unifiedSourceCount: Int,
+) {
+    if (option == QueryMode.Unified) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Unified")
+            Box(
+                modifier = Modifier
+                    .background(
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = CircleShape,
+                    )
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = unifiedSourceCount.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimary,
                 )
             }
         }
+    } else {
+        SourceLogo(source = requireNotNull(source), size = 18.dp)
     }
 }
 

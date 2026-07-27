@@ -21,8 +21,9 @@ import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
-import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -70,31 +71,9 @@ internal class SearchViewModel(
 
     override fun onAction(action: SearchAction) {
         when (action) {
-            is SearchAction.SelectMode -> {
-                coordinator.setMode(action.mode)
-                coordinator.clearAutocompleteSuggestions()
-                clearSuggestionState()
-                publishCoordinatorState()
-                persistDraftQuery()
-                refreshTrending()
-            }
+            is SearchAction.SelectMode -> selectMode(action.mode)
 
-            is SearchAction.ToggleTemporarySource -> {
-                val input = mutableState.value.suggestions.input
-                if (coordinator.toggleTemporarySource(action.source)) {
-                    cancelAutocomplete()
-                    coordinator.clearAutocompleteSuggestions()
-                    clearSuggestionState()
-                    publishCoordinatorState()
-                    persistDraftQuery()
-                    if (input.isBlank()) {
-                        refreshTrending()
-                        refreshAutocomplete(input)
-                    } else {
-                        refreshAutocomplete(input)
-                    }
-                }
-            }
+            is SearchAction.ToggleTemporarySource -> toggleTemporarySource(action.source)
 
             is SearchAction.SelectSort -> mutateDraft {
                 coordinator.setSort(action.sort)
@@ -152,21 +131,7 @@ internal class SearchViewModel(
                 publishCoordinatorState()
             }
 
-            SearchAction.ApplyDraft -> {
-                val directGalleryId = commitPendingDirectInput()
-                launchSearch(
-                    kind = if (mutableState.value.content.hasExecutedSearch) {
-                        SearchRequestKind.REPLACE
-                    } else {
-                        SearchRequestKind.INITIAL
-                    },
-                    submittedQuery = coordinator.draftQuery,
-                    operation = coordinator::applyDraft,
-                    onSuccess = {
-                        directGalleryId?.let { galleryId -> openDirectNhentaiGallery(galleryId) }
-                    },
-                )
-            }
+            SearchAction.ApplyDraft -> applyDraft()
 
             is SearchAction.ApplyHistoricalQuery -> launchSearch(
                 kind = SearchRequestKind.REPLACE,
@@ -178,19 +143,7 @@ internal class SearchViewModel(
                 },
             )
 
-            is SearchAction.ApplyTagSearch -> {
-                if (!coordinator.prepareTagSearch(action.includeTags, mode = action.mode)) {
-                    effectChannel.trySend(SearchEffect.ShowMessage("Search source is unavailable"))
-                } else {
-                    publishCoordinatorState()
-                    persistDraftQuery()
-                    launchSearch(
-                        kind = SearchRequestKind.REPLACE,
-                        submittedQuery = coordinator.draftQuery,
-                        operation = coordinator::applyDraft,
-                    )
-                }
-            }
+            is SearchAction.ApplyTagSearch -> applyTagSearch(action)
 
             SearchAction.ResetDraft -> mutateDraft {
                 coordinator.resetDraft()
@@ -206,15 +159,7 @@ internal class SearchViewModel(
                 operation = coordinator::retry,
             )
 
-            SearchAction.LoadNextPage -> {
-                if (mutableState.value.content.canLoadMore) {
-                    launchSearch(
-                        kind = SearchRequestKind.PAGE,
-                        submittedQuery = coordinator.appliedQuery,
-                        operation = coordinator::loadNextPage,
-                    )
-                }
-            }
+            SearchAction.LoadNextPage -> loadNextPage()
 
             SearchAction.CancelActiveRequest -> cancelActiveRequest()
 
@@ -267,6 +212,66 @@ internal class SearchViewModel(
                 SearchStateReducer.reduce(mutableState.value, action),
             )
         }
+    }
+
+    private fun selectMode(mode: QueryMode) {
+        coordinator.setMode(mode)
+        coordinator.clearAutocompleteSuggestions()
+        clearSuggestionState()
+        publishCoordinatorState()
+        persistDraftQuery()
+        refreshTrending()
+    }
+
+    private fun toggleTemporarySource(source: SourceKey) {
+        val input = mutableState.value.suggestions.input
+        if (!coordinator.toggleTemporarySource(source)) return
+        cancelAutocomplete()
+        coordinator.clearAutocompleteSuggestions()
+        clearSuggestionState()
+        publishCoordinatorState()
+        persistDraftQuery()
+        if (input.isBlank()) refreshTrending()
+        refreshAutocomplete(input)
+    }
+
+    private fun applyDraft() {
+        val directGalleryId = commitPendingDirectInput()
+        launchSearch(
+            kind = if (mutableState.value.content.hasExecutedSearch) {
+                SearchRequestKind.REPLACE
+            } else {
+                SearchRequestKind.INITIAL
+            },
+            submittedQuery = coordinator.draftQuery,
+            operation = coordinator::applyDraft,
+            onSuccess = {
+                directGalleryId?.let { galleryId -> openDirectNhentaiGallery(galleryId) }
+            },
+        )
+    }
+
+    private fun applyTagSearch(action: SearchAction.ApplyTagSearch) {
+        if (!coordinator.prepareTagSearch(action.includeTags, mode = action.mode)) {
+            effectChannel.trySend(SearchEffect.ShowMessage("Search source is unavailable"))
+            return
+        }
+        publishCoordinatorState()
+        persistDraftQuery()
+        launchSearch(
+            kind = SearchRequestKind.REPLACE,
+            submittedQuery = coordinator.draftQuery,
+            operation = coordinator::applyDraft,
+        )
+    }
+
+    private fun loadNextPage() {
+        if (!mutableState.value.content.canLoadMore) return
+        launchSearch(
+            kind = SearchRequestKind.PAGE,
+            submittedQuery = coordinator.appliedQuery,
+            operation = coordinator::loadNextPage,
+        )
     }
 
     fun synchronizeEnvironment(settings: AppSettings) {
