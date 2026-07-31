@@ -80,6 +80,76 @@ class ArchitectureBoundarySourceTest {
     }
 
     @Test
+    fun `app shell does not collect destination owned state`() {
+        val appPath = "app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt"
+        val boundariesPath =
+            "app/src/main/java/com/theoriacodex/app/ui/routes/DestinationStateBoundaries.kt"
+        val app = File(repositoryRoot, appPath).readText()
+        val shell = app.substringAfter("internal fun TheoriaAppContent(")
+            .substringBefore("private fun StartupUpdatePromptCard(")
+        val boundaries = File(repositoryRoot, boundariesPath).readText()
+        val forbiddenShellReads = listOf(
+            "observeSettings()",
+            "observeWatchedPosts()",
+            "observeSearches()",
+            "observeActivity()",
+            "observeLikedPostIds(",
+            "observeLikes(",
+            "observeCodices()",
+            "observeCodexItems(",
+            ".recoveryState.collectAsStateWithLifecycle",
+            "settingsOwner.state.collectAsStateWithLifecycle",
+            "searchRouteOwner?.state",
+            "forYouRouteOwner?.state",
+            "creatorRouteOwner?.state",
+        )
+        val violations = forbiddenShellReads.filter(shell::contains)
+
+        assertNoViolations(
+            rule = "TheoriaAppContent may collect only shell-global observable state",
+            violations = violations,
+        )
+        assertTrue(
+            "The shell-global AppShell owner must remain lifecycle aware",
+            "appShellOwner.state.collectAsStateWithLifecycle()" in shell,
+        )
+        listOf(
+            "BrowsingDestinationStateBoundary",
+            "RecentsDestinationStateBoundary",
+            "CodexDestinationStateBoundary",
+            "SettingsDestinationStateBoundary",
+            "CredentialRecoveryOverlay",
+            "ViewerDestinationStateBoundary",
+        ).forEach { boundary ->
+            assertTrue("$boundary must be used by the shell", "$boundary(" in shell)
+            assertTrue("$boundary must be owned by the destination boundary file", "fun $boundary(" in boundaries)
+        }
+        listOf(
+            "owner.state.collectAsStateWithLifecycle()" to "Settings state",
+            "observeWatchedPosts()" to "Recents watched state",
+            "observeSearches()" to "Recents search state",
+            "observeActivity()" to "Recents merged activity",
+            "observeCodices()" to "Codex list state",
+            "observeCodexItems(" to "Codex item state",
+            "recoveryState.collectAsStateWithLifecycle()" to "credential recovery state",
+            "searchOwner?.state" to "retained Search Viewer state",
+            "forYouOwner?.state" to "retained For You Viewer state",
+            "creatorOwner?.state" to "retained Creator Viewer state",
+        ).forEach { (read, owner) ->
+            assertTrue("$owner must be read below the shell boundary", read in boundaries)
+        }
+        assertTrue(
+            "Retained Search, For You, and Creator handles must stay available to Viewer",
+            listOf("searchOwner = searchRouteOwner", "forYouOwner = forYouRouteOwner", "creatorOwner = creatorRouteOwner")
+                .all(shell::contains),
+        )
+        assertTrue(
+            "Leaf destination boundaries must receive narrow dependency groups, not the app container",
+            "appContainer: TheoriaAppContainer" !in boundaries,
+        )
+    }
+
+    @Test
     fun `feed composables delegate animated duration enrichment to route owners`() {
         val screens = listOf(
             "app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt",

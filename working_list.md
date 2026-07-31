@@ -8,11 +8,10 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### In Progress
 
-- None — F13 is committed next and awaiting review; do not begin F14.
+- None — F14 is ready to commit and await review; do not begin F15.
 
 ### Pending
 
-- [ ] F14: reduce `TheoriaAppContent` to navigation and global system-effect ownership
 - [ ] F15: ratchet hotspot complexity, split monolithic tests, and preserve duplication headroom
 - [ ] F16: evaluate Coil 3 and Gradle configuration cache in isolated, evidence-led changes
 - [ ] Run the final deterministic, Android-device, performance, and documentation acceptance matrix
@@ -20,6 +19,8 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### Done
 
+- [x] F14: localize destination state collection behind lifecycle-aware route boundaries
+  - Commit: `refactor(app): localize destination state collection`. Evidence: `TheoriaAppContent` now directly observes only the global AppShell owner; lifecycle-aware child boundaries own Settings, credentials, Recents, Codex list/detail/save, browsing preferences/membership, and retained feed/Viewer state. Navigation, incoming intents, startup/update/install/platform effects, action callbacks, weak retained feed handles, and Viewer session/paging identity remain shell-stable. A one-composition Robolectric test proved after each independent Settings, Recents, Codex, and credential mutation that only the matching child recomposed while the parent shell count remained fixed. All 394 app JVM tests passed (zero failures/errors, three intentional skips), as did all 59 app-logic tests, main/Android-test compilation, app lint, app/app-logic Detekt, aggregate Kover, changed-coverage helper tests, HTML validation, and diff checks. The repository changed-line gate had no eligible F14 lines because it intentionally covers platform-free modules rather than Android `app`; focused structural and recomposition tests cover this boundary. Duplication passed at 195 lines / 0.53%, npm reported zero vulnerabilities, and app Detekt retained its existing 10 compiler-resolution diagnostics while exiting green. No emulator, connected, physical-device, release, or live-provider command ran.
 - [x] F13: extract platform-free application logic and include it in changed-line coverage
   - Commit: `refactor(architecture): extract platform-free app logic`. Evidence: the new Kotlin/JVM `:app-logic` module owns Search execution/state contracts and reducers, the shared scoped-input parser/messages, visibility/filtering, feed activation/decode policy, provider-independent media classification/duration, recommendation taxonomy, and animated-duration candidate/drain scheduling. Android route/ViewModel/service/Compose/Media3/Coil/lifecycle ownership and provider URL/header normalization remain in `:app`; dependencies are limited to `:core-domain`, `:core-data`, and coroutines. Pixiv Ugoira MIME now has one `:core-domain` wire owner plus a source compatibility alias. Fifty-eight app-logic tests and 392 app JVM tests passed with zero failures/errors and three intentional app skips; main/Android-test compilation, lint, app/app-logic Detekt, aggregate Kover, coverage-helper tests, 0.54% duplication, npm audit, HTML, and diff checks passed. The staged changed-line gate passed at 93.06% (228/245 executable lines; 491 eligible production lines inspected). Architecture guards prove the dependency/moved-owner/quality-gate boundary and prevent the shared Search policy from duplicating again. App Detekt exited green with 23 compiler-resolution diagnostics. No connected, physical-device, or live-provider command ran.
   - Follow-up: `perf(media): reuse progressive source policy`. Evidence: the four-source progressive-image allowlist is allocated once instead of on every per-card policy check. Four architecture tests and three PostMedia tests passed with app compilation, lint, Detekt, HTML validation, and diff checks; no device command ran.
