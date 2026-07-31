@@ -1,0 +1,157 @@
+package com.theoriacodex.data.android.room
+
+import android.content.Context
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import com.theoriacodex.data.repository.RecentActivityEntry
+import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SortMode
+import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runTest
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28])
+class RoomRecentsRepositoryTest {
+    private lateinit var database: TheoriaRoomDatabase
+    private var now = 100L
+
+    @Before fun setUp() {
+        database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext<Context>(),
+            TheoriaRoomDatabase::class.java,
+        ).allowMainThreadQueries().build()
+    }
+
+    @After fun tearDown() = database.close()
+
+    @Test fun `dedupe caps deterministic ties and origin preservation match Recents contract`() = runTest {
+        val repository = RoomRecentsRepository(database, watchedLimit = 2, searchLimit = 2, clock = { now })
+        repository.recordWatchedPost(recentPost("b"), ViewerStreamSource.SEARCH, "original")
+        repository.recordWatchedPost(recentPost("a"), ViewerStreamSource.CODEX, "codex")
+        repository.recordWatchedPost(recentPost("b").copy(title = "refreshed"), ViewerStreamSource.RECENTS, "ignored")
+        repository.recordWatchedPost(recentPost("c"), ViewerStreamSource.FOR_YOU, null)
+        repository.recordSearch(recentQuery("one"), " b ")
+        repository.recordSearch(recentQuery("two"), "a")
+        repository.recordSearch(recentQuery("three"), "c")
+
+        val watched = repository.observeWatchedPosts().first()
+        val searches = repository.observeSearches().first()
+        assertEquals(listOf("c", "b"), watched.map { it.post.id.sourcePostId })
+        assertEquals("refreshed", watched.single { it.post.id.sourcePostId == "b" }.post.title)
+        assertEquals(ViewerStreamSource.SEARCH, watched.single { it.post.id.sourcePostId == "b" }.origin)
+        assertEquals("original", watched.single { it.post.id.sourcePostId == "b" }.originQueryHash)
+        assertEquals(listOf("c", "a"), searches.map { it.queryHash })
+
+        val activity = repository.observeActivity().first()
+        assertTrue(activity.take(2).all { it is RecentActivityEntry.Watched })
+        assertEquals(
+            listOf("c", "b"),
+            activity.take(2).map { (it as RecentActivityEntry.Watched).entry.post.id.sourcePostId },
+        )
+    }
+
+    @Test fun `filtered clears clean only newly orphaned posts`() = runTest {
+        val recents = RoomRecentsRepository(database, clock = { now++ })
+        val codex = RoomCodexLikesRepository(database, clock = { now++ }, newId = { "codex" })
+        val shared = recentPost("shared")
+        val recentsOnly = recentPost("recents-only")
+        val codexId = codex.createCodex("Saved").codexId
+        codex.addItem(codexId, shared)
+        recents.recordWatchedPost(shared, ViewerStreamSource.SEARCH, null)
+        recents.recordWatchedPost(recentsOnly, ViewerStreamSource.FOR_YOU, null)
+
+        recents.clearWatchedPosts(ViewerStreamSource.FOR_YOU)
+        assertNull(codex.getPost(recentsOnly.id))
+        assertEquals(shared, codex.getPost(shared.id))
+
+        recents.clearWatchedPostsExcept(ViewerStreamSource.CODEX)
+        assertEquals(shared, codex.getPost(shared.id))
+        codex.deleteCodex(codexId)
+        assertNull(codex.getPost(shared.id))
+    }
+
+    @Test fun `failed watched transaction rolls back its shared post`() = runTest {
+        database.openHelper.writableDatabase.execSQL(
+            "CREATE TRIGGER reject_recent BEFORE INSERT ON recent_watched BEGIN SELECT RAISE(ABORT, 'no'); END"
+        )
+        val repository = RoomRecentsRepository(database)
+        val post = recentPost("rollback")
+
+        assertTrue(runCatching {
+            repository.recordWatchedPost(post, ViewerStreamSource.SEARCH, null)
+        }.isFailure)
+        assertNull(database.codexLikesDao().post(post.id.source.name, post.id.sourcePostId))
+        assertTrue(repository.observeWatchedPosts().first().isEmpty())
+    }
+
+    @Test fun `versioned query payload restarts from the same database`() = runTest {
+        val repository = RoomRecentsRepository(database, clock = { 9L })
+        val query = recentQuery("artist").copy(
+            includeTerms = listOf(SearchTerm("name", sourceNamespace = "pixiv")),
+        )
+        repository.recordSearch(query, "hash")
+
+        val reconstructed = RoomRecentsRepository(database)
+        assertEquals(query, reconstructed.observeSearches().first().single().query)
+        assertTrue(database.recentsDao().searches().single().queryPayloadJson.contains("schemaVersion"))
+    }
+
+    @Test fun `unfiltered watched search and combined clears remain independent`() = runTest {
+        val repository = RoomRecentsRepository(database, clock = { now++ })
+        repository.recordWatchedPost(recentPost("watched"), ViewerStreamSource.SEARCH, null)
+        repository.recordSearch(recentQuery("search"), "search")
+
+        repository.clearWatchedPosts()
+        assertTrue(repository.observeWatchedPosts().first().isEmpty())
+        assertEquals(listOf("search"), repository.observeSearches().first().map { it.queryHash })
+
+        repository.recordWatchedPost(recentPost("watched-2"), ViewerStreamSource.CODEX, null)
+        repository.clearSearches()
+        assertTrue(repository.observeSearches().first().isEmpty())
+        assertEquals(listOf("watched-2"), repository.observeWatchedPosts().first().map { it.post.id.sourcePostId })
+
+        repository.recordSearch(recentQuery("again"), "again")
+        repository.clearAll()
+        assertTrue(repository.observeActivity().first().isEmpty())
+        assertNull(database.codexLikesDao().post(SourceKey.PIXIV.name, "watched-2"))
+    }
+}
+
+private fun recentQuery(tag: String) = Query(
+    mode = QueryMode.Source(SourceKey.PIXIV),
+    includeTerms = listOf(SearchTerm(tag)),
+    excludeTerms = emptyList(),
+    sort = SortMode.NEWEST,
+    dateRange = null,
+    minScore = null,
+)
+
+private fun recentPost(id: String) = Post(
+    id = PostId(SourceKey.PIXIV, id),
+    preview = ImageRef("https://example.com/$id.jpg", null, "image/jpeg"),
+    full = null,
+    pageUrl = "https://example.com/$id",
+    width = 100,
+    height = 100,
+    canonicalTags = listOf("tag"),
+    rawTags = listOf("tag"),
+    authorName = "artist",
+    createdAtEpochMs = 1L,
+    title = "post-$id",
+)

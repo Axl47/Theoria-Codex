@@ -75,7 +75,7 @@ class GsonWireContractTest {
                 emptyMap<String, Any>(),
             ),
             LegacyFixture(
-                "com.theoriacodex.data.repository.RecentsStoreFile",
+                "com.theoriacodex.data.storage.LegacyRecentsStoreFile",
                 """{"watchedPosts":[],"searches":[]}""",
                 "watchedPosts",
                 emptyList<Any>(),

@@ -81,23 +81,23 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
--keepclassmembers class com.theoriacodex.data.repository.QueryRecord {
+-keepclassmembers class com.theoriacodex.data.storage.QueryStorageRecord {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
--keepclassmembers class com.theoriacodex.data.repository.SearchTermRecord {
+-keepclassmembers class com.theoriacodex.data.storage.SearchTermStorageRecord {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
--keepclassmembers class com.theoriacodex.data.repository.RecentsStoreFile {
+-keepclassmembers class com.theoriacodex.data.storage.LegacyRecentsStoreFile {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
--keepclassmembers class com.theoriacodex.data.repository.RecentPostRecord {
+-keepclassmembers class com.theoriacodex.data.storage.LegacyRecentPostRecord {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
--keepclassmembers class com.theoriacodex.data.repository.RecentSearchRecord {
+-keepclassmembers class com.theoriacodex.data.storage.LegacyRecentSearchRecord {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }

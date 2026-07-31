@@ -7,6 +7,8 @@ import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
+import com.theoriacodex.data.storage.QueryStorageCodec
+import com.theoriacodex.data.storage.QueryStorageRecord
 import com.theoriacodex.data.storage.mutateAndPersistWithRollback
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexItem
@@ -34,9 +36,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-private const val DEFAULT_RECENT_WATCHED_LIMIT = 200
-private const val DEFAULT_RECENT_SEARCH_LIMIT = 100
-private const val DEFAULT_RECENTS_MAX_SERIALIZED_BYTES = 4 * 1024 * 1024
 
 class FileBackedCodexRepository(
     baseDirectory: File,
@@ -263,7 +262,7 @@ class FileBackedQueryRepository(
                 onRecovery = recoveryRegistry::record,
             )
         }
-        queriesFlow.value = stored.queries.mapValues { (_, record) -> record.toDomain() }
+        queriesFlow.value = stored.queries.mapValues { (_, record) -> QueryStorageCodec.decode(record) }
     }
 
     override fun observeAppliedQuery(modeKey: String): Flow<Query?> {
@@ -287,207 +286,9 @@ class FileBackedQueryRepository(
 
     private suspend fun persist() {
         val payload = QueryStoreFile(
-            queries = queriesFlow.value.mapValues { (_, query) -> QueryRecord.fromDomain(query) },
+            queries = queriesFlow.value.mapValues { (_, query) -> QueryStorageCodec.encode(query) },
         )
         fileStore.write(storageFile, payload)
-    }
-}
-
-class FileBackedRecentsRepository(
-    baseDirectory: File,
-    private val watchedLimit: Int = DEFAULT_RECENT_WATCHED_LIMIT,
-    private val searchLimit: Int = DEFAULT_RECENT_SEARCH_LIMIT,
-    private val maxSerializedBytes: Int = DEFAULT_RECENTS_MAX_SERIALIZED_BYTES,
-    private val clock: () -> Long = System::currentTimeMillis,
-    ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    recoveryRegistry: LegacyJsonRecoveryRegistry = LegacyJsonRecoveryRegistry(),
-) : RecentsRepository {
-    private val mutex = Mutex()
-    private val storageFile = baseDirectory.resolve("recents_store.json")
-    private val gson: Gson = GsonBuilder().setPrettyPrinting().create()
-    private val fileStore = AtomicJsonFileStore(ioDispatcher = ioDispatcher, gson = gson)
-    private val watchedFlow = MutableStateFlow<List<RecentPostEntry>>(emptyList())
-    private val searchesFlow = MutableStateFlow<List<RecentSearchEntry>>(emptyList())
-
-    init {
-        require(maxSerializedBytes >= encodedSize(RecentsStoreFile())) {
-            "Recents byte limit must fit an empty snapshot"
-        }
-        recoveryRegistry.registerStore("Recent activity", storageFile)
-        val stored = runBlocking {
-            fileStore.read(
-                file = storageFile,
-                fallback = RecentsStoreFile(),
-                logicalStore = "Recent activity",
-                onRecovery = recoveryRegistry::record,
-            )
-        }
-        watchedFlow.value = RepositoryPolicies.normalizeRecentWatched(
-            entries = stored.watchedPosts.orEmpty().mapNotNull { record -> record.toDomainOrNull() },
-            limit = watchedLimit,
-        )
-        searchesFlow.value = RepositoryPolicies.normalizeRecentSearches(
-            entries = stored.searches.orEmpty().mapNotNull { record -> record.toDomainOrNull() },
-            limit = searchLimit,
-        )
-        val normalized = enforceSerializedByteLimit()
-        if (normalized) {
-            runBlocking { writeCurrentSnapshot() }
-        }
-    }
-
-    override fun observeWatchedPosts(): Flow<List<RecentPostEntry>> {
-        return watchedFlow
-    }
-
-    override fun observeSearches(): Flow<List<RecentSearchEntry>> {
-        return searchesFlow
-    }
-
-    override fun observeActivity(): Flow<List<RecentActivityEntry>> {
-        return combine(watchedFlow, searchesFlow) { watchedPosts, searchEntries ->
-            RepositoryPolicies.mergeRecentActivity(watchedPosts, searchEntries)
-        }
-    }
-
-    override suspend fun recordWatchedPost(post: Post, origin: ViewerStreamSource, originQueryHash: String?) {
-        mutex.withLock {
-            commitMutation {
-                val previousEntry = watchedFlow.value.firstOrNull { entry -> entry.post.id == post.id }
-                val effectiveOrigin = previousEntry?.origin.takeIf { origin == ViewerStreamSource.RECENTS } ?: origin
-                val effectiveQueryHash = previousEntry?.originQueryHash.takeIf { origin == ViewerStreamSource.RECENTS }
-                    ?: originQueryHash
-                watchedFlow.value = RepositoryPolicies.recordWatched(
-                    entries = watchedFlow.value,
-                    entry = RecentPostEntry(
-                        post = post,
-                        viewedAtEpochMs = clock(),
-                        origin = effectiveOrigin,
-                        originQueryHash = effectiveQueryHash,
-                    ),
-                    limit = watchedLimit,
-                )
-            }
-        }
-    }
-
-    override suspend fun recordSearch(query: Query, queryHash: String) {
-        val normalizedHash = queryHash.trim()
-        if (normalizedHash.isBlank()) return
-        mutex.withLock {
-            commitMutation {
-                searchesFlow.value = RepositoryPolicies.recordSearch(
-                    entries = searchesFlow.value,
-                    entry = RecentSearchEntry(
-                        query = query,
-                        queryHash = normalizedHash,
-                        searchedAtEpochMs = clock(),
-                    ),
-                    limit = searchLimit,
-                )
-            }
-        }
-    }
-
-    override suspend fun clearWatchedPosts() {
-        mutex.withLock {
-            commitMutation { watchedFlow.value = emptyList() }
-        }
-    }
-
-    override suspend fun clearWatchedPosts(origin: ViewerStreamSource) {
-        mutex.withLock {
-            commitMutation {
-                watchedFlow.value = watchedFlow.value.filterNot { entry -> entry.origin == origin }
-            }
-        }
-    }
-
-    override suspend fun clearWatchedPostsExcept(origin: ViewerStreamSource) {
-        mutex.withLock {
-            commitMutation {
-                watchedFlow.value = watchedFlow.value.filter { entry -> entry.origin == origin }
-            }
-        }
-    }
-
-    override suspend fun clearSearches() {
-        mutex.withLock {
-            commitMutation { searchesFlow.value = emptyList() }
-        }
-    }
-
-    override suspend fun clearAll() {
-        mutex.withLock {
-            commitMutation {
-                watchedFlow.value = emptyList()
-                searchesFlow.value = emptyList()
-            }
-        }
-    }
-
-    private suspend inline fun <T> commitMutation(mutate: () -> T): T {
-        return mutateAndPersistWithRollback(
-            snapshot = { watchedFlow.value to searchesFlow.value },
-            restore = { (watched, searches) ->
-                watchedFlow.value = watched
-                searchesFlow.value = searches
-            },
-            mutate = mutate,
-            persist = { persist() },
-        )
-    }
-
-    private suspend fun persist() {
-        enforceSerializedByteLimit()
-        writeCurrentSnapshot()
-    }
-
-    /**
-     * Count limits do not bound rich gallery snapshots. Evict the oldest complete activity entry
-     * until the UTF-8 JSON fits; never truncate a Post or Query into an unreadable record.
-     */
-    private fun enforceSerializedByteLimit(): Boolean {
-        var watched = watchedFlow.value
-        var searches = searchesFlow.value
-        var changed = false
-        while (encodedSize(snapshot(watched, searches)) > maxSerializedBytes) {
-            val oldestWatched = watched.lastOrNull()
-            val oldestSearch = searches.lastOrNull()
-            if (oldestWatched == null && oldestSearch == null) break
-            if (
-                oldestSearch == null ||
-                (oldestWatched != null && oldestWatched.viewedAtEpochMs <= oldestSearch.searchedAtEpochMs)
-            ) {
-                watched = watched.dropLast(1)
-            } else {
-                searches = searches.dropLast(1)
-            }
-            changed = true
-        }
-        if (changed) {
-            watchedFlow.value = watched
-            searchesFlow.value = searches
-        }
-        return changed
-    }
-
-    private suspend fun writeCurrentSnapshot() {
-        fileStore.write(storageFile, snapshot(watchedFlow.value, searchesFlow.value))
-    }
-
-    private fun snapshot(
-        watched: List<RecentPostEntry>,
-        searches: List<RecentSearchEntry>,
-    ): RecentsStoreFile {
-        return RecentsStoreFile(
-            watchedPosts = watched.map(RecentPostRecord::fromDomain),
-            searches = searches.map(RecentSearchRecord::fromDomain),
-        )
-    }
-
-    private fun encodedSize(snapshot: RecentsStoreFile): Int {
-        return gson.toJson(snapshot).toByteArray(Charsets.UTF_8).size
     }
 }
 
@@ -1035,181 +836,8 @@ private data class CodexItemRecord(
 
 private data class QueryStoreFile(
     @field:SerializedName("queries")
-    val queries: Map<String, QueryRecord> = emptyMap(),
+    val queries: Map<String, QueryStorageRecord> = emptyMap(),
 )
-
-private data class QueryRecord(
-    @field:SerializedName("modeType")
-    val modeType: String = "unified",
-    @field:SerializedName("modeSource")
-    val modeSource: String? = null,
-    @field:SerializedName("includeTags")
-    val includeTags: List<String> = emptyList(),
-    @field:SerializedName("excludeTags")
-    val excludeTags: List<String> = emptyList(),
-    @field:SerializedName("sort")
-    val sort: String = SortMode.TOP.name,
-    @field:SerializedName("dateFromEpochMs")
-    val dateFromEpochMs: Long? = null,
-    @field:SerializedName("dateToEpochMs")
-    val dateToEpochMs: Long? = null,
-    @field:SerializedName("minScore")
-    val minScore: Int? = null,
-    @field:SerializedName("includeTerms")
-    val includeTerms: List<SearchTermRecord?>? = null,
-    @field:SerializedName("excludeTerms")
-    val excludeTerms: List<SearchTermRecord?>? = null,
-) {
-    fun toDomain(): Query {
-        val mode = when (modeType) {
-            "unified" -> QueryMode.Unified
-            "source" -> modeSource.toSourceKeyOrNull()?.let(QueryMode::Source) ?: QueryMode.Unified
-            else -> QueryMode.Unified
-        }
-        return Query(
-            mode = mode,
-            includeTerms = includeTerms
-                ?.mapNotNull { record -> record?.toDomainOrNull() }
-                ?: includeTags.orEmpty().map { value -> SearchTerm(value = value) },
-            excludeTerms = excludeTerms
-                ?.mapNotNull { record -> record?.toDomainOrNull() }
-                ?: excludeTags.orEmpty().map { value -> SearchTerm(value = value) },
-            sort = sort.toSortModeOrDefault(),
-            dateRange = if (dateFromEpochMs == null && dateToEpochMs == null) null else DateRange(dateFromEpochMs, dateToEpochMs),
-            minScore = minScore,
-        )
-    }
-
-    companion object {
-        fun fromDomain(query: Query): QueryRecord {
-            val modeType: String
-            val modeSource: String?
-            when (val mode = query.mode) {
-                QueryMode.Unified -> {
-                    modeType = "unified"
-                    modeSource = null
-                }
-                is QueryMode.Source -> {
-                    modeType = "source"
-                    modeSource = mode.source.name
-                }
-            }
-            return QueryRecord(
-                modeType = modeType,
-                modeSource = modeSource,
-                includeTags = query.includeTags,
-                excludeTags = query.excludeTags,
-                sort = query.sort.name,
-                dateFromEpochMs = query.dateRange?.fromEpochMs,
-                dateToEpochMs = query.dateRange?.toEpochMs,
-                minScore = query.minScore,
-                includeTerms = query.includeTerms.map(SearchTermRecord::fromDomain),
-                excludeTerms = query.excludeTerms.map(SearchTermRecord::fromDomain),
-            )
-        }
-    }
-}
-
-private data class SearchTermRecord(
-    @field:SerializedName("value")
-    val value: String? = null,
-    @field:SerializedName("facet")
-    val facet: String? = null,
-    @field:SerializedName("sourceNamespace")
-    val sourceNamespace: String? = null,
-) {
-    fun toDomainOrNull(): SearchTerm? {
-        val resolvedValue = value?.trim()?.takeIf(String::isNotBlank) ?: return null
-        val resolvedFacet = facet.toSearchFacetOrNull() ?: return null
-        return SearchTerm(
-            value = resolvedValue,
-            facet = resolvedFacet,
-            sourceNamespace = sourceNamespace?.trim()?.takeIf(String::isNotBlank),
-        )
-    }
-
-    companion object {
-        fun fromDomain(term: SearchTerm): SearchTermRecord {
-            return SearchTermRecord(
-                value = term.value,
-                facet = term.facet.name,
-                sourceNamespace = term.sourceNamespace,
-            )
-        }
-    }
-}
-
-private data class RecentsStoreFile(
-    @field:SerializedName("watchedPosts")
-    val watchedPosts: List<RecentPostRecord>? = null,
-    @field:SerializedName("searches")
-    val searches: List<RecentSearchRecord>? = null,
-)
-
-private data class RecentPostRecord(
-    @field:SerializedName("post")
-    val post: PostStorageRecord? = null,
-    @field:SerializedName("viewedAtEpochMs")
-    val viewedAtEpochMs: Long? = null,
-    @field:SerializedName("origin")
-    val origin: String? = null,
-    @field:SerializedName("originQueryHash")
-    val originQueryHash: String? = null,
-) {
-    fun toDomainOrNull(): RecentPostEntry? {
-        val loadedPost = post?.let(PostStorageCodec::decode) ?: return null
-        val loadedOrigin = origin
-            ?.let { value -> runCatching { ViewerStreamSource.valueOf(value) }.getOrNull() }
-            ?: ViewerStreamSource.SEARCH
-        return RecentPostEntry(
-            post = loadedPost,
-            viewedAtEpochMs = viewedAtEpochMs ?: 0L,
-            origin = loadedOrigin,
-            originQueryHash = originQueryHash?.takeIf(String::isNotBlank),
-        )
-    }
-
-    companion object {
-        fun fromDomain(entry: RecentPostEntry): RecentPostRecord {
-            return RecentPostRecord(
-                post = PostStorageCodec.encode(entry.post),
-                viewedAtEpochMs = entry.viewedAtEpochMs,
-                origin = entry.origin.name,
-                originQueryHash = entry.originQueryHash,
-            )
-        }
-    }
-}
-
-private data class RecentSearchRecord(
-    @field:SerializedName("query")
-    val query: QueryRecord? = null,
-    @field:SerializedName("queryHash")
-    val queryHash: String? = null,
-    @field:SerializedName("searchedAtEpochMs")
-    val searchedAtEpochMs: Long? = null,
-) {
-    fun toDomainOrNull(): RecentSearchEntry? {
-        val normalizedHash = queryHash?.trim().orEmpty()
-        if (normalizedHash.isBlank()) return null
-        val loadedQuery = query?.toDomain() ?: return null
-        return RecentSearchEntry(
-            query = loadedQuery,
-            queryHash = normalizedHash,
-            searchedAtEpochMs = searchedAtEpochMs ?: 0L,
-        )
-    }
-
-    companion object {
-        fun fromDomain(entry: RecentSearchEntry): RecentSearchRecord {
-            return RecentSearchRecord(
-                query = QueryRecord.fromDomain(entry.query),
-                queryHash = entry.queryHash,
-                searchedAtEpochMs = entry.searchedAtEpochMs,
-            )
-        }
-    }
-}
 
 private const val CURRENT_SOURCE_CATALOG_VERSION = 2
 

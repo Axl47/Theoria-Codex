@@ -19,11 +19,11 @@ com.theoriacodex.data.repository.CodexStoreFile|codices,items,posts
 com.theoriacodex.data.repository.CodexRecord|codexId,name,createdAtEpochMs
 com.theoriacodex.data.repository.CodexItemRecord|codexId,source,sourcePostId,savedAtEpochMs
 com.theoriacodex.data.repository.QueryStoreFile|queries
-com.theoriacodex.data.repository.QueryRecord|modeType,modeSource,includeTags,excludeTags,sort,dateFromEpochMs,dateToEpochMs,minScore,includeTerms,excludeTerms
-com.theoriacodex.data.repository.SearchTermRecord|value,facet,sourceNamespace
-com.theoriacodex.data.repository.RecentsStoreFile|watchedPosts,searches
-com.theoriacodex.data.repository.RecentPostRecord|post,viewedAtEpochMs,origin,originQueryHash
-com.theoriacodex.data.repository.RecentSearchRecord|query,queryHash,searchedAtEpochMs
+com.theoriacodex.data.storage.QueryStorageRecord|schemaVersion,modeType,modeSource,includeTags,excludeTags,sort,dateFromEpochMs,dateToEpochMs,minScore,includeTerms,excludeTerms
+com.theoriacodex.data.storage.SearchTermStorageRecord|value,facet,sourceNamespace
+com.theoriacodex.data.storage.LegacyRecentsStoreFile|watchedPosts,searches
+com.theoriacodex.data.storage.LegacyRecentPostRecord|post,viewedAtEpochMs,origin,originQueryHash
+com.theoriacodex.data.storage.LegacyRecentSearchRecord|query,queryHash,searchedAtEpochMs
 com.theoriacodex.data.repository.SettingsStoreFile|sourceCatalogVersion,enabledSources,sourceWeights,cacheFullImageOnSave,resolveUnknownAnimatedDurations,invertMultiImageScrollDirection,scenarioPreset,lastSelectedTabRoute,recommendationProfiles,activeProfileId,activeProfile,forYouBlacklistByProfile,favoriteTagsByProfile,providerHealth
 com.theoriacodex.data.repository.ProviderHealthSnapshotRecord|source,status,checkedAtEpochMs,latencyMs,failureReason,message
 com.theoriacodex.data.repository.FavoriteTagEntryRecord|source,tag

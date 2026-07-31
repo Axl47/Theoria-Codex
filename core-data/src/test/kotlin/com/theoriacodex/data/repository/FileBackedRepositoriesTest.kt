@@ -565,26 +565,19 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
-    fun `query and recents publish verified recovery through the shared registry`() = runTest {
+    fun `query publishes verified recovery through the shared registry`() = runTest {
         val dir = tempDir("legacy-json-recovery-registry-")
         val queryBytes = "{broken-query".toByteArray()
-        val recentsBytes = ByteArray(0)
         dir.resolve("query_store.json").writeBytes(queryBytes)
-        dir.resolve("recents_store.json").writeBytes(recentsBytes)
         val registry = LegacyJsonRecoveryRegistry()
 
         FileBackedQueryRepository(dir, recoveryRegistry = registry)
-        FileBackedRecentsRepository(dir, recoveryRegistry = registry)
 
         val recoveries = registry.recoveries.value
-        assertEquals(setOf("Saved searches", "Recent activity"), recoveries.map { it.logicalStore }.toSet())
+        assertEquals(setOf("Saved searches"), recoveries.map { it.logicalStore }.toSet())
         recoveries.forEach { recovery ->
-            val expected = when (recovery.logicalStore) {
-                "Saved searches" -> queryBytes
-                else -> recentsBytes
-            }
-            assertEquals(expected.size.toLong(), recovery.byteCount)
-            assertTrue(File(recovery.backupPath!!).readBytes().contentEquals(expected))
+            assertEquals(queryBytes.size.toLong(), recovery.byteCount)
+            assertTrue(File(recovery.backupPath!!).readBytes().contentEquals(queryBytes))
         }
     }
 
@@ -668,28 +661,6 @@ class FileBackedRepositoriesTest {
             val reconstructed = FileBackedCodexRepository(dir)
             assertEquals(originalItems, reconstructed.observeCodexItems(codex.codexId).first())
             assertEquals(null, reconstructed.getPost(attempted.id))
-        }
-    }
-
-    @Test
-    fun `failed Recents persistence rolls back watched and search flows`() = runTest {
-        val dir = tempDir("recents-failed-persistence-")
-        ControllableIoDispatcher("recents-io").use { dispatcher ->
-            val repository = FileBackedRecentsRepository(dir, ioDispatcher = dispatcher)
-            repository.recordWatchedPost(samplePost("1", localPath = null), ViewerStreamSource.SEARCH, "query")
-            repository.recordSearch(sampleQuery(), "query")
-            val originalWatched = repository.observeWatchedPosts().first()
-            val originalSearches = repository.observeSearches().first()
-            dispatcher.dispatchFailure = RejectedExecutionException("write rejected")
-
-            val failure = runCatching { repository.clearAll() }.exceptionOrNull()
-
-            assertTrue(failure is RejectedExecutionException)
-            assertEquals(originalWatched, repository.observeWatchedPosts().first())
-            assertEquals(originalSearches, repository.observeSearches().first())
-            val reconstructed = FileBackedRecentsRepository(dir)
-            assertEquals(originalWatched, reconstructed.observeWatchedPosts().first())
-            assertEquals(originalSearches, reconstructed.observeSearches().first())
         }
     }
 
@@ -795,6 +766,8 @@ class FileBackedRepositoriesTest {
                   "includeTerms": [
                     null,
                     {"value": "", "facet": "TAG"},
+                    {"value": "missing"},
+                    {"value": "blank", "facet": " "},
                     {"value": "unknown", "facet": "REMOVED_FACET"},
                     {"value": " najar ", "facet": "ARTIST", "sourceNamespace": " artist "}
                   ],
@@ -820,162 +793,14 @@ class FileBackedRepositoriesTest {
         assertEquals(emptyList<SearchTerm>(), typedEmpty?.includeTerms)
         assertEquals(emptyList<SearchTerm>(), typedEmpty?.excludeTerms)
         assertEquals(
-            listOf(SearchTerm(value = "najar", facet = SearchFacet.ARTIST, sourceNamespace = "artist")),
+            listOf(
+                SearchTerm(value = "missing"),
+                SearchTerm(value = "blank"),
+                SearchTerm(value = "najar", facet = SearchFacet.ARTIST, sourceNamespace = "artist"),
+            ),
             typedMalformed?.includeTerms,
         )
         assertEquals(emptyList<SearchTerm>(), typedMalformed?.excludeTerms)
-    }
-
-    @Test
-    fun `recents repository persists watched posts searches and activity order`() = runTest {
-        val dir = tempDir("recents-store-")
-        var now = 10_000L
-        val first = FileBackedRecentsRepository(
-            baseDirectory = dir,
-            watchedLimit = 2,
-            searchLimit = 2,
-            clock = { now },
-        )
-        val media = ImageRef(
-            url = "https://example.com/full-video.mp4",
-            localPath = null,
-            mime = "video/mp4",
-            progressiveUrls = listOf("https://example.com/sample-video.mp4"),
-        )
-        val basePixivPost = samplePost("1", localPath = null, source = SourceKey.PIXIV)
-        val pixivPost = basePixivPost.copy(
-            title = "First viewed",
-            preview = basePixivPost.preview.copy(
-                mime = "image/webp",
-                isAnimated = true,
-            ),
-            media = listOf(media),
-            durationMs = 42_000L,
-            mediaCount = 2,
-            taxonomy = listOf(
-                PostTaxonomyTerm(
-                    value = "najar",
-                    facet = SearchFacet.ARTIST,
-                    sourceNamespace = "artist",
-                ),
-            ),
-        )
-        val gelbooruPost = samplePost("2", localPath = null, source = SourceKey.GELBOORU)
-        val aibooruPost = samplePost("3", localPath = null, source = SourceKey.AIBOORU)
-        val firstQuery = sampleQuery(includeTags = listOf("landscape")).copy(
-            includeTerms = listOf(
-                SearchTerm(
-                    value = "najar",
-                    facet = SearchFacet.ARTIST,
-                    sourceNamespace = "artist",
-                ),
-            ),
-        )
-        val secondQuery = sampleQuery(includeTags = listOf("portrait"))
-        val thirdQuery = sampleQuery(includeTags = listOf("city"))
-
-        first.recordWatchedPost(pixivPost, ViewerStreamSource.SEARCH, "query-1")
-        now += 1
-        first.recordWatchedPost(gelbooruPost, ViewerStreamSource.FOR_YOU, "query-2")
-        now += 1
-        first.recordWatchedPost(pixivPost.copy(title = "Viewed again"), ViewerStreamSource.CODEX, "query-3")
-        now += 1
-        first.recordWatchedPost(aibooruPost, ViewerStreamSource.CREATOR_PROFILE, "query-4")
-        now += 1
-        first.recordSearch(firstQuery, "search-1")
-        now += 1
-        first.recordSearch(secondQuery, "search-2")
-        now += 1
-        first.recordSearch(
-            firstQuery.copy(excludeTerms = listOf(SearchTerm(value = "comic"))),
-            "search-1",
-        )
-        now += 1
-        first.recordSearch(thirdQuery, "search-3")
-
-        val second = FileBackedRecentsRepository(dir)
-        val watched = second.observeWatchedPosts().first()
-        val searches = second.observeSearches().first()
-        val activity = second.observeActivity().first()
-
-        assertEquals(listOf(aibooruPost.id, pixivPost.id), watched.map { entry -> entry.post.id })
-        assertEquals("Viewed again", watched[1].post.title)
-        assertEquals(ViewerStreamSource.CODEX, watched[1].origin)
-        assertEquals("query-3", watched[1].originQueryHash)
-        assertEquals(listOf("https://example.com/sample-video.mp4"), watched[1].post.media.single().progressiveUrls)
-        assertTrue(watched[1].post.preview.isAnimated)
-        assertEquals(42_000L, watched[1].post.durationMs)
-        assertEquals(2, watched[1].post.mediaCount)
-        assertEquals(pixivPost.taxonomy, watched[1].post.taxonomy)
-        assertEquals(listOf("search-3", "search-1"), searches.map { entry -> entry.queryHash })
-        assertEquals(listOf("comic"), searches[1].query.excludeTags)
-        assertEquals(firstQuery.includeTerms, searches[1].query.includeTerms)
-        assertEquals(searches.first().searchedAtEpochMs, activity.first().occurredAtEpochMs)
-    }
-
-    @Test
-    fun `recents repository evicts oldest complete entries to stay within its byte budget`() = runTest {
-        val dir = tempDir("recents-byte-budget-")
-        var now = 1L
-        val maxBytes = 12_000
-        val repository = FileBackedRecentsRepository(
-            baseDirectory = dir,
-            watchedLimit = 200,
-            searchLimit = 100,
-            maxSerializedBytes = maxBytes,
-            clock = { now++ },
-        )
-
-        repeat(10) { index ->
-            repository.recordWatchedPost(
-                post = samplePost("large-$index", localPath = null).copy(
-                    title = "entry-$index-" + "x".repeat(2_000),
-                ),
-                origin = ViewerStreamSource.SEARCH,
-                originQueryHash = "query-$index",
-            )
-        }
-
-        val retained = repository.observeWatchedPosts().first()
-        val storeFile = dir.resolve("recents_store.json")
-        assertTrue("the serialized store must stay bounded", storeFile.length() <= maxBytes)
-        assertTrue("at least one complete entry should fit", retained.isNotEmpty())
-        assertTrue("the byte budget should evict some history", retained.size < 10)
-        assertEquals("large-9", retained.first().post.id.sourcePostId)
-        assertTrue(retained.all { entry -> entry.post.title?.length == 2_008 })
-
-        val reconstructed = FileBackedRecentsRepository(
-            baseDirectory = dir,
-            maxSerializedBytes = maxBytes,
-        )
-        assertEquals(retained, reconstructed.observeWatchedPosts().first())
-        assertTrue(storeFile.length() <= maxBytes)
-    }
-
-    @Test
-    fun `recents repository clears watched and search history independently across restarts`() = runTest {
-        val dir = tempDir("recents-clear-store-")
-        val first = FileBackedRecentsRepository(dir, clock = { 1L })
-
-        first.recordWatchedPost(samplePost("1", localPath = null), ViewerStreamSource.SEARCH, "hash")
-        first.recordSearch(sampleQuery(), "query")
-        first.clearWatchedPosts()
-
-        val second = FileBackedRecentsRepository(dir)
-        assertTrue(second.observeWatchedPosts().first().isEmpty())
-        assertEquals(1, second.observeSearches().first().size)
-
-        second.clearSearches()
-        val third = FileBackedRecentsRepository(dir)
-        assertTrue(third.observeSearches().first().isEmpty())
-
-        third.recordWatchedPost(samplePost("2", localPath = null), ViewerStreamSource.CODEX, null)
-        third.recordSearch(sampleQuery(includeTags = listOf("city")), "query-2")
-        third.clearAll()
-
-        val fourth = FileBackedRecentsRepository(dir)
-        assertTrue(fourth.observeWatchedPosts().first().isEmpty())
-        assertTrue(fourth.observeSearches().first().isEmpty())
     }
 
     @Test

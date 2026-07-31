@@ -66,6 +66,20 @@ class ArchitectureBoundarySourceTest {
     }
 
     @Test
+    fun `production Recents ownership is Room only and startup gated`() {
+        val container = File(
+            repositoryRoot,
+            "app/src/main/java/com/theoriacodex/app/di/TheoriaAppContainer.kt",
+        ).readText()
+        val production = productionSources().joinToString("\n") { it.readText() }
+
+        assertTrue("The app container must construct Room Recents", "RoomRecentsRepository(contentDatabase)" in container)
+        assertTrue("The app container must construct the one-time Recents importer", "RoomRecentsLegacyImporter(" in container)
+        assertTrue("Recents import must finish inside the durable startup gate", "recentsImporter.importAndArchive" in container)
+        assertTrue("The removed whole-file Recents repository must not return", "class FileBackedRecentsRepository" !in production)
+    }
+
+    @Test
     fun `feed composables delegate animated duration enrichment to route owners`() {
         val screens = listOf(
             "app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt",
