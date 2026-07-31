@@ -2,6 +2,12 @@ package com.theoriacodex.app.search.state
 
 import com.theoriacodex.app.search.DateRangePreset
 import com.theoriacodex.app.search.NhentaiLanguageFilter
+import com.theoriacodex.app.search.ParsedScopedInput
+import com.theoriacodex.app.search.UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE
+import com.theoriacodex.app.search.UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
+import com.theoriacodex.app.search.UNSUPPORTED_SEARCH_SCOPE_MESSAGE
+import com.theoriacodex.app.search.parseScopedInput
+import com.theoriacodex.app.search.resolveSupportedScope
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.model.Post
@@ -13,19 +19,19 @@ import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeGelbooruToken
 import com.theoriacodex.domain.tags.sourceTagsMatch
 
-internal data class SearchDraftContext(
+data class SearchDraftContext(
     val availableSources: Set<SourceKey>,
     val appliedByMode: Map<String, Query>,
 )
 
-internal data class SearchDraftReduction(
+data class SearchDraftReduction(
     val state: SearchUiState,
     val changed: Boolean = true,
     val accepted: Boolean = true,
 )
 
 /** Pure route-input reducer. SearchViewModel is the only holder of the returned state. */
-internal object SearchDraftReducer {
+object SearchDraftReducer {
     fun selectMode(
         state: SearchUiState,
         mode: QueryMode,
@@ -407,17 +413,17 @@ internal object SearchDraftReducer {
     }
 }
 
-internal fun modeKey(mode: QueryMode): String = when (mode) {
+fun modeKey(mode: QueryMode): String = when (mode) {
     QueryMode.Unified -> "unified"
     is QueryMode.Source -> "source:${mode.source.name}"
 }
 
-internal fun QueryMode.isAvailable(sources: Set<SourceKey>): Boolean = when (this) {
+fun QueryMode.isAvailable(sources: Set<SourceKey>): Boolean = when (this) {
     QueryMode.Unified -> true
     is QueryMode.Source -> source in sources
 }
 
-internal fun SearchSourceScope.queryMode(): QueryMode = when (this) {
+fun SearchSourceScope.queryMode(): QueryMode = when (this) {
     SearchSourceScope.GlobalUnified -> QueryMode.Unified
     is SearchSourceScope.Single -> QueryMode.Source(source)
     is SearchSourceScope.Temporary -> QueryMode.Unified
@@ -441,40 +447,6 @@ private fun Query.hasSourceOwnedTerms(): Boolean =
 private fun SearchTerm.normalizedOrNull(): SearchTerm? {
     val value = value.trim().takeIf(String::isNotBlank) ?: return null
     return copy(value = value, sourceNamespace = sourceNamespace?.trim()?.takeIf(String::isNotBlank))
-}
-
-private data class SearchScopePrefix(
-    val facet: SearchFacet,
-    val sourceNamespace: String? = null,
-    val requiresExactNamespace: Boolean = false,
-)
-
-private data class ParsedScopedInput(
-    val value: String,
-    val isExclude: Boolean,
-    val explicitScope: SearchScopePrefix?,
-)
-
-private fun parseScopedInput(input: String): ParsedScopedInput {
-    val trimmed = input.trim()
-    val excluded = trimmed.startsWith('-')
-    val unsigned = trimmed.removePrefix("-").trim()
-    val separator = unsigned.indexOf(':')
-    if (separator <= 0) return ParsedScopedInput(unsigned, excluded, null)
-    val prefix = SEARCH_SCOPE_PREFIXES[unsigned.substring(0, separator).trim().lowercase()]
-        ?: return ParsedScopedInput(unsigned, excluded, null)
-    return ParsedScopedInput(unsigned.substring(separator + 1).trim(), excluded, prefix)
-}
-
-private fun resolveSupportedScope(
-    prefix: SearchScopePrefix,
-    scopes: List<FacetedSearchScope>,
-): FacetedSearchScope? {
-    scopes.firstOrNull { it.facet == prefix.facet && it.sourceNamespace == prefix.sourceNamespace }
-        ?.let { return it }
-    if (prefix.requiresExactNamespace) return null
-    return scopes.firstOrNull { it.facet == prefix.facet && it.sourceNamespace == null }
-        ?: scopes.firstOrNull { it.facet == prefix.facet }
 }
 
 private fun Query.nhentaiLanguageFilter(): NhentaiLanguageFilter =
@@ -510,20 +482,6 @@ private fun Query.directNhentaiGalleryIdCandidate(): String? {
     return terms.single().value.trim().takeIf { value -> value.isNotBlank() && value.all(Char::isDigit) }
 }
 
-private val SEARCH_SCOPE_PREFIXES = mapOf(
-    "tag" to SearchScopePrefix(SearchFacet.TAG, "tag"),
-    "female" to SearchScopePrefix(SearchFacet.TAG, "female", true),
-    "male" to SearchScopePrefix(SearchFacet.TAG, "male", true),
-    "artist" to SearchScopePrefix(SearchFacet.ARTIST),
-    "character" to SearchScopePrefix(SearchFacet.CHARACTER),
-    "series" to SearchScopePrefix(SearchFacet.SERIES),
-    "parody" to SearchScopePrefix(SearchFacet.SERIES, "parody", true),
-    "group" to SearchScopePrefix(SearchFacet.GROUP),
-    "type" to SearchScopePrefix(SearchFacet.TYPE),
-    "category" to SearchScopePrefix(SearchFacet.TYPE, "category", true),
-    "language" to SearchScopePrefix(SearchFacet.LANGUAGE),
-)
-
 private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(
     SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.NHENTAI, SourceKey.HITOMI,
     SourceKey.IWARA, SourceKey.RULE34XXX, SourceKey.RULE34PAHEAL,
@@ -539,9 +497,3 @@ private const val NHENTAI_TAG_NAMESPACE = "tag"
 private const val NHENTAI_FULL_COLOR_TAG = "full color"
 private const val GELBOORU_SUGGESTION_REQUIRED_MESSAGE =
     "For Gelbooru, pick a suggested tag from autocomplete."
-private const val UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE =
-    "Artists, series, characters, groups, types, and languages require a specific source."
-internal const val UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE =
-    "Source-specific search terms were removed when switching to Unified."
-private const val UNSUPPORTED_SEARCH_SCOPE_MESSAGE =
-    "That search scope is not supported by this source."

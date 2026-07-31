@@ -371,6 +371,26 @@ class SearchCoordinatorTest {
         assertEquals(artist, autocomplete.selectedScope)
         assertEquals(listOf(suggestion), autocomplete.facetedAutocomplete)
         assertEquals(listOf(suggestion), featured.facetedAutocomplete)
+        assertEquals(
+            UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE,
+            coordinator.fetchAutocomplete(
+                unifiedQuery(""),
+                SearchSourceScope.GlobalUnified,
+                FacetedSearchScope.All,
+                "artist:naj",
+                emptyList(),
+            ).validationMessage,
+        )
+        assertEquals(
+            UNSUPPORTED_SEARCH_SCOPE_MESSAGE,
+            coordinator.fetchAutocomplete(
+                query,
+                SearchSourceScope.Single(SourceKey.HITOMI),
+                FacetedSearchScope.All,
+                "female:naj",
+                emptyList(),
+            ).validationMessage,
+        )
         adapter.failure = CancellationException("scope changed")
         assertTrue(
             runCatching {

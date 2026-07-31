@@ -1,6 +1,5 @@
 package com.theoriacodex.app.search
 
-import androidx.compose.ui.geometry.Rect
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -72,9 +71,9 @@ class FeedMediaLifecycleTest {
 
     @Test
     fun `clipped bounds are inactive while any visible area remains active`() {
-        assertFalse(isVisibleFeedBounds(Rect.Zero))
-        assertFalse(isVisibleFeedBounds(Rect(0f, 0f, 20f, 0f)))
-        assertTrue(isVisibleFeedBounds(Rect(0f, 0f, 1f, 1f)))
+        assertFalse(hasVisibleFeedArea(0f, 0f))
+        assertFalse(hasVisibleFeedArea(20f, 0f))
+        assertTrue(hasVisibleFeedArea(1f, 1f))
     }
 
     @Test

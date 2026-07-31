@@ -116,6 +116,25 @@ class ChangedCoverageTest(unittest.TestCase):
             filtered,
         )
 
+    def test_app_logic_changed_source_fails_closed_when_report_omits_it(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            repo = pathlib.Path(temporary_directory)
+            source_path = pathlib.PurePosixPath(
+                "app-logic/src/main/kotlin/com/example/AppPolicy.kt"
+            )
+            self._write_source(repo, source_path, "com.example")
+
+            with self.assertRaisesRegex(
+                coverage.CoverageCheckError,
+                "coverage XML has no source entry",
+            ):
+                coverage.calculate_changed_coverage(
+                    repo=repo,
+                    changed={source_path: {2}},
+                    report={},
+                    included_modules=frozenset({"app-logic"}),
+                )
+
     def test_maps_package_entries_across_modules_and_counts_only_xml_lines(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             repo = pathlib.Path(temporary_directory)

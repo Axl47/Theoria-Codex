@@ -9,123 +9,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
-
-data class AnimatedDurationEnrichment(
-    val postId: PostId,
-    val durationMs: Long,
-)
-
-interface AnimatedDurationEnricher {
-    suspend fun enrich(post: Post): AnimatedDurationEnrichment?
-}
-
-internal object NoOpAnimatedDurationEnricher : AnimatedDurationEnricher {
-    override suspend fun enrich(post: Post): AnimatedDurationEnrichment? = null
-}
-
-internal fun animatedDurationEnrichmentCandidates(
-    posts: List<Post>,
-    excludedPostIds: Set<PostId> = emptySet(),
-    limit: Int = ANIMATED_DURATION_ENRICHMENT_BATCH_SIZE,
-): List<Post> {
-    if (limit <= 0) return emptyList()
-    return posts.asSequence()
-        .filter(::isAnimatedPost)
-        .filter { post -> animatedDurationMs(post) == null }
-        .distinctBy(Post::id)
-        .filterNot { post -> post.id in excludedPostIds }
-        .take(limit)
-        .toList()
-}
-
-/**
- * Route-owned drain lane for duration requests. Each owner gets its own attempted set while all
- * lanes share the application service underneath.
- */
-internal class AnimatedDurationEnrichmentLane<SessionIdentity>(
-    private val scope: CoroutineScope,
-    private val enricher: AnimatedDurationEnricher,
-    private val currentIdentity: () -> SessionIdentity?,
-    private val currentPosts: () -> List<Post>,
-    private val applyEnrichments: (SessionIdentity, List<AnimatedDurationEnrichment>) -> Unit,
-) {
-    private val stateLock = Any()
-    private val attemptedPostIds = mutableSetOf<PostId>()
-    private var activeIdentity: SessionIdentity? = null
-    private var worker: Job? = null
-    private var rerunRequested = false
-
-    fun request(identity: SessionIdentity) {
-        if (currentIdentity() != identity) return
-        synchronized(stateLock) {
-            if (activeIdentity != identity) {
-                activeIdentity = identity
-                attemptedPostIds.clear()
-            }
-            if (worker?.isActive == true) {
-                rerunRequested = true
-            } else {
-                startWorkerLocked(identity)
-            }
-        }
-    }
-
-    private fun startWorkerLocked(identity: SessionIdentity) {
-        rerunRequested = false
-        worker = scope.launch {
-            try {
-                drain(identity)
-            } finally {
-                val nextIdentity = synchronized(stateLock) {
-                    worker = null
-                    activeIdentity.takeIf { active ->
-                        rerunRequested && active == currentIdentity()
-                    }?.also {
-                        rerunRequested = false
-                    }
-                }
-                if (nextIdentity != null) {
-                    synchronized(stateLock) {
-                        if (worker?.isActive != true && activeIdentity == nextIdentity) {
-                            startWorkerLocked(nextIdentity)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private suspend fun drain(identity: SessionIdentity) {
-        while (currentIdentity() == identity) {
-            val candidates = synchronized(stateLock) {
-                if (activeIdentity != identity) return
-                animatedDurationEnrichmentCandidates(
-                    posts = currentPosts(),
-                    excludedPostIds = attemptedPostIds,
-                ).also { batch -> attemptedPostIds += batch.map(Post::id) }
-            }
-            if (candidates.isEmpty()) return
-            val enrichments = coroutineScope {
-                candidates.map { post -> async { enricher.enrich(post) } }
-                    .awaitAll()
-                    .filterNotNull()
-            }
-            if (currentIdentity() != identity) return
-            if (enrichments.isNotEmpty()) applyEnrichments(identity, enrichments)
-        }
-    }
-}
 
 /** Application-owned duration resolver shared by every feed route. */
 internal class AnimatedDurationEnrichmentService(
@@ -270,5 +160,3 @@ internal class AnimatedDurationEnrichmentService(
         const val DEFAULT_NEGATIVE_TTL_MS = 5L * 60L * 1_000L
     }
 }
-
-internal const val ANIMATED_DURATION_ENRICHMENT_BATCH_SIZE = 8

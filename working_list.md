@@ -8,9 +8,10 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### In Progress
 
+- None — F13 is committed next and awaiting review; do not begin F14.
+
 ### Pending
 
-- [ ] F13: extract platform-free application logic and include it in changed-line coverage
 - [ ] F14: reduce `TheoriaAppContent` to navigation and global system-effect ownership
 - [ ] F15: ratchet hotspot complexity, split monolithic tests, and preserve duplication headroom
 - [ ] F16: evaluate Coil 3 and Gradle configuration cache in isolated, evidence-led changes
@@ -19,6 +20,8 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### Done
 
+- [x] F13: extract platform-free application logic and include it in changed-line coverage
+  - Commit: `refactor(architecture): extract platform-free app logic`. Evidence: the new Kotlin/JVM `:app-logic` module owns Search execution/state contracts and reducers, the shared scoped-input parser/messages, visibility/filtering, feed activation/decode policy, provider-independent media classification/duration, recommendation taxonomy, and animated-duration candidate/drain scheduling. Android route/ViewModel/service/Compose/Media3/Coil/lifecycle ownership and provider URL/header normalization remain in `:app`; dependencies are limited to `:core-domain`, `:core-data`, and coroutines. Pixiv Ugoira MIME now has one `:core-domain` wire owner plus a source compatibility alias. Fifty-eight app-logic tests and 392 app JVM tests passed with zero failures/errors and three intentional app skips; main/Android-test compilation, lint, app/app-logic Detekt, aggregate Kover, coverage-helper tests, 0.54% duplication, npm audit, HTML, and diff checks passed. The staged changed-line gate passed at 93.06% (228/245 executable lines; 491 eligible production lines inspected). Architecture guards prove the dependency/moved-owner/quality-gate boundary and prevent the shared Search policy from duplicating again. App Detekt exited green with 23 compiler-resolution diagnostics. No connected, physical-device, or live-provider command ran.
 - [x] F12: make Search route state ownership authoritative in one owner
   - Commit: `refactor(search): make route state ownership authoritative`. Evidence: SearchViewModel now exclusively owns Search route state, execution identity, initial/page/retry jobs, continuation, accepted-result persistence, stale-result rejection, provider-status merging, canonical dedupe, retry transitions, and one-time restoration. SearchCoordinator is an immutable execution/persistence service with no observable snapshot or competing query/results/status/loading/token state; the old mapper is deleted. Identity-mismatched or superseded results clear loading and cannot publish or persist, admitted root failures apply and record the requested query while retaining prior content and disabling old paging, and page success/failure merges statuses by source. Sixty-five focused boundary tests and all 446 app JVM tests passed (three intentional skips), together with main/Android-test compilation, lint, Detekt, HTML validation, and diff checks. Detekt exited green with its existing 10 compiler-resolution diagnostics. No connected, physical-device, or live-provider command ran.
 - [x] F11: improve concurrent autoplay performance while every visible video card keeps playing

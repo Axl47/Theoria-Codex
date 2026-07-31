@@ -298,51 +298,8 @@ internal fun buildFeedImageRequest(
     )
 }
 
-internal data class FeedPreviewDecodeSize(
-    val widthPx: Int,
-    val heightPx: Int,
-)
-
-internal fun feedPreviewDecodeSize(
-    screenWidthPx: Int,
-    aspectRatio: Float,
-): FeedPreviewDecodeSize {
-    val safeRatio = aspectRatio.takeIf { it.isFinite() && it > 0f } ?: 1f
-    val width = (screenWidthPx.coerceAtLeast(2) / 2)
-        .coerceAtMost(FEED_PREVIEW_MAX_WIDTH_PX)
-        .coerceAtLeast(1)
-    val height = (width / safeRatio).toInt()
-        .coerceIn(1, FEED_PREVIEW_MAX_HEIGHT_PX)
-    return FeedPreviewDecodeSize(widthPx = width, heightPx = height)
-}
-
-internal fun shouldFeedMediaPlay(
-    isInViewport: Boolean,
-    isLifecycleStarted: Boolean,
-): Boolean = isInViewport && isLifecycleStarted
-
-internal data class FeedPlayerActivationDecision(
-    val shouldPrepare: Boolean,
-    val shouldRetainPlayer: Boolean,
-    val shouldPlay: Boolean,
-)
-
-internal class FeedPlayerActivationState {
-    private var hasActivated = false
-
-    fun update(isActive: Boolean): FeedPlayerActivationDecision {
-        val shouldPrepare = isActive && !hasActivated
-        if (shouldPrepare) hasActivated = true
-        return FeedPlayerActivationDecision(
-            shouldPrepare = shouldPrepare,
-            shouldRetainPlayer = hasActivated,
-            shouldPlay = isActive && hasActivated,
-        )
-    }
-}
-
 internal fun isVisibleFeedBounds(bounds: Rect): Boolean {
-    return bounds.width > 0f && bounds.height > 0f
+    return hasVisibleFeedArea(bounds.width, bounds.height)
 }
 
 @Composable
@@ -371,6 +328,3 @@ internal fun FeedAsyncImage(
         },
     )
 }
-
-private const val FEED_PREVIEW_MAX_WIDTH_PX = 1_600
-private const val FEED_PREVIEW_MAX_HEIGHT_PX = 2_400

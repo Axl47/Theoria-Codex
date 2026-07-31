@@ -633,6 +633,7 @@ fun SearchScreen(
                     )
                 }
                 state.content.error != null -> {
+                    val error = requireNotNull(state.content.error)
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -642,7 +643,7 @@ fun SearchScreen(
                             ) { focusManager.clearFocus() }
                     ) {
                         ErrorBlock(
-                            message = state.content.error.message,
+                            message = error.message,
                             onRetry = {
                                 focusManager.clearFocus()
                                 onAction(SearchAction.Retry)
@@ -1882,79 +1883,6 @@ private fun ErrorBlock(
         actionLabel = actionLabel,
         onRetry = onRetry,
     )
-}
-
-enum class UnknownAnimatedDurationPolicy {
-    HIDE_UNKNOWNS,
-    RESOLVE_IN_BACKGROUND,
-}
-
-internal data class FavoriteTagSection(
-    val source: SourceKey,
-    val tags: List<String>,
-)
-
-internal fun filterSearchResults(
-    results: List<Post>,
-    filters: SearchVisibilityFilters,
-    likedPostIds: Set<PostId>,
-    savedPostIds: Set<PostId>,
-    unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy = UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
-): List<Post> {
-    return results.filter { post ->
-        (!filters.animatedOnly || isAnimatedPost(post)) &&
-            matchesAnimatedDurationFilter(
-                post = post,
-                filters = filters,
-                unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
-            ) &&
-            (!filters.hideLiked || post.id !in likedPostIds) &&
-            (!filters.hideSaved || post.id !in savedPostIds)
-    }
-}
-
-private fun matchesAnimatedDurationFilter(
-    post: Post,
-    filters: SearchVisibilityFilters,
-    unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy,
-): Boolean {
-    val range = filters.animatedDurationRange
-    if (range.isFullRange) return true
-    if (!isAnimatedPost(post)) return true
-    val durationMs = animatedDurationMs(post) ?: return when (unknownAnimatedDurationPolicy) {
-        UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS -> false
-        UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND -> false
-    }
-    return range.contains(durationMs)
-}
-
-internal fun favoriteTagSections(
-    mode: QueryMode,
-    favoriteTags: Map<SourceKey, List<String>>,
-    sourceDisplayOrder: List<SourceKey>,
-): List<FavoriteTagSection> {
-    val orderedSources = (sourceDisplayOrder + favoriteTags.keys)
-        .distinct()
-    return when (mode) {
-        is QueryMode.Source -> {
-            favoriteTags[mode.source]
-                .orEmpty()
-                .takeIf { tags -> tags.isNotEmpty() }
-                ?.let { tags ->
-                    listOf(FavoriteTagSection(source = mode.source, tags = tags))
-                }
-                .orEmpty()
-        }
-
-        QueryMode.Unified -> {
-            orderedSources.mapNotNull { source ->
-                favoriteTags[source]
-                    .orEmpty()
-                    .takeIf { tags -> tags.isNotEmpty() }
-                    ?.let { tags -> FavoriteTagSection(source = source, tags = tags) }
-            }
-        }
-    }
 }
 
 private fun buildEmptySearchMessage(

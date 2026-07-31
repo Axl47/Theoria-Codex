@@ -123,6 +123,7 @@ jobs:
         run: >-
           ./gradlew
           :app:detektDebug
+          :app-logic:detektMain
           :core-data-android:detektDebug
           :core-domain:detektMain
           :core-data:detektMain
@@ -145,6 +146,7 @@ jobs:
           python3 scripts/check_changed_coverage.py \
             --xml build/reports/kover/quality.xml \
             --base "$base" \
+            --include-module app-logic \
             --include-module core-domain \
             --include-module core-data \
             --include-module core-data-android \
@@ -161,6 +163,7 @@ jobs:
             build/reports/jscpd/
             build/reports/kover/
             app/build/reports/detekt/
+            app-logic/build/reports/detekt/
             core-*/build/reports/detekt/
           if-no-files-found: warn
           retention-days: 14

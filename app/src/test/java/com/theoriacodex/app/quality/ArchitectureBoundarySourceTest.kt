@@ -142,7 +142,7 @@ class ArchitectureBoundarySourceTest {
             .asSequence()
             .filter { directory ->
                 directory.isDirectory &&
-                    (directory.name == "app" || directory.name.startsWith("core-"))
+                    (directory.name == "app" || directory.name == "app-logic" || directory.name.startsWith("core-"))
             }
             .flatMap { module ->
                 File(module, "src/main").walkTopDown()

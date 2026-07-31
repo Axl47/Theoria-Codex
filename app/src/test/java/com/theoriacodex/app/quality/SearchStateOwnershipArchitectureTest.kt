@@ -15,7 +15,9 @@ class SearchStateOwnershipArchitectureTest {
     fun `search view model is the only mutable route state owner`() {
         val coordinator = file("app/src/main/java/com/theoriacodex/app/search/SearchCoordinator.kt").readText()
         val viewModel = file("app/src/main/java/com/theoriacodex/app/search/SearchViewModel.kt").readText()
-        val contract = file("app/src/main/java/com/theoriacodex/app/search/SearchExecutionContract.kt").readText()
+        val contract = file(
+            "app-logic/src/main/kotlin/com/theoriacodex/app/search/SearchExecutionContract.kt",
+        ).readText()
 
         assertTrue("SearchViewModel must own the observable state", "MutableStateFlow" in viewModel)
         assertTrue("Coordinator must return immutable root results", "SearchExecutionResult" in coordinator)

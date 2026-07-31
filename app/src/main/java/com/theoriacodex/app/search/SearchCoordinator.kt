@@ -932,8 +932,6 @@ class SearchCoordinator(
     }
 }
 
-enum class DateRangePreset { NONE, TODAY, LAST_7_DAYS, LAST_30_DAYS }
-enum class NhentaiLanguageFilter { ANY, ENGLISH, CHINESE, JAPANESE }
 
 private data class SanitizedQuery(val query: Query, val removedSourceOwnedTerms: Boolean)
 private fun Query.sanitizedForMode(mode: QueryMode): SanitizedQuery {
@@ -946,36 +944,6 @@ private fun Query.sanitizedForMode(mode: QueryMode): SanitizedQuery {
     )
 }
 
-private data class SearchScopePrefix(
-    val facet: SearchFacet,
-    val sourceNamespace: String? = null,
-    val requiresExactNamespace: Boolean = false,
-)
-private data class ParsedScopedInput(
-    val value: String,
-    val isExclude: Boolean,
-    val explicitScope: SearchScopePrefix?,
-)
-private fun parseScopedInput(input: String): ParsedScopedInput {
-    val trimmed = input.trim()
-    val excluded = trimmed.startsWith('-')
-    val unsigned = trimmed.removePrefix("-").trim()
-    val separator = unsigned.indexOf(':')
-    if (separator <= 0) return ParsedScopedInput(unsigned, excluded, null)
-    val scope = SEARCH_SCOPE_PREFIXES[unsigned.substring(0, separator).trim().lowercase()]
-        ?: return ParsedScopedInput(unsigned, excluded, null)
-    return ParsedScopedInput(unsigned.substring(separator + 1).trim(), excluded, scope)
-}
-private fun resolveSupportedScope(
-    prefix: SearchScopePrefix,
-    scopes: List<FacetedSearchScope>,
-): FacetedSearchScope? {
-    scopes.firstOrNull { it.facet == prefix.facet && it.sourceNamespace == prefix.sourceNamespace }
-        ?.let { return it }
-    if (prefix.requiresExactNamespace) return null
-    return scopes.firstOrNull { it.facet == prefix.facet && it.sourceNamespace == null }
-        ?: scopes.firstOrNull { it.facet == prefix.facet }
-}
 private fun FacetedSearchScope.scopeOrder(): Int =
     if (sourceNamespace == null || facet == SearchFacet.TAG && sourceNamespace == "tag") 0 else 1
 private fun FacetedTagSuggestion.toLegacySuggestion() =
@@ -1008,27 +976,9 @@ private val SEARCH_SCOPE_ORDER = listOf(
 private val SEARCH_SCOPE_COMPARATOR = compareBy<FacetedSearchScope> {
     SEARCH_SCOPE_ORDER.indexOf(it.facet)
 }.thenBy(FacetedSearchScope::scopeOrder).thenBy { it.sourceNamespace.orEmpty() }
-private val SEARCH_SCOPE_PREFIXES = mapOf(
-    "tag" to SearchScopePrefix(SearchFacet.TAG, "tag"),
-    "female" to SearchScopePrefix(SearchFacet.TAG, "female", true),
-    "male" to SearchScopePrefix(SearchFacet.TAG, "male", true),
-    "artist" to SearchScopePrefix(SearchFacet.ARTIST),
-    "character" to SearchScopePrefix(SearchFacet.CHARACTER),
-    "series" to SearchScopePrefix(SearchFacet.SERIES),
-    "parody" to SearchScopePrefix(SearchFacet.SERIES, "parody", true),
-    "group" to SearchScopePrefix(SearchFacet.GROUP),
-    "type" to SearchScopePrefix(SearchFacet.TYPE),
-    "category" to SearchScopePrefix(SearchFacet.TYPE, "category", true),
-    "language" to SearchScopePrefix(SearchFacet.LANGUAGE),
-)
 private const val LAST_ACTIVE_QUERY_KEY = "last_active"
 private const val PIXIV_UNKNOWN_RETRY_MESSAGE =
     "Pixiv returned a temporary unknown error. Search was reset. Please retry."
-private const val UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE =
-    "Artists, series, characters, groups, types, and languages require a specific source."
-private const val UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE =
-    "Source-specific search terms were removed when switching to Unified."
-private const val UNSUPPORTED_SEARCH_SCOPE_MESSAGE = "That search scope is not supported by this source."
 private const val FACETED_AUTOCOMPLETE_LIMIT = 20
 private const val FACETED_AUTOCOMPLETE_CACHE_LIMIT = 120
 private const val TAG_LOOKUP_LIMIT = 20_000

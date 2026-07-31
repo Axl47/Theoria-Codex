@@ -467,6 +467,6 @@ private fun formatEpochDate(value: Long): String {
 }
 
 private const val PIXIV_API_BASE: String = "https://app-api.pixiv.net"
-const val PIXIV_UGOIRA_MIME: String = "image/ugoira"
+const val PIXIV_UGOIRA_MIME: String = com.theoriacodex.domain.model.PIXIV_UGOIRA_MIME
 private val PIXIV_TRAILING_PARENTHESIS_REGEX = Regex("\\s*\\([^)]*\\)\\s*$")
 private val PIXIV_TAG_WHITESPACE_REGEX = Regex("\\s+")

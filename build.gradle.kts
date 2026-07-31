@@ -15,6 +15,7 @@ plugins {
 
 dependencies {
     kover(project(":app"))
+    kover(project(":app-logic"))
     kover(project(":core-domain"))
     kover(project(":core-data"))
     kover(project(":core-data-android"))
