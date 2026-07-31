@@ -8,11 +8,10 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### In Progress
 
-- None. F06 is implemented and verified; awaiting its dedicated commit/review before F07 starts.
+-
 
 ### Pending
 
-- [ ] F07: bound Hitomi random-search memory while preserving deterministic continuation
 - [ ] F08: quarantine unreadable legacy JSON instead of silently overwriting it
 - [ ] F09: migrate Recents activity persistence to Room
 - [ ] F10: add numeric startup and concurrent-feed-autoplay Macrobenchmarks
@@ -27,8 +26,10 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### Done
 
+- [x] F07: bound Hitomi random/search memory with primitive storage and deterministic continuation
+  - Commit: pending. Evidence: Nozomi decoding and random/search membership/page paths are primitive; canonical sort/dedupe prevents repeated raw IDs across pages; one 16 MiB snapshot cache is reused across seeds; membership is capped at 8 MiB, global indexes at 32 MiB, known sizes and suggestion counts at 256 KiB each, and media failure guards at 64 KiB. Version 4 tokens bind query, snapshot, seed, affine algorithm version, offset, and global-index version. Seventy-eight focused Hitomi tests and all 205 core-sources tests passed with strict core/app Detekt, app lint, Android-test compilation, and Gson compatibility. Release R8 completed and the direct mapping proof retained 206 exact fields across 40 classes while removing 13 unreachable contract classes. The Gradle wrapper verifier still targets an obsolete mapping path, so the same checked verifier was run directly against AGP's actual intermediate mapping and seeds. This is deterministic JVM/build evidence; no connected-device, physical-device, or live-provider proof is claimed.
 - [x] F06: centralize animated-duration enrichment with bounded single-flight work
-  - Commit: pending dedicated `refactor(media): centralize animated duration enrichment` commit. Evidence: Search, For You, and Creator composables now emit typed requests to route-owned bounded drain lanes backed by one application-owned service with cross-route single-flight, a three-work concurrency cap, 128-entry positive/negative LRU caches, five-minute negative expiry, authoritative adapter resolution, and cancellation-preserving probing. Eighty-nine focused JVM tests passed across the service, all three route owners/contracts, filtering/media behavior, and structural ownership guards; both Android-test owners compiled; app lint and Detekt passed. This is deterministic JVM/build evidence only; no connected-device, physical-device, or live-provider retriever execution is claimed.
+  - Commit: `65716eb` (`refactor(media): centralize animated duration enrichment`). Evidence: Search, For You, and Creator composables now emit typed requests to route-owned bounded drain lanes backed by one application-owned service with cross-route single-flight, a three-work concurrency cap, 128-entry positive/negative LRU caches, five-minute negative expiry, authoritative adapter resolution, and cancellation-preserving probing. Eighty-nine focused JVM tests passed across the service, all three route owners/contracts, filtering/media behavior, and structural ownership guards; both Android-test owners compiled; app lint and Detekt passed. This is deterministic JVM/build evidence only; no connected-device, physical-device, or live-provider retriever execution is claimed.
 - [x] F05: consolidate Search query and scroll persistence and delete the orphan persistence path
   - Commit: `d0c5011` (`refactor(search): consolidate query and scroll persistence`). Evidence: UI restore is the sole live scroll store; prior query-file offsets migrate once with proof and structural cleanup; the production ViewModel coalesces query-keyed positions, excludes temporary scopes, serializes begun writes, and drains one final value during real owner clear before cancelling its scheduler. One hundred fifty-nine focused JVM tests, both Android-test compilation owners, app lint, app/core-data Detekt, HTML validation, and `git diff --check` passed. No connected-device or physical-device claim is needed for this deterministic persistence finding.
 - [x] F04: centralize Settings state and persisted section expansion ownership

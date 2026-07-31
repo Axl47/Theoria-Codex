@@ -1,5 +1,6 @@
 package com.theoriacodex.sources.hitomi
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -54,6 +55,38 @@ class HitomiNozomiTest {
         assertEquals(29, ids.size)
         assertEquals(listOf(4_042_375, 4_042_353, 4_041_204), ids.take(3))
         assertEquals(2_491_545, ids.last())
+    }
+
+    @Test
+    fun `decode and dedupe remain primitive with deterministic sorted snapshots`() {
+        val decoded: IntArray = HitomiNozomi.decodeGalleryIds(
+            byteArrayOf(
+                0, 0, 0, 3,
+                0, 0, 0, 1,
+                0, 0, 0, 3,
+                0, 0, 0, 2,
+            ),
+        )
+
+        assertArrayEquals(intArrayOf(3, 1, 3, 2), decoded)
+        assertArrayEquals(intArrayOf(1, 2, 3), decoded.sortedDistinctCopy())
+        assertArrayEquals(intArrayOf(3, 1, 3, 2), decoded)
+    }
+
+    @Test
+    fun `allocation model removes boxed decode and full permutation copy costs`() {
+        val model = HitomiIdAllocationModel.forIdCount(HitomiNozomi.MAX_GALLERY_IDS)
+
+        assertEquals(8_000_016L, model.primitiveIdBytes)
+        assertEquals(48_000_032L, model.legacyBoxedDecodePeakBytes)
+        assertEquals(40_000_016L, model.nozomiPeakBytesSaved)
+        assertEquals(8_000_016L, model.commonInlineSourceBytes)
+        assertEquals(16_000_032L, model.legacyInlineExtraBytes)
+        assertEquals(8_000_032L, model.newInlineExtraBytes)
+        assertEquals(16L, model.statelessPermutationBytes)
+        assertEquals(8_000_000L, model.inlinePeakBytesSaved)
+        assertEquals(8_000_016L, model.legacyPerSeedRetainedShuffleBytes)
+        assertEquals(0L, model.newPerSeedRetainedShuffleBytes)
     }
 
     @Test

@@ -40,7 +40,6 @@ import com.theoriacodex.sources.media.mimeFromFileExt
 import java.io.IOException
 import java.net.URI
 import java.net.URLEncoder
-import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -48,16 +47,12 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Base64
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.max
-import kotlin.random.Random
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 
 /**
@@ -71,6 +66,12 @@ class HitomiSourceAdapter(
     private val pageSize: Int = DEFAULT_PAGE_SIZE,
     private val hydrationConcurrency: Int = DEFAULT_HYDRATION_CONCURRENCY,
     globalIndexCacheMaxBytes: Long = HitomiGlobalIndexCache.DEFAULT_MAX_BYTES,
+    membershipCacheMaxBytes: Long = DEFAULT_MEMBERSHIP_CACHE_BYTES,
+    randomSnapshotCacheMaxBytes: Long = HitomiRandomSnapshotCache.DEFAULT_MAX_BYTES,
+    randomSnapshotReuseTtlMillis: Long = HitomiRandomSnapshotCache.DEFAULT_INITIAL_REUSE_TTL_MILLIS,
+    randomSnapshotNowMillis: () -> Long = System::currentTimeMillis,
+    knownSizeCacheMaxBytes: Long = DEFAULT_KNOWN_SIZE_CACHE_BYTES,
+    suggestionCountCacheMaxBytes: Long = DEFAULT_SUGGESTION_COUNT_CACHE_BYTES,
     private val mediaCandidates: suspend (HitomiMediaFile) -> List<HitomiMediaCandidate> = { file ->
         mediaUrlResolver.candidates(file)
     },
@@ -102,30 +103,25 @@ class HitomiSourceAdapter(
     )
 
     private val gson = Gson()
-    private val suggestionCounts = ConcurrentHashMap<String, Int>()
+    private val suggestionCounts = HitomiByteBudgetCache<String, Int>(
+        maxBytes = suggestionCountCacheMaxBytes,
+        weigh = { key, _ -> key.hitomiUtf8ByteWeight() + Int.SIZE_BYTES },
+    )
     private val globalSearchIndex = HitomiGlobalSearchIndex(httpClient)
     private val globalIndexCache = HitomiGlobalIndexCache(globalIndexCacheMaxBytes)
-    private val knownNozomiSizes = ConcurrentHashMap<String, Long>()
-    private val membershipCacheMutex = Mutex()
-    private val membershipCache = object : LinkedHashMap<String, IntArray>(
-        MAX_MEMBERSHIP_CACHE_ENTRIES,
-        0.75f,
-        true,
-    ) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, IntArray>?): Boolean {
-            return size > MAX_MEMBERSHIP_CACHE_ENTRIES
-        }
-    }
-    private val randomOrderCacheMutex = Mutex()
-    private val randomOrderCache = object : LinkedHashMap<RandomOrderCacheKey, IntArray>(
-        MAX_RANDOM_ORDER_CACHE_ENTRIES,
-        0.75f,
-        true,
-    ) {
-        override fun removeEldestEntry(
-            eldest: MutableMap.MutableEntry<RandomOrderCacheKey, IntArray>?,
-        ): Boolean = size > MAX_RANDOM_ORDER_CACHE_ENTRIES
-    }
+    private val knownNozomiSizes = HitomiByteBudgetCache<String, Long>(
+        maxBytes = knownSizeCacheMaxBytes,
+        weigh = { key, _ -> key.hitomiUtf8ByteWeight() + Long.SIZE_BYTES },
+    )
+    private val membershipCache = HitomiByteBudgetCache<String, IntArray>(
+        maxBytes = membershipCacheMaxBytes,
+        weigh = { key, ids -> key.hitomiUtf8ByteWeight() + ids.hitomiByteWeight() },
+    )
+    private val randomSnapshotCache = HitomiRandomSnapshotCache(
+        maxBytes = randomSnapshotCacheMaxBytes,
+        initialReuseTtlMillis = randomSnapshotReuseTtlMillis,
+        nowMillis = randomSnapshotNowMillis,
+    )
 
     init {
         require(pageSize in 1..MAX_PAGE_SIZE) {
@@ -173,8 +169,15 @@ class HitomiSourceAdapter(
         }
         if (
             decodedToken != null &&
+            query.sort == SortMode.RANDOM &&
+            decodedToken.randomPermutationVersion != HitomiDeterministicPermutation.ALGORITHM_VERSION
+        ) {
+            throw sourceParseFailure("Hitomi random page token used an unsupported permutation")
+        }
+        if (
+            decodedToken != null &&
             query.sort != SortMode.RANDOM &&
-            decodedToken.randomSnapshotFingerprint != null
+            (decodedToken.randomSnapshotFingerprint != null || decodedToken.randomPermutationVersion != null)
         ) {
             throw sourceParseFailure("Hitomi non-random page token contained a random snapshot")
         }
@@ -213,7 +216,7 @@ class HitomiSourceAdapter(
             )
         }
 
-        val survivingIds = ArrayList<Int>(pageSize)
+        val survivingIds = HitomiIntArrayBuilder(pageSize)
         var exhausted = false
         var scannedIds = 0
         while (
@@ -242,7 +245,7 @@ class HitomiSourceAdapter(
                 val included = secondaryIncludes.all { membership -> membership.containsId(galleryId) }
                 val excluded = exclusions.any { membership -> membership.containsId(galleryId) }
                 if (included && !excluded) {
-                    survivingIds += galleryId
+                    survivingIds.add(galleryId)
                 }
                 if (survivingIds.size >= pageSize) break
             }
@@ -251,7 +254,7 @@ class HitomiSourceAdapter(
             exhausted = range.exhausted && consumedFromRange >= range.ids.size
         }
 
-        val posts = hydrateGalleries(survivingIds)
+        val posts = hydrateGalleries(survivingIds.toIntArray())
         val nextToken = if (!exhausted && scannedIds > 0) {
             encodePageToken(
                 HitomiPageToken(
@@ -280,41 +283,44 @@ class HitomiSourceAdapter(
         exclusions: List<IntArray>,
         globalIndexVersion: String?,
     ): Page<Post> {
-        val randomOrder = randomOrderFor(
+        val snapshot = randomSnapshotFor(
             compiledIndex = primary,
-            seed = seed,
             expectedSnapshotFingerprint = expectedSnapshotFingerprint,
         )
-        val randomIds = randomOrder.ids
+        val randomIds = snapshot.ids
         if (initialOffset > randomIds.size.toLong()) {
             throw sourceParseFailure("Hitomi page token offset exceeded the random candidate list")
         }
-        var offset = initialOffset.toInt()
+        val permutation = randomIds.takeIf(IntArray::isNotEmpty)?.let { ids ->
+            HitomiDeterministicPermutation(ids.size, seed)
+        }
+        var offset = initialOffset
         var scanned = 0
-        val survivingIds = ArrayList<Int>(pageSize)
+        val survivingIds = HitomiIntArrayBuilder(pageSize)
         while (
-            offset < randomIds.size &&
+            offset < randomIds.size.toLong() &&
             survivingIds.size < pageSize &&
             scanned < MAX_PRIMARY_SCAN_IDS_PER_PAGE
         ) {
-            val galleryId = randomIds[offset]
-            offset += 1
+            val galleryId = randomIds[requireNotNull(permutation).sourceIndex(offset)]
+            offset += 1L
             scanned += 1
             val included = secondaryIncludes.all { membership -> membership.containsId(galleryId) }
             val excluded = exclusions.any { membership -> membership.containsId(galleryId) }
-            if (included && !excluded) survivingIds += galleryId
+            if (included && !excluded) survivingIds.add(galleryId)
         }
 
-        val posts = hydrateGalleries(survivingIds)
-        val nextToken = if (offset < randomIds.size) {
+        val posts = hydrateGalleries(survivingIds.toIntArray())
+        val nextToken = if (offset < randomIds.size.toLong()) {
             encodePageToken(
                 HitomiPageToken(
                     version = PAGE_TOKEN_VERSION,
                     queryHash = queryHash,
                     primaryKey = primary.key,
-                    primaryOffset = offset.toLong(),
+                    primaryOffset = offset,
                     randomSeed = seed,
-                    randomSnapshotFingerprint = randomOrder.snapshotFingerprint,
+                    randomSnapshotFingerprint = snapshot.fingerprint,
+                    randomPermutationVersion = HitomiDeterministicPermutation.ALGORITHM_VERSION,
                     globalIndexVersion = globalIndexVersion,
                 ),
             )
@@ -324,25 +330,21 @@ class HitomiSourceAdapter(
         return Page(items = posts, nextPageToken = nextToken)
     }
 
-    private suspend fun randomOrderFor(
+    private suspend fun randomSnapshotFor(
         compiledIndex: CompiledIndex,
-        seed: Long,
         expectedSnapshotFingerprint: String?,
-    ): RandomOrder {
+    ): HitomiNozomiSnapshot {
         val url = compiledIndex.url
-        if (expectedSnapshotFingerprint != null) {
-            randomOrderCacheMutex.withLock {
-                val key = RandomOrderCacheKey(url, seed, expectedSnapshotFingerprint)
-                randomOrderCache[key]?.let { cachedIds ->
-                    return RandomOrder(
-                        ids = cachedIds,
-                        snapshotFingerprint = key.snapshotFingerprint,
-                    )
-                }
+        val snapshot = try {
+            randomSnapshotCache.getOrLoad(url, expectedSnapshotFingerprint) {
+                readCompleteNozomi(compiledIndex, MAX_RANDOM_GALLERY_IDS)
             }
+        } catch (error: HitomiRandomSnapshotMismatchException) {
+            throw sourceParseFailure(
+                "Hitomi random source changed before the next page could be resumed",
+                error,
+            )
         }
-
-        val snapshot = readCompleteNozomi(compiledIndex, MAX_RANDOM_GALLERY_IDS)
         if (
             expectedSnapshotFingerprint != null &&
             snapshot.fingerprint != expectedSnapshotFingerprint
@@ -351,34 +353,30 @@ class HitomiSourceAdapter(
                 "Hitomi random source changed before the next page could be resumed",
             )
         }
-        val ids = snapshot.ids
-        val random = Random(seed)
-        for (index in ids.lastIndex downTo 1) {
-            val swapIndex = random.nextInt(index + 1)
-            val value = ids[index]
-            ids[index] = ids[swapIndex]
-            ids[swapIndex] = value
-        }
-        val key = RandomOrderCacheKey(url, seed, snapshot.fingerprint)
-        randomOrderCacheMutex.withLock {
-            randomOrderCache[key] = ids
-        }
-        return RandomOrder(ids = ids, snapshotFingerprint = snapshot.fingerprint)
+        return snapshot
+    }
+
+    internal suspend fun cacheSnapshot(): HitomiSourceCacheSnapshot {
+        return HitomiSourceCacheSnapshot(
+            globalIndex = globalIndexCache.snapshot(),
+            membership = membershipCache.snapshot(),
+            random = randomSnapshotCache.snapshot(),
+            knownSizes = knownNozomiSizes.snapshot(),
+            suggestionCounts = suggestionCounts.snapshot(),
+        )
     }
 
     private suspend fun readCompleteNozomi(
         index: CompiledIndex,
         maxGalleryIds: Int,
-    ): NozomiSnapshot {
+    ): HitomiNozomiSnapshot {
         val url = index.url
         (index.inlineIds ?: globalIndexCache.get(url))?.let { ordered ->
             if (ordered.size > maxGalleryIds) {
                 throw sourceParseFailure("Hitomi global index exceeded the bounded gallery limit")
             }
-            val bytes = ByteBuffer.allocate(ordered.size * Int.SIZE_BYTES)
-                .apply { ordered.forEach(::putInt) }
-                .array()
-            return NozomiSnapshot(ordered.copyOf(), sha256Hex(bytes))
+            val uniqueIds = ordered.sortedDistinctCopy()
+            return HitomiNozomiSnapshot(uniqueIds, uniqueIds.hitomiSha256Hex())
         }
         val maxBytes = Math.multiplyExact(maxGalleryIds, Int.SIZE_BYTES)
         val response = requestNozomi(
@@ -411,8 +409,8 @@ class HitomiSourceAdapter(
             }
             else -> throw sourceHttpFailure("random Nozomi", response.statusCode)
         }
-        val ids = HitomiNozomi.decodeGalleryIds(body, maxGalleryIds).toIntArray()
-        return NozomiSnapshot(ids = ids, fingerprint = sha256Hex(body))
+        val ids = HitomiNozomi.decodeGalleryIds(body, maxGalleryIds).sortDistinctOwned()
+        return HitomiNozomiSnapshot(ids = ids, fingerprint = ids.hitomiSha256Hex())
     }
 
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
@@ -466,11 +464,13 @@ class HitomiSourceAdapter(
                 text = value,
                 facet = requireNotNull(scope.facet),
                 sourceNamespace = scope.sourceNamespace,
-                count = suggestionCounts[SearchTerm(
-                    value = value,
-                    facet = requireNotNull(scope.facet),
-                    sourceNamespace = scope.sourceNamespace,
-                ).termCacheKey()],
+                count = suggestionCounts.get(
+                    SearchTerm(
+                        value = value,
+                        facet = requireNotNull(scope.facet),
+                        sourceNamespace = scope.sourceNamespace,
+                    ).termCacheKey(),
+                ),
             )
         }
     }
@@ -497,7 +497,7 @@ class HitomiSourceAdapter(
             .also { suggestions ->
                 suggestions.forEach { suggestion ->
                     suggestion.count?.let { count ->
-                        suggestionCounts[suggestion.termCacheKey()] = count
+                        suggestionCounts.put(suggestion.termCacheKey(), count)
                     }
                 }
             }
@@ -614,7 +614,7 @@ class HitomiSourceAdapter(
 
     private suspend fun nozomiSize(url: String): Long {
         globalIndexCache.get(url)?.let { return it.size.toLong() }
-        knownNozomiSizes[url]?.let { return it }
+        knownNozomiSizes.get(url)?.let { return it }
         val response = requestNozomi(
             url = url,
             firstIdIndex = 0L,
@@ -632,19 +632,17 @@ class HitomiSourceAdapter(
             }
             else -> throw sourceHttpFailure("Nozomi size probe", response.statusCode)
         }
-        knownNozomiSizes[url] = size
+        knownNozomiSizes.put(url, size)
         return size
     }
 
     private suspend fun membershipFor(index: CompiledIndex): IntArray {
         val url = index.url
-        membershipCacheMutex.withLock {
-            membershipCache[url]?.let { return it }
-        }
+        membershipCache.get(url)?.let { return it }
 
         (index.inlineIds ?: globalIndexCache.get(url))?.let { ids ->
-            val membership = ids.distinct().sorted().toIntArray()
-            membershipCacheMutex.withLock { membershipCache[url] = membership }
+            val membership = ids.sortedDistinctCopy()
+            membershipCache.put(url, membership)
             return membership
         }
 
@@ -655,7 +653,7 @@ class HitomiSourceAdapter(
             maxBodyBytes = MAX_SECONDARY_MEMBERSHIP_IDS * Int.SIZE_BYTES,
         )
         val ids = when (response.statusCode) {
-            404, 416 -> emptyList()
+            404, 416 -> IntArray(0)
             200 -> HitomiNozomi.decodeGalleryIds(
                 bytes = response.body,
                 maxGalleryIds = MAX_SECONDARY_MEMBERSHIP_IDS,
@@ -687,10 +685,8 @@ class HitomiSourceAdapter(
             }
             else -> throw sourceHttpFailure("Nozomi membership", response.statusCode)
         }
-        val membership = ids.distinct().sorted().toIntArray()
-        membershipCacheMutex.withLock {
-            membershipCache[url] = membership
-        }
+        val membership = ids.sortDistinctOwned()
+        membershipCache.put(url, membership)
         return membership
     }
 
@@ -703,11 +699,11 @@ class HitomiSourceAdapter(
         (index.inlineIds ?: globalIndexCache.get(url))?.let { ids ->
             val from = firstIdIndex.coerceAtMost(ids.size.toLong()).toInt()
             val until = (firstIdIndex + idCount).coerceAtMost(ids.size.toLong()).toInt()
-            return PrimaryRange(ids.slice(from until until), exhausted = until >= ids.size)
+            return PrimaryRange(ids.primitiveSlice(from, until), exhausted = until >= ids.size)
         }
         val response = requestNozomi(url, firstIdIndex, idCount)
         return when (response.statusCode) {
-            404, 416 -> PrimaryRange(emptyList(), exhausted = true)
+            404, 416 -> PrimaryRange(IntArray(0), exhausted = true)
             200 -> {
                 val allIds = HitomiNozomi.decodeGalleryIds(response.body)
                 val from = firstIdIndex.coerceAtMost(allIds.size.toLong()).toInt()
@@ -715,7 +711,7 @@ class HitomiSourceAdapter(
                     .coerceAtMost(allIds.size.toLong())
                     .toInt()
                 PrimaryRange(
-                    ids = allIds.subList(from, until),
+                    ids = allIds.primitiveSlice(from, until),
                     exhausted = until >= allIds.size,
                 )
             }
@@ -728,7 +724,7 @@ class HitomiSourceAdapter(
                 }
                 val ids = HitomiNozomi.decodeGalleryIds(response.body)
                 val totalIds = contentRange.totalBytes?.let(::bytesToIdCount)
-                if (totalIds != null) knownNozomiSizes[url] = totalIds
+                if (totalIds != null) knownNozomiSizes.put(url, totalIds)
                 PrimaryRange(
                     ids = ids,
                     exhausted = when {
@@ -786,7 +782,7 @@ class HitomiSourceAdapter(
         }
     }
 
-    private suspend fun hydrateGalleries(ids: List<Int>): List<Post> = supervisorScope {
+    private suspend fun hydrateGalleries(ids: IntArray): List<Post> = supervisorScope {
         val semaphore = Semaphore(hydrationConcurrency)
         ids.map { galleryId ->
             async {
@@ -1262,7 +1258,7 @@ class HitomiSourceAdapter(
         version: HitomiGlobalIndexVersion,
     ): CompiledIndex {
         val normalized = term.value.trim().lowercase(Locale.ROOT)
-        val url = "hitomi-global://${version.value}/${sha256Hex(normalized.toByteArray()).take(16)}"
+        val url = "hitomi-global://${version.value}/${normalized.toByteArray().hitomiSha256Hex().take(16)}"
         val ids = globalIndexCache.getOrLoad(
             version = version.value,
             key = url,
@@ -1365,7 +1361,11 @@ class HitomiSourceAdapter(
             throw sourceParseFailure("Hitomi page token was malformed", error)
         }
         if (
-            token.version !in setOf(LEGACY_PAGE_TOKEN_VERSION, PAGE_TOKEN_VERSION) ||
+            token.version !in setOf(
+                LEGACY_PAGE_TOKEN_VERSION,
+                PREVIOUS_PAGE_TOKEN_VERSION,
+                PAGE_TOKEN_VERSION,
+            ) ||
             token.queryHash.isNullOrBlank() ||
             token.primaryKey.isNullOrBlank() ||
             token.primaryOffset == null ||
@@ -1383,7 +1383,14 @@ class HitomiSourceAdapter(
                 ?: token.randomSnapshotFingerprint?.let {
                     throw sourceParseFailure("Hitomi page token contained an invalid random snapshot")
                 },
-            globalIndexVersion = if (token.version == PAGE_TOKEN_VERSION) {
+            randomPermutationVersion = if (token.version == PAGE_TOKEN_VERSION) {
+                token.randomPermutationVersion
+            } else {
+                null
+            },
+            globalIndexVersion = if (
+                token.version == PREVIOUS_PAGE_TOKEN_VERSION || token.version == PAGE_TOKEN_VERSION
+            ) {
                 token.globalIndexVersion
                     ?.takeIf(GLOBAL_INDEX_VERSION_PATTERN::matches)
                     ?: token.globalIndexVersion?.let {
@@ -1442,24 +1449,8 @@ class HitomiSourceAdapter(
     }
 
     private data class PrimaryRange(
-        val ids: List<Int>,
+        val ids: IntArray,
         val exhausted: Boolean,
-    )
-
-    private data class RandomOrderCacheKey(
-        val url: String,
-        val seed: Long,
-        val snapshotFingerprint: String,
-    )
-
-    private data class RandomOrder(
-        val ids: IntArray,
-        val snapshotFingerprint: String,
-    )
-
-    private data class NozomiSnapshot(
-        val ids: IntArray,
-        val fingerprint: String,
     )
 
     private data class HitomiPageToken(
@@ -1475,6 +1466,8 @@ class HitomiSourceAdapter(
         val randomSeed: Long? = null,
         @field:SerializedName("randomSnapshotFingerprint")
         val randomSnapshotFingerprint: String? = null,
+        @field:SerializedName("randomPermutationVersion")
+        val randomPermutationVersion: Int? = null,
         @field:SerializedName("globalIndexVersion")
         val globalIndexVersion: String? = null,
     )
@@ -1485,6 +1478,7 @@ class HitomiSourceAdapter(
         val primaryOffset: Long,
         val randomSeed: Long,
         val randomSnapshotFingerprint: String?,
+        val randomPermutationVersion: Int?,
         val globalIndexVersion: String?,
     )
 
@@ -1526,12 +1520,14 @@ class HitomiSourceAdapter(
         private const val PRIMARY_SCAN_CHUNK_IDS = 64
         private const val MAX_PRIMARY_SCAN_IDS_PER_PAGE = 10_000
         private const val MAX_SECONDARY_MEMBERSHIP_IDS = 500_000
-        private const val MAX_MEMBERSHIP_CACHE_ENTRIES = 4
+        internal const val DEFAULT_MEMBERSHIP_CACHE_BYTES = 8L * 1024L * 1024L
         private const val MAX_NOZOMI_RESPONSE_BYTES = 8 * 1024 * 1024
         private const val MAX_RANDOM_GALLERY_IDS = HitomiNozomi.MAX_GALLERY_IDS
-        private const val MAX_RANDOM_ORDER_CACHE_ENTRIES = 2
+        internal const val DEFAULT_KNOWN_SIZE_CACHE_BYTES = 256L * 1024L
+        internal const val DEFAULT_SUGGESTION_COUNT_CACHE_BYTES = 256L * 1024L
         private const val LEGACY_PAGE_TOKEN_VERSION = 2
-        private const val PAGE_TOKEN_VERSION = 3
+        private const val PREVIOUS_PAGE_TOKEN_VERSION = 3
+        private const val PAGE_TOKEN_VERSION = 4
         private const val BASE_PRIMARY_KEY = "__all__"
         private const val HITOMI_ALL_LANGUAGE = "all"
         private const val HITOMI_ANIME_TYPE = "anime"
@@ -1580,14 +1576,6 @@ class HitomiSourceAdapter(
             return digest.take(Long.SIZE_BYTES).fold(0L) { result, byte ->
                 (result shl Byte.SIZE_BITS) or (byte.toLong() and 0xffL)
             }
-        }
-
-        private fun sha256Hex(bytes: ByteArray): String {
-            return MessageDigest.getInstance("SHA-256")
-                .digest(bytes)
-                .joinToString(separator = "") { byte ->
-                    (byte.toInt() and 0xff).toString(16).padStart(2, '0')
-                }
         }
 
         private fun hitomiVideoUrl(filename: String): String {
@@ -1756,6 +1744,14 @@ class HitomiSourceAdapter(
         private val HITOMI_FILE_EXTENSION = Regex("[A-Za-z0-9]{1,10}")
     }
 }
+
+internal data class HitomiSourceCacheSnapshot(
+    val globalIndex: HitomiGlobalIndexCacheSnapshot,
+    val membership: HitomiByteBudgetCacheSnapshot<String>,
+    val random: HitomiRandomSnapshotCacheSnapshot,
+    val knownSizes: HitomiByteBudgetCacheSnapshot<String>,
+    val suggestionCounts: HitomiByteBudgetCacheSnapshot<String>,
+)
 
 private class HitomiGalleryException(
     val reason: SourceFailureReason,
