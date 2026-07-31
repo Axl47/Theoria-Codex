@@ -4,6 +4,40 @@ updated_at: 2026-07-26T06:12:08-04:00
 ---
 # Working List
 
+## Current Task: Implement the 2026-07-31 UX, Performance, Reliability, and Quality Audit
+
+### In Progress
+
+- [~] Launch the dedicated Sol/High implementation task and hand it the sequential commit contract
+
+### Pending
+
+- [ ] F01: execute every Android instrumentation owner in CI and correct device artifact naming
+- [ ] F02: enlarge compact feed controls and add explicit accessibility state semantics
+- [ ] F03: keep persisted source API keys out of saveable UI state
+- [ ] F04: centralize Settings state and persisted section expansion ownership
+- [ ] F05: consolidate Search query and scroll persistence and delete the orphan persistence path
+- [ ] F06: centralize animated-duration enrichment with bounded single-flight work
+- [ ] F07: bound Hitomi random-search memory while preserving deterministic continuation
+- [ ] F08: quarantine unreadable legacy JSON instead of silently overwriting it
+- [ ] F09: migrate Recents activity persistence to Room
+- [ ] F10: add numeric startup and concurrent-feed-autoplay Macrobenchmarks
+- [ ] F11: improve concurrent autoplay performance while every visible video card keeps playing
+- [ ] F12: make Search route state ownership authoritative in one owner
+- [ ] F13: extract platform-free application logic and include it in changed-line coverage
+- [ ] F14: reduce `TheoriaAppContent` to navigation and global system-effect ownership
+- [ ] F15: ratchet hotspot complexity, split monolithic tests, and preserve duplication headroom
+- [ ] F16: evaluate Coil 3 and Gradle configuration cache in isolated, evidence-led changes
+- [ ] Run the final deterministic, Android-device, performance, and documentation acceptance matrix
+- [ ] Update the ExecPlan, `working_list.md`, and any durable `AGENTS.md` findings after every commit
+
+### Done
+
+- [x] Complete the read-only 2026-07-31 audit and establish current validation baselines
+- [x] Record the non-negotiable product constraint that all visible video cards continue autoplaying
+- [x] Create and validate `.docs/exec/code-quality-ux-performance-reliability-remediation.html`
+  - Evidence: the plan maps F01 through F16 to sequential commits, exact validation, recovery, and living-log requirements; `html-validate` and `git diff --check` pass.
+
 ## Current Task: Preserve Settings Collapse State
 
 ### In Progress

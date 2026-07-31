@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Improve UX, Performance, Reliability, and Code Quality</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f4;
+      --surface: #ffffff;
+      --text: #202124;
+      --muted: #5f6368;
+      --border: #d7d7d0;
+      --accent: #0f766e;
+      --accent-soft: #dff3ef;
+      --risk: #9a3412;
+      --risk-soft: #ffedd5;
+      --decision: #1d4ed8;
+      --decision-soft: #dbeafe;
+      --code: #111827;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151716;
+        --surface: #202321;
+        --text: #f0f2ef;
+        --muted: #b8beb7;
+        --border: #3a403c;
+        --accent: #5eead4;
+        --accent-soft: #123b37;
+        --risk: #fdba74;
+        --risk-soft: #43230f;
+        --decision: #93c5fd;
+        --decision-soft: #172554;
+        --code: #0b0f0d;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header, main { max-width: 1240px; margin: 0 auto; padding: 24px; }
+    header { padding-top: 36px; }
+    h1, h2, h3, h4 { line-height: 1.18; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+    h2 { margin-top: 34px; font-size: 1.55rem; }
+    h3 { margin-top: 26px; font-size: 1.18rem; }
+    h4 { margin-top: 18px; font-size: 1rem; }
+    p { margin: 0 0 14px; }
+    ul, ol { margin-top: 8px; }
+    li + li { margin-top: 5px; }
+    a { color: var(--accent); }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-block: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(10px);
+    }
+    nav ul {
+      display: flex;
+      gap: 6px;
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 8px 24px;
+      list-style: none;
+      overflow-x: auto;
+    }
+    nav li { margin: 0; }
+    nav a {
+      display: block;
+      padding: 6px 10px;
+      border-radius: 6px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    nav a:hover { background: var(--accent-soft); }
+    section {
+      padding: 22px;
+      margin: 18px 0;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--surface);
+    }
+    article + article { margin-top: 30px; padding-top: 22px; border-top: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.92rem; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 700; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+    pre { overflow-x: auto; padding: 14px; border-radius: 8px; background: var(--code); color: #f8fafc; }
+    details { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; }
+    summary { cursor: pointer; font-weight: 700; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; color: var(--muted); }
+    .pill { padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
+    .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 18px; }
+    .card { padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    .card strong { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.82rem; text-transform: uppercase; }
+    .callout { margin: 14px 0; padding: 12px 14px; border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 6px; }
+    .risk { border-left-color: var(--risk); background: var(--risk-soft); }
+    .decision { border-left-color: var(--decision); background: var(--decision-soft); }
+    .compact td:first-child { width: 190px; color: var(--muted); font-weight: 700; }
+    .finding { white-space: nowrap; font-weight: 800; }
+    .pending { color: var(--risk); font-weight: 800; }
+    .done { color: var(--accent); font-weight: 800; }
+    @media print {
+      nav { position: static; }
+      section, .card { break-inside: avoid; }
+      body { background: #fff; color: #000; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Improve UX, performance, reliability, and code quality</h1>
+    <p>This plan implements every finding from the 2026-07-31 audit as a sequential, independently verified commit. It preserves the product's defining browsing behavior: every visibly presented video or animated card continues autoplaying simultaneously while the underlying playback, state, persistence, and test systems become cheaper and more reliable.</p>
+    <div class="meta" role="group" aria-label="Plan metadata">
+      <span class="pill">Status: In progress</span>
+      <span class="pill">Owner: Dedicated Codex implementation task</span>
+      <span class="pill">Created: 2026-07-31</span>
+      <span class="pill">Updated: 2026-07-31</span>
+      <span class="pill">Plan: .docs/exec/code-quality-ux-performance-reliability-remediation.html</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next action</strong>Implement F01, run its focused verification, update this plan and <code>working_list.md</code>, then create its dedicated commit.</div>
+      <div class="card"><strong>Primary constraint</strong>Do not replace concurrent feed autoplay with a single-active-card policy. Every visible video card must keep playing.</div>
+      <div class="card"><strong>Commit contract</strong>Findings execute in ID order. Each finding gets focused tests and one user-facing Conventional Commit before the next begins.</div>
+      <div class="card"><strong>Final acceptance</strong>Deterministic quality gate, both Android instrumentation owners, measured performance journeys, release-acceptance build, and clean repository state.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#status">Status</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#constraints">Constraints</a></li>
+      <li><a href="#findings">Finding Ledger</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#work-plan">Work Plan</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#living-log">Living Log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>The app already has a stable application-owned container, route-scoped ViewModels, durable quality gates, and strong provider protocol tests. Recent Search, Settings, mixed-media, and Hitomi work has nevertheless concentrated responsibility back into several large boundaries. This increases the chance that a change to one surface triggers unrelated recomposition, duplicated persistence, stale state, memory pressure, or a regression that current CI cannot observe.</p>
+      <p>After this plan, browsing should remain visually familiar but feel steadier during media-heavy scrolling. Search will have one authoritative state owner. Each destination will observe only the state it needs. Recents and UI restore data will have clear durable owners. Hitomi random search will have a bounded memory model. CI will execute every instrumentation suite it compiles, and performance will be tracked with numbers rather than intuition.</p>
+      <div class="callout decision"><strong>No rewrite:</strong> retain the application container, explicit provider adapters, route ViewModels, existing navigation and persistence contracts, and the current autoplay product behavior. Repair ownership at the narrowest durable seam.</div>
+    </section>
+
+    <section id="status">
+      <h2>Current Status</h2>
+      <table class="compact"><tbody>
+        <tr><td>Repository baseline</td><td><code>main</code> at <code>a390ca1</code> / <code>v0.7.1</code>, clean before this plan was authored.</td></tr>
+        <tr><td>Production scale</td><td>179 Kotlin/Java production files and 46,942 production lines. The largest current boundaries are <code>TheoriaApp.kt</code> (3,069), <code>ViewerScreen.kt</code> (2,569), <code>SearchCoordinator.kt</code> (2,353), and <code>SearchScreen.kt</code> (2,174).</td></tr>
+        <tr><td>Deterministic baseline</td><td>Gradle tests, app/Room lint, Detekt, instrumentation compilation, and Kover passed. Current reports contain 797 tests with zero failures/errors and three skips.</td></tr>
+        <tr><td>Quality budgets</td><td>Aggregate line coverage is 55.64% against a 55% floor. Production duplication is 207 lines / 0.66% against a 0.70% ceiling.</td></tr>
+        <tr><td>Device evidence</td><td>This audit compiled both instrumentation owners but did not execute a local connected-device lane. Device and physical performance evidence must remain distinct from JVM/build evidence.</td></tr>
+        <tr><td>Completion rule</td><td>No finding is complete until code, focused tests, plan/log updates, and a dedicated commit all exist. A documented no-change decision is acceptable only for an optional dependency/tool migration and must include reproduced compatibility evidence.</td></tr>
+      </tbody></table>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <p>A <em>route owner</em> is the ViewModel that owns one destination's jobs and immutable render state. A <em>single-flight</em> operation lets only one request for the same logical item proceed and lets callers share its result. A <em>Macrobenchmark</em> drives the built app from another process and records startup or rendered-frame timing. A <em>visible card</em> is a card intersecting the active feed viewport; cards retained outside the viewport may be paused or released.</p>
+      <table>
+        <thead><tr><th>Boundary</th><th>Current behavior</th><th>Target behavior</th></tr></thead>
+        <tbody>
+          <tr><td><code>app/.../search/SearchScreen.kt</code></td><td>Each composed video/Ugoira card owns playback. Animated-duration network work is also launched from Search, For You, and Creator composables.</td><td>All visible cards still autoplay, using stable players and shared/cache-aware infrastructure. Duration enrichment is lifecycle-aware application logic.</td></tr>
+          <tr><td><code>app/.../search/SearchCoordinator.kt</code> and <code>SearchViewModel.kt</code></td><td>Both contain mutable representations of route state and manually copy snapshots between them.</td><td>The ViewModel is the only writable route-state owner; engines/use cases return immutable results.</td></tr>
+          <tr><td><code>app/.../ui/TheoriaApp.kt</code></td><td>The app shell collects settings, recents, activity, likes, cache, codices, credentials, and route state in one 3,069-line composable.</td><td>The shell owns navigation and global Android effects. Destination owners collect destination state.</td></tr>
+          <tr><td><code>core-data</code></td><td>Search scroll has two stores. Recents rewrite whole JSON snapshots. Generic tolerant JSON reads can silently substitute an empty fallback.</td><td>One owner per persisted concept, Room for row-shaped history, and explicit quarantine/recovery for unreadable legacy files.</td></tr>
+          <tr><td><code>core-sources/.../hitomi</code></td><td>Random search may decode two million boxed integers, copy them, shuffle the full index, and retain multiple arrays.</td><td>Primitive decoding, byte-budgeted caches, and deterministic continuation that avoids full-index transient memory where protocol behavior allows.</td></tr>
+          <tr><td>Quality and CI</td><td>The Room schema suite compiles but is not executed in CI. Baseline profiles are generated without numeric startup/frame benchmarks. App logic is outside changed-line coverage.</td><td>Every test owner runs, critical journeys have numeric baselines, and platform-free application logic participates in coverage and complexity ratchets.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="constraints">
+      <h2>Non-Negotiable Product And Execution Constraints</h2>
+      <ul>
+        <li><strong>Concurrent autoplay remains:</strong> every visible video or animated card in Search, For You, Creator Profile, Recents, and Codex must autoplay simultaneously. Do not implement one active preview, tap-to-play, or an autoplay-off default.</li>
+        <li>It is acceptable to pause/release cards only after they leave the visible viewport, the destination stops, or the app lifecycle stops. Returning cards must resume automatically without a tap.</li>
+        <li>Preserve route IDs, query hashes, page tokens, saved state, source headers, authentication, and fail-closed explicit-provider behavior.</li>
+        <li>Use authoritative provider metadata or raw record counts for pagination. Never infer exhaustion from hydrated/deduplicated visible counts.</li>
+        <li>Implement findings sequentially. Do not begin the next finding before focused verification and a commit for the current finding.</li>
+        <li>Update this ExecPlan and <code>working_list.md</code> in every finding commit. Record surprises and deviations immediately.</li>
+        <li>Do not push, tag, publish, or create a release unless separately authorized.</li>
+        <li>Do not report emulator, stub, compilation, or baseline-profile generation as physical-device performance proof.</li>
+      </ul>
+    </section>
+
+    <section id="findings">
+      <h2>Finding-To-Commit Ledger</h2>
+      <table>
+        <thead><tr><th>ID</th><th>Status</th><th>Finding and required outcome</th><th>Expected commit</th></tr></thead>
+        <tbody>
+          <tr><td class="finding">F01</td><td class="pending">Pending</td><td>Run <code>:core-data-android:connectedDebugAndroidTest</code> in device CI as well as the app suite; fix the API 35 artifact named API 37.</td><td><code>ci(android): execute Room schema validation on devices</code></td></tr>
+          <tr><td class="finding">F02</td><td class="pending">Pending</td><td>Give compact like/source/settings controls at least 48dp interactive bounds and explicit role, selected/expanded, and state descriptions without visually bloating the UI.</td><td><code>fix(ui): improve compact control accessibility</code></td></tr>
+          <tr><td class="finding">F03</td><td class="pending">Pending</td><td>Never load stored API keys into <code>rememberSaveable</code>. Show configured status, accept blank replace-only secrets, clear input after mutation, and test recovery/error states.</td><td><code>fix(settings): keep saved API keys out of UI state</code></td></tr>
+          <tr><td class="finding">F04</td><td class="pending">Pending</td><td>Create a Settings route owner with one keyed expansion map and a compact state/actions contract; remove seven shell booleans and the 44-parameter screen boundary.</td><td><code>refactor(settings): centralize settings state ownership</code></td></tr>
+          <tr><td class="finding">F05</td><td class="pending">Pending</td><td>Make UI restore the sole scroll owner, migrate/remove legacy query offsets, delete the orphan composable debounce helper, and test the production ViewModel cancellation/flush path.</td><td><code>refactor(search): consolidate query and scroll persistence</code></td></tr>
+          <tr><td class="finding">F06</td><td class="pending">Pending</td><td>Move repeated animated-duration resolve/probe loops from three composables into a bounded, cached, single-flight enrichment service with route actions for immutable updates.</td><td><code>refactor(media): centralize animated duration enrichment</code></td></tr>
+          <tr><td class="finding">F07</td><td class="pending">Pending</td><td>Decode Hitomi Nozomi directly to primitive arrays, byte-budget all relevant caches, and preserve seeded deterministic pagination. Prototype range/permutation continuation; ship it if protocol tests prove stable uniqueness, otherwise record why the bounded primitive design is safer.</td><td><code>perf(hitomi): bound random search memory</code></td></tr>
+          <tr><td class="finding">F08</td><td class="pending">Pending</td><td>Quarantine unreadable legacy JSON and surface recoverable store state. Do not let the next mutation silently overwrite the only corrupt evidence.</td><td><code>fix(storage): quarantine unreadable legacy state</code></td></tr>
+          <tr><td class="finding">F09</td><td class="pending">Pending</td><td>Add Room entities/DAO/repository for watched and search activity, enforce limits transactionally, import legacy JSON once, and remove repeated whole-snapshot serialization.</td><td><code>refactor(recents): migrate activity history to Room</code></td></tr>
+          <tr><td class="finding">F10</td><td class="pending">Pending</td><td>Add Macrobenchmarks for cold/warm startup, Search feed scrolling with multiple simultaneous autoplay cards, and Viewer swipes. Record repeatable baseline metrics and traces.</td><td><code>test(performance): measure startup and concurrent autoplay</code></td></tr>
+          <tr><td class="finding">F11</td><td class="pending">Pending</td><td>Improve feed media cost while all visible cards autoplay: keep players stable, share request/data-source/cache infrastructure, bound thumbnail buffers, avoid duplicate prepares, and stop only non-visible/lifecycle-stopped cards. Compare against F10.</td><td><code>perf(feed): optimize concurrent autoplay previews</code></td></tr>
+          <tr><td class="finding">F12</td><td class="pending">Pending</td><td>Make <code>SearchViewModel</code> the sole writable state/job owner. Replace coordinator snapshots with immutable execution/page results and delete dual-publish bridges.</td><td><code>refactor(search): make route state ownership authoritative</code></td></tr>
+          <tr><td class="finding">F13</td><td class="pending">Pending</td><td>Create a JVM <code>app-logic</code> module for reducers, visibility/filter policy, enrichment policy, and pure orchestration. Include it in Kover and 60% changed-line coverage.</td><td><code>refactor(architecture): extract platform-free app logic</code></td></tr>
+          <tr><td class="finding">F14</td><td class="pending">Pending</td><td>Reduce <code>TheoriaAppContent</code> to navigation and global system effects. Localize Settings, Recents, Codex, credentials, and destination Flow collection behind route owners/configuration objects.</td><td><code>refactor(app): localize destination state collection</code></td></tr>
+          <tr><td class="finding">F15</td><td class="pending">Pending</td><td>Split monolithic tests by behavior, add hotspot size/complexity ratchets, reduce Detekt baseline debt, and restore meaningful duplication headroom rather than merely staying at 0.66%.</td><td><code>test(quality): ratchet hotspot ownership and coverage</code></td></tr>
+          <tr><td class="finding">F16</td><td class="pending">Pending</td><td>Evaluate Coil 3 and Gradle configuration cache independently. Migrate/enable only with green media/auth/device evidence and measurable build/runtime benefit; otherwise record the reproduced blocker and retain current behavior.</td><td><code>build(android): evaluate image loading and configuration cache</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+
+      <article>
+        <h3>Phase 1: Close Immediate Test And UX Gaps — F01–F04</h3>
+        <p>Start with changes that are independently visible and reduce risk for later structural work. Wire the missing Room device lane, repair stale artifact naming, then fix control hitboxes, credential-field ownership, and Settings state.</p>
+        <table class="compact"><tbody>
+          <tr><td>Primary files</td><td><code>.github/workflows/device-validation.yml</code>, <code>app/.../search/SearchScreen.kt</code>, <code>app/.../recommend/ForYouScreen.kt</code>, <code>app/.../settings/SettingsScreen.kt</code>, <code>app/.../ui/TheoriaApp.kt</code>, new Settings route owner/tests.</td></tr>
+          <tr><td>Focused checks</td><td>Workflow syntax review, Settings/Search/For You unit and Compose tests, <code>:app:lintDebug</code>, <code>:core-data-android:compileDebugAndroidTestKotlin</code>.</td></tr>
+          <tr><td>Observable acceptance</td><td>Both instrumentation owners appear in device CI; compact controls are easy to tap; configured secrets remain blank; Settings expansion survives recreation/relaunch.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>Phase 2: Remove Repeated Work And Persistence Ambiguity — F05–F09</h3>
+        <p>Consolidate Search scroll ownership and animated-duration enrichment before changing larger route state. Bound Hitomi memory and make legacy-file failures recoverable, then move row-shaped activity history into Room.</p>
+        <table class="compact"><tbody>
+          <tr><td>Primary files</td><td><code>SearchCoordinator.kt</code>, <code>SearchViewModel.kt</code>, <code>SearchScreen.kt</code>, For You/Creator screens and owners, <code>HitomiNozomi.kt</code>, <code>HitomiSourceAdapter.kt</code>, <code>AtomicJsonFileStore.kt</code>, <code>FileBackedRepositories.kt</code>, and <code>core-data-android/.../room</code>.</td></tr>
+          <tr><td>Migration rule</td><td>Legacy query/recents data must import once with proof metadata. Reruns must be idempotent. Corrupt files must be preserved under a diagnostic/quarantine name.</td></tr>
+          <tr><td>Observable acceptance</td><td>Search restoration performs one durable write path; duration probes deduplicate across routes; seeded Hitomi pages resume without duplicates or runaway allocations; recents survive restart through Room.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>Phase 3: Measure And Optimize Concurrent Autoplay — F10–F11</h3>
+        <p>First record startup and multi-card scrolling baselines. Then optimize the actual hot path without changing the product behavior. Do not infer success from fewer player objects if visible cards stop playing.</p>
+        <table class="compact"><tbody>
+          <tr><td>Candidate seams</td><td><code>baseline-profile</code>, a benchmark class using <code>MacrobenchmarkRule</code>, <code>SearchResultCard</code>, <code>SearchVideoPreview</code>, <code>ExoVideoComponents.kt</code>, <code>PixivUgoiraPlayer.kt</code>, Media3 data-source/cache/load-control factories, and visibility tracking.</td></tr>
+          <tr><td>Required experiment</td><td>Compare current per-card defaults with stable remembered players, shared factories/cache, smaller preview buffers, duplicate-prepare suppression, and true viewport lifecycle control. Keep all visible cards playing in every arm.</td></tr>
+          <tr><td>Acceptance</td><td>Multi-card autoplay behavior test passes. Frame timing, memory, and transferred/prepared work improve or stay within an explicit budget. No card requires a tap to begin or resume while visible.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>Phase 4: Restore Single Ownership And Module Boundaries — F12–F14</h3>
+        <p>Use the now-cleaner persistence and media seams to remove Search's dual state, extract platform-free logic, and finally shrink the application shell. Keep each intermediate commit runnable with one authoritative owner.</p>
+        <table class="compact"><tbody>
+          <tr><td>Primary files</td><td><code>SearchCoordinator.kt</code>, <code>SearchViewModel.kt</code>, <code>search/state</code>, new <code>app-logic</code> module, <code>TheoriaApp.kt</code>, route files, app container factories, Gradle/Kover configuration.</td></tr>
+          <tr><td>Ownership invariant</td><td>At no commit may the ViewModel and coordinator both accept writes for the same route state. The shell must not replace route ownership with a second application-scoped state cache.</td></tr>
+          <tr><td>Acceptance</td><td>Search state tests exercise one reducer/owner; platform-free changes trigger changed-line coverage; unrelated Settings/Recents updates no longer invalidate the full destination host.</td></tr>
+        </tbody></table>
+      </article>
+
+      <article>
+        <h3>Phase 5: Tighten Gates And Make Evidence-Led Modernization Decisions — F15–F16</h3>
+        <p>Split tests by behavior and add ratchets that prevent the same hotspots regrowing under a static baseline. Evaluate Coil 3 and configuration cache as isolated migrations, not fashionable dependency churn.</p>
+        <table class="compact"><tbody>
+          <tr><td>Primary files</td><td><code>SearchCoordinatorTest.kt</code>, persistence/provider test monoliths, Detekt baselines/config, duplication config, verification scripts/workflow, version catalog, image request tests, <code>gradle.properties</code>, and this plan.</td></tr>
+          <tr><td>Decision evidence</td><td>For Coil 3, verify protected-source headers, GIF/SVG/animated WebP, cache behavior, preview rendering, and R8. For configuration cache, run the final gate twice and record compatibility and time.</td></tr>
+          <tr><td>Acceptance</td><td>No hotspot can grow silently under a baseline; test suites map to behavior; optional migrations either land with evidence or close with a reproducible documented blocker.</td></tr>
+        </tbody></table>
+      </article>
+    </section>
+
+    <section id="work-plan">
+      <h2>Work Plan And Commit Protocol</h2>
+      <ol>
+        <li>Before each finding, re-read its current files and tests because prior commits may have changed the recommended seam.</li>
+        <li>Move only that finding to <code>[~]</code> in <code>working_list.md</code>; keep later findings pending.</li>
+        <li>Implement the smallest complete behavior, including migrations and cleanup required to leave one owner. Do not leave a second production path “temporarily” writable.</li>
+        <li>Run the focused test lane named in the finding/phase. Repair root causes in one coherent patch.</li>
+        <li>Update this ledger status, Progress, Surprises, Decision Log, and the working-list evidence before committing.</li>
+        <li>Review <code>git diff --check</code>, <code>git status --short</code>, and the exact staged diff. Do not stage generated reports or unrelated changes.</li>
+        <li>Create one Conventional Commit for the finding using the suggested message or a more accurate user-facing equivalent. Include concise body bullets for multi-file findings.</li>
+        <li>Record the commit SHA and verification evidence in this plan. Only then begin the next finding.</li>
+      </ol>
+      <div class="callout risk"><strong>If a later finding exposes a defect in an earlier commit:</strong> create a separate focused <code>fix(...)</code> commit. Do not rewrite, squash, or silently amend the earlier finding history.</div>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <p>Run commands from the repository root. Focused checks happen per finding; the complete matrix runs after F16.</p>
+      <table>
+        <thead><tr><th>Check</th><th>Command or action</th><th>Expected evidence</th></tr></thead>
+        <tbody>
+          <tr><td>Core/app deterministic gate</td><td><code>./gradlew :app:testDebugUnitTest :core-domain:test :core-data:test :core-data-android:testDebugUnitTest :core-sources:test :core-stubs:test</code></td><td>Zero failures/errors; skips remain explicitly opt-in.</td></tr>
+          <tr><td>Static and coverage</td><td><code>./gradlew :app:lintDebug :core-data-android:lintDebug :app:detektDebug :core-data-android:detektDebug :core-domain:detektMain :core-data:detektMain :core-sources:detektMain :core-stubs:detektMain :koverXmlReport :koverVerify</code></td><td>Lint/Detekt/Kover pass; new app-logic participates in changed-line coverage.</td></tr>
+          <tr><td>Duplication/tool tests</td><td><code>npm run audit:duplicates &amp;&amp; npm audit --audit-level=high &amp;&amp; python3 -m unittest discover -s scripts/tests -p 'test_*.py'</code></td><td>Duplication has meaningful margin below its ceiling; no high vulnerabilities; helper tests pass.</td></tr>
+          <tr><td>Instrumentation compilation</td><td><code>./gradlew :app:compileDebugAndroidTestKotlin :core-data-android:compileDebugAndroidTestKotlin</code></td><td>Both suites compile.</td></tr>
+          <tr><td>Connected device</td><td><code>./gradlew :app:connectedDebugAndroidTest :core-data-android:connectedDebugAndroidTest</code></td><td>Both owners execute on the intended emulator/device; reports are retained separately.</td></tr>
+          <tr><td>Performance</td><td>Run the Macrobenchmark startup, multi-card feed scroll, and Viewer journeys against <code>benchmarkRelease</code>.</td><td>JSON metrics and traces compare F10 baseline with F11. Physical-device evidence is labeled; emulator numbers are diagnostic only.</td></tr>
+          <tr><td>Concurrent autoplay</td><td>Open a feed containing at least four simultaneously visible videos/animations, scroll away/back, background/foreground the app, and navigate between feeds.</td><td>Every visible card starts/resumes without a tap; non-visible work stops; no audio; no player leak/crash.</td></tr>
+          <tr><td>Persistence/restart</td><td>Exercise Search scroll, Settings expansion, credentials, watched/search activity, process recreation, and legacy/corrupt import fixtures.</td><td>State restores once, secrets remain blank, history remains durable, corrupt source files are quarantined with recoverable messaging.</td></tr>
+          <tr><td>Release behavior</td><td><code>./gradlew :app:assembleRelease :app:assembleReleaseAcceptance</code> plus existing R8 JSON contract verification.</td><td>Optimized artifacts build and stable serialized contracts remain valid.</td></tr>
+          <tr><td>Plan/document hygiene</td><td><code>npx --yes html-validate .docs/exec/code-quality-ux-performance-reliability-remediation.html &amp;&amp; git diff --check</code></td><td>HTML and repository whitespace checks pass.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="living-log">
+      <h2>Living Log</h2>
+
+      <h3>Progress</h3>
+      <ul>
+        <li>[x] 2026-07-31 — Completed the repository-wide audit and current deterministic validation baseline.</li>
+        <li>[x] 2026-07-31 — Captured the user's concurrent-autoplay requirement in this plan and <code>AGENTS.md</code>.</li>
+        <li>[x] 2026-07-31 — Created the finding-to-commit ledger and sequential verification contract.</li>
+        <li>[ ] F01–F16 — Implementation task records each focused commit and validation result here.</li>
+        <li>[ ] Final — Run the complete acceptance matrix and close Outcomes/Retrospective.</li>
+      </ul>
+
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li>Observation: the existing July quality/ownership ExecPlans are complete historical programs. This plan is a delta based on current <code>v0.7.1</code> code, not a reopening of those plans.</li>
+        <li>Observation: current production duplication is under the gate by only 0.04 percentage points, and semantic duplication such as duration enrichment is not fully represented by clone counts.</li>
+        <li>Observation: the Room schema instrumentation test is compiled by verification but its owning module is absent from connected-device CI execution.</li>
+      </ul>
+
+      <h3>Decision Log</h3>
+      <ul>
+        <li><strong>Decision:</strong> preserve simultaneous autoplay for every visible media card. <strong>Rationale:</strong> it is an intentional browsing affordance; optimization must reduce cost without reducing information available while scanning. <strong>Date/Author:</strong> 2026-07-31 / User and Codex.</li>
+        <li><strong>Decision:</strong> execute findings serially with one focused commit each. <strong>Rationale:</strong> the changes cross state, persistence, media, Room, and CI boundaries; independent commits preserve reviewability, rollback, and regression attribution. <strong>Date/Author:</strong> 2026-07-31 / User and Codex.</li>
+        <li><strong>Decision:</strong> measure playback before optimizing it. <strong>Rationale:</strong> multiple simultaneous decoders are inherently device-sensitive, so player-count intuition is not acceptance evidence. <strong>Date/Author:</strong> 2026-07-31 / Codex.</li>
+        <li><strong>Decision:</strong> Coil 3 and configuration cache remain evidence-gated migrations. <strong>Rationale:</strong> modernization is valuable only if protected media behavior and build reliability stay intact. <strong>Date/Author:</strong> 2026-07-31 / Codex.</li>
+      </ul>
+
+      <h3>Outcomes And Retrospective</h3>
+      <p>In progress. At completion, summarize user-visible improvements, final file/complexity/coverage/duplication numbers, device and performance evidence, all finding commit SHAs, and any acceptance gap that still requires a physical device or live provider.</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <ul>
+        <li>Gradle, lint, Detekt, Kover, jscpd, helper tests, and HTML validation are safe to rerun. Generated reports stay ignored and must not be committed.</li>
+        <li>Room and DataStore migrations require fixtures proving first import, repeated startup, partial legacy state, corrupt legacy state, and downgrade/unknown-version behavior before the old store path is removed.</li>
+        <li>Never use destructive Git resets. If a finding fails validation, keep its changes uncommitted, repair the common cause, or restore only the explicitly owned patch with <code>apply_patch</code>.</li>
+        <li>If a device or physical benchmark is unavailable, complete deterministic work but leave that acceptance item pending. Do not substitute compilation or emulator timing.</li>
+        <li>If provider protocol behavior blocks the Hitomi range/permutation design, retain the bounded primitive implementation, record exact evidence, and avoid weakening continuation uniqueness or snapshot validation.</li>
+        <li>To resume, read this plan, <code>working_list.md</code>, <code>AGENTS.md</code>, the latest finding commit, and <code>git status --short</code>. Continue from the first pending finding ID.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

@@ -38,6 +38,10 @@ Provider pages must publish unique canonical `Post.id` values after hydration. R
 
 The Search route applies persisted scroll position once when the route is restored or re-entered. Page appends must not retrigger that restoration from a changed result count, or pagination will replay the initial saved position and jump the grid to the top. Keep route-entry restoration separate from page-loading state. Unified execution may retain `EXCLUDED` source statuses for orchestration diagnostics, but the UI status row should only render actionable provider failures.
 
+## Feed Autoplay Performance
+
+Search, For You, Creator Profile, Recents, and Codex browsing must keep every visibly presented video or animated card autoplaying simultaneously. Performance work may share request, cache, media-source, buffering, and decode infrastructure; keep players stable across recomposition; and pause or release cards only after they are no longer visibly presented or the app lifecycle stops. Do not replace concurrent visible autoplay with a single-active-card policy. Validate this contract with multi-card behavior coverage and numeric frame/network/memory evidence rather than assuming fewer players is acceptable.
+
 ## Settings Sections
 
 Settings cards use the shared `SettingsSection` composable with independently persisted expanded state owned by `TheoriaAppContent` and stored through `UiRestoreRepository`, so leaving and reopening the app does not reset the user's choices. New settings groups should use the same header and right-side chevron pattern rather than introducing another section-specific collapse control.
