@@ -2076,32 +2076,12 @@ private fun StartupUpdatePromptCard(
                 itemSpacing = 10.dp,
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(
-                    onClick = onYes,
-                    enabled = actionEnabled,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Yes")
-                }
-                TextButton(
-                    onClick = onNo,
-                    enabled = actionEnabled,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("No")
-                }
-            }
-            TextButton(
-                onClick = onRemindLater,
-                enabled = actionEnabled,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Remind Later")
-            }
+            StartupUpdatePromptActions(
+                actionEnabled = actionEnabled,
+                onYes = onYes,
+                onNo = onNo,
+                onRemindLater = onRemindLater,
+            )
         }
     }
 }
