@@ -12,6 +12,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher.Companion.expectValue
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTouchHeightIsEqualTo
@@ -22,6 +23,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
@@ -37,6 +39,7 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.data.storage.CorruptionRecovery
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -173,6 +176,37 @@ class CompactControlAccessibilityDeviceTest {
                 ),
             )
         }
+    }
+
+    @Test
+    fun settingsShowsConciseRecoveryReasonWithoutDiagnosticPathOrResetAction() {
+        val fullPath = "/private/app/data/query_store.json.corrupt-7-${"a".repeat(64)}"
+        composeRule.setContent {
+            MaterialTheme {
+                SettingsScreen(
+                    state = SettingsUiState(
+                        legacyJsonRecoveries = listOf(
+                            CorruptionRecovery(
+                                reason = "query_store.json contains malformed JSON",
+                                backupPath = fullPath,
+                                logicalStore = "Saved searches",
+                                logicalFile = "query_store.json",
+                                sha256 = "a".repeat(64),
+                                byteCount = 7L,
+                            )
+                        )
+                    ),
+                    onAction = {},
+                )
+            }
+        }
+
+        composeRule.onNode(hasText("Saved searches was reset", substring = true))
+            .performScrollTo()
+            .assert(hasText("unreadable local data was preserved", substring = true))
+            .assert(hasText("checksum aaaaaaaa", substring = true))
+        composeRule.onAllNodesWithText(fullPath).assertCountEquals(0)
+        composeRule.onAllNodesWithText("Reset recovered storage").assertCountEquals(0)
     }
 
     private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertRole(expected: Role) =

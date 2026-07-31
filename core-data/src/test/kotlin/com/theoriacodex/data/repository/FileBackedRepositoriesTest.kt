@@ -2,6 +2,7 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.data.testing.RecordingIoDispatcher
 import com.theoriacodex.data.testing.ControllableIoDispatcher
+import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
@@ -561,6 +562,49 @@ class FileBackedRepositoriesTest {
         assertTrue(storedJson.contains("\"includeTags\""))
         assertTrue(storedJson.contains("\"excludeTags\""))
         assertFalse(storedJson.contains("scrollOffsets"))
+    }
+
+    @Test
+    fun `query and recents publish verified recovery through the shared registry`() = runTest {
+        val dir = tempDir("legacy-json-recovery-registry-")
+        val queryBytes = "{broken-query".toByteArray()
+        val recentsBytes = ByteArray(0)
+        dir.resolve("query_store.json").writeBytes(queryBytes)
+        dir.resolve("recents_store.json").writeBytes(recentsBytes)
+        val registry = LegacyJsonRecoveryRegistry()
+
+        FileBackedQueryRepository(dir, recoveryRegistry = registry)
+        FileBackedRecentsRepository(dir, recoveryRegistry = registry)
+
+        val recoveries = registry.recoveries.value
+        assertEquals(setOf("Saved searches", "Recent activity"), recoveries.map { it.logicalStore }.toSet())
+        recoveries.forEach { recovery ->
+            val expected = when (recovery.logicalStore) {
+                "Saved searches" -> queryBytes
+                else -> recentsBytes
+            }
+            assertEquals(expected.size.toLong(), recovery.byteCount)
+            assertTrue(File(recovery.backupPath!!).readBytes().contentEquals(expected))
+        }
+    }
+
+    @Test
+    fun `verified query quarantine is rediscovered after process restart`() = runTest {
+        val dir = tempDir("legacy-json-recovery-restart-")
+        val original = "{broken-query".toByteArray()
+        dir.resolve("query_store.json").writeBytes(original)
+        val firstProcess = LegacyJsonRecoveryRegistry()
+        FileBackedQueryRepository(dir, recoveryRegistry = firstProcess)
+        val quarantine = File(firstProcess.recoveries.value.single().backupPath!!)
+
+        val restartedProcess = LegacyJsonRecoveryRegistry()
+        FileBackedQueryRepository(dir, recoveryRegistry = restartedProcess)
+
+        val rediscovered = restartedProcess.recoveries.value.single()
+        assertEquals("Saved searches", rediscovered.logicalStore)
+        assertEquals(quarantine.absolutePath, rediscovered.backupPath)
+        assertEquals(original.size.toLong(), rediscovered.byteCount)
+        assertTrue(quarantine.readBytes().contentEquals(original))
     }
 
     @Test

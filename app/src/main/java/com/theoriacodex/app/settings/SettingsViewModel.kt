@@ -24,6 +24,7 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.pixiv.PixivAuthApi
@@ -174,6 +175,7 @@ internal data class SettingsOwnerDependencies(
     val profileMutations: SettingsProfileMutations,
     val accounts: SettingsAccountGateway,
     val availableSources: List<SourceKey>,
+    val legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>> = MutableStateFlow(emptyList()),
     val showDeveloperScenarios: Boolean = false,
 )
 
@@ -235,6 +237,11 @@ internal class SettingsViewModel(
         ownerScope.launch {
             dependencies.cacheRepository.observeSnapshot().collect { snapshot ->
                 updateState { copy(cacheSnapshot = snapshot) }
+            }
+        }
+        ownerScope.launch {
+            dependencies.legacyJsonRecoveries.collect { recoveries ->
+                updateState { copy(legacyJsonRecoveries = recoveries) }
             }
         }
         ownerScope.launch {
@@ -642,6 +649,7 @@ internal class SettingsViewModel(
                             pixivAuthController = container.sources.pixivAuthController,
                         ),
                         availableSources = container.features.search.availableSources,
+                        legacyJsonRecoveries = container.data.legacyJsonRecoveries,
                     )
                 )
             }

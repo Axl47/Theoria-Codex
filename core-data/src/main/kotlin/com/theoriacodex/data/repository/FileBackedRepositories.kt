@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.annotations.SerializedName
 import com.theoriacodex.data.storage.AtomicJsonFileStore
+import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.data.storage.mutateAndPersistWithRollback
@@ -245,6 +246,7 @@ class FileBackedCodexRepository(
 class FileBackedQueryRepository(
     baseDirectory: File,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    recoveryRegistry: LegacyJsonRecoveryRegistry = LegacyJsonRecoveryRegistry(),
 ) : QueryRepository {
     private val mutex = Mutex()
     private val storageFile = baseDirectory.resolve("query_store.json")
@@ -252,7 +254,15 @@ class FileBackedQueryRepository(
     private val queriesFlow = MutableStateFlow<Map<String, Query>>(emptyMap())
 
     init {
-        val stored = runBlocking { fileStore.read(storageFile, QueryStoreFile()) }
+        recoveryRegistry.registerStore("Saved searches", storageFile)
+        val stored = runBlocking {
+            fileStore.read(
+                file = storageFile,
+                fallback = QueryStoreFile(),
+                logicalStore = "Saved searches",
+                onRecovery = recoveryRegistry::record,
+            )
+        }
         queriesFlow.value = stored.queries.mapValues { (_, record) -> record.toDomain() }
     }
 
@@ -290,6 +300,7 @@ class FileBackedRecentsRepository(
     private val maxSerializedBytes: Int = DEFAULT_RECENTS_MAX_SERIALIZED_BYTES,
     private val clock: () -> Long = System::currentTimeMillis,
     ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    recoveryRegistry: LegacyJsonRecoveryRegistry = LegacyJsonRecoveryRegistry(),
 ) : RecentsRepository {
     private val mutex = Mutex()
     private val storageFile = baseDirectory.resolve("recents_store.json")
@@ -302,7 +313,15 @@ class FileBackedRecentsRepository(
         require(maxSerializedBytes >= encodedSize(RecentsStoreFile())) {
             "Recents byte limit must fit an empty snapshot"
         }
-        val stored = runBlocking { fileStore.read(storageFile, RecentsStoreFile()) }
+        recoveryRegistry.registerStore("Recent activity", storageFile)
+        val stored = runBlocking {
+            fileStore.read(
+                file = storageFile,
+                fallback = RecentsStoreFile(),
+                logicalStore = "Recent activity",
+                onRecovery = recoveryRegistry::record,
+            )
+        }
         watchedFlow.value = RepositoryPolicies.normalizeRecentWatched(
             entries = stored.watchedPosts.orEmpty().mapNotNull { record -> record.toDomainOrNull() },
             limit = watchedLimit,

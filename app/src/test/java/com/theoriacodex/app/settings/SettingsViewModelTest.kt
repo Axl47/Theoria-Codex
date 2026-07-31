@@ -6,6 +6,7 @@ import com.theoriacodex.data.repository.InMemoryCacheRepository
 import com.theoriacodex.data.repository.InMemoryLikesRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
+import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.Rule34XxxCredentials
@@ -63,6 +64,26 @@ class SettingsViewModelTest {
         assertTrue(owner.state.value.settings.cache.cacheFullImageOnSave)
         assertFalse(owner.state.value.settings.contentFilters.resolveUnknownAnimatedDurations)
         assertEquals(setOf(SourceKey.PIXIV), owner.state.value.settings.runtime.enabledSources)
+    }
+
+    @Test
+    fun `verified legacy recovery is presented by the Settings owner`() = runTest {
+        val recoveries = MutableStateFlow<List<CorruptionRecovery>>(emptyList())
+        val owner = owner(legacyJsonRecoveries = recoveries)
+        runCurrent()
+
+        val recovery = CorruptionRecovery(
+            reason = "query_store.json contains malformed JSON",
+            backupPath = "/data/query_store.json.corrupt-7-deadbeef",
+            logicalStore = "Saved searches",
+            logicalFile = "query_store.json",
+            sha256 = "a".repeat(64),
+            byteCount = 7L,
+        )
+        recoveries.value = listOf(recovery)
+        runCurrent()
+
+        assertEquals(listOf(recovery), owner.state.value.legacyJsonRecoveries)
     }
 
     @Test
@@ -140,6 +161,7 @@ class SettingsViewModelTest {
         settingsRepository: InMemorySettingsRepository = InMemorySettingsRepository(),
         uiRestoreRepository: InMemoryUiRestoreRepository = InMemoryUiRestoreRepository(),
         accounts: FakeSettingsAccountGateway = FakeSettingsAccountGateway(),
+        legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>> = MutableStateFlow(emptyList()),
     ): SettingsViewModel {
         return SettingsViewModel(
             dependencies = SettingsOwnerDependencies(
@@ -150,6 +172,7 @@ class SettingsViewModelTest {
                 profileMutations = NoOpSettingsProfileMutations,
                 accounts = accounts,
                 availableSources = listOf(SourceKey.PIXIV),
+                legacyJsonRecoveries = legacyJsonRecoveries,
             ),
             coroutineScope = backgroundScope,
         )

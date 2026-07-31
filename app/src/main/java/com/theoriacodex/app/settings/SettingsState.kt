@@ -5,6 +5,7 @@ import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ScenarioPreset
+import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
 
 enum class SettingsSectionKey {
@@ -73,6 +74,7 @@ data class SettingsUiState(
     val profileDeleteTargetId: String? = null,
     val showClearCacheOptions: Boolean = false,
     val changelogLoading: Boolean = false,
+    val legacyJsonRecoveries: List<CorruptionRecovery> = emptyList(),
 )
 
 sealed interface SettingsAction {

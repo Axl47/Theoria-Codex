@@ -40,6 +40,10 @@ The Search route applies persisted scroll position once when the route is restor
 
 `UiRestoreRepository` is the sole live Search scroll store. `query_store.json` owns applied queries only; its pre-F05 `scrollOffsets` field is a one-time DataStore migration input and is removed after a verified import. SearchViewModel owns debounce and registers a closeable scheduler that synchronously waits for its final DataStore write during ViewModel teardown before cancelling that scheduler. This deliberately trades a storage-operation-length teardown stall for a provable final flush; do not move that flush into the already-cancelled `viewModelScope` or add a lossy timeout.
 
+## Legacy JSON Recovery
+
+`AtomicJsonFileStore` owns verified quarantine for the remaining live whole-file JSON stores: applied queries, Recents, updater state, and tag suggestions. A present malformed, empty, null, or invalid UTF-8 file is never a normal miss: preserve and verify its exact bytes under the deterministic filename/byte-count/SHA-256 identity before removing the live name or returning a default. Register each production owner with the shared `LegacyJsonRecoveryRegistry` so verified quarantines are rediscovered across process restart and surfaced through Settings. Do not apply this fallback to DataStore newer-schema failures or Room migration conflicts; those contracts remain fail-closed.
+
 ## Feed Autoplay Performance
 
 Search, For You, Creator Profile, Recents, and Codex browsing must keep every visibly presented video or animated card autoplaying simultaneously. Performance work may share request, cache, media-source, buffering, and decode infrastructure; keep players stable across recomposition; and pause or release cards only after they are no longer visibly presented or the app lifecycle stops. Do not replace concurrent visible autoplay with a single-active-card policy. Validate this contract with multi-card behavior coverage and numeric frame/network/memory evidence rather than assuming fewer players is acceptable.

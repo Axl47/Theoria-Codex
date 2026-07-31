@@ -39,6 +39,8 @@ import com.theoriacodex.data.repository.QueryRepository
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
+import com.theoriacodex.data.storage.CorruptionRecovery
+import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
 import com.theoriacodex.data.android.room.LegacyArchiveResult
 import com.theoriacodex.data.android.room.LegacyJsonImportResult
 import com.theoriacodex.data.android.room.LegacyJsonMigrationException
@@ -68,6 +70,7 @@ data class DataDependencies(
     val settingsRepository: SettingsRepository,
     val cacheRepository: CacheRepository,
     val uiRestoreRepository: UiRestoreRepository,
+    val legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>>,
 )
 
 data class SourceDependencies(
@@ -122,9 +125,11 @@ internal class DefaultTheoriaAppContainer(
     private val appContext = context.applicationContext
     private val storageDirectory = File(appContext.filesDir, "theoria_codex")
     private val durableStoreScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val legacyJsonRecoveryRegistry = LegacyJsonRecoveryRegistry()
     private val tagSuggestionStore = FileBackedTagSuggestionStore(
         storeFile = File(storageDirectory, "tag_suggestions.json"),
         seedData = loadSeedTagSuggestions(appContext),
+        recoveryRegistry = legacyJsonRecoveryRegistry,
     )
     private val sourceHttpClient = DefaultSourceHttpClient()
     private val accountStore = ObservableSourceAccountStore(
@@ -159,8 +164,14 @@ internal class DefaultTheoriaAppContainer(
     private val codexRepository: CodexRepository = contentRepository
     private val likesRepository: LikesRepository = contentRepository
     private val codexLikesTransactions: CodexLikesTransactions = contentRepository
-    private val queryRepository = FileBackedQueryRepository(storageDirectory)
-    private val recentsRepository = FileBackedRecentsRepository(storageDirectory)
+    private val queryRepository = FileBackedQueryRepository(
+        storageDirectory,
+        recoveryRegistry = legacyJsonRecoveryRegistry,
+    )
+    private val recentsRepository = FileBackedRecentsRepository(
+        storageDirectory,
+        recoveryRegistry = legacyJsonRecoveryRegistry,
+    )
     private val settingsRepository = DataStoreSettingsRepository(
         baseDirectory = storageDirectory,
         scope = durableStoreScope,
@@ -173,6 +184,7 @@ internal class DefaultTheoriaAppContainer(
 
     private val updateStateStore = FileBackedUpdateStateStore(
         file = File(storageDirectory, "update_state.json"),
+        recoveryRegistry = legacyJsonRecoveryRegistry,
     )
     private val updateFeedClient = GitHubReleaseFeedClient(
         owner = BuildConfig.UPDATE_REPO_OWNER,
@@ -202,6 +214,7 @@ internal class DefaultTheoriaAppContainer(
         settingsRepository = settingsRepository,
         cacheRepository = cacheRepository,
         uiRestoreRepository = uiRestoreRepository,
+        legacyJsonRecoveries = legacyJsonRecoveryRegistry.recoveries,
     )
 
     override val sources = SourceDependencies(

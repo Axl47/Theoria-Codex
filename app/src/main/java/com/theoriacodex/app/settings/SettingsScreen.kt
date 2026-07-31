@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.expandableControlSemantics
 import com.theoriacodex.data.repository.ScenarioPreset
+import com.theoriacodex.data.storage.CorruptionRecovery
 
 @Composable
 fun SettingsScreen(
@@ -372,6 +373,18 @@ fun SettingsScreen(
                 }
                 Text("Thumbnails: ${state.cacheSnapshot.thumbnailCount}")
                 Text("Full images: ${state.cacheSnapshot.fullImageCount}")
+                if (state.legacyJsonRecoveries.isNotEmpty()) {
+                    Text(
+                        text = "Recovered legacy storage (${state.legacyJsonRecoveries.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    state.legacyJsonRecoveries.forEach { recovery ->
+                        Text(
+                            text = legacyRecoverySummary(recovery),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
                 Button(onClick = { onAction(SettingsAction.ToggleClearCacheOptions) }) {
                     Text(if (state.showClearCacheOptions) "Clear cache ▲" else "Clear cache ▼")
                 }
@@ -458,6 +471,20 @@ fun SettingsScreen(
             )
         }
     }
+}
+
+internal fun legacyRecoverySummary(
+    recovery: CorruptionRecovery,
+): String = buildString {
+    append(recovery.logicalStore.ifBlank { recovery.logicalFile.ifBlank { "Local storage" } })
+    append(" was reset after unreadable local data was preserved (")
+    append(recovery.byteCount)
+    append(" bytes")
+    if (recovery.sha256.isNotBlank()) {
+        append(", checksum ")
+        append(recovery.sha256.take(8))
+    }
+    append(").")
 }
 
 @Composable
