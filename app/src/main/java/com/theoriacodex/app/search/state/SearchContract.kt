@@ -190,6 +190,7 @@ sealed interface SearchAction {
     data class SetNhentaiFullColor(val enabled: Boolean) : SearchAction
     data object ResetFilters : SearchAction
     data class RememberResolvedPost(val post: Post) : SearchAction
+    data class RequestAnimatedDurationEnrichment(val queryHash: String) : SearchAction
 
     data class ScrollChanged(
         val firstVisibleItemIndex: Int,

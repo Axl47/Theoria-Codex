@@ -44,6 +44,8 @@ The Search route applies persisted scroll position once when the route is restor
 
 Search, For You, Creator Profile, Recents, and Codex browsing must keep every visibly presented video or animated card autoplaying simultaneously. Performance work may share request, cache, media-source, buffering, and decode infrastructure; keep players stable across recomposition; and pause or release cards only after they are no longer visibly presented or the app lifecycle stops. Do not replace concurrent visible autoplay with a single-active-card policy. Validate this contract with multi-card behavior coverage and numeric frame/network/memory evidence rather than assuming fewer players is acceptable.
 
+Animated-duration enrichment is application-owned work shared by Search, For You, and Creator Profile. Composables emit typed requests only; their route owners drain bounded batches for the current query/seed identity and apply immutable duration-only updates. Keep cross-route single-flight, bounded positive and negative caches, cancellation isolation, and stale-identity rejection in the shared enrichment path rather than reintroducing per-screen resolve/probe loops.
+
 ## Settings Sections
 
 Settings cards use the shared `SettingsSection` composable with independently persisted expanded state owned by `TheoriaAppContent` and stored through `UiRestoreRepository`, so leaving and reopening the app does not reset the user's choices. New settings groups should use the same header and right-side chevron pattern rather than introducing another section-specific collapse control.

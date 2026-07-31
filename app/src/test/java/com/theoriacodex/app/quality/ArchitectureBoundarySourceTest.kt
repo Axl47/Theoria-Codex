@@ -65,6 +65,62 @@ class ArchitectureBoundarySourceTest {
         )
     }
 
+    @Test
+    fun `feed composables delegate animated duration enrichment to route owners`() {
+        val screens = listOf(
+            "app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt",
+            "app/src/main/java/com/theoriacodex/app/recommend/ForYouScreen.kt",
+            "app/src/main/java/com/theoriacodex/app/creator/CreatorProfileScreen.kt",
+        )
+        val forbiddenFragments = listOf(
+            "probeRemoteVideoDurationMs(",
+            "durationResolutionRequests",
+            "animatedDurationResolutionCandidates(",
+            "ANIMATED_DURATION_RESOLVE_BATCH_SIZE",
+        )
+        val violations = screens.flatMap { path ->
+            val text = File(repositoryRoot, path).readText()
+            forbiddenFragments.filter { fragment -> fragment in text }
+                .map { fragment -> "$path contains $fragment" }
+        }
+
+        assertNoViolations(
+            rule = "Feed composables must emit typed enrichment actions instead of owning resolve/probe loops",
+            violations = violations,
+        )
+        screens.forEach { path ->
+            assertTrue(
+                "$path must retain its typed duration-enrichment action",
+                "RequestAnimatedDurationEnrichment" in File(repositoryRoot, path).readText(),
+            )
+        }
+        listOf(
+            "app/src/main/java/com/theoriacodex/app/recommend/ForYouScreen.kt",
+            "app/src/main/java/com/theoriacodex/app/creator/CreatorProfileScreen.kt",
+        ).forEach { path ->
+            val text = File(repositoryRoot, path).readText()
+            assertTrue("$path must not accept a duration resolver", "resolvePost: suspend" !in text)
+            assertTrue("$path must not accept resolved-post mutation", "rememberResolvedPost:" !in text)
+        }
+
+        val servicePath = "app/src/main/java/com/theoriacodex/app/media/AnimatedDurationEnrichmentService.kt"
+        val containerPath = "app/src/main/java/com/theoriacodex/app/di/TheoriaAppContainer.kt"
+        val serviceConstruction = Regex("""\bAnimatedDurationEnrichmentService\s*\(""")
+        val constructionViolations = appProductionSources()
+            .filter { source -> relativePath(source) !in setOf(servicePath, containerPath) }
+            .filter { source -> serviceConstruction.containsMatchIn(source.readText()) }
+            .map(::relativePath)
+            .toList()
+        assertNoViolations(
+            rule = "The application container must be the sole enrichment-service owner",
+            violations = constructionViolations,
+        )
+        assertTrue(
+            "The application-owned service guard became vacuous",
+            serviceConstruction.containsMatchIn(File(repositoryRoot, containerPath).readText()),
+        )
+    }
+
     private fun appProductionSources(): Sequence<File> = kotlinSourcesUnder("app/src/main")
 
     private fun productionSources(): Sequence<File> {

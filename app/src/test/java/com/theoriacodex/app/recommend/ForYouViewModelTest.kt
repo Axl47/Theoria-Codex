@@ -4,6 +4,8 @@ import androidx.lifecycle.SavedStateHandle
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouCoordinatorSnapshot
 import com.theoriacodex.app.recommend.state.ForYouEffect
+import com.theoriacodex.app.testing.TestAnimatedDurationEnricher
+import com.theoriacodex.app.testing.animatedTestPost
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
@@ -24,6 +26,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -169,6 +172,112 @@ class ForYouViewModelTest {
         assertTrue(message.message.contains("already blacklisted"))
         assertEquals("empty-seed", viewModel.state.value.seedId)
     }
+
+    @Test
+    fun `duration lane advances past eight negative decisions to enrich ninth immutably`() = runTest {
+        val posts = (1..9).map { index -> animatedTestPost(sourcePostId = "animated-$index") }
+        val ninth = posts.last()
+        val engine = FakeForYouRouteEngine().apply {
+            current = current.copy(activeProfileLikesCount = 1, results = posts, seedId = "seed")
+        }
+        val enricher = TestAnimatedDurationEnricher { post ->
+            9_000L.takeIf { post.id == ninth.id }
+        }
+        val viewModel = ForYouViewModel(
+            engine,
+            SavedStateHandle(),
+            coroutineScope = this,
+            animatedDurationEnricher = enricher,
+        )
+        advanceUntilIdle()
+
+        viewModel.onAction(ForYouAction.RequestAnimatedDurationEnrichment("seed"))
+        advanceUntilIdle()
+
+        assertEquals(posts.map { it.id }, enricher.requestedPostIds)
+        assertEquals(9_000L, viewModel.state.value.results.last().durationMs)
+        assertNull(ninth.durationMs)
+    }
+
+    @Test
+    fun `duration lane coalesces results appended while a batch is active`() = runTest {
+        val first = animatedTestPost(sourcePostId = "first")
+        val appended = animatedTestPost(sourcePostId = "appended")
+        val firstStarted = CompletableDeferred<Unit>()
+        val releaseFirst = CompletableDeferred<Unit>()
+        val engine = FakeForYouRouteEngine().apply {
+            current = current.copy(
+                activeProfileLikesCount = 1,
+                results = listOf(first),
+                seedId = "seed",
+                canLoadMore = true,
+            )
+            pageResults = listOf(appended)
+        }
+        val enricher = TestAnimatedDurationEnricher { post ->
+            if (post.id == first.id) {
+                firstStarted.complete(Unit)
+                releaseFirst.await()
+                1_000L
+            } else {
+                2_000L
+            }
+        }
+        val viewModel = ForYouViewModel(
+            engine,
+            SavedStateHandle(),
+            coroutineScope = this,
+            animatedDurationEnricher = enricher,
+        )
+        advanceUntilIdle()
+
+        viewModel.onAction(ForYouAction.RequestAnimatedDurationEnrichment("seed"))
+        runCurrent()
+        firstStarted.await()
+        viewModel.onAction(ForYouAction.LoadNextPage)
+        runCurrent()
+        assertEquals(listOf(first.id, appended.id), viewModel.state.value.results.map(Post::id))
+        viewModel.onAction(ForYouAction.RequestAnimatedDurationEnrichment("seed"))
+        releaseFirst.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(listOf(first.id, appended.id), enricher.requestedPostIds)
+        assertEquals(listOf(1_000L, 2_000L), viewModel.state.value.results.map(Post::durationMs))
+    }
+
+    @Test
+    fun `duration completion from replaced seed cannot update fresh results`() = runTest {
+        val oldPost = animatedTestPost(sourcePostId = "shared", title = "old")
+        val freshPost = animatedTestPost(sourcePostId = "shared", title = "fresh")
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val engine = FakeForYouRouteEngine().apply {
+            current = current.copy(activeProfileLikesCount = 1, results = listOf(oldPost), seedId = "old-seed")
+        }
+        val enricher = TestAnimatedDurationEnricher {
+            started.complete(Unit)
+            release.await()
+            6_000L
+        }
+        val viewModel = ForYouViewModel(
+            engine,
+            SavedStateHandle(),
+            coroutineScope = this,
+            animatedDurationEnricher = enricher,
+        )
+        advanceUntilIdle()
+        viewModel.onAction(ForYouAction.RequestAnimatedDurationEnrichment("old-seed"))
+        runCurrent()
+        started.await()
+
+        engine.current = engine.current.copy(results = listOf(freshPost), seedId = "fresh-seed")
+        viewModel.rememberResolvedPost(freshPost)
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals("fresh", viewModel.state.value.results.single().title)
+        assertNull(viewModel.state.value.results.single().durationMs)
+    }
 }
 
 private class FakeForYouRouteEngine(
@@ -194,6 +303,7 @@ private class FakeForYouRouteEngine(
     var restoredSort: SortMode? = null
     var refreshResult: List<Post> = emptyList()
     var refreshCanLoadMore = false
+    var pageResults: List<Post> = emptyList()
     var pageError: String? = null
     var blacklistAdditions = 1
     var settingsChangedResult = false
@@ -283,7 +393,11 @@ private class FakeForYouRouteEngine(
     }
 
     override suspend fun loadNextPage() {
-        current = current.copy(errorMessage = pageError, canLoadMore = false)
+        current = current.copy(
+            results = current.results + pageResults,
+            errorMessage = pageError,
+            canLoadMore = false,
+        )
     }
 
     override fun clear() {
@@ -297,6 +411,12 @@ private class FakeForYouRouteEngine(
     }
 
     override suspend fun resolvePost(postId: PostId): Post? = null
-    override fun rememberResolvedPost(post: Post) = Unit
+    override fun rememberResolvedPost(post: Post) {
+        val index = current.results.indexOfFirst { candidate -> candidate.id == post.id }
+        if (index < 0) return
+        current = current.copy(
+            results = current.results.toMutableList().apply { this[index] = post },
+        )
+    }
     override fun displayTagFor(post: Post): String? = null
 }

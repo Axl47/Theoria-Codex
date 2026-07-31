@@ -11,6 +11,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.recommend.ForYouCoordinator
 import com.theoriacodex.app.recommend.ForYouScreen
 import com.theoriacodex.app.recommend.ForYouViewModel
+import com.theoriacodex.app.media.AnimatedDurationEnricher
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouEffect
 import com.theoriacodex.app.recommend.state.ForYouUiState
@@ -74,6 +75,7 @@ internal class ForYouRouteOwnerHandle(
 @Composable
 internal fun ForYouRoute(
     coordinator: ForYouCoordinator,
+    animatedDurationEnricher: AnimatedDurationEnricher,
     pixivUgoiraClient: PixivUgoiraClient?,
     config: ForYouRouteConfig,
     callbacks: ForYouRouteCallbacks,
@@ -84,6 +86,7 @@ internal fun ForYouRoute(
         factory = ForYouViewModel.factory(
             coordinator = coordinator,
             initialProfiles = config.settings.recommendationProfiles,
+            animatedDurationEnricher = animatedDurationEnricher,
         ),
     )
     val state by owner.state.collectAsStateWithLifecycle()
@@ -124,8 +127,6 @@ internal fun ForYouRoute(
         resolveUnknownAnimatedDurations = config.resolveUnknownAnimatedDurations,
         onToggleLike = callbacks.onToggleLike,
         onAction = owner::onAction,
-        resolvePost = owner::resolvePost,
-        rememberResolvedPost = owner::rememberResolvedPost,
         displayTagFor = owner::displayTagFor,
     )
 }

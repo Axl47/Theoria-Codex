@@ -52,15 +52,12 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
 import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
-import com.theoriacodex.app.media.animatedDurationMs
-import com.theoriacodex.app.media.probeRemoteVideoDurationMs
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
-import com.theoriacodex.app.search.animatedDurationResolutionCandidates
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.FeedEmptyTile
@@ -69,7 +66,6 @@ import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.ui.components.expandableControlSemantics
 import com.theoriacodex.app.viewer.PixivUgoiraClient
-import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SortMode
@@ -85,8 +81,6 @@ fun ForYouScreen(
     resolveUnknownAnimatedDurations: Boolean = false,
     onToggleLike: (Post) -> Unit,
     onAction: (ForYouAction) -> Unit,
-    resolvePost: suspend (PostId) -> Post? = { null },
-    rememberResolvedPost: (Post) -> Unit = {},
     displayTagFor: (Post) -> String? = { null },
 ) {
     val gridState = rememberLazyStaggeredGridState()
@@ -124,25 +118,11 @@ fun ForYouScreen(
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
         )
     }
-    val durationResolutionRequests = remember(state.seedId) { mutableSetOf<PostId>() }
-    LaunchedEffect(state.results, visibilityFilters, unknownAnimatedDurationPolicy, state.seedId) {
-        if (unknownAnimatedDurationPolicy != UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND) return@LaunchedEffect
-        val candidates = animatedDurationResolutionCandidates(
-            results = state.results,
-            filters = visibilityFilters,
-        ).filter { post -> durationResolutionRequests.add(post.id) }
-            .take(FOR_YOU_DURATION_RESOLVE_BATCH_SIZE)
-        candidates.forEach { post ->
-            val resolved = runCatchingPreservingCancellation {
-                resolvePost(post.id)
-            }.getOrNull()
-            val candidate = resolved ?: post
-            if (animatedDurationMs(candidate) == null) {
-                val probedDurationMs = probeRemoteVideoDurationMs(candidate)
-                if (probedDurationMs != null) {
-                    rememberResolvedPost(candidate.copy(durationMs = probedDurationMs))
-                }
-            }
+    LaunchedEffect(state.results, animatedDurationFilterActive, unknownAnimatedDurationPolicy, state.seedId) {
+        if (animatedDurationFilterActive &&
+            unknownAnimatedDurationPolicy == UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
+        ) {
+            onAction(ForYouAction.RequestAnimatedDurationEnrichment(state.seedId))
         }
     }
 
@@ -432,7 +412,6 @@ internal fun ForYouSourceSelector(
 }
 
 private const val FOR_YOU_PREFETCH_RATIO = 0.8f
-private const val FOR_YOU_DURATION_RESOLVE_BATCH_SIZE = 8
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

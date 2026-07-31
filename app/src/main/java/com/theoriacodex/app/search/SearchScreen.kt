@@ -115,7 +115,6 @@ import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.media.postPreviewImageCandidate
-import com.theoriacodex.app.media.probeRemoteVideoDurationMs
 import com.theoriacodex.app.recommend.recommendationIncludeTags
 import com.theoriacodex.app.recommend.recommendationTagsFor
 import com.theoriacodex.app.recommend.associatedDisplayTag
@@ -251,25 +250,11 @@ fun SearchScreen(
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
         )
     }
-    val durationResolutionRequests = remember(queryHash) { mutableSetOf<PostId>() }
-    LaunchedEffect(displayResults, visibilityFilters, unknownAnimatedDurationPolicy, queryHash) {
-        if (unknownAnimatedDurationPolicy != UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND) return@LaunchedEffect
-        val candidates = animatedDurationResolutionCandidates(
-            results = displayResults,
-            filters = visibilityFilters,
-        ).filter { post -> durationResolutionRequests.add(post.id) }
-            .take(ANIMATED_DURATION_RESOLVE_BATCH_SIZE)
-        candidates.forEach { post ->
-            val resolved = runCatchingPreservingCancellation {
-                resolvePostById(post.id)
-            }.getOrNull()
-            val candidate = resolved ?: post
-            if (animatedDurationMs(candidate) == null) {
-                val probedDurationMs = probeRemoteVideoDurationMs(candidate)
-                if (probedDurationMs != null) {
-                    onAction(SearchAction.RememberResolvedPost(candidate.copy(durationMs = probedDurationMs)))
-                }
-            }
+    LaunchedEffect(displayResults, animatedDurationFilterActive, unknownAnimatedDurationPolicy, queryHash) {
+        if (animatedDurationFilterActive &&
+            unknownAnimatedDurationPolicy == UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
+        ) {
+            onAction(SearchAction.RequestAnimatedDurationEnrichment(queryHash))
         }
     }
     fun openPostActionSheet(post: Post) {
@@ -2015,16 +2000,6 @@ internal fun filterSearchResults(
     }
 }
 
-internal fun animatedDurationResolutionCandidates(
-    results: List<Post>,
-    filters: SearchVisibilityFilters,
-): List<Post> {
-    if (filters.animatedDurationRange.isFullRange) return emptyList()
-    return results.filter { post ->
-        isAnimatedPost(post) && animatedDurationMs(post) == null
-    }
-}
-
 private fun matchesAnimatedDurationFilter(
     post: Post,
     filters: SearchVisibilityFilters,
@@ -2153,4 +2128,3 @@ private fun Post.hasActionableTags(): Boolean {
 
 private const val PAGINATION_PREFETCH_RATIO = 0.8f
 private const val ANIMATED_PREFETCH_MIN_VISIBLE = 12
-private const val ANIMATED_DURATION_RESOLVE_BATCH_SIZE = 8

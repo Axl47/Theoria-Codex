@@ -1520,6 +1520,7 @@ internal fun TheoriaAppContent(
                                 TopLevelDestination.Search -> {
                                     SearchRoute(
                                         coordinator = featureDependencies.search,
+                                        animatedDurationEnricher = featureDependencies.animatedDurationEnricher,
                                         pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                         config = SearchRouteConfig(
                                             settings = settings,
@@ -1579,6 +1580,7 @@ internal fun TheoriaAppContent(
                                 TopLevelDestination.ForYou -> {
                                     ForYouRoute(
                                         coordinator = featureDependencies.forYou,
+                                        animatedDurationEnricher = featureDependencies.animatedDurationEnricher,
                                         pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                         config = ForYouRouteConfig(
                                             settings = settings,
@@ -1887,6 +1889,7 @@ internal fun TheoriaAppContent(
                     composable(AppRoute.CreatorProfile) {
                         CreatorRoute(
                             coordinator = featureDependencies.creatorProfile,
+                            animatedDurationEnricher = featureDependencies.animatedDurationEnricher,
                             pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                             config = CreatorRouteConfig(
                                 activeCreator = pendingCreatorProfile,

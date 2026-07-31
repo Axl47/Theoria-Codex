@@ -5,6 +5,8 @@ import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.creator.state.CreatorCoordinatorSnapshot
 import com.theoriacodex.app.creator.state.CreatorEffect
 import com.theoriacodex.app.creator.state.CreatorFailureReason
+import com.theoriacodex.app.testing.TestAnimatedDurationEnricher
+import com.theoriacodex.app.testing.animatedTestPost
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -145,6 +147,67 @@ class CreatorProfileViewModelTest {
         val backEffect = async { viewModel.effects.first() }
         viewModel.onAction(CreatorAction.Back)
         assertEquals(CreatorEffect.NavigateBack, backEffect.await())
+    }
+
+    @Test
+    fun `duration enrichment copies into current creator results`() = runTest {
+        val post = animatedTestPost(sourcePostId = "animated")
+        val creator = creator(SourceKey.PIXIV, "creator")
+        val engine = FakeCreatorRouteEngine().apply { openResults = listOf(post) }
+        val enricher = TestAnimatedDurationEnricher { 3_500L }
+        val viewModel = CreatorProfileViewModel(
+            engine,
+            SavedStateHandle(),
+            coroutineScope = this,
+            animatedDurationEnricher = enricher,
+        )
+        viewModel.onAction(CreatorAction.OpenCreator(creator))
+        advanceUntilIdle()
+        val queryHash = requireNotNull(viewModel.state.value.queryHash)
+
+        viewModel.onAction(CreatorAction.RequestAnimatedDurationEnrichment(queryHash))
+        advanceUntilIdle()
+
+        assertEquals(3_500L, viewModel.state.value.results.single().durationMs)
+        assertNull(post.durationMs)
+    }
+
+    @Test
+    fun `duration completion from replaced creator cannot update fresh results`() = runTest {
+        val firstCreator = creator(SourceKey.PIXIV, "first")
+        val replacement = creator(SourceKey.PIXIV, "replacement")
+        val oldPost = animatedTestPost(sourcePostId = "shared", title = "old")
+        val freshPost = animatedTestPost(sourcePostId = "shared", title = "fresh")
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val engine = FakeCreatorRouteEngine().apply { openResults = listOf(oldPost) }
+        val enricher = TestAnimatedDurationEnricher {
+            started.complete(Unit)
+            release.await()
+            8_000L
+        }
+        val viewModel = CreatorProfileViewModel(
+            engine,
+            SavedStateHandle(),
+            coroutineScope = this,
+            animatedDurationEnricher = enricher,
+        )
+        viewModel.onAction(CreatorAction.OpenCreator(firstCreator))
+        advanceUntilIdle()
+        val oldQueryHash = requireNotNull(viewModel.state.value.queryHash)
+        viewModel.onAction(CreatorAction.RequestAnimatedDurationEnrichment(oldQueryHash))
+        runCurrent()
+        started.await()
+
+        engine.openResults = listOf(freshPost)
+        viewModel.onAction(CreatorAction.OpenCreator(replacement))
+        runCurrent()
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(replacement, viewModel.state.value.creator)
+        assertEquals("fresh", viewModel.state.value.results.single().title)
+        assertNull(viewModel.state.value.results.single().durationMs)
     }
 
     private fun creator(source: SourceKey, profileId: String): CreatorProfile {

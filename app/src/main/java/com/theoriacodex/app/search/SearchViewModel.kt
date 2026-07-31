@@ -16,6 +16,8 @@ import com.theoriacodex.app.search.state.SearchStateReducer
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.search.state.captureSearchCoordinatorSnapshot
 import com.theoriacodex.app.search.state.toSearchUiState
+import com.theoriacodex.app.media.AnimatedDurationEnricher
+import com.theoriacodex.app.media.NoOpAnimatedDurationEnricher
 import com.theoriacodex.app.ui.state.RouteStateOwner
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.AppSettings
@@ -61,6 +63,7 @@ internal class SearchViewModel(
     private val autocompleteDelayMs: Long = DEFAULT_AUTOCOMPLETE_DELAY_MS,
     scrollPersistenceDelayMs: Long = DEFAULT_SCROLL_PERSISTENCE_DELAY_MS,
     scrollPersistenceDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val animatedDurationEnricher: AnimatedDurationEnricher = NoOpAnimatedDurationEnricher,
 ) : ViewModel(), RouteStateOwner<SearchUiState, SearchAction, SearchEffect> {
     private val mutableState = MutableStateFlow(
         coordinator.toSearchUiState(restoration = SearchRestorationUiState.NotStarted),
@@ -87,6 +90,11 @@ internal class SearchViewModel(
                 queryHash = target.queryHash,
             )
         },
+    )
+    private val durationEnrichmentOwner = SearchAnimatedDurationEnrichmentOwner(
+        scope = viewModelScope, enricher = animatedDurationEnricher,
+        currentState = { mutableState.value }, rememberResolvedPost = coordinator::rememberResolvedPost,
+        publishState = { publishCoordinatorState() },
     )
 
     init {
@@ -229,6 +237,8 @@ internal class SearchViewModel(
                 coordinator.rememberResolvedPost(action.post)
                 publishCoordinatorState()
             }
+
+            is SearchAction.RequestAnimatedDurationEnrichment -> durationEnrichmentOwner.request(action.queryHash)
 
             is SearchAction.ScrollChanged -> persistScroll(action)
 
@@ -555,7 +565,7 @@ internal class SearchViewModel(
                 val savedQuery = savedStateHandle.get<String>(SearchSavedStateKeys.DRAFT_QUERY)
                     ?.let(SearchSavedQueryCodec::decode)
                 val restoredQuery = savedQuery?.let(coordinator::restoreDraftQuery) == true
-                val savedScroll = savedScrollState()
+                val savedScroll = savedStateHandle.savedSearchScrollState()
                 val scroll = savedScroll ?: coordinator.restoreSearchScrollState()
                 mutableState.value = coordinatorState(
                     includeSuggestions = true,
@@ -600,12 +610,6 @@ internal class SearchViewModel(
                 state = SearchScrollState(index, offset),
             ),
         )
-    }
-
-    private fun savedScrollState(): SearchScrollState? {
-        val index = savedStateHandle.get<Int>(SearchSavedStateKeys.SCROLL_INDEX) ?: return null
-        val offset = savedStateHandle.get<Int>(SearchSavedStateKeys.SCROLL_OFFSET) ?: 0
-        return SearchScrollState(index.coerceAtLeast(0), offset.coerceAtLeast(0))
     }
 
     private fun persistDraftQuery() {
@@ -708,12 +712,15 @@ internal class SearchViewModel(
     }
 
     companion object {
-        fun factory(coordinator: SearchCoordinator): ViewModelProvider.Factory {
+        fun factory(
+            coordinator: SearchCoordinator, animatedDurationEnricher: AnimatedDurationEnricher,
+        ): ViewModelProvider.Factory {
             return viewModelFactory {
                 initializer {
                     SearchViewModel(
                         coordinator = coordinator,
                         savedStateHandle = createSavedStateHandle(),
+                        animatedDurationEnricher = animatedDurationEnricher,
                     )
                 }
             }
@@ -723,6 +730,12 @@ internal class SearchViewModel(
         private const val DEFAULT_SCROLL_PERSISTENCE_DELAY_MS = 150L
         private const val SEARCH_SCROLL_PERSISTENCE_KEY = "search-scroll-persistence"
     }
+}
+
+private fun SavedStateHandle.savedSearchScrollState(): SearchScrollState? {
+    val index = get<Int>(SearchSavedStateKeys.SCROLL_INDEX) ?: return null
+    val offset = get<Int>(SearchSavedStateKeys.SCROLL_OFFSET) ?: 0
+    return SearchScrollState(index.coerceAtLeast(0), offset.coerceAtLeast(0))
 }
 
 internal data class SearchScrollPersistenceTarget(

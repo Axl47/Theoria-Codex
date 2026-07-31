@@ -17,6 +17,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.SearchScreen
 import com.theoriacodex.app.search.SearchViewModel
+import com.theoriacodex.app.media.AnimatedDurationEnricher
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchEffect
 import com.theoriacodex.app.search.state.SearchUiState
@@ -258,6 +259,7 @@ internal class SearchRouteResumeObserver(
 @Composable
 internal fun SearchRoute(
     coordinator: SearchCoordinator,
+    animatedDurationEnricher: AnimatedDurationEnricher,
     pixivUgoiraClient: PixivUgoiraClient?,
     config: SearchRouteConfig,
     callbacks: SearchRouteCallbacks,
@@ -265,7 +267,7 @@ internal fun SearchRoute(
 ) {
     val owner = viewModel<SearchViewModel>(
         key = SEARCH_ROUTE_OWNER_KEY,
-        factory = SearchViewModel.factory(coordinator),
+        factory = SearchViewModel.factory(coordinator, animatedDurationEnricher),
     )
     val state by owner.state.collectAsStateWithLifecycle()
     val ownerHandle = remember(owner) { SearchRouteOwnerHandle(owner) }

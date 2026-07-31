@@ -8,11 +8,10 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### In Progress
 
--
+- None. F06 is implemented and verified; awaiting its dedicated commit/review before F07 starts.
 
 ### Pending
 
-- [ ] F06: centralize animated-duration enrichment with bounded single-flight work
 - [ ] F07: bound Hitomi random-search memory while preserving deterministic continuation
 - [ ] F08: quarantine unreadable legacy JSON instead of silently overwriting it
 - [ ] F09: migrate Recents activity persistence to Room
@@ -28,8 +27,10 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### Done
 
+- [x] F06: centralize animated-duration enrichment with bounded single-flight work
+  - Commit: pending dedicated `refactor(media): centralize animated duration enrichment` commit. Evidence: Search, For You, and Creator composables now emit typed requests to route-owned bounded drain lanes backed by one application-owned service with cross-route single-flight, a three-work concurrency cap, 128-entry positive/negative LRU caches, five-minute negative expiry, authoritative adapter resolution, and cancellation-preserving probing. Eighty-nine focused JVM tests passed across the service, all three route owners/contracts, filtering/media behavior, and structural ownership guards; both Android-test owners compiled; app lint and Detekt passed. This is deterministic JVM/build evidence only; no connected-device, physical-device, or live-provider retriever execution is claimed.
 - [x] F05: consolidate Search query and scroll persistence and delete the orphan persistence path
-  - Commit: pending creation (`refactor(search): consolidate query and scroll persistence`). Evidence: UI restore is the sole live scroll store; prior query-file offsets migrate once with proof and structural cleanup; the production ViewModel coalesces query-keyed positions, excludes temporary scopes, serializes begun writes, and drains one final value during real owner clear before cancelling its scheduler. One hundred fifty-nine focused JVM tests, both Android-test compilation owners, app lint, app/core-data Detekt, HTML validation, and `git diff --check` passed. No connected-device or physical-device claim is needed for this deterministic persistence finding.
+  - Commit: `d0c5011` (`refactor(search): consolidate query and scroll persistence`). Evidence: UI restore is the sole live scroll store; prior query-file offsets migrate once with proof and structural cleanup; the production ViewModel coalesces query-keyed positions, excludes temporary scopes, serializes begun writes, and drains one final value during real owner clear before cancelling its scheduler. One hundred fifty-nine focused JVM tests, both Android-test compilation owners, app lint, app/core-data Detekt, HTML validation, and `git diff --check` passed. No connected-device or physical-device claim is needed for this deterministic persistence finding.
 - [x] F04: centralize Settings state and persisted section expansion ownership
   - Commit: `069b705` (`refactor(settings): centralize settings state ownership`). Evidence: one Settings owner replaces seven shell expansion booleans and the 44-parameter screen boundary with keyed durable expansion plus immutable state/typed actions. Thirty-one focused owner, credential, recovery, and ownership tests and 45 repository persistence/reopen tests passed; app lint, Detekt, Android-test compilation, HTML validation, and `git diff --check` passed. The four-test Compose class compiles, but the new owner-contract test was not device-executed because no device is attached and the API 37 AVD registry entry has no backing configuration; the unchanged header retains F02's accepted API 37 geometry evidence.
 - [x] F03: keep persisted source API keys out of saveable UI state

@@ -3,6 +3,8 @@ package com.theoriacodex.app.di
 import android.content.Context
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
+import com.theoriacodex.app.media.AnimatedDurationEnricher
+import com.theoriacodex.app.media.AnimatedDurationEnrichmentService
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.app.recommend.ForYouCoordinator
@@ -88,6 +90,7 @@ data class FeatureDependencies(
     val search: SearchCoordinator,
     val forYou: ForYouCoordinator,
     val creatorProfile: CreatorProfileCoordinator,
+    val animatedDurationEnricher: AnimatedDurationEnricher,
 )
 
 data class WorkflowDependencies(
@@ -145,6 +148,9 @@ internal class DefaultTheoriaAppContainer(
     private val sourceRegistry = AvailabilityAwareSourceAdapterRegistry(
         delegate = allPotentialSourceRegistry,
         availableSourceState = accountStore.availableSources,
+    )
+    private val animatedDurationEnricher = AnimatedDurationEnrichmentService(
+        registry = sourceRegistry,
     )
 
     private val contentDatabase = TheoriaRoomDatabase.create(appContext)
@@ -230,6 +236,7 @@ internal class DefaultTheoriaAppContainer(
             tagSuggestionStore = tagSuggestionStore,
         ),
         creatorProfile = CreatorProfileCoordinator(registry = sourceRegistry),
+        animatedDurationEnricher = animatedDurationEnricher,
     )
 
     override val workflows = WorkflowDependencies(

@@ -59,6 +59,7 @@ sealed interface CreatorAction {
         val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
     ) : CreatorAction
     data object Back : CreatorAction
+    data class RequestAnimatedDurationEnrichment(val queryHash: String) : CreatorAction
 
     data class RefreshCompleted(
         val request: CreatorRequestIdentity,
@@ -233,6 +234,7 @@ fun CreatorUiState.reduce(action: CreatorAction): CreatorTransition {
         }
 
         CreatorAction.Back -> CreatorTransition(this, CreatorEffect.NavigateBack)
+        is CreatorAction.RequestAnimatedDurationEnrichment -> unchanged()
         is CreatorAction.RefreshCompleted -> {
             if (!accepts(action.request, CreatorRequestKind.REFRESH)) {
                 unchanged()
