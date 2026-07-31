@@ -146,6 +146,17 @@ class PerformanceBenchmarkArchitectureTest {
             "Personal-device benchmarks must not enable or disable unrelated packages",
             "SideEffectRunListener" in macroBuild || "testInstrumentationRunnerArguments[\"listener\"]" in macroBuild,
         )
+        val runnerVerifier = file("scripts/verify_macrobenchmark_runner_apk.py").readText()
+        assertTrue(
+            "Macrobenchmark assembly must verify the packaged runner manifest",
+            "finalizedBy(verifyMacrobenchmarkRunnerArtifact)" in macroBuild &&
+                "EXPECTED_RUNNER" in runnerVerifier &&
+                "FORBIDDEN_MANIFEST_CONFIGURATION" in runnerVerifier,
+        )
+        assertTrue(
+            "Packaged listener classes must be documented as inert rather than absent",
+            "transitive SideEffectRunListener bytecode" in runnerVerifier,
+        )
         assertTrue(
             "Macrobenchmark must use the plugin-managed benchmarkRelease target lane",
             "libs.plugins.androidx.baselineprofile" in macroBuild &&

@@ -28,6 +28,10 @@ Do not configure `androidx.benchmark.junit4.SideEffectRunListener` for this suit
 Benchmark 1.5.0-alpha07's listener disables 41 unrelated packages at setup and unconditionally
 enables them at teardown, so it cannot preserve a personal device's prior app state. The suite
 accepts ordinary background-device variance instead of mutating unrelated packages.
+`benchmark-macro-junit4` may still package the transitive `SideEffectRunListener` and
+`DisablePackages` classes. Those classes are inert: the Gradle runner has no `listener` argument,
+and packaged-runner verification proves that the instrumentation manifest has no listener
+configuration. Do not try to strip required library bytecode or treat class-name presence as use.
 
 Trace count meanings:
 

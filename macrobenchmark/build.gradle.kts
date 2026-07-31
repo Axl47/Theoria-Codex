@@ -31,3 +31,27 @@ dependencies {
     implementation(libs.androidx.junit)
     implementation(libs.androidx.test.uiautomator)
 }
+
+val verifyMacrobenchmarkRunnerArtifact = tasks.register<Exec>("verifyMacrobenchmarkRunnerArtifact") {
+    group = "verification"
+    description = "Verifies that the packaged Macrobenchmark runner has no side-effect listener config."
+    dependsOn("packageBenchmarkRelease")
+    val runnerApk = layout.buildDirectory.file(
+        "outputs/apk/benchmarkRelease/macrobenchmark-benchmarkRelease.apk",
+    )
+    inputs.file(runnerApk)
+    inputs.file(rootProject.file("scripts/verify_macrobenchmark_runner_apk.py"))
+    doFirst {
+        val sdkDirectory = androidComponents.sdkComponents.sdkDirectory.get().asFile
+        commandLine(
+            "python3",
+            rootProject.file("scripts/verify_macrobenchmark_runner_apk.py"),
+            runnerApk.get().asFile,
+            sdkDirectory.resolve("cmdline-tools/latest/bin/apkanalyzer"),
+        )
+    }
+}
+
+tasks.matching { task -> task.name == "assembleBenchmarkRelease" }.configureEach {
+    finalizedBy(verifyMacrobenchmarkRunnerArtifact)
+}
