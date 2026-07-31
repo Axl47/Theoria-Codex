@@ -8,11 +8,10 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### In Progress
 
-- [~] Launch the dedicated Sol/High implementation task and hand it the sequential commit contract
+-
 
 ### Pending
 
-- [ ] F01: execute every Android instrumentation owner in CI and correct device artifact naming
 - [ ] F02: enlarge compact feed controls and add explicit accessibility state semantics
 - [ ] F03: keep persisted source API keys out of saveable UI state
 - [ ] F04: centralize Settings state and persisted section expansion ownership
@@ -33,6 +32,9 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### Done
 
+- [x] F01: execute every Android instrumentation owner in CI and correct device artifact naming
+  - Evidence: device CI now runs and uploads reports for both `:app` and `:core-data-android`; the API 35 release-acceptance artifact is named accurately. Two workflow contract tests, `actionlint`, `:core-data-android:compileDebugAndroidTestKotlin`, and `git diff --check` passed.
+- [x] Launch the dedicated implementation task and hand it the sequential commit contract
 - [x] Complete the read-only 2026-07-31 audit and establish current validation baselines
 - [x] Record the non-negotiable product constraint that all visible video cards continue autoplaying
 - [x] Create and validate `.docs/exec/code-quality-ux-performance-reliability-remediation.html`
