@@ -12,7 +12,6 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### Pending
 
-- [ ] F04: centralize Settings state and persisted section expansion ownership
 - [ ] F05: consolidate Search query and scroll persistence and delete the orphan persistence path
 - [ ] F06: centralize animated-duration enrichment with bounded single-flight work
 - [ ] F07: bound Hitomi random-search memory while preserving deterministic continuation
@@ -30,8 +29,10 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### Done
 
+- [x] F04: centralize Settings state and persisted section expansion ownership
+  - Commit: pending (`refactor(settings): centralize settings state ownership`). Evidence: one Settings owner replaces seven shell expansion booleans and the 44-parameter screen boundary with keyed durable expansion plus immutable state/typed actions. Thirty-one focused owner, credential, recovery, and ownership tests and 45 repository persistence/reopen tests passed; app lint, Detekt, Android-test compilation, HTML validation, and `git diff --check` passed. The four-test Compose class compiles, but the new owner-contract test was not device-executed because no device is attached and the API 37 AVD registry entry has no backing configuration; the unchanged header retains F02's accepted API 37 geometry evidence.
 - [x] F03: keep persisted source API keys out of saveable UI state
-  - Evidence: stored credentials now map through a replace-only presentation that exposes user ID and Configured status but always emits a blank API-key field; blank saves reuse the repository key, replacements supersede it, and unconfigured blank saves fail closed. Six policy tests plus 18 encrypted-store/recovery tests passed; Android-test compilation, app lint, Detekt, HTML validation, and `git diff --check` passed.
+  - Commit: `411aece` (`fix(settings): keep saved API keys out of UI state`). Evidence: stored credentials now map through a replace-only presentation that exposes user ID and Configured status but always emits a blank API-key field; blank saves reuse the repository key, replacements supersede it, and unconfigured blank saves fail closed. Six policy tests plus 18 encrypted-store/recovery tests passed; Android-test compilation, app lint, Detekt, HTML validation, and `git diff --check` passed.
 - [x] F02: enlarge compact feed controls and add explicit accessibility state semantics
   - Commit: `333e7fb` (`fix(ui): improve compact control accessibility`). Evidence: Search like, For You source, and Settings header controls expose 48dp clickable geometry with checkbox/dropdown/button roles and selected or expanded state descriptions while preserving 30dp and 18dp visuals. The focused three-test Compose class passed on an API 37 emulator after the shared semantics extraction; app unit tests, `:app:lintDebug`, `:app:detektDebug`, Android-test compilation, and `git diff --check` passed.
 - [x] F01: execute every Android instrumentation owner in CI and correct device artifact naming

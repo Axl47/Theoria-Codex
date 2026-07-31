@@ -26,11 +26,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -39,107 +34,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.expandableControlSemantics
-import com.theoriacodex.data.repository.AppSettings
-import com.theoriacodex.data.repository.CacheSnapshot
-import com.theoriacodex.data.repository.ForYouBlacklistEntry
-import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ScenarioPreset
-import com.theoriacodex.domain.model.SourceKey
-
-enum class SettingsSectionKey {
-    RECOMMENDATION_PROFILES,
-    UNIFIED_MODE,
-    FOR_YOU_BLACKLIST,
-    SOURCE_ACCOUNTS,
-    UPDATES,
-    STORAGE_AND_CACHING,
-    DEVELOPER_SCENARIOS,
-}
-
-data class SettingsSectionExpansionState(
-    val recommendationProfiles: Boolean = true,
-    val unifiedMode: Boolean = true,
-    val forYouBlacklist: Boolean = true,
-    val sourceAccounts: Boolean = true,
-    val updates: Boolean = true,
-    val storageAndCaching: Boolean = true,
-    val developerScenarios: Boolean = true,
-)
-
-fun SettingsSectionExpansionState.toPersistenceMap(): Map<String, Boolean> {
-    return mapOf(
-        SettingsSectionKey.RECOMMENDATION_PROFILES.name to recommendationProfiles,
-        SettingsSectionKey.UNIFIED_MODE.name to unifiedMode,
-        SettingsSectionKey.FOR_YOU_BLACKLIST.name to forYouBlacklist,
-        SettingsSectionKey.SOURCE_ACCOUNTS.name to sourceAccounts,
-        SettingsSectionKey.UPDATES.name to updates,
-        SettingsSectionKey.STORAGE_AND_CACHING.name to storageAndCaching,
-        SettingsSectionKey.DEVELOPER_SCENARIOS.name to developerScenarios,
-    )
-}
-
-fun Map<String, Boolean>.toSettingsSectionExpansionState(): SettingsSectionExpansionState {
-    return SettingsSectionExpansionState(
-        recommendationProfiles = this[SettingsSectionKey.RECOMMENDATION_PROFILES.name] ?: true,
-        unifiedMode = this[SettingsSectionKey.UNIFIED_MODE.name] ?: true,
-        forYouBlacklist = this[SettingsSectionKey.FOR_YOU_BLACKLIST.name] ?: true,
-        sourceAccounts = this[SettingsSectionKey.SOURCE_ACCOUNTS.name] ?: true,
-        updates = this[SettingsSectionKey.UPDATES.name] ?: true,
-        storageAndCaching = this[SettingsSectionKey.STORAGE_AND_CACHING.name] ?: true,
-        developerScenarios = this[SettingsSectionKey.DEVELOPER_SCENARIOS.name] ?: true,
-    )
-}
 
 @Composable
 fun SettingsScreen(
-    settings: AppSettings,
-    recommendationProfiles: List<RecommendationProfile>,
-    activeProfileId: String,
-    activeProfileName: String,
-    likesCount: Int,
-    forYouBlacklistEntries: List<ForYouBlacklistEntry>,
-    availableSources: List<SourceKey>,
-    cacheSnapshot: CacheSnapshot,
-    showDeveloperScenarios: Boolean,
-    pixivStatusLabel: String,
-    pixivConnectEnabled: Boolean,
-    onPixivConnect: () -> Unit,
-    onPixivDisconnect: () -> Unit,
-    gelbooruUserId: String,
-    gelbooruApiKey: String,
-    gelbooruStatusLabel: String,
-    onGelbooruUserIdChange: (String) -> Unit,
-    onGelbooruApiKeyChange: (String) -> Unit,
-    onSaveGelbooruCredentials: () -> Unit,
-    onClearGelbooruCredentials: () -> Unit,
-    rule34XxxUserId: String,
-    rule34XxxApiKey: String,
-    rule34XxxStatusLabel: String,
-    onRule34XxxUserIdChange: (String) -> Unit,
-    onRule34XxxApiKeyChange: (String) -> Unit,
-    onSaveRule34XxxCredentials: () -> Unit,
-    onClearRule34XxxCredentials: () -> Unit,
-    onSetEnabledSources: (Set<SourceKey>) -> Unit,
-    onSetSourceWeights: (Map<SourceKey, Double>) -> Unit,
-    onSetActiveProfile: (String) -> Unit,
-    onAddProfile: (String) -> Unit,
-    onRemoveProfile: (String) -> Unit,
-    onClearLikesForActiveProfile: () -> Unit,
-    onRemoveForYouBlacklistEntry: (SourceKey, List<String>) -> Unit,
-    onSetCacheFullImageOnSave: (Boolean) -> Unit,
-    onSetResolveUnknownAnimatedDurations: (Boolean) -> Unit,
-    onSetScenarioPreset: (ScenarioPreset) -> Unit,
-    onClearThumbnailCache: () -> Unit,
-    onClearFullImageCache: () -> Unit,
-    changelogLoading: Boolean,
-    onOpenChangelog: () -> Unit,
-    sectionExpansion: SettingsSectionExpansionState,
-    onSectionExpansionChanged: (SettingsSectionKey, Boolean) -> Unit,
+    state: SettingsUiState,
+    onAction: (SettingsAction) -> Unit,
 ) {
-    var showClearCacheOptions by rememberSaveable { mutableStateOf(false) }
-    var newProfileName by remember { mutableStateOf("") }
-    var profileDeleteTarget by remember { mutableStateOf<RecommendationProfile?>(null) }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -157,30 +58,30 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "Recommendation Profiles",
-            expanded = sectionExpansion.recommendationProfiles,
+            expanded = state.sectionExpansion[SettingsSectionKey.RECOMMENDATION_PROFILES],
             onToggle = {
-                onSectionExpansionChanged(
-                    SettingsSectionKey.RECOMMENDATION_PROFILES,
-                    !sectionExpansion.recommendationProfiles,
+                onAction(
+                    SettingsAction.SetSectionExpanded(
+                        SettingsSectionKey.RECOMMENDATION_PROFILES,
+                        !state.sectionExpansion[SettingsSectionKey.RECOMMENDATION_PROFILES],
+                    )
                 )
             },
         ) {
-                recommendationProfiles.forEach { profile ->
+                state.settings.recommendationProfiles.forEach { profile ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         FilterChip(
-                            selected = activeProfileId == profile.profileId,
-                            onClick = { onSetActiveProfile(profile.profileId) },
+                            selected = state.activeProfile.profileId == profile.profileId,
+                            onClick = { onAction(SettingsAction.SetActiveProfile(profile.profileId)) },
                             label = { Text(profile.name) },
                         )
                         TextButton(
-                            enabled = recommendationProfiles.size > 1,
-                            onClick = {
-                                profileDeleteTarget = profile
-                            },
+                            enabled = state.settings.recommendationProfiles.size > 1,
+                            onClick = { onAction(SettingsAction.RequestRemoveProfile(profile.profileId)) },
                         ) {
                             Text("Remove")
                         }
@@ -193,25 +94,22 @@ fun SettingsScreen(
                 ) {
                     OutlinedTextField(
                         modifier = Modifier.weight(1f),
-                        value = newProfileName,
-                        onValueChange = { newProfileName = it },
+                        value = state.newProfileName,
+                        onValueChange = { onAction(SettingsAction.SetNewProfileName(it)) },
                         label = { Text("New profile") },
                         singleLine = true,
                     )
-                    Button(onClick = {
-                        onAddProfile(newProfileName)
-                        newProfileName = ""
-                    }) {
+                    Button(onClick = { onAction(SettingsAction.AddProfile) }) {
                         Text("Add")
                     }
                 }
                 Text(
-                    text = "Liked posts in active profile: $likesCount",
+                    text = "Liked posts in active profile: ${state.activeProfileLikesCount}",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 TextButton(
-                    enabled = likesCount > 0,
-                    onClick = onClearLikesForActiveProfile,
+                    enabled = state.activeProfileLikesCount > 0,
+                    onClick = { onAction(SettingsAction.ClearActiveProfileLikes) },
                 ) {
                     Text("Clear active profile likes")
                 }
@@ -219,16 +117,18 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "Unified Mode",
-            expanded = sectionExpansion.unifiedMode,
+            expanded = state.sectionExpansion[SettingsSectionKey.UNIFIED_MODE],
             onToggle = {
-                onSectionExpansionChanged(
-                    SettingsSectionKey.UNIFIED_MODE,
-                    !sectionExpansion.unifiedMode,
+                onAction(
+                    SettingsAction.SetSectionExpanded(
+                        SettingsSectionKey.UNIFIED_MODE,
+                        !state.sectionExpansion[SettingsSectionKey.UNIFIED_MODE],
+                    )
                 )
             },
         ) {
-            availableSources.forEach { source ->
-                val isEnabled = source in settings.runtime.enabledSources
+            state.availableSources.forEach { source ->
+                val isEnabled = source in state.settings.runtime.enabledSources
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -238,25 +138,25 @@ fun SettingsScreen(
                     Switch(
                         checked = isEnabled,
                         onCheckedChange = { checked ->
-                            val updated = settings.runtime.enabledSources
-                                .intersect(availableSources.toSet())
+                            val updated = state.settings.runtime.enabledSources
+                                .intersect(state.availableSources.toSet())
                                 .toMutableSet()
                             if (checked) {
                                 updated += source
                             } else {
                                 updated -= source
                             }
-                            onSetEnabledSources(updated)
+                            onAction(SettingsAction.SetEnabledSources(updated))
                         },
                     )
                 }
-                val weight = settings.runtime.sourceWeights[source]?.toFloat() ?: 0f
+                val weight = state.settings.runtime.sourceWeights[source]?.toFloat() ?: 0f
                 Slider(
                     value = weight,
                     onValueChange = { raw ->
-                        val updated = settings.runtime.sourceWeights.toMutableMap()
+                        val updated = state.settings.runtime.sourceWeights.toMutableMap()
                         updated[source] = raw.toDouble()
-                        onSetSourceWeights(updated)
+                        onAction(SettingsAction.SetSourceWeights(updated))
                     },
                     valueRange = 0f..1f,
                 )
@@ -266,25 +166,27 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "For You Blacklist",
-            expanded = sectionExpansion.forYouBlacklist,
+            expanded = state.sectionExpansion[SettingsSectionKey.FOR_YOU_BLACKLIST],
             onToggle = {
-                onSectionExpansionChanged(
-                    SettingsSectionKey.FOR_YOU_BLACKLIST,
-                    !sectionExpansion.forYouBlacklist,
+                onAction(
+                    SettingsAction.SetSectionExpanded(
+                        SettingsSectionKey.FOR_YOU_BLACKLIST,
+                        !state.sectionExpansion[SettingsSectionKey.FOR_YOU_BLACKLIST],
+                    )
                 )
             },
         ) {
                 Text(
-                    text = "Hidden tag sets for $activeProfileName",
+                    text = "Hidden tag sets for ${state.activeProfile.name}",
                     style = MaterialTheme.typography.bodySmall,
                 )
-                if (forYouBlacklistEntries.isEmpty()) {
+                if (state.activeProfileBlacklist.isEmpty()) {
                     Text(
                         text = "No blacklisted tags yet.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 } else {
-                    forYouBlacklistEntries.forEach { entry ->
+                    state.activeProfileBlacklist.forEach { entry ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -296,7 +198,9 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.bodySmall,
                             )
                             TextButton(
-                                onClick = { onRemoveForYouBlacklistEntry(entry.source, entry.tags) },
+                                onClick = {
+                                    onAction(SettingsAction.RemoveBlacklistEntry(entry.source, entry.tags))
+                                },
                             ) {
                                 Text("Remove")
                             }
@@ -307,42 +211,44 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "Source Accounts",
-            expanded = sectionExpansion.sourceAccounts,
+            expanded = state.sectionExpansion[SettingsSectionKey.SOURCE_ACCOUNTS],
             onToggle = {
-                onSectionExpansionChanged(
-                    SettingsSectionKey.SOURCE_ACCOUNTS,
-                    !sectionExpansion.sourceAccounts,
+                onAction(
+                    SettingsAction.SetSectionExpanded(
+                        SettingsSectionKey.SOURCE_ACCOUNTS,
+                        !state.sectionExpansion[SettingsSectionKey.SOURCE_ACCOUNTS],
+                    )
                 )
             },
         ) {
 
                 Text("Pixiv", style = MaterialTheme.typography.titleSmall)
-                Text(pixivStatusLabel, style = MaterialTheme.typography.bodySmall)
+                Text(state.accounts.pixivStatusLabel, style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
-                        onClick = onPixivConnect,
-                        enabled = pixivConnectEnabled,
+                        onClick = { onAction(SettingsAction.ConnectPixiv) },
+                        enabled = state.accounts.pixivConnectEnabled,
                     ) {
                         Text("Connect")
                     }
-                    TextButton(onClick = onPixivDisconnect) {
+                    TextButton(onClick = { onAction(SettingsAction.DisconnectPixiv) }) {
                         Text("Disconnect")
                     }
                 }
 
                 Text("Gelbooru", style = MaterialTheme.typography.titleSmall)
-                Text(gelbooruStatusLabel, style = MaterialTheme.typography.bodySmall)
+                Text(state.accounts.gelbooruStatusLabel, style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
-                    value = gelbooruUserId,
-                    onValueChange = onGelbooruUserIdChange,
+                    value = state.accounts.gelbooruUserIdInput,
+                    onValueChange = { onAction(SettingsAction.SetGelbooruUserId(it)) },
                     label = { Text("User ID") },
                     singleLine = true,
                 )
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
-                    value = gelbooruApiKey,
-                    onValueChange = onGelbooruApiKeyChange,
+                    value = state.accounts.gelbooruApiKeyInput,
+                    onValueChange = { onAction(SettingsAction.SetGelbooruApiKey(it)) },
                     label = { Text("Replacement API Key") },
                     supportingText = {
                         Text(
@@ -354,27 +260,27 @@ fun SettingsScreen(
                     visualTransformation = PasswordVisualTransformation(),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onSaveGelbooruCredentials) {
+                    Button(onClick = { onAction(SettingsAction.SaveGelbooruCredentials) }) {
                         Text("Save")
                     }
-                    TextButton(onClick = onClearGelbooruCredentials) {
+                    TextButton(onClick = { onAction(SettingsAction.ClearGelbooruCredentials) }) {
                         Text("Clear")
                     }
                 }
 
                 Text("rule34.xxx", style = MaterialTheme.typography.titleSmall)
-                Text(rule34XxxStatusLabel, style = MaterialTheme.typography.bodySmall)
+                Text(state.accounts.rule34XxxStatusLabel, style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
-                    value = rule34XxxUserId,
-                    onValueChange = onRule34XxxUserIdChange,
+                    value = state.accounts.rule34XxxUserIdInput,
+                    onValueChange = { onAction(SettingsAction.SetRule34XxxUserId(it)) },
                     label = { Text("User ID") },
                     singleLine = true,
                 )
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
-                    value = rule34XxxApiKey,
-                    onValueChange = onRule34XxxApiKeyChange,
+                    value = state.accounts.rule34XxxApiKeyInput,
+                    onValueChange = { onAction(SettingsAction.SetRule34XxxApiKey(it)) },
                     label = { Text("Replacement API Key") },
                     supportingText = {
                         Text(
@@ -386,10 +292,10 @@ fun SettingsScreen(
                     visualTransformation = PasswordVisualTransformation(),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onSaveRule34XxxCredentials) {
+                    Button(onClick = { onAction(SettingsAction.SaveRule34XxxCredentials) }) {
                         Text("Save")
                     }
-                    TextButton(onClick = onClearRule34XxxCredentials) {
+                    TextButton(onClick = { onAction(SettingsAction.ClearRule34XxxCredentials) }) {
                         Text("Clear")
                     }
                 }
@@ -397,17 +303,19 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "Updates",
-            expanded = sectionExpansion.updates,
+            expanded = state.sectionExpansion[SettingsSectionKey.UPDATES],
             onToggle = {
-                onSectionExpansionChanged(
-                    SettingsSectionKey.UPDATES,
-                    !sectionExpansion.updates,
+                onAction(
+                    SettingsAction.SetSectionExpanded(
+                        SettingsSectionKey.UPDATES,
+                        !state.sectionExpansion[SettingsSectionKey.UPDATES],
+                    )
                 )
             },
             contentSpacing = 8.dp,
         ) {
             Text(
-                if (changelogLoading) {
+                if (state.changelogLoading) {
                     "Loading release history..."
                 } else {
                     "View changelog history for available pre-releases."
@@ -415,8 +323,8 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
             )
             Button(
-                onClick = onOpenChangelog,
-                enabled = !changelogLoading,
+                onClick = { onAction(SettingsAction.OpenChangelog) },
+                enabled = !state.changelogLoading,
             ) {
                 Text("Open changelog")
             }
@@ -424,11 +332,13 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "Storage & Caching",
-            expanded = sectionExpansion.storageAndCaching,
+            expanded = state.sectionExpansion[SettingsSectionKey.STORAGE_AND_CACHING],
             onToggle = {
-                onSectionExpansionChanged(
-                    SettingsSectionKey.STORAGE_AND_CACHING,
-                    !sectionExpansion.storageAndCaching,
+                onAction(
+                    SettingsAction.SetSectionExpanded(
+                        SettingsSectionKey.STORAGE_AND_CACHING,
+                        !state.sectionExpansion[SettingsSectionKey.STORAGE_AND_CACHING],
+                    )
                 )
             },
             contentSpacing = 8.dp,
@@ -440,8 +350,8 @@ fun SettingsScreen(
                 ) {
                     Text("Cache full image on save")
                     Switch(
-                        checked = settings.cache.cacheFullImageOnSave,
-                        onCheckedChange = onSetCacheFullImageOnSave,
+                        checked = state.settings.cache.cacheFullImageOnSave,
+                        onCheckedChange = { onAction(SettingsAction.SetCacheFullImageOnSave(it)) },
                     )
                 }
                 Row(
@@ -454,36 +364,32 @@ fun SettingsScreen(
                         modifier = Modifier.weight(1f),
                     )
                     Switch(
-                        checked = settings.contentFilters.resolveUnknownAnimatedDurations,
-                        onCheckedChange = onSetResolveUnknownAnimatedDurations,
+                        checked = state.settings.contentFilters.resolveUnknownAnimatedDurations,
+                        onCheckedChange = {
+                            onAction(SettingsAction.SetResolveUnknownAnimatedDurations(it))
+                        },
                     )
                 }
-                Text("Thumbnails: ${cacheSnapshot.thumbnailCount}")
-                Text("Full images: ${cacheSnapshot.fullImageCount}")
-                Button(onClick = { showClearCacheOptions = !showClearCacheOptions }) {
-                    Text(if (showClearCacheOptions) "Clear cache ▲" else "Clear cache ▼")
+                Text("Thumbnails: ${state.cacheSnapshot.thumbnailCount}")
+                Text("Full images: ${state.cacheSnapshot.fullImageCount}")
+                Button(onClick = { onAction(SettingsAction.ToggleClearCacheOptions) }) {
+                    Text(if (state.showClearCacheOptions) "Clear cache ▲" else "Clear cache ▼")
                 }
-                if (showClearCacheOptions) {
+                if (state.showClearCacheOptions) {
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         TextButton(
                             modifier = Modifier.fillMaxWidth(),
-                            onClick = {
-                                onClearThumbnailCache()
-                                showClearCacheOptions = false
-                            },
+                            onClick = { onAction(SettingsAction.ClearThumbnailCache) },
                         ) {
                             Text("Clear thumbnail cache")
                         }
                         TextButton(
                             modifier = Modifier.fillMaxWidth(),
-                            onClick = {
-                                onClearFullImageCache()
-                                showClearCacheOptions = false
-                            },
-                            enabled = cacheSnapshot.fullImageCount > 0,
+                            onClick = { onAction(SettingsAction.ClearFullImageCache) },
+                            enabled = state.cacheSnapshot.fullImageCount > 0,
                         ) {
                             Text("Clear full image cache")
                         }
@@ -491,14 +397,16 @@ fun SettingsScreen(
                 }
         }
 
-        if (showDeveloperScenarios) {
+        if (state.showDeveloperScenarios) {
             SettingsSection(
                 title = "Developer scenarios",
-                expanded = sectionExpansion.developerScenarios,
+                expanded = state.sectionExpansion[SettingsSectionKey.DEVELOPER_SCENARIOS],
                 onToggle = {
-                    onSectionExpansionChanged(
-                        SettingsSectionKey.DEVELOPER_SCENARIOS,
-                        !sectionExpansion.developerScenarios,
+                    onAction(
+                        SettingsAction.SetSectionExpanded(
+                            SettingsSectionKey.DEVELOPER_SCENARIOS,
+                            !state.sectionExpansion[SettingsSectionKey.DEVELOPER_SCENARIOS],
+                        )
                     )
                 },
                 contentSpacing = 8.dp,
@@ -512,8 +420,8 @@ fun SettingsScreen(
                                 ScenarioPreset.SLOW_NETWORK -> "Slow"
                             }
                             FilterChip(
-                                selected = settings.scenarioPreset == scenario,
-                                onClick = { onSetScenarioPreset(scenario) },
+                                selected = state.settings.scenarioPreset == scenario,
+                                onClick = { onAction(SettingsAction.SetScenarioPreset(scenario)) },
                                 label = { Text(label) },
                             )
                         }
@@ -521,10 +429,12 @@ fun SettingsScreen(
             }
         }
 
-        val profileToDelete = profileDeleteTarget
+        val profileToDelete = state.profileDeleteTargetId?.let { targetId ->
+            state.settings.recommendationProfiles.firstOrNull { it.profileId == targetId }
+        }
         if (profileToDelete != null) {
             AlertDialog(
-                onDismissRequest = { profileDeleteTarget = null },
+                onDismissRequest = { onAction(SettingsAction.DismissRemoveProfile) },
                 title = { Text("Delete Profile?") },
                 text = {
                     Text(
@@ -532,15 +442,14 @@ fun SettingsScreen(
                     )
                 },
                 dismissButton = {
-                    TextButton(onClick = { profileDeleteTarget = null }) {
+                    TextButton(onClick = { onAction(SettingsAction.DismissRemoveProfile) }) {
                         Text("Cancel")
                     }
                 },
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            onRemoveProfile(profileToDelete.profileId)
-                            profileDeleteTarget = null
+                            onAction(SettingsAction.ConfirmRemoveProfile)
                         },
                     ) {
                         Text("Delete")

@@ -96,7 +96,6 @@ import com.theoriacodex.app.codex.codexBelongsToProfile
 import com.theoriacodex.app.codex.codexSearchSourceOptions as buildCodexSearchSourceOptions
 import com.theoriacodex.app.codex.codexSearchTagOptions as buildCodexSearchTagOptions
 import com.theoriacodex.app.codex.profileScopedCodexId
-import com.theoriacodex.app.codex.PROFILE_CODEX_ID_PREFIX
 import com.theoriacodex.app.codex.transfer.CodexExportResult
 import com.theoriacodex.app.codex.transfer.CodexImportResult
 import com.theoriacodex.app.appshell.AppShellAction
@@ -116,23 +115,16 @@ import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.source.ExternalCreatorDeepLink
 import com.theoriacodex.app.source.ExternalPostDeepLink
-import com.theoriacodex.app.settings.SettingsSectionExpansionState
-import com.theoriacodex.app.settings.SettingsSectionKey
+import com.theoriacodex.app.settings.SettingsAction
+import com.theoriacodex.app.settings.SettingsEffect
 import com.theoriacodex.app.settings.SettingsScreen
-import com.theoriacodex.app.settings.credentialAccountPresentation
-import com.theoriacodex.app.settings.credentialRecoveryPresentation
-import com.theoriacodex.app.settings.resolveReplaceOnlyCredential
-import com.theoriacodex.app.settings.toPersistenceMap
-import com.theoriacodex.app.settings.toSettingsSectionExpansionState
+import com.theoriacodex.app.settings.SettingsViewModel
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.creatorBrowsingSources
 import com.theoriacodex.app.source.parseExternalCreatorDeepLink
 import com.theoriacodex.app.source.parseExternalPostDeepLink
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
-import com.theoriacodex.app.sourceauth.CredentialStoreUnavailableException
-import com.theoriacodex.app.sourceauth.parseGelbooruCredentialInput
-import com.theoriacodex.app.sourceauth.parseRule34XxxCredentialInput
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
 import com.theoriacodex.app.ui.routes.ViewerRoute
 import com.theoriacodex.app.ui.routes.ViewerRouteDependencies
@@ -157,6 +149,7 @@ import com.theoriacodex.app.ui.routes.CreatorRoute
 import com.theoriacodex.app.ui.routes.CreatorRouteCallbacks
 import com.theoriacodex.app.ui.routes.CreatorRouteConfig
 import com.theoriacodex.app.ui.routes.CreatorRouteOwnerHandle
+import com.theoriacodex.app.ui.routes.CollectRouteEffects
 import com.theoriacodex.app.ui.routes.PendingRouteActions
 import com.theoriacodex.app.ui.routes.RouteOwnerHandleBinding
 import com.theoriacodex.app.update.ChangelogSection
@@ -174,15 +167,11 @@ import com.theoriacodex.app.viewer.prefetchViewerMedia
 import com.theoriacodex.app.viewer.requiresLazyMediaResolution
 import com.theoriacodex.app.viewer.requiresViewerPostResolution
 import com.theoriacodex.data.repository.AppSettings
-import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.CodexSortMode
-import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.storage.ApplicationDataState
-import com.theoriacodex.domain.adapter.SourceAdapterException
-import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -190,8 +179,6 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.sources.credentials.GelbooruCredentials
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.coroutineScope
@@ -201,7 +188,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.repeatOnLifecycle
@@ -320,6 +306,11 @@ internal fun TheoriaAppContent(
     }
     val credentialRecoveryState by sourceDependencies.accounts.recoveryState.collectAsStateWithLifecycle()
     val appShellState by appShellOwner.state.collectAsStateWithLifecycle()
+    val settingsOwner = viewModel<SettingsViewModel>(
+        key = "settings-route-owner",
+        factory = SettingsViewModel.factory(appContainer),
+    )
+    val settingsRouteState by settingsOwner.state.collectAsStateWithLifecycle()
 
     val settings by dataDependencies.settingsRepository
         .observeSettings()
@@ -358,23 +349,12 @@ internal fun TheoriaAppContent(
     val activeProfileLikes by dataDependencies.likesRepository
         .observeLikes(activeRecommendationProfile.profileId)
         .collectAsStateWithLifecycle(initialValue = emptyList())
-    val activeProfileForYouBlacklist = remember(settings.forYouBlacklistByProfile, activeRecommendationProfile.profileId) {
-        settings.forYouBlacklistByProfile[activeRecommendationProfile.profileId]
-            .orEmpty()
-            .sortedWith(
-                compareBy<ForYouBlacklistEntry> { entry -> entry.source.name }
-                    .thenBy { entry -> entry.tags.joinToString(separator = "+") }
-            )
-    }
     val activeProfileFavoriteTags = remember(settings.favoriteTagsByProfile, activeRecommendationProfile.profileId) {
         settings.favoriteTagsByProfile[activeRecommendationProfile.profileId]
             .orEmpty()
             .groupBy { entry -> entry.source }
             .mapValues { (_, entries) -> entries.map { entry -> entry.tag } }
     }
-    val cacheSnapshot by dataDependencies.cacheRepository.observeSnapshot().collectAsStateWithLifecycle(
-        initialValue = CacheSnapshot(thumbnailCount = 0, fullImageCount = 0),
-    )
     val codices by dataDependencies.codexRepository
         .observeCodices()
         .collectAsStateWithLifecycle(initialValue = emptyList())
@@ -456,75 +436,9 @@ internal fun TheoriaAppContent(
     var showSaveSheet by remember { mutableStateOf(false) }
     var pendingSavePost by remember { mutableStateOf<Post?>(null) }
     var homeTabRoute by rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
-    var settingsProfilesExpanded by rememberSaveable { mutableStateOf(true) }
-    var settingsUnifiedModeExpanded by rememberSaveable { mutableStateOf(true) }
-    var settingsForYouBlacklistExpanded by rememberSaveable { mutableStateOf(true) }
-    var settingsSourceAccountsExpanded by rememberSaveable { mutableStateOf(true) }
-    var settingsUpdatesExpanded by rememberSaveable { mutableStateOf(true) }
-    var settingsStorageExpanded by rememberSaveable { mutableStateOf(true) }
-    var settingsDeveloperScenariosExpanded by rememberSaveable { mutableStateOf(true) }
-    LaunchedEffect(dataDependencies.uiRestoreRepository) {
-        val restored = try {
-            dataDependencies.uiRestoreRepository
-                .getSettingsSectionExpansion()
-                .toSettingsSectionExpansionState()
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            SettingsSectionExpansionState()
-        }
-        settingsProfilesExpanded = restored.recommendationProfiles
-        settingsUnifiedModeExpanded = restored.unifiedMode
-        settingsForYouBlacklistExpanded = restored.forYouBlacklist
-        settingsSourceAccountsExpanded = restored.sourceAccounts
-        settingsUpdatesExpanded = restored.updates
-        settingsStorageExpanded = restored.storageAndCaching
-        settingsDeveloperScenariosExpanded = restored.developerScenarios
-    }
-    val settingsSectionExpansion = SettingsSectionExpansionState(
-        recommendationProfiles = settingsProfilesExpanded,
-        unifiedMode = settingsUnifiedModeExpanded,
-        forYouBlacklist = settingsForYouBlacklistExpanded,
-        sourceAccounts = settingsSourceAccountsExpanded,
-        updates = settingsUpdatesExpanded,
-        storageAndCaching = settingsStorageExpanded,
-        developerScenarios = settingsDeveloperScenariosExpanded,
-    )
-    fun updateSettingsSectionExpansion(section: SettingsSectionKey, expanded: Boolean) {
-        val updated = when (section) {
-            SettingsSectionKey.RECOMMENDATION_PROFILES -> {
-                settingsSectionExpansion.copy(recommendationProfiles = expanded)
-            }
-            SettingsSectionKey.UNIFIED_MODE -> {
-                settingsSectionExpansion.copy(unifiedMode = expanded)
-            }
-            SettingsSectionKey.FOR_YOU_BLACKLIST -> {
-                settingsSectionExpansion.copy(forYouBlacklist = expanded)
-            }
-            SettingsSectionKey.SOURCE_ACCOUNTS -> {
-                settingsSectionExpansion.copy(sourceAccounts = expanded)
-            }
-            SettingsSectionKey.UPDATES -> {
-                settingsSectionExpansion.copy(updates = expanded)
-            }
-            SettingsSectionKey.STORAGE_AND_CACHING -> {
-                settingsSectionExpansion.copy(storageAndCaching = expanded)
-            }
-            SettingsSectionKey.DEVELOPER_SCENARIOS -> {
-                settingsSectionExpansion.copy(developerScenarios = expanded)
-            }
-        }
-        when (section) {
-            SettingsSectionKey.RECOMMENDATION_PROFILES -> settingsProfilesExpanded = expanded
-            SettingsSectionKey.UNIFIED_MODE -> settingsUnifiedModeExpanded = expanded
-            SettingsSectionKey.FOR_YOU_BLACKLIST -> settingsForYouBlacklistExpanded = expanded
-            SettingsSectionKey.SOURCE_ACCOUNTS -> settingsSourceAccountsExpanded = expanded
-            SettingsSectionKey.UPDATES -> settingsUpdatesExpanded = expanded
-            SettingsSectionKey.STORAGE_AND_CACHING -> settingsStorageExpanded = expanded
-            SettingsSectionKey.DEVELOPER_SCENARIOS -> settingsDeveloperScenariosExpanded = expanded
-        }
-        scope.launch {
-            dataDependencies.uiRestoreRepository.setSettingsSectionExpansion(updated.toPersistenceMap())
+    LaunchedEffect(homeTabRoute) {
+        if (homeTabRoute == TopLevelDestination.Settings.route) {
+            settingsOwner.onAction(SettingsAction.SettingsEntered)
         }
     }
     var pendingTopLevelRoute by remember { mutableStateOf<String?>(null) }
@@ -539,7 +453,6 @@ internal fun TheoriaAppContent(
     var postInstallReleaseHistory by remember { mutableStateOf<List<ReleaseChangelogEntry>>(emptyList()) }
     var latestInstalledChangelog by remember { mutableStateOf<PendingPostInstallChangelog?>(null) }
     var releaseHistoryEntries by remember { mutableStateOf<List<ReleaseChangelogEntry>?>(null) }
-    var releaseHistoryLoading by remember { mutableStateOf(false) }
     val startupActionLocked = startupWorkflowState.actionLocked
     val pendingInstallRemote = startupWorkflowState.pendingInstall
     val awaitingUnknownSources = startupWorkflowState.awaitingUnknownSources
@@ -596,251 +509,6 @@ internal fun TheoriaAppContent(
                     tag = tag,
                 )
             }
-        }
-    }
-
-    var pixivStatusLabel by remember { mutableStateOf("Not connected") }
-    var pixivConnected by remember { mutableStateOf(false) }
-    var gelbooruStatusLabel by remember { mutableStateOf("Not configured") }
-    var gelbooruUserIdInput by rememberSaveable { mutableStateOf("") }
-    var gelbooruApiKeyInput by remember { mutableStateOf("") }
-    var rule34XxxStatusLabel by remember { mutableStateOf("Not configured") }
-    var rule34XxxUserIdInput by rememberSaveable { mutableStateOf("") }
-    var rule34XxxApiKeyInput by remember { mutableStateOf("") }
-    var showCredentialRecoveryDialog by rememberSaveable { mutableStateOf(false) }
-
-    fun credentialRecoveryMessage(state: CredentialStoreRecoveryState): String = when (state) {
-        CredentialStoreRecoveryState.Loading -> "Loading source credentials…"
-        CredentialStoreRecoveryState.Migrating -> "Finishing secure credential upgrade…"
-        CredentialStoreRecoveryState.Ready -> "Source credentials are ready"
-        CredentialStoreRecoveryState.TemporarilyUnavailable ->
-            "Source credentials are temporarily unavailable — try again"
-        CredentialStoreRecoveryState.ReconnectRequired -> CREDENTIAL_RECONNECT_MESSAGE
-        is CredentialStoreRecoveryState.UnsupportedVersion ->
-            "Stored credentials require a newer app version"
-    }
-
-    fun applyCredentialRecoveryStatus(state: CredentialStoreRecoveryState) {
-        if (state == CredentialStoreRecoveryState.Ready) return
-        val message = credentialRecoveryMessage(state)
-        pixivConnected = false
-        pixivStatusLabel = message
-        val clearUserIds =
-            state == CredentialStoreRecoveryState.ReconnectRequired ||
-            state is CredentialStoreRecoveryState.UnsupportedVersion
-        val gelbooruPresentation = credentialRecoveryPresentation(
-            currentUserIdInput = gelbooruUserIdInput,
-            statusLabel = message,
-            clearUserId = clearUserIds,
-        )
-        gelbooruStatusLabel = gelbooruPresentation.statusLabel
-        gelbooruUserIdInput = gelbooruPresentation.userIdInput
-        gelbooruApiKeyInput = gelbooruPresentation.apiKeyInput
-        val rule34XxxPresentation = credentialRecoveryPresentation(
-            currentUserIdInput = rule34XxxUserIdInput,
-            statusLabel = message,
-            clearUserId = clearUserIds,
-        )
-        rule34XxxStatusLabel = rule34XxxPresentation.statusLabel
-        rule34XxxUserIdInput = rule34XxxPresentation.userIdInput
-        rule34XxxApiKeyInput = rule34XxxPresentation.apiKeyInput
-    }
-
-    fun blockCredentialMutationIfNeeded(): Boolean {
-        val state = sourceDependencies.accounts.recoveryState.value
-        if (state == CredentialStoreRecoveryState.Ready) return false
-        applyCredentialRecoveryStatus(state)
-        if (state == CredentialStoreRecoveryState.ReconnectRequired) {
-            showCredentialRecoveryDialog = true
-        } else {
-            Toast.makeText(appContext, credentialRecoveryMessage(state), Toast.LENGTH_SHORT).show()
-        }
-        return true
-    }
-
-    suspend fun refreshSourceAccountState() {
-        val initialState = sourceDependencies.accounts.recoveryState.value
-        if (
-            initialState == CredentialStoreRecoveryState.ReconnectRequired ||
-            initialState is CredentialStoreRecoveryState.UnsupportedVersion
-        ) {
-            applyCredentialRecoveryStatus(initialState)
-            return
-        }
-        val pixivTokens = sourceDependencies.accounts.getPixivTokens()
-        val loadedState = sourceDependencies.accounts.recoveryState.value
-        if (loadedState != CredentialStoreRecoveryState.Ready) {
-            applyCredentialRecoveryStatus(loadedState)
-            return
-        }
-        pixivStatusLabel = when {
-            pixivTokens == null -> {
-                pixivConnected = false
-                "Not connected"
-            }
-            pixivTokens.expiresAtEpochMs <= System.currentTimeMillis() -> {
-                pixivStatusLabel = "Connected (refreshing token...)"
-                val refreshResult = withTimeoutOrNull(PIXIV_TOKEN_REFRESH_TIMEOUT_MS) {
-                    runCatchingPreservingCancellation {
-                        sourceDependencies.pixivAuthApi.refresh(pixivTokens.refreshToken)
-                    }
-                }
-                when {
-                    refreshResult == null -> {
-                        pixivConnected = false
-                        "Connected (refresh timed out, retry on next request)"
-                    }
-                    refreshResult.isSuccess -> {
-                        val saved = runCatchingPreservingCancellation {
-                            sourceDependencies.accounts.savePixivTokens(
-                                requireNotNull(refreshResult.getOrNull()),
-                            )
-                        }
-                        if (saved.isSuccess) {
-                            pixivConnected = true
-                            "Connected"
-                        } else {
-                            val state = sourceDependencies.accounts.recoveryState.value
-                            applyCredentialRecoveryStatus(state)
-                            credentialRecoveryMessage(state)
-                        }
-                    }
-                    else -> {
-                        val failure = refreshResult.exceptionOrNull()
-                        if (
-                            failure is SourceAdapterException &&
-                            (failure.reason == SourceFailureReason.AUTH_EXPIRED ||
-                                failure.reason == SourceFailureReason.AUTH_REQUIRED)
-                        ) {
-                            val cleared = runCatchingPreservingCancellation {
-                                sourceDependencies.accounts.clearPixivTokens()
-                            }
-                            if (cleared.isSuccess) {
-                                pixivConnected = false
-                                "Not connected (session expired)"
-                            } else {
-                                val state = sourceDependencies.accounts.recoveryState.value
-                                applyCredentialRecoveryStatus(state)
-                                credentialRecoveryMessage(state)
-                            }
-                        } else {
-                            pixivConnected = false
-                            "Connected (refresh failed, retry on next request)"
-                        }
-                    }
-                }
-            }
-            else -> {
-                pixivConnected = true
-                "Connected"
-            }
-        }
-
-        val postPixivState = sourceDependencies.accounts.recoveryState.value
-        if (postPixivState != CredentialStoreRecoveryState.Ready) {
-            applyCredentialRecoveryStatus(postPixivState)
-            return
-        }
-
-        val gelbooruCredentials = sourceDependencies.accounts.getGelbooruCredentials()
-        val postGelbooruState = sourceDependencies.accounts.recoveryState.value
-        if (postGelbooruState != CredentialStoreRecoveryState.Ready) {
-            applyCredentialRecoveryStatus(postGelbooruState)
-            return
-        }
-        val gelbooruPresentation = credentialAccountPresentation(
-            credential = gelbooruCredentials,
-            userId = GelbooruCredentials::userId,
-        )
-        gelbooruStatusLabel = gelbooruPresentation.statusLabel
-        gelbooruUserIdInput = gelbooruPresentation.userIdInput
-        gelbooruApiKeyInput = gelbooruPresentation.apiKeyInput
-
-        val rule34XxxCredentials = sourceDependencies.accounts.getRule34XxxCredentials()
-        val postRule34State = sourceDependencies.accounts.recoveryState.value
-        if (postRule34State != CredentialStoreRecoveryState.Ready) {
-            applyCredentialRecoveryStatus(postRule34State)
-            return
-        }
-        val rule34XxxPresentation = credentialAccountPresentation(
-            credential = rule34XxxCredentials,
-            userId = Rule34XxxCredentials::userId,
-        )
-        rule34XxxStatusLabel = rule34XxxPresentation.statusLabel
-        rule34XxxUserIdInput = rule34XxxPresentation.userIdInput
-        rule34XxxApiKeyInput = rule34XxxPresentation.apiKeyInput
-    }
-
-    suspend fun runCredentialMutation(mutation: suspend () -> Unit): Boolean {
-        if (sourceDependencies.accounts.recoveryState.value != CredentialStoreRecoveryState.Ready) {
-            blockCredentialMutationIfNeeded()
-            return false
-        }
-        val result = runCatchingPreservingCancellation { mutation() }
-        val failure = result.exceptionOrNull()
-        if (failure != null && failure !is CredentialStoreUnavailableException) {
-            throw failure
-        }
-        refreshSourceAccountState()
-        if (failure != null) {
-            if (!blockCredentialMutationIfNeeded()) {
-                Toast.makeText(
-                    appContext,
-                    "Could not update source credentials — try again",
-                    Toast.LENGTH_SHORT,
-                ).show()
-            }
-        }
-        return result.isSuccess
-    }
-
-    suspend fun <Credential> saveReplaceOnlyCredential(
-        userIdInput: String,
-        replacementApiKeyInput: String,
-        currentCredential: suspend () -> Credential?,
-        currentApiKey: (Credential) -> String,
-        createCredential: (String, String) -> Credential,
-        saveCredential: suspend (Credential) -> Unit,
-        onMissingInput: () -> Unit,
-        clearReplacementInput: () -> Unit,
-    ) {
-        var missingInput = false
-        val saved = runCredentialMutation {
-            val configuredApiKey = if (replacementApiKeyInput.isBlank()) {
-                currentCredential()?.let(currentApiKey)
-            } else {
-                null
-            }
-            val resolved = resolveReplaceOnlyCredential(
-                userIdInput = userIdInput,
-                replacementApiKeyInput = replacementApiKeyInput,
-                configuredApiKey = configuredApiKey,
-            )
-            if (resolved == null) {
-                missingInput = true
-            } else {
-                saveCredential(createCredential(resolved.userId, resolved.apiKey))
-            }
-        }
-        if (missingInput) {
-            onMissingInput()
-        } else if (saved) {
-            clearReplacementInput()
-        }
-    }
-
-    LaunchedEffect(homeTabRoute) {
-        if (homeTabRoute == TopLevelDestination.Settings.route) {
-            gelbooruApiKeyInput = ""
-            rule34XxxApiKeyInput = ""
-        }
-    }
-
-    LaunchedEffect(credentialRecoveryState) {
-        if (credentialRecoveryState != CredentialStoreRecoveryState.Ready) {
-            showCredentialRecoveryDialog =
-                credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired
-            refreshSourceAccountState()
         }
     }
 
@@ -991,22 +659,6 @@ internal fun TheoriaAppContent(
         )
     }
 
-    suspend fun clearProfileLikesAndSyncCodex(profileId: String) {
-        workflowDependencies.likesCodexSync.clearProfile(profileId)
-    }
-
-    suspend fun removeProfileLikesCodex(profileId: String) {
-        workflowDependencies.likesCodexSync.removeProfileCodex(profileId)
-    }
-
-    suspend fun removeProfileScopedCodices(profileId: String) {
-        val prefix = "${PROFILE_CODEX_ID_PREFIX}_${profileId}_"
-        codices
-            .filter { codex -> codex.codexId.startsWith(prefix) }
-            .forEach { codex ->
-                dataDependencies.codexRepository.deleteCodex(codex.codexId)
-            }
-    }
 
     suspend fun searchFromCodex(source: SourceKey, includeTags: List<String>) {
         if (source !in sourceDependencies.registry.availableSources()) {
@@ -1112,7 +764,7 @@ internal fun TheoriaAppContent(
             return
         }
 
-        refreshSourceAccountState()
+        settingsOwner.onAction(SettingsAction.RefreshAccounts)
         when (
             val result = workflowDependencies.codexTransfer.import(
                 raw = raw,
@@ -1173,7 +825,7 @@ internal fun TheoriaAppContent(
         if (navReady) return
         sourceDependencies.accounts.refreshAvailability()
         ensureLikesCodexId(activeRecommendationProfile)
-        refreshSourceAccountState()
+        settingsOwner.onAction(SettingsAction.RefreshAccounts)
         val legacyLastTabRoute = dataDependencies.settingsRepository
             .observeSettings()
             .first()
@@ -1327,7 +979,6 @@ internal fun TheoriaAppContent(
     LaunchedEffect(credentialRecoveryState, pendingPixivCallback) {
         val pending = pendingPixivCallback ?: return@LaunchedEffect
         if (credentialRecoveryState != CredentialStoreRecoveryState.Ready) {
-            applyCredentialRecoveryStatus(credentialRecoveryState)
             return@LaunchedEffect
         }
 
@@ -1339,16 +990,13 @@ internal fun TheoriaAppContent(
         // cancellation after that boundary cannot hide success from this collector.
         appShellOwner.onAction(AppShellAction.ConsumeIncomingUri(pending))
         if (result.isSuccess) {
-            pixivStatusLabel = "Connected"
-            refreshSourceAccountState()
+            settingsOwner.onAction(SettingsAction.PixivCallbackCompleted())
         } else {
-            val state = sourceDependencies.accounts.recoveryState.value
-            if (state != CredentialStoreRecoveryState.Ready) {
-                applyCredentialRecoveryStatus(state)
-            } else {
-                pixivStatusLabel =
-                    "Connection failed: ${result.exceptionOrNull()?.message ?: "Unknown error"}"
-            }
+            settingsOwner.onAction(
+                SettingsAction.PixivCallbackCompleted(
+                    result.exceptionOrNull()?.message ?: "Unknown error",
+                )
+            )
         }
     }
 
@@ -1555,6 +1203,45 @@ internal fun TheoriaAppContent(
     }
     val bottomBarHeight = bottomBarHeightDp.dp
     val bottomBarIconSize = bottomBarIconSizeDp.dp
+
+    CollectRouteEffects(settingsOwner.effects) { effect ->
+        when (effect) {
+            is SettingsEffect.OpenExternalUri -> openInBrowser(appContext, effect.uri)
+            is SettingsEffect.ShowMessage -> Toast.makeText(
+                appContext,
+                effect.message,
+                if (effect.long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT,
+            ).show()
+            SettingsEffect.LoadChangelog -> {
+                try {
+                    val remoteHistory = updateDependencies.feedClient.mainPrereleaseHistory(limit = 50)
+                        .getOrElse { emptyList() }
+                    val merged = mergeReleaseHistory(
+                        remoteHistory = remoteHistory,
+                        localCurrent = latestInstalledChangelog,
+                    )
+                    if (merged.isEmpty()) {
+                        Toast.makeText(appContext, "No changelog available yet", Toast.LENGTH_SHORT).show()
+                    } else {
+                        releaseHistoryEntries = merged
+                    }
+                } finally {
+                    settingsOwner.onAction(SettingsAction.ChangelogRequestFinished)
+                }
+            }
+            SettingsEffect.ThumbnailCacheCleared -> thumbnailCacheGeneration += 1
+            SettingsEffect.NavigateToSettings -> {
+                pendingTopLevelRoute = TopLevelDestination.Settings.route
+                homeTabRoute = TopLevelDestination.Settings.route
+                if (navReady && currentRoute != AppRoute.Home) {
+                    val returnedHome = navController.popBackStack(AppRoute.Home, inclusive = false)
+                    if (!returnedHome) {
+                        navController.navigate(AppRoute.Home) { launchSingleTop = true }
+                    }
+                }
+            }
+        }
+    }
 
     LaunchedEffect(navReady, currentRoute) {
         if (!navReady || currentRoute != AppRoute.Home) return@LaunchedEffect
@@ -2094,204 +1781,8 @@ internal fun TheoriaAppContent(
 
                                 TopLevelDestination.Settings -> {
                                     SettingsScreen(
-                                        settings = settings,
-                                        recommendationProfiles = settings.recommendationProfiles,
-                                        activeProfileId = activeRecommendationProfile.profileId,
-                                        activeProfileName = activeRecommendationProfile.name,
-                                        likesCount = activeProfileLikes.size,
-                                        forYouBlacklistEntries = activeProfileForYouBlacklist,
-                                        availableSources = featureDependencies.search.availableSources,
-                                        cacheSnapshot = cacheSnapshot,
-                                        showDeveloperScenarios = false,
-                                        sectionExpansion = settingsSectionExpansion,
-                                        onSectionExpansionChanged = ::updateSettingsSectionExpansion,
-                                        pixivStatusLabel = pixivStatusLabel,
-                                        pixivConnectEnabled = !pixivConnected &&
-                                            credentialRecoveryState == CredentialStoreRecoveryState.Ready &&
-                                            !pixivStatusLabel.startsWith("Awaiting authorization callback"),
-                                        onPixivConnect = {
-                                            if (!blockCredentialMutationIfNeeded()) {
-                                                scope.launch {
-                                                    val authorization = runCatchingPreservingCancellation {
-                                                        sourceDependencies.pixivAuthController
-                                                            .startAuthorizationUri()
-                                                    }
-                                                    authorization.onSuccess { authUri ->
-                                                        pixivStatusLabel = "Awaiting authorization callback..."
-                                                        pixivConnected = false
-                                                        openInBrowser(appContext, authUri.toString())
-                                                    }.onFailure {
-                                                        pixivStatusLabel =
-                                                            "Could not start Pixiv authorization — try again"
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        onPixivDisconnect = {
-                                            if (!blockCredentialMutationIfNeeded()) {
-                                                scope.launch {
-                                                    runCredentialMutation {
-                                                        sourceDependencies.accounts.clearPixivTokens()
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        gelbooruUserId = gelbooruUserIdInput,
-                                        gelbooruApiKey = gelbooruApiKeyInput,
-                                        gelbooruStatusLabel = gelbooruStatusLabel,
-                                        onGelbooruUserIdChange = { gelbooruUserIdInput = it.trim() },
-                                        onGelbooruApiKeyChange = { input ->
-                                            val parsed = parseGelbooruCredentialInput(input)
-                                            if (parsed != null) {
-                                                gelbooruApiKeyInput = parsed.apiKey
-                                                gelbooruUserIdInput = parsed.userId
-                                            } else {
-                                                gelbooruApiKeyInput = input.trim()
-                                            }
-                                        },
-                                        onSaveGelbooruCredentials = {
-                                            if (!blockCredentialMutationIfNeeded()) scope.launch {
-                                                saveReplaceOnlyCredential(
-                                                    userIdInput = gelbooruUserIdInput,
-                                                    replacementApiKeyInput = gelbooruApiKeyInput,
-                                                    currentCredential = sourceDependencies.accounts::getGelbooruCredentials,
-                                                    currentApiKey = GelbooruCredentials::apiKey,
-                                                    createCredential = ::GelbooruCredentials,
-                                                    saveCredential = sourceDependencies.accounts::saveGelbooruCredentials,
-                                                    onMissingInput = {
-                                                        gelbooruStatusLabel = "Missing user ID or API key"
-                                                    },
-                                                    clearReplacementInput = { gelbooruApiKeyInput = "" },
-                                                )
-                                            }
-                                        },
-                                        onClearGelbooruCredentials = {
-                                            if (!blockCredentialMutationIfNeeded()) {
-                                                scope.launch {
-                                                    runCredentialMutation {
-                                                        sourceDependencies.accounts.clearGelbooruCredentials()
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        rule34XxxUserId = rule34XxxUserIdInput,
-                                        rule34XxxApiKey = rule34XxxApiKeyInput,
-                                        rule34XxxStatusLabel = rule34XxxStatusLabel,
-                                        onRule34XxxUserIdChange = { rule34XxxUserIdInput = it.trim() },
-                                        onRule34XxxApiKeyChange = { input ->
-                                            val parsed = parseRule34XxxCredentialInput(input)
-                                            if (parsed != null) {
-                                                rule34XxxApiKeyInput = parsed.apiKey
-                                                rule34XxxUserIdInput = parsed.userId
-                                            } else {
-                                                rule34XxxApiKeyInput = input.trim()
-                                            }
-                                        },
-                                        onSaveRule34XxxCredentials = {
-                                            if (!blockCredentialMutationIfNeeded()) scope.launch {
-                                                saveReplaceOnlyCredential(
-                                                    userIdInput = rule34XxxUserIdInput,
-                                                    replacementApiKeyInput = rule34XxxApiKeyInput,
-                                                    currentCredential = sourceDependencies.accounts::getRule34XxxCredentials,
-                                                    currentApiKey = Rule34XxxCredentials::apiKey,
-                                                    createCredential = ::Rule34XxxCredentials,
-                                                    saveCredential = sourceDependencies.accounts::saveRule34XxxCredentials,
-                                                    onMissingInput = {
-                                                        rule34XxxStatusLabel = "Missing user ID or API key"
-                                                    },
-                                                    clearReplacementInput = { rule34XxxApiKeyInput = "" },
-                                                )
-                                            }
-                                        },
-                                        onClearRule34XxxCredentials = {
-                                            if (!blockCredentialMutationIfNeeded()) {
-                                                scope.launch {
-                                                    runCredentialMutation {
-                                                        sourceDependencies.accounts.clearRule34XxxCredentials()
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        onSetEnabledSources = { enabled ->
-                                            scope.launch {
-                                                dataDependencies.settingsRepository.setEnabledSources(
-                                                    enabled.intersect(featureDependencies.search.availableSources.toSet())
-                                                )
-                                            }
-                                        },
-                                        onSetSourceWeights = { weights ->
-                                            scope.launch { dataDependencies.settingsRepository.setSourceWeights(weights) }
-                                        },
-                                        onSetActiveProfile = { profileId ->
-                                            scope.launch { dataDependencies.settingsRepository.setActiveProfile(profileId) }
-                                        },
-                                        onAddProfile = { name ->
-                                            scope.launch { dataDependencies.settingsRepository.addRecommendationProfile(name) }
-                                        },
-                                        onRemoveProfile = { profileId ->
-                                            scope.launch {
-                                                val canRemove = settings.recommendationProfiles.size > 1 &&
-                                                    settings.recommendationProfiles.any { profile -> profile.profileId == profileId }
-                                                if (!canRemove) return@launch
-                                                clearProfileLikesAndSyncCodex(profileId)
-                                                removeProfileLikesCodex(profileId)
-                                                removeProfileScopedCodices(profileId)
-                                                dataDependencies.settingsRepository.removeRecommendationProfile(profileId)
-                                            }
-                                        },
-                                        onClearLikesForActiveProfile = {
-                                            scope.launch { clearProfileLikesAndSyncCodex(activeRecommendationProfile.profileId) }
-                                        },
-                                        onRemoveForYouBlacklistEntry = { source, tags ->
-                                            scope.launch {
-                                                dataDependencies.settingsRepository.removeForYouBlacklistEntry(
-                                                    profileId = activeRecommendationProfile.profileId,
-                                                    source = source,
-                                                    tags = tags,
-                                                )
-                                            }
-                                        },
-                                        onSetCacheFullImageOnSave = { enabled ->
-                                            scope.launch { dataDependencies.settingsRepository.setCacheFullImageOnSave(enabled) }
-                                        },
-                                        onSetResolveUnknownAnimatedDurations = { enabled ->
-                                            scope.launch { dataDependencies.settingsRepository.setResolveUnknownAnimatedDurations(enabled) }
-                                        },
-                                        onSetScenarioPreset = { preset ->
-                                            scope.launch { dataDependencies.settingsRepository.setScenarioPreset(preset) }
-                                        },
-                                        onClearThumbnailCache = {
-                                            scope.launch {
-                                                dataDependencies.cacheRepository.clearThumbnailCache()
-                                                thumbnailCacheGeneration += 1
-                                            }
-                                        },
-                                        onClearFullImageCache = {
-                                            scope.launch { dataDependencies.cacheRepository.clearFullImageCache() }
-                                        },
-                                        changelogLoading = releaseHistoryLoading,
-                                        onOpenChangelog = {
-                                            if (releaseHistoryLoading) return@SettingsScreen
-                                            scope.launch {
-                                                releaseHistoryLoading = true
-                                                val remoteHistory = updateDependencies.feedClient.mainPrereleaseHistory(limit = 50)
-                                                    .getOrElse { emptyList() }
-                                                val merged = mergeReleaseHistory(
-                                                    remoteHistory = remoteHistory,
-                                                    localCurrent = latestInstalledChangelog,
-                                                )
-                                                if (merged.isEmpty()) {
-                                                    Toast.makeText(
-                                                        appContext,
-                                                        "No changelog available yet",
-                                                        Toast.LENGTH_SHORT,
-                                                    ).show()
-                                                } else {
-                                                    releaseHistoryEntries = merged
-                                                }
-                                                releaseHistoryLoading = false
-                                            }
-                                        },
+                                        state = settingsRouteState,
+                                        onAction = settingsOwner::onAction,
                                     )
                                 }
                             }
@@ -2652,53 +2143,22 @@ internal fun TheoriaAppContent(
         }
 
         if (
-            showCredentialRecoveryDialog &&
+            settingsRouteState.accounts.showRecoveryDialog &&
             credentialRecoveryState == CredentialStoreRecoveryState.ReconnectRequired
         ) {
             AlertDialog(
-                onDismissRequest = { showCredentialRecoveryDialog = false },
+                onDismissRequest = { settingsOwner.onAction(SettingsAction.DismissCredentialRecovery) },
                 confirmButton = {
                     TextButton(
-                        onClick = {
-                            showCredentialRecoveryDialog = false
-                            scope.launch {
-                                val reset = sourceDependencies.accounts.resetAfterReconnectRequired()
-                                refreshSourceAccountState()
-                                if (reset) {
-                                    pendingTopLevelRoute = TopLevelDestination.Settings.route
-                                    homeTabRoute = TopLevelDestination.Settings.route
-                                    if (navReady && currentRoute != AppRoute.Home) {
-                                        val returnedHome = navController.popBackStack(
-                                            route = AppRoute.Home,
-                                            inclusive = false,
-                                        )
-                                        if (!returnedHome) {
-                                            navController.navigate(AppRoute.Home) {
-                                                launchSingleTop = true
-                                            }
-                                        }
-                                    }
-                                    Toast.makeText(
-                                        appContext,
-                                        "Reconnect each source account in Settings",
-                                        Toast.LENGTH_LONG,
-                                    ).show()
-                                } else {
-                                    showCredentialRecoveryDialog = true
-                                    Toast.makeText(
-                                        appContext,
-                                        "Could not reset source credentials",
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
-                                }
-                            }
-                        },
+                        onClick = { settingsOwner.onAction(SettingsAction.ResetCredentialStore) },
                     ) {
                         Text("Reconnect")
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showCredentialRecoveryDialog = false }) {
+                    TextButton(
+                        onClick = { settingsOwner.onAction(SettingsAction.DismissCredentialRecovery) },
+                    ) {
                         Text("Not now")
                     }
                 },
@@ -3104,8 +2564,6 @@ private fun parseGelbooruProfileOwner(html: String): String? {
     return owner?.trim()?.takeIf(String::isNotBlank)
 }
 
-private const val PIXIV_TOKEN_REFRESH_TIMEOUT_MS = 6_000L
-private const val CREDENTIAL_RECONNECT_MESSAGE = "Source credentials need to be reconnected"
 private const val BOTTOM_BAR_HEIGHT_RATIO = 0.085f
 private const val BOTTOM_BAR_ICON_RATIO = 0.38f
 private const val MIN_BOTTOM_BAR_HEIGHT_DP = 68

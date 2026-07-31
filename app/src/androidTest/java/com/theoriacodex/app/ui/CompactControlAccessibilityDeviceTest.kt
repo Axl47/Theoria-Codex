@@ -23,10 +23,16 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.recommend.ForYouSourceSelector
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.settings.SettingsSection
+import com.theoriacodex.app.settings.SettingsAction
+import com.theoriacodex.app.settings.SettingsScreen
+import com.theoriacodex.app.settings.SettingsSectionExpansionState
+import com.theoriacodex.app.settings.SettingsSectionKey
+import com.theoriacodex.app.settings.SettingsUiState
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -136,6 +142,37 @@ class CompactControlAccessibilityDeviceTest {
         collapsed.assertStateDescription("Collapsed")
         assertTrue(collapsed.fetchSemanticsNode().config.contains(SemanticsActions.Expand))
         assertFalse(collapsed.fetchSemanticsNode().config.contains(SemanticsActions.Collapse))
+    }
+
+    @Test
+    fun settingsScreenRoutesKeyedExpansionThroughItsOwnerContract() {
+        var received: SettingsAction? = null
+        val expansion = SettingsSectionExpansionState(
+            expandedBySection = SettingsSectionKey.entries.associateWith { section ->
+                section == SettingsSectionKey.UPDATES
+            },
+        )
+        composeRule.setContent {
+            MaterialTheme {
+                SettingsScreen(
+                    state = SettingsUiState(sectionExpansion = expansion),
+                    onAction = { received = it },
+                )
+            }
+        }
+
+        composeRule.onNode(hasText("Updates") and hasClickAction())
+            .performScrollTo()
+            .performClick()
+
+        composeRule.runOnIdle {
+            assertTrue(
+                received == SettingsAction.SetSectionExpanded(
+                    SettingsSectionKey.UPDATES,
+                    expanded = false,
+                ),
+            )
+        }
     }
 
     private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertRole(expected: Role) =
