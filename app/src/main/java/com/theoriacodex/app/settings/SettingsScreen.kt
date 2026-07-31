@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -32,10 +33,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.ui.components.expandableControlSemantics
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
@@ -543,7 +546,7 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SettingsSection(
+internal fun SettingsSection(
     title: String,
     expanded: Boolean,
     onToggle: () -> Unit,
@@ -555,7 +558,16 @@ private fun SettingsSection(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(onClick = onToggle)
+                    .sizeIn(minHeight = 48.dp)
+                    .expandableControlSemantics(
+                        expanded = expanded,
+                        description = if (expanded) "Expanded" else "Collapsed",
+                        onExpandedChange = { onToggle() },
+                    )
+                    .clickable(
+                        role = Role.Button,
+                        onClick = onToggle,
+                    )
                     .padding(12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
@@ -567,7 +579,7 @@ private fun SettingsSection(
                 )
                 Icon(
                     imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = if (expanded) "Collapse $title" else "Expand $title",
+                    contentDescription = null,
                 )
             }
             if (expanded) {

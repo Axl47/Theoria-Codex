@@ -128,7 +128,7 @@
       <span class="pill">Plan: .docs/exec/code-quality-ux-performance-reliability-remediation.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next action</strong>Record the F01 commit SHA, then implement F02 without changing the later finding order.</div>
+      <div class="card"><strong>Next action</strong>Record the F02 commit SHA, then implement F03 without changing the later finding order.</div>
       <div class="card"><strong>Primary constraint</strong>Do not replace concurrent feed autoplay with a single-active-card policy. Every visible video card must keep playing.</div>
       <div class="card"><strong>Commit contract</strong>Findings execute in ID order. Each finding gets focused tests and one user-facing Conventional Commit before the next begins.</div>
       <div class="card"><strong>Final acceptance</strong>Deterministic quality gate, both Android instrumentation owners, measured performance journeys, release-acceptance build, and clean repository state.</div>
@@ -205,8 +205,8 @@
       <table>
         <thead><tr><th>ID</th><th>Status</th><th>Finding and required outcome</th><th>Expected commit</th></tr></thead>
         <tbody>
-          <tr><td class="finding">F01</td><td class="done">Verified</td><td>Device CI runs and retains reports for both instrumentation owners, and the release-acceptance artifact accurately identifies API 35. Focused workflow contract tests, workflow lint, and Room instrumentation compilation pass.</td><td><code>ci(android): execute Room schema validation on devices</code> — SHA recorded immediately after commit creation.</td></tr>
-          <tr><td class="finding">F02</td><td class="pending">Pending</td><td>Give compact like/source/settings controls at least 48dp interactive bounds and explicit role, selected/expanded, and state descriptions without visually bloating the UI.</td><td><code>fix(ui): improve compact control accessibility</code></td></tr>
+          <tr><td class="finding">F01</td><td class="done">Verified</td><td>Device CI runs and retains reports for both instrumentation owners, and the release-acceptance artifact accurately identifies API 35. Focused workflow contract tests, workflow lint, and Room instrumentation compilation pass.</td><td><code>61dd92c</code> — <code>ci(android): execute Room schema validation on devices</code></td></tr>
+          <tr><td class="finding">F02</td><td class="done">Verified</td><td>Search like, For You source, and Settings expansion controls now expose 48dp clickable geometry with checkbox, dropdown, and button roles plus selected/expanded state descriptions. The 30dp like surface and 18dp source icon remain visually compact.</td><td><code>fix(ui): improve compact control accessibility</code> — SHA recorded immediately after commit creation.</td></tr>
           <tr><td class="finding">F03</td><td class="pending">Pending</td><td>Never load stored API keys into <code>rememberSaveable</code>. Show configured status, accept blank replace-only secrets, clear input after mutation, and test recovery/error states.</td><td><code>fix(settings): keep saved API keys out of UI state</code></td></tr>
           <tr><td class="finding">F04</td><td class="pending">Pending</td><td>Create a Settings route owner with one keyed expansion map and a compact state/actions contract; remove seven shell booleans and the 44-parameter screen boundary.</td><td><code>refactor(settings): centralize settings state ownership</code></td></tr>
           <tr><td class="finding">F05</td><td class="pending">Pending</td><td>Make UI restore the sole scroll owner, migrate/remove legacy query offsets, delete the orphan composable debounce helper, and test the production ViewModel cancellation/flush path.</td><td><code>refactor(search): consolidate query and scroll persistence</code></td></tr>
@@ -322,8 +322,9 @@
         <li>[x] 2026-07-31 — Completed the repository-wide audit and current deterministic validation baseline.</li>
         <li>[x] 2026-07-31 — Captured the user's concurrent-autoplay requirement in this plan and <code>AGENTS.md</code>.</li>
         <li>[x] 2026-07-31 — Created the finding-to-commit ledger and sequential verification contract.</li>
-        <li>[x] F01 — Device CI now executes <code>:app:connectedDebugAndroidTest</code> and <code>:core-data-android:connectedDebugAndroidTest</code>, retains both report trees, and names the release-acceptance artifact for API 35. Verification: two Python workflow contract tests, <code>actionlint</code>, <code>:core-data-android:compileDebugAndroidTestKotlin</code>, and <code>git diff --check</code>.</li>
-        <li>[ ] F02–F16 — Implementation task records each focused commit and validation result here.</li>
+        <li>[x] F01 / <code>61dd92c</code> — Device CI now executes <code>:app:connectedDebugAndroidTest</code> and <code>:core-data-android:connectedDebugAndroidTest</code>, retains both report trees, and names the release-acceptance artifact for API 35. Verification: two Python workflow contract tests, <code>actionlint</code>, <code>:core-data-android:compileDebugAndroidTestKotlin</code>, and <code>git diff --check</code>.</li>
+        <li>[x] F02 — Compact Search like, For You source, and Settings expansion controls retain their visual sizes inside 48dp clickable owners with explicit role and state semantics. Verification: three focused Compose geometry/semantics tests passed on an API 37 emulator after the shared semantics extraction; <code>:app:testDebugUnitTest</code>, <code>:app:lintDebug</code>, <code>:app:detektDebug</code>, Android-test compilation, and <code>git diff --check</code> passed.</li>
+        <li>[ ] F03–F16 — Implementation task records each focused commit and validation result here.</li>
         <li>[ ] Final — Run the complete acceptance matrix and close Outcomes/Retrospective.</li>
       </ul>
 
@@ -333,6 +334,7 @@
         <li>Observation: current production duplication is under the gate by only 0.04 percentage points, and semantic duplication such as duration enrichment is not fully represented by clone counts.</li>
         <li>Observation: the Room schema instrumentation test is compiled by verification but its owning module is absent from connected-device CI execution.</li>
         <li>Observation: this worktree began detached at planning commit <code>213d9e9</code>; implementation is anchored on <code>codex/theoria-quality-ux-reliability</code> before the first finding commit.</li>
+        <li>Observation: the local <code>theoria_api37</code> AVD registry entry had no backing directory. Isolated API 37 AVD cold boots twice lost ADB or Android package/activity services before a usable assertion run; clean restarts passed all three F02 tests both before and after the behavior-preserving shared semantics extraction. The temporary AVD was removed after verification.</li>
       </ul>
 
       <h3>Decision Log</h3>

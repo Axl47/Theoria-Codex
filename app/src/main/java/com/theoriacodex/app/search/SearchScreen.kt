@@ -86,7 +86,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -1078,34 +1080,45 @@ fun SearchResultCard(
                 )
             }
             if (onToggleLike != null) {
-                Surface(
+                Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(8.dp)
-                        .size(30.dp)
-                        .clickable(onClick = onToggleLike),
-                    color = Color.Black.copy(alpha = 0.55f),
-                    shape = CircleShape,
+                        .size(48.dp)
+                        .semantics {
+                            contentDescription = if (liked) "Unlike post" else "Like post"
+                            selected = liked
+                            stateDescription = if (liked) "Liked" else "Not liked"
+                        }
+                        .clickable(
+                            role = Role.Checkbox,
+                            onClick = onToggleLike,
+                        ),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = if (liked) {
-                                Icons.Default.Favorite
-                            } else {
-                                Icons.Outlined.FavoriteBorder
-                            },
-                            contentDescription = if (liked) {
-                                "Unlike post"
-                            } else {
-                                "Like post"
-                            },
-                            tint = if (liked) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                Color.White
-                            },
-                            modifier = Modifier.size(16.dp),
-                        )
+                    Surface(
+                        modifier = Modifier
+                            .size(30.dp)
+                            .testTag("Search like visual"),
+                        color = Color.Black.copy(alpha = 0.55f),
+                        shape = CircleShape,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (liked) {
+                                    Icons.Default.Favorite
+                                } else {
+                                    Icons.Outlined.FavoriteBorder
+                                },
+                                contentDescription = null,
+                                tint = if (liked) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    Color.White
+                                },
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
                     }
                 }
             }

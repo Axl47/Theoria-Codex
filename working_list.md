@@ -12,7 +12,6 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### Pending
 
-- [ ] F02: enlarge compact feed controls and add explicit accessibility state semantics
 - [ ] F03: keep persisted source API keys out of saveable UI state
 - [ ] F04: centralize Settings state and persisted section expansion ownership
 - [ ] F05: consolidate Search query and scroll persistence and delete the orphan persistence path
@@ -32,8 +31,10 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### Done
 
+- [x] F02: enlarge compact feed controls and add explicit accessibility state semantics
+  - Evidence: Search like, For You source, and Settings header controls expose 48dp clickable geometry with checkbox/dropdown/button roles and selected or expanded state descriptions while preserving 30dp and 18dp visuals. The focused three-test Compose class passed on an API 37 emulator after the shared semantics extraction; app unit tests, `:app:lintDebug`, `:app:detektDebug`, Android-test compilation, and `git diff --check` passed.
 - [x] F01: execute every Android instrumentation owner in CI and correct device artifact naming
-  - Evidence: device CI now runs and uploads reports for both `:app` and `:core-data-android`; the API 35 release-acceptance artifact is named accurately. Two workflow contract tests, `actionlint`, `:core-data-android:compileDebugAndroidTestKotlin`, and `git diff --check` passed.
+  - Commit: `61dd92c` (`ci(android): execute Room schema validation on devices`). Evidence: device CI now runs and uploads reports for both `:app` and `:core-data-android`; the API 35 release-acceptance artifact is named accurately. Two workflow contract tests, `actionlint`, `:core-data-android:compileDebugAndroidTestKotlin`, and `git diff --check` passed.
 - [x] Launch the dedicated implementation task and hand it the sequential commit contract
 - [x] Complete the read-only 2026-07-31 audit and establish current validation baselines
 - [x] Record the non-negotiable product constraint that all visible video cards continue autoplaying
