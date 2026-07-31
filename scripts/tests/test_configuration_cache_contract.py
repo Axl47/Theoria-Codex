@@ -24,7 +24,14 @@ class ConfigurationCacheContractTest(unittest.TestCase):
 
         self.assertEqual(2, step.count("./gradlew help"))
         self.assertEqual(2, step.count("--configuration-cache-problems=fail"))
-        self.assertEqual(2, step.count('--project-cache-dir "$RUNNER_TEMP/theoria-config-cache"'))
+        self.assertEqual(2, step.count('--project-cache-dir "$project_cache"'))
+        self.assertEqual(2, step.count("--console=plain"))
+        self.assertIn("set -euo pipefail", step)
+        self.assertIn('reuse_log="$RUNNER_TEMP/theoria-config-cache-reuse.log"', step)
+        self.assertIn('reuse_signal="Configuration cache entry reused."', step)
+        self.assertIn('2>&1 | tee "$reuse_log"', step)
+        self.assertIn('grep -Fqx "$reuse_signal" "$reuse_log"', step)
+        self.assertIn("exit 1", step)
         self.assertNotIn("--configuration-cache-problems=warn", workflow)
 
     def test_ci_strictly_configures_custom_android_artifact_owners(self) -> None:

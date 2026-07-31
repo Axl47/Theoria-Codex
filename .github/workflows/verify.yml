@@ -105,15 +105,26 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Verify strict configuration-cache store and reuse
+        shell: bash
         run: |
+          set -euo pipefail
+          project_cache="$RUNNER_TEMP/theoria-config-cache"
+          reuse_log="$RUNNER_TEMP/theoria-config-cache-reuse.log"
+          reuse_signal="Configuration cache entry reused."
           ./gradlew help \
-            --project-cache-dir "$RUNNER_TEMP/theoria-config-cache" \
+            --project-cache-dir "$project_cache" \
             --configuration-cache \
-            --configuration-cache-problems=fail
+            --configuration-cache-problems=fail \
+            --console=plain
           ./gradlew help \
-            --project-cache-dir "$RUNNER_TEMP/theoria-config-cache" \
+            --project-cache-dir "$project_cache" \
             --configuration-cache \
-            --configuration-cache-problems=fail
+            --configuration-cache-problems=fail \
+            --console=plain 2>&1 | tee "$reuse_log"
+          if ! grep -Fqx "$reuse_signal" "$reuse_log"; then
+            echo "::error::Second strict Gradle help invocation did not reuse configuration cache."
+            exit 1
+          fi
 
       - name: Verify custom Android artifact tasks are configuration-cache compatible
         run: >-
