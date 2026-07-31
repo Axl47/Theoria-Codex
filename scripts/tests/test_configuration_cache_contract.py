@@ -43,6 +43,8 @@ class ConfigurationCacheContractTest(unittest.TestCase):
         step = workflow[step_start:step_end]
 
         self.assertIn(":app:verifyBenchmarkFixtureArtifact", step)
+        self.assertIn(":app:verifyReleaseJsonContracts", step)
+        self.assertIn(":app:verifyReleaseAcceptanceJsonContracts", step)
         self.assertIn(":macrobenchmark:verifyMacrobenchmarkRunnerArtifact", step)
         self.assertIn("--configuration-cache", step)
         self.assertIn("--configuration-cache-problems=fail", step)

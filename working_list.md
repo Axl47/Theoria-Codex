@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-31T19:23:26-04:00
+updated_at: 2026-07-31T19:58:08-04:00
 ---
 # Working List
 
@@ -8,7 +8,7 @@ updated_at: 2026-07-31T19:23:26-04:00
 
 ### In Progress
 
-None. F01–F16, deterministic host acceptance, and the authorized physical performance comparison are complete.
+- [~] Record the dedicated F17 commit and stop for parent review; do not begin the separate unchanged SC2129 cleanup
 
 ### Pending
 
@@ -16,6 +16,9 @@ None. F01–F16, deterministic host acceptance, and the authorized physical perf
 - [ ] Opt-in authenticated/live-provider paths and Coil protected-header plus animated-media device behavior remain unclaimed unless separately authorized
 
 ### Done
+
+- [x] F17: repair release R8 JSON-contract verification ownership
+  - Commit: pending — `fix(release): verify R8 contracts from AGP artifacts`. Evidence: one typed, configuration-cache-safe task consumes each variant's public `SingleArtifact.OBFUSCATION_MAPPING_FILE` provider plus a separately declared required `outputs/mapping/<variant>/seeds.txt` input; the mapping provider carries the R8 task dependency, and no guessed intermediates path, string-named minify dependency, or `doFirst` script capture remains. After moving aside all four generated release/releaseAcceptance mapping directories, the two public verifier tasks rebuilt 90 tasks in 5m20s and each verified 207 durable fields across 40 retained exact classes while proving 13 contract classes unreachable. An isolated strict graph then stored in 5m52s (90 executed) and reused in 5m30s (84 executed, 6 up-to-date), emitting exact `Configuration cache entry stored.` and `Configuration cache entry reused.` acknowledgements and passing both verifiers again. `:app:assembleRelease :app:assembleReleaseAcceptance` completed 151 tasks in 5m21s and each matching finalizer passed with the same counts. Four focused R8 build/workflow contracts plus four configuration-cache contracts passed; all 36 helper/workflow tests, ordinary and branch-base hotspot gates, production duplication at 195/36,650 lines (0.53%), changed `verify.yml` actionlint, ExecPlan HTML validation, and diff checks passed. The tagged release workflow still reports only its known untouched SC2129 at line 35 and continues to enter through `:app:assembleRelease`; no manual Python fallback exists. No device, emulator, benchmark instrumentation, live provider, signing, tag, push, publish, PR, or release-metadata mutation ran, and the accepted `c3391bd` hardware artifacts remain unchanged.
 
 - [x] Final safe physical Macrobenchmark closeout on the accepted branch
   - Evidence: the preserved F10 baseline remains byte-for-byte intact under `build/reports/hardware-closeout/f10-pre-containment-baseline/` (35 files, one 1,564,575-byte JSON with SHA-256 `7f197822bc49836f393a9edfeef0fe6e8e6ac7ff61aebdfbe7145e76facb2566`, and 30 traces). The first host-only preflight failure remains separately preserved; it never installed an app or began instrumentation. Parent then explicitly authorized one corrected attempt using `ANDROID_HOME=/Users/axel/Library/Android/sdk ANDROID_SDK_ROOT=/Users/axel/Library/Android/sdk ./gradlew :macrobenchmark:connectedBenchmarkReleaseAndroidTest`. The existing runner passed direct verification before execution: AndroidJUnitRunner has no configured listener, while transitive SideEffectRunListener bytecode remains inert. Exactly one unlocked physical target was present—Samsung SM-S926U, Android 16/API 36, serial `R5CWC0SXR3A`, non-emulator—and the command passed 4/4 tests with zero failures/errors/skips in 10m04s. All 30 iterations produced fresh Perfetto traces: 10 cold, 10 warm, 5 Search, and 5 Viewer. The fresh 1,462,126-byte JSON SHA-256 is `f63b9de9730038292f85dd3f3783dba639e217853f855448ba4c347ec3d31a4e`; all 35 output files are isolated under `build/reports/hardware-closeout/final-8b61b0c/connected-output/` with matching source/preserved manifests and zero pre-marker files.

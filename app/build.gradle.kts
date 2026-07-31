@@ -1,4 +1,46 @@
+import com.android.build.api.artifact.SingleArtifact
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.testing.Test
+import org.gradle.process.ExecOperations
+import javax.inject.Inject
+
+abstract class VerifyR8JsonContractsTask @Inject constructor(
+    private val execOperations: ExecOperations,
+) : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val mappingFile: RegularFileProperty
+
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val seedsFile: RegularFileProperty
+
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val contractManifest: RegularFileProperty
+
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val verifierScript: RegularFileProperty
+
+    @TaskAction
+    fun verify() {
+        execOperations.exec {
+            commandLine(
+                "python3",
+                verifierScript.get().asFile,
+                mappingFile.get().asFile,
+                contractManifest.get().asFile,
+                seedsFile.get().asFile,
+            )
+        }
+    }
+}
 
 plugins {
     alias(libs.plugins.android.application)
@@ -108,6 +150,35 @@ androidComponents {
             "src/benchmarkRelease/AndroidManifest.xml",
         )
     }
+
+    setOf("release", "releaseAcceptance").forEach { buildType ->
+        onVariants(selector().withBuildType(buildType)) { variant ->
+            val capitalizedVariant = variant.name.replaceFirstChar(Char::uppercaseChar)
+            val verification = tasks.register<VerifyR8JsonContractsTask>(
+                "verify${capitalizedVariant}JsonContracts",
+            ) {
+                group = "verification"
+                description = "Verifies stable Gson field names in the ${variant.name} R8 mapping."
+                mappingFile.set(
+                    variant.artifacts.get(SingleArtifact.OBFUSCATION_MAPPING_FILE),
+                )
+                seedsFile.set(
+                    layout.buildDirectory.file("outputs/mapping/${variant.name}/seeds.txt"),
+                )
+                contractManifest.set(
+                    layout.projectDirectory.file("src/test/resources/r8-json-contracts.txt"),
+                )
+                verifierScript.set(
+                    rootProject.layout.projectDirectory.file(
+                        "scripts/verify_r8_json_contract.py",
+                    ),
+                )
+            }
+            tasks.matching { task -> task.name == "assemble$capitalizedVariant" }.configureEach {
+                finalizedBy(verification)
+            }
+        }
+    }
 }
 
 dependencies {
@@ -207,28 +278,3 @@ tasks.withType<Test>().configureEach {
         systemProperty("theoria.providerProbeCases", caseFile)
     }
 }
-
-fun registerR8JsonContractVerification(variantName: String) {
-    val capitalizedVariant = variantName.replaceFirstChar(Char::uppercaseChar)
-    val verification = tasks.register<Exec>("verify${capitalizedVariant}JsonContracts") {
-        group = "verification"
-        description = "Verifies stable Gson field names in the $variantName R8 mapping."
-        dependsOn("minify${capitalizedVariant}WithR8")
-        val mappingFile = layout.buildDirectory.file("outputs/mapping/$variantName/mapping.txt")
-        val contractManifest = project.file("src/test/resources/r8-json-contracts.txt")
-        inputs.file(mappingFile)
-        inputs.file(contractManifest)
-        commandLine(
-            "python3",
-            rootProject.file("scripts/verify_r8_json_contract.py"),
-            mappingFile.get().asFile,
-            contractManifest,
-        )
-    }
-    tasks.matching { task -> task.name == "assemble$capitalizedVariant" }.configureEach {
-        finalizedBy(verification)
-    }
-}
-
-registerR8JsonContractVerification("releaseAcceptance")
-registerR8JsonContractVerification("release")

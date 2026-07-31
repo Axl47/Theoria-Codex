@@ -130,6 +130,8 @@ jobs:
         run: >-
           ./gradlew
           :app:verifyBenchmarkFixtureArtifact
+          :app:verifyReleaseJsonContracts
+          :app:verifyReleaseAcceptanceJsonContracts
           :macrobenchmark:verifyMacrobenchmarkRunnerArtifact
           --configuration-cache
           --configuration-cache-problems=fail

@@ -72,6 +72,8 @@ GitHub prereleases are created only by pushing an annotated `vX.Y.Z` tag. The ta
 
 Use the repo-local `$theoria-release` skill in `.codex/skills/theoria-release/` whenever preparing or publishing a release. It drafts notes before making changes and requires a separate explicit publish instruction before it creates or pushes a tag.
 
+Release JSON verification must run through `:app:verifyReleaseJsonContracts` and `:app:verifyReleaseAcceptanceJsonContracts`. Those tasks consume AGP's public `SingleArtifact.OBFUSCATION_MAPPING_FILE`; AGP 9.1.1 exposes no public seeds artifact, so the matching `outputs/mapping/<variant>/seeds.txt` remains a separate explicit task input. Do not invoke the Python verifier against a guessed intermediates path or infer seeds beside the intermediate mapping.
+
 ## Final Output
 
 Include a Conventional Commit message after each change. These commit messages feed the version changelog, so make the message user-facing.
