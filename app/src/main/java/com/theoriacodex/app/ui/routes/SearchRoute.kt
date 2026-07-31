@@ -302,10 +302,14 @@ internal fun SearchRoute(
         state = state,
         creatorBrowsingSources = config.creatorBrowsingSources,
         onAction = owner::onAction,
-        resolvePostById = coordinator::resolvePostForSearch,
+        resolvePostById = { postId -> coordinator.resolvePostForSearch(postId, state.query.appliedQueryHash) },
         recoverPostMedia = coordinator::recoverPostMedia,
-        tagVideoCountProvider = coordinator::tagVideoCount,
-        fetchTagVideoCounts = coordinator::fetchTagVideoCounts,
+        tagVideoCountProvider = { source, tag -> coordinator.tagVideoCount(
+            source, tag, state.suggestions.autocomplete, state.suggestions.trending,
+        ) },
+        fetchTagVideoCounts = { source, tags -> coordinator.fetchTagVideoCounts(
+            source, tags, state.suggestions.autocomplete, state.suggestions.trending,
+        ) },
         pixivUgoiraClient = pixivUgoiraClient,
         likedPostIds = config.likedPostIds,
         savedPostIds = config.savedPostIds,

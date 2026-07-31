@@ -6,9 +6,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.InMemoryQueryRepository
+import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.data.repository.QueryRepository
+import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.app.search.state.SearchAction
@@ -255,6 +257,31 @@ class SearchViewModelTest {
             assertEquals(listOf("paged-result", "paged-page"), resultIds(viewModel))
             assertFalse(viewModel.state.value.content.canLoadMore)
             assertFalse(viewModel.state.value.loadingMore)
+        }
+
+    @Test
+    fun `stale noncancellable page cannot enter a replacement execution`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val adapter = ViewModelSearchAdapter()
+            val viewModel = viewModel(adapter)
+            restore(viewModel)
+            viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+            viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("slow-page")))
+            viewModel.onAction(SearchAction.ApplyDraft)
+            advanceUntilIdle()
+
+            viewModel.onAction(SearchAction.LoadNextPage)
+            runCurrent()
+            adapter.slowPageStarted.await()
+            viewModel.onAction(SearchAction.ClearDraft)
+            viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("replacement")))
+            viewModel.onAction(SearchAction.ApplyDraft)
+            runCurrent()
+            adapter.releaseSlowPage.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(listOf("replacement-result"), resultIds(viewModel))
+            assertFalse(viewModel.state.value.loading)
         }
 
     @Test
@@ -573,6 +600,94 @@ class SearchViewModelTest {
             assertEquals(listOf("paged-result", "paged-page"), resultIds(recreated))
         }
 
+    @Test
+    fun `mismatched execution key rejects current result clears loading and never persists`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val queryRepository = InMemoryQueryRepository()
+            lateinit var mismatch: MismatchedExecutionService
+            val viewModel = viewModel(
+                adapter = ViewModelSearchAdapter(),
+                queryRepository = queryRepository,
+                executionService = { coordinator -> MismatchedExecutionService(coordinator).also { mismatch = it } },
+            )
+            restore(viewModel)
+            viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+            viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("mismatch")))
+
+            viewModel.onAction(SearchAction.ApplyDraft)
+            advanceUntilIdle()
+
+            assertFalse(viewModel.state.value.loading)
+            assertEquals(null, viewModel.state.value.execution.activeRequestId)
+            assertTrue(viewModel.state.value.content.results.isEmpty())
+            assertEquals(0, mismatch.persistCalls)
+            assertEquals(null, queryRepository.observeAppliedQuery("source:PIXIV").first())
+        }
+
+    @Test
+    fun `superseded noncancellable success cannot persist history`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val queryRepository = InMemoryQueryRepository()
+            val recents = InMemoryRecentsRepository()
+            val adapter = ViewModelSearchAdapter()
+            val viewModel = viewModel(adapter, queryRepository = queryRepository, recentsRepository = recents)
+            restore(viewModel)
+            viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+            viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("slow")))
+            viewModel.onAction(SearchAction.ApplyDraft)
+            runCurrent()
+            adapter.slowSearchStarted.await()
+
+            viewModel.onAction(SearchAction.ClearDraft)
+            viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("fast")))
+            viewModel.onAction(SearchAction.ApplyDraft)
+            runCurrent()
+            adapter.releaseSlowSearch.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(listOf("fast-result"), resultIds(viewModel))
+            assertEquals(listOf("fast"), queryRepository.observeAppliedQuery("source:PIXIV").first()?.includeTags)
+            assertEquals(listOf(listOf("fast")), recents.observeSearches().first().map { it.query.includeTags })
+        }
+
+    @Test
+    fun `admitted root failure applies failed query disables paging persists once and retry targets it`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val queryRepository = InMemoryQueryRepository()
+            val recents = InMemoryRecentsRepository()
+            val adapter = ViewModelSearchAdapter()
+            val viewModel = viewModel(adapter, queryRepository = queryRepository, recentsRepository = recents)
+            restore(viewModel)
+            viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+            viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("paged")))
+            viewModel.onAction(SearchAction.ApplyDraft)
+            advanceUntilIdle()
+            assertTrue(viewModel.state.value.content.canLoadMore)
+
+            adapter.failingTags += "broken"
+            viewModel.onAction(SearchAction.ClearDraft)
+            viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("broken")))
+            viewModel.onAction(SearchAction.ApplyDraft)
+            advanceUntilIdle()
+
+            val failed = viewModel.state.value
+            assertEquals(listOf("broken"), failed.query.applied.includeTags)
+            assertEquals(listOf("paged-result"), resultIds(viewModel))
+            assertFalse(failed.content.canLoadMore)
+            assertTrue(failed.content.error?.message.orEmpty().contains("broken"))
+            assertEquals(null, failed.execution.activeRequestId)
+            assertEquals(listOf("broken"), queryRepository.observeAppliedQuery("source:PIXIV").first()?.includeTags)
+            assertEquals(2, recents.observeSearches().first().size)
+
+            adapter.failingTags.clear()
+            viewModel.onAction(SearchAction.Retry)
+            advanceUntilIdle()
+
+            assertEquals(listOf("broken-result"), resultIds(viewModel))
+            assertEquals("broken", adapter.searchedTags.last())
+            assertEquals(2, recents.observeSearches().first().size)
+        }
+
     private suspend fun kotlinx.coroutines.test.TestScope.restore(viewModel: SearchViewModel) {
         viewModel.onAction(SearchAction.Restore)
         advanceUntilIdle()
@@ -589,15 +704,20 @@ class SearchViewModelTest {
         scrollPersistenceDelayMs: Long = 0L,
         scrollPersistenceDispatcher: CoroutineDispatcher = mainDispatcherRule.dispatcher,
         animatedDurationEnricher: AnimatedDurationEnricher = TestAnimatedDurationEnricher { null },
+        recentsRepository: RecentsRepository = InMemoryRecentsRepository(),
+        executionService: ((SearchCoordinator) -> SearchExecutionService)? = null,
     ): SearchViewModel {
+        val coordinator = SearchCoordinator(
+            ViewModelSearchRegistry(adapter, *additionalAdapters.toTypedArray()),
+            queryRepository = queryRepository,
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = uiRestoreRepository,
+            recentsRepository = recentsRepository,
+        )
         return SearchViewModel(
-            coordinator = SearchCoordinator(
-                ViewModelSearchRegistry(adapter, *additionalAdapters.toTypedArray()),
-                queryRepository = queryRepository,
-                settingsRepository = InMemorySettingsRepository(),
-                uiRestoreRepository = uiRestoreRepository,
-            ),
+            coordinator = coordinator,
             savedStateHandle = savedState,
+            executionService = executionService?.invoke(coordinator) ?: coordinator,
             autocompleteDelayMs = autocompleteDelayMs,
             scrollPersistenceDelayMs = scrollPersistenceDelayMs,
             scrollPersistenceDispatcher = scrollPersistenceDispatcher,
@@ -640,6 +760,34 @@ private class BlockingUiRestoreRepository : RecordingUiRestoreRepository() {
             releaseFirstWrite.await()
         }
         super.setSearchScrollState(queryHash, state)
+    }
+}
+
+private class MismatchedExecutionService(
+    private val delegate: SearchExecutionService,
+) : SearchExecutionService by delegate {
+    var persistCalls = 0
+
+    override suspend fun executeInitial(
+        query: Query,
+        sourceScope: SearchSourceScope,
+    ): SearchExecutionResult {
+        return when (val result = delegate.executeInitial(query, sourceScope)) {
+            is SearchExecutionResult.Failure -> result.copy(executionKey = "mismatched-key")
+            is SearchExecutionResult.Success -> result.copy(
+                executionKey = "mismatched-key",
+                continuation = result.continuation.copy(executionKey = "mismatched-key"),
+            )
+        }
+    }
+
+    override suspend fun persistAppliedSearch(
+        query: Query,
+        sourceScope: SearchSourceScope,
+        executionKey: String,
+    ) {
+        persistCalls += 1
+        delegate.persistAppliedSearch(query, sourceScope, executionKey)
     }
 }
 
@@ -692,21 +840,34 @@ private class ViewModelSearchAdapter(
     val releaseSlowSearch = CompletableDeferred<Unit>()
     val oldAutocompleteStarted = CompletableDeferred<Unit>()
     val releaseOldAutocomplete = CompletableDeferred<Unit>()
+    val slowPageStarted = CompletableDeferred<Unit>()
+    val releaseSlowPage = CompletableDeferred<Unit>()
     var searchCount: Int = 0
     var resultFactory: ((String) -> List<Post>)? = null
+    val failingTags = mutableSetOf<String>()
+    val searchedTags = mutableListOf<String>()
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> {
         searchCount += 1
         val tag = query.includeTags.firstOrNull().orEmpty()
+        searchedTags += tag
+        if (tag in failingTags) throw IllegalStateException("$tag unavailable")
         if (tag == "slow") {
             slowSearchStarted.complete(Unit)
             withContext(NonCancellable) { releaseSlowSearch.await() }
             return Page(listOf(post("slow-result")), null)
         }
-        if (pageToken == "next") return Page(listOf(post("paged-page")), null)
+        if (pageToken == "next") {
+            if (tag == "slow-page") {
+                slowPageStarted.complete(Unit)
+                withContext(NonCancellable) { releaseSlowPage.await() }
+                return Page(listOf(post("slow-page-stale")), null)
+            }
+            return Page(listOf(post("paged-page")), null)
+        }
         return Page(
             items = resultFactory?.invoke(tag) ?: listOf(post("$tag-result")),
-            nextPageToken = "next".takeIf { tag == "paged" },
+            nextPageToken = "next".takeIf { tag == "paged" || tag == "slow-page" },
         )
     }
 

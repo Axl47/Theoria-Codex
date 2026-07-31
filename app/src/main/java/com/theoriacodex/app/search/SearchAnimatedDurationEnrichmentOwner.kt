@@ -13,8 +13,7 @@ internal class SearchAnimatedDurationEnrichmentOwner(
     scope: CoroutineScope,
     enricher: AnimatedDurationEnricher,
     private val currentState: () -> SearchUiState,
-    private val rememberResolvedPost: (Post) -> Unit,
-    private val publishState: () -> Unit,
+    private val applyResolvedPosts: (String, List<Post>) -> Unit,
 ) {
     private val lane = AnimatedDurationEnrichmentLane(
         scope = scope,
@@ -33,15 +32,13 @@ internal class SearchAnimatedDurationEnrichmentOwner(
         enrichments: List<AnimatedDurationEnrichment>,
     ) {
         if (currentState().query.appliedQueryHash != queryHash) return
-        var changed = false
-        enrichments.forEach { result ->
+        val resolved = enrichments.mapNotNull { result ->
             val latestPost = currentState().content.results
                 .firstOrNull { post -> post.id == result.postId }
-                ?: return@forEach
-            if (animatedDurationMs(latestPost) != null) return@forEach
-            rememberResolvedPost(latestPost.copy(durationMs = result.durationMs))
-            changed = true
+                ?: return@mapNotNull null
+            if (animatedDurationMs(latestPost) != null) return@mapNotNull null
+            latestPost.copy(durationMs = result.durationMs)
         }
-        if (changed) publishState()
+        if (resolved.isNotEmpty()) applyResolvedPosts(queryHash, resolved)
     }
 }

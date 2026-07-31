@@ -3,8 +3,6 @@ package com.theoriacodex.app.search.state
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.FacetedSearchScope
-import com.theoriacodex.domain.adapter.FacetedTagSuggestion
-import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -69,73 +67,6 @@ class SearchStateContractTest {
         )
 
         assertTrue(state.hasPendingChanges)
-    }
-
-    @Test
-    fun `coordinator snapshot maps all renderable search lanes`() {
-        val applied = query("applied")
-        val draft = query("draft")
-        val result = post("mapped")
-        val status = SourceRunStatus(SourceKey.PIXIV, SourceRunState.SUCCESS)
-        val mutableResults = mutableListOf(result)
-        val mutableStatuses = mutableListOf(status)
-        val scope = FacetedSearchScope(SearchFacet.ARTIST, "artist")
-        val snapshot = SearchCoordinatorSnapshot(
-            draftQuery = draft,
-            appliedQuery = applied,
-            draftSourceScope = SearchSourceScope.Temporary(
-                listOf(SourceKey.GELBOORU, SourceKey.PIXIV),
-            ),
-            appliedSourceScope = SearchSourceScope.GlobalUnified,
-            appliedQueryHash = QueryHash.from(applied),
-            results = mutableResults,
-            statuses = mutableStatuses,
-            trendingTags = listOf(TagSuggestion("popular", "trending", 10)),
-            autocompleteSuggestions = listOf(TagSuggestion("plain", "tag", 5)),
-            facetedAutocompleteSuggestions = listOf(
-                FacetedTagSuggestion("artist name", SearchFacet.ARTIST, "artist", 2),
-            ),
-            selectedSearchScope = scope,
-            supportedSearchScopes = listOf(FacetedSearchScope.All, scope),
-            availableSources = listOf(SourceKey.PIXIV),
-            modeOptions = listOf(QueryMode.Unified, QueryMode.Source(SourceKey.PIXIV)),
-            enabledSourceCount = 1,
-            tagInputValidationMessage = "validation",
-            loading = true,
-            loadingMore = false,
-            canLoadMore = true,
-            errorMessage = "temporary failure",
-            displayResultsVersion = 7,
-            hasAnySearchRun = true,
-        )
-
-        val state = snapshot.toSearchUiState(
-            restoration = SearchRestorationUiState.Restored(
-                restoredQuery = true,
-                scrollState = SearchScrollState(3, 12),
-            ),
-        )
-        mutableResults.clear()
-        mutableStatuses.clear()
-
-        assertEquals(draft, state.query.draft)
-        assertEquals(applied, state.query.applied)
-        assertEquals(
-            SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)),
-            state.query.draftSourceScope,
-        )
-        assertEquals(SearchSourceScope.GlobalUnified, state.query.appliedSourceScope)
-        assertEquals(listOf(result), state.content.results)
-        assertEquals(listOf(status), state.content.statuses)
-        assertEquals(scope, state.query.selectedScope)
-        assertEquals("validation", state.query.validationMessage)
-        assertEquals(1, state.suggestions.trending.size)
-        assertEquals(1, state.suggestions.autocomplete.size)
-        assertEquals(1, state.suggestions.facetedAutocomplete.size)
-        assertEquals(SearchRequestKind.REPLACE, state.execution.activeKind)
-        assertEquals("temporary failure", state.content.error?.message)
-        assertTrue(state.hasPendingChanges)
-        assertTrue(state.loading)
     }
 
     @Test
@@ -267,6 +198,53 @@ class SearchStateContractTest {
         assertFalse(completed.content.canLoadMore)
         assertEquals(14L, completed.execution.lastCompletedRequestId)
         assertFalse(completed.loadingMore)
+    }
+
+    @Test
+    fun `paging merges provider statuses by source without losing exhausted providers`() {
+        val query = query("paged")
+        val pixiv = SourceRunStatus(SourceKey.PIXIV, SourceRunState.SUCCESS)
+        val exhausted = SourceRunStatus(SourceKey.GELBOORU, SourceRunState.EXCLUDED, errorMessage = "exhausted")
+        val loading = SearchStateReducer.reduce(
+            SearchUiState(
+                query = SearchQueryUiState(applied = query, draft = query),
+                content = SearchContentUiState(statuses = listOf(pixiv, exhausted), canLoadMore = true),
+            ),
+            SearchStateChange.BeginRequest(22L, SearchRequestKind.PAGE, query),
+        ).state
+        val refreshedPixiv = SourceRunStatus(SourceKey.PIXIV, SourceRunState.FAILED, errorMessage = "network")
+
+        val completed = SearchStateReducer.reduce(
+            loading,
+            SearchStateChange.AppendPage(22L, emptyList(), listOf(refreshedPixiv), false),
+        ).state
+
+        assertEquals(refreshedPixiv, completed.content.statuses.first { it.source == SourceKey.PIXIV })
+        assertEquals(exhausted, completed.content.statuses.first { it.source == SourceKey.GELBOORU })
+    }
+
+    @Test
+    fun `page failure merges provider status without erasing other providers`() {
+        val query = query("paged")
+        val pixiv = SourceRunStatus(SourceKey.PIXIV, SourceRunState.SUCCESS)
+        val exhausted = SourceRunStatus(SourceKey.GELBOORU, SourceRunState.EXCLUDED, errorMessage = "exhausted")
+        val loading = SearchStateReducer.reduce(
+            SearchUiState(
+                query = SearchQueryUiState(applied = query, draft = query),
+                content = SearchContentUiState(statuses = listOf(pixiv, exhausted), canLoadMore = true),
+            ),
+            SearchStateChange.BeginRequest(23L, SearchRequestKind.PAGE, query),
+        ).state
+        val failedPixiv = SourceRunStatus(SourceKey.PIXIV, SourceRunState.FAILED, errorMessage = "offline")
+
+        val failed = SearchStateReducer.reduce(
+            loading,
+            SearchStateChange.RequestFailed(23L, "page failed", listOf(failedPixiv)),
+        ).state
+
+        assertEquals(failedPixiv, failed.content.statuses.first { it.source == SourceKey.PIXIV })
+        assertEquals(exhausted, failed.content.statuses.first { it.source == SourceKey.GELBOORU })
+        assertTrue(failed.content.canLoadMore)
     }
 
     @Test

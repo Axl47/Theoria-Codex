@@ -21,6 +21,8 @@ sealed interface SearchStateChange {
         val results: List<Post>,
         val statuses: List<SourceRunStatus>,
         val canLoadMore: Boolean,
+        val appliedSourceScope: SearchSourceScope = SearchSourceScope.fromQuery(appliedQuery),
+        val appliedQueryHash: String = QueryHash.from(appliedQuery),
     ) : SearchStateChange
 
     data class AppendPage(
@@ -35,6 +37,9 @@ sealed interface SearchStateChange {
         val message: String,
         val statuses: List<SourceRunStatus> = emptyList(),
         val retryable: Boolean = true,
+        val appliedQuery: Query? = null,
+        val appliedSourceScope: SearchSourceScope? = null,
+        val appliedQueryHash: String? = null,
     ) : SearchStateChange
 
     data class RequestCancelled(
@@ -144,7 +149,8 @@ object SearchStateReducer {
                 query = state.query.copy(
                     draft = draft,
                     applied = change.appliedQuery,
-                    appliedQueryHash = QueryHash.from(change.appliedQuery),
+                    appliedSourceScope = change.appliedSourceScope,
+                    appliedQueryHash = change.appliedQueryHash,
                 ),
                 content = state.content.copy(
                     results = change.results.toList(),
@@ -166,11 +172,15 @@ object SearchStateReducer {
         if (!state.isCurrent(change.requestId)) return SearchReduction(state)
         val combined = (state.content.results + change.results)
             .distinctBy { post -> post.id }
+        val mergedStatuses = (state.content.statuses + change.statuses)
+            .associateBy { status -> status.source }
+            .values
+            .sortedBy { status -> status.source.name }
         return SearchReduction(
             state = state.copy(
                 content = state.content.copy(
                     results = combined,
-                    statuses = change.statuses.toList(),
+                    statuses = mergedStatuses,
                     canLoadMore = change.canLoadMore,
                     error = null,
                     displayVersion = state.content.displayVersion + 1,
@@ -185,10 +195,36 @@ object SearchStateReducer {
         change: SearchStateChange.RequestFailed,
     ): SearchReduction {
         if (!state.isCurrent(change.requestId)) return SearchReduction(state)
+        val statuses = if (
+            state.execution.activeKind == SearchRequestKind.PAGE && change.statuses.isNotEmpty()
+        ) {
+            mergeStatusesBySource(state.content.statuses, change.statuses)
+        } else {
+            change.statuses.ifEmpty { state.content.statuses }
+        }
+        val appliedQuery = change.appliedQuery
+        val queryState = if (appliedQuery == null) {
+            state.query
+        } else {
+            state.query.copy(
+                draft = if (state.query.draft == state.execution.submittedQuery) {
+                    appliedQuery
+                } else {
+                    state.query.draft
+                },
+                applied = appliedQuery,
+                appliedSourceScope = change.appliedSourceScope
+                    ?: SearchSourceScope.fromQuery(appliedQuery),
+                appliedQueryHash = change.appliedQueryHash ?: QueryHash.from(appliedQuery),
+            )
+        }
         return SearchReduction(
             state = state.copy(
+                query = queryState,
                 content = state.content.copy(
-                    statuses = change.statuses.ifEmpty { state.content.statuses },
+                    statuses = statuses,
+                    hasExecutedSearch = state.content.hasExecutedSearch || appliedQuery != null,
+                    canLoadMore = if (appliedQuery != null) false else state.content.canLoadMore,
                     error = SearchErrorUiState(
                         message = change.message,
                         requestKind = state.execution.activeKind,
@@ -203,6 +239,14 @@ object SearchStateReducer {
             ),
         )
     }
+
+    private fun mergeStatusesBySource(
+        current: List<SourceRunStatus>,
+        updates: List<SourceRunStatus>,
+    ): List<SourceRunStatus> = (current + updates)
+        .associateBy(SourceRunStatus::source)
+        .values
+        .sortedBy { status -> status.source.name }
 
     private fun cancelRequest(
         state: SearchUiState,

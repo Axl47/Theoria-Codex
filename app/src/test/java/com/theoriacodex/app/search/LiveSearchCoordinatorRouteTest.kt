@@ -7,10 +7,12 @@ import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.source.exposedRealSources
 import com.theoriacodex.app.source.requestHeaders
+import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.viewer.ViewerMediaOverviewKind
 import com.theoriacodex.app.viewer.viewerMediaOverviewItems
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
@@ -105,7 +107,7 @@ class LiveSearchCoordinatorRouteTest {
         val issues = mutableListOf<String>()
 
         cases.forEach { probeCase ->
-            val coordinator = executeSeededSearch(registry, probeCase, issues) ?: return@forEach
+            val run = executeSeededSearch(registry, probeCase, issues) ?: return@forEach
 
             val autocompleteProbes = probeCase.autocompleteProbes.ifEmpty {
                 listOfNotNull(
@@ -120,14 +122,20 @@ class LiveSearchCoordinatorRouteTest {
                 val scopedPrefix = autocompleteProbe.sourceNamespace
                     ?.let { namespace -> "$namespace:${autocompleteProbe.prefix}" }
                     ?: autocompleteProbe.prefix
-                coordinator.refreshAutocompleteSuggestions(scopedPrefix)
-                if (coordinator.autocompleteSuggestions.isEmpty()) {
+                val autocomplete = run.coordinator.fetchAutocomplete(
+                    query = run.query,
+                    sourceScope = run.sourceScope,
+                    selectedScope = FacetedSearchScope.All,
+                    input = scopedPrefix,
+                    trending = emptyList(),
+                )
+                if (autocomplete.autocomplete.isEmpty()) {
                     issues += "${probeCase.source.name}: ${autocompleteProbe.checkName} returned no tags for prefix $scopedPrefix"
                 }
                 val expectedFacet = autocompleteProbe.facet
                 if (
                     expectedFacet != null &&
-                    coordinator.facetedAutocompleteSuggestions.none { suggestion ->
+                    autocomplete.facetedAutocomplete.none { suggestion ->
                         suggestion.facet == expectedFacet &&
                             suggestion.sourceNamespace == autocompleteProbe.sourceNamespace
                     }
@@ -137,8 +145,12 @@ class LiveSearchCoordinatorRouteTest {
             }
 
             if (probeCase.trendingProbe) {
-                coordinator.loadTrendingTags(forceRefresh = true)
-                if (coordinator.trendingTags.isEmpty()) {
+                val trending = run.coordinator.fetchTrending(
+                    run.query,
+                    run.sourceScope,
+                    forceRefresh = true,
+                )
+                if (trending.isEmpty()) {
                     issues += "${probeCase.source.name}: trending tags returned no tags"
                 }
             }
@@ -167,8 +179,8 @@ class LiveSearchCoordinatorRouteTest {
         val issues = mutableListOf<String>()
 
         cases.forEach { probeCase ->
-            val coordinator = executeSeededSearch(registry, probeCase, issues) ?: return@forEach
-            val post = coordinator.results.firstOrNull()
+            val run = executeSeededSearch(registry, probeCase, issues) ?: return@forEach
+            val post = run.result.posts.firstOrNull()
             val candidate = post?.let(::postDownloadMediaCandidate)
             if (candidate == null) {
                 issues += "${probeCase.source.name}: app media policy found no downloadable candidate"
@@ -209,59 +221,67 @@ class LiveSearchCoordinatorRouteTest {
         val httpClient = liveHttpClient()
         val registry = realRegistry(setOf(SourceKey.HITOMI), httpClient)
 
-        val newest = searchCoordinator(registry, "hitomi-newest")
-        newest.initialize()
-        newest.setMode(QueryMode.Source(SourceKey.HITOMI))
-        newest.setSort(SortMode.NEWEST)
-        newest.applyDraft()
-        assertCoordinatorSucceeded("Hitomi blank Newest", newest)
+        val newest = executeSourceSearch(
+            registry,
+            "hitomi-newest",
+            sourceQuery(SourceKey.HITOMI, sort = SortMode.NEWEST),
+        )
+        assertCoordinatorSucceeded("Hitomi blank Newest", newest.result)
         assertTrue(
             "Hitomi blank Newest returned a non-Hitomi post",
-            newest.results.all { post -> post.id.source == SourceKey.HITOMI },
+            newest.result.posts.all { post -> post.id.source == SourceKey.HITOMI },
         )
 
-        val global = searchCoordinator(registry, "hitomi-global-girl")
-        global.initialize()
-        global.setMode(QueryMode.Source(SourceKey.HITOMI))
-        assertTrue("Hitomi rejected global girl search", global.commitTagInput("girl"))
-        global.applyDraft()
-        assertCoordinatorSucceeded("Hitomi global girl", global)
+        val global = executeSourceSearch(
+            registry,
+            "hitomi-global-girl",
+            sourceQuery(SourceKey.HITOMI, includeTerms = listOf(SearchTerm("girl"))),
+        )
+        assertCoordinatorSucceeded("Hitomi global girl", global.result)
         assertEquals(
             "Hitomi global girl returned duplicate post identities",
-            global.results.size,
-            global.results.map { post -> post.id }.distinct().size,
+            global.result.posts.size,
+            global.result.posts.map { post -> post.id }.distinct().size,
         )
 
-        val character = searchCoordinator(registry, "hitomi-character-klee")
-        character.initialize()
-        character.setMode(QueryMode.Source(SourceKey.HITOMI))
-        assertTrue("Hitomi rejected character:klee", character.commitTagInput("character:klee"))
-        character.applyDraft()
-        assertCoordinatorSucceeded("Hitomi character:klee", character)
+        val character = executeSourceSearch(
+            registry,
+            "hitomi-character-klee",
+            sourceQuery(
+                SourceKey.HITOMI,
+                includeTerms = listOf(SearchTerm("klee", SearchFacet.CHARACTER, "character")),
+            ),
+        )
+        assertCoordinatorSucceeded("Hitomi character:klee", character.result)
         assertEquals(
             "Hitomi character:klee returned duplicate post identities",
-            character.results.size,
-            character.results.map { post -> post.id }.distinct().size,
+            character.result.posts.size,
+            character.result.posts.map { post -> post.id }.distinct().size,
         )
 
-        val typed = searchCoordinator(registry, "hitomi-typed")
-        typed.initialize()
-        typed.setMode(QueryMode.Source(SourceKey.HITOMI))
-        assertTrue("Hitomi rejected artist:najar", typed.commitTagInput("artist:najar"))
-        assertTrue("Hitomi rejected type:artistcg", typed.commitTagInput("type:artistcg"))
-        typed.setSort(SortMode.POPULAR)
-        typed.applyDraft()
-        assertCoordinatorSucceeded("Hitomi typed Popular", typed)
+        val typed = executeSourceSearch(
+            registry,
+            "hitomi-typed",
+            sourceQuery(
+                SourceKey.HITOMI,
+                includeTerms = listOf(
+                    SearchTerm("najar", SearchFacet.ARTIST, "artist"),
+                    SearchTerm("artistcg", SearchFacet.TYPE, "type"),
+                ),
+                sort = SortMode.POPULAR,
+            ),
+        )
+        assertCoordinatorSucceeded("Hitomi typed Popular", typed.result)
         assertEquals(
             listOf(
                 SearchTerm("najar", SearchFacet.ARTIST, "artist"),
                 SearchTerm("artistcg", SearchFacet.TYPE, "type"),
             ),
-            typed.appliedQuery.includeTerms,
+            typed.query.includeTerms,
         )
         assertTrue(
             "Hitomi typed Popular returned a post outside the requested artistcg taxonomy",
-            typed.results.all { post ->
+            typed.result.posts.all { post ->
                 post.taxonomy.any { term ->
                     term.value == "najar" && term.facet == SearchFacet.ARTIST
                 } && post.taxonomy.any { term ->
@@ -271,36 +291,49 @@ class LiveSearchCoordinatorRouteTest {
         )
 
         val suggestions = searchCoordinator(registry, "hitomi-autocomplete")
-        suggestions.initialize()
-        suggestions.setMode(QueryMode.Source(SourceKey.HITOMI))
-        suggestions.refreshAutocompleteSuggestions("naj")
+        suggestions.initializeRoute()
+        val suggestionQuery = sourceQuery(SourceKey.HITOMI)
+        val globalSuggestions = suggestions.fetchAutocomplete(
+            suggestionQuery,
+            SearchSourceScope.Single(SourceKey.HITOMI),
+            FacetedSearchScope.All,
+            "naj",
+            emptyList(),
+        )
         assertTrue(
             "Hitomi global autocomplete did not preserve the Najar artist taxonomy",
-            suggestions.facetedAutocompleteSuggestions.any { suggestion ->
+            globalSuggestions.facetedAutocomplete.any { suggestion ->
                 suggestion.text == "najar" &&
                     suggestion.facet == SearchFacet.ARTIST &&
                     suggestion.sourceNamespace == "artist"
             },
         )
-        suggestions.refreshAutocompleteSuggestions("artist:naj")
+        val artistSuggestions = suggestions.fetchAutocomplete(
+            suggestionQuery,
+            SearchSourceScope.Single(SourceKey.HITOMI),
+            FacetedSearchScope.All,
+            "artist:naj",
+            emptyList(),
+        )
         assertEquals(
             FacetedSearchScope(SearchFacet.ARTIST, "artist"),
-            suggestions.selectedSearchScope,
+            artistSuggestions.selectedScope,
         )
         assertTrue(
             "Hitomi Artist autocomplete did not return Najar",
-            suggestions.facetedAutocompleteSuggestions.any { suggestion -> suggestion.text == "najar" },
+            artistSuggestions.facetedAutocomplete.any { suggestion -> suggestion.text == "najar" },
         )
         assertTrue(
             "Hitomi Artist autocomplete leaked another taxonomy",
-            suggestions.facetedAutocompleteSuggestions.all { suggestion ->
+            artistSuggestions.facetedAutocomplete.all { suggestion ->
                 suggestion.facet == SearchFacet.ARTIST && suggestion.sourceNamespace == "artist"
             },
         )
 
         val animatedGallery = requireNotNull(
-            typed.resolvePost(
+            typed.coordinator.resolvePostForSearch(
                 PostId(SourceKey.HITOMI, ANIMATED_GALLERY_ID),
+                typed.result.executionKey,
             ),
         ) { "Hitomi gallery $ANIMATED_GALLERY_ID did not resolve" }
         assertTrue(
@@ -349,8 +382,9 @@ class LiveSearchCoordinatorRouteTest {
         )
 
         val anime = requireNotNull(
-            typed.resolvePost(
+            typed.coordinator.resolvePostForSearch(
                 PostId(SourceKey.HITOMI, ANIME_GALLERY_ID),
+                typed.result.executionKey,
             ),
         ) { "Hitomi anime $ANIME_GALLERY_ID did not resolve" }
         assertTrue(
@@ -387,42 +421,34 @@ class LiveSearchCoordinatorRouteTest {
         registry: RealAdapterRegistry,
         probeCase: ProviderProbeCase,
         issues: MutableList<String>,
-    ): SearchCoordinator? {
+    ): LiveSearchRun? {
         val coordinator = searchCoordinator(registry, probeCase.source.name.lowercase())
-        coordinator.initialize()
-        val mode = QueryMode.Source(probeCase.source)
-        coordinator.setMode(mode)
-        probeCase.includeTerms.forEach { term ->
-            if (!coordinator.addIncludeTerm(term)) {
-                issues += "${probeCase.source.name}: could not commit seeded term $term"
-                return null
-            }
+        coordinator.initializeRoute()
+        val query = sourceQuery(
+            source = probeCase.source,
+            includeTerms = probeCase.includeTerms + probeCase.includeTags.map(::SearchTerm),
+            sort = probeCase.sort,
+        )
+        val scope = SearchSourceScope.Single(probeCase.source)
+        val result = coordinator.executeInitial(query, scope)
+        if (result is SearchExecutionResult.Failure) {
+            issues += "${probeCase.source.name}: search error ${result.message}"
+            return null
         }
-        probeCase.includeTags.forEach { term ->
-            if (!coordinator.commitTagInput(term)) {
-                issues += "${probeCase.source.name}: could not commit seeded term $term"
-                return null
-            }
-        }
-        coordinator.setSort(probeCase.sort)
-        coordinator.applyDraft()
-
-        if (coordinator.errorMessage != null) {
-            issues += "${probeCase.source.name}: search error ${coordinator.errorMessage}"
-        }
-        if (coordinator.results.isEmpty()) {
+        result as SearchExecutionResult.Success
+        if (result.posts.isEmpty()) {
             val seededTerms = (probeCase.includeTerms.map { term ->
                 "${term.sourceNamespace?.let { namespace -> "$namespace:" }.orEmpty()}${term.value}"
             } + probeCase.includeTags).joinToString()
             issues += "${probeCase.source.name}: seeded search returned no posts for $seededTerms"
         }
-        val failedStatuses = coordinator.statuses.filter { status ->
+        val failedStatuses = result.statuses.filter { status ->
             status.errorMessage != null || status.failureReason != null
         }
         if (failedStatuses.isNotEmpty()) {
             issues += "${probeCase.source.name}: status failures ${failedStatuses.joinToString { it.errorMessage ?: it.failureReason?.name.orEmpty() }}"
         }
-        return coordinator
+        return LiveSearchRun(coordinator, query, scope, result)
     }
 
     private fun searchCoordinator(
@@ -437,10 +463,24 @@ class LiveSearchCoordinatorRouteTest {
         )
     }
 
-    private fun assertCoordinatorSucceeded(label: String, coordinator: SearchCoordinator) {
-        assertNull("$label failed: ${coordinator.errorMessage}", coordinator.errorMessage)
-        assertTrue("$label returned no posts", coordinator.results.isNotEmpty())
-        val failedStatuses = coordinator.statuses.filter { status ->
+    private suspend fun executeSourceSearch(
+        registry: RealAdapterRegistry,
+        storeName: String,
+        query: Query,
+    ): LiveSearchRun {
+        val coordinator = searchCoordinator(registry, storeName)
+        coordinator.initializeRoute()
+        val scope = SearchSourceScope.Single((query.mode as QueryMode.Source).source)
+        val result = coordinator.executeInitial(query, scope)
+        require(result is SearchExecutionResult.Success) {
+            (result as SearchExecutionResult.Failure).message
+        }
+        return LiveSearchRun(coordinator, query, scope, result)
+    }
+
+    private fun assertCoordinatorSucceeded(label: String, result: SearchExecutionResult.Success) {
+        assertTrue("$label returned no posts", result.posts.isNotEmpty())
+        val failedStatuses = result.statuses.filter { status ->
             status.errorMessage != null || status.failureReason != null
         }
         assertTrue(
@@ -603,6 +643,26 @@ class LiveSearchCoordinatorRouteTest {
         override suspend fun clearRule34XxxCredentials() = Unit
     }
 }
+
+private data class LiveSearchRun(
+    val coordinator: SearchCoordinator,
+    val query: Query,
+    val sourceScope: SearchSourceScope,
+    val result: SearchExecutionResult.Success,
+)
+
+private fun sourceQuery(
+    source: SourceKey,
+    includeTerms: List<SearchTerm> = emptyList(),
+    sort: SortMode = SortMode.NEWEST,
+): Query = Query(
+    mode = QueryMode.Source(source),
+    includeTerms = includeTerms,
+    excludeTerms = emptyList(),
+    sort = sort,
+    dateRange = null,
+    minScore = null,
+)
 
 private const val ANIMATED_GALLERY_ID = "4042375"
 private const val ANIME_GALLERY_ID = "7231"
