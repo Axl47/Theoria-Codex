@@ -88,8 +88,7 @@ fun progressiveImageCandidates(post: Post, media: ImageRef): List<String> {
 }
 
 fun supportsProgressiveImageCandidates(post: Post, media: ImageRef): Boolean {
-    val supported = setOf(SourceKey.PIXIV, SourceKey.GELBOORU, SourceKey.NHENTAI, SourceKey.HITOMI)
-    return post.id.source in supported &&
+    return post.id.source in PROGRESSIVE_IMAGE_SOURCES &&
         (media.progressiveUrls.isNotEmpty() || !media.localPath.isNullOrBlank())
 }
 
@@ -141,3 +140,9 @@ private fun ImageRef.bestLocation(): String? =
     localPath?.takeIf(String::isNotBlank) ?: url?.takeIf(String::isNotBlank)
 
 private val IMAGE_EXTENSIONS = setOf("gif", "png", "webp", "jpg", "jpeg", "bmp", "heic", "heif", "avif")
+private val PROGRESSIVE_IMAGE_SOURCES = setOf(
+    SourceKey.PIXIV,
+    SourceKey.GELBOORU,
+    SourceKey.NHENTAI,
+    SourceKey.HITOMI,
+)

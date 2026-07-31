@@ -109,6 +109,21 @@ class AppLogicArchitectureTest {
         assertTrue("app-logic/build/reports/detekt/" in workflow)
     }
 
+    @Test
+    fun `app integration reuses progressive image source policy off the hot path`() {
+        val postMedia = File(
+            root,
+            "app/src/main/java/com/theoriacodex/app/media/PostMedia.kt",
+        ).readText()
+        val progressiveCheck = postMedia
+            .substringAfter("fun supportsProgressiveImageCandidates")
+            .substringBefore("fun isLikelyImageLocation")
+
+        assertTrue("PROGRESSIVE_IMAGE_SOURCES" in progressiveCheck)
+        assertFalse("setOf(" in progressiveCheck)
+        assertTrue("private val PROGRESSIVE_IMAGE_SOURCES = setOf(" in postMedia)
+    }
+
     private fun sourceFiles(): Sequence<File> = File(root, "app-logic/src/main/kotlin")
         .walkTopDown()
         .filter { file -> file.isFile && file.extension == "kt" }
