@@ -38,7 +38,12 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
             container.awaitDurableStores()
             container
         }
-        startAppContainer()
+        startAppContainerIfAllowed(
+            benchmarkFixturesEnabled = BuildConfig.BENCHMARK_FIXTURES_ENABLED,
+            packageName = packageName,
+            processName = currentProcessName(),
+            start = ::startAppContainer,
+        )
     }
 
     override fun startAppContainer() = readiness.start()
@@ -58,5 +63,36 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
                 }
             }
             .build()
+    }
+
+    private fun currentProcessName(): String? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return getProcessName()
+        }
+        val activityManager = getSystemService(ACTIVITY_SERVICE) as? android.app.ActivityManager
+        val processId = android.os.Process.myPid()
+        return activityManager?.runningAppProcesses
+            ?.firstOrNull { process -> process.pid == processId }
+            ?.processName
+    }
+}
+
+internal fun shouldStartAppContainer(
+    benchmarkFixturesEnabled: Boolean,
+    packageName: String,
+    processName: String?,
+): Boolean {
+    val benchmarkFixtureProcess = "$packageName:benchmarkFixture"
+    return !benchmarkFixturesEnabled || processName != benchmarkFixtureProcess
+}
+
+internal inline fun startAppContainerIfAllowed(
+    benchmarkFixturesEnabled: Boolean,
+    packageName: String,
+    processName: String?,
+    start: () -> Unit,
+) {
+    if (shouldStartAppContainer(benchmarkFixturesEnabled, packageName, processName)) {
+        start()
     }
 }

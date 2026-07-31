@@ -136,10 +136,15 @@ import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.tags.FavoriteTagActionGrid
 import com.theoriacodex.app.tags.PostTagActionSection
+import com.theoriacodex.app.viewer.MediaTraceSections
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
 import com.theoriacodex.app.viewer.createLoopingExoPlayer
 import com.theoriacodex.app.viewer.createTexturePlayerView
+import com.theoriacodex.app.viewer.playbackDiagnosticsSemantics
+import com.theoriacodex.app.viewer.FirstFrameTraceGate
+import com.theoriacodex.app.viewer.mediaTestTagPart
+import com.theoriacodex.app.viewer.traceMediaSection
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -892,6 +897,7 @@ fun SearchResultCard(
     resolvePostById: (suspend (PostId) -> Post?)? = null,
     recoverPostMedia: (suspend (Post, ImageRef) -> Post?)? = null,
     refreshOnPreviewError: Boolean = false,
+    playbackDiagnosticsEnabled: Boolean = false,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
 ) {
@@ -922,6 +928,7 @@ fun SearchResultCard(
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag(searchCardTestTag(post.id))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongPress,
@@ -994,7 +1001,9 @@ fun SearchResultCard(
             } else if (videoRef != null && !videoPlaybackFailed) {
                 SearchVideoPreview(
                     media = videoRef,
+                    postId = effectivePost.id,
                     sourceKey = effectivePost.id.source,
+                    playbackDiagnosticsEnabled = playbackDiagnosticsEnabled,
                     previewModel = imageModel,
                     modifier = Modifier.fillMaxSize(),
                     onPlaybackError = {
@@ -1145,7 +1154,9 @@ fun SearchResultCard(
 @Composable
 private fun SearchVideoPreview(
     media: ImageRef,
+    postId: PostId,
     sourceKey: SourceKey,
+    playbackDiagnosticsEnabled: Boolean,
     modifier: Modifier = Modifier,
     previewModel: Any? = null,
     onPlaybackError: () -> Unit = {},
@@ -1162,15 +1173,19 @@ private fun SearchVideoPreview(
     var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
     var didNotifyError by remember(location, sourceKey) { mutableStateOf(false) }
     var hasRenderedFirstFrame by remember(location, sourceKey) { mutableStateOf(false) }
+    var isActuallyPlaying by remember(location, sourceKey) { mutableStateOf(false) }
 
     DisposableEffect(location, sourceKey, lifecycleOwner) {
         didNotifyError = false
-        val player = createLoopingExoPlayer(
-            context = context,
-            location = location,
-            headers = sourceKey.requestHeaders(),
-            muted = true,
-        )
+        val player = traceMediaSection(MediaTraceSections.PREVIEW_PREPARE) {
+            createLoopingExoPlayer(
+                context = context,
+                location = location,
+                headers = sourceKey.requestHeaders(),
+                muted = true,
+            )
+        }
+        val firstFrameTraceGate = FirstFrameTraceGate()
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playerRef !== player) return
@@ -1183,7 +1198,14 @@ private fun SearchVideoPreview(
             }
 
             override fun onRenderedFirstFrame() {
-                hasRenderedFirstFrame = true
+                if (!hasRenderedFirstFrame) {
+                    firstFrameTraceGate.recordOnce(MediaTraceSections.PREVIEW_FIRST_FRAME)
+                    hasRenderedFirstFrame = true
+                }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                isActuallyPlaying = isPlaying
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -1234,11 +1256,27 @@ private fun SearchVideoPreview(
             if (playerRef === player) {
                 playerRef = null
             }
+            isActuallyPlaying = false
             playerViewRef = null
         }
     }
 
-    Box(modifier = modifier) {
+    Box(
+        modifier = modifier
+            .testTag(searchVideoTestTag(postId))
+            .then(
+                playbackDiagnosticsSemantics(
+                    enabled = playbackDiagnosticsEnabled,
+                    isPlaying = isActuallyPlaying,
+                    surface = "Search",
+                )?.let { diagnostics ->
+                    Modifier.semantics {
+                        stateDescription = diagnostics.stateDescription
+                        contentDescription = diagnostics.contentDescription
+                    }
+                } ?: Modifier,
+            ),
+    ) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { factoryContext ->
@@ -1325,6 +1363,10 @@ private fun resolveCardVideoRef(post: Post): ImageRef? {
 internal fun allowsInlineAutoplayInSearch(post: Post): Boolean {
     return post.id.source != SourceKey.IWARA && post.id.source != SourceKey.HITOMI
 }
+
+internal fun searchCardTestTag(postId: PostId): String = "search_card_${postId.mediaTestTagPart()}"
+
+internal fun searchVideoTestTag(postId: PostId): String = "search_video_${postId.mediaTestTagPart()}"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

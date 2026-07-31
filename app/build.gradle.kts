@@ -38,6 +38,7 @@ android {
         buildConfigField("String", "UPDATE_ASSET_NAME", "\"theoria-codex-main.apk\"")
         buildConfigField("long", "UPDATE_CHECK_TIMEOUT_MS", "3000L")
         buildConfigField("boolean", "UPDATER_ENABLED", "false")
+        buildConfigField("boolean", "BENCHMARK_FIXTURES_ENABLED", "false")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -69,7 +70,10 @@ android {
         // behavior while using the debug key for connected profile collection and measurement.
         create("benchmarkRelease") {
             signingConfig = signingConfigs.getByName("debug")
+            applicationIdSuffix = ".benchmark"
+            matchingFallbacks += "release"
             buildConfigField("boolean", "UPDATER_ENABLED", "false")
+            buildConfigField("boolean", "BENCHMARK_FIXTURES_ENABLED", "true")
         }
         create("nonMinifiedRelease") {
             signingConfig = signingConfigs.getByName("debug")
@@ -91,6 +95,14 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("benchmarkRelease")) { variant ->
+        variant.sources.manifests.addStaticManifestFile(
+            "src/benchmarkRelease/AndroidManifest.xml",
+        )
     }
 }
 
@@ -142,6 +154,36 @@ dependencies {
 baselineProfile {
     automaticGenerationDuringBuild = false
     saveInSrc = true
+}
+
+val verifyBenchmarkFixtureArtifact = tasks.register<Exec>("verifyBenchmarkFixtureArtifact") {
+    group = "verification"
+    description = "Verifies the packaged benchmark-only activity, process, dex, and media fixture."
+    dependsOn("packageBenchmarkRelease")
+    val benchmarkApk = layout.buildDirectory.file(
+        "outputs/apk/benchmarkRelease/app-benchmarkRelease.apk",
+    )
+    val fixtureVideo = layout.projectDirectory.file(
+        "src/benchmarkRelease/res/raw/benchmark_loop.mp4",
+    )
+    inputs.file(benchmarkApk)
+    inputs.file(fixtureVideo)
+    inputs.file(rootProject.file("scripts/verify_benchmark_fixture_apk.py"))
+    doFirst {
+        val sdkDirectory = androidComponents.sdkComponents.sdkDirectory.get().asFile
+        val analyzer = sdkDirectory.resolve("cmdline-tools/latest/bin/apkanalyzer")
+        commandLine(
+            "python3",
+            rootProject.file("scripts/verify_benchmark_fixture_apk.py"),
+            benchmarkApk.get().asFile,
+            fixtureVideo.asFile,
+            analyzer,
+        )
+    }
+}
+
+tasks.matching { task -> task.name == "assembleBenchmarkRelease" }.configureEach {
+    finalizedBy(verifyBenchmarkFixtureArtifact)
 }
 
 tasks.withType<Test>().configureEach {
