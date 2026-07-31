@@ -119,6 +119,9 @@ import com.theoriacodex.app.source.ExternalPostDeepLink
 import com.theoriacodex.app.settings.SettingsSectionExpansionState
 import com.theoriacodex.app.settings.SettingsSectionKey
 import com.theoriacodex.app.settings.SettingsScreen
+import com.theoriacodex.app.settings.credentialAccountPresentation
+import com.theoriacodex.app.settings.credentialRecoveryPresentation
+import com.theoriacodex.app.settings.resolveReplaceOnlyCredential
 import com.theoriacodex.app.settings.toPersistenceMap
 import com.theoriacodex.app.settings.toSettingsSectionExpansionState
 import com.theoriacodex.app.source.displayName
@@ -600,10 +603,10 @@ internal fun TheoriaAppContent(
     var pixivConnected by remember { mutableStateOf(false) }
     var gelbooruStatusLabel by remember { mutableStateOf("Not configured") }
     var gelbooruUserIdInput by rememberSaveable { mutableStateOf("") }
-    var gelbooruApiKeyInput by rememberSaveable { mutableStateOf("") }
+    var gelbooruApiKeyInput by remember { mutableStateOf("") }
     var rule34XxxStatusLabel by remember { mutableStateOf("Not configured") }
     var rule34XxxUserIdInput by rememberSaveable { mutableStateOf("") }
-    var rule34XxxApiKeyInput by rememberSaveable { mutableStateOf("") }
+    var rule34XxxApiKeyInput by remember { mutableStateOf("") }
     var showCredentialRecoveryDialog by rememberSaveable { mutableStateOf(false) }
 
     fun credentialRecoveryMessage(state: CredentialStoreRecoveryState): String = when (state) {
@@ -622,19 +625,25 @@ internal fun TheoriaAppContent(
         val message = credentialRecoveryMessage(state)
         pixivConnected = false
         pixivStatusLabel = message
-        gelbooruStatusLabel = message
-        rule34XxxStatusLabel = message
-        if (
+        val clearUserIds =
             state == CredentialStoreRecoveryState.ReconnectRequired ||
             state is CredentialStoreRecoveryState.UnsupportedVersion
-        ) {
-            // Never leave a stale secret visible when the authoritative encrypted snapshot cannot
-            // be opened. This only clears transient UI fields; durable data remains untouched.
-            gelbooruUserIdInput = ""
-            gelbooruApiKeyInput = ""
-            rule34XxxUserIdInput = ""
-            rule34XxxApiKeyInput = ""
-        }
+        val gelbooruPresentation = credentialRecoveryPresentation(
+            currentUserIdInput = gelbooruUserIdInput,
+            statusLabel = message,
+            clearUserId = clearUserIds,
+        )
+        gelbooruStatusLabel = gelbooruPresentation.statusLabel
+        gelbooruUserIdInput = gelbooruPresentation.userIdInput
+        gelbooruApiKeyInput = gelbooruPresentation.apiKeyInput
+        val rule34XxxPresentation = credentialRecoveryPresentation(
+            currentUserIdInput = rule34XxxUserIdInput,
+            statusLabel = message,
+            clearUserId = clearUserIds,
+        )
+        rule34XxxStatusLabel = rule34XxxPresentation.statusLabel
+        rule34XxxUserIdInput = rule34XxxPresentation.userIdInput
+        rule34XxxApiKeyInput = rule34XxxPresentation.apiKeyInput
     }
 
     fun blockCredentialMutationIfNeeded(): Boolean {
@@ -739,15 +748,13 @@ internal fun TheoriaAppContent(
             applyCredentialRecoveryStatus(postGelbooruState)
             return
         }
-        if (gelbooruCredentials == null) {
-            gelbooruStatusLabel = "Not configured"
-            gelbooruUserIdInput = ""
-            gelbooruApiKeyInput = ""
-        } else {
-            gelbooruStatusLabel = "Configured"
-            gelbooruUserIdInput = gelbooruCredentials.userId
-            gelbooruApiKeyInput = gelbooruCredentials.apiKey
-        }
+        val gelbooruPresentation = credentialAccountPresentation(
+            credential = gelbooruCredentials,
+            userId = GelbooruCredentials::userId,
+        )
+        gelbooruStatusLabel = gelbooruPresentation.statusLabel
+        gelbooruUserIdInput = gelbooruPresentation.userIdInput
+        gelbooruApiKeyInput = gelbooruPresentation.apiKeyInput
 
         val rule34XxxCredentials = sourceDependencies.accounts.getRule34XxxCredentials()
         val postRule34State = sourceDependencies.accounts.recoveryState.value
@@ -755,15 +762,13 @@ internal fun TheoriaAppContent(
             applyCredentialRecoveryStatus(postRule34State)
             return
         }
-        if (rule34XxxCredentials == null) {
-            rule34XxxStatusLabel = "Not configured"
-            rule34XxxUserIdInput = ""
-            rule34XxxApiKeyInput = ""
-        } else {
-            rule34XxxStatusLabel = "Configured"
-            rule34XxxUserIdInput = rule34XxxCredentials.userId
-            rule34XxxApiKeyInput = rule34XxxCredentials.apiKey
-        }
+        val rule34XxxPresentation = credentialAccountPresentation(
+            credential = rule34XxxCredentials,
+            userId = Rule34XxxCredentials::userId,
+        )
+        rule34XxxStatusLabel = rule34XxxPresentation.statusLabel
+        rule34XxxUserIdInput = rule34XxxPresentation.userIdInput
+        rule34XxxApiKeyInput = rule34XxxPresentation.apiKeyInput
     }
 
     suspend fun runCredentialMutation(mutation: suspend () -> Unit): Boolean {
@@ -787,6 +792,48 @@ internal fun TheoriaAppContent(
             }
         }
         return result.isSuccess
+    }
+
+    suspend fun <Credential> saveReplaceOnlyCredential(
+        userIdInput: String,
+        replacementApiKeyInput: String,
+        currentCredential: suspend () -> Credential?,
+        currentApiKey: (Credential) -> String,
+        createCredential: (String, String) -> Credential,
+        saveCredential: suspend (Credential) -> Unit,
+        onMissingInput: () -> Unit,
+        clearReplacementInput: () -> Unit,
+    ) {
+        var missingInput = false
+        val saved = runCredentialMutation {
+            val configuredApiKey = if (replacementApiKeyInput.isBlank()) {
+                currentCredential()?.let(currentApiKey)
+            } else {
+                null
+            }
+            val resolved = resolveReplaceOnlyCredential(
+                userIdInput = userIdInput,
+                replacementApiKeyInput = replacementApiKeyInput,
+                configuredApiKey = configuredApiKey,
+            )
+            if (resolved == null) {
+                missingInput = true
+            } else {
+                saveCredential(createCredential(resolved.userId, resolved.apiKey))
+            }
+        }
+        if (missingInput) {
+            onMissingInput()
+        } else if (saved) {
+            clearReplacementInput()
+        }
+    }
+
+    LaunchedEffect(homeTabRoute) {
+        if (homeTabRoute == TopLevelDestination.Settings.route) {
+            gelbooruApiKeyInput = ""
+            rule34XxxApiKeyInput = ""
+        }
     }
 
     LaunchedEffect(credentialRecoveryState) {
@@ -2104,18 +2151,18 @@ internal fun TheoriaAppContent(
                                         },
                                         onSaveGelbooruCredentials = {
                                             if (!blockCredentialMutationIfNeeded()) scope.launch {
-                                                if (gelbooruUserIdInput.isBlank() || gelbooruApiKeyInput.isBlank()) {
-                                                    gelbooruStatusLabel = "Missing user ID or API key"
-                                                } else {
-                                                    runCredentialMutation {
-                                                        sourceDependencies.accounts.saveGelbooruCredentials(
-                                                            GelbooruCredentials(
-                                                                userId = gelbooruUserIdInput,
-                                                                apiKey = gelbooruApiKeyInput,
-                                                            )
-                                                        )
-                                                    }
-                                                }
+                                                saveReplaceOnlyCredential(
+                                                    userIdInput = gelbooruUserIdInput,
+                                                    replacementApiKeyInput = gelbooruApiKeyInput,
+                                                    currentCredential = sourceDependencies.accounts::getGelbooruCredentials,
+                                                    currentApiKey = GelbooruCredentials::apiKey,
+                                                    createCredential = ::GelbooruCredentials,
+                                                    saveCredential = sourceDependencies.accounts::saveGelbooruCredentials,
+                                                    onMissingInput = {
+                                                        gelbooruStatusLabel = "Missing user ID or API key"
+                                                    },
+                                                    clearReplacementInput = { gelbooruApiKeyInput = "" },
+                                                )
                                             }
                                         },
                                         onClearGelbooruCredentials = {
@@ -2142,18 +2189,18 @@ internal fun TheoriaAppContent(
                                         },
                                         onSaveRule34XxxCredentials = {
                                             if (!blockCredentialMutationIfNeeded()) scope.launch {
-                                                if (rule34XxxUserIdInput.isBlank() || rule34XxxApiKeyInput.isBlank()) {
-                                                    rule34XxxStatusLabel = "Missing user ID or API key"
-                                                } else {
-                                                    runCredentialMutation {
-                                                        sourceDependencies.accounts.saveRule34XxxCredentials(
-                                                            Rule34XxxCredentials(
-                                                                userId = rule34XxxUserIdInput,
-                                                                apiKey = rule34XxxApiKeyInput,
-                                                            )
-                                                        )
-                                                    }
-                                                }
+                                                saveReplaceOnlyCredential(
+                                                    userIdInput = rule34XxxUserIdInput,
+                                                    replacementApiKeyInput = rule34XxxApiKeyInput,
+                                                    currentCredential = sourceDependencies.accounts::getRule34XxxCredentials,
+                                                    currentApiKey = Rule34XxxCredentials::apiKey,
+                                                    createCredential = ::Rule34XxxCredentials,
+                                                    saveCredential = sourceDependencies.accounts::saveRule34XxxCredentials,
+                                                    onMissingInput = {
+                                                        rule34XxxStatusLabel = "Missing user ID or API key"
+                                                    },
+                                                    clearReplacementInput = { rule34XxxApiKeyInput = "" },
+                                                )
                                             }
                                         },
                                         onClearRule34XxxCredentials = {

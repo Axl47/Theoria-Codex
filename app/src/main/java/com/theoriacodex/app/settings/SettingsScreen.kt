@@ -343,9 +343,12 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     value = gelbooruApiKey,
                     onValueChange = onGelbooruApiKeyChange,
-                    label = { Text("API Key") },
+                    label = { Text("Replacement API Key") },
                     supportingText = {
-                        Text("Paste key or &api_key=<key>&user_id=<id> to auto-fill.")
+                        Text(
+                            "Leave blank to keep the configured key. " +
+                                "Paste a key or credential query to replace it.",
+                        )
                     },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
@@ -372,9 +375,12 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     value = rule34XxxApiKey,
                     onValueChange = onRule34XxxApiKeyChange,
-                    label = { Text("API Key") },
+                    label = { Text("Replacement API Key") },
                     supportingText = {
-                        Text("Paste key or &api_key=<key>&user_id=<id> to auto-fill.")
+                        Text(
+                            "Leave blank to keep the configured key. " +
+                                "Paste a key or credential query to replace it.",
+                        )
                     },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),

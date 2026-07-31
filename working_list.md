@@ -12,7 +12,6 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### Pending
 
-- [ ] F03: keep persisted source API keys out of saveable UI state
 - [ ] F04: centralize Settings state and persisted section expansion ownership
 - [ ] F05: consolidate Search query and scroll persistence and delete the orphan persistence path
 - [ ] F06: centralize animated-duration enrichment with bounded single-flight work
@@ -31,8 +30,10 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### Done
 
+- [x] F03: keep persisted source API keys out of saveable UI state
+  - Evidence: stored credentials now map through a replace-only presentation that exposes user ID and Configured status but always emits a blank API-key field; blank saves reuse the repository key, replacements supersede it, and unconfigured blank saves fail closed. Six policy tests plus 18 encrypted-store/recovery tests passed; Android-test compilation, app lint, Detekt, HTML validation, and `git diff --check` passed.
 - [x] F02: enlarge compact feed controls and add explicit accessibility state semantics
-  - Evidence: Search like, For You source, and Settings header controls expose 48dp clickable geometry with checkbox/dropdown/button roles and selected or expanded state descriptions while preserving 30dp and 18dp visuals. The focused three-test Compose class passed on an API 37 emulator after the shared semantics extraction; app unit tests, `:app:lintDebug`, `:app:detektDebug`, Android-test compilation, and `git diff --check` passed.
+  - Commit: `333e7fb` (`fix(ui): improve compact control accessibility`). Evidence: Search like, For You source, and Settings header controls expose 48dp clickable geometry with checkbox/dropdown/button roles and selected or expanded state descriptions while preserving 30dp and 18dp visuals. The focused three-test Compose class passed on an API 37 emulator after the shared semantics extraction; app unit tests, `:app:lintDebug`, `:app:detektDebug`, Android-test compilation, and `git diff --check` passed.
 - [x] F01: execute every Android instrumentation owner in CI and correct device artifact naming
   - Commit: `61dd92c` (`ci(android): execute Room schema validation on devices`). Evidence: device CI now runs and uploads reports for both `:app` and `:core-data-android`; the API 35 release-acceptance artifact is named accurately. Two workflow contract tests, `actionlint`, `:core-data-android:compileDebugAndroidTestKotlin`, and `git diff --check` passed.
 - [x] Launch the dedicated implementation task and hand it the sequential commit contract
