@@ -525,7 +525,7 @@ class FileBackedRepositoriesTest {
     }
 
     @Test
-    fun `query repository persists applied query and scroll offsets`() = runTest {
+    fun `query repository persists applied query without scroll state`() = runTest {
         val dir = tempDir("query-store-")
         val first = FileBackedQueryRepository(dir)
         val query = Query(
@@ -550,7 +550,6 @@ class FileBackedRepositoriesTest {
             minScore = 10,
         )
         first.upsertAppliedQuery("source:PIXIV", query)
-        first.upsertScrollOffset("qhash", 320)
 
         val second = FileBackedQueryRepository(dir)
         val loaded = second.observeAppliedQuery("source:PIXIV").first()
@@ -561,7 +560,7 @@ class FileBackedRepositoriesTest {
         assertTrue(storedJson.contains("\"excludeTerms\""))
         assertTrue(storedJson.contains("\"includeTags\""))
         assertTrue(storedJson.contains("\"excludeTags\""))
-        assertEquals(320, second.getScrollOffset("qhash"))
+        assertFalse(storedJson.contains("scrollOffsets"))
     }
 
     @Test
@@ -571,12 +570,12 @@ class FileBackedRepositoriesTest {
             val repository = FileBackedQueryRepository(dir, ioDispatcher = dispatcher)
             val dispatchesAfterInitialization = dispatcher.executionThreadNames.size
 
-            repository.upsertScrollOffset("query", 42)
+            repository.upsertAppliedQuery("query", sampleQuery())
 
             assertTrue(dispatchesAfterInitialization > 0)
             assertTrue(dispatcher.executionThreadNames.size > dispatchesAfterInitialization)
             assertTrue(dispatcher.executionThreadNames.all { name -> name == "repository-file-io" })
-            assertEquals(42, FileBackedQueryRepository(dir).getScrollOffset("query"))
+            assertEquals(sampleQuery(), FileBackedQueryRepository(dir).observeAppliedQuery("query").first())
         }
     }
 
@@ -588,14 +587,17 @@ class FileBackedRepositoriesTest {
         coroutineScope {
             repeat(24) { index ->
                 launch(Dispatchers.Default) {
-                    repository.upsertScrollOffset("query-$index", index)
+                    repository.upsertAppliedQuery("query-$index", sampleQuery(listOf("tag-$index")))
                 }
             }
         }
 
         val reconstructed = FileBackedQueryRepository(dir)
         repeat(24) { index ->
-            assertEquals(index, reconstructed.getScrollOffset("query-$index"))
+            assertEquals(
+                listOf("tag-$index"),
+                reconstructed.observeAppliedQuery("query-$index").first()?.includeTags,
+            )
         }
     }
 
@@ -707,7 +709,7 @@ class FileBackedRepositoriesTest {
         assertEquals(SortMode.TOP, loaded?.sort)
         assertEquals(listOf("landscape"), loaded?.includeTags)
         assertEquals(listOf(SearchTerm(value = "landscape")), loaded?.includeTerms)
-        assertEquals(320, repository.getScrollOffset("qhash"))
+        assertTrue(dir.resolve("query_store.json").readText().contains("scrollOffsets"))
     }
 
     @Test

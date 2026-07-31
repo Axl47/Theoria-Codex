@@ -303,7 +303,7 @@ class SearchCoordinator(
             resetUnsupportedSearchScope()
             hasExecutedSearch =
                 appliedByMode.containsKey(modeKey(appliedQuery.mode)) ||
-                queryRepository.getScrollOffset(appliedQueryHash) != null
+                uiRestoreRepository.getSearchScrollState(appliedQueryHash) != null
             initialized = true
         }
     }
@@ -1193,7 +1193,7 @@ class SearchCoordinator(
         offsetPx: Int,
         queryHash: String = appliedQueryHash,
     ) {
-        if (isAppliedTemporarySourceScope) return
+        if (isAppliedTemporarySourceScope && queryHash == appliedQueryHash) return
         val state = SearchScrollState(
             firstVisibleItemIndex = index,
             firstVisibleItemOffsetPx = offsetPx,
@@ -1202,7 +1202,6 @@ class SearchCoordinator(
             scrollPersistenceMutex.withLock {
                 if (persistedScrollStateByQuery[queryHash] == state) return@withLock
                 uiRestoreRepository.setSearchScrollState(queryHash = queryHash, state = state)
-                queryRepository.upsertScrollOffset(queryHash, offsetPx)
                 persistedScrollStateByQuery[queryHash] = state
             }
         }
@@ -1212,15 +1211,16 @@ class SearchCoordinator(
         if (isAppliedTemporarySourceScope) return null
         val hash = appliedQueryHash
         val restored = uiRestoreRepository.getSearchScrollState(hash)
-            ?: queryRepository.getScrollOffset(hash)?.let { offset ->
-                SearchScrollState(firstVisibleItemIndex = 0, firstVisibleItemOffsetPx = offset)
-            }
         if (restored != null) {
             scrollPersistenceMutex.withLock {
                 persistedScrollStateByQuery[hash] = restored
             }
         }
         return restored
+    }
+
+    fun searchScrollPersistenceTarget(): String? {
+        return appliedQueryHash.takeUnless { isAppliedTemporarySourceScope }
     }
 
     fun buildViewerLaunchContext(
@@ -1363,8 +1363,6 @@ class SearchCoordinator(
                     firstVisibleItemOffsetPx = 0,
                 ),
             )
-            ensureCurrent(request)
-            queryRepository.upsertScrollOffset(request.queryHash, 0)
             ensureCurrent(request)
             recentsRepository.recordSearch(request.query, request.queryHash)
             ensureCurrent(request)

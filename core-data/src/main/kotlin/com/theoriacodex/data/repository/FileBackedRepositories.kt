@@ -250,12 +250,10 @@ class FileBackedQueryRepository(
     private val storageFile = baseDirectory.resolve("query_store.json")
     private val fileStore = AtomicJsonFileStore(ioDispatcher = ioDispatcher)
     private val queriesFlow = MutableStateFlow<Map<String, Query>>(emptyMap())
-    private val offsetsFlow = MutableStateFlow<Map<String, Int>>(emptyMap())
 
     init {
         val stored = runBlocking { fileStore.read(storageFile, QueryStoreFile()) }
         queriesFlow.value = stored.queries.mapValues { (_, record) -> record.toDomain() }
-        offsetsFlow.value = stored.scrollOffsets
     }
 
     override fun observeAppliedQuery(modeKey: String): Flow<Query?> {
@@ -268,23 +266,10 @@ class FileBackedQueryRepository(
         }
     }
 
-    override suspend fun upsertScrollOffset(queryHash: String, offsetPx: Int) {
-        mutex.withLock {
-            commitMutation { offsetsFlow.value = offsetsFlow.value + (queryHash to offsetPx) }
-        }
-    }
-
-    override suspend fun getScrollOffset(queryHash: String): Int? {
-        return offsetsFlow.value[queryHash]
-    }
-
     private suspend inline fun <T> commitMutation(mutate: () -> T): T {
         return mutateAndPersistWithRollback(
-            snapshot = { queriesFlow.value to offsetsFlow.value },
-            restore = { (queries, offsets) ->
-                queriesFlow.value = queries
-                offsetsFlow.value = offsets
-            },
+            snapshot = { queriesFlow.value },
+            restore = { queries -> queriesFlow.value = queries },
             mutate = mutate,
             persist = { persist() },
         )
@@ -293,7 +278,6 @@ class FileBackedQueryRepository(
     private suspend fun persist() {
         val payload = QueryStoreFile(
             queries = queriesFlow.value.mapValues { (_, query) -> QueryRecord.fromDomain(query) },
-            scrollOffsets = offsetsFlow.value,
         )
         fileStore.write(storageFile, payload)
     }
@@ -1033,8 +1017,6 @@ private data class CodexItemRecord(
 private data class QueryStoreFile(
     @field:SerializedName("queries")
     val queries: Map<String, QueryRecord> = emptyMap(),
-    @field:SerializedName("scrollOffsets")
-    val scrollOffsets: Map<String, Int> = emptyMap(),
 )
 
 private data class QueryRecord(

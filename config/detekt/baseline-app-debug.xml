@@ -19,7 +19,7 @@
     <ID>CognitiveComplexMethod:SearchScreen.kt:@Composable @OptIn(ExperimentalFoundationApi::class) fun SearchResultCard</ID>
     <ID>CognitiveComplexMethod:SearchScreen.kt:@Composable private fun SearchVideoPreview</ID>
     <ID>CognitiveComplexMethod:SearchScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun FilterSheet</ID>
-    <ID>CognitiveComplexMethod:SearchScreen.kt:@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, FlowPreview::class) @Composable fun SearchScreen</ID>
+    <ID>CognitiveComplexMethod:SearchScreen.kt:@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class) @Composable fun SearchScreen</ID>
     <ID>CognitiveComplexMethod:SettingsScreen.kt:@Composable fun SettingsScreen</ID>
     <ID>CognitiveComplexMethod:StartupUpdater.kt:StartupUpdater$suspend fun checkForEligibleUpdate: Result&lt;RemoteUpdate?&gt;</ID>
     <ID>CognitiveComplexMethod:TheoriaApp.kt:@Composable internal fun TheoriaAppContent</ID>
@@ -55,7 +55,7 @@
     <ID>LongMethod:SearchScreen.kt:@Composable @OptIn(ExperimentalFoundationApi::class) fun SearchResultCard</ID>
     <ID>LongMethod:SearchScreen.kt:@Composable private fun SearchVideoPreview</ID>
     <ID>LongMethod:SearchScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun FilterSheet</ID>
-    <ID>LongMethod:SearchScreen.kt:@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, FlowPreview::class) @Composable fun SearchScreen</ID>
+    <ID>LongMethod:SearchScreen.kt:@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class) @Composable fun SearchScreen</ID>
     <ID>LongMethod:SearchViewModel.kt:SearchViewModel$override fun onAction</ID>
     <ID>LongMethod:SettingsScreen.kt:@Composable fun SettingsScreen</ID>
     <ID>LongMethod:StartupUpdateWorkflow.kt:StartupUpdateWorkflowReducer$fun reduce: StartupUpdateWorkflowTransition</ID>

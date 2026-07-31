@@ -12,7 +12,6 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### Pending
 
-- [ ] F05: consolidate Search query and scroll persistence and delete the orphan persistence path
 - [ ] F06: centralize animated-duration enrichment with bounded single-flight work
 - [ ] F07: bound Hitomi random-search memory while preserving deterministic continuation
 - [ ] F08: quarantine unreadable legacy JSON instead of silently overwriting it
@@ -29,8 +28,10 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### Done
 
+- [x] F05: consolidate Search query and scroll persistence and delete the orphan persistence path
+  - Commit: pending creation (`refactor(search): consolidate query and scroll persistence`). Evidence: UI restore is the sole live scroll store; prior query-file offsets migrate once with proof and structural cleanup; the production ViewModel coalesces query-keyed positions, excludes temporary scopes, serializes begun writes, and drains one final value during real owner clear before cancelling its scheduler. One hundred fifty-nine focused JVM tests, both Android-test compilation owners, app lint, app/core-data Detekt, HTML validation, and `git diff --check` passed. No connected-device or physical-device claim is needed for this deterministic persistence finding.
 - [x] F04: centralize Settings state and persisted section expansion ownership
-  - Commit: pending (`refactor(settings): centralize settings state ownership`). Evidence: one Settings owner replaces seven shell expansion booleans and the 44-parameter screen boundary with keyed durable expansion plus immutable state/typed actions. Thirty-one focused owner, credential, recovery, and ownership tests and 45 repository persistence/reopen tests passed; app lint, Detekt, Android-test compilation, HTML validation, and `git diff --check` passed. The four-test Compose class compiles, but the new owner-contract test was not device-executed because no device is attached and the API 37 AVD registry entry has no backing configuration; the unchanged header retains F02's accepted API 37 geometry evidence.
+  - Commit: `069b705` (`refactor(settings): centralize settings state ownership`). Evidence: one Settings owner replaces seven shell expansion booleans and the 44-parameter screen boundary with keyed durable expansion plus immutable state/typed actions. Thirty-one focused owner, credential, recovery, and ownership tests and 45 repository persistence/reopen tests passed; app lint, Detekt, Android-test compilation, HTML validation, and `git diff --check` passed. The four-test Compose class compiles, but the new owner-contract test was not device-executed because no device is attached and the API 37 AVD registry entry has no backing configuration; the unchanged header retains F02's accepted API 37 geometry evidence.
 - [x] F03: keep persisted source API keys out of saveable UI state
   - Commit: `411aece` (`fix(settings): keep saved API keys out of UI state`). Evidence: stored credentials now map through a replace-only presentation that exposes user ID and Configured status but always emits a blank API-key field; blank saves reuse the repository key, replacements supersede it, and unconfigured blank saves fail closed. Six policy tests plus 18 encrypted-store/recovery tests passed; Android-test compilation, app lint, Detekt, HTML validation, and `git diff --check` passed.
 - [x] F02: enlarge compact feed controls and add explicit accessibility state semantics

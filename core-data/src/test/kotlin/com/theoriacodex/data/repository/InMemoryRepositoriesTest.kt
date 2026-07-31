@@ -93,7 +93,7 @@ class InMemoryRepositoriesTest {
     }
 
     @Test
-    fun `query repository stores query and scroll offset`() = runTest {
+    fun `query repository stores applied query`() = runTest {
         val repo = InMemoryQueryRepository()
         val query = Query(
             mode = QueryMode.Unified,
@@ -105,10 +105,8 @@ class InMemoryRepositoriesTest {
         )
 
         repo.upsertAppliedQuery("unified", query)
-        repo.upsertScrollOffset("hash-1", 420)
 
         assertNotNull(repo.observeAppliedQuery("unified").first())
-        assertEquals(420, repo.getScrollOffset("hash-1"))
     }
 
     @Test

@@ -25,8 +25,13 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -37,6 +42,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * Navigation-scoped owner for Search.
@@ -50,7 +59,8 @@ internal class SearchViewModel(
     private val coordinator: SearchCoordinator,
     private val savedStateHandle: SavedStateHandle,
     private val autocompleteDelayMs: Long = DEFAULT_AUTOCOMPLETE_DELAY_MS,
-    private val scrollPersistenceDelayMs: Long = DEFAULT_SCROLL_PERSISTENCE_DELAY_MS,
+    scrollPersistenceDelayMs: Long = DEFAULT_SCROLL_PERSISTENCE_DELAY_MS,
+    scrollPersistenceDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel(), RouteStateOwner<SearchUiState, SearchAction, SearchEffect> {
     private val mutableState = MutableStateFlow(
         coordinator.toSearchUiState(restoration = SearchRestorationUiState.NotStarted),
@@ -66,8 +76,22 @@ internal class SearchViewModel(
     private var autocompleteJob: Job? = null
     private var trendingJob: Job? = null
     private var restorationJob: Job? = null
-    private var scrollPersistenceJob: Job? = null
     private var latestEnvironmentSettings: AppSettings? = null
+    private val scrollPersistence = SearchScrollPersistenceController(
+        dispatcher = scrollPersistenceDispatcher,
+        debounceMillis = scrollPersistenceDelayMs,
+        persist = { target ->
+            coordinator.persistSearchScrollState(
+                index = target.state.firstVisibleItemIndex,
+                offsetPx = target.state.firstVisibleItemOffsetPx,
+                queryHash = target.queryHash,
+            )
+        },
+    )
+
+    init {
+        addCloseable(SEARCH_SCROLL_PERSISTENCE_KEY, scrollPersistence)
+    }
 
     override fun onAction(action: SearchAction) {
         when (action) {
@@ -569,11 +593,13 @@ internal class SearchViewModel(
         val offset = action.firstVisibleItemOffsetPx.coerceAtLeast(0)
         savedStateHandle[SearchSavedStateKeys.SCROLL_INDEX] = index
         savedStateHandle[SearchSavedStateKeys.SCROLL_OFFSET] = offset
-        scrollPersistenceJob?.cancel()
-        scrollPersistenceJob = viewModelScope.launch {
-            if (scrollPersistenceDelayMs > 0) delay(scrollPersistenceDelayMs)
-            coordinator.persistSearchScrollState(index = index, offsetPx = offset)
-        }
+        val queryHash = coordinator.searchScrollPersistenceTarget() ?: return
+        scrollPersistence.submit(
+            SearchScrollPersistenceTarget(
+                queryHash = queryHash,
+                state = SearchScrollState(index, offset),
+            ),
+        )
     }
 
     private fun savedScrollState(): SearchScrollState? {
@@ -695,5 +721,74 @@ internal class SearchViewModel(
 
         private const val DEFAULT_AUTOCOMPLETE_DELAY_MS = 300L
         private const val DEFAULT_SCROLL_PERSISTENCE_DELAY_MS = 150L
+        private const val SEARCH_SCROLL_PERSISTENCE_KEY = "search-scroll-persistence"
+    }
+}
+
+internal data class SearchScrollPersistenceTarget(
+    val queryHash: String,
+    val state: SearchScrollState,
+)
+
+/**
+ * Navigation-owner closeable for debounced scroll writes. Its scheduler is independent from
+ * viewModelScope so ViewModel teardown can cancel route work first and still synchronously drain
+ * the final pending position through the durable repository.
+ */
+internal class SearchScrollPersistenceController(
+    dispatcher: CoroutineDispatcher,
+    private val debounceMillis: Long,
+    private val persist: suspend (SearchScrollPersistenceTarget) -> Unit,
+) : AutoCloseable {
+    private val scope = kotlinx.coroutines.CoroutineScope(SupervisorJob() + dispatcher)
+    private val lock = Any()
+    private val commitMutex = Mutex()
+    private var activeJob: Job? = null
+    private var latest: SearchScrollPersistenceTarget? = null
+    private var committed: SearchScrollPersistenceTarget? = null
+    private var closed = false
+
+    fun submit(target: SearchScrollPersistenceTarget) {
+        synchronized(lock) {
+            if (closed || target == latest) return
+            latest = target
+            activeJob?.cancel(CancellationException("Search scroll position superseded"))
+            activeJob = scope.launch {
+                if (debounceMillis > 0) delay(debounceMillis)
+                commit(target)
+            }
+        }
+    }
+
+    /**
+     * ViewModel.clear() has no suspending completion hook. The caller therefore waits for the one
+     * final DataStore acknowledgement on Dispatchers.IO before the owned scheduler is cancelled.
+     * This can delay teardown by the duration of that storage operation; imposing a timeout would
+     * make the final position lossy again, so storage failure is surfaced instead of abandoned.
+     */
+    override fun close() {
+        synchronized(lock) {
+            if (closed) return
+            closed = true
+            activeJob?.cancel(CancellationException("Search owner closed"))
+        }
+        try {
+            runBlocking(Dispatchers.IO) {
+                val pending = synchronized(lock) { latest?.takeIf { target -> target != committed } }
+                if (pending != null) commit(pending)
+            }
+        } finally {
+            scope.cancel(CancellationException("Search scroll scheduler closed"))
+        }
+    }
+
+    private suspend fun commit(target: SearchScrollPersistenceTarget) {
+        withContext(NonCancellable) {
+            commitMutex.withLock {
+                if (synchronized(lock) { committed == target }) return@withLock
+                persist(target)
+                synchronized(lock) { committed = target }
+            }
+        }
     }
 }

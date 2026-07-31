@@ -160,20 +160,15 @@ import com.theoriacodex.domain.orchestration.SourceRunStatus
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, FlowPreview::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SearchScreen(
     state: SearchUiState,
@@ -2156,32 +2151,6 @@ private fun Post.hasActionableTags(): Boolean {
         rawTags.any { tag -> tag.isNotBlank() }
 }
 
-@OptIn(FlowPreview::class)
-internal suspend fun Flow<Pair<Int, Int>>.persistDebouncedSearchScrollStates(
-    debounceMillis: Long = SEARCH_SCROLL_PERSIST_DEBOUNCE_MS,
-    persist: suspend (Pair<Int, Int>) -> Unit,
-) {
-    var latestObserved: Pair<Int, Int>? = null
-    var lastCommitted: Pair<Int, Int>? = null
-    try {
-        distinctUntilChanged()
-            .onEach { position -> latestObserved = position }
-            .debounce(debounceMillis)
-            .collect { position ->
-                persist(position)
-                lastCommitted = position
-            }
-    } finally {
-        val pending = latestObserved
-        if (pending != null && pending != lastCommitted) {
-            withContext(NonCancellable) {
-                persist(pending)
-            }
-        }
-    }
-}
-
 private const val PAGINATION_PREFETCH_RATIO = 0.8f
-internal const val SEARCH_SCROLL_PERSIST_DEBOUNCE_MS = 250L
 private const val ANIMATED_PREFETCH_MIN_VISIBLE = 12
 private const val ANIMATED_DURATION_RESOLVE_BATCH_SIZE = 8
