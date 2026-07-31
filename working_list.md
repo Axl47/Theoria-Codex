@@ -8,17 +8,30 @@ updated_at: 2026-07-26T06:12:08-04:00
 
 ### In Progress
 
--
+- [~] Repair the F15 Detekt baseline owner-identity ratchet
+  - [x] Canonicalize only safely parsed leading declaration annotations while preserving rule, file, nesting, and the remaining callable/class declaration; logical-owner collisions fail closed
+  - [x] Added 15-test focused coverage for annotation equivalence, the actual SearchScreen pattern, rule/file/nesting/callable changes, malformed annotations, logical collisions, and genuine new debt
+  - [x] `python3 scripts/check_hotspots.py --base 213d9e9` now passes for the completed branch while the new-owner mutation fixtures still fail
+  - [x] All 32 helper/workflow tests, ordinary hotspot audit, production duplication (195 lines / 0.53%), zero-vulnerability npm audit, HTML validation, and diff checks passed; no workflow changed, so actionlint was not applicable
+  - [ ] Commit `fix(quality): compare Detekt debt by stable owner`, record its SHA, and stop
+
+- [!] Final deterministic host-only acceptance matrix — paused until the quality-gate repair is accepted
+  - [x] Strictly stored and reused the complete 368-task Gradle graph with build-cache substitution disabled: all requested JVM/compile/lint/Detekt/Kover/artifact/releaseAcceptance owners passed and Gradle emitted the exact store/reuse acknowledgements
+  - [x] Direct R8 verification passed for 207 fields across 40 retained classes against both AGP releaseAcceptance mappings plus actual seeds; 13 unreachable contract classes were removed, while the ordinary release wrapper's expected mapping.txt remains absent
+  - [x] Changed-line coverage passed at 94.28% (1,434/1,521 executable changed lines)
+  - [!] Hotspot/Detekt-baseline audit against planning base `213d9e9` failed on two SearchScreen IDs: F05 removed `FlowPreview` from the existing function annotation, changing the textual CognitiveComplexMethod/LongMethod baseline identities without adding debt. F15's exact-ID comparison treats those replacements as additions, and `verify.yml` supplies the PR base, so the current branch would fail CI. No fix was made.
+  - [ ] After parent steering, run the not-yet-started duplication, npm, helper/workflow, actionlint, autoplay/listener XML, HTML, diff, and repository-state checks
+  - [x] Recorded partial deterministic evidence while leaving physical/device/live acceptance pending and creating no closeout commit
 
 ### Pending
 
-- [ ] Run the final deterministic, Android-device, performance, and documentation acceptance matrix
+- [ ] Run the final Android-device, performance, and physical acceptance matrix after host-only evidence is accepted
 - [ ] Update the ExecPlan, `working_list.md`, and any durable `AGENTS.md` findings after every commit
 
 ### Done
 
 - [x] F16 review follow-up: make CI fail closed unless the second strict help invocation reuses configuration cache
-  - Commit: `ci(android): assert configuration cache reuse` (SHA recorded after commit). Evidence: the Verify workflow runs both strict help invocations with plain console output in one isolated project cache, tees the second log under `set -euo pipefail`, and exits unless `grep -Fqx` finds the exact `Configuration cache entry reused.` line. The strengthened four-test configuration-cache contract locks the pipefail, retained-log, exact-signal, and explicit-failure boundaries. The same shell mechanism locally emitted `Reusing configuration cache.` and `Configuration cache entry reused.` after a 770ms store and 472ms reuse; all 28 helper tests, `actionlint` on `verify.yml`, ExecPlan HTML validation, and diff checks passed. No device, emulator, benchmark instrumentation, final matrix, live-provider, release, push, or PR command ran.
+  - Commit: `43a8182` — `ci(android): assert configuration cache reuse`. Evidence: the Verify workflow runs both strict help invocations with plain console output in one isolated project cache, tees the second log under `set -euo pipefail`, and exits unless `grep -Fqx` finds the exact `Configuration cache entry reused.` line. The strengthened four-test configuration-cache contract locks the pipefail, retained-log, exact-signal, and explicit-failure boundaries. The same shell mechanism locally emitted `Reusing configuration cache.` and `Configuration cache entry reused.` after a 770ms store and 472ms reuse; all 28 helper tests, `actionlint` on `verify.yml`, ExecPlan HTML validation, and diff checks passed. No device, emulator, benchmark instrumentation, final matrix, live-provider, release, push, or PR command ran.
 
 - [x] F16: independently evaluate Coil 3 compatibility and strict Gradle configuration-cache adoption
   - Commit: `b7f9085` — `build(android): evaluate image loading and configuration cache`. Evidence: official Coil docs identify 3.5.0 as current stable and confirm separate network/cache-control artifacts, new header/extras/cache-key APIs, `Image` conversion, singleton-loader ownership, painter `StateFlow`, and default-size changes. An isolated detached-worktree compile reproduced breakage across Theoria's loader factory, custom decoder result/options, protected per-request headers, crossfade/SVG, and Viewer drawable seams. Coil remains at 2.7.0 because this finding cannot run the required protected-header plus animated-media device evidence; a two-test architecture gate makes any future major upgrade deliberate. Gradle configuration cache is enabled repository-wide in strict fail mode. Help, the 231-task representative app/core graph, and both custom packaged-artifact verifiers store/reuse with zero problems after removing script-object captures from the two verifier tasks. Five identical warm up-to-date samples measured 1.37s median without configuration cache versus 0.72s with reuse (47.4% lower; 1.63s store); this measures local configuration/task-graph overhead, not clean compilation or CI speed. The final strict 312-task host graph stored then reused and passed all 878 JVM tests with zero failures/errors and six unchanged skips, both Android-test compilers, app/Room lint, seven Detekt owners, Kover, and both packaged APK contracts. Hotspot budgets, 0.53% duplication, zero-vulnerability npm audit, 28 helper/workflow tests, changed-line coverage (no eligible platform-free F16 lines), changed-workflow `actionlint`, HTML, and diff checks passed. A full workflow-glob `actionlint` also surfaced an unchanged style-only SC2129 in `main-prerelease.yml`; F16 did not modify that release workflow. No emulator, connected, physical, benchmark instrumentation, release, or live-provider command ran.

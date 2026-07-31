@@ -7,6 +7,7 @@ import argparse
 import collections
 import json
 import pathlib
+import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ElementTree
@@ -15,6 +16,26 @@ from typing import Any
 
 EXPECTED_ROOT_KEYS = {"version", "sourceModules", "lineBudgets", "detektBaselines"}
 EXPECTED_LINE_KEYS = {"production", "test", "productionExceptions"}
+DETEKT_NESTING_PATTERN = re.compile(r"(?P<nesting>(?:[A-Za-z_][A-Za-z0-9_]*\$)*)(?P<declaration>.+)")
+DETEKT_IDENTIFIER_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+DETEKT_FUNCTION_MODIFIERS = {
+    "abstract",
+    "actual",
+    "expect",
+    "external",
+    "final",
+    "infix",
+    "inline",
+    "internal",
+    "open",
+    "operator",
+    "override",
+    "private",
+    "protected",
+    "public",
+    "suspend",
+    "tailrec",
+}
 
 
 class ConfigurationError(ValueError):
@@ -139,6 +160,130 @@ def authoritative_baseline_paths(root: pathlib.Path) -> set[str]:
     return {line for line in result.stdout.splitlines() if line}
 
 
+def _consume_detekt_annotation(text: str, start: int, label: str) -> int:
+    position = start + 1
+    name = DETEKT_IDENTIFIER_PATTERN.match(text, position)
+    if name is None:
+        raise ConfigurationError(f"cannot canonicalize Detekt annotation in {label}: {text}")
+    position = name.end()
+    if position < len(text) and text[position] == ":":
+        position += 1
+        name = DETEKT_IDENTIFIER_PATTERN.match(text, position)
+        if name is None:
+            raise ConfigurationError(f"cannot canonicalize Detekt annotation in {label}: {text}")
+        position = name.end()
+    while position < len(text) and text[position] == ".":
+        position += 1
+        name = DETEKT_IDENTIFIER_PATTERN.match(text, position)
+        if name is None:
+            raise ConfigurationError(f"cannot canonicalize Detekt annotation in {label}: {text}")
+        position = name.end()
+    while position < len(text) and text[position].isspace():
+        position += 1
+    if position >= len(text) or text[position] != "(":
+        return position
+
+    depth = 0
+    quote: str | None = None
+    escaped = False
+    while position < len(text):
+        character = text[position]
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+        elif character in {'"', "'"}:
+            quote = character
+        elif character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+            if depth == 0:
+                return position + 1
+        position += 1
+    raise ConfigurationError(f"cannot canonicalize unbalanced Detekt annotation in {label}: {text}")
+
+
+def _is_supported_detekt_declaration(declaration: str) -> bool:
+    words = declaration.split()
+    if "fun" in words:
+        fun_index = words.index("fun")
+        if any(word not in DETEKT_FUNCTION_MODIFIERS for word in words[:fun_index]):
+            return False
+        suffix = " ".join(words[fun_index + 1 :])
+        if not suffix:
+            return False
+        owner = suffix.split(":", 1)[0].strip()
+        return bool(owner) and " " not in owner and not owner.startswith("@")
+    return bool(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(?:\s*:\s*\S.*)?", declaration))
+
+
+def _strip_leading_detekt_annotations(text: str, label: str) -> tuple[str, int]:
+    position = 0
+    annotation_count = 0
+    while True:
+        while position < len(text) and text[position].isspace():
+            position += 1
+        if position < len(text) and text[position] == "@":
+            position = _consume_detekt_annotation(text, position, label)
+            annotation_count += 1
+            continue
+        if annotation_count and text.startswith("//", position):
+            candidates: list[tuple[str, int]] = []
+            for match in re.finditer(r"\s@", text[position + 2 :]):
+                candidate_start = position + 2 + match.start() + 1
+                try:
+                    declaration, nested_count = _strip_leading_detekt_annotations(
+                        text[candidate_start:], label
+                    )
+                except ConfigurationError:
+                    continue
+                if nested_count and _is_supported_detekt_declaration(declaration):
+                    candidates.append((declaration, nested_count))
+            if len(candidates) != 1:
+                raise ConfigurationError(
+                    f"cannot canonicalize flattened Detekt annotation comment in {label}: {text}"
+                )
+            declaration, nested_count = candidates[0]
+            return declaration, annotation_count + nested_count
+        break
+    return text[position:].strip(), annotation_count
+
+
+def canonical_detekt_owner_identity(identifier: str, label: str = "Detekt baseline") -> str:
+    parts = identifier.split(":", 2)
+    if len(parts) != 3 or not all(parts):
+        raise ConfigurationError(f"invalid Detekt issue ID in {label}: {identifier}")
+    rule, file_name, owner = parts
+    if DETEKT_IDENTIFIER_PATTERN.fullmatch(rule) is None or any(
+        character.isspace() for character in file_name
+    ):
+        raise ConfigurationError(f"cannot canonicalize Detekt issue ID in {label}: {identifier}")
+    owner_match = DETEKT_NESTING_PATTERN.fullmatch(owner.strip())
+    if owner_match is None:
+        raise ConfigurationError(f"cannot canonicalize Detekt owner in {label}: {identifier}")
+    declaration, _ = _strip_leading_detekt_annotations(owner_match.group("declaration"), label)
+    if not _is_supported_detekt_declaration(declaration):
+        raise ConfigurationError(f"cannot canonicalize Detekt owner in {label}: {identifier}")
+    return f"{rule}:{file_name}:{owner_match.group('nesting')}{declaration}"
+
+
+def logical_detekt_owners(identifiers: set[str], label: str) -> dict[str, str]:
+    owners: dict[str, str] = {}
+    for identifier in identifiers:
+        logical_owner = canonical_detekt_owner_identity(identifier, label)
+        existing = owners.get(logical_owner)
+        if existing is not None:
+            raise ConfigurationError(
+                f"duplicate logical Detekt owner in {label}: {existing}, {identifier}"
+            )
+        owners[logical_owner] = identifier
+    return owners
+
+
 def parse_baseline_text(text: str, label: str) -> tuple[collections.Counter[str], set[str]]:
     try:
         root = ElementTree.fromstring(text)
@@ -231,6 +376,7 @@ def audit(root: pathlib.Path, config: dict[str, Any], base: str | None = None) -
     baseline_report: dict[str, dict[str, int]] = {}
     for relative_path, expected_counts in config["detektBaselines"].items():
         counts, current_ids = parse_baseline_file(root / relative_path)
+        current_owners = logical_detekt_owners(current_ids, relative_path)
         observed_counts = dict(sorted(counts.items()))
         baseline_report[relative_path] = observed_counts
         if observed_counts != expected_counts:
@@ -244,10 +390,13 @@ def audit(root: pathlib.Path, config: dict[str, Any], base: str | None = None) -
                 if current_ids:
                     errors.append(f"cannot compare non-empty baseline absent at {base}: {relative_path}")
             else:
-                additions = sorted(current_ids - base_ids)
+                base_owners = logical_detekt_owners(base_ids, f"{base}:{relative_path}")
+                additions = sorted(
+                    current_owners[owner] for owner in current_owners.keys() - base_owners.keys()
+                )
                 if additions:
                     errors.append(
-                        f"Detekt baseline gained IDs versus {base} in {relative_path}: "
+                        f"Detekt baseline gained owners versus {base} in {relative_path}: "
                         + ", ".join(additions)
                     )
 

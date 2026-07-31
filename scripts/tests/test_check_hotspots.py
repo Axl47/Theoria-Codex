@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections
 import json
 import pathlib
 import subprocess
@@ -124,16 +125,73 @@ class HotspotGateTest(unittest.TestCase):
         self.config["detektBaselines"]["config/detekt/baseline-sample.xml"] = {"LongMethod": 1}
         self.assertEqual("passed", self.audit()["status"])
 
-    def test_rejects_new_detekt_id_even_when_rule_count_is_unchanged(self) -> None:
+    def commit_baseline(self, identifiers: list[str]) -> None:
         subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=self.root, check=True)
         subprocess.run(["git", "config", "user.name", "Test"], cwd=self.root, check=True)
-        self.write_baseline(["LongMethod:Old.kt:fun old"])
-        self.config["detektBaselines"]["config/detekt/baseline-sample.xml"] = {"LongMethod": 1}
+        self.write_baseline(identifiers)
+        self.config["detektBaselines"]["config/detekt/baseline-sample.xml"] = dict(
+            sorted(collections.Counter(identifier.split(":", 1)[0] for identifier in identifiers).items())
+        )
         subprocess.run(["git", "add", "."], cwd=self.root, check=True)
         subprocess.run(["git", "commit", "-qm", "baseline"], cwd=self.root, check=True)
+
+    def test_annotation_add_remove_and_reorder_preserve_logical_owner(self) -> None:
+        variants = [
+            "LongMethod:Feature.kt:fun render",
+            "LongMethod:Feature.kt:@Composable fun render",
+            "LongMethod:Feature.kt:@OptIn(One::class, Two::class) @Composable fun render",
+            "LongMethod:Feature.kt:@Composable @OptIn(Two::class) fun render",
+        ]
+        identities = {hotspots.canonical_detekt_owner_identity(identifier) for identifier in variants}
+        self.assertEqual({"LongMethod:Feature.kt:fun render"}, identities)
+
+    def test_actual_search_owner_annotation_change_is_not_new_debt(self) -> None:
+        old = (
+            "CognitiveComplexMethod:SearchScreen.kt:"
+            "@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, "
+            "FlowPreview::class) @Composable fun SearchScreen"
+        )
+        new = (
+            "CognitiveComplexMethod:SearchScreen.kt:"
+            "@Composable @OptIn(ExperimentalFoundationApi::class) fun SearchScreen"
+        )
+        self.commit_baseline([old])
+        self.write_baseline([new])
+        self.assertEqual("passed", self.audit("HEAD")["status"])
+
+    def test_logical_owner_preserves_rule_file_nesting_and_callable(self) -> None:
+        self.commit_baseline(["LongMethod:Feature.kt:Owner$fun render"])
+        different = {
+            "rule": "CognitiveComplexMethod:Feature.kt:Owner$fun render",
+            "file": "LongMethod:Other.kt:Owner$fun render",
+            "nesting": "LongMethod:Feature.kt:Other$fun render",
+            "callable": "LongMethod:Feature.kt:Owner$fun refresh",
+        }
+        for label, identifier in different.items():
+            with self.subTest(label=label):
+                self.write_baseline([identifier])
+                rule = identifier.split(":", 1)[0]
+                self.config["detektBaselines"]["config/detekt/baseline-sample.xml"] = {rule: 1}
+                self.assertIn("gained owners", "\n".join(self.audit("HEAD")["errors"]))
+
+    def test_rejects_new_detekt_owner_even_when_rule_count_is_unchanged(self) -> None:
+        self.commit_baseline(["LongMethod:Old.kt:Owner$fun old"])
         self.write_baseline(["LongMethod:New.kt:fun new"])
         report = self.audit("HEAD")
-        self.assertIn("gained IDs", "\n".join(report["errors"]))
+        self.assertIn("gained owners", "\n".join(report["errors"]))
+
+    def test_rejects_unparseable_annotation_and_logical_owner_collision(self) -> None:
+        malformed = "LongMethod:Feature.kt:@OptIn(Broken::class fun render"
+        self.write_baseline([malformed])
+        self.config["detektBaselines"]["config/detekt/baseline-sample.xml"] = {"LongMethod": 1}
+        with self.assertRaisesRegex(hotspots.ConfigurationError, "unbalanced Detekt annotation"):
+            self.audit()
+        identifiers = {
+            "LongMethod:Feature.kt:@Composable fun render",
+            "LongMethod:Feature.kt:@OptIn(One::class) fun render",
+        }
+        with self.assertRaisesRegex(hotspots.ConfigurationError, "duplicate logical Detekt owner"):
+            hotspots.logical_detekt_owners(identifiers, "fixture")
 
     def test_repository_quality_lane_and_workflow_own_the_gate(self) -> None:
         package = json.loads((REPOSITORY_ROOT / "package.json").read_text(encoding="utf-8"))
