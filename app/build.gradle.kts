@@ -173,20 +173,22 @@ val verifyBenchmarkFixtureArtifact = tasks.register<Exec>("verifyBenchmarkFixtur
     val fixtureVideo = layout.projectDirectory.file(
         "src/benchmarkRelease/res/raw/benchmark_loop.mp4",
     )
+    val verifierScript = rootProject.layout.projectDirectory.file(
+        "scripts/verify_benchmark_fixture_apk.py",
+    )
+    val analyzer = androidComponents.sdkComponents.sdkDirectory.get().asFile.resolve(
+        "cmdline-tools/latest/bin/apkanalyzer",
+    )
     inputs.file(benchmarkApk)
     inputs.file(fixtureVideo)
-    inputs.file(rootProject.file("scripts/verify_benchmark_fixture_apk.py"))
-    doFirst {
-        val sdkDirectory = androidComponents.sdkComponents.sdkDirectory.get().asFile
-        val analyzer = sdkDirectory.resolve("cmdline-tools/latest/bin/apkanalyzer")
-        commandLine(
-            "python3",
-            rootProject.file("scripts/verify_benchmark_fixture_apk.py"),
-            benchmarkApk.get().asFile,
-            fixtureVideo.asFile,
-            analyzer,
-        )
-    }
+    inputs.file(verifierScript)
+    commandLine(
+        "python3",
+        verifierScript.asFile,
+        benchmarkApk.get().asFile,
+        fixtureVideo.asFile,
+        analyzer,
+    )
 }
 
 tasks.matching { task -> task.name == "assembleBenchmarkRelease" }.configureEach {

@@ -104,6 +104,25 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Verify strict configuration-cache store and reuse
+        run: |
+          ./gradlew help \
+            --project-cache-dir "$RUNNER_TEMP/theoria-config-cache" \
+            --configuration-cache \
+            --configuration-cache-problems=fail
+          ./gradlew help \
+            --project-cache-dir "$RUNNER_TEMP/theoria-config-cache" \
+            --configuration-cache \
+            --configuration-cache-problems=fail
+
+      - name: Verify custom Android artifact tasks are configuration-cache compatible
+        run: >-
+          ./gradlew
+          :app:verifyBenchmarkFixtureArtifact
+          :macrobenchmark:verifyMacrobenchmarkRunnerArtifact
+          --configuration-cache
+          --configuration-cache-problems=fail
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:

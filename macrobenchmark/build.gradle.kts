@@ -39,17 +39,20 @@ val verifyMacrobenchmarkRunnerArtifact = tasks.register<Exec>("verifyMacrobenchm
     val runnerApk = layout.buildDirectory.file(
         "outputs/apk/benchmarkRelease/macrobenchmark-benchmarkRelease.apk",
     )
+    val verifierScript = rootProject.layout.projectDirectory.file(
+        "scripts/verify_macrobenchmark_runner_apk.py",
+    )
+    val analyzer = androidComponents.sdkComponents.sdkDirectory.get().asFile.resolve(
+        "cmdline-tools/latest/bin/apkanalyzer",
+    )
     inputs.file(runnerApk)
-    inputs.file(rootProject.file("scripts/verify_macrobenchmark_runner_apk.py"))
-    doFirst {
-        val sdkDirectory = androidComponents.sdkComponents.sdkDirectory.get().asFile
-        commandLine(
-            "python3",
-            rootProject.file("scripts/verify_macrobenchmark_runner_apk.py"),
-            runnerApk.get().asFile,
-            sdkDirectory.resolve("cmdline-tools/latest/bin/apkanalyzer"),
-        )
-    }
+    inputs.file(verifierScript)
+    commandLine(
+        "python3",
+        verifierScript.asFile,
+        runnerApk.get().asFile,
+        analyzer,
+    )
 }
 
 tasks.matching { task -> task.name == "assembleBenchmarkRelease" }.configureEach {

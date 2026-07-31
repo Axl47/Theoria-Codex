@@ -115,6 +115,11 @@ python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 ./gradlew :koverXmlReport :koverVerify
 ```
 
+Gradle configuration cache is enabled repository-wide in strict fail mode. CI creates an isolated
+cache entry and immediately reuses it; when diagnosing build logic, keep
+`--configuration-cache-problems=fail` enabled rather than allowing incompatible tasks to fall back
+silently. Use `--no-configuration-cache` only for an intentional comparison or diagnosis.
+
 CI holds total line coverage at 55%, requires at least 60% changed-line coverage in the explicitly listed JVM/core modules, caps test files and new production hotspots, freezes existing production-hotspot growth, and requires exact non-growing Detekt baseline debt per module. These gates fail closed for missing configuration or eligible sources. Android/Compose behavior is runtime-validated separately so instrumentation-only code is not mislabeled as uncovered JVM code.
 
 Build before installing or running on a device/emulator:
