@@ -10,6 +10,7 @@ import com.theoriacodex.app.di.DefaultTheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import com.theoriacodex.app.media.LegacyAnimatedWebPDecoder
+import com.theoriacodex.app.viewer.VideoPlaybackInfrastructure
 import com.theoriacodex.data.storage.ApplicationDataReadiness
 import com.theoriacodex.data.storage.ApplicationDataState
 import kotlinx.coroutines.CoroutineScope
@@ -21,6 +22,10 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var readiness: ApplicationDataReadiness<TheoriaAppContainer>
     private var initializingContainer: DefaultTheoriaAppContainer? = null
+
+    internal val videoPlaybackInfrastructure: VideoPlaybackInfrastructure by lazy {
+        VideoPlaybackInfrastructure(this)
+    }
 
     override val appContainerState: StateFlow<ApplicationDataState<TheoriaAppContainer>>
         get() = readiness.state

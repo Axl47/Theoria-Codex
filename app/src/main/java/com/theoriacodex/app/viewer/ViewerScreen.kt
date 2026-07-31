@@ -1497,6 +1497,7 @@ private fun ViewerVideoPlayer(
                 location = playbackLocation,
                 headers = sourceKey.requestHeaders(),
                 muted = false,
+                profile = VideoPlaybackProfile.VIEWER,
             )
         }
         val firstFrameTraceGate = FirstFrameTraceGate()

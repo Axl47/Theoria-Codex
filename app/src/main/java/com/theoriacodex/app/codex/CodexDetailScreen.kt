@@ -124,7 +124,10 @@ fun CodexDetailScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                itemsIndexed(posts) { index, post ->
+                itemsIndexed(
+                    items = posts,
+                    key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" },
+                ) { index, post ->
                     SearchResultCard(
                         post = post,
                         pixivUgoiraClient = pixivUgoiraClient,

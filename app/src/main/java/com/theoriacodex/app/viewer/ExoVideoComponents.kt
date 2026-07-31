@@ -8,18 +8,13 @@ import android.os.Trace
 import android.view.LayoutInflater
 import android.widget.FrameLayout
 import androidx.core.net.toUri
-import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DataSource
-import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import com.theoriacodex.app.R
 import com.theoriacodex.domain.model.PostId
@@ -35,19 +30,21 @@ internal fun createLoopingExoPlayer(
     location: String,
     headers: Map<String, String>,
     muted: Boolean,
+    profile: VideoPlaybackProfile,
 ): ExoPlayer {
     val appContext = context.applicationContext
-    val dataSourceFactory = buildVideoDataSourceFactory(appContext, location, headers)
-    val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+    val infrastructure = appContext.videoPlaybackInfrastructure()
+    val request = infrastructure.bind(location, headers)
     return ExoPlayer.Builder(appContext)
-        .setMediaSourceFactory(mediaSourceFactory)
+        .setMediaSourceFactory(request.mediaSourceFactory)
+        .setLoadControl(infrastructure.loadControl(profile))
         .build()
         .apply {
             addAnalyticsListener(MediaLoadTraceListener)
             repeatMode = Player.REPEAT_MODE_ONE
             setSeekParameters(SeekParameters.EXACT)
             volume = if (muted) 0f else 1f
-            setMediaItem(MediaItem.fromUri(videoLocationToUri(location)))
+            setMediaItem(request.mediaItem)
             prepare()
         }
 }
@@ -126,31 +123,7 @@ private object MediaLoadTraceListener : AnalyticsListener {
     }
 }
 
-private fun buildVideoDataSourceFactory(
-    context: Context,
-    location: String,
-    headers: Map<String, String>,
-): DataSource.Factory {
-    if (!isHttpLocation(location)) {
-        return DefaultDataSource.Factory(context)
-    }
-    val httpFactory = DefaultHttpDataSource.Factory()
-        .setAllowCrossProtocolRedirects(true)
-        .setConnectTimeoutMs(12_000)
-        .setReadTimeoutMs(24_000)
-        .setUserAgent("Mozilla/5.0")
-    if (headers.isNotEmpty()) {
-        httpFactory.setDefaultRequestProperties(headers)
-    }
-    return DefaultDataSource.Factory(context, httpFactory)
-}
-
-private fun isHttpLocation(location: String): Boolean {
-    return location.startsWith("http://", ignoreCase = true) ||
-        location.startsWith("https://", ignoreCase = true)
-}
-
-private fun videoLocationToUri(location: String): Uri {
+internal fun videoLocationToUri(location: String): Uri {
     return when {
         location.startsWith("http://", ignoreCase = true) ||
             location.startsWith("https://", ignoreCase = true) ||

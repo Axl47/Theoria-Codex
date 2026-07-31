@@ -201,8 +201,8 @@ class PerformanceBenchmarkArchitectureTest {
         val media = file(
             "app/src/main/java/com/theoriacodex/app/viewer/ExoVideoComponents.kt",
         ).readText()
-        val search = file(
-            "app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt",
+        val feedMedia = file(
+            "app/src/main/java/com/theoriacodex/app/search/FeedMediaComponents.kt",
         ).readText()
         val viewer = file(
             "app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt",
@@ -224,11 +224,11 @@ class PerformanceBenchmarkArchitectureTest {
             assertTrue("Macrobenchmark must retain $traceName", traceName in benchmark)
             assertTrue("App instrumentation must retain $traceName", traceName in media)
         }
-        assertTrue("Search semantics must expose actual player state", "onIsPlayingChanged" in search)
+        assertTrue("Search semantics must expose actual player state", "onIsPlayingChanged" in feedMedia)
         assertTrue("Viewer semantics must expose actual player state", "onIsPlayingChanged" in viewer)
         assertTrue(
             "Search playback announcements must be diagnostics-gated",
-            "playbackDiagnosticsSemantics(" in search,
+            "playbackDiagnosticsSemantics(" in feedMedia,
         )
         assertTrue(
             "Viewer playback announcements must be diagnostics-gated",
@@ -236,7 +236,7 @@ class PerformanceBenchmarkArchitectureTest {
         )
         assertFalse(
             "Search benchmark announcement must not expose provider IDs",
-            "Playing Search video ${'$'}{postId.sourcePostId}" in search,
+            "Playing Search video ${'$'}{postId.sourcePostId}" in feedMedia,
         )
         assertFalse(
             "Viewer benchmark announcement must not expose provider IDs",

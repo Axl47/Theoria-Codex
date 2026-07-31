@@ -1,5 +1,3 @@
-@file:androidx.annotation.OptIn(UnstableApi::class)
-
 package com.theoriacodex.app.search
 
 import android.content.Context
@@ -76,11 +74,14 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -93,16 +94,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
-import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
 import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
@@ -112,7 +104,6 @@ import com.theoriacodex.app.media.animatedDurationRangeLabel
 import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.media.isHttpNotFound
 import com.theoriacodex.app.media.isPixivUgoiraPost
-import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.media.postPreviewImageCandidate
 import com.theoriacodex.app.recommend.recommendationIncludeTags
@@ -123,7 +114,6 @@ import com.theoriacodex.app.R
 import com.theoriacodex.app.source.SourceLogo
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.isRule34Family
-import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.ui.components.AutocompleteListShell
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedErrorTile
@@ -136,15 +126,9 @@ import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.tags.FavoriteTagActionGrid
 import com.theoriacodex.app.tags.PostTagActionSection
-import com.theoriacodex.app.viewer.MediaTraceSections
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
-import com.theoriacodex.app.viewer.createLoopingExoPlayer
-import com.theoriacodex.app.viewer.createTexturePlayerView
-import com.theoriacodex.app.viewer.playbackDiagnosticsSemantics
-import com.theoriacodex.app.viewer.FirstFrameTraceGate
 import com.theoriacodex.app.viewer.mediaTestTagPart
-import com.theoriacodex.app.viewer.traceMediaSection
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -902,11 +886,29 @@ fun SearchResultCard(
     onLongPress: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
+    var isInViewport by remember(post.id) { mutableStateOf(false) }
+    var isLifecycleStarted by remember(lifecycleOwner) {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+    }
+    val playbackActive = shouldFeedMediaPlay(
+        isInViewport = isInViewport,
+        isLifecycleStarted = isLifecycleStarted,
+    )
     var resolvedPostOverride by remember(post.id) { mutableStateOf<Post?>(null) }
     var resolutionAttempted by remember(post.id) { mutableStateOf(false) }
     val mediaRecoveryAttemptedUrls = remember(post.id) { mutableSetOf<String>() }
     val effectivePost = resolvedPostOverride ?: post
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, _ ->
+            isLifecycleStarted = lifecycleOwner.lifecycle.currentState
+                .isAtLeast(Lifecycle.State.STARTED)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     fun requestResolvedCardPreview(force: Boolean = false) {
         if (resolutionAttempted) return
@@ -928,6 +930,11 @@ fun SearchResultCard(
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
+            .onGloballyPositioned { coordinates ->
+                val visible = coordinates.isAttached &&
+                    isVisibleFeedBounds(coordinates.boundsInWindow(clipBounds = true))
+                if (isInViewport != visible) isInViewport = visible
+            }
             .testTag(searchCardTestTag(post.id))
             .combinedClickable(
                 onClick = onClick,
@@ -973,8 +980,27 @@ fun SearchResultCard(
         val ratio = remember(post.id) {
             previewAspectRatio(post)
         }
-        val imageModel = remember(context, previewUrl, effectivePost.id.source) {
-            previewUrl?.let { buildImageRequest(context, it, effectivePost.id.source) }
+        val windowSize = LocalWindowInfo.current.containerSize
+        val decodeSize = remember(windowSize.width, ratio) {
+            feedPreviewDecodeSize(
+                screenWidthPx = windowSize.width,
+                aspectRatio = ratio,
+            )
+        }
+        val imageModel = remember(
+            context,
+            previewUrl,
+            effectivePost.id.source,
+            decodeSize,
+        ) {
+            previewUrl?.let {
+                buildFeedImageRequest(
+                    context = context,
+                    url = it,
+                    sourceKey = effectivePost.id.source,
+                    decodeSize = decodeSize,
+                )
+            }
         }
         val mediaCount = postMediaCount(effectivePost)
 
@@ -997,6 +1023,7 @@ fun SearchResultCard(
                     modifier = Modifier.fillMaxSize(),
                     contentDescription = title,
                     contentScale = ContentScale.Crop,
+                    isActive = playbackActive,
                 )
             } else if (videoRef != null && !videoPlaybackFailed) {
                 SearchVideoPreview(
@@ -1004,6 +1031,7 @@ fun SearchResultCard(
                     postId = effectivePost.id,
                     sourceKey = effectivePost.id.source,
                     playbackDiagnosticsEnabled = playbackDiagnosticsEnabled,
+                    isActive = playbackActive,
                     previewModel = imageModel,
                     modifier = Modifier.fillMaxSize(),
                     onPlaybackError = {
@@ -1014,11 +1042,12 @@ fun SearchResultCard(
                     },
                 )
             } else if (imageModel != null) {
-                AsyncImage(
+                FeedAsyncImage(
                     model = imageModel,
                     contentDescription = title,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
+                    isActive = playbackActive,
                     onError = { state ->
                         val canAdvance = displayedImageCandidateIndex < imageCandidates.lastIndex
                         val failedRef = previewRef?.copy(url = previewUrl)
@@ -1147,164 +1176,6 @@ fun SearchResultCard(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun SearchVideoPreview(
-    media: ImageRef,
-    postId: PostId,
-    sourceKey: SourceKey,
-    playbackDiagnosticsEnabled: Boolean,
-    modifier: Modifier = Modifier,
-    previewModel: Any? = null,
-    onPlaybackError: () -> Unit = {},
-) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val location = media.localPath ?: media.url
-    if (location.isNullOrBlank()) {
-        onPlaybackError()
-        return
-    }
-
-    var playerRef by remember(location, sourceKey) { mutableStateOf<ExoPlayer?>(null) }
-    var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
-    var didNotifyError by remember(location, sourceKey) { mutableStateOf(false) }
-    var hasRenderedFirstFrame by remember(location, sourceKey) { mutableStateOf(false) }
-    var isActuallyPlaying by remember(location, sourceKey) { mutableStateOf(false) }
-
-    DisposableEffect(location, sourceKey, lifecycleOwner) {
-        didNotifyError = false
-        val player = traceMediaSection(MediaTraceSections.PREVIEW_PREPARE) {
-            createLoopingExoPlayer(
-                context = context,
-                location = location,
-                headers = sourceKey.requestHeaders(),
-                muted = true,
-            )
-        }
-        val firstFrameTraceGate = FirstFrameTraceGate()
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playerRef !== player) return
-                if (playbackState != Player.STATE_READY) return
-                if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
-                runCatching {
-                    player.playWhenReady = true
-                    player.play()
-                }
-            }
-
-            override fun onRenderedFirstFrame() {
-                if (!hasRenderedFirstFrame) {
-                    firstFrameTraceGate.recordOnce(MediaTraceSections.PREVIEW_FIRST_FRAME)
-                    hasRenderedFirstFrame = true
-                }
-            }
-
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                isActuallyPlaying = isPlaying
-            }
-
-            override fun onPlayerError(error: PlaybackException) {
-                if (didNotifyError) return
-                didNotifyError = true
-                onPlaybackError()
-            }
-        }
-        player.addListener(listener)
-        playerRef = player
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME -> {
-                    runCatching {
-                        player.playWhenReady = true
-                        player.play()
-                    }
-                }
-                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
-                    runCatching {
-                        player.playWhenReady = false
-                        player.pause()
-                    }
-                }
-                else -> Unit
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-            runCatching {
-                player.playWhenReady = true
-                player.play()
-            }
-        }
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            player.removeListener(listener)
-            runCatching {
-                player.playWhenReady = false
-                player.pause()
-            }
-            runCatching {
-                playerViewRef?.player = null
-            }
-            runCatching {
-                player.release()
-            }
-            if (playerRef === player) {
-                playerRef = null
-            }
-            isActuallyPlaying = false
-            playerViewRef = null
-        }
-    }
-
-    Box(
-        modifier = modifier
-            .testTag(searchVideoTestTag(postId))
-            .then(
-                playbackDiagnosticsSemantics(
-                    enabled = playbackDiagnosticsEnabled,
-                    isPlaying = isActuallyPlaying,
-                    surface = "Search",
-                )?.let { diagnostics ->
-                    Modifier.semantics {
-                        stateDescription = diagnostics.stateDescription
-                        contentDescription = diagnostics.contentDescription
-                    }
-                } ?: Modifier,
-            ),
-    ) {
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { factoryContext ->
-                createTexturePlayerView(factoryContext).apply {
-                    player = playerRef
-                    useController = false
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                    playerViewRef = this
-                    isClickable = false
-                    isFocusable = false
-                }
-            },
-            update = { playerView ->
-                playerViewRef = playerView
-                playerView.useController = false
-                playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                playerView.player = playerRef
-                playerView.isClickable = false
-                playerView.isFocusable = false
-            },
-        )
-        if (!hasRenderedFirstFrame && previewModel != null) {
-            AsyncImage(
-                model = previewModel,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
         }
     }
 }
@@ -2144,19 +2015,6 @@ internal fun previewAspectRatio(post: Post): Float {
     val height = post.height ?: return 1f
     if (width <= 0 || height <= 0) return 1f
     return width.toFloat() / height.toFloat()
-}
-
-private fun buildImageRequest(
-    context: Context,
-    url: String,
-    sourceKey: SourceKey,
-): ImageRequest {
-    return MediaRequestFactory.imageRequest(
-        context = context,
-        url = url,
-        sourceKey = sourceKey,
-        crossfade = false,
-    )
 }
 
 private fun String.isDigitsOnly(): Boolean {
