@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-07-31T20:03:34-04:00
+updated_at: 2026-07-31T20:05:02-04:00
 ---
 # Working List
 
@@ -8,7 +8,7 @@ updated_at: 2026-07-31T20:03:34-04:00
 
 ### In Progress
 
-- [~] Record the dedicated F18 commit and stop; no further release or device action is authorized
+None. F18 is committed and the audit is closed; no further release or device action is authorized.
 
 ### Pending
 
@@ -18,7 +18,7 @@ updated_at: 2026-07-31T20:03:34-04:00
 ### Done
 
 - [x] F18: eliminate the final repository-wide actionlint/ShellCheck warning without changing release behavior
-  - Commit: pending — `ci(release): write metadata in one environment block`. Evidence: the four existing `VERSION_CODE`, `RELEASE_TITLE`, `RELEASE_TAG`, and `RELEASE_NOTES_FILE` values are emitted at the same post-validation point through one brace-group append to `GITHUB_ENV`; no validation, action version, Gradle, signing, tag, or publication behavior changed. `actionlint .github/workflows/*.yml` now passes with zero findings, superseding the prior SC2129 caveat while preserving its historical evidence. All 36 helper/workflow tests, ExecPlan HTML validation, and whitespace/diff checks pass. No Gradle rebuild, device/emulator, live provider, signing, tag, publish, push, PR, or release-metadata mutation ran.
+  - Commit: `961bec8` — `ci(release): write metadata in one environment block`. Evidence: the four existing `VERSION_CODE`, `RELEASE_TITLE`, `RELEASE_TAG`, and `RELEASE_NOTES_FILE` values are emitted at the same post-validation point through one brace-group append to `GITHUB_ENV`; no validation, action version, Gradle, signing, tag, or publication behavior changed. `actionlint .github/workflows/*.yml` now passes with zero findings, superseding the prior SC2129 caveat while preserving its historical evidence. All 36 helper/workflow tests, ExecPlan HTML validation, and whitespace/diff checks pass. No Gradle rebuild, device/emulator, live provider, signing, tag, publish, push, PR, or release-metadata mutation ran.
 
 - [x] F17: repair release R8 JSON-contract verification ownership
   - Commit: `d5956fc` — `fix(release): verify R8 contracts from AGP artifacts`. Evidence: one typed, configuration-cache-safe task consumes each variant's public `SingleArtifact.OBFUSCATION_MAPPING_FILE` provider plus a separately declared required `outputs/mapping/<variant>/seeds.txt` input; the mapping provider carries the R8 task dependency, and no guessed intermediates path, string-named minify dependency, or `doFirst` script capture remains. After moving aside all four generated release/releaseAcceptance mapping directories, the two public verifier tasks rebuilt 90 tasks in 5m20s and each verified 207 durable fields across 40 retained exact classes while proving 13 contract classes unreachable. An isolated strict graph then stored in 5m52s (90 executed) and reused in 5m30s (84 executed, 6 up-to-date), emitting exact `Configuration cache entry stored.` and `Configuration cache entry reused.` acknowledgements and passing both verifiers again. `:app:assembleRelease :app:assembleReleaseAcceptance` completed 151 tasks in 5m21s and each matching finalizer passed with the same counts. Four focused R8 build/workflow contracts plus four configuration-cache contracts passed; all 36 helper/workflow tests, ordinary and branch-base hotspot gates, production duplication at 195/36,650 lines (0.53%), changed `verify.yml` actionlint, ExecPlan HTML validation, and diff checks passed. The tagged release workflow still reports only its known untouched SC2129 at line 35 and continues to enter through `:app:assembleRelease`; no manual Python fallback exists. No device, emulator, benchmark instrumentation, live provider, signing, tag, push, publish, PR, or release-metadata mutation ran, and the accepted `c3391bd` hardware artifacts remain unchanged.
