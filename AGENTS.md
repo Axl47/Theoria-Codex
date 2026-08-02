@@ -60,6 +60,14 @@ Numeric startup, Search concurrent-autoplay, and Viewer-swipe measurements live 
 
 Never configure `androidx.benchmark.junit4.SideEffectRunListener` as a runner argument in the personal-device benchmark lane. In AndroidX Benchmark 1.5.0-alpha07 it disables 41 unrelated packages, including Play Store and Google Play services, then unconditionally enables every package without restoring prior state. The required benchmark library may still package the listener and `DisablePackages` classes; class presence is harmless because no runner argument instantiates them. Source guards and packaged-runner manifest verification prove the listener is unconfigured. The benchmark app APK separately isolates its application ID and storage and removes production deep links, App Links verification, install/network permission, and FileProvider.
 
+## Production App Data Safety
+
+Treat the production package `com.theoriacodex` and its private data as protected user data. Before running any Gradle task, Android Studio action, script, ADB command, connected test, baseline-profile collection, or benchmark that can install, uninstall, replace, clear, downgrade, or launch an APK, prove the packaged application ID and signing lane first. Build-only assembly tasks do not touch a device, but do not infer install safety from a task or variant name.
+
+Every debug-signed or device-testable application variant must use a non-production application ID: Debug uses `com.theoriacodex.debug`, macrobenchmark uses `com.theoriacodex.benchmark`, release acceptance uses `com.theoriacodex.acceptance`, and baseline-profile collection uses `com.theoriacodex.baselineprofile`. Keep automated source and packaged-artifact guards for these identities. Never run a connected lane on a personal device if its target resolves to `com.theoriacodex`, and never use `adb uninstall`, `pm clear`, signature-mismatch uninstall/reinstall, or an install flag that removes production data unless the user explicitly authorizes that exact destructive production-package action after being warned that saved data can be lost.
+
+For a new or changed device command, use a host-only dry run to inspect its task graph, verify output metadata or the packaged manifest for every APK it can install, and confirm that no production-ID target or package-mutating listener is configured. If that proof is incomplete, stop before connecting to the device. Use `installDebug` only for the isolated Debug app; production releases must be installed only through the signed release/update path.
+
 ## Settings Sections
 
 Settings cards use the shared `SettingsSection` composable with independently persisted expanded state owned by `TheoriaAppContent` and stored through `UiRestoreRepository`, so leaving and reopening the app does not reset the user's choices. New settings groups should use the same header and right-side chevron pattern rather than introducing another section-specific collapse control.
