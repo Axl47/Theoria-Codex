@@ -8,19 +8,21 @@ updated_at: 2026-08-02T16:32:44-04:00
 
 ### In Progress
 
-None. F19 is verified and ready for its dedicated commit; F20 must not begin before that boundary.
+None. F20 is verified and ready for its dedicated commit; F21 must not begin before that boundary.
 
 ### Pending
 
-- [ ] F20: observe live Settings source availability and persist toggles against the current source set
 - [ ] F21: make animated-duration retries generation/expiry-aware and bounded
 - [ ] F09 physical Room v1→v2 migration execution remains unclaimed; the Macrobenchmark target does not exercise that instrumentation owner
 - [ ] Opt-in authenticated/live-provider paths and Coil protected-header plus animated-media device behavior remain unclaimed unless separately authorized
 
 ### Done
 
+- [x] F20: observe live Settings source availability and persist toggles against the current source set
+  - Evidence: the Settings owner now renders from the account-backed source-availability flow and validates mutations against that flow's current value, replacing the construction-time Search snapshot. Eight focused owner tests passed, including a late Rule34 XXX availability emission followed immediately by a persisted toggle before the collector could mask a stale-mutation bug. App compilation through the test lane, app Detekt, ExecPlan HTML validation, and diff checks passed; Detekt retained its known 10 analyzer-resolution diagnostics while exiting green.
+
 - [x] F19: preserve richer shared Room post payloads when Recents or its legacy importer receives a partial snapshot
-  - Evidence: live Recents and legacy import now call one transaction-local shared-post writer. Its field-aware merge accepts known incoming enrichment/update values while preserving absent rich preview/full/media/tag/taxonomy/creator fields. Both focused Robolectric suites passed 18/18 tests (Room Recents 6, importer 12), including independent partial-versus-rich assertions for both write paths. Room Detekt, ExecPlan HTML validation, and whitespace checks passed; Detekt retained its known analyzer-resolution caveat with 360 compiler errors while exiting green.
+  - Commit: `f8304ab` — `fix(recents): preserve richer shared post payloads`. Evidence: live Recents and legacy import now call one transaction-local shared-post writer. Its field-aware merge accepts known incoming enrichment/update values while preserving absent rich preview/full/media/tag/taxonomy/creator fields. Both focused Robolectric suites passed 18/18 tests (Room Recents 6, importer 12), including independent partial-versus-rich assertions for both write paths. Room Detekt, ExecPlan HTML validation, and whitespace checks passed; Detekt retained its known analyzer-resolution caveat with 360 compiler errors while exiting green.
 
 - [x] F18: eliminate the final repository-wide actionlint/ShellCheck warning without changing release behavior
   - Commit: `961bec8` — `ci(release): write metadata in one environment block`. Evidence: the four existing `VERSION_CODE`, `RELEASE_TITLE`, `RELEASE_TAG`, and `RELEASE_NOTES_FILE` values are emitted at the same post-validation point through one brace-group append to `GITHUB_ENV`; no validation, action version, Gradle, signing, tag, or publication behavior changed. `actionlint .github/workflows/*.yml` now passes with zero findings, superseding the prior SC2129 caveat while preserving its historical evidence. All 36 helper/workflow tests, ExecPlan HTML validation, and whitespace/diff checks pass. No Gradle rebuild, device/emulator, live provider, signing, tag, publish, push, PR, or release-metadata mutation ran.

@@ -13,6 +13,7 @@ import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -64,6 +65,37 @@ class SettingsViewModelTest {
         assertTrue(owner.state.value.settings.cache.cacheFullImageOnSave)
         assertFalse(owner.state.value.settings.contentFilters.resolveUnknownAnimatedDurations)
         assertEquals(setOf(SourceKey.PIXIV), owner.state.value.settings.runtime.enabledSources)
+    }
+
+    @Test
+    fun `late source availability appears and toggle persists from the live source set`() = runTest {
+        val settingsRepository = InMemorySettingsRepository()
+        val availableSources = MutableStateFlow(setOf(SourceKey.PIXIV))
+        val owner = owner(
+            settingsRepository = settingsRepository,
+            availableSources = availableSources,
+        )
+        runCurrent()
+        assertEquals(listOf(SourceKey.PIXIV), owner.state.value.availableSources)
+
+        availableSources.value = setOf(SourceKey.PIXIV, SourceKey.RULE34XXX)
+        owner.onAction(
+            SettingsAction.SetEnabledSources(setOf(SourceKey.PIXIV, SourceKey.RULE34XXX)),
+        )
+        runCurrent()
+
+        assertEquals(
+            listOf(SourceKey.PIXIV, SourceKey.RULE34XXX),
+            owner.state.value.availableSources,
+        )
+        assertEquals(
+            setOf(SourceKey.PIXIV, SourceKey.RULE34XXX),
+            settingsRepository.observeSettings().first().runtime.enabledSources,
+        )
+        assertEquals(
+            setOf(SourceKey.PIXIV, SourceKey.RULE34XXX),
+            owner.state.value.settings.runtime.enabledSources,
+        )
     }
 
     @Test
@@ -162,6 +194,7 @@ class SettingsViewModelTest {
         uiRestoreRepository: InMemoryUiRestoreRepository = InMemoryUiRestoreRepository(),
         accounts: FakeSettingsAccountGateway = FakeSettingsAccountGateway(),
         legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>> = MutableStateFlow(emptyList()),
+        availableSources: StateFlow<Set<SourceKey>> = MutableStateFlow(setOf(SourceKey.PIXIV)),
     ): SettingsViewModel {
         return SettingsViewModel(
             dependencies = SettingsOwnerDependencies(
@@ -171,7 +204,7 @@ class SettingsViewModelTest {
                 likesRepository = InMemoryLikesRepository(),
                 profileMutations = NoOpSettingsProfileMutations,
                 accounts = accounts,
-                availableSources = listOf(SourceKey.PIXIV),
+                availableSources = availableSources,
                 legacyJsonRecoveries = legacyJsonRecoveries,
             ),
             coroutineScope = backgroundScope,

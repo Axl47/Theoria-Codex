@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.PROFILE_CODEX_ID_PREFIX
 import com.theoriacodex.app.di.TheoriaAppContainer
+import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
 import com.theoriacodex.app.sourceauth.CredentialStoreUnavailableException
 import com.theoriacodex.app.sourceauth.PixivPkceController
@@ -174,7 +175,7 @@ internal data class SettingsOwnerDependencies(
     val likesRepository: LikesRepository,
     val profileMutations: SettingsProfileMutations,
     val accounts: SettingsAccountGateway,
-    val availableSources: List<SourceKey>,
+    val availableSources: StateFlow<Set<SourceKey>>,
     val legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>> = MutableStateFlow(emptyList()),
     val showDeveloperScenarios: Boolean = false,
 )
@@ -187,7 +188,7 @@ internal class SettingsViewModel(
     private val ownerScope = coroutineScope ?: viewModelScope
     private val mutableState = MutableStateFlow(
         SettingsUiState(
-            availableSources = dependencies.availableSources,
+            availableSources = dependencies.availableSources.value.inPresentationOrder(),
             showDeveloperScenarios = dependencies.showDeveloperScenarios,
         )
     )
@@ -212,6 +213,11 @@ internal class SettingsViewModel(
                 updateState {
                     copy(sectionExpansion = SettingsSectionExpansionState.fromPersistenceMap(restored))
                 }
+            }
+        }
+        ownerScope.launch {
+            dependencies.availableSources.collect { sources ->
+                updateState { copy(availableSources = sources.inPresentationOrder()) }
             }
         }
         ownerScope.launch {
@@ -292,7 +298,7 @@ internal class SettingsViewModel(
         when (action) {
             is SettingsAction.SetEnabledSources -> launchMutation {
                 dependencies.settingsRepository.setEnabledSources(
-                    action.sources.intersect(dependencies.availableSources.toSet()),
+                    action.sources.intersect(dependencies.availableSources.value),
                 )
             }
             is SettingsAction.SetSourceWeights -> launchMutation {
@@ -648,7 +654,7 @@ internal class SettingsViewModel(
                             pixivAuthApi = container.sources.pixivAuthApi,
                             pixivAuthController = container.sources.pixivAuthController,
                         ),
-                        availableSources = container.features.search.availableSources,
+                        availableSources = container.sources.availableSources,
                         legacyJsonRecoveries = container.data.legacyJsonRecoveries,
                     )
                 )
