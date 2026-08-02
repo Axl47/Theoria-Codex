@@ -31,8 +31,10 @@ class AnimatedDurationEnrichmentPolicyTest {
         val posts = (1..8).map(::post).toMutableList()
         val firstProbe = CompletableDeferred<Unit>()
         val applied = mutableListOf<AnimatedDurationEnrichment>()
+        val calls = mutableListOf<PostId>()
         val enricher = object : AnimatedDurationEnricher {
             override suspend fun enrich(post: Post): AnimatedDurationEnrichment? {
+                calls += post.id
                 if (post.id.sourcePostId == "1") firstProbe.await()
                 return post.id.sourcePostId.toInt().takeIf { it > 8 }
                     ?.let { AnimatedDurationEnrichment(post.id, it * 1_000L) }
@@ -53,6 +55,7 @@ class AnimatedDurationEnrichmentPolicyTest {
         advanceUntilIdle()
 
         assertEquals(listOf(post(9).id), applied.map(AnimatedDurationEnrichment::postId))
+        assertEquals((1..9).map { post(it).id }, calls.sortedBy { it.sourcePostId.toInt() })
     }
 
     @Test
@@ -79,6 +82,37 @@ class AnimatedDurationEnrichmentPolicyTest {
         advanceUntilIdle()
 
         assertTrue(published.isEmpty())
+    }
+
+    @Test
+    fun `null outcome retries only after the bounded negative decision expires`() = runTest {
+        var now = 1_000L
+        var calls = 0
+        val lane = AnimatedDurationEnrichmentLane(
+            scope = this,
+            enricher = object : AnimatedDurationEnricher {
+                override suspend fun enrich(post: Post): AnimatedDurationEnrichment? {
+                    calls += 1
+                    return null
+                }
+            },
+            currentIdentity = { "seed" },
+            currentPosts = { listOf(post(1)) },
+            applyEnrichments = { _, _ -> error("Null enrichment must not publish") },
+            clock = { now },
+            negativeRetryAfterMs = 500L,
+        )
+
+        lane.request("seed")
+        advanceUntilIdle()
+        lane.request("seed")
+        advanceUntilIdle()
+        assertEquals(1, calls)
+
+        now += 500L
+        lane.request("seed")
+        advanceUntilIdle()
+        assertEquals(2, calls)
     }
 
     private fun post(index: Int): Post = Post(

@@ -238,6 +238,42 @@ class AnimatedDurationEnrichmentServiceTest {
         service.close()
     }
 
+    @Test
+    fun `same identity refresh reapplies cached duration without another probe`() = runTest {
+        var probes = 0
+        var posts = listOf(animatedPost("refreshed"))
+        val applied = mutableListOf<AnimatedDurationEnrichment>()
+        val service = service(
+            probeDuration = {
+                probes += 1
+                4_200L
+            },
+        )
+        val lane = AnimatedDurationEnrichmentLane(
+            scope = this,
+            enricher = service,
+            currentIdentity = { "same-query" },
+            currentPosts = { posts },
+            applyEnrichments = { _, enrichments ->
+                applied += enrichments
+                val durations = enrichments.associateBy(AnimatedDurationEnrichment::postId)
+                posts = posts.map { post ->
+                    durations[post.id]?.let { post.copy(durationMs = it.durationMs) } ?: post
+                }
+            },
+        )
+
+        lane.request("same-query")
+        advanceUntilIdle()
+        posts = listOf(animatedPost("refreshed"))
+        lane.request("same-query")
+        advanceUntilIdle()
+
+        assertEquals(listOf(4_200L, 4_200L), applied.map(AnimatedDurationEnrichment::durationMs))
+        assertEquals(1, probes)
+        service.close()
+    }
+
     private fun kotlinx.coroutines.test.TestScope.service(
         resolvePost: suspend (com.theoriacodex.domain.model.PostId) -> Post? = { null },
         probeDuration: suspend (Post) -> Long?,

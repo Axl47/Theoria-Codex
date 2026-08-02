@@ -8,18 +8,20 @@ updated_at: 2026-08-02T16:32:44-04:00
 
 ### In Progress
 
-None. F20 is verified and ready for its dedicated commit; F21 must not begin before that boundary.
+None. F21 is verified and ready for its dedicated commit; the integrated review-follow-up matrix runs only after that boundary.
 
 ### Pending
 
-- [ ] F21: make animated-duration retries generation/expiry-aware and bounded
 - [ ] F09 physical Room v1→v2 migration execution remains unclaimed; the Macrobenchmark target does not exercise that instrumentation owner
 - [ ] Opt-in authenticated/live-provider paths and Coil protected-header plus animated-media device behavior remain unclaimed unless separately authorized
 
 ### Done
 
+- [x] F21: make animated-duration retries generation/expiry-aware and bounded
+  - Evidence: each explicit same-identity request now advances a short-lived generation, drains a deduplicated candidate snapshot in eight-item batches, and retains only a 128-entry expiring null-decision map aligned with the service's canonical five-minute TTL. Expired nulls retry, successful IDs can re-enter a later generation so refreshed duration-less posts receive the service's positive cache, and active requests still coalesce. Thirteen focused policy/service tests and 27 Search/For You/Creator owner tests passed; app/app-logic Detekt, ExecPlan HTML validation, and diff checks passed. App Detekt retained its known 10 analyzer-resolution diagnostics while exiting green.
+
 - [x] F20: observe live Settings source availability and persist toggles against the current source set
-  - Evidence: the Settings owner now renders from the account-backed source-availability flow and validates mutations against that flow's current value, replacing the construction-time Search snapshot. Eight focused owner tests passed, including a late Rule34 XXX availability emission followed immediately by a persisted toggle before the collector could mask a stale-mutation bug. App compilation through the test lane, app Detekt, ExecPlan HTML validation, and diff checks passed; Detekt retained its known 10 analyzer-resolution diagnostics while exiting green.
+  - Commit: `1547fc2` — `fix(settings): observe live source availability`. Evidence: the Settings owner now renders from the account-backed source-availability flow and validates mutations against that flow's current value, replacing the construction-time Search snapshot. Eight focused owner tests passed, including a late Rule34 XXX availability emission followed immediately by a persisted toggle before the collector could mask a stale-mutation bug. App compilation through the test lane, app Detekt, ExecPlan HTML validation, and diff checks passed; Detekt retained its known 10 analyzer-resolution diagnostics while exiting green.
 
 - [x] F19: preserve richer shared Room post payloads when Recents or its legacy importer receives a partial snapshot
   - Commit: `f8304ab` — `fix(recents): preserve richer shared post payloads`. Evidence: live Recents and legacy import now call one transaction-local shared-post writer. Its field-aware merge accepts known incoming enrichment/update values while preserving absent rich preview/full/media/tag/taxonomy/creator fields. Both focused Robolectric suites passed 18/18 tests (Room Recents 6, importer 12), including independent partial-versus-rich assertions for both write paths. Room Detekt, ExecPlan HTML validation, and whitespace checks passed; Detekt retained its known analyzer-resolution caveat with 360 compiler errors while exiting green.

@@ -23,8 +23,8 @@ internal class AnimatedDurationEnrichmentService(
     private val probeDurationMs: suspend (Post) -> Long?,
     private val clock: () -> Long = System::currentTimeMillis,
     private val successCacheSize: Int = DEFAULT_SUCCESS_CACHE_SIZE,
-    private val negativeCacheSize: Int = DEFAULT_NEGATIVE_CACHE_SIZE,
-    private val negativeTtlMs: Long = DEFAULT_NEGATIVE_TTL_MS,
+    private val negativeCacheSize: Int = ANIMATED_DURATION_ENRICHMENT_NEGATIVE_DECISION_LIMIT,
+    private val negativeTtlMs: Long = ANIMATED_DURATION_ENRICHMENT_NEGATIVE_TTL_MS,
     maxConcurrentWork: Int = DEFAULT_MAX_CONCURRENT_WORK,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : AnimatedDurationEnricher, AutoCloseable {
@@ -156,7 +156,5 @@ internal class AnimatedDurationEnrichmentService(
     private companion object {
         const val DEFAULT_MAX_CONCURRENT_WORK = 3
         const val DEFAULT_SUCCESS_CACHE_SIZE = 128
-        const val DEFAULT_NEGATIVE_CACHE_SIZE = 128
-        const val DEFAULT_NEGATIVE_TTL_MS = 5L * 60L * 1_000L
     }
 }
