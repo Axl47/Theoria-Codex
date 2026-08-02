@@ -661,14 +661,14 @@ fun PixivUgoiraPlayer(
     val effectivePlaybackRate = playbackRate.coerceAtLeast(0.1f)
     val effectivePlaybackPaused = isPlaying?.not() ?: playbackPaused
 
-    LaunchedEffect(postId, client) {
+    LaunchedEffect(postId, client, isActive) {
         frameIndex = 0
         elapsedInLoopMs = 0L
         isScrubbing = false
         playbackPaused = false
         errorMessage = null
         playback = client.cached(postId)
-        if (playback != null) return@LaunchedEffect
+        if (playback != null || !isActive) return@LaunchedEffect
         val result = client.load(postId)
         result.onSuccess { loaded ->
             playback = loaded

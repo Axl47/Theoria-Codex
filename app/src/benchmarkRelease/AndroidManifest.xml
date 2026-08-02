@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission
+        android:name="android.permission.INTERNET"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.REQUEST_INSTALL_PACKAGES"
+        tools:node="remove" />
+
+    <application>
+        <profileable
+            android:shell="true"
+            tools:targetApi="q" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            tools:node="remove" />
+
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize"
+            android:exported="true"
+            android:launchMode="singleTask"
+            tools:node="replace">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".benchmark.BenchmarkFixtureActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:process=":benchmarkFixture"
+            android:theme="@style/Theme.TheoriaCodex">
+            <intent-filter>
+                <action android:name="com.theoriacodex.action.BENCHMARK_FIXTURE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

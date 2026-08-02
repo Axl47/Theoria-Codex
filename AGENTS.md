@@ -38,9 +38,27 @@ Provider pages must publish unique canonical `Post.id` values after hydration. R
 
 The Search route applies persisted scroll position once when the route is restored or re-entered. Page appends must not retrigger that restoration from a changed result count, or pagination will replay the initial saved position and jump the grid to the top. Keep route-entry restoration separate from page-loading state. Unified execution may retain `EXCLUDED` source statuses for orchestration diagnostics, but the UI status row should only render actionable provider failures.
 
+`UiRestoreRepository` is the sole live Search scroll store. `query_store.json` owns applied queries only; its pre-F05 `scrollOffsets` field is a one-time DataStore migration input and is removed after a verified import. SearchViewModel owns debounce and registers a closeable scheduler that synchronously waits for its final DataStore write during ViewModel teardown before cancelling that scheduler. This deliberately trades a storage-operation-length teardown stall for a provable final flush; do not move that flush into the already-cancelled `viewModelScope` or add a lossy timeout.
+
+## Legacy JSON Recovery
+
+`AtomicJsonFileStore` owns verified quarantine for the remaining live whole-file JSON stores: applied queries, Recents, updater state, and tag suggestions. A present malformed, empty, null, or invalid UTF-8 file is never a normal miss: preserve and verify its exact bytes under the deterministic filename/byte-count/SHA-256 identity before removing the live name or returning a default. Register each production owner with the shared `LegacyJsonRecoveryRegistry` so verified quarantines are rediscovered across process restart and surfaced through Settings. Do not apply this fallback to DataStore newer-schema failures or Room migration conflicts; those contracts remain fail-closed.
+
 ## Feed Autoplay Performance
 
 Search, For You, Creator Profile, Recents, and Codex browsing must keep every visibly presented video or animated card autoplaying simultaneously. Performance work may share request, cache, media-source, buffering, and decode infrastructure; keep players stable across recomposition; and pause or release cards only after they are no longer visibly presented or the app lifecycle stops. Do not replace concurrent visible autoplay with a single-active-card policy. Validate this contract with multi-card behavior coverage and numeric frame/network/memory evidence rather than assuming fewer players is acceptable.
+
+Animated-duration enrichment is application-owned work shared by Search, For You, and Creator Profile. Composables emit typed requests only; their route owners drain bounded batches for the current query/seed identity and apply immutable duration-only updates. Keep cross-route single-flight, bounded positive and negative caches, cancellation isolation, and stale-identity rejection in the shared enrichment path rather than reintroducing per-screen resolve/probe loops.
+
+## Platform-Free Application Logic
+
+`app-logic` is the Kotlin/JVM owner for Search state/reducers, visibility filtering, feed activation/decode policy, media classification/duration policy, recommendation tag policy, and animated-duration candidate/drain scheduling. Keep Android routes, ViewModels, provider services, Media3/Coil, lifecycle, and source-specific URL/header normalization in `app`. The module may depend on `core-domain`, `core-data`, and coroutines only; it is explicitly covered by Detekt, aggregate Kover, and the 60% changed-line gate. The canonical Pixiv Ugoira wire MIME lives in `core-domain`; provider code retains only a compatibility alias.
+
+All five browsing feeds converge on `SearchResultCard` and `FeedMediaComponents`. A video card must intersect the clipped window and reach a started lifecycle before its first player is constructed/prepared; while the card remains composed, later offscreen or lifecycle stops pause that same player and do not prepare another. Media3's HTTP/local factories and 64 MiB byte-evicted cache are application-owned, but protected headers remain request-scoped and each ExoPlayer receives a fresh load-control instance from the shared bounded policy. Do not turn the player-activation latch into eager offscreen preparation or share a state-owning `DefaultLoadControl` across concurrent players.
+
+Numeric startup, Search concurrent-autoplay, and Viewer-swipe measurements live in the separate `macrobenchmark` module and target `benchmarkRelease`. Run `:macrobenchmark:connectedBenchmarkReleaseAndroidTest` only on physical hardware; build-only or emulator results are not performance proof. The offline fixture activity exists only in `app/src/benchmarkRelease`, runs in `:benchmarkFixture`, skips production container startup in that exact compile-time-enabled process, and publishes benchmark-only playback diagnostics. Preserve the complete `macrobenchmark/build/outputs/connected_android_test_additional_output/benchmarkRelease/connected/<device>/` directory because it contains the JSON result and one Perfetto trace per iteration.
+
+Never configure `androidx.benchmark.junit4.SideEffectRunListener` as a runner argument in the personal-device benchmark lane. In AndroidX Benchmark 1.5.0-alpha07 it disables 41 unrelated packages, including Play Store and Google Play services, then unconditionally enables every package without restoring prior state. The required benchmark library may still package the listener and `DisablePackages` classes; class presence is harmless because no runner argument instantiates them. Source guards and packaged-runner manifest verification prove the listener is unconfigured. The benchmark app APK separately isolates its application ID and storage and removes production deep links, App Links verification, install/network permission, and FileProvider.
 
 ## Settings Sections
 
@@ -53,6 +71,8 @@ GitHub prereleases are created only by pushing an annotated `vX.Y.Z` tag. The ta
 `actions/checkout` can replace its local tag ref with the peeled commit during a tag-push workflow. The prerelease workflow must explicitly refetch `refs/tags/$GITHUB_REF_NAME` before proving it is annotated and that its annotation matches the checked-in release notes; otherwise a valid annotated tag can fail the release gate.
 
 Use the repo-local `$theoria-release` skill in `.codex/skills/theoria-release/` whenever preparing or publishing a release. It drafts notes before making changes and requires a separate explicit publish instruction before it creates or pushes a tag.
+
+Release JSON verification must run through `:app:verifyReleaseJsonContracts` and `:app:verifyReleaseAcceptanceJsonContracts`. Those tasks consume AGP's public `SingleArtifact.OBFUSCATION_MAPPING_FILE`; AGP 9.1.1 exposes no public seeds artifact, so the matching `outputs/mapping/<variant>/seeds.txt` remains a separate explicit task input. Do not invoke the Python verifier against a guessed intermediates path or infer seeds beside the intermediate mapping.
 
 ## Final Output
 

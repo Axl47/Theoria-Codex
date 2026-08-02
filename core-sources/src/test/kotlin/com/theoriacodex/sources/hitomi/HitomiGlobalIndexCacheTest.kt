@@ -20,7 +20,7 @@ import org.junit.Test
 class HitomiGlobalIndexCacheTest {
     @Test
     fun `byte weighted LRU evicts the least recently used indexes`() = runTest {
-        val cache = HitomiGlobalIndexCache(maxBytes = 12L)
+        val cache = HitomiGlobalIndexCache(maxBytes = 26L)
 
         cache.getOrLoad("v1", "large") { intArrayOf(1, 2) }
         cache.getOrLoad("v1", "old-small") { intArrayOf(3) }
@@ -30,13 +30,14 @@ class HitomiGlobalIndexCacheTest {
         assertArrayEquals(intArrayOf(1, 2), cache.get("large"))
         assertNull(cache.get("old-small"))
         assertArrayEquals(intArrayOf(4), cache.get("new-small"))
-        assertEquals(12L, cache.snapshot().cachedBytes)
+        assertEquals(26L, cache.snapshot().cachedBytes)
         assertEquals(listOf("large", "new-small"), cache.snapshot().keysInLruOrder)
+        assertEquals(listOf("large" to 13L, "new-small" to 13L), cache.snapshot().weightsInLruOrder)
     }
 
     @Test
     fun `an index larger than the total budget is returned without being cached`() = runTest {
-        val cache = HitomiGlobalIndexCache(maxBytes = 4L)
+        val cache = HitomiGlobalIndexCache(maxBytes = 11L)
 
         val loaded = cache.getOrLoad("v1", "oversize") { intArrayOf(1, 2) }
 
@@ -57,7 +58,7 @@ class HitomiGlobalIndexCacheTest {
         assertNull(cache.get("term-b"))
         assertArrayEquals(intArrayOf(3), cache.get("term-c"))
         assertEquals("v2", cache.snapshot().activeVersion)
-        assertEquals(4L, cache.snapshot().cachedBytes)
+        assertEquals(10L, cache.snapshot().cachedBytes)
     }
 
     @Test

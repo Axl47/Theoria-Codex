@@ -2,6 +2,7 @@ package com.theoriacodex.app.search
 
 import com.google.gson.GsonBuilder
 import com.theoriacodex.data.storage.AtomicJsonFileStore
+import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -25,6 +26,26 @@ import org.junit.rules.TemporaryFolder
 class TagSuggestionStoreTest {
     @get:Rule
     val tempFolder = TemporaryFolder()
+
+    @Test
+    fun `malformed production snapshot publishes verified recovery`() = runTest {
+        val storeFile = tempDir("tag-store-recovery-test").resolve("tag_suggestions.json")
+        val original = "{broken".toByteArray()
+        storeFile.writeBytes(original)
+        val registry = LegacyJsonRecoveryRegistry()
+        val store = FileBackedTagSuggestionStore(
+            storeFile = storeFile,
+            recoveryRegistry = registry,
+        )
+
+        store.awaitLoaded()
+
+        val recovery = registry.recoveries.value.single()
+        assertEquals("Search suggestions", recovery.logicalStore)
+        assertTrue(File(recovery.backupPath!!).readBytes().contentEquals(original))
+        assertTrue(!storeFile.exists())
+        store.close()
+    }
 
     @Test
     fun `incoming metadata overrides weaker seeded entry`() = runTest {

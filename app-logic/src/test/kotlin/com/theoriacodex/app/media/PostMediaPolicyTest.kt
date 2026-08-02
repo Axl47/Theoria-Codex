@@ -1,0 +1,65 @@
+package com.theoriacodex.app.media
+
+import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.SourceKey
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class PostMediaPolicyTest {
+    @Test
+    fun `media kind detects videos images ugoira and unknown locations`() {
+        assertEquals(PostMediaKind.VIDEO, mediaKind("video/mp4", null))
+        assertEquals(PostMediaKind.VIDEO, mediaKind(null, "https://x/file.webm?z=1"))
+        assertEquals(PostMediaKind.IMAGE, mediaKind(null, "https://x/file.jpg"))
+        assertEquals(PostMediaKind.UGOIRA, mediaKind("image/ugoira", null))
+        assertEquals(PostMediaKind.UNKNOWN, mediaKind(null, "https://x/file"))
+    }
+
+    @Test
+    fun `animated policy covers videos gifs animated webp ugoira and unresolved video sources`() {
+        val animatedWebp = ImageRef("https://x/a.webp", null, "image/webp", isAnimated = true)
+        assertTrue(isAnimatedImageMediaRef(animatedWebp))
+        assertFalse(isGifMediaRef(animatedWebp))
+        assertTrue(isAnimatedPost(post(SourceKey.GELBOORU, full = ref("file.mp4", "video/mp4"))))
+        assertTrue(isAnimatedPost(post(SourceKey.AIBOORU, full = ref("file.gif", "image/gif"))))
+        assertTrue(isPixivUgoiraPost(post(SourceKey.PIXIV, full = ref("file.zip", "image/ugoira"))))
+        assertFalse(isPixivUgoiraPost(post(SourceKey.GELBOORU, full = ref("file.zip", "image/ugoira"))))
+        assertTrue(isAnimatedPost(post(SourceKey.IWARA, full = null)))
+        assertFalse(isAnimatedPost(post(SourceKey.HITOMI, full = ref("file.webp", "image/webp"))))
+    }
+
+    @Test
+    fun `duration range normalizes and maps exact bucket boundaries`() {
+        assertEquals(0, durationBucketFor(4_999L))
+        assertEquals(1, durationBucketFor(5_000L))
+        assertEquals(24, durationBucketFor(120_000L))
+        assertEquals(25, durationBucketFor(120_001L))
+        assertTrue(AnimatedDurationRange(1, 2).contains(7_500L))
+        assertFalse(AnimatedDurationRange(1, 2).contains(15_000L))
+        assertEquals(AnimatedDurationRange.Full, AnimatedDurationRange(-4, 99).let {
+            AnimatedDurationRange(it.normalizedMinBucket, it.normalizedMaxBucket)
+        })
+    }
+
+    private fun post(source: SourceKey, full: ImageRef?): Post = Post(
+        id = PostId(source, "1"),
+        preview = ref("preview.jpg", "image/jpeg"),
+        full = full,
+        media = full?.let(::listOf).orEmpty(),
+        pageUrl = null,
+        width = null,
+        height = null,
+        canonicalTags = emptyList(),
+        rawTags = emptyList(),
+        authorName = null,
+        createdAtEpochMs = null,
+        title = null,
+    )
+
+    private fun ref(path: String, mime: String): ImageRef =
+        ImageRef("https://example.test/$path", null, mime)
+}

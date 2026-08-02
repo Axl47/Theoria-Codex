@@ -1,5 +1,3 @@
-@file:androidx.annotation.OptIn(UnstableApi::class)
-
 package com.theoriacodex.app.search
 
 import android.content.Context
@@ -76,31 +74,27 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
-import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
 import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
@@ -110,10 +104,8 @@ import com.theoriacodex.app.media.animatedDurationRangeLabel
 import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.media.isHttpNotFound
 import com.theoriacodex.app.media.isPixivUgoiraPost
-import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.media.postPreviewImageCandidate
-import com.theoriacodex.app.media.probeRemoteVideoDurationMs
 import com.theoriacodex.app.recommend.recommendationIncludeTags
 import com.theoriacodex.app.recommend.recommendationTagsFor
 import com.theoriacodex.app.recommend.associatedDisplayTag
@@ -122,7 +114,6 @@ import com.theoriacodex.app.R
 import com.theoriacodex.app.source.SourceLogo
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.isRule34Family
-import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.ui.components.AutocompleteListShell
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedErrorTile
@@ -137,8 +128,7 @@ import com.theoriacodex.app.tags.FavoriteTagActionGrid
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
-import com.theoriacodex.app.viewer.createLoopingExoPlayer
-import com.theoriacodex.app.viewer.createTexturePlayerView
+import com.theoriacodex.app.viewer.mediaTestTagPart
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -158,20 +148,15 @@ import com.theoriacodex.domain.orchestration.SourceRunStatus
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, FlowPreview::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SearchScreen(
     state: SearchUiState,
@@ -254,25 +239,11 @@ fun SearchScreen(
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
         )
     }
-    val durationResolutionRequests = remember(queryHash) { mutableSetOf<PostId>() }
-    LaunchedEffect(displayResults, visibilityFilters, unknownAnimatedDurationPolicy, queryHash) {
-        if (unknownAnimatedDurationPolicy != UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND) return@LaunchedEffect
-        val candidates = animatedDurationResolutionCandidates(
-            results = displayResults,
-            filters = visibilityFilters,
-        ).filter { post -> durationResolutionRequests.add(post.id) }
-            .take(ANIMATED_DURATION_RESOLVE_BATCH_SIZE)
-        candidates.forEach { post ->
-            val resolved = runCatchingPreservingCancellation {
-                resolvePostById(post.id)
-            }.getOrNull()
-            val candidate = resolved ?: post
-            if (animatedDurationMs(candidate) == null) {
-                val probedDurationMs = probeRemoteVideoDurationMs(candidate)
-                if (probedDurationMs != null) {
-                    onAction(SearchAction.RememberResolvedPost(candidate.copy(durationMs = probedDurationMs)))
-                }
-            }
+    LaunchedEffect(displayResults, animatedDurationFilterActive, unknownAnimatedDurationPolicy, queryHash) {
+        if (animatedDurationFilterActive &&
+            unknownAnimatedDurationPolicy == UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
+        ) {
+            onAction(SearchAction.RequestAnimatedDurationEnrichment(queryHash))
         }
     }
     fun openPostActionSheet(post: Post) {
@@ -662,6 +633,7 @@ fun SearchScreen(
                     )
                 }
                 state.content.error != null -> {
+                    val error = requireNotNull(state.content.error)
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -671,7 +643,7 @@ fun SearchScreen(
                             ) { focusManager.clearFocus() }
                     ) {
                         ErrorBlock(
-                            message = state.content.error.message,
+                            message = error.message,
                             onRetry = {
                                 focusManager.clearFocus()
                                 onAction(SearchAction.Retry)
@@ -910,15 +882,34 @@ fun SearchResultCard(
     resolvePostById: (suspend (PostId) -> Post?)? = null,
     recoverPostMedia: (suspend (Post, ImageRef) -> Post?)? = null,
     refreshOnPreviewError: Boolean = false,
+    playbackDiagnosticsEnabled: Boolean = false,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
+    var isInViewport by remember(post.id) { mutableStateOf(false) }
+    var isLifecycleStarted by remember(lifecycleOwner) {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+    }
+    val playbackActive = shouldFeedMediaPlay(
+        isInViewport = isInViewport,
+        isLifecycleStarted = isLifecycleStarted,
+    )
     var resolvedPostOverride by remember(post.id) { mutableStateOf<Post?>(null) }
     var resolutionAttempted by remember(post.id) { mutableStateOf(false) }
     val mediaRecoveryAttemptedUrls = remember(post.id) { mutableSetOf<String>() }
     val effectivePost = resolvedPostOverride ?: post
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, _ ->
+            isLifecycleStarted = lifecycleOwner.lifecycle.currentState
+                .isAtLeast(Lifecycle.State.STARTED)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     fun requestResolvedCardPreview(force: Boolean = false) {
         if (resolutionAttempted) return
@@ -940,6 +931,12 @@ fun SearchResultCard(
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
+            .onGloballyPositioned { coordinates ->
+                val visible = coordinates.isAttached &&
+                    isVisibleFeedBounds(coordinates.boundsInWindow(clipBounds = true))
+                if (isInViewport != visible) isInViewport = visible
+            }
+            .testTag(searchCardTestTag(post.id))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongPress,
@@ -984,8 +981,27 @@ fun SearchResultCard(
         val ratio = remember(post.id) {
             previewAspectRatio(post)
         }
-        val imageModel = remember(context, previewUrl, effectivePost.id.source) {
-            previewUrl?.let { buildImageRequest(context, it, effectivePost.id.source) }
+        val windowSize = LocalWindowInfo.current.containerSize
+        val decodeSize = remember(windowSize.width, ratio) {
+            feedPreviewDecodeSize(
+                screenWidthPx = windowSize.width,
+                aspectRatio = ratio,
+            )
+        }
+        val imageModel = remember(
+            context,
+            previewUrl,
+            effectivePost.id.source,
+            decodeSize,
+        ) {
+            previewUrl?.let {
+                buildFeedImageRequest(
+                    context = context,
+                    url = it,
+                    sourceKey = effectivePost.id.source,
+                    decodeSize = decodeSize,
+                )
+            }
         }
         val mediaCount = postMediaCount(effectivePost)
 
@@ -1008,11 +1024,15 @@ fun SearchResultCard(
                     modifier = Modifier.fillMaxSize(),
                     contentDescription = title,
                     contentScale = ContentScale.Crop,
+                    isActive = playbackActive,
                 )
             } else if (videoRef != null && !videoPlaybackFailed) {
                 SearchVideoPreview(
                     media = videoRef,
+                    postId = effectivePost.id,
                     sourceKey = effectivePost.id.source,
+                    playbackDiagnosticsEnabled = playbackDiagnosticsEnabled,
+                    isActive = playbackActive,
                     previewModel = imageModel,
                     modifier = Modifier.fillMaxSize(),
                     onPlaybackError = {
@@ -1023,11 +1043,12 @@ fun SearchResultCard(
                     },
                 )
             } else if (imageModel != null) {
-                AsyncImage(
+                FeedAsyncImage(
                     model = imageModel,
                     contentDescription = title,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
+                    isActive = playbackActive,
                     onError = { state ->
                         val canAdvance = displayedImageCandidateIndex < imageCandidates.lastIndex
                         val failedRef = previewRef?.copy(url = previewUrl)
@@ -1078,34 +1099,45 @@ fun SearchResultCard(
                 )
             }
             if (onToggleLike != null) {
-                Surface(
+                Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(8.dp)
-                        .size(30.dp)
-                        .clickable(onClick = onToggleLike),
-                    color = Color.Black.copy(alpha = 0.55f),
-                    shape = CircleShape,
+                        .size(48.dp)
+                        .semantics {
+                            contentDescription = if (liked) "Unlike post" else "Like post"
+                            selected = liked
+                            stateDescription = if (liked) "Liked" else "Not liked"
+                        }
+                        .clickable(
+                            role = Role.Checkbox,
+                            onClick = onToggleLike,
+                        ),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = if (liked) {
-                                Icons.Default.Favorite
-                            } else {
-                                Icons.Outlined.FavoriteBorder
-                            },
-                            contentDescription = if (liked) {
-                                "Unlike post"
-                            } else {
-                                "Like post"
-                            },
-                            tint = if (liked) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                Color.White
-                            },
-                            modifier = Modifier.size(16.dp),
-                        )
+                    Surface(
+                        modifier = Modifier
+                            .size(30.dp)
+                            .testTag("Search like visual"),
+                        color = Color.Black.copy(alpha = 0.55f),
+                        shape = CircleShape,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (liked) {
+                                    Icons.Default.Favorite
+                                } else {
+                                    Icons.Outlined.FavoriteBorder
+                                },
+                                contentDescription = null,
+                                tint = if (liked) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    Color.White
+                                },
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -1145,135 +1177,6 @@ fun SearchResultCard(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun SearchVideoPreview(
-    media: ImageRef,
-    sourceKey: SourceKey,
-    modifier: Modifier = Modifier,
-    previewModel: Any? = null,
-    onPlaybackError: () -> Unit = {},
-) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val location = media.localPath ?: media.url
-    if (location.isNullOrBlank()) {
-        onPlaybackError()
-        return
-    }
-
-    var playerRef by remember(location, sourceKey) { mutableStateOf<ExoPlayer?>(null) }
-    var playerViewRef by remember { mutableStateOf<PlayerView?>(null) }
-    var didNotifyError by remember(location, sourceKey) { mutableStateOf(false) }
-    var hasRenderedFirstFrame by remember(location, sourceKey) { mutableStateOf(false) }
-
-    DisposableEffect(location, sourceKey, lifecycleOwner) {
-        didNotifyError = false
-        val player = createLoopingExoPlayer(
-            context = context,
-            location = location,
-            headers = sourceKey.requestHeaders(),
-            muted = true,
-        )
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playerRef !== player) return
-                if (playbackState != Player.STATE_READY) return
-                if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
-                runCatching {
-                    player.playWhenReady = true
-                    player.play()
-                }
-            }
-
-            override fun onRenderedFirstFrame() {
-                hasRenderedFirstFrame = true
-            }
-
-            override fun onPlayerError(error: PlaybackException) {
-                if (didNotifyError) return
-                didNotifyError = true
-                onPlaybackError()
-            }
-        }
-        player.addListener(listener)
-        playerRef = player
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME -> {
-                    runCatching {
-                        player.playWhenReady = true
-                        player.play()
-                    }
-                }
-                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
-                    runCatching {
-                        player.playWhenReady = false
-                        player.pause()
-                    }
-                }
-                else -> Unit
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-            runCatching {
-                player.playWhenReady = true
-                player.play()
-            }
-        }
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            player.removeListener(listener)
-            runCatching {
-                player.playWhenReady = false
-                player.pause()
-            }
-            runCatching {
-                playerViewRef?.player = null
-            }
-            runCatching {
-                player.release()
-            }
-            if (playerRef === player) {
-                playerRef = null
-            }
-            playerViewRef = null
-        }
-    }
-
-    Box(modifier = modifier) {
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { factoryContext ->
-                createTexturePlayerView(factoryContext).apply {
-                    player = playerRef
-                    useController = false
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                    playerViewRef = this
-                    isClickable = false
-                    isFocusable = false
-                }
-            },
-            update = { playerView ->
-                playerViewRef = playerView
-                playerView.useController = false
-                playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                playerView.player = playerRef
-                playerView.isClickable = false
-                playerView.isFocusable = false
-            },
-        )
-        if (!hasRenderedFirstFrame && previewModel != null) {
-            AsyncImage(
-                model = previewModel,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
         }
     }
 }
@@ -1332,6 +1235,10 @@ private fun resolveCardVideoRef(post: Post): ImageRef? {
 internal fun allowsInlineAutoplayInSearch(post: Post): Boolean {
     return post.id.source != SourceKey.IWARA && post.id.source != SourceKey.HITOMI
 }
+
+internal fun searchCardTestTag(postId: PostId): String = "search_card_${postId.mediaTestTagPart()}"
+
+internal fun searchVideoTestTag(postId: PostId): String = "search_video_${postId.mediaTestTagPart()}"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1978,89 +1885,6 @@ private fun ErrorBlock(
     )
 }
 
-enum class UnknownAnimatedDurationPolicy {
-    HIDE_UNKNOWNS,
-    RESOLVE_IN_BACKGROUND,
-}
-
-internal data class FavoriteTagSection(
-    val source: SourceKey,
-    val tags: List<String>,
-)
-
-internal fun filterSearchResults(
-    results: List<Post>,
-    filters: SearchVisibilityFilters,
-    likedPostIds: Set<PostId>,
-    savedPostIds: Set<PostId>,
-    unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy = UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
-): List<Post> {
-    return results.filter { post ->
-        (!filters.animatedOnly || isAnimatedPost(post)) &&
-            matchesAnimatedDurationFilter(
-                post = post,
-                filters = filters,
-                unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
-            ) &&
-            (!filters.hideLiked || post.id !in likedPostIds) &&
-            (!filters.hideSaved || post.id !in savedPostIds)
-    }
-}
-
-internal fun animatedDurationResolutionCandidates(
-    results: List<Post>,
-    filters: SearchVisibilityFilters,
-): List<Post> {
-    if (filters.animatedDurationRange.isFullRange) return emptyList()
-    return results.filter { post ->
-        isAnimatedPost(post) && animatedDurationMs(post) == null
-    }
-}
-
-private fun matchesAnimatedDurationFilter(
-    post: Post,
-    filters: SearchVisibilityFilters,
-    unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy,
-): Boolean {
-    val range = filters.animatedDurationRange
-    if (range.isFullRange) return true
-    if (!isAnimatedPost(post)) return true
-    val durationMs = animatedDurationMs(post) ?: return when (unknownAnimatedDurationPolicy) {
-        UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS -> false
-        UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND -> false
-    }
-    return range.contains(durationMs)
-}
-
-internal fun favoriteTagSections(
-    mode: QueryMode,
-    favoriteTags: Map<SourceKey, List<String>>,
-    sourceDisplayOrder: List<SourceKey>,
-): List<FavoriteTagSection> {
-    val orderedSources = (sourceDisplayOrder + favoriteTags.keys)
-        .distinct()
-    return when (mode) {
-        is QueryMode.Source -> {
-            favoriteTags[mode.source]
-                .orEmpty()
-                .takeIf { tags -> tags.isNotEmpty() }
-                ?.let { tags ->
-                    listOf(FavoriteTagSection(source = mode.source, tags = tags))
-                }
-                .orEmpty()
-        }
-
-        QueryMode.Unified -> {
-            orderedSources.mapNotNull { source ->
-                favoriteTags[source]
-                    .orEmpty()
-                    .takeIf { tags -> tags.isNotEmpty() }
-                    ?.let { tags -> FavoriteTagSection(source = source, tags = tags) }
-            }
-        }
-    }
-}
-
 private fun buildEmptySearchMessage(
     sourceResults: List<Post>,
     visibilityFilters: SearchVisibilityFilters,
@@ -2121,19 +1945,6 @@ internal fun previewAspectRatio(post: Post): Float {
     return width.toFloat() / height.toFloat()
 }
 
-private fun buildImageRequest(
-    context: Context,
-    url: String,
-    sourceKey: SourceKey,
-): ImageRequest {
-    return MediaRequestFactory.imageRequest(
-        context = context,
-        url = url,
-        sourceKey = sourceKey,
-        crossfade = false,
-    )
-}
-
 private fun String.isDigitsOnly(): Boolean {
     return isNotBlank() && all { ch -> ch.isDigit() }
 }
@@ -2143,32 +1954,5 @@ private fun Post.hasActionableTags(): Boolean {
         rawTags.any { tag -> tag.isNotBlank() }
 }
 
-@OptIn(FlowPreview::class)
-internal suspend fun Flow<Pair<Int, Int>>.persistDebouncedSearchScrollStates(
-    debounceMillis: Long = SEARCH_SCROLL_PERSIST_DEBOUNCE_MS,
-    persist: suspend (Pair<Int, Int>) -> Unit,
-) {
-    var latestObserved: Pair<Int, Int>? = null
-    var lastCommitted: Pair<Int, Int>? = null
-    try {
-        distinctUntilChanged()
-            .onEach { position -> latestObserved = position }
-            .debounce(debounceMillis)
-            .collect { position ->
-                persist(position)
-                lastCommitted = position
-            }
-    } finally {
-        val pending = latestObserved
-        if (pending != null && pending != lastCommitted) {
-            withContext(NonCancellable) {
-                persist(pending)
-            }
-        }
-    }
-}
-
 private const val PAGINATION_PREFETCH_RATIO = 0.8f
-internal const val SEARCH_SCROLL_PERSIST_DEBOUNCE_MS = 250L
 private const val ANIMATED_PREFETCH_MIN_VISIBLE = 12
-private const val ANIMATED_DURATION_RESOLVE_BATCH_SIZE = 8

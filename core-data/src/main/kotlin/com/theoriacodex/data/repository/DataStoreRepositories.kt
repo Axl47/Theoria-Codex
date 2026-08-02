@@ -310,7 +310,13 @@ class DataStoreUiRestoreRepository(
                 gson = gson,
                 onImported = ::recordImports,
                 onFailure = ::recordFailure,
-            )
+            ),
+            QueryScrollOffsetDataMigration(
+                queryFile = baseDirectory.resolve("query_store.json"),
+                gson = gson,
+                onImported = ::recordImports,
+                onFailure = ::recordFailure,
+            ),
         ),
         scope = scope,
         produceFile = { storeFile },

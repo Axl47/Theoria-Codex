@@ -2,7 +2,9 @@
   "name": "theoria-codex-quality",
   "private": true,
   "scripts": {
-    "audit:duplicates": "jscpd --config .jscpd.json ."
+    "audit:hotspots": "python3 scripts/check_hotspots.py",
+    "audit:duplicates": "jscpd --config .jscpd.json .",
+    "audit:quality": "npm run audit:hotspots && npm run audit:duplicates"
   },
   "devDependencies": {
     "jscpd": "4.2.5"

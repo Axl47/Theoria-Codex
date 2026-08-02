@@ -82,7 +82,11 @@ jobs:
             -gpu swiftshader_indirect
             -noaudio
             -no-boot-anim
-          script: ./gradlew :app:connectedDebugAndroidTest --stacktrace
+          script: >-
+            ./gradlew
+            :app:connectedDebugAndroidTest
+            :core-data-android:connectedDebugAndroidTest
+            --stacktrace
 
       - name: Upload connected-test reports
         if: always()
@@ -92,6 +96,8 @@ jobs:
           path: |
             app/build/outputs/androidTest-results/connected/
             app/build/reports/androidTests/connected/
+            core-data-android/build/outputs/androidTest-results/connected/
+            core-data-android/build/reports/androidTests/connected/
           if-no-files-found: warn
           retention-days: 14
 
@@ -144,7 +150,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: release-acceptance-api-37
+          name: release-acceptance-api-35
           path: |
             app/build/outputs/apk/releaseAcceptance/
             app/build/outputs/mapping/releaseAcceptance/

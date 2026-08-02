@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.annotations.SerializedName
 import com.theoriacodex.data.storage.AtomicJsonFileStore
+import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -14,11 +15,13 @@ import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -95,6 +98,7 @@ internal class FileBackedTagSuggestionStore(
     private val workDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val gson: Gson = GsonBuilder().setPrettyPrinting().create(),
     private val fileStore: AtomicJsonFileStore = AtomicJsonFileStore(gson = gson),
+    private val recoveryRegistry: LegacyJsonRecoveryRegistry = LegacyJsonRecoveryRegistry(),
     private val onWriteCompleted: () -> Unit = {},
 ) : TagSuggestionStore {
     private val lock = Any()
@@ -108,7 +112,7 @@ internal class FileBackedTagSuggestionStore(
     private var debounceJob: Job? = null
     private var closing = false
     private var closed = false
-    private val loadJob: Job
+    private val loadJob: Deferred<Unit>
 
     init {
         require(maxEntriesPerSource > 0) { "maxEntriesPerSource must be positive" }
@@ -116,9 +120,10 @@ internal class FileBackedTagSuggestionStore(
             "maxTotalUtf8Bytes must fit an empty tag suggestion snapshot"
         }
         require(persistenceDebounceMs >= 0L) { "persistenceDebounceMs must not be negative" }
+        recoveryRegistry.registerStore("Search suggestions", storeFile)
         rebuildWeightsLocked()
         enforceTotalByteBudgetLocked()
-        loadJob = scope.launch {
+        loadJob = scope.async {
             if (loadFromDisk()) {
                 markDirtyAndSchedulePersistence()
             }
@@ -188,11 +193,11 @@ internal class FileBackedTagSuggestionStore(
     }
 
     override suspend fun awaitLoaded() {
-        loadJob.join()
+        loadJob.await()
     }
 
     override suspend fun flush() {
-        loadJob.join()
+        loadJob.await()
         synchronized(lock) {
             debounceJob?.cancel()
             debounceJob = null
@@ -253,7 +258,12 @@ internal class FileBackedTagSuggestionStore(
     }
 
     private suspend fun loadFromDisk(): Boolean {
-        val snapshot = fileStore.read(storeFile, TagStoreSnapshot())
+        val snapshot = fileStore.read(
+            file = storeFile,
+            fallback = TagStoreSnapshot(),
+            logicalStore = "Search suggestions",
+            onRecovery = recoveryRegistry::record,
+        )
         var pruned = false
         synchronized(lock) {
             snapshot.sources.orEmpty().forEach { (sourceName, entries) ->
@@ -284,7 +294,7 @@ internal class FileBackedTagSuggestionStore(
         debounceJob?.cancel()
         debounceJob = scope.launch {
             delay(persistenceDebounceMs)
-            loadJob.join()
+            loadJob.await()
             try {
                 persistPending()
             } catch (error: CancellationException) {

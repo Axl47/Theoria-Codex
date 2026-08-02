@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
@@ -42,28 +43,29 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
 import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
-import com.theoriacodex.app.media.animatedDurationMs
-import com.theoriacodex.app.media.probeRemoteVideoDurationMs
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
-import com.theoriacodex.app.search.animatedDurationResolutionCandidates
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedErrorTile
 import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
+import com.theoriacodex.app.ui.components.expandableControlSemantics
 import com.theoriacodex.app.viewer.PixivUgoiraClient
-import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SortMode
@@ -79,8 +81,6 @@ fun ForYouScreen(
     resolveUnknownAnimatedDurations: Boolean = false,
     onToggleLike: (Post) -> Unit,
     onAction: (ForYouAction) -> Unit,
-    resolvePost: suspend (PostId) -> Post? = { null },
-    rememberResolvedPost: (Post) -> Unit = {},
     displayTagFor: (Post) -> String? = { null },
 ) {
     val gridState = rememberLazyStaggeredGridState()
@@ -118,25 +118,11 @@ fun ForYouScreen(
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
         )
     }
-    val durationResolutionRequests = remember(state.seedId) { mutableSetOf<PostId>() }
-    LaunchedEffect(state.results, visibilityFilters, unknownAnimatedDurationPolicy, state.seedId) {
-        if (unknownAnimatedDurationPolicy != UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND) return@LaunchedEffect
-        val candidates = animatedDurationResolutionCandidates(
-            results = state.results,
-            filters = visibilityFilters,
-        ).filter { post -> durationResolutionRequests.add(post.id) }
-            .take(FOR_YOU_DURATION_RESOLVE_BATCH_SIZE)
-        candidates.forEach { post ->
-            val resolved = runCatchingPreservingCancellation {
-                resolvePost(post.id)
-            }.getOrNull()
-            val candidate = resolved ?: post
-            if (animatedDurationMs(candidate) == null) {
-                val probedDurationMs = probeRemoteVideoDurationMs(candidate)
-                if (probedDurationMs != null) {
-                    rememberResolvedPost(candidate.copy(durationMs = probedDurationMs))
-                }
-            }
+    LaunchedEffect(state.results, animatedDurationFilterActive, unknownAnimatedDurationPolicy, state.seedId) {
+        if (animatedDurationFilterActive &&
+            unknownAnimatedDurationPolicy == UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
+        ) {
+            onAction(ForYouAction.RequestAnimatedDurationEnrichment(state.seedId))
         }
     }
 
@@ -215,51 +201,17 @@ fun ForYouScreen(
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("For You", style = MaterialTheme.typography.titleLarge)
-                Box {
-                    Row(
-                        modifier = Modifier
-                            .clickable(
-                                enabled = !state.isRefreshing && !state.isPaging,
-                                onClick = { showSourceMenu = true },
-                            )
-                            .padding(vertical = 2.dp),
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = state.selectedSource?.displayName() ?: "Unified",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Icon(
-                            imageVector = Icons.Default.ArrowDropDown,
-                            contentDescription = "Select For You source",
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = showSourceMenu,
-                        onDismissRequest = { showSourceMenu = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Unified") },
-                            onClick = {
-                                showSourceMenu = false
-                                onAction(ForYouAction.SelectSource(null))
-                            },
-                        )
-                        state.availableSources.forEach { source ->
-                            DropdownMenuItem(
-                                text = { Text(source.displayName()) },
-                                onClick = {
-                                    showSourceMenu = false
-                                    onAction(ForYouAction.SelectSource(source))
-                                },
-                            )
-                        }
-                    }
-                }
+                ForYouSourceSelector(
+                    selectedSource = state.selectedSource,
+                    availableSources = state.availableSources,
+                    enabled = !state.isRefreshing && !state.isPaging,
+                    expanded = showSourceMenu,
+                    onExpandedChange = { showSourceMenu = it },
+                    onSourceSelected = { source ->
+                        showSourceMenu = false
+                        onAction(ForYouAction.SelectSource(source))
+                    },
+                )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 IconButton(
@@ -395,8 +347,71 @@ fun ForYouScreen(
     }
 }
 
+@Composable
+internal fun ForYouSourceSelector(
+    selectedSource: SourceKey?,
+    availableSources: List<SourceKey>,
+    enabled: Boolean,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onSourceSelected: (SourceKey?) -> Unit,
+) {
+    val selectedLabel = selectedSource?.displayName() ?: "Unified"
+    Box {
+        Row(
+            modifier = Modifier
+                .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                .semantics {
+                    contentDescription = "Select For You source"
+                }
+                .expandableControlSemantics(
+                    expanded = expanded,
+                    description = "${if (expanded) "Expanded" else "Collapsed"}; " +
+                        "$selectedLabel selected",
+                    onExpandedChange = onExpandedChange,
+                )
+                .clickable(
+                    enabled = enabled,
+                    role = Role.DropdownList,
+                    onClick = { onExpandedChange(true) },
+                )
+                .padding(vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = selectedLabel,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Icon(
+                imageVector = Icons.Default.ArrowDropDown,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(18.dp)
+                    .testTag("For You source icon"),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandedChange(false) },
+        ) {
+            DropdownMenuItem(
+                text = { Text("Unified") },
+                onClick = { onSourceSelected(null) },
+            )
+            availableSources.forEach { source ->
+                DropdownMenuItem(
+                    text = { Text(source.displayName()) },
+                    onClick = { onSourceSelected(source) },
+                )
+            }
+        }
+    }
+}
+
 private const val FOR_YOU_PREFETCH_RATIO = 0.8f
-private const val FOR_YOU_DURATION_RESOLVE_BATCH_SIZE = 8
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

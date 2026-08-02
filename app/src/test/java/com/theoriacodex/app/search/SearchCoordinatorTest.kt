@@ -1,11 +1,11 @@
 package com.theoriacodex.app.search
 
-import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
-import com.theoriacodex.data.repository.QueryRepository
+import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.domain.adapter.Page
@@ -15,1840 +15,500 @@ import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
-import com.theoriacodex.domain.adapter.SourceAdapterRegistry
-import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
-import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
-import com.theoriacodex.app.search.state.SearchSourceScope
-import com.theoriacodex.stubs.StubAdapterRegistry
-import kotlinx.coroutines.CompletableDeferred
+import com.theoriacodex.domain.query.QueryHash
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-@OptIn(ExperimentalCoroutinesApi::class)
 class SearchCoordinatorTest {
     @Test
-    fun `slower first search cannot replace a faster second query`() = runTest {
-        val adapter = GenerationControlledAdapter(SourceKey.PIXIV)
+    fun `initial execution returns immutable posts status and continuation`() = runTest {
+        val coordinator = coordinator(TestAdapter(SourceKey.PIXIV))
+        coordinator.initializeRoute()
+        val query = query(SourceKey.PIXIV, "first")
+
+        val result = coordinator.executeInitial(query, SearchSourceScope.Single(SourceKey.PIXIV))
+            as SearchExecutionResult.Success
+
+        assertEquals(listOf("first-0"), result.posts.map { it.id.sourcePostId })
+        assertEquals(SourceRunState.SUCCESS, result.statuses.single().state)
+        assertTrue(result.continuation.canLoadMore)
+        assertEquals(QueryHash.from(query), result.executionKey)
+    }
+
+    @Test
+    fun `unified execution keeps successful posts and typed provider failure`() = runTest {
+        val success = TestAdapter(SourceKey.PIXIV)
+        val failure = TestAdapter(SourceKey.GELBOORU).apply {
+            failure = SourceAdapterException(SourceFailureReason.AUTH_REQUIRED, "credentials required")
+        }
+        val coordinator = coordinator(success, failure)
+        coordinator.initializeRoute()
+
+        val result = coordinator.executeInitial(
+            query = unifiedQuery("mixed"),
+            sourceScope = SearchSourceScope.GlobalUnified,
+        ) as SearchExecutionResult.Success
+
+        assertEquals(listOf("mixed-0"), result.posts.map { it.id.sourcePostId })
+        assertEquals(SourceRunState.SUCCESS, result.statuses.first { it.source == SourceKey.PIXIV }.state)
+        assertEquals(SourceFailureReason.AUTH_REQUIRED, result.statuses.first { it.source == SourceKey.GELBOORU }.failureReason)
+    }
+
+    @Test
+    fun `all provider failures remain a typed admitted result instead of throwing`() = runTest {
+        val adapter = TestAdapter(SourceKey.PIXIV).apply {
+            failure = SourceAdapterException(SourceFailureReason.AUTH_REQUIRED, "credentials required")
+        }
+        val coordinator = coordinator(adapter)
+        coordinator.initializeRoute()
+
+        val result = coordinator.executeInitial(
+            query = unifiedQuery("failed"),
+            sourceScope = SearchSourceScope.GlobalUnified,
+        ) as SearchExecutionResult.Success
+
+        assertTrue(result.posts.isEmpty())
+        assertEquals(SourceRunState.FAILED, result.statuses.single().state)
+        assertFalse(result.continuation.canLoadMore)
+    }
+
+    @Test
+    fun `source exception returns explicit failure bound to requested execution`() = runTest {
+        val adapter = TestAdapter(SourceKey.PIXIV).apply { failure = IllegalStateException("offline") }
+        val coordinator = coordinator(adapter)
+        coordinator.initializeRoute()
+        val query = query(SourceKey.PIXIV, "failed")
+
+        val result = coordinator.executeInitial(query, SearchSourceScope.Single(SourceKey.PIXIV))
+            as SearchExecutionResult.Failure
+
+        assertEquals(QueryHash.from(query), result.executionKey)
+        assertEquals("offline", result.message)
+    }
+
+    @Test
+    fun `page result returns only new posts and consumes attempted omitted tokens`() = runTest {
+        val adapter = TestAdapter(SourceKey.PIXIV)
+        val coordinator = coordinator(adapter)
+        coordinator.initializeRoute()
+        val query = unifiedQuery("page")
+        val key = QueryHash.from(query)
+        val continuation = SearchContinuation(
+            executionKey = key,
+            query = query,
+            sourceScope = SearchSourceScope.GlobalUnified,
+            enabledSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
+            availableSources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU),
+            weights = mapOf(SourceKey.PIXIV to 0.5, SourceKey.GELBOORU to 0.5),
+            unifiedPageTokens = mapOf(SourceKey.PIXIV to "next", SourceKey.GELBOORU to "next"),
+        )
+
+        val result = coordinator.executePage(continuation) as SearchPageResult.Success
+
+        assertEquals(listOf("page-1"), result.posts.map { it.id.sourcePostId })
+        assertEquals(null, result.continuation.unifiedPageTokens[SourceKey.PIXIV])
+        assertEquals(null, result.continuation.unifiedPageTokens[SourceKey.GELBOORU])
+        assertFalse(result.continuation.canLoadMore)
+    }
+
+    @Test
+    fun `temporary execution key binds canonical source selection`() = runTest {
+        val coordinator = coordinator(TestAdapter(SourceKey.PIXIV), TestAdapter(SourceKey.GELBOORU))
+        val query = unifiedQuery("temporary")
+        val scope = SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV))
+
+        assertEquals(
+            "${QueryHash.from(query)}|temporary-sources:GELBOORU,PIXIV",
+            coordinator.executionKeyFor(query, scope),
+        )
+    }
+
+    @Test
+    fun `source execution ignores unified settings while unified execution excludes disabled sources`() = runTest {
+        val pixiv = TestAdapter(SourceKey.PIXIV)
+        val gelbooru = TestAdapter(SourceKey.GELBOORU)
+        val settings = InMemorySettingsRepository().apply { setEnabledSources(setOf(SourceKey.PIXIV)) }
+        val coordinator = coordinator(
+            settingsRepository = settings,
+            adapters = arrayOf(pixiv, gelbooru),
+        )
+        coordinator.initializeRoute()
+
+        val source = coordinator.executeInitial(
+            query(SourceKey.GELBOORU, "source"),
+            SearchSourceScope.Single(SourceKey.GELBOORU),
+        ) as SearchExecutionResult.Success
+        val unified = coordinator.executeInitial(
+            unifiedQuery("unified"),
+            SearchSourceScope.GlobalUnified,
+        ) as SearchExecutionResult.Success
+
+        assertEquals(listOf("source"), gelbooru.searchedTags.first())
+        assertEquals(1, source.statuses.size)
+        assertEquals(listOf("unified"), pixiv.searchedTags.last())
+        assertEquals(1, gelbooru.searchedTags.size)
+        assertEquals(SourceRunState.EXCLUDED, unified.statuses.first { it.source == SourceKey.GELBOORU }.state)
+    }
+
+    @Test
+    fun `temporary execution uses exact sources and persistence remains disabled`() = runTest {
+        val pixiv = TestAdapter(SourceKey.PIXIV)
+        val gelbooru = TestAdapter(SourceKey.GELBOORU)
+        val hitomi = TestAdapter(SourceKey.HITOMI)
         val queryRepository = InMemoryQueryRepository()
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(mapOf(SourceKey.PIXIV to adapter)),
-            queryRepository = queryRepository,
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
-        coordinator.addIncludeTag("slow")
+        val recents = InMemoryRecentsRepository()
+        val coordinator = coordinator(queryRepository, InMemorySettingsRepository(), InMemoryUiRestoreRepository(), recents, pixiv, gelbooru, hitomi)
+        coordinator.initializeRoute()
+        val query = unifiedQuery("temporary")
+        val scope = SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV))
 
-        val slowSearch = async { coordinator.applyDraft() }
-        runCurrent()
-        adapter.slowSearchStarted.await()
+        val result = coordinator.executeInitial(query, scope) as SearchExecutionResult.Success
+        coordinator.persistAppliedSearch(result.query, result.sourceScope, result.executionKey)
+        coordinator.executePage(result.continuation)
 
-        coordinator.clearDraft()
-        coordinator.addIncludeTag("fast")
-        val fastSearch = async { coordinator.applyDraft() }
-        runCurrent()
-        fastSearch.await()
-        slowSearch.join()
-
-        assertTrue(adapter.slowSearchCancelled)
-        assertEquals(listOf("fast-result"), coordinator.results.map { it.id.sourcePostId })
-        assertEquals(listOf("fast"), coordinator.appliedQuery.includeTags)
-        assertEquals(
-            listOf("fast"),
-            queryRepository.observeAppliedQuery("last_active").first()?.includeTags,
-        )
-        assertFalse(coordinator.loading)
-        assertNull(coordinator.errorMessage)
+        assertEquals(2, pixiv.searchedTags.size)
+        assertEquals(2, gelbooru.searchedTags.size)
+        assertTrue(hitomi.searchedTags.isEmpty())
+        assertTrue(recents.observeSearches().first().isEmpty())
+        assertEquals(null, queryRepository.observeAppliedQuery("unified").first())
     }
 
     @Test
-    fun `stale load more page cannot enter a replacement query`() = runTest {
-        val adapter = GenerationControlledAdapter(SourceKey.PIXIV)
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(mapOf(SourceKey.PIXIV to adapter)),
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
-        coordinator.addIncludeTag("paged")
-        coordinator.applyDraft()
-        assertTrue(coordinator.canLoadMore)
-
-        val stalePage = async { coordinator.loadNextPage() }
-        runCurrent()
-        adapter.loadMoreStarted.await()
-
-        coordinator.clearDraft()
-        coordinator.addIncludeTag("fast")
-        val replacement = async { coordinator.applyDraft() }
-        runCurrent()
-        replacement.await()
-        adapter.releaseStaleLoadMore.complete(Unit)
-        runCurrent()
-        stalePage.join()
-
-        assertEquals(listOf("fast-result"), coordinator.results.map { it.id.sourcePostId })
-        assertFalse(coordinator.results.any { it.id.sourcePostId == "stale-page" })
-        assertFalse(coordinator.loading)
-        assertFalse(coordinator.loadingMore)
-        assertFalse(coordinator.canLoadMore)
-    }
-
-    @Test
-    fun `external root cancellation clears loading without publishing partial results`() = runTest {
-        val adapter = GenerationControlledAdapter(SourceKey.PIXIV)
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(mapOf(SourceKey.PIXIV to adapter)),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
-        coordinator.addIncludeTag("slow")
-
-        val search = async { coordinator.applyDraft() }
-        runCurrent()
-        adapter.slowSearchStarted.await()
-        search.cancelAndJoin()
-
-        assertTrue(adapter.slowSearchCancelled)
-        assertTrue(coordinator.results.isEmpty())
-        assertFalse(coordinator.loading)
-        assertNull(coordinator.errorMessage)
-    }
-
-    @Test
-    fun `draft apply reset transitions preserve explicit apply semantics`() = runTest {
-        val coordinator = coordinator()
-        coordinator.initialize()
-
-        coordinator.addIncludeTag("landscape")
-        assertTrue(coordinator.hasPendingChanges)
-        assertTrue("landscape" in coordinator.draftQuery.includeTags)
-        assertTrue(coordinator.appliedQuery.includeTags.isEmpty())
-
-        coordinator.resetDraft()
-        assertFalse(coordinator.hasPendingChanges)
-        assertTrue(coordinator.draftQuery.includeTags.isEmpty())
-
-        coordinator.addIncludeTag("landscape")
-        coordinator.applyDraft()
-        assertFalse(coordinator.hasPendingChanges)
-        assertTrue("landscape" in coordinator.appliedQuery.includeTags)
-    }
-
-    @Test
-    fun `apply draft records search history and retry does not duplicate it`() = runTest {
-        var now = 1_000L
-        val recentsRepository = InMemoryRecentsRepository(clock = { now })
-        val coordinator = SearchCoordinator(
-            registry = StubAdapterRegistry(),
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-            recentsRepository = recentsRepository,
-        )
-        coordinator.initialize()
-        coordinator.addIncludeTag("landscape")
-
-        coordinator.applyDraft()
-        val firstHistory = recentsRepository.observeSearches().first()
-        now += 1
-        coordinator.retry()
-        val afterRetryHistory = recentsRepository.observeSearches().first()
-        now += 1
-        coordinator.applyDraft()
-        val afterReapplyHistory = recentsRepository.observeSearches().first()
-
-        assertEquals(1, firstHistory.size)
-        assertEquals(listOf("landscape"), firstHistory.first().query.includeTags)
-        assertEquals(firstHistory, afterRetryHistory)
-        assertEquals(1, afterReapplyHistory.size)
-        assertEquals(now, afterReapplyHistory.first().searchedAtEpochMs)
-    }
-
-    @Test
-    fun `historical query apply restores query records search and executes`() = runTest {
-        val recentsRepository = InMemoryRecentsRepository(clock = { 2_000L })
-        val coordinator = SearchCoordinator(
-            registry = StubAdapterRegistry(),
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-            recentsRepository = recentsRepository,
-        )
-        coordinator.initialize()
-        val historicalQuery = Query(
-            mode = QueryMode.Source(SourceKey.PIXIV),
-            includeTags = listOf("portrait"),
-            excludeTags = listOf("sketch"),
-            sort = SortMode.TOP,
-            dateRange = null,
-            minScore = 25,
-        )
-
-        val applied = coordinator.applyHistoricalQuery(historicalQuery)
-
-        assertTrue(applied)
-        assertEquals(historicalQuery, coordinator.appliedQuery)
-        assertEquals(historicalQuery, coordinator.draftQuery)
-        assertFalse(coordinator.hasPendingChanges)
-        assertTrue(coordinator.hasAnySearchRun)
-        assertEquals(historicalQuery, recentsRepository.observeSearches().first().single().query)
-    }
-
-    @Test
-    fun `query hash keyed scroll state and viewer launch context are restored`() = runTest {
-        val coordinator = coordinator()
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
-        coordinator.addIncludeTag("portrait")
-        coordinator.applyDraft()
-
-        coordinator.persistSearchScrollState(index = 4, offsetPx = 120)
-        val restored = coordinator.restoreSearchScrollState()
-        val context = coordinator.buildViewerLaunchContext(startIndex = 2, scrollOffsetHint = 120)
-
-        assertEquals(4, restored?.firstVisibleItemIndex)
-        assertEquals(120, restored?.firstVisibleItemOffsetPx)
-        assertEquals(coordinator.appliedQueryHash, context.queryHash)
-        assertEquals(2, context.startIndex)
-    }
-
-    @Test
-    fun `runtime source settings change requests refresh only after at least one execution`() = runTest {
-        val coordinator = coordinator()
-        coordinator.initialize()
-        val firstChange = coordinator.onSettingsChanged(
-            AppSettings(
-                runtime = AppSettings().runtime.copy(
-                    enabledSources = setOf(SourceKey.PIXIV),
-                )
-            )
-        )
-        assertFalse(firstChange)
-
-        coordinator.applyDraft()
-        val secondChange = coordinator.onSettingsChanged(
-            AppSettings(
-                runtime = AppSettings().runtime.copy(
-                    enabledSources = setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
-                )
-            )
-        )
-        assertTrue(secondChange)
-        assertNotNull(coordinator.statuses)
-    }
-
-    @Test
-    fun `initialize restores executed-search state when previous apply was persisted`() = runTest {
+    fun `admitted persistence records history once and initialization restores source mode`() = runTest {
         val queryRepository = InMemoryQueryRepository()
-        val settingsRepository = InMemorySettingsRepository()
-        val uiRestoreRepository = InMemoryUiRestoreRepository()
+        val recents = InMemoryRecentsRepository()
+        val restore = InMemoryUiRestoreRepository()
+        val adapter = TestAdapter(SourceKey.PIXIV)
+        val first = coordinator(queryRepository, InMemorySettingsRepository(), restore, recents, adapter)
+        first.initializeRoute()
+        val applied = query(SourceKey.PIXIV, "history")
+        val result = first.executeInitial(applied, SearchSourceScope.Single(SourceKey.PIXIV)) as SearchExecutionResult.Success
 
-        val firstSession = SearchCoordinator(
-            registry = StubAdapterRegistry(),
-            queryRepository = queryRepository,
-            settingsRepository = settingsRepository,
-            uiRestoreRepository = uiRestoreRepository,
-        )
-        firstSession.initialize()
-        assertFalse(firstSession.hasAnySearchRun)
-        firstSession.applyDraft()
-        assertTrue(firstSession.hasAnySearchRun)
+        first.persistAppliedSearch(result.query, result.sourceScope, result.executionKey)
+        first.persistAppliedSearch(result.query, result.sourceScope, result.executionKey)
+        val restarted = coordinator(queryRepository, InMemorySettingsRepository(), restore, recents, adapter).initializeRoute()
 
-        val restoredSession = SearchCoordinator(
-            registry = StubAdapterRegistry(),
-            queryRepository = queryRepository,
-            settingsRepository = settingsRepository,
-            uiRestoreRepository = uiRestoreRepository,
-        )
-        restoredSession.initialize()
-
-        assertTrue(restoredSession.hasAnySearchRun)
+        assertEquals(applied, restarted.query)
+        assertTrue(restarted.hasExecutedSearch)
+        assertEquals(1, recents.observeSearches().first().size)
     }
 
     @Test
-    fun `identical stable scroll state is written once to both compatibility stores`() = runTest {
-        val queryRepository = CountingQueryRepository()
-        val uiRestoreRepository = CountingUiRestoreRepository()
-        val coordinator = SearchCoordinator(
-            registry = StubAdapterRegistry(),
-            queryRepository = queryRepository,
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = uiRestoreRepository,
-        )
-        coordinator.initialize()
+    fun `scroll writes deduplicate and restoration rejects temporary scope`() = runTest {
+        val restore = CountingRestoreRepository()
+        val coordinator = coordinator(uiRestoreRepository = restore, adapters = arrayOf(TestAdapter(SourceKey.PIXIV)))
+        val key = QueryHash.from(unifiedQuery("scroll"))
 
-        coordinator.persistSearchScrollState(index = 4, offsetPx = 12)
-        coordinator.persistSearchScrollState(index = 4, offsetPx = 12)
+        coordinator.persistSearchScrollState(4, 12, key)
+        coordinator.persistSearchScrollState(4, 12, key)
 
-        assertEquals(1, queryRepository.scrollWriteCount)
-        assertEquals(1, uiRestoreRepository.scrollWriteCount)
+        assertEquals(1, restore.writeCount)
+        assertEquals(SearchScrollState(4, 12), coordinator.restoreSearchScrollState(key, SearchSourceScope.GlobalUnified))
         assertEquals(
-            SearchScrollState(firstVisibleItemIndex = 4, firstVisibleItemOffsetPx = 12),
-            coordinator.restoreSearchScrollState(),
-        )
-    }
-
-    @Test
-    fun `initialize restores last applied source mode after restart`() = runTest {
-        val queryRepository = InMemoryQueryRepository()
-        val settingsRepository = InMemorySettingsRepository()
-        val uiRestoreRepository = InMemoryUiRestoreRepository()
-
-        val firstSession = SearchCoordinator(
-            registry = StubAdapterRegistry(),
-            queryRepository = queryRepository,
-            settingsRepository = settingsRepository,
-            uiRestoreRepository = uiRestoreRepository,
-        )
-        firstSession.initialize()
-        firstSession.setMode(QueryMode.Source(SourceKey.PIXIV))
-        firstSession.addIncludeTag("landscape")
-        firstSession.applyDraft()
-
-        val restoredSession = SearchCoordinator(
-            registry = StubAdapterRegistry(),
-            queryRepository = queryRepository,
-            settingsRepository = settingsRepository,
-            uiRestoreRepository = uiRestoreRepository,
-        )
-        restoredSession.initialize()
-
-        assertEquals(QueryMode.Source(SourceKey.PIXIV), restoredSession.appliedQuery.mode)
-        assertEquals(QueryMode.Source(SourceKey.PIXIV), restoredSession.draftQuery.mode)
-        assertTrue("landscape" in restoredSession.appliedQuery.includeTags)
-    }
-
-    @Test
-    fun `mode options and source mode availability follow registry`() = runTest {
-        val coordinator = SearchCoordinator(
-            registry = LimitedStubRegistry(setOf(SourceKey.PIXIV)),
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-        )
-        coordinator.initialize()
-
-        assertEquals(
-            listOf(QueryMode.Unified, QueryMode.Source(SourceKey.PIXIV)),
-            coordinator.modeOptions,
-        )
-
-        coordinator.setMode(QueryMode.Source(SourceKey.GELBOORU))
-        assertEquals(QueryMode.Unified, coordinator.draftQuery.mode)
-    }
-
-    @Test
-    fun `source mode search ignores unified enabled-source toggles`() = runTest {
-        val gelbooruAdapter = RecordingAdapter(sourceKey = SourceKey.GELBOORU)
-        val settingsRepository = InMemorySettingsRepository()
-        settingsRepository.setEnabledSources(setOf(SourceKey.PIXIV))
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(
-                adapters = mapOf(SourceKey.GELBOORU to gelbooruAdapter),
-            ),
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = settingsRepository,
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.GELBOORU))
-        coordinator.addIncludeTag("landscape")
-
-        coordinator.applyDraft()
-
-        assertEquals(listOf("landscape"), gelbooruAdapter.lastSearchQuery?.includeTags)
-        assertEquals(1, coordinator.statuses.size)
-        assertEquals(SourceKey.GELBOORU, coordinator.statuses.single().source)
-        assertEquals(SourceRunState.SUCCESS, coordinator.statuses.single().state)
-    }
-
-    @Test
-    fun `unified search still excludes disabled sources from settings`() = runTest {
-        val pixivAdapter = RecordingAdapter(sourceKey = SourceKey.PIXIV)
-        val gelbooruAdapter = RecordingAdapter(sourceKey = SourceKey.GELBOORU)
-        val settingsRepository = InMemorySettingsRepository()
-        settingsRepository.setEnabledSources(setOf(SourceKey.PIXIV))
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(
-                adapters = mapOf(
-                    SourceKey.PIXIV to pixivAdapter,
-                    SourceKey.GELBOORU to gelbooruAdapter,
-                ),
-            ),
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = settingsRepository,
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-        )
-        coordinator.initialize()
-        coordinator.addIncludeTag("landscape")
-
-        coordinator.applyDraft()
-
-        assertEquals(listOf("landscape"), pixivAdapter.lastSearchQuery?.includeTags)
-        assertNull(gelbooruAdapter.lastSearchQuery)
-        assertTrue(
-            coordinator.statuses.any { status ->
-                status.source == SourceKey.GELBOORU && status.state == SourceRunState.EXCLUDED
-            }
-        )
-    }
-
-    @Test
-    fun `temporary search executes selected sources without settings or durable history`() = runTest {
-        val pixivAdapter = RecordingAdapter(SourceKey.PIXIV)
-        val gelbooruAdapter = RecordingAdapter(SourceKey.GELBOORU)
-        val hitomiAdapter = RecordingAdapter(SourceKey.HITOMI)
-        val settingsRepository = InMemorySettingsRepository()
-        settingsRepository.setEnabledSources(setOf(SourceKey.PIXIV, SourceKey.HITOMI))
-        val queryRepository = InMemoryQueryRepository()
-        val recentsRepository = InMemoryRecentsRepository()
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(
-                mapOf(
-                    SourceKey.PIXIV to pixivAdapter,
-                    SourceKey.GELBOORU to gelbooruAdapter,
-                    SourceKey.HITOMI to hitomiAdapter,
-                ),
-            ),
-            queryRepository = queryRepository,
-            settingsRepository = settingsRepository,
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-            recentsRepository = recentsRepository,
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
-        coordinator.addIncludeTag("landscape")
-        coordinator.addIncludeTerm(
-            SearchTerm("portrait artist", SearchFacet.ARTIST, "artist"),
-        )
-        assertTrue(coordinator.toggleTemporarySource(SourceKey.GELBOORU))
-
-        assertEquals(
-            SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)),
-            coordinator.draftSourceScopeSnapshot,
-        )
-        assertEquals(listOf("landscape"), coordinator.draftQuery.includeTags)
-        assertEquals(QueryMode.Unified, coordinator.draftQuery.mode)
-
-        coordinator.applyDraft()
-
-        assertEquals(listOf("landscape"), pixivAdapter.lastSearchQuery?.includeTags)
-        assertEquals(listOf("landscape"), gelbooruAdapter.lastSearchQuery?.includeTags)
-        assertNull(hitomiAdapter.lastSearchQuery)
-        assertEquals(
-            setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
-            coordinator.statuses.mapTo(mutableSetOf()) { status -> status.source },
-        )
-        assertEquals(SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)), coordinator.appliedSourceScopeSnapshot)
-        assertTrue(coordinator.appliedQueryHash.contains("temporary-sources:"))
-        assertEquals(setOf(SourceKey.PIXIV, SourceKey.HITOMI), settingsRepository.observeSettings().first().runtime.enabledSources)
-        assertTrue(recentsRepository.observeSearches().first().isEmpty())
-        assertNull(queryRepository.observeAppliedQuery("unified").first())
-    }
-
-    @Test
-    fun `temporary root retry and paging retain the exact selected source set`() = runTest {
-        val pixivAdapter = RecordingAdapter(
-            sourceKey = SourceKey.PIXIV,
-            pagesByToken = mapOf(
-                null to Page(listOf(samplePost(SourceKey.PIXIV, "pixiv-root")), "next"),
-                "next" to Page(listOf(samplePost(SourceKey.PIXIV, "pixiv-page")), null),
+            null,
+            coordinator.restoreSearchScrollState(
+                key,
+                SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)),
             ),
         )
-        val gelbooruAdapter = RecordingAdapter(
-            sourceKey = SourceKey.GELBOORU,
-            pagesByToken = mapOf(
-                null to Page(listOf(samplePost(SourceKey.GELBOORU, "gelbooru-root")), "next"),
-                "next" to Page(listOf(samplePost(SourceKey.GELBOORU, "gelbooru-page")), null),
-            ),
-        )
-        val unrelatedAdapter = RecordingAdapter(SourceKey.HITOMI)
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(
-                mapOf(
-                    SourceKey.PIXIV to pixivAdapter,
-                    SourceKey.GELBOORU to gelbooruAdapter,
-                    SourceKey.HITOMI to unrelatedAdapter,
-                ),
-            ),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
-        coordinator.toggleTemporarySource(SourceKey.GELBOORU)
-        coordinator.applyDraft()
-        coordinator.loadNextPage()
-        coordinator.retry()
-
-        assertEquals(listOf(null, "next", null), pixivAdapter.searchPageTokens)
-        assertEquals(listOf(null, "next", null), gelbooruAdapter.searchPageTokens)
-        assertTrue(unrelatedAdapter.searchPageTokens.isEmpty())
-        assertEquals(
-            setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
-            coordinator.statuses.mapTo(mutableSetOf()) { status -> status.source },
-        )
     }
 
     @Test
-    fun `temporary autocomplete follows the draft explicit source set`() = runTest {
-        val pixivAdapter = RecordingAdapter(SourceKey.PIXIV)
-        val gelbooruAdapter = RecordingAdapter(SourceKey.GELBOORU)
-        val unrelatedAdapter = RecordingAdapter(SourceKey.HITOMI)
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(
-                mapOf(
-                    SourceKey.PIXIV to pixivAdapter,
-                    SourceKey.GELBOORU to gelbooruAdapter,
-                    SourceKey.HITOMI to unrelatedAdapter,
-                ),
-            ),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
-        coordinator.toggleTemporarySource(SourceKey.GELBOORU)
-
-        coordinator.refreshAutocompleteSuggestions("land")
-
-        assertEquals("land", pixivAdapter.lastAutocompletePrefix)
-        assertEquals("land", gelbooruAdapter.lastAutocompletePrefix)
-        assertNull(unrelatedAdapter.lastAutocompletePrefix)
-
-        coordinator.loadTrendingTags(forceRefresh = true)
-
-        assertEquals(1, pixivAdapter.trendingCallCount)
-        assertEquals(1, gelbooruAdapter.trendingCallCount)
-        assertEquals(0, unrelatedAdapter.trendingCallCount)
-    }
-
-    @Test
-    fun `removing a temporary source collapses to one source and preserves portable terms`() = runTest {
-        val coordinator = coordinator()
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
-        coordinator.addIncludeTag("portable")
-        coordinator.toggleTemporarySource(SourceKey.GELBOORU)
-
-        assertTrue(coordinator.toggleTemporarySource(SourceKey.GELBOORU))
-
-        assertEquals(SearchSourceScope.Single(SourceKey.PIXIV), coordinator.draftSourceScopeSnapshot)
-        assertEquals(QueryMode.Source(SourceKey.PIXIV), coordinator.draftQuery.mode)
-        assertEquals(listOf("portable"), coordinator.draftQuery.includeTags)
-    }
-
-    @Test
-    fun `unavailable source is removed from applied temporary scope and collapses safely`() = runTest {
-        val registry = MutableCompatibilityRegistry(
-            mapOf(
-                SourceKey.PIXIV to RecordingAdapter(SourceKey.PIXIV),
-                SourceKey.GELBOORU to RecordingAdapter(SourceKey.GELBOORU),
-            ),
-        )
-        val coordinator = SearchCoordinator(registry = registry)
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
-        coordinator.toggleTemporarySource(SourceKey.GELBOORU)
-        coordinator.applyDraft()
-
-        registry.remove(SourceKey.GELBOORU)
-        assertTrue(coordinator.onAvailableSourcesChanged())
-
-        assertEquals(SearchSourceScope.Single(SourceKey.PIXIV), coordinator.draftSourceScopeSnapshot)
-        assertEquals(SearchSourceScope.Single(SourceKey.PIXIV), coordinator.appliedSourceScopeSnapshot)
-        assertEquals(QueryMode.Source(SourceKey.PIXIV), coordinator.appliedQuery.mode)
-        assertFalse(coordinator.hasPendingChanges)
-    }
-
-    @Test
-    fun `available source ordering inserts iwara after nhentai`() = runTest {
-        val coordinator = SearchCoordinator(
-            registry = LimitedStubRegistry(
-                setOf(
-                    SourceKey.RULE34VIDEO,
-                    SourceKey.IWARA,
-                    SourceKey.NHENTAI,
-                    SourceKey.PIXIV,
-                ),
-            ),
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-        )
-        coordinator.initialize()
-
-        assertEquals(
-            listOf(SourceKey.PIXIV, SourceKey.NHENTAI, SourceKey.IWARA, SourceKey.RULE34VIDEO),
-            coordinator.availableSources,
-        )
-    }
-
-    @Test
-    fun `display results overlays remembered resolved posts for current query`() = runTest {
-        val raw = samplePost()
-        val resolved = raw.copy(
-            full = ImageRef(url = "https://cdn.iwara.tv/video.mp4", localPath = null, mime = "video/mp4"),
-            media = listOf(ImageRef(url = "https://cdn.iwara.tv/video.mp4", localPath = null, mime = "video/mp4")),
-        )
-        val adapter = SearchResolveAdapter(
-            sourceKey = SourceKey.IWARA,
-            searchResults = listOf(raw),
-        ) { resolved }
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(mapOf(SourceKey.IWARA to adapter)),
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.IWARA))
-        coordinator.applyDraft()
-
-        coordinator.rememberResolvedPost(resolved)
-
-        assertEquals("https://cdn.iwara.tv/video.mp4", coordinator.displayResults().single().full?.url)
-    }
-
-    @Test
-    fun `resolved post overlay is query scoped`() = runTest {
-        val raw = samplePost()
-        val resolved = raw.copy(
-            full = ImageRef(url = "https://cdn.iwara.tv/video.mp4", localPath = null, mime = "video/mp4"),
-            media = listOf(ImageRef(url = "https://cdn.iwara.tv/video.mp4", localPath = null, mime = "video/mp4")),
-        )
-        val adapter = SearchResolveAdapter(
-            sourceKey = SourceKey.IWARA,
-            searchResults = listOf(raw),
-        ) { resolved }
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(mapOf(SourceKey.IWARA to adapter)),
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.IWARA))
-        coordinator.addIncludeTag("alpha")
-        coordinator.applyDraft()
-        coordinator.rememberResolvedPost(resolved)
-
-        coordinator.clearDraft()
-        coordinator.addIncludeTag("beta")
-        coordinator.applyDraft()
-
-        assertNull(coordinator.displayResults().single().full)
-    }
-
-    @Test
-    fun `resolve post for search stores successful resolved post and reuses it`() = runTest {
-        val raw = samplePost()
-        val resolved = raw.copy(
-            full = ImageRef(url = "https://cdn.iwara.tv/video.mp4", localPath = null, mime = "video/mp4"),
-            media = listOf(ImageRef(url = "https://cdn.iwara.tv/video.mp4", localPath = null, mime = "video/mp4")),
-        )
-        val adapter = SearchResolveAdapter(
-            sourceKey = SourceKey.IWARA,
-            searchResults = listOf(raw),
-        ) { resolved }
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(mapOf(SourceKey.IWARA to adapter)),
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.IWARA))
-        coordinator.applyDraft()
-
-        val first = coordinator.resolvePostForSearch(raw.id)
-        val second = coordinator.resolvePostForSearch(raw.id)
-
-        assertEquals("https://cdn.iwara.tv/video.mp4", first?.full?.url)
-        assertEquals("https://cdn.iwara.tv/video.mp4", second?.full?.url)
-        assertEquals("https://cdn.iwara.tv/video.mp4", coordinator.displayResults().single().full?.url)
-        assertEquals(1, adapter.resolveCallCount)
-    }
-
-    @Test
-    fun `resolve post for search defers immediate retry after rate limit`() = runTest {
-        var now = 1_000L
-        val raw = samplePost()
-        val adapter = SearchResolveAdapter(
-            sourceKey = SourceKey.IWARA,
-            searchResults = listOf(raw),
-        ) {
-            throw SourceAdapterException(
-                reason = SourceFailureReason.RATE_LIMITED,
-                message = "429",
+    fun `autocomplete follows temporary sources normalizes prefixes and sorts counts`() = runTest {
+        val pixiv = TestAdapter(SourceKey.PIXIV).apply {
+            autocomplete = listOf(
+                TagSuggestion("blue_hair_low", "tag", 1),
+                TagSuggestion("blue_hair_high", "tag", 50),
             )
         }
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(mapOf(SourceKey.IWARA to adapter)),
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-            clock = { now },
+        val gelbooru = TestAdapter(SourceKey.GELBOORU).apply {
+            autocomplete = listOf(TagSuggestion("blue_hair_mid", "tag", 20))
+        }
+        val hitomi = TestAdapter(SourceKey.HITOMI)
+        val coordinator = coordinator(pixiv, gelbooru, hitomi)
+        coordinator.initializeRoute()
+
+        val result = coordinator.fetchAutocomplete(
+            unifiedQuery(""),
+            SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)),
+            com.theoriacodex.domain.adapter.FacetedSearchScope.All,
+            "blue hair",
+            emptyList(),
         )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.IWARA))
-        coordinator.applyDraft()
 
-        assertNull(coordinator.resolvePostForSearch(raw.id))
-        assertTrue(coordinator.shouldDeferResolve(raw.id))
-        assertEquals(1, adapter.resolveCallCount)
+        assertEquals("blue hair", pixiv.autocompletePrefixes.single())
+        assertEquals("blue_hair", gelbooru.autocompletePrefixes.single())
+        assertTrue(hitomi.autocompletePrefixes.isEmpty())
+        assertEquals(
+            listOf("blue_hair_high", "blue_hair_mid", "blue_hair_low"),
+            result.autocomplete.map(TagSuggestion::text),
+        )
+    }
 
-        assertNull(coordinator.resolvePostForSearch(raw.id))
-        assertEquals(1, adapter.resolveCallCount)
+    @Test
+    fun `unified query overrides map provider-compatible tags without promoting source facets`() = runTest {
+        val pixiv = TestAdapter(SourceKey.PIXIV)
+        val gelbooru = TestAdapter(SourceKey.GELBOORU).apply {
+            autocompleteByPrefix["cat"] = listOf(TagSuggestion("cat_(animal)", "tag", 1))
+        }
+        val coordinator = coordinator(pixiv, gelbooru)
+        coordinator.initializeRoute()
+        val query = unifiedQuery("cat").copy(
+            includeTerms = listOf(SearchTerm("cat"), SearchTerm("najar", com.theoriacodex.domain.model.SearchFacet.ARTIST, "artist")),
+            excludeTerms = listOf(SearchTerm("nsfw_(content)")),
+        )
 
+        coordinator.executeInitial(query, SearchSourceScope.GlobalUnified)
+
+        assertEquals(listOf("cat"), pixiv.searchedTags.single())
+        assertEquals(listOf("nsfw"), pixiv.searchedExclusions.single())
+        assertEquals(listOf("cat_(animal)"), gelbooru.searchedTags.single())
+        assertEquals(listOf("nsfw_(content)"), gelbooru.searchedExclusions.single())
+    }
+
+    @Test
+    fun `resolved post cache is execution scoped and rate limits use bounded retry backoff`() = runTest {
+        var now = 1_000L
+        val resolved = post(SourceKey.IWARA, "resolved").copy(
+            full = ImageRef("https://example.test/resolved.mp4", null, "video/mp4"),
+        )
+        val adapter = TestAdapter(SourceKey.IWARA).apply { resolvedPost = resolved }
+        val coordinator = SearchCoordinator(TestRegistry(listOf(adapter)), clock = { now })
+        val key = "query-a"
+
+        assertEquals(resolved, coordinator.resolvePostForSearch(resolved.id, key))
+        assertEquals(resolved, coordinator.resolvePostForSearch(resolved.id, key))
+        assertEquals(1, adapter.resolveCalls)
+        assertEquals(resolved, coordinator.resolvePostForSearch(resolved.id, "query-b"))
+        assertEquals(2, adapter.resolveCalls)
+
+        adapter.resolveFailure = SourceAdapterException(SourceFailureReason.RATE_LIMITED, "429")
+        val limitedId = PostId(SourceKey.IWARA, "limited")
+        assertEquals(null, coordinator.resolvePostForSearch(limitedId, key))
+        assertEquals(null, coordinator.resolvePostForSearch(limitedId, key))
+        assertEquals(3, adapter.resolveCalls)
         now += 31_000L
-        assertFalse(coordinator.shouldDeferResolve(raw.id))
-        assertNull(coordinator.resolvePostForSearch(raw.id))
-        assertEquals(2, adapter.resolveCallCount)
-        assertTrue(coordinator.shouldDeferResolve(raw.id))
+        assertEquals(null, coordinator.resolvePostForSearch(limitedId, key))
+        assertEquals(4, adapter.resolveCalls)
     }
 
     @Test
-    fun `display results stay resolved after retry refresh for same query`() = runTest {
-        val raw = samplePost()
-        val resolved = raw.copy(
-            full = ImageRef(url = "https://cdn.iwara.tv/video.mp4", localPath = null, mime = "video/mp4"),
-            media = listOf(ImageRef(url = "https://cdn.iwara.tv/video.mp4", localPath = null, mime = "video/mp4")),
-        )
-        val adapter = SearchResolveAdapter(
-            sourceKey = SourceKey.IWARA,
-            searchResults = listOf(raw),
-        ) { resolved }
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(mapOf(SourceKey.IWARA to adapter)),
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.IWARA))
-        coordinator.applyDraft()
-        coordinator.rememberResolvedPost(resolved)
-
-        coordinator.retry()
-
-        assertEquals("https://cdn.iwara.tv/video.mp4", coordinator.displayResults().single().full?.url)
-    }
-
-    @Test
-    fun `clear draft resets to default query for current mode`() = runTest {
-        val coordinator = coordinator()
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
-        coordinator.addIncludeTag("first")
-        coordinator.applyDraft()
-        coordinator.addIncludeTag("second")
-
-        coordinator.clearDraft()
-
-        assertTrue(coordinator.draftQuery.includeTags.isEmpty())
-        assertTrue(coordinator.draftQuery.excludeTags.isEmpty())
-        assertEquals(QueryMode.Source(SourceKey.PIXIV), coordinator.draftQuery.mode)
-    }
-
-    @Test
-    fun `prepare tag search resets draft and clears prior runtime state`() = runTest {
-        val coordinator = coordinator()
-        coordinator.initialize()
-        coordinator.addIncludeTag("before")
-        coordinator.applyDraft()
-        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
-        coordinator.addExcludeTag("old-exclude")
-        coordinator.setSort(SortMode.TOP)
-
-        val prepared = coordinator.prepareTagSearch(
-            includeTags = listOf("fresh-tag", "fresh-tag"),
-            excludeTags = listOf("blocked", "fresh-tag"),
-        )
-
-        assertTrue(prepared)
-        assertEquals(QueryMode.Unified, coordinator.draftQuery.mode)
-        assertEquals(listOf("fresh-tag"), coordinator.draftQuery.includeTags)
-        assertEquals(listOf("blocked"), coordinator.draftQuery.excludeTags)
-        assertEquals(SortMode.NEWEST, coordinator.draftQuery.sort)
-        assertEquals(null, coordinator.draftQuery.dateRange)
-        assertEquals(null, coordinator.draftQuery.minScore)
-        assertTrue(coordinator.results.isEmpty())
-        assertTrue(coordinator.statuses.isEmpty())
-        assertEquals(null, coordinator.errorMessage)
-    }
-
-    @Test
-    fun `prepare tag search can target an available source mode`() = runTest {
-        val coordinator = coordinator()
-        coordinator.initialize()
-
-        val prepared = coordinator.prepareTagSearch(
-            includeTags = listOf("fresh-tag"),
-            mode = QueryMode.Source(SourceKey.PIXIV),
-        )
-
-        assertTrue(prepared)
-        assertEquals(QueryMode.Source(SourceKey.PIXIV), coordinator.draftQuery.mode)
-        assertEquals(listOf("fresh-tag"), coordinator.draftQuery.includeTags)
-        assertEquals(SortMode.NEWEST, coordinator.draftQuery.sort)
-    }
-
-    @Test
-    fun `prepare tag search rejects unavailable source mode`() = runTest {
-        val coordinator = SearchCoordinator(
-            registry = LimitedStubRegistry(setOf(SourceKey.PIXIV)),
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-        )
-        coordinator.initialize()
-
-        val prepared = coordinator.prepareTagSearch(
-            includeTags = listOf("fresh-tag"),
-            mode = QueryMode.Source(SourceKey.GELBOORU),
-        )
-
-        assertFalse(prepared)
-        assertEquals(QueryMode.Unified, coordinator.draftQuery.mode)
-        assertTrue(coordinator.draftQuery.includeTags.isEmpty())
-    }
-
-    @Test
-    fun `prepare tag search rejects empty selections`() = runTest {
-        val coordinator = coordinator()
-        coordinator.initialize()
-
-        val prepared = coordinator.prepareTagSearch(
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-        )
-
-        assertFalse(prepared)
-    }
-
-    @Test
-    fun `gelbooru source mode only commits typed tags from suggestions`() = runTest {
-        val registry = CompatibilityRegistry(
-            adapters = mapOf(
-                SourceKey.GELBOORU to RecordingAdapter(
-                    sourceKey = SourceKey.GELBOORU,
-                    autocompleteByPrefix = mapOf(
-                        "land" to listOf("landscape"),
-                        "safe" to listOf("safe"),
-                    ),
-                ),
-            ),
-        )
-        val coordinator = SearchCoordinator(
-            registry = registry,
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-            tagSuggestionStore = InMemoryTagSuggestionStore(),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.GELBOORU))
-
-        coordinator.refreshAutocompleteSuggestions("portrait")
-        assertFalse(coordinator.commitTagInput("portrait"))
-        assertTrue(coordinator.tagInputValidationMessage?.contains("Gelbooru", ignoreCase = true) == true)
-
-        coordinator.refreshAutocompleteSuggestions("land")
-        assertTrue(coordinator.commitTagInput("landscape"))
-        assertTrue("landscape" in coordinator.draftQuery.includeTags)
-
-        coordinator.refreshAutocompleteSuggestions("safe")
-        assertTrue(coordinator.commitTagInput("-safe"))
-        assertTrue("safe" in coordinator.draftQuery.excludeTags)
-        assertNull(coordinator.tagInputValidationMessage)
-    }
-
-    @Test
-    fun `gelbooru autocomplete treats spaces as underscores`() = runTest {
-        val gelbooruAdapter = RecordingAdapter(
-            sourceKey = SourceKey.GELBOORU,
-            autocompleteByPrefix = mapOf(
-                "blue_hair" to listOf("blue_hair"),
-            ),
-        )
-        val registry = CompatibilityRegistry(
-            adapters = mapOf(SourceKey.GELBOORU to gelbooruAdapter),
-        )
-        val coordinator = SearchCoordinator(
-            registry = registry,
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-            tagSuggestionStore = InMemoryTagSuggestionStore(),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.GELBOORU))
-
-        coordinator.refreshAutocompleteSuggestions("blue hair")
-
-        assertEquals("blue_hair", gelbooruAdapter.lastAutocompletePrefix)
-        assertEquals(listOf("blue_hair"), coordinator.autocompleteSuggestions.map { it.text })
-        assertTrue(coordinator.canCommitTagInput("blue hair"))
-        assertTrue(coordinator.commitTagInput("blue hair"))
-        assertTrue("blue_hair" in coordinator.draftQuery.includeTags)
-    }
-
-    @Test
-    fun `iwara autocomplete treats spaces as underscores`() = runTest {
-        val iwaraAdapter = RecordingAdapter(
-            sourceKey = SourceKey.IWARA,
-            autocompleteByPrefix = mapOf(
-                "blue_hair" to listOf("blue_hair"),
-            ),
-        )
-        val registry = CompatibilityRegistry(
-            adapters = mapOf(SourceKey.IWARA to iwaraAdapter),
-        )
-        val coordinator = SearchCoordinator(
-            registry = registry,
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-            tagSuggestionStore = InMemoryTagSuggestionStore(),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.IWARA))
-
-        coordinator.refreshAutocompleteSuggestions("blue hair")
-
-        assertEquals("blue_hair", iwaraAdapter.lastAutocompletePrefix)
-        assertEquals(listOf("blue_hair"), coordinator.autocompleteSuggestions.map { it.text })
-        assertTrue(coordinator.canCommitTagInput("blue hair"))
-        assertTrue(coordinator.commitTagInput("blue hair"))
-        assertTrue("blue_hair" in coordinator.draftQuery.includeTags)
-    }
-
-    @Test
-    fun `pixiv source mode smart add resolves to suggested canonical tag`() = runTest {
-        val pixivAdapter = RecordingAdapter(
-            sourceKey = SourceKey.PIXIV,
-            autocompleteByPrefix = mapOf(
-                "blue hair" to listOf("blue_hair"),
-            ),
-        )
-        val registry = CompatibilityRegistry(
-            adapters = mapOf(SourceKey.PIXIV to pixivAdapter),
-        )
-        val coordinator = SearchCoordinator(
-            registry = registry,
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-            tagSuggestionStore = InMemoryTagSuggestionStore(),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
-
-        coordinator.refreshAutocompleteSuggestions("blue hair")
-
-        assertTrue(coordinator.canCommitTagInput("blue hair"))
-        assertTrue(coordinator.commitTagInput("blue hair"))
-        assertTrue("blue_hair" in coordinator.draftQuery.includeTags)
-        assertFalse("blue hair" in coordinator.draftQuery.includeTags)
-    }
-
-    @Test
-    fun `nhentai language filter toggles language tags in include list`() = runTest {
-        val coordinator = coordinator()
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
-        coordinator.addIncludeTag("artist:example")
-
-        coordinator.setNhentaiLanguageFilter(NhentaiLanguageFilter.CHINESE)
-        assertEquals(NhentaiLanguageFilter.CHINESE, coordinator.selectedNhentaiLanguageFilter())
-        assertTrue("chinese" in coordinator.draftQuery.includeTags)
-
-        coordinator.setNhentaiLanguageFilter(NhentaiLanguageFilter.JAPANESE)
-        assertEquals(NhentaiLanguageFilter.JAPANESE, coordinator.selectedNhentaiLanguageFilter())
-        assertFalse("chinese" in coordinator.draftQuery.includeTags)
-        assertTrue("japanese" in coordinator.draftQuery.includeTags)
-
-        coordinator.setNhentaiLanguageFilter(NhentaiLanguageFilter.ANY)
-        assertEquals(NhentaiLanguageFilter.ANY, coordinator.selectedNhentaiLanguageFilter())
-        assertFalse("japanese" in coordinator.draftQuery.includeTags)
-        assertTrue("artist:example" in coordinator.draftQuery.includeTags)
-    }
-
-    @Test
-    fun `nhentai full color filter toggles full color tag in include list`() = runTest {
-        val coordinator = coordinator()
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
-        coordinator.addIncludeTag("artist:example")
-
-        coordinator.setNhentaiFullColorFilter(true)
-        assertTrue(coordinator.selectedNhentaiFullColorFilter())
-        assertTrue("full color" in coordinator.draftQuery.includeTags)
-
-        coordinator.setNhentaiFullColorFilter(false)
-        assertFalse(coordinator.selectedNhentaiFullColorFilter())
-        assertFalse("full color" in coordinator.draftQuery.includeTags)
-        assertTrue("artist:example" in coordinator.draftQuery.includeTags)
-    }
-
-    @Test
-    fun `direct nhentai gallery id candidate supports source and unified modes`() = runTest {
-        val coordinator = coordinator()
-        coordinator.initialize()
-
-        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
-        coordinator.addIncludeTag("634609")
-        assertEquals("634609", coordinator.directNhentaiGalleryIdCandidate())
-        coordinator.setNhentaiLanguageFilter(NhentaiLanguageFilter.ENGLISH)
-        assertEquals("634609", coordinator.directNhentaiGalleryIdCandidate())
-        coordinator.setNhentaiFullColorFilter(true)
-        assertEquals("634609", coordinator.directNhentaiGalleryIdCandidate())
-
-        coordinator.setMode(QueryMode.Unified)
-        coordinator.addIncludeTag("634609")
-        assertEquals("634609", coordinator.directNhentaiGalleryIdCandidate())
-
-        coordinator.addExcludeTag("english")
-        assertNull(coordinator.directNhentaiGalleryIdCandidate())
-    }
-
-    @Test
-    fun `gelbooru batch tag counts are cached for subsequent lookups`() = runTest {
-        val gelbooruAdapter = RecordingAdapter(
-            sourceKey = SourceKey.GELBOORU,
-            tagCountsByName = mapOf("blue_hair" to 321),
-        )
-        val registry = CompatibilityRegistry(
-            adapters = mapOf(SourceKey.GELBOORU to gelbooruAdapter),
-        )
-        val coordinator = SearchCoordinator(
-            registry = registry,
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-            tagSuggestionStore = InMemoryTagSuggestionStore(),
-        )
-        coordinator.initialize()
-
-        val first = coordinator.fetchTagVideoCounts(SourceKey.GELBOORU, listOf("blue hair"))
-
-        assertEquals(321, first["blue hair"])
-        assertEquals(1, gelbooruAdapter.batchTagLookupCount)
-        assertEquals(321, coordinator.tagVideoCount(SourceKey.GELBOORU, "blue hair"))
-
-        coordinator.fetchTagVideoCounts(SourceKey.GELBOORU, listOf("blue hair"))
-        assertEquals(1, gelbooruAdapter.batchTagLookupCount)
-    }
-
-    @Test
-    fun `unified search maps gelbooru compatibility tags and falls back to raw tag`() = runTest {
-        val pixivAdapter = RecordingAdapter(sourceKey = SourceKey.PIXIV)
-        val gelbooruAdapter = RecordingAdapter(
-            sourceKey = SourceKey.GELBOORU,
-            autocompleteByPrefix = mapOf(
-                "cat" to listOf("cat_(animal)"),
-                "dog" to emptyList(),
-            ),
-        )
-        val registry = CompatibilityRegistry(
-            adapters = mapOf(
-                SourceKey.PIXIV to pixivAdapter,
-                SourceKey.GELBOORU to gelbooruAdapter,
-            ),
-        )
-        val coordinator = SearchCoordinator(
-            registry = registry,
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-        )
-        coordinator.initialize()
-        coordinator.addIncludeTag("cat")
-        coordinator.addIncludeTag("dog")
-
-        coordinator.applyDraft()
-
-        assertEquals(listOf("cat", "dog"), pixivAdapter.lastSearchQuery?.includeTags)
-        assertEquals(listOf("cat_(animal)", "dog"), gelbooruAdapter.lastSearchQuery?.includeTags)
-    }
-
-    @Test
-    fun `unified search normalizes pixiv tags by removing underscores and trailing disambiguation`() = runTest {
-        val pixivAdapter = RecordingAdapter(sourceKey = SourceKey.PIXIV)
-        val gelbooruAdapter = RecordingAdapter(sourceKey = SourceKey.GELBOORU)
-        val registry = CompatibilityRegistry(
-            adapters = mapOf(
-                SourceKey.PIXIV to pixivAdapter,
-                SourceKey.GELBOORU to gelbooruAdapter,
-            ),
-        )
-        val coordinator = SearchCoordinator(
-            registry = registry,
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-        )
-        coordinator.initialize()
-        coordinator.addIncludeTag("this_is_a_tag_(Game)")
-        coordinator.addExcludeTag("nsfw_(content)")
-
-        coordinator.applyDraft()
-
-        assertEquals(listOf("this is a tag"), pixivAdapter.lastSearchQuery?.includeTags)
-        assertEquals(listOf("nsfw"), pixivAdapter.lastSearchQuery?.excludeTags)
-        assertEquals(listOf("this_is_a_tag_(Game)"), gelbooruAdapter.lastSearchQuery?.includeTags)
-        assertEquals(listOf("nsfw_(content)"), gelbooruAdapter.lastSearchQuery?.excludeTags)
-    }
-
-    @Test
-    fun `unified compatibility mapping never promotes source facets into portable tags`() = runTest {
-        val pixivAdapter = RecordingAdapter(sourceKey = SourceKey.PIXIV)
-        val gelbooruAdapter = RecordingAdapter(sourceKey = SourceKey.GELBOORU)
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(
-                adapters = mapOf(
-                    SourceKey.PIXIV to pixivAdapter,
-                    SourceKey.GELBOORU to gelbooruAdapter,
-                ),
-            ),
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-        )
-        coordinator.initialize()
-        val query = Query(
-            mode = QueryMode.Unified,
-            includeTerms = listOf(
-                SearchTerm(value = "portable_tag"),
-                SearchTerm(value = "najar", facet = SearchFacet.ARTIST, sourceNamespace = "artist"),
-                SearchTerm(value = "owned", sourceNamespace = "hitomi"),
-            ),
-            excludeTerms = listOf(
-                SearchTerm(value = "portable_exclusion"),
-                SearchTerm(value = "series name", facet = SearchFacet.SERIES, sourceNamespace = "series"),
-            ),
-            sort = SortMode.TOP,
-            dateRange = null,
-            minScore = null,
-        )
-
-        coordinator.applyHistoricalQuery(query)
-
-        assertEquals(listOf("portable tag"), pixivAdapter.lastSearchQuery?.includeTags)
-        assertEquals(listOf("portable exclusion"), pixivAdapter.lastSearchQuery?.excludeTags)
-        assertEquals(listOf("portable_tag"), gelbooruAdapter.lastSearchQuery?.includeTags)
-        assertEquals(listOf("portable_exclusion"), gelbooruAdapter.lastSearchQuery?.excludeTags)
-    }
-
-    @Test
-    fun `faceted source exposes scopes and resets ephemeral selection on mode change`() = runTest {
-        val all = FacetedSearchScope.All
-        val tags = FacetedSearchScope(SearchFacet.TAG, "tag")
-        val artists = FacetedSearchScope(SearchFacet.ARTIST, "artist")
-        val series = FacetedSearchScope(SearchFacet.SERIES, "parody")
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(
-                adapters = mapOf(
-                    SourceKey.NHENTAI to FacetedRecordingAdapter(
-                        sourceKey = SourceKey.NHENTAI,
-                        supportedSearchScopes = linkedSetOf(series, artists, tags, all),
-                    ),
-                    SourceKey.GELBOORU to RecordingAdapter(SourceKey.GELBOORU),
-                ),
-            ),
-        )
-        coordinator.initialize()
-
-        assertTrue(coordinator.supportedSearchScopes.isEmpty())
-        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
-        assertEquals(listOf(all, tags, artists, series), coordinator.supportedSearchScopes)
-        assertTrue(coordinator.selectSearchScope(artists))
-        assertEquals(artists, coordinator.selectedSearchScope)
-        assertFalse(coordinator.selectSearchScope(FacetedSearchScope(SearchFacet.GROUP, "group")))
-
-        coordinator.setMode(QueryMode.Source(SourceKey.GELBOORU))
-
-        assertTrue(coordinator.supportedSearchScopes.isEmpty())
-        assertEquals(FacetedSearchScope.All, coordinator.selectedSearchScope)
-    }
-
-    @Test
-    fun `faceted autocomplete keeps suggestion identity through selection and removal`() = runTest {
-        val artists = FacetedSearchScope(SearchFacet.ARTIST, "artist")
-        val artistSuggestion = FacetedTagSuggestion(
-            text = "najar",
-            facet = SearchFacet.ARTIST,
-            sourceNamespace = "artist",
-            count = 42,
-        )
-        val adapter = FacetedRecordingAdapter(
-            sourceKey = SourceKey.NHENTAI,
-            supportedSearchScopes = linkedSetOf(FacetedSearchScope.All, artists),
-            suggestionsByScope = mapOf(artists to listOf(artistSuggestion)),
-        )
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(mapOf(SourceKey.NHENTAI to adapter)),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
-
-        coordinator.refreshAutocompleteSuggestions("artist:naj")
-
-        assertEquals(artists, coordinator.selectedSearchScope)
-        assertEquals("naj", adapter.lastFacetedPrefix)
-        assertEquals(artists, adapter.lastFacetedScope)
-        assertEquals(listOf(artistSuggestion), coordinator.facetedAutocompleteSuggestions)
-        assertEquals(listOf("najar"), coordinator.autocompleteSuggestions.map(TagSuggestion::text))
-
-        assertTrue(coordinator.addIncludeSuggestion(artistSuggestion))
-        val tagSuggestion = artistSuggestion.copy(
-            facet = SearchFacet.TAG,
-            sourceNamespace = "tag",
-        )
-        assertTrue(coordinator.addIncludeSuggestion(tagSuggestion))
-        assertEquals(2, coordinator.draftQuery.includeTerms.size)
-
-        coordinator.removeIncludeTerm(artistSuggestion.toSearchTerm())
-
-        assertEquals(listOf(tagSuggestion.toSearchTerm()), coordinator.draftQuery.includeTerms)
-        assertTrue(coordinator.addExcludeSuggestion(artistSuggestion))
-        coordinator.removeExcludeTerm(artistSuggestion.toSearchTerm())
-        assertTrue(coordinator.draftQuery.excludeTerms.isEmpty())
-    }
-
-    @Test
-    fun `selected facet exposes featured values before typing`() = runTest {
-        val types = FacetedSearchScope(SearchFacet.TYPE, "type")
-        val gameCg = FacetedTagSuggestion("gamecg", SearchFacet.TYPE, "type", count = 37_877)
-        val adapter = FacetedRecordingAdapter(
-            sourceKey = SourceKey.HITOMI,
-            supportedSearchScopes = linkedSetOf(FacetedSearchScope.All, types),
-            featuredByScope = mapOf(types to listOf(gameCg)),
-        )
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(mapOf(SourceKey.HITOMI to adapter)),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.HITOMI))
-        assertTrue(coordinator.selectSearchScope(types))
-
-        coordinator.refreshFeaturedFacetedSuggestions()
-
-        assertEquals(listOf(gameCg), coordinator.facetedAutocompleteSuggestions)
-        assertEquals(listOf("gamecg"), coordinator.autocompleteSuggestions.map(TagSuggestion::text))
-    }
-
-    @Test
-    fun `post facet entry switches to its source without resetting portable draft filters`() = runTest {
-        val coordinator = coordinator()
-        coordinator.initialize()
-        val oldSourceTerm = SearchTerm("old artist", SearchFacet.ARTIST, "artist")
-        assertTrue(
-            coordinator.addPostExcludeTerm(
-                samplePost(source = SourceKey.NHENTAI),
-                oldSourceTerm,
-            ),
-        )
-        coordinator.addIncludeTag("portable")
-        coordinator.addExcludeTag("portable exclusion")
-        coordinator.setSort(SortMode.TOP)
-        val hitomiPost = samplePost(source = SourceKey.HITOMI)
-        val artist = SearchTerm("najar", SearchFacet.ARTIST, "artist")
-
-        assertTrue(coordinator.addPostIncludeTerm(hitomiPost, artist))
-
-        assertEquals(QueryMode.Source(SourceKey.HITOMI), coordinator.draftQuery.mode)
-        assertEquals(listOf(SearchTerm("portable"), artist), coordinator.draftQuery.includeTerms)
-        assertEquals(listOf(SearchTerm("portable exclusion")), coordinator.draftQuery.excludeTerms)
-        assertEquals(SortMode.TOP, coordinator.draftQuery.sort)
-    }
-
-    @Test
-    fun `portable post tag stays in unified mode`() = runTest {
-        val coordinator = coordinator()
-        coordinator.initialize()
-        val portableTag = SearchTerm("portable")
-
-        assertTrue(
-            coordinator.addPostIncludeTerm(
-                samplePost(source = SourceKey.HITOMI),
-                portableTag,
-            ),
-        )
-
-        assertEquals(QueryMode.Unified, coordinator.draftQuery.mode)
-        assertEquals(listOf(portableTag), coordinator.draftQuery.includeTerms)
-    }
-
-    @Test
-    fun `post term acceptance stays true when the exact term is already current`() = runTest {
-        val coordinator = coordinator()
-        coordinator.initialize()
-        val hitomiPost = samplePost(source = SourceKey.HITOMI)
-        val artist = SearchTerm("najar", SearchFacet.ARTIST, "artist")
-        val series = SearchTerm("series", SearchFacet.SERIES, "series")
-
-        assertTrue(coordinator.addPostIncludeTerm(hitomiPost, artist))
-        assertTrue(coordinator.addPostIncludeTerm(hitomiPost, artist))
-        assertTrue(coordinator.addPostExcludeTerm(hitomiPost, series))
-        assertTrue(coordinator.addPostExcludeTerm(hitomiPost, series))
-
-        assertEquals(listOf(artist), coordinator.draftQuery.includeTerms)
-        assertEquals(listOf(series), coordinator.draftQuery.excludeTerms)
-    }
-
-    @Test
-    fun `unavailable source owned post term leaves draft unchanged`() = runTest {
-        val coordinator = SearchCoordinator(
-            registry = LimitedStubRegistry(setOf(SourceKey.PIXIV)),
-        )
-        coordinator.initialize()
-        coordinator.addIncludeTag("portable")
-        coordinator.setSort(SortMode.TOP)
-        val originalDraft = coordinator.draftQuery
-
-        assertFalse(
-            coordinator.addPostExcludeTerm(
-                samplePost(source = SourceKey.HITOMI),
-                SearchTerm("najar", SearchFacet.ARTIST, "artist"),
-            ),
-        )
-
-        assertEquals(originalDraft, coordinator.draftQuery)
-    }
-
-    @Test
-    fun `post facet entry preserves same-source draft and exact removal keeps same-text tag`() = runTest {
-        val coordinator = coordinator()
-        coordinator.initialize()
-        val hitomiPost = samplePost(source = SourceKey.HITOMI)
-        val tag = SearchTerm("najar", SearchFacet.TAG, "tag")
-        val artist = SearchTerm("najar", SearchFacet.ARTIST, "artist")
-        val series = SearchTerm("series", SearchFacet.SERIES, "series")
-
-        assertTrue(coordinator.addPostIncludeTerm(hitomiPost, tag))
-        assertTrue(coordinator.addPostIncludeTerm(hitomiPost, artist))
-        coordinator.setSort(SortMode.RANDOM)
-        assertTrue(coordinator.addPostExcludeTerm(hitomiPost, series))
-
-        assertEquals(listOf(tag, artist), coordinator.draftQuery.includeTerms)
-        assertEquals(listOf(series), coordinator.draftQuery.excludeTerms)
-        assertEquals(SortMode.RANDOM, coordinator.draftQuery.sort)
-
-        coordinator.removeIncludeTerm(artist)
-        coordinator.removeExcludeTerm(series)
-
-        assertEquals(listOf(tag), coordinator.draftQuery.includeTerms)
-        assertTrue(coordinator.draftQuery.excludeTerms.isEmpty())
-    }
-
-    @Test
-    fun `unified autocomplete projects only general tags from faceted sources`() = runTest {
-        val all = FacetedSearchScope.All
-        val adapter = FacetedRecordingAdapter(
-            sourceKey = SourceKey.NHENTAI,
-            supportedSearchScopes = linkedSetOf(
-                all,
-                FacetedSearchScope(SearchFacet.TAG, "tag"),
-                FacetedSearchScope(SearchFacet.ARTIST, "artist"),
-            ),
-            suggestionsByScope = mapOf(
-                all to listOf(
-                    FacetedTagSuggestion("najar", SearchFacet.TAG, "tag", count = 5),
-                    FacetedTagSuggestion("najar", SearchFacet.ARTIST, "artist", count = 42),
-                ),
-            ),
-        )
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(mapOf(SourceKey.NHENTAI to adapter)),
-        )
-        coordinator.initialize()
-
-        coordinator.refreshAutocompleteSuggestions("najar")
-
-        assertEquals(listOf("najar"), coordinator.autocompleteSuggestions.map(TagSuggestion::text))
-        assertEquals(listOf("tag"), coordinator.autocompleteSuggestions.map(TagSuggestion::type))
-        assertTrue(coordinator.facetedAutocompleteSuggestions.isEmpty())
-        coordinator.addIncludeTag(coordinator.autocompleteSuggestions.single().text)
-        assertEquals(listOf(SearchTerm("najar")), coordinator.draftQuery.includeTerms)
-    }
-
-    @Test
-    fun `unsupported scoped autocomplete clears suggestions before commit`() = runTest {
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(
-                mapOf(
-                    SourceKey.NHENTAI to FacetedRecordingAdapter(
-                        sourceKey = SourceKey.NHENTAI,
-                        supportedSearchScopes = linkedSetOf(
-                            FacetedSearchScope.All,
-                            FacetedSearchScope(SearchFacet.ARTIST, "artist"),
-                        ),
-                    ),
-                ),
-            ),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
-
-        coordinator.refreshAutocompleteSuggestions("series:idolmaster")
-
-        assertTrue(coordinator.autocompleteSuggestions.isEmpty())
-        assertTrue(coordinator.facetedAutocompleteSuggestions.isEmpty())
-        assertTrue(coordinator.tagInputValidationMessage?.contains("not supported") == true)
-        assertFalse(coordinator.commitTagInput("series:idolmaster"))
-    }
-
-    @Test
-    fun `faceted autocomplete rethrows cancellation`() = runTest {
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(
-                mapOf(
-                    SourceKey.NHENTAI to FacetedRecordingAdapter(
-                        sourceKey = SourceKey.NHENTAI,
-                        supportedSearchScopes = linkedSetOf(FacetedSearchScope.All),
-                        autocompleteFailure = CancellationException("scope changed"),
-                    ),
-                ),
-            ),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
-
-        val error = runCatching {
-            coordinator.refreshAutocompleteSuggestions("najar")
+    fun `autocomplete cancellation and pixiv unknown failures preserve typed contracts`() = runTest {
+        val cancelling = TestAdapter(SourceKey.PIXIV).apply { autocompleteFailure = CancellationException("changed") }
+        val coordinator = coordinator(cancelling)
+        coordinator.initializeRoute()
+        val cancellation = runCatching {
+            coordinator.fetchAutocomplete(
+                query(SourceKey.PIXIV, ""),
+                SearchSourceScope.Single(SourceKey.PIXIV),
+                com.theoriacodex.domain.adapter.FacetedSearchScope.All,
+                "tag",
+                emptyList(),
+            )
         }.exceptionOrNull()
+        assertTrue(cancellation is CancellationException)
 
-        assertTrue(error is CancellationException)
+        cancelling.autocompleteFailure = null
+        cancelling.failure = SourceAdapterException(SourceFailureReason.UNKNOWN, "PIXIV_UNKNOWN")
+        val failure = coordinator.executeInitial(
+            query(SourceKey.PIXIV, ""),
+            SearchSourceScope.Single(SourceKey.PIXIV),
+        ) as SearchExecutionResult.Failure
+        assertTrue(failure.message.contains("reset", ignoreCase = true))
     }
 
     @Test
-    fun `seen tag ingestion preserves same-text source namespaces`() = runTest {
-        val store = RecordingFacetedSuggestionStore()
-        val post = samplePost(source = SourceKey.NHENTAI).copy(
+    fun `faceted autocomplete preserves scope identity featured values and cancellation`() = runTest {
+        val artist = FacetedSearchScope(SearchFacet.ARTIST, "artist")
+        val suggestion = FacetedTagSuggestion("najar", SearchFacet.ARTIST, "artist", 42)
+        val adapter = FacetedAdapter(
+            source = SourceKey.HITOMI,
+            supportedSearchScopes = linkedSetOf(FacetedSearchScope.All, artist),
+            autocomplete = listOf(suggestion),
+            featured = listOf(suggestion),
+        )
+        val coordinator = SearchCoordinator(TestRegistry(listOf(adapter)))
+        coordinator.initializeRoute()
+        val query = query(SourceKey.HITOMI, "")
+
+        val autocomplete = coordinator.fetchAutocomplete(
+            query,
+            SearchSourceScope.Single(SourceKey.HITOMI),
+            FacetedSearchScope.All,
+            "artist:naj",
+            emptyList(),
+        )
+        val featured = coordinator.fetchAutocomplete(
+            query,
+            SearchSourceScope.Single(SourceKey.HITOMI),
+            artist,
+            "",
+            emptyList(),
+        )
+
+        assertEquals(artist, autocomplete.selectedScope)
+        assertEquals(listOf(suggestion), autocomplete.facetedAutocomplete)
+        assertEquals(listOf(suggestion), featured.facetedAutocomplete)
+        assertEquals(
+            UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE,
+            coordinator.fetchAutocomplete(
+                unifiedQuery(""),
+                SearchSourceScope.GlobalUnified,
+                FacetedSearchScope.All,
+                "artist:naj",
+                emptyList(),
+            ).validationMessage,
+        )
+        assertEquals(
+            UNSUPPORTED_SEARCH_SCOPE_MESSAGE,
+            coordinator.fetchAutocomplete(
+                query,
+                SearchSourceScope.Single(SourceKey.HITOMI),
+                FacetedSearchScope.All,
+                "female:naj",
+                emptyList(),
+            ).validationMessage,
+        )
+        adapter.failure = CancellationException("scope changed")
+        assertTrue(
+            runCatching {
+                coordinator.fetchAutocomplete(
+                    query,
+                    SearchSourceScope.Single(SourceKey.HITOMI),
+                    artist,
+                    "naj",
+                    emptyList(),
+                )
+            }.exceptionOrNull() is CancellationException,
+        )
+    }
+
+    @Test
+    fun `tag count lookup caches batch results and seen taxonomy retains namespaces`() = runTest {
+        val countDelegate = TestAdapter(SourceKey.GELBOORU)
+        val countAdapter = CountAdapter(countDelegate, mapOf("blue_hair" to 321))
+        val countStore = RecordingTagStore()
+        val counts = SearchCoordinator(TestRegistry(listOf(countAdapter)), tagSuggestionStore = countStore)
+        counts.initializeRoute()
+
+        assertEquals(321, counts.fetchTagVideoCounts(SourceKey.GELBOORU, listOf("blue hair"))["blue hair"])
+        assertEquals(321, counts.fetchTagVideoCounts(SourceKey.GELBOORU, listOf("blue hair"))["blue hair"])
+        assertEquals(1, countAdapter.calls)
+
+        val post = post(SourceKey.NHENTAI, "taxonomy").copy(
             canonicalTags = listOf("shared"),
             taxonomy = listOf(
-                com.theoriacodex.domain.model.PostTaxonomyTerm("shared", SearchFacet.TAG, "female"),
-                com.theoriacodex.domain.model.PostTaxonomyTerm("shared", SearchFacet.TAG, "male"),
+                PostTaxonomyTerm("shared", SearchFacet.TAG, "female"),
+                PostTaxonomyTerm("shared", SearchFacet.TAG, "male"),
             ),
         )
-        val adapter = SearchResolveAdapter(
-            sourceKey = SourceKey.NHENTAI,
-            searchResults = listOf(post),
-            resolveBlock = { null },
-        )
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(mapOf(SourceKey.NHENTAI to adapter)),
-            tagSuggestionStore = store,
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
+        val taxonomyAdapter = TestAdapter(SourceKey.NHENTAI).apply { fixedPosts = listOf(post) }
+        val taxonomyStore = RecordingTagStore()
+        val taxonomy = SearchCoordinator(TestRegistry(listOf(taxonomyAdapter)), tagSuggestionStore = taxonomyStore)
+        taxonomy.initializeRoute()
+        taxonomy.executeInitial(query(SourceKey.NHENTAI, ""), SearchSourceScope.Single(SourceKey.NHENTAI))
 
-        coordinator.applyDraft()
-
-        assertEquals(
-            listOf("female", "male"),
-            store.facetedSuggestions.map(FacetedTagSuggestion::sourceNamespace),
-        )
+        assertEquals(listOf("female", "male"), taxonomyStore.faceted.mapNotNull(FacetedTagSuggestion::sourceNamespace))
     }
 
     @Test
-    fun `seen tag ingestion keeps pixiv native raw tags instead of translated aliases`() = runTest {
-        val store = RecordingFacetedSuggestionStore()
-        val post = samplePost(source = SourceKey.PIXIV).copy(
-            canonicalTags = listOf("猫", "cat"),
-            rawTags = listOf("猫"),
-            taxonomy = listOf(
-                com.theoriacodex.domain.model.PostTaxonomyTerm("猫"),
-                com.theoriacodex.domain.model.PostTaxonomyTerm("cat"),
-            ),
-        )
-        val adapter = SearchResolveAdapter(
-            sourceKey = SourceKey.PIXIV,
-            searchResults = listOf(post),
-            resolveBlock = { null },
-        )
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(mapOf(SourceKey.PIXIV to adapter)),
-            tagSuggestionStore = store,
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
+    fun `temporary trending stays on selected sources and source order is stable`() = runTest {
+        val pixiv = TestAdapter(SourceKey.PIXIV).apply { autocomplete = listOf(TagSuggestion("pixiv", "tag", 3)) }
+        val gelbooru = TestAdapter(SourceKey.GELBOORU).apply { autocomplete = listOf(TagSuggestion("gelbooru", "tag", 2)) }
+        val hitomi = TestAdapter(SourceKey.HITOMI).apply { autocomplete = listOf(TagSuggestion("hitomi", "tag", 1)) }
+        val store = RecordingTagStore()
+        val coordinator = SearchCoordinator(TestRegistry(listOf(hitomi, gelbooru, pixiv)), tagSuggestionStore = store)
+        coordinator.initializeRoute()
 
-        coordinator.applyDraft()
+        val trending = coordinator.fetchTrending(
+            unifiedQuery(""),
+            SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)),
+            forceRefresh = true,
+        )
 
-        assertEquals(listOf("猫"), store.facetedSuggestions.map(FacetedTagSuggestion::text))
+        assertEquals(listOf(SourceKey.GELBOORU, SourceKey.PIXIV, SourceKey.HITOMI), coordinator.availableSources)
+        assertEquals(setOf("pixiv", "gelbooru"), trending.mapTo(mutableSetOf(), TagSuggestion::text))
+        assertFalse(trending.any { it.text == "hitomi" })
     }
 
-    @Test
-    fun `raw scoped prefixes auto-select source scope and preserve positive and negative meaning`() = runTest {
-        val scopes = linkedSetOf(
-            FacetedSearchScope.All,
-            FacetedSearchScope(SearchFacet.TAG, "tag"),
-            FacetedSearchScope(SearchFacet.TAG, "female"),
-            FacetedSearchScope(SearchFacet.TAG, "male"),
-            FacetedSearchScope(SearchFacet.ARTIST, "artist"),
-            FacetedSearchScope(SearchFacet.CHARACTER, "character"),
-            FacetedSearchScope(SearchFacet.SERIES, "parody"),
-            FacetedSearchScope(SearchFacet.GROUP, "group"),
-            FacetedSearchScope(SearchFacet.TYPE, "category"),
-            FacetedSearchScope(SearchFacet.LANGUAGE, "language"),
-        )
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(
-                mapOf(
-                    SourceKey.NHENTAI to FacetedRecordingAdapter(
-                        sourceKey = SourceKey.NHENTAI,
-                        supportedSearchScopes = scopes,
-                    ),
-                ),
-            ),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.NHENTAI))
+    private fun coordinator(vararg adapters: TestAdapter): SearchCoordinator = coordinator(
+        InMemoryQueryRepository(),
+        InMemorySettingsRepository(),
+        InMemoryUiRestoreRepository(),
+        InMemoryRecentsRepository(),
+        *adapters,
+    )
 
-        assertTrue(coordinator.commitTagInput("artist:najar"))
-        assertTrue(coordinator.commitTagInput("series:the idolmaster"))
-        assertTrue(coordinator.commitTagInput("female:x-ray"))
-        assertTrue(coordinator.commitTagInput("male:sole male"))
-        assertTrue(coordinator.commitTagInput("-character:rin"))
-
-        assertEquals(
-            listOf(
-                SearchTerm("najar", SearchFacet.ARTIST, "artist"),
-                SearchTerm("the idolmaster", SearchFacet.SERIES, "parody"),
-                SearchTerm("x-ray", SearchFacet.TAG, "female"),
-                SearchTerm("sole male", SearchFacet.TAG, "male"),
-            ),
-            coordinator.draftQuery.includeTerms,
-        )
-        assertEquals(
-            listOf(SearchTerm("rin", SearchFacet.CHARACTER, "character")),
-            coordinator.draftQuery.excludeTerms,
-        )
-        assertEquals(
-            FacetedSearchScope(SearchFacet.CHARACTER, "character"),
-            coordinator.selectedSearchScope,
-        )
-    }
-
-    @Test
-    fun `unified mode blocks scoped input and removes historical source terms without excluding sources`() = runTest {
-        val pixiv = RecordingAdapter(SourceKey.PIXIV)
-        val gelbooru = RecordingAdapter(SourceKey.GELBOORU)
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(
-                mapOf(SourceKey.PIXIV to pixiv, SourceKey.GELBOORU to gelbooru),
-            ),
-        )
-        coordinator.initialize()
-
-        assertFalse(coordinator.commitTagInput("artist:najar"))
-        assertTrue(coordinator.tagInputValidationMessage?.contains("specific source") == true)
-        assertTrue(coordinator.draftQuery.includeTerms.isEmpty())
-
-        coordinator.applyHistoricalQuery(
-            Query(
-                mode = QueryMode.Unified,
-                includeTerms = listOf(
-                    SearchTerm("portable"),
-                    SearchTerm("najar", SearchFacet.ARTIST, "artist"),
-                ),
-                excludeTerms = listOf(
-                    SearchTerm("series", SearchFacet.SERIES, "series"),
-                ),
-                sort = SortMode.NEWEST,
-                dateRange = null,
-                minScore = null,
-            ),
-        )
-
-        assertEquals(listOf(SearchTerm("portable")), coordinator.appliedQuery.includeTerms)
-        assertTrue(coordinator.appliedQuery.excludeTerms.isEmpty())
-        assertTrue(coordinator.tagInputValidationMessage?.contains("removed") == true)
-        assertEquals(listOf("portable"), pixiv.lastSearchQuery?.includeTags)
-        assertEquals(listOf("portable"), gelbooru.lastSearchQuery?.includeTags)
-        assertEquals(
-            setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
-            coordinator.statuses
-                .filter { status -> status.state == SourceRunState.SUCCESS }
-                .mapTo(mutableSetOf()) { status -> status.source },
-        )
-    }
-
-    @Test
-    fun `nhentai filters inspect typed language and type terms without consuming artist terms`() = runTest {
-        val coordinator = SearchCoordinator(
-            registry = CompatibilityRegistry(
-                mapOf(SourceKey.NHENTAI to RecordingAdapter(SourceKey.NHENTAI)),
-            ),
-        )
-        coordinator.initialize()
-        val numeric = SearchTerm("634609")
-        val artistChinese = SearchTerm("chinese", SearchFacet.ARTIST, "artist")
-        val artistFullColor = SearchTerm("full color", SearchFacet.ARTIST, "artist")
-        val japanese = SearchTerm("japanese", SearchFacet.LANGUAGE, "language")
-        val categoryFullColor = SearchTerm("full color", SearchFacet.TYPE, "category")
-        val fullColor = SearchTerm("full color", SearchFacet.TAG, "tag")
-        coordinator.applyHistoricalQuery(
-            Query(
-                mode = QueryMode.Source(SourceKey.NHENTAI),
-                includeTerms = listOf(
-                    numeric,
-                    artistChinese,
-                    artistFullColor,
-                    japanese,
-                    categoryFullColor,
-                    fullColor,
-                ),
-                excludeTerms = emptyList(),
-                sort = SortMode.NEWEST,
-                dateRange = null,
-                minScore = null,
-            ),
-        )
-
-        assertEquals(NhentaiLanguageFilter.JAPANESE, coordinator.selectedNhentaiLanguageFilter())
-        assertTrue(coordinator.selectedNhentaiFullColorFilter())
-        assertNull(coordinator.directNhentaiGalleryIdCandidate())
-
-        coordinator.setNhentaiLanguageFilter(NhentaiLanguageFilter.CHINESE)
-        coordinator.setNhentaiFullColorFilter(false)
-
-        assertTrue(artistChinese in coordinator.draftQuery.includeTerms)
-        assertTrue(artistFullColor in coordinator.draftQuery.includeTerms)
-        assertTrue(categoryFullColor in coordinator.draftQuery.includeTerms)
-        assertFalse(japanese in coordinator.draftQuery.includeTerms)
-        assertFalse(fullColor in coordinator.draftQuery.includeTerms)
-        assertEquals(NhentaiLanguageFilter.CHINESE, coordinator.selectedNhentaiLanguageFilter())
-        assertFalse(coordinator.selectedNhentaiFullColorFilter())
-
-        coordinator.removeIncludeTerm(artistChinese)
-        coordinator.removeIncludeTerm(artistFullColor)
-        coordinator.removeIncludeTerm(categoryFullColor)
-        assertEquals("634609", coordinator.directNhentaiGalleryIdCandidate())
-    }
-
-    @Test
-    fun `autocomplete suggestions are sorted by post count descending`() = runTest {
-        val registry = CompatibilityRegistry(
-            adapters = mapOf(
-                SourceKey.GELBOORU to RecordingAdapter(
-                    sourceKey = SourceKey.GELBOORU,
-                    autocompleteTagsByPrefix = mapOf(
-                        "land" to listOf(
-                            TagSuggestion(text = "landscape_low", type = "tag", count = 10),
-                            TagSuggestion(text = "landscape_high", type = "tag", count = 500),
-                            TagSuggestion(text = "landscape_mid", type = "tag", count = 120),
-                        ),
-                    ),
-                ),
-            ),
-        )
-        val coordinator = SearchCoordinator(
-            registry = registry,
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.GELBOORU))
-
-        coordinator.refreshAutocompleteSuggestions("land")
-
-        assertEquals(
-            listOf("landscape_high", "landscape_mid", "landscape_low"),
-            coordinator.autocompleteSuggestions.map { it.text },
-        )
-    }
-
-    @Test
-    fun `pixiv unknown failure resets search and prompts retry message`() = runTest {
-        val registry = object : SourceAdapterRegistry {
-            private val pixivAdapter = object : SourceAdapter {
-                override val sourceKey: SourceKey = SourceKey.PIXIV
-                override val capabilities: SourceCapabilities = SourceCapabilities(
-                    supportsSortNewest = true,
-                    supportsSortPopular = true,
-                    supportsSortTop = true,
-                    supportsSortRandom = true,
-                    supportsExcludeTagsServerSide = false,
-                    supportsDateRangeServerSide = false,
-                    supportsMinScoreServerSide = false,
-                    requiresCredentials = true,
-                )
-
-                override suspend fun search(query: Query, pageToken: String?): Page<Post> {
-                    throw SourceAdapterException(
-                        reason = SourceFailureReason.UNKNOWN,
-                        message = "PIXIV_UNKNOWN",
-                    )
-                }
-
-                override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
-
-                override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = emptyList()
-
-                override suspend fun quickQuery(kind: QuickQueryKind): Query = query
-
-                override suspend fun resolvePost(id: PostId): Post? = null
-
-                private val query = Query(
-                    mode = QueryMode.Source(SourceKey.PIXIV),
-                    includeTags = emptyList(),
-                    excludeTags = emptyList(),
-                    sort = com.theoriacodex.domain.model.SortMode.NEWEST,
-                    dateRange = null,
-                    minScore = null,
-                )
-            }
-
-            override fun availableSources(): Set<SourceKey> = setOf(SourceKey.PIXIV)
-
-            override fun adapterFor(sourceKey: SourceKey): SourceAdapter? = pixivAdapter.takeIf {
-                sourceKey == SourceKey.PIXIV
-            }
-
-            override fun unifiedOrchestrator(): UnifiedSearchOrchestrator {
-                return UnifiedSearchOrchestrator(mapOf(SourceKey.PIXIV to pixivAdapter))
-            }
-        }
-        val coordinator = SearchCoordinator(
-            registry = registry,
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
-        )
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
-
-        coordinator.applyDraft()
-
-        assertTrue(coordinator.results.isEmpty())
-        assertTrue(coordinator.errorMessage?.contains("Search was reset", ignoreCase = true) == true)
-    }
-
-    private fun coordinator(): SearchCoordinator {
+    private fun coordinator(
+        queryRepository: InMemoryQueryRepository = InMemoryQueryRepository(),
+        settingsRepository: InMemorySettingsRepository = InMemorySettingsRepository(),
+        uiRestoreRepository: UiRestoreRepository = InMemoryUiRestoreRepository(),
+        recentsRepository: InMemoryRecentsRepository = InMemoryRecentsRepository(),
+        vararg adapters: TestAdapter,
+    ): SearchCoordinator {
         return SearchCoordinator(
-            registry = StubAdapterRegistry(),
-            queryRepository = InMemoryQueryRepository(),
-            settingsRepository = InMemorySettingsRepository(),
-            uiRestoreRepository = InMemoryUiRestoreRepository(),
+            registry = TestRegistry(adapters.toList()),
+            queryRepository = queryRepository,
+            settingsRepository = settingsRepository,
+            uiRestoreRepository = uiRestoreRepository,
+            recentsRepository = recentsRepository,
         )
     }
 }
 
-private class CountingQueryRepository(
-    private val delegate: InMemoryQueryRepository = InMemoryQueryRepository(),
-) : QueryRepository by delegate {
-    var scrollWriteCount: Int = 0
-        private set
-
-    override suspend fun upsertScrollOffset(queryHash: String, offsetPx: Int) {
-        scrollWriteCount += 1
-        delegate.upsertScrollOffset(queryHash, offsetPx)
-    }
-}
-
-private class CountingUiRestoreRepository(
+private class CountingRestoreRepository(
     private val delegate: InMemoryUiRestoreRepository = InMemoryUiRestoreRepository(),
 ) : UiRestoreRepository by delegate {
-    var scrollWriteCount: Int = 0
-        private set
-
+    var writeCount = 0
     override suspend fun setSearchScrollState(queryHash: String, state: SearchScrollState) {
-        scrollWriteCount += 1
+        writeCount += 1
         delegate.setSearchScrollState(queryHash, state)
     }
 }
 
-private class LimitedStubRegistry(
-    private val available: Set<SourceKey>,
-) : SourceAdapterRegistry {
-    private val delegate = StubAdapterRegistry()
-    private val adaptersBySource: Map<SourceKey, SourceAdapter> = available.associateWith { source ->
-        requireNotNull(delegate.adapterFor(source))
-    }
-
-    override fun availableSources(): Set<SourceKey> = available
-
-    override fun adapterFor(sourceKey: SourceKey): SourceAdapter? {
-        return adaptersBySource[sourceKey]
-    }
-
-    override fun unifiedOrchestrator(): UnifiedSearchOrchestrator {
-        return UnifiedSearchOrchestrator(adaptersBySource)
-    }
-}
-
-private class CompatibilityRegistry(
-    private val adapters: Map<SourceKey, SourceAdapter>,
-) : SourceAdapterRegistry {
-    private val orchestrator = UnifiedSearchOrchestrator(adapters)
-
-    override fun availableSources(): Set<SourceKey> = adapters.keys
-
-    override fun adapterFor(sourceKey: SourceKey): SourceAdapter? = adapters[sourceKey]
-
+private class TestRegistry(adapters: List<SourceAdapter>) : SourceAdapterRegistry {
+    private val bySource = adapters.associateBy(SourceAdapter::sourceKey)
+    private val orchestrator = UnifiedSearchOrchestrator(bySource)
+    override fun availableSources(): Set<SourceKey> = bySource.keys
+    override fun adapterFor(sourceKey: SourceKey): SourceAdapter? = bySource[sourceKey]
     override fun unifiedOrchestrator(): UnifiedSearchOrchestrator = orchestrator
 }
 
-private class MutableCompatibilityRegistry(
-    initialAdapters: Map<SourceKey, SourceAdapter>,
-) : SourceAdapterRegistry {
-    private var adapters: Map<SourceKey, SourceAdapter> = initialAdapters
-
-    fun remove(source: SourceKey) {
-        adapters = adapters - source
-    }
-
-    override fun availableSources(): Set<SourceKey> = adapters.keys
-
-    override fun adapterFor(sourceKey: SourceKey): SourceAdapter? = adapters[sourceKey]
-
-    override fun unifiedOrchestrator(): UnifiedSearchOrchestrator {
-        return UnifiedSearchOrchestrator(adapters)
-    }
-}
-
-private class GenerationControlledAdapter(
-    override val sourceKey: SourceKey,
-) : SourceAdapter {
-    val slowSearchStarted = CompletableDeferred<Unit>()
-    val loadMoreStarted = CompletableDeferred<Unit>()
-    val releaseStaleLoadMore = CompletableDeferred<Unit>()
-    var slowSearchCancelled: Boolean = false
-        private set
-
-    override val capabilities: SourceCapabilities = SourceCapabilities(
+private class TestAdapter(override val sourceKey: SourceKey) : SourceAdapter {
+    var failure: Throwable? = null
+    var autocompleteFailure: Throwable? = null
+    var autocomplete: List<TagSuggestion> = emptyList()
+    val autocompleteByPrefix = mutableMapOf<String, List<TagSuggestion>>()
+    val autocompletePrefixes = mutableListOf<String>()
+    val searchedTags = mutableListOf<List<String>>()
+    val searchedExclusions = mutableListOf<List<String>>()
+    var resolvedPost: Post? = null
+    var fixedPosts: List<Post>? = null
+    var resolveFailure: Throwable? = null
+    var resolveCalls = 0
+    override val capabilities = SourceCapabilities(
         supportsSortNewest = true,
         supportsSortPopular = true,
         supportsSortTop = true,
@@ -1860,296 +520,121 @@ private class GenerationControlledAdapter(
     )
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> {
-        if (pageToken == "next") {
-            loadMoreStarted.complete(Unit)
-            withContext(NonCancellable) {
-                releaseStaleLoadMore.await()
-            }
-            return Page(
-                items = listOf(samplePost(source = sourceKey, sourcePostId = "stale-page")),
-                nextPageToken = null,
-            )
-        }
-
-        return when (query.includeTags.singleOrNull()) {
-            "slow" -> {
-                slowSearchStarted.complete(Unit)
-                try {
-                    awaitCancellation()
-                } finally {
-                    slowSearchCancelled = true
-                }
-            }
-            "paged" -> Page(
-                items = listOf(samplePost(source = sourceKey, sourcePostId = "first-page")),
-                nextPageToken = "next",
-            )
-            else -> Page(
-                items = listOf(samplePost(source = sourceKey, sourcePostId = "fast-result")),
-                nextPageToken = null,
-            )
-        }
-    }
-
-    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
-
-    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = emptyList()
-
-    override suspend fun quickQuery(kind: QuickQueryKind): Query {
-        return Query(
-            mode = QueryMode.Source(sourceKey),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = SortMode.NEWEST,
-            dateRange = null,
-            minScore = null,
+        failure?.let { throw it }
+        searchedTags += query.includeTags
+        searchedExclusions += query.excludeTags
+        val tag = query.includeTags.firstOrNull().orEmpty()
+        val index = if (pageToken == null) 0 else 1
+        return Page(
+            items = fixedPosts ?: listOf(post(sourceKey, "$tag-$index")),
+            nextPageToken = "next".takeIf { pageToken == null },
         )
     }
 
-    override suspend fun resolvePost(id: PostId): Post? = null
-}
-
-private class RecordingAdapter(
-    override val sourceKey: SourceKey,
-    private val autocompleteByPrefix: Map<String, List<String>> = emptyMap(),
-    private val autocompleteTagsByPrefix: Map<String, List<TagSuggestion>> = emptyMap(),
-    private val tagCountsByName: Map<String, Int> = emptyMap(),
-    private val pagesByToken: Map<String?, Page<Post>> = emptyMap(),
-) : SourceAdapter, TagCountLookupSourceAdapter {
-    var lastSearchQuery: Query? = null
-    var lastAutocompletePrefix: String? = null
-    var batchTagLookupCount: Int = 0
-    var trendingCallCount: Int = 0
-    val searchPageTokens = mutableListOf<String?>()
-
-    override val capabilities: SourceCapabilities = SourceCapabilities(
-        supportsSortNewest = true,
-        supportsSortPopular = true,
-        supportsSortTop = true,
-        supportsSortRandom = true,
-        supportsExcludeTagsServerSide = true,
-        supportsDateRangeServerSide = true,
-        supportsMinScoreServerSide = true,
-        requiresCredentials = false,
-    )
-
-    override suspend fun search(query: Query, pageToken: String?): Page<Post> {
-        lastSearchQuery = query
-        searchPageTokens += pageToken
-        return pagesByToken[pageToken] ?: Page(items = emptyList(), nextPageToken = null)
-    }
-
-    override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
-        trendingCallCount += 1
-        return emptyList()
-    }
+    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = autocomplete.take(limit)
 
     override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
-        lastAutocompletePrefix = prefix
-        val normalized = prefix.trim().lowercase()
-        val richMatches = autocompleteTagsByPrefix[normalized]
-            ?: autocompleteTagsByPrefix.entries.firstOrNull { (key, _) ->
-                normalized.startsWith(key.lowercase()) || key.lowercase().startsWith(normalized)
-            }?.value
-        if (richMatches != null) {
-            return richMatches.take(limit)
-        }
-
-        val matches = autocompleteByPrefix[normalized]
-            ?: autocompleteByPrefix.entries.firstOrNull { (key, _) ->
-                normalized.startsWith(key.lowercase()) || key.lowercase().startsWith(normalized)
-            }?.value
-            ?: emptyList()
-        return matches
-            .take(limit)
-            .map { tag -> TagSuggestion(text = tag, type = "tag", count = null) }
+        autocompleteFailure?.let { throw it }
+        autocompletePrefixes += prefix
+        return autocompleteByPrefix[prefix]?.take(limit) ?: autocomplete.take(limit)
     }
 
-    override suspend fun quickQuery(kind: QuickQueryKind): Query {
-        return Query(
-            mode = QueryMode.Source(sourceKey),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = SortMode.NEWEST,
-            dateRange = null,
-            minScore = null,
-        )
-    }
+    override suspend fun quickQuery(kind: QuickQueryKind): Query = query(sourceKey, "")
 
-    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> {
-        if (tags.isEmpty()) return emptyMap()
-        batchTagLookupCount += 1
-        return tags.mapNotNull { raw ->
-            val normalized = raw.trim().replace(' ', '_').lowercase()
-            tagCountsByName[normalized]?.let { count -> normalized to count }
-        }.toMap()
+    override suspend fun resolvePost(id: PostId): Post? {
+        resolveCalls += 1
+        resolveFailure?.let { throw it }
+        return resolvedPost
     }
-
-    override suspend fun resolvePost(id: PostId): Post? = null
 }
 
-private class FacetedRecordingAdapter(
-    override val sourceKey: SourceKey,
+private class FacetedAdapter(
+    source: SourceKey,
     override val supportedSearchScopes: Set<FacetedSearchScope>,
-    private val suggestionsByScope: Map<FacetedSearchScope, List<FacetedTagSuggestion>> = emptyMap(),
-    private val featuredByScope: Map<FacetedSearchScope, List<FacetedTagSuggestion>> = emptyMap(),
-    private val autocompleteFailure: Throwable? = null,
-) : SourceAdapter, FacetedSearchSourceAdapter {
-    var lastSearchQuery: Query? = null
-    var lastFacetedPrefix: String? = null
-    var lastFacetedScope: FacetedSearchScope? = null
-
-    override val capabilities: SourceCapabilities = SourceCapabilities(
-        supportsSortNewest = true,
-        supportsSortPopular = true,
-        supportsSortTop = true,
-        supportsSortRandom = true,
-        supportsExcludeTagsServerSide = true,
-        supportsDateRangeServerSide = false,
-        supportsMinScoreServerSide = false,
-        requiresCredentials = false,
-    )
-
-    override suspend fun search(query: Query, pageToken: String?): Page<Post> {
-        lastSearchQuery = query
-        return Page(items = emptyList(), nextPageToken = null)
-    }
-
-    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
-
-    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
-        return emptyList()
-    }
+    private val autocomplete: List<FacetedTagSuggestion>,
+    private val featured: List<FacetedTagSuggestion>,
+) : SourceAdapter by TestAdapter(source), FacetedSearchSourceAdapter {
+    var failure: Throwable? = null
 
     override suspend fun autocompleteFaceted(
         prefix: String,
         scope: FacetedSearchScope,
         limit: Int,
     ): List<FacetedTagSuggestion> {
-        autocompleteFailure?.let { error -> throw error }
-        lastFacetedPrefix = prefix
-        lastFacetedScope = scope
-        return suggestionsByScope[scope]
-            .orEmpty()
-            .filter { suggestion -> suggestion.text.contains(prefix, ignoreCase = true) }
-            .take(limit)
+        failure?.let { throw it }
+        return autocomplete.filter { suggestion ->
+            suggestion.text.startsWith(prefix, ignoreCase = true) &&
+                (scope.isAll || suggestion.facet == scope.facet && suggestion.sourceNamespace == scope.sourceNamespace)
+        }.take(limit)
     }
 
     override suspend fun featuredFacetedSuggestions(
         scope: FacetedSearchScope,
         limit: Int,
-    ): List<FacetedTagSuggestion> = featuredByScope[scope].orEmpty().take(limit)
-
-    override suspend fun quickQuery(kind: QuickQueryKind): Query {
-        return Query(
-            mode = QueryMode.Source(sourceKey),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = SortMode.NEWEST,
-            dateRange = null,
-            minScore = null,
-        )
-    }
-
-    override suspend fun resolvePost(id: PostId): Post? = null
+    ): List<FacetedTagSuggestion> = featured.filter { suggestion ->
+        suggestion.facet == scope.facet && suggestion.sourceNamespace == scope.sourceNamespace
+    }.take(limit)
 }
 
-private class RecordingFacetedSuggestionStore : TagSuggestionStore {
-    val facetedSuggestions = mutableListOf<FacetedTagSuggestion>()
+private class CountAdapter(
+    delegate: TestAdapter,
+    private val counts: Map<String, Int>,
+) : SourceAdapter by delegate, TagCountLookupSourceAdapter {
+    var calls = 0
+    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> {
+        calls += 1
+        return counts.filterKeys { it in tags }
+    }
+}
 
-    override fun get(source: SourceKey, limit: Int): List<TagSuggestion> = emptyList()
+private class RecordingTagStore : TagSuggestionStore {
+    private val legacy = mutableMapOf<SourceKey, MutableList<TagSuggestion>>()
+    val faceted = mutableListOf<FacetedTagSuggestion>()
 
-    override fun put(source: SourceKey, suggestions: List<TagSuggestion>) = Unit
+    override fun get(source: SourceKey, limit: Int): List<TagSuggestion> = legacy[source].orEmpty().take(limit)
+
+    override fun put(source: SourceKey, suggestions: List<TagSuggestion>) {
+        legacy.getOrPut(source) { mutableListOf() }.apply {
+            suggestions.forEach { incoming ->
+                removeAll { it.text == incoming.text }
+                add(incoming)
+            }
+        }
+    }
 
     override fun getFaceted(
         source: SourceKey,
         limit: Int,
         scope: FacetedSearchScope,
-    ): List<FacetedTagSuggestion> = facetedSuggestions.take(limit)
+    ): List<FacetedTagSuggestion> = faceted.filter { suggestion ->
+        scope.isAll || suggestion.facet == scope.facet && suggestion.sourceNamespace == scope.sourceNamespace
+    }.take(limit)
 
     override fun putFaceted(source: SourceKey, suggestions: List<FacetedTagSuggestion>) {
-        facetedSuggestions += suggestions
+        faceted += suggestions
     }
 }
 
-private class SearchResolveAdapter(
-    override val sourceKey: SourceKey,
-    private val searchResults: List<Post>,
-    private val resolveBlock: suspend (PostId) -> Post?,
-) : SourceAdapter {
-    var resolveCallCount: Int = 0
+private fun query(source: SourceKey, tag: String) = Query(
+    mode = QueryMode.Source(source),
+    includeTerms = listOf(SearchTerm(tag)),
+    excludeTerms = emptyList(),
+    sort = SortMode.NEWEST,
+    dateRange = null,
+    minScore = null,
+)
 
-    override val capabilities: SourceCapabilities = SourceCapabilities(
-        supportsSortNewest = true,
-        supportsSortPopular = true,
-        supportsSortTop = true,
-        supportsSortRandom = true,
-        supportsExcludeTagsServerSide = true,
-        supportsDateRangeServerSide = true,
-        supportsMinScoreServerSide = true,
-        requiresCredentials = false,
-    )
+private fun unifiedQuery(tag: String) = query(SourceKey.PIXIV, tag).copy(mode = QueryMode.Unified)
 
-    override suspend fun search(query: Query, pageToken: String?): Page<Post> {
-        return Page(items = searchResults, nextPageToken = null)
-    }
-
-    override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
-
-    override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = emptyList()
-
-    override suspend fun quickQuery(kind: QuickQueryKind): Query {
-        return Query(
-            mode = QueryMode.Source(sourceKey),
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = SortMode.NEWEST,
-            dateRange = null,
-            minScore = null,
-        )
-    }
-
-    override suspend fun resolvePost(id: PostId): Post? {
-        resolveCallCount += 1
-        return resolveBlock(id)
-    }
-}
-
-private class InMemoryTagSuggestionStore : TagSuggestionStore {
-    private val bySource = mutableMapOf<SourceKey, LinkedHashMap<String, TagSuggestion>>()
-
-    override fun get(source: SourceKey, limit: Int): List<TagSuggestion> {
-        if (limit <= 0) return emptyList()
-        return bySource[source].orEmpty().values.take(limit)
-    }
-
-    override fun put(source: SourceKey, suggestions: List<TagSuggestion>) {
-        if (suggestions.isEmpty()) return
-        val bucket = bySource.getOrPut(source) { linkedMapOf() }
-        suggestions.forEach { suggestion ->
-            val text = suggestion.text.trim()
-            if (text.isBlank()) return@forEach
-            bucket[text.lowercase()] = suggestion.copy(text = text)
-        }
-    }
-}
-
-private fun samplePost(
-    source: SourceKey = SourceKey.IWARA,
-    sourcePostId: String = "1",
-): Post {
-    return Post(
-        id = PostId(source = source, sourcePostId = sourcePostId),
-        preview = ImageRef(url = "https://i.iwara.tv/image/thumbnail/$sourcePostId/$sourcePostId.jpg", localPath = null, mime = "image/jpeg"),
-        full = null,
-        media = emptyList(),
-        pageUrl = "https://www.iwara.tv/video/$sourcePostId",
-        width = null,
-        height = null,
-        canonicalTags = emptyList(),
-        rawTags = emptyList(),
-        authorName = null,
-        createdAtEpochMs = null,
-        title = "Sample",
-    )
-}
+private fun post(source: SourceKey, id: String) = Post(
+    id = PostId(source, id),
+    preview = ImageRef("https://example.test/$id.jpg", null, "image/jpeg"),
+    full = null,
+    pageUrl = null,
+    width = 100,
+    height = 100,
+    canonicalTags = emptyList(),
+    rawTags = emptyList(),
+    authorName = null,
+    createdAtEpochMs = null,
+)

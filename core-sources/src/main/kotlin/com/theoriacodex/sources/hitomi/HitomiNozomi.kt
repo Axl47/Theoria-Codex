@@ -59,7 +59,7 @@ object HitomiNozomi {
         return SourceByteRange(startInclusive = start, endInclusive = end)
     }
 
-    fun decodeGalleryIds(bytes: ByteArray, maxGalleryIds: Int = MAX_GALLERY_IDS): List<Int> {
+    fun decodeGalleryIds(bytes: ByteArray, maxGalleryIds: Int = MAX_GALLERY_IDS): IntArray {
         if (maxGalleryIds <= 0) {
             throw HitomiProtocolException("Nozomi gallery ID limit must be positive")
         }
@@ -71,7 +71,7 @@ object HitomiNozomi {
             throw HitomiProtocolException("Nozomi response exceeded the gallery ID limit")
         }
         val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
-        return List(count) { index ->
+        return IntArray(count) { index ->
             val id = buffer.int
             if (id <= 0) {
                 throw HitomiProtocolException("Nozomi gallery ID at index $index was not positive")

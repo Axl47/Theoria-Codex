@@ -104,6 +104,38 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Verify strict configuration-cache store and reuse
+        shell: bash
+        run: |
+          set -euo pipefail
+          project_cache="$RUNNER_TEMP/theoria-config-cache"
+          reuse_log="$RUNNER_TEMP/theoria-config-cache-reuse.log"
+          reuse_signal="Configuration cache entry reused."
+          ./gradlew help \
+            --project-cache-dir "$project_cache" \
+            --configuration-cache \
+            --configuration-cache-problems=fail \
+            --console=plain
+          ./gradlew help \
+            --project-cache-dir "$project_cache" \
+            --configuration-cache \
+            --configuration-cache-problems=fail \
+            --console=plain 2>&1 | tee "$reuse_log"
+          if ! grep -Fqx "$reuse_signal" "$reuse_log"; then
+            echo "::error::Second strict Gradle help invocation did not reuse configuration cache."
+            exit 1
+          fi
+
+      - name: Verify custom Android artifact tasks are configuration-cache compatible
+        run: >-
+          ./gradlew
+          :app:verifyBenchmarkFixtureArtifact
+          :app:verifyReleaseJsonContracts
+          :app:verifyReleaseAcceptanceJsonContracts
+          :macrobenchmark:verifyMacrobenchmarkRunnerArtifact
+          --configuration-cache
+          --configuration-cache-problems=fail
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -112,6 +144,20 @@ jobs:
 
       - name: Install quality tooling
         run: npm ci
+
+      - name: Enforce hotspot and Detekt debt budgets
+        env:
+          HOTSPOT_BASE: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+        run: |
+          base="$HOTSPOT_BASE"
+          if [[ "$base" =~ ^0+$ ]]; then
+            base="$(git rev-parse HEAD^ 2>/dev/null || true)"
+          fi
+          args=()
+          if [[ -n "$base" ]]; then
+            args+=(--base "$base")
+          fi
+          python3 scripts/check_hotspots.py "${args[@]}"
 
       - name: Enforce production duplication budget
         run: npm run audit:duplicates
@@ -123,6 +169,7 @@ jobs:
         run: >-
           ./gradlew
           :app:detektDebug
+          :app-logic:detektMain
           :core-data-android:detektDebug
           :core-domain:detektMain
           :core-data:detektMain
@@ -145,6 +192,7 @@ jobs:
           python3 scripts/check_changed_coverage.py \
             --xml build/reports/kover/quality.xml \
             --base "$base" \
+            --include-module app-logic \
             --include-module core-domain \
             --include-module core-data \
             --include-module core-data-android \
@@ -158,9 +206,11 @@ jobs:
         with:
           name: maintainability-reports
           path: |
+            build/reports/quality/
             build/reports/jscpd/
             build/reports/kover/
             app/build/reports/detekt/
+            app-logic/build/reports/detekt/
             core-*/build/reports/detekt/
           if-no-files-found: warn
           retention-days: 14

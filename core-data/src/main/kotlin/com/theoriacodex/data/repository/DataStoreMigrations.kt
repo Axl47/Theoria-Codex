@@ -2,7 +2,9 @@ package com.theoriacodex.data.repository
 
 import androidx.datastore.core.DataMigration
 import com.google.gson.Gson
+import com.google.gson.JsonObject
 import com.google.gson.JsonParseException
+import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.LegacyFileSnapshot
 import com.theoriacodex.data.storage.LegacyImportProof
 import com.theoriacodex.data.storage.archiveVerifiedLegacyFile
@@ -119,6 +121,97 @@ internal class UiRestoreLegacyDataMigration(
     }
 }
 
+/**
+ * Moves the pre-F05 Search offset map out of the still-live query file. The proof is stored in
+ * UI restore DataStore, while cleanup rewrites query_store.json in place so applied queries remain
+ * available and the legacy field cannot become a second live scroll store again.
+ */
+internal class QueryScrollOffsetDataMigration(
+    private val queryFile: File,
+    private val gson: Gson,
+    private val onImported: (List<LegacyImportProof>) -> Unit,
+    private val onFailure: (Throwable) -> Unit,
+) : DataMigration<UiRestoreDataStoreFile> {
+    private val fileStore = AtomicJsonFileStore(gson = gson)
+
+    override suspend fun shouldMigrate(currentData: UiRestoreDataStoreFile): Boolean {
+        return readQuerySnapshot()?.payload?.has(LEGACY_SCROLL_OFFSETS_FIELD) == true
+    }
+
+    override suspend fun migrate(currentData: UiRestoreDataStoreFile): UiRestoreDataStoreFile {
+        return migrationAttempt(onFailure) {
+            val snapshot = readQuerySnapshot()
+                ?: throw IOException("Legacy query offsets disappeared before migration")
+            val priorProofExists = currentData.legacyImports.any { proof ->
+                proof.sourceFileName == queryFile.name &&
+                    LEGACY_SCROLL_IMPORT_COUNT in proof.importedCounts
+            }
+            if (priorProofExists) return@migrationAttempt currentData
+
+            val offsets = snapshot.readOffsets()
+            val state = currentData.toMemoryState()
+            val migratedScrollStates = LinkedHashMap(state.scrollStates)
+            offsets.forEach { (queryHash, offsetPx) ->
+                migratedScrollStates.putIfAbsent(
+                    queryHash,
+                    SearchScrollState(
+                        firstVisibleItemIndex = 0,
+                        firstVisibleItemOffsetPx = offsetPx.coerceAtLeast(0),
+                    ),
+                )
+            }
+            val proof = snapshot.source.proof(
+                sourceSchemaVersion = 1,
+                destinationSchemaVersion = UI_RESTORE_DATASTORE_SCHEMA_VERSION,
+                importedCounts = mapOf(LEGACY_SCROLL_IMPORT_COUNT to offsets.size),
+            )
+            UiRestoreDataStoreFile.fromMemoryState(
+                state = state.copy(scrollStates = migratedScrollStates),
+                legacyImports = currentData.legacyImports + proof,
+            ).also { migrated -> onImported(migrated.legacyImports) }
+        }
+    }
+
+    override suspend fun cleanUp() {
+        migrationAttempt(onFailure) {
+            val snapshot = readQuerySnapshot() ?: return@migrationAttempt
+            if (!snapshot.payload.has(LEGACY_SCROLL_OFFSETS_FIELD)) return@migrationAttempt
+            val cleaned = snapshot.payload.deepCopy().apply {
+                remove(LEGACY_SCROLL_OFFSETS_FIELD)
+            }
+            fileStore.write(queryFile, cleaned)
+        }
+    }
+
+    private fun readQuerySnapshot(): LegacyQuerySnapshot? {
+        if (!queryFile.isFile) return null
+        val source = LegacyFileSnapshot(
+            logicalFileName = queryFile.name,
+            actualFile = queryFile,
+            bytes = queryFile.readBytes(),
+        )
+        val payload = source.parse(JsonObject::class.java, gson, "legacy query store")
+        return LegacyQuerySnapshot(source = source, payload = payload)
+    }
+}
+
+private data class LegacyQuerySnapshot(
+    val source: LegacyFileSnapshot,
+    val payload: JsonObject,
+) {
+    fun readOffsets(): Map<String, Int> {
+        val offsets = payload.get(LEGACY_SCROLL_OFFSETS_FIELD)
+            ?.takeIf { element -> element.isJsonObject }
+            ?.asJsonObject
+            ?: return emptyMap()
+        return offsets.entrySet().mapNotNull { (rawHash, element) ->
+            val queryHash = rawHash.trim().takeIf(String::isNotBlank) ?: return@mapNotNull null
+            val offset = runCatching { element.asInt }.getOrNull() ?: return@mapNotNull null
+            queryHash to offset
+        }.toMap()
+    }
+}
+
 private inline fun <T> migrationAttempt(
     onFailure: (Throwable) -> Unit,
     block: () -> T,
@@ -160,3 +253,6 @@ private fun LegacyFileSnapshot.proof(
         importedCounts = importedCounts,
     )
 }
+
+private const val LEGACY_SCROLL_OFFSETS_FIELD = "scrollOffsets"
+private const val LEGACY_SCROLL_IMPORT_COUNT = "searchScrollStates"

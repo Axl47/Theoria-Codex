@@ -323,6 +323,52 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
+    fun `ui restore migrates legacy query offsets once and removes the second store`() = runTest {
+        val directory = tempFolder.newFolder("ui-query-scroll-migration")
+        directory.resolve(DATASTORE_UI_RESTORE_FILE_NAME).writeText(
+            """
+            {
+              "schemaVersion": 2,
+              "state": {
+                "searchScrollStates": {
+                  "existing": {"firstVisibleItemIndex": 6, "firstVisibleItemOffsetPx": 60}
+                }
+              },
+              "legacyImports": []
+            }
+            """.trimIndent(),
+        )
+        val queryFile = directory.resolve("query_store.json")
+        queryFile.writeText(
+            """
+            {
+              "queries": {"unified": {"modeType": "unified", "sort": "TOP"}},
+              "scrollOffsets": {"legacy": 27, "existing": 999}
+            }
+            """.trimIndent(),
+        )
+        val firstScope = newScope()
+        val first = DataStoreUiRestoreRepository(directory, firstScope)
+
+        assertEquals(SearchScrollState(0, 27), first.getSearchScrollState("legacy"))
+        assertEquals(SearchScrollState(6, 60), first.getSearchScrollState("existing"))
+        assertFalse(queryFile.readText().contains("scrollOffsets"))
+        assertTrue(queryFile.readText().contains("\"queries\""))
+        val proof = first.storageStatus.value.imports.single()
+        assertEquals("query_store.json", proof.sourceFileName)
+        assertEquals(2, proof.importedCounts["searchScrollStates"])
+        closeScope(firstScope)
+
+        val secondScope = newScope()
+        val reopened = DataStoreUiRestoreRepository(directory, secondScope)
+
+        assertEquals(SearchScrollState(0, 27), reopened.getSearchScrollState("legacy"))
+        assertEquals(1, reopened.storageStatus.value.imports.size)
+        assertFalse(queryFile.readText().contains("scrollOffsets"))
+        closeScope(secondScope)
+    }
+
+    @Test
     fun `newer ui schema fails closed without corruption replacement`() = runTest {
         val directory = tempFolder.newFolder("ui-future-schema")
         val destination = directory.resolve(DATASTORE_UI_RESTORE_FILE_NAME)

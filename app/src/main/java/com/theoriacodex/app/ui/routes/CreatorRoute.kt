@@ -11,6 +11,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.creator.CreatorProfileScreen
 import com.theoriacodex.app.creator.CreatorProfileViewModel
+import com.theoriacodex.app.media.AnimatedDurationEnricher
 import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.creator.state.CreatorEffect
 import com.theoriacodex.app.creator.state.CreatorUiState
@@ -81,13 +82,14 @@ internal class CreatorRouteOwnerHandle(
 @Composable
 internal fun CreatorRoute(
     coordinator: CreatorProfileCoordinator,
+    animatedDurationEnricher: AnimatedDurationEnricher,
     pixivUgoiraClient: PixivUgoiraClient?,
     config: CreatorRouteConfig,
     callbacks: CreatorRouteCallbacks,
     onOwnerAvailable: (CreatorRouteOwnerHandle) -> Unit = {},
 ) {
     val owner = viewModel<CreatorProfileViewModel>(
-        factory = CreatorProfileViewModel.factory(coordinator),
+        factory = CreatorProfileViewModel.factory(coordinator, animatedDurationEnricher),
     )
     val state by owner.state.collectAsStateWithLifecycle()
     val ownerHandle = remember(owner) { CreatorRouteOwnerHandle(owner) }
@@ -125,8 +127,6 @@ internal fun CreatorRoute(
         resolveUnknownAnimatedDurations = config.resolveUnknownAnimatedDurations,
         onToggleLike = callbacks.onToggleLike,
         onAction = owner::onAction,
-        resolvePost = owner::resolvePost,
-        rememberResolvedPost = owner::rememberResolvedPost,
         onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
         onSaveToDevice = callbacks.onSaveToDevice,
         onOpenUrl = callbacks.onOpenUrl,

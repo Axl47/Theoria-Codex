@@ -201,6 +201,29 @@ class HitomiMediaUrlResolverTest {
     }
 
     @Test
+    fun `failed configuration refresh guards evict by an observable byte budget`() = runTest {
+        val versions = listOf("1783681201", "1783681202", "1783681203", "1783681204")
+        val client = QueueHttpClient(
+            *versions.map { version -> fixture().replace("1783681201", version) }.toTypedArray(),
+        )
+        val resolver = HitomiMediaUrlResolver(client, failureVersionCacheMaxBytes = 10L)
+        val file = mediaFile()
+        var failedVersion = resolver.candidates(file).first().configurationVersion
+
+        repeat(3) {
+            failedVersion = resolver.refreshCandidates(file, failedVersion)
+                .first()
+                .configurationVersion
+        }
+
+        val snapshot = resolver.failureVersionCacheSnapshot()
+        assertEquals(10L, snapshot.maxBytes)
+        assertEquals(10L, snapshot.cachedBytes)
+        assertEquals(listOf("1783681203"), snapshot.keysInLruOrder)
+        assertEquals(listOf("1783681203" to 10L), snapshot.weightsInLruOrder)
+    }
+
+    @Test
     fun `rejects malformed configuration and unsafe file inputs`() = runTest {
         val missingShardFunction = "gg = { b: '1783681201/' };"
         val unsafeBase = fixture().replace("1783681201/", "../media/")

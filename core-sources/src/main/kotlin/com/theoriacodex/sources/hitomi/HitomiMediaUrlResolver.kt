@@ -3,7 +3,6 @@ package com.theoriacodex.sources.hitomi
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.media.mimeFromFileExt
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CancellationException
@@ -52,6 +51,7 @@ class HitomiMediaUrlResolver(
     private val cacheTtlMillis: Long = DEFAULT_CONFIGURATION_TTL_MILLIS,
     private val nowMillis: () -> Long = System::currentTimeMillis,
     private val configurationUrl: String = GG_CONFIGURATION_URL,
+    failureVersionCacheMaxBytes: Long = DEFAULT_FAILURE_VERSION_CACHE_BYTES,
 ) {
     private data class CachedConfiguration(
         val configuration: HitomiCdnConfiguration,
@@ -61,7 +61,10 @@ class HitomiMediaUrlResolver(
     private val configurationMutex = Mutex()
     private val cachedConfiguration = AtomicReference<CachedConfiguration?>(null)
     private val invalidationGeneration = AtomicLong(0L)
-    private val refreshedFailureVersions = ConcurrentHashMap.newKeySet<String>()
+    private val refreshedFailureVersions = HitomiByteBudgetCache<String, Unit>(
+        maxBytes = failureVersionCacheMaxBytes,
+        weigh = { version, _ -> version.hitomiUtf8ByteWeight() },
+    )
 
     init {
         require(cacheTtlMillis > 0L) { "Hitomi CDN configuration cache TTL must be positive" }
@@ -96,7 +99,7 @@ class HitomiMediaUrlResolver(
             if (current != null && current.version != normalizedFailedVersion) {
                 return@withLock current
             }
-            if (!refreshedFailureVersions.add(normalizedFailedVersion)) {
+            if (refreshedFailureVersions.putIfAbsent(normalizedFailedVersion, Unit) != null) {
                 return@withLock current ?: throw HitomiProtocolException(
                     "Hitomi CDN configuration refresh was already attempted for version " +
                         normalizedFailedVersion,
@@ -118,6 +121,10 @@ class HitomiMediaUrlResolver(
         invalidationGeneration.incrementAndGet()
         cachedConfiguration.set(null)
         refreshedFailureVersions.clear()
+    }
+
+    internal fun failureVersionCacheSnapshot(): HitomiByteBudgetCacheSnapshot<String> {
+        return refreshedFailureVersions.snapshot()
     }
 
     private suspend fun configuration(forceRefresh: Boolean): HitomiCdnConfiguration {
@@ -165,6 +172,7 @@ class HitomiMediaUrlResolver(
         const val GG_CONFIGURATION_URL: String = "${HitomiProtocol.DATA_BASE_URL}/gg.js"
         const val DEFAULT_CONFIGURATION_TTL_MILLIS: Long = 30L * 60L * 1_000L
         const val MAX_CONFIGURATION_RESPONSE_CHARS: Int = 512 * 1_024
+        const val DEFAULT_FAILURE_VERSION_CACHE_BYTES: Long = 64L * 1024L
 
         private const val CDN_DOMAIN = "gold-usergeneratedcontent.net"
 

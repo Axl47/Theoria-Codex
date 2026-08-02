@@ -16,7 +16,9 @@ dependencyResolutionManagement {
 
 rootProject.name = "Theoria Codex"
 include(":app")
+include(":app-logic")
 include(":baseline-profile")
+include(":macrobenchmark")
 include(":core-domain")
 include(":core-data")
 include(":core-data-android")

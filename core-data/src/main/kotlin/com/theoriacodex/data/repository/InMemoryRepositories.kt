@@ -170,7 +170,6 @@ class InMemoryCodexRepository : CodexRepository {
 class InMemoryQueryRepository : QueryRepository {
     private val mutex = Mutex()
     private val queryState = MutableStateFlow<Map<String, Query>>(emptyMap())
-    private val scrollOffsets = MutableStateFlow<Map<String, Int>>(emptyMap())
 
     override fun observeAppliedQuery(modeKey: String): Flow<Query?> {
         return queryState.map { it[modeKey] }
@@ -182,15 +181,6 @@ class InMemoryQueryRepository : QueryRepository {
         }
     }
 
-    override suspend fun upsertScrollOffset(queryHash: String, offsetPx: Int) {
-        mutex.withLock {
-            scrollOffsets.value = scrollOffsets.value + (queryHash to offsetPx)
-        }
-    }
-
-    override suspend fun getScrollOffset(queryHash: String): Int? {
-        return scrollOffsets.value[queryHash]
-    }
 }
 
 class InMemoryRecentsRepository(

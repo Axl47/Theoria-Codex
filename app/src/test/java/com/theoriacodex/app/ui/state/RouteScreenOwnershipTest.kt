@@ -6,7 +6,9 @@ import com.theoriacodex.app.recommend.ForYouCoordinator
 import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.state.SearchUiState
+import com.theoriacodex.app.settings.SettingsUiState
 import com.theoriacodex.app.viewer.state.ViewerUiState
+import com.theoriacodex.data.repository.AppSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -38,6 +40,12 @@ class RouteScreenOwnershipTest {
             methodName = "ViewerScreen",
             stateType = ViewerUiState::class.java,
             forbiddenType = List::class.java,
+        )
+        assertSingleStateScreen(
+            className = "com.theoriacodex.app.settings.SettingsScreenKt",
+            methodName = "SettingsScreen",
+            stateType = SettingsUiState::class.java,
+            forbiddenType = AppSettings::class.java,
         )
     }
 

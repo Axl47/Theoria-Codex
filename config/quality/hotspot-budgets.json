@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "sourceModules": [
+    "app",
+    "app-logic",
+    "baseline-profile",
+    "macrobenchmark",
+    "core-domain",
+    "core-data",
+    "core-data-android",
+    "core-sources",
+    "core-stubs"
+  ],
+  "lineBudgets": {
+    "production": 900,
+    "test": 700,
+    "productionExceptions": {
+      "app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt": 2612,
+      "app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt": 2420,
+      "app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt": 1958,
+      "core-sources/src/main/kotlin/com/theoriacodex/sources/hitomi/HitomiSourceAdapter.kt": 1760,
+      "core-data/src/main/kotlin/com/theoriacodex/data/repository/FileBackedRepositories.kt": 1228,
+      "core-sources/src/main/kotlin/com/theoriacodex/sources/nhentai/NhentaiSourceAdapter.kt": 1196,
+      "app/src/main/java/com/theoriacodex/app/search/SearchViewModel.kt": 1100,
+      "app/src/main/java/com/theoriacodex/app/search/SearchCoordinator.kt": 998,
+      "app/src/main/java/com/theoriacodex/app/codex/CodexListScreen.kt": 915
+    }
+  },
+  "detektBaselines": {
+    "config/detekt/baseline-app-debug.xml": {
+      "CognitiveComplexMethod": 27,
+      "LongMethod": 32
+    },
+    "config/detekt/baseline-app-logic.xml": {},
+    "config/detekt/baseline-core-data-android-debug.xml": {
+      "CognitiveComplexMethod": 3,
+      "LongMethod": 2
+    },
+    "config/detekt/baseline-core-data-main.xml": {
+      "CognitiveComplexMethod": 1,
+      "LongMethod": 1
+    },
+    "config/detekt/baseline-core-domain-main.xml": {
+      "CognitiveComplexMethod": 1,
+      "LongMethod": 2
+    },
+    "config/detekt/baseline-core-sources-main.xml": {
+      "CognitiveComplexMethod": 4,
+      "LargeClass": 2,
+      "LongMethod": 7
+    },
+    "config/detekt/baseline-core-stubs.xml": {}
+  }
+}

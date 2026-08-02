@@ -7,6 +7,11 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.theoriacodex.app.media.AnimatedDurationEnricher
+import com.theoriacodex.app.media.AnimatedDurationEnrichment
+import com.theoriacodex.app.media.AnimatedDurationEnrichmentLane
+import com.theoriacodex.app.media.NoOpAnimatedDurationEnricher
+import com.theoriacodex.app.media.animatedDurationMs
 import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.creator.state.CreatorCoordinatorSnapshot
 import com.theoriacodex.app.creator.state.CreatorEffect
@@ -79,13 +84,16 @@ internal class CreatorProfileViewModel(
     private val engine: CreatorRouteEngine,
     private val savedStateHandle: SavedStateHandle,
     coroutineScope: CoroutineScope? = null,
+    private val animatedDurationEnricher: AnimatedDurationEnricher = NoOpAnimatedDurationEnricher,
 ) : ViewModel(), RouteStateOwner<CreatorUiState, CreatorAction, CreatorEffect> {
     constructor(
         coordinator: CreatorProfileCoordinator,
         savedStateHandle: SavedStateHandle,
+        animatedDurationEnricher: AnimatedDurationEnricher = NoOpAnimatedDurationEnricher,
     ) : this(
         engine = CoordinatorCreatorRouteEngine(coordinator),
         savedStateHandle = savedStateHandle,
+        animatedDurationEnricher = animatedDurationEnricher,
     )
 
     private val ownerScope = coroutineScope ?: viewModelScope
@@ -97,12 +105,23 @@ internal class CreatorProfileViewModel(
 
     private val effectChannel = Channel<CreatorEffect>(capacity = Channel.BUFFERED)
     override val effects: Flow<CreatorEffect> = effectChannel.receiveAsFlow()
+    private val durationEnrichmentLane = AnimatedDurationEnrichmentLane(
+        scope = ownerScope,
+        enricher = animatedDurationEnricher,
+        currentIdentity = { mutableState.value.queryHash },
+        currentPosts = { mutableState.value.results },
+        applyEnrichments = ::applyAnimatedDurationEnrichments,
+    )
 
     init {
         restoredCreator()?.let { creator -> onAction(CreatorAction.OpenCreator(creator)) }
     }
 
     override fun onAction(action: CreatorAction) {
+        if (action is CreatorAction.RequestAnimatedDurationEnrichment) {
+            requestAnimatedDurationEnrichment(action.queryHash)
+            return
+        }
         val transition = mutableState.value.reduce(action)
         mutableState.value = transition.state
         transition.state.creator?.let(::persistCreator)
@@ -132,6 +151,26 @@ internal class CreatorProfileViewModel(
     fun rememberResolvedPost(post: Post) {
         engine.rememberResolvedPost(post)
         publishSnapshot()
+    }
+
+    private fun requestAnimatedDurationEnrichment(queryHash: String) {
+        durationEnrichmentLane.request(queryHash)
+    }
+
+    private fun applyAnimatedDurationEnrichments(
+        queryHash: String,
+        enrichments: List<AnimatedDurationEnrichment>,
+    ) {
+        if (mutableState.value.queryHash != queryHash) return
+        var changed = false
+        enrichments.forEach { result ->
+            val latestPost = mutableState.value.results.firstOrNull { post -> post.id == result.postId }
+                ?: return@forEach
+            if (animatedDurationMs(latestPost) != null) return@forEach
+            engine.rememberResolvedPost(latestPost.copy(durationMs = result.durationMs))
+            changed = true
+        }
+        if (changed) publishSnapshot()
     }
 
     private fun handleEffect(effect: CreatorEffect) {
@@ -262,11 +301,15 @@ internal class CreatorProfileViewModel(
     }
 
     companion object {
-        fun factory(coordinator: CreatorProfileCoordinator): ViewModelProvider.Factory = viewModelFactory {
+        fun factory(
+            coordinator: CreatorProfileCoordinator,
+            animatedDurationEnricher: AnimatedDurationEnricher,
+        ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 CreatorProfileViewModel(
                     coordinator = coordinator,
                     savedStateHandle = createSavedStateHandle(),
+                    animatedDurationEnricher = animatedDurationEnricher,
                 )
             }
         }

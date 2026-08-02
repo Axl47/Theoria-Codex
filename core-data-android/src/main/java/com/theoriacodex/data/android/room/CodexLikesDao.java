@@ -97,7 +97,10 @@ public interface CodexLikesDao {
             + "AND codex_items.source_post_id = posts.source_post_id) "
             + "AND NOT EXISTS (SELECT 1 FROM liked_posts "
             + "WHERE liked_posts.source = posts.source "
-            + "AND liked_posts.source_post_id = posts.source_post_id)")
+            + "AND liked_posts.source_post_id = posts.source_post_id) "
+            + "AND NOT EXISTS (SELECT 1 FROM recent_watched "
+            + "WHERE recent_watched.source = posts.source "
+            + "AND recent_watched.source_post_id = posts.source_post_id)")
     int deleteOrphanPosts();
 
     @Query("DELETE FROM posts")

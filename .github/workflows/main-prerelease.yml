@@ -82,10 +82,12 @@ jobs:
             exit 1
           fi
 
-          echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
-          echo "RELEASE_TITLE=${RELEASE_TITLE}" >> "$GITHUB_ENV"
-          echo "RELEASE_TAG=${RELEASE_TAG}" >> "$GITHUB_ENV"
-          echo "RELEASE_NOTES_FILE=${RELEASE_NOTES_FILE}" >> "$GITHUB_ENV"
+          {
+            echo "VERSION_CODE=${VERSION_CODE}"
+            echo "RELEASE_TITLE=${RELEASE_TITLE}"
+            echo "RELEASE_TAG=${RELEASE_TAG}"
+            echo "RELEASE_NOTES_FILE=${RELEASE_NOTES_FILE}"
+          } >> "$GITHUB_ENV"
 
       - name: Assemble release APK
         run: |

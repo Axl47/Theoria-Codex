@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -81,6 +82,7 @@ class RepositoryContractTest(
 
     @Test
     fun `recents keeps one newest watched and search entry per identity`() = runTest {
+        assumeTrue("Room owns the second durable Recents contract lane", backend == Backend.IN_MEMORY)
         var now = 100L
         val repository = createRecentsRepository(clock = { now++ })
         val post = repositoryTestPost(id = "post-1")
@@ -113,6 +115,7 @@ class RepositoryContractTest(
 
     @Test
     fun `recents preserves a posts section when it is reopened from history`() = runTest {
+        assumeTrue("Room owns the second durable Recents contract lane", backend == Backend.IN_MEMORY)
         var now = 100L
         val repository = createRecentsRepository(clock = { now++ })
         val codexPost = repositoryTestPost(id = "codex-post")
@@ -131,6 +134,7 @@ class RepositoryContractTest(
 
     @Test
     fun `recents clears codex and external watched sections independently`() = runTest {
+        assumeTrue("Room owns the second durable Recents contract lane", backend == Backend.IN_MEMORY)
         var now = 100L
         val repository = createRecentsRepository(clock = { now++ })
         repository.recordWatchedPost(repositoryTestPost(id = "codex-post"), ViewerStreamSource.CODEX, null)
@@ -305,10 +309,7 @@ class RepositoryContractTest(
     }
 
     private fun createRecentsRepository(clock: () -> Long): RecentsRepository {
-        return when (backend) {
-            Backend.IN_MEMORY -> InMemoryRecentsRepository(clock = clock)
-            Backend.FILE_BACKED -> FileBackedRecentsRepository(baseDirectory = newDirectory(), clock = clock)
-        }
+        return InMemoryRecentsRepository(clock = clock)
     }
 
     private fun createSettingsRepository(): SettingsRepository {

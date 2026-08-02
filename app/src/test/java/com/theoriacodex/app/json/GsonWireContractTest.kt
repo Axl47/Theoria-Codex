@@ -71,11 +71,11 @@ class GsonWireContractTest {
             LegacyFixture(
                 "com.theoriacodex.data.repository.QueryStoreFile",
                 """{"queries":{},"scrollOffsets":{"legacy-query":7}}""",
-                "scrollOffsets",
-                mapOf("legacy-query" to 7),
+                "queries",
+                emptyMap<String, Any>(),
             ),
             LegacyFixture(
-                "com.theoriacodex.data.repository.RecentsStoreFile",
+                "com.theoriacodex.data.storage.LegacyRecentsStoreFile",
                 """{"watchedPosts":[],"searches":[]}""",
                 "watchedPosts",
                 emptyList<Any>(),

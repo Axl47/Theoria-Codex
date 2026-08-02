@@ -10,6 +10,7 @@ import com.theoriacodex.app.di.DefaultTheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.TheoriaAppContainerOwner
 import com.theoriacodex.app.media.LegacyAnimatedWebPDecoder
+import com.theoriacodex.app.viewer.VideoPlaybackInfrastructure
 import com.theoriacodex.data.storage.ApplicationDataReadiness
 import com.theoriacodex.data.storage.ApplicationDataState
 import kotlinx.coroutines.CoroutineScope
@@ -21,6 +22,10 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var readiness: ApplicationDataReadiness<TheoriaAppContainer>
     private var initializingContainer: DefaultTheoriaAppContainer? = null
+
+    internal val videoPlaybackInfrastructure: VideoPlaybackInfrastructure by lazy {
+        VideoPlaybackInfrastructure(this)
+    }
 
     override val appContainerState: StateFlow<ApplicationDataState<TheoriaAppContainer>>
         get() = readiness.state
@@ -38,7 +43,12 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
             container.awaitDurableStores()
             container
         }
-        startAppContainer()
+        startAppContainerIfAllowed(
+            benchmarkFixturesEnabled = BuildConfig.BENCHMARK_FIXTURES_ENABLED,
+            packageName = packageName,
+            processName = currentProcessName(),
+            start = ::startAppContainer,
+        )
     }
 
     override fun startAppContainer() = readiness.start()
@@ -58,5 +68,36 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
                 }
             }
             .build()
+    }
+
+    private fun currentProcessName(): String? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return getProcessName()
+        }
+        val activityManager = getSystemService(ACTIVITY_SERVICE) as? android.app.ActivityManager
+        val processId = android.os.Process.myPid()
+        return activityManager?.runningAppProcesses
+            ?.firstOrNull { process -> process.pid == processId }
+            ?.processName
+    }
+}
+
+internal fun shouldStartAppContainer(
+    benchmarkFixturesEnabled: Boolean,
+    packageName: String,
+    processName: String?,
+): Boolean {
+    val benchmarkFixtureProcess = "$packageName:benchmarkFixture"
+    return !benchmarkFixturesEnabled || processName != benchmarkFixtureProcess
+}
+
+internal inline fun startAppContainerIfAllowed(
+    benchmarkFixturesEnabled: Boolean,
+    packageName: String,
+    processName: String?,
+    start: () -> Unit,
+) {
+    if (shouldStartAppContainer(benchmarkFixturesEnabled, packageName, processName)) {
+        start()
     }
 }

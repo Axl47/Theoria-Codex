@@ -57,6 +57,20 @@ class SearchScreenMediaBehaviorTest {
         assertEquals(listOf(primary, alternate), searchCardImageCandidates(ref))
     }
 
+    @Test
+    fun `search video semantics use a stable resource-safe post identity`() {
+        val postId = PostId(SourceKey.RULE34VIDEO, "Benchmark Search/0")
+
+        assertEquals(
+            "search_video_rule34video_benchmark_search_0",
+            searchVideoTestTag(postId),
+        )
+        assertEquals(
+            "search_card_rule34video_benchmark_search_0",
+            searchCardTestTag(postId),
+        )
+    }
+
     private fun samplePost(source: SourceKey): Post {
         return Post(
             id = PostId(source = source, sourcePostId = "1"),

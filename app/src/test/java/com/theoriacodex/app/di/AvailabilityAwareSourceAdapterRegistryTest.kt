@@ -62,18 +62,17 @@ class AvailabilityAwareSourceAdapterRegistryTest {
     }
 
     @Test
-    fun `search initialization is idempotent and preserves an in progress draft`() = runTest {
+    fun `search initialization is idempotent and returns immutable persisted state`() = runTest {
         val pixiv = FakeAdapter(SourceKey.PIXIV)
         val registry = FakeRegistry(mapOf(SourceKey.PIXIV to pixiv))
         val coordinator = SearchCoordinator(registry)
-        coordinator.initialize()
-        coordinator.setMode(QueryMode.Source(SourceKey.PIXIV))
-        coordinator.addIncludeTag("draft survives recreation")
 
-        coordinator.initialize()
+        val first = coordinator.initializeRoute()
+        val second = coordinator.initializeRoute()
 
-        assertEquals(QueryMode.Source(SourceKey.PIXIV), coordinator.draftQuery.mode)
-        assertEquals(listOf("draft survives recreation"), coordinator.draftQuery.includeTags)
+        assertEquals(first, second)
+        assertEquals(QueryMode.Unified, second.query.mode)
+        assertEquals(listOf(SourceKey.PIXIV), second.availableSources)
     }
 
     @Test
@@ -86,9 +85,7 @@ class AvailabilityAwareSourceAdapterRegistryTest {
             availableSourceState = capabilities,
         )
         val search = SearchCoordinator(registry)
-        search.initialize()
-        search.setMode(QueryMode.Source(SourceKey.RULE34XXX))
-        search.applyDraft()
+        search.initializeRoute()
 
         val likes = InMemoryLikesRepository()
         val profileId = defaultRecommendationProfiles().first().profileId
@@ -108,9 +105,9 @@ class AvailabilityAwareSourceAdapterRegistryTest {
 
         capabilities.value = setOf(SourceKey.PIXIV)
 
-        assertTrue(search.onAvailableSourcesChanged())
-        assertEquals(QueryMode.Unified, search.draftQuery.mode)
-        assertEquals(QueryMode.Unified, search.appliedQuery.mode)
+        val searchChange = search.updateEnvironment(com.theoriacodex.data.repository.AppSettings())
+        assertTrue(searchChange.sourcesChanged)
+        assertEquals(listOf(SourceKey.PIXIV), searchChange.availableSources)
         assertTrue(forYou.onAvailableSourcesChanged())
         assertNull(forYou.selectedSource)
     }

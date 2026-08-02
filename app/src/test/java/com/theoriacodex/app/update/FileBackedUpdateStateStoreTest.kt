@@ -3,6 +3,7 @@ package com.theoriacodex.app.update
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonSerializer
 import com.theoriacodex.data.storage.AtomicJsonFileStore
+import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
 import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
@@ -83,11 +84,20 @@ class FileBackedUpdateStateStoreTest {
     }
 
     @Test
-    fun `corrupt and legacy snapshots read tolerantly`() = runTest {
+    fun `corrupt snapshot is quarantined and legacy valid snapshot remains compatible`() = runTest {
         val file = File(tempDir("update-store-tolerant-test-"), "update_state.json")
-        file.writeText("{broken")
+        val corruptBytes = "{broken".toByteArray()
+        file.writeBytes(corruptBytes)
+        val registry = LegacyJsonRecoveryRegistry()
 
-        assertEquals(UpdateStateSnapshot(), FileBackedUpdateStateStore(file).snapshot())
+        assertEquals(
+            UpdateStateSnapshot(),
+            FileBackedUpdateStateStore(file, recoveryRegistry = registry).snapshot(),
+        )
+        val recovery = registry.recoveries.value.single()
+        assertEquals("Updater state", recovery.logicalStore)
+        assertTrue(File(recovery.backupPath!!).readBytes().contentEquals(corruptBytes))
+        assertTrue(!file.exists())
 
         file.writeText(
             """

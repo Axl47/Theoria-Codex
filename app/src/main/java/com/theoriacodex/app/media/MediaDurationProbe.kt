@@ -2,6 +2,7 @@ package com.theoriacodex.app.media
 
 import android.media.MediaMetadataRetriever
 import com.theoriacodex.app.source.requestHeaders
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.Dispatchers
@@ -10,7 +11,7 @@ import kotlinx.coroutines.withContext
 suspend fun probeRemoteVideoDurationMs(post: Post): Long? = withContext(Dispatchers.IO) {
     val ref = bestDurationProbeRef(post) ?: return@withContext null
     val location = ref.url?.trim()?.takeIf(String::isNotBlank) ?: return@withContext null
-    runCatching {
+    runCatchingPreservingCancellation {
         val retriever = MediaMetadataRetriever()
         try {
             retriever.setDataSource(location, post.id.source.requestHeaders())

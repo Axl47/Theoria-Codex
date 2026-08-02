@@ -3,6 +3,8 @@ package com.theoriacodex.app.di
 import android.content.Context
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
+import com.theoriacodex.app.media.AnimatedDurationEnricher
+import com.theoriacodex.app.media.AnimatedDurationEnrichmentService
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.app.recommend.ForYouCoordinator
@@ -29,7 +31,6 @@ import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexLikesTransactions
 import com.theoriacodex.data.repository.FileBackedCacheRepository
 import com.theoriacodex.data.repository.FileBackedQueryRepository
-import com.theoriacodex.data.repository.FileBackedRecentsRepository
 import com.theoriacodex.data.repository.DataStoreSettingsRepository
 import com.theoriacodex.data.repository.DataStoreUiRestoreRepository
 import com.theoriacodex.data.repository.LikesRepository
@@ -37,11 +38,16 @@ import com.theoriacodex.data.repository.QueryRepository
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
+import com.theoriacodex.data.storage.CorruptionRecovery
+import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
 import com.theoriacodex.data.android.room.LegacyArchiveResult
 import com.theoriacodex.data.android.room.LegacyJsonImportResult
 import com.theoriacodex.data.android.room.LegacyJsonMigrationException
 import com.theoriacodex.data.android.room.RoomCodexLikesRepository
 import com.theoriacodex.data.android.room.RoomLegacyJsonImporter
+import com.theoriacodex.data.android.room.RecentsImportResult
+import com.theoriacodex.data.android.room.RoomRecentsLegacyImporter
+import com.theoriacodex.data.android.room.RoomRecentsRepository
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.SourceKey
@@ -66,6 +72,7 @@ data class DataDependencies(
     val settingsRepository: SettingsRepository,
     val cacheRepository: CacheRepository,
     val uiRestoreRepository: UiRestoreRepository,
+    val legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>>,
 )
 
 data class SourceDependencies(
@@ -88,6 +95,7 @@ data class FeatureDependencies(
     val search: SearchCoordinator,
     val forYou: ForYouCoordinator,
     val creatorProfile: CreatorProfileCoordinator,
+    val animatedDurationEnricher: AnimatedDurationEnricher,
 )
 
 data class WorkflowDependencies(
@@ -119,9 +127,11 @@ internal class DefaultTheoriaAppContainer(
     private val appContext = context.applicationContext
     private val storageDirectory = File(appContext.filesDir, "theoria_codex")
     private val durableStoreScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val legacyJsonRecoveryRegistry = LegacyJsonRecoveryRegistry()
     private val tagSuggestionStore = FileBackedTagSuggestionStore(
         storeFile = File(storageDirectory, "tag_suggestions.json"),
         seedData = loadSeedTagSuggestions(appContext),
+        recoveryRegistry = legacyJsonRecoveryRegistry,
     )
     private val sourceHttpClient = DefaultSourceHttpClient()
     private val accountStore = ObservableSourceAccountStore(
@@ -146,15 +156,25 @@ internal class DefaultTheoriaAppContainer(
         delegate = allPotentialSourceRegistry,
         availableSourceState = accountStore.availableSources,
     )
+    private val animatedDurationEnricher = AnimatedDurationEnrichmentService(
+        registry = sourceRegistry,
+    )
 
     private val contentDatabase = TheoriaRoomDatabase.create(appContext)
     private val contentRepository = RoomCodexLikesRepository(contentDatabase)
     private val contentImporter = RoomLegacyJsonImporter(contentDatabase)
+    private val recentsImporter = RoomRecentsLegacyImporter(
+        database = contentDatabase,
+        recoveryRegistry = legacyJsonRecoveryRegistry,
+    )
     private val codexRepository: CodexRepository = contentRepository
     private val likesRepository: LikesRepository = contentRepository
     private val codexLikesTransactions: CodexLikesTransactions = contentRepository
-    private val queryRepository = FileBackedQueryRepository(storageDirectory)
-    private val recentsRepository = FileBackedRecentsRepository(storageDirectory)
+    private val queryRepository = FileBackedQueryRepository(
+        storageDirectory,
+        recoveryRegistry = legacyJsonRecoveryRegistry,
+    )
+    private val recentsRepository = RoomRecentsRepository(contentDatabase)
     private val settingsRepository = DataStoreSettingsRepository(
         baseDirectory = storageDirectory,
         scope = durableStoreScope,
@@ -167,6 +187,7 @@ internal class DefaultTheoriaAppContainer(
 
     private val updateStateStore = FileBackedUpdateStateStore(
         file = File(storageDirectory, "update_state.json"),
+        recoveryRegistry = legacyJsonRecoveryRegistry,
     )
     private val updateFeedClient = GitHubReleaseFeedClient(
         owner = BuildConfig.UPDATE_REPO_OWNER,
@@ -196,6 +217,7 @@ internal class DefaultTheoriaAppContainer(
         settingsRepository = settingsRepository,
         cacheRepository = cacheRepository,
         uiRestoreRepository = uiRestoreRepository,
+        legacyJsonRecoveries = legacyJsonRecoveryRegistry.recoveries,
     )
 
     override val sources = SourceDependencies(
@@ -230,6 +252,7 @@ internal class DefaultTheoriaAppContainer(
             tagSuggestionStore = tagSuggestionStore,
         ),
         creatorProfile = CreatorProfileCoordinator(registry = sourceRegistry),
+        animatedDurationEnricher = animatedDurationEnricher,
     )
 
     override val workflows = WorkflowDependencies(
@@ -285,6 +308,26 @@ internal class DefaultTheoriaAppContainer(
             is LegacyArchiveResult.Partial -> throw LegacyJsonMigrationException(
                 "Room Codex/Likes legacy archive is incomplete for ${archived.blockedFile}: " +
                     archived.reason,
+            )
+        }
+        when (val recents = recentsImporter.importAndArchive(storageDirectory)) {
+            is RecentsImportResult.Imported,
+            is RecentsImportResult.AlreadyImported -> Unit
+
+            is RecentsImportResult.SourceChanged -> throw LegacyJsonMigrationException(
+                "Legacy Recent activity changed after its verified Room migration",
+            )
+            is RecentsImportResult.DestinationConflict -> throw LegacyJsonMigrationException(
+                "Room Recent activity conflicts with the retained legacy snapshot",
+            )
+            is RecentsImportResult.DestinationDrift -> throw LegacyJsonMigrationException(
+                "Room Recent activity no longer matches its verified migration proof",
+            )
+            is RecentsImportResult.InvalidProof -> throw LegacyJsonMigrationException(
+                "Room Recent activity migration proof is invalid: ${recents.reason}",
+            )
+            is RecentsImportResult.ArchiveFailed -> throw LegacyJsonMigrationException(
+                "Recent activity legacy archive is incomplete: ${recents.reason}",
             )
         }
     }

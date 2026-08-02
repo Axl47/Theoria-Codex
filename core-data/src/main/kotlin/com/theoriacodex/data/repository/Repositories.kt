@@ -34,8 +34,6 @@ enum class CodexSortMode {
 interface QueryRepository {
     fun observeAppliedQuery(modeKey: String): Flow<Query?>
     suspend fun upsertAppliedQuery(modeKey: String, query: Query)
-    suspend fun upsertScrollOffset(queryHash: String, offsetPx: Int)
-    suspend fun getScrollOffset(queryHash: String): Int?
 }
 
 data class RecentPostEntry(

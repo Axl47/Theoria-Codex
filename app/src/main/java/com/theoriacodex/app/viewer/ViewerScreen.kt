@@ -103,6 +103,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -173,6 +177,7 @@ internal fun ViewerScreen(
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)? = null,
+    playbackDiagnosticsEnabled: Boolean = false,
 ) {
     val posts = uiState.pages.map { page -> page.post }
     if (posts.isEmpty()) {
@@ -760,7 +765,9 @@ internal fun ViewerScreen(
                         } else if (isVideoMedia) {
                             ViewerVideoPlayer(
                                 media = media,
+                                postId = post.id,
                                 sourceKey = post.id.source,
+                                playbackDiagnosticsEnabled = playbackDiagnosticsEnabled,
                                 terminalMessage = terminalResolutionMessage,
                                 modifier = Modifier.fillMaxSize(),
                                 mediaModifier = mediaTransformModifier,
@@ -1416,9 +1423,11 @@ private fun SeekJumpFeedbackOverlay(
 @Composable
 private fun ViewerVideoPlayer(
     media: ImageRef,
+    postId: PostId,
     sourceKey: SourceKey,
-    terminalMessage: String? = null,
+    playbackDiagnosticsEnabled: Boolean,
     modifier: Modifier = Modifier,
+    terminalMessage: String? = null,
     mediaModifier: Modifier = Modifier,
     showTimeline: Boolean = false,
     isActive: Boolean = true,
@@ -1467,6 +1476,7 @@ private fun ViewerVideoPlayer(
     var positionMs by remember(playbackLocation) { mutableLongStateOf(0L) }
     var isScrubbing by remember(playbackLocation) { mutableStateOf(false) }
     var playbackPaused by remember(playbackLocation) { mutableStateOf(false) }
+    var isActuallyPlaying by remember(playbackLocation) { mutableStateOf(false) }
     var lastSeekDispatchAtMs by remember(playbackLocation) { mutableLongStateOf(0L) }
     var lastSeekDispatchTargetMs by remember(playbackLocation) { mutableLongStateOf(0L) }
     val effectivePlaybackRate = playbackRate.coerceAtLeast(MIN_PLAYBACK_RATE)
@@ -1481,12 +1491,16 @@ private fun ViewerVideoPlayer(
         playbackPaused = false
         lastSeekDispatchAtMs = 0L
         lastSeekDispatchTargetMs = 0L
-        val player = createLoopingExoPlayer(
-            context = context,
-            location = playbackLocation,
-            headers = sourceKey.requestHeaders(),
-            muted = false,
-        )
+        val player = traceMediaSection(MediaTraceSections.VIEWER_PREPARE) {
+            createLoopingExoPlayer(
+                context = context,
+                location = playbackLocation,
+                headers = sourceKey.requestHeaders(),
+                muted = false,
+                profile = VideoPlaybackProfile.VIEWER,
+            )
+        }
+        val firstFrameTraceGate = FirstFrameTraceGate()
         player.playbackParameters = PlaybackParameters(effectivePlaybackRate)
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -1505,6 +1519,14 @@ private fun ViewerVideoPlayer(
                 loading = false
                 loadFailed = true
             }
+
+            override fun onRenderedFirstFrame() {
+                firstFrameTraceGate.recordOnce(MediaTraceSections.VIEWER_FIRST_FRAME)
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                isActuallyPlaying = isPlaying
+            }
         }
         player.addListener(listener)
         playerRef = player
@@ -1519,6 +1541,7 @@ private fun ViewerVideoPlayer(
             if (playerRef === player) {
                 playerRef = null
             }
+            isActuallyPlaying = false
             runCatching {
                 player.playWhenReady = false
                 player.pause()
@@ -1634,7 +1657,23 @@ private fun ViewerVideoPlayer(
         }
     }
 
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+    Box(
+        modifier = modifier
+            .testTag(viewerVideoTestTag(postId))
+            .then(
+                playbackDiagnosticsSemantics(
+                    enabled = playbackDiagnosticsEnabled,
+                    isPlaying = isActuallyPlaying,
+                    surface = "Viewer",
+                )?.let { diagnostics ->
+                    Modifier.semantics {
+                        stateDescription = diagnostics.stateDescription
+                        contentDescription = diagnostics.contentDescription
+                    }
+                } ?: Modifier,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
         AndroidView(
             modifier = Modifier
                 .fillMaxSize()
@@ -1736,6 +1775,10 @@ private fun ViewerVideoPlayer(
             }
         }
     }
+}
+
+internal fun viewerVideoTestTag(postId: PostId): String {
+    return "viewer_video_${postId.mediaTestTagPart()}"
 }
 
 @Composable

@@ -1,6 +1,10 @@
 package com.theoriacodex.app.search
 
 import com.theoriacodex.app.media.recoverRemoteMedia
+import com.theoriacodex.app.recommend.recommendationTaxonomyFor
+import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.app.search.state.modeKey
+import com.theoriacodex.app.search.state.queryMode
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.InMemoryQueryRepository
@@ -13,18 +17,16 @@ import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
-import com.theoriacodex.data.repository.ViewerStreamSource
-import com.theoriacodex.domain.adapter.SourceAdapterRegistry
-import com.theoriacodex.domain.adapter.SourceAdapterException
-import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
+import com.theoriacodex.domain.adapter.SourceAdapter
+import com.theoriacodex.domain.adapter.SourceAdapterException
+import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceFailureReason
-import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
+import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
-import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -43,10 +45,8 @@ import com.theoriacodex.domain.tags.normalizeGelbooruToken
 import com.theoriacodex.domain.tags.normalizeMatchToken
 import com.theoriacodex.domain.tags.sourceTagKey
 import com.theoriacodex.domain.tags.sourceTagsMatch
-import com.theoriacodex.app.recommend.recommendationTaxonomyFor
-import com.theoriacodex.app.search.state.SearchSourceScope
+import java.util.LinkedHashMap
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -55,6 +55,14 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+/**
+ * Application execution service for Search.
+ *
+ * It owns provider access, durable writes, and bounded service caches. It never owns route jobs,
+ * route continuation, queries, results, statuses, loading flags, or an observable UI snapshot.
+ * Every provider call returns an immutable value that SearchViewModel admits by request identity.
+ */
+@Suppress("LargeClass") // F12 removes route ownership; F15 owns remaining service-size ratchets.
 class SearchCoordinator(
     private val registry: SourceAdapterRegistry,
     private val queryRepository: QueryRepository = InMemoryQueryRepository(),
@@ -63,869 +71,446 @@ class SearchCoordinator(
     private val recentsRepository: RecentsRepository = InMemoryRecentsRepository(),
     private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
     private val clock: () -> Long = System::currentTimeMillis,
-) {
-    private var runtimeSettings: AppSettings = AppSettings()
-    private var hasExecutedSearch = false
-    private val appliedByMode = mutableMapOf<String, Query>()
-    private var unifiedNextPageTokens: Map<SourceKey, String?> = emptyMap()
-    private var unifiedQueryOverrides: Map<SourceKey, Query> = emptyMap()
-    private var sourceNextPageToken: String? = null
+) : SearchExecutionService {
+    private var runtimeSettings = AppSettings()
+    private var availableSourcesSnapshot = registry.availableSources()
     private val lastTrendingRefreshAtBySource = mutableMapOf<SourceKey, Long>()
-    private val resolvedPostOverridesByQueryHash = linkedMapOf<String, LinkedHashMap<PostId, Post>>()
-    private val recentResolveFailuresByQueryHash = mutableMapOf<String, MutableMap<PostId, ResolveFailureRecord>>()
-    private val searchGenerationLock = Any()
+    private val resolvedPostsByExecution = linkedMapOf<String, LinkedHashMap<PostId, Post>>()
+    private val resolveFailuresByExecution = mutableMapOf<String, MutableMap<PostId, ResolveFailureRecord>>()
     private val appliedPersistenceMutex = Mutex()
     private val scrollPersistenceMutex = Mutex()
-    private val initializationMutex = Mutex()
     private val persistedScrollStateByQuery = mutableMapOf<String, SearchScrollState>()
-    private var nextSearchGeneration = 0L
+
     @Volatile
     private var initialized = false
-    private var availableSourcesSnapshot = registry.availableSources()
-    private var activeRootSearch: RootSearchRequest? = null
-    private var activeRootSearchJob: Job? = null
-    private var activeLoadMoreJob: Job? = null
-    private var draftSourceScope: SearchSourceScope = SearchSourceScope.GlobalUnified
-    private var appliedSourceScope: SearchSourceScope = SearchSourceScope.GlobalUnified
-
-    var draftQuery = defaultQuery()
-        private set
-
-    var appliedQuery = defaultQuery()
-        private set
-
-    var results: List<Post> = emptyList()
-        private set
-
-    var statuses: List<SourceRunStatus> = emptyList()
-        private set
-
-    var trendingTags: List<TagSuggestion> = emptyList()
-        private set
-
-    var autocompleteSuggestions: List<TagSuggestion> = emptyList()
-        private set
-
-    /**
-     * The lossless suggestion lane used by faceted sources. The legacy suggestion list above
-     * remains available for sources that only expose general tags.
-     */
-    var facetedAutocompleteSuggestions: List<FacetedTagSuggestion> = emptyList()
-        private set
-
-    var selectedSearchScope: FacetedSearchScope = FacetedSearchScope.All
-        private set
-
-    var tagInputValidationMessage: String? = null
-        private set
-
-    var loading = false
-        private set
-
-    var loadingMore = false
-        private set
-
-    var canLoadMore = false
-        private set
-
-    var errorMessage: String? = null
-        private set
-
-    var displayResultsVersion = 0
-        private set
 
     val availableSources: List<SourceKey>
         get() = registry.availableSources().inPresentationOrder()
 
-    val modeOptions: List<QueryMode>
-        get() = listOf(QueryMode.Unified) + availableSources.map(QueryMode::Source)
-
-    val supportedSearchScopes: List<FacetedSearchScope>
-        get() {
-            val mode = draftQuery.mode as? QueryMode.Source ?: return emptyList()
-            val adapter = registry.adapterFor(mode.source) as? FacetedSearchSourceAdapter
-                ?: return emptyList()
-            return adapter.supportedSearchScopes
-                .sortedWith(SEARCH_SCOPE_COMPARATOR)
-        }
-
-    val hasPendingChanges: Boolean
-        get() = draftQuery != appliedQuery || draftSourceScope != appliedSourceScope
-
-    val isTemporarySourceScope: Boolean
-        get() = draftSourceScope is SearchSourceScope.Temporary
-
-    val isAppliedTemporarySourceScope: Boolean
-        get() = appliedSourceScope is SearchSourceScope.Temporary
-
-    val draftSourceScopeSnapshot: SearchSourceScope
-        get() = draftSourceScope
-
-    val appliedSourceScopeSnapshot: SearchSourceScope
-        get() = appliedSourceScope
-
-    val hasAnySearchRun: Boolean
-        get() = hasExecutedSearch
-
-    val enabledSourceCount: Int
-        get() = effectiveEnabledSources(draftSourceScope).size
-
     val isInitialized: Boolean
         get() = initialized
 
-    val appliedQueryHash: String
-        get() = executionKey(appliedQuery, appliedSourceScope)
-
-    fun tagVideoCount(source: SourceKey, tag: String): Int? {
-        val normalized = tag.trim().lowercase()
-        if (normalized.isBlank()) return null
-
-        val cachedCount = tagSuggestionStore
-            .get(source = source, limit = TAG_LOOKUP_LIMIT)
-            .firstOrNull { suggestion ->
-                tagsMatchForSource(source, suggestion.text, normalized)
-            }
-            ?.count
-        if (cachedCount != null) return cachedCount
-
-        val autocompleteCount = autocompleteSuggestions
-            .firstOrNull { suggestion ->
-                tagsMatchForSource(source, suggestion.text, normalized)
-            }
-            ?.count
-        if (autocompleteCount != null) return autocompleteCount
-
-        return trendingTags
-            .firstOrNull { suggestion ->
-                tagsMatchForSource(source, suggestion.text, normalized)
-            }
-            ?.count
-    }
-
-    suspend fun fetchTagVideoCount(source: SourceKey, tag: String): Int? {
-        val normalized = tag.trim()
-        if (normalized.isBlank()) return null
-        return fetchTagVideoCounts(source, tags = listOf(normalized))[normalized]
-    }
-
-    suspend fun fetchTagVideoCounts(source: SourceKey, tags: List<String>): Map<String, Int?> {
-        val requested = tags
-            .asSequence()
-            .map(String::trim)
-            .filter(String::isNotBlank)
-            .distinct()
-            .toList()
-        if (requested.isEmpty()) return emptyMap()
-
-        val resolved = requested.associateWith { tag -> tagVideoCount(source, tag) }.toMutableMap()
-        var missing = requested.filter { tag -> resolved[tag] == null }
-        if (missing.isEmpty()) return resolved
-
-        val adapter = registry.adapterFor(source) ?: return resolved
-        if (adapter is TagCountLookupSourceAdapter) {
-            val sourceTags = missing.map { tag -> autocompletePrefixForSource(source, tag) }
-            val batchCounts = runCatchingPreservingCancellation {
-                adapter.fetchTagCounts(sourceTags)
-            }.getOrDefault(emptyMap())
-            if (batchCounts.isNotEmpty()) {
-                tagSuggestionStore.put(
-                    source = source,
-                    suggestions = batchCounts.map { (tagText, count) ->
-                        TagSuggestion(
-                            text = tagText,
-                            type = "tag_count_lookup",
-                            count = count,
-                        )
-                    },
-                )
-                missing.forEach { tag ->
-                    val matched = batchCounts.entries
-                        .firstOrNull { (name, _) -> tagsMatchForSource(source, name, tag) }
-                        ?.value
-                    if (matched != null) {
-                        resolved[tag] = matched
-                    }
-                }
-            }
-            missing = requested.filter { tag -> resolved[tag] == null }
-        }
-
-        missing.forEach { tag ->
-            val sourcePrefix = autocompletePrefixForSource(source, tag)
-            val fetched = runCatchingPreservingCancellation {
-                adapter.autocompleteTags(prefix = sourcePrefix, limit = TAG_FETCH_LIMIT)
-            }.getOrDefault(emptyList())
-            if (fetched.isNotEmpty()) {
-                tagSuggestionStore.put(source, fetched)
-            }
-            val count = fetched
-                .firstOrNull { suggestion -> tagsMatchForSource(source, suggestion.text, tag) }
-                ?.count
-                ?: tagVideoCount(source, tag)
-            if (count != null) {
-                resolved[tag] = count
-            }
-        }
-
-        return resolved
-    }
-
-    suspend fun initialize() {
-        if (initialized) return
-        initializationMutex.withLock {
-            if (initialized) return@withLock
-            tagSuggestionStore.awaitLoaded()
-            runtimeSettings = settingsRepository.observeSettings().first()
-            availableSourcesSnapshot = registry.availableSources()
-
-            modeOptions.forEach { mode ->
-                val stored = queryRepository.observeAppliedQuery(modeKey(mode)).first()
-                if (stored != null && isModeAvailable(stored.mode)) {
-                    appliedByMode[modeKey(mode)] = stored
-                }
-            }
-
-            val lastApplied = queryRepository.observeAppliedQuery(LAST_ACTIVE_QUERY_KEY).first()
+    internal suspend fun initializeRoute(): SearchInitialization {
+        tagSuggestionStore.awaitLoaded()
+        runtimeSettings = settingsRepository.observeSettings().first()
+        availableSourcesSnapshot = registry.availableSources()
+        val modes = listOf(QueryMode.Unified) + availableSources.map(QueryMode::Source)
+        val storedByMode = modes.mapNotNull { mode ->
+            queryRepository.observeAppliedQuery(modeKey(mode)).first()
                 ?.takeIf { query -> isModeAvailable(query.mode) }
-            val restored = if (lastApplied != null) {
-                appliedByMode[modeKey(lastApplied.mode)] ?: defaultQuery(lastApplied.mode)
-            } else {
-                appliedByMode[modeKey(QueryMode.Unified)] ?: defaultQuery()
-            }
-            val sanitized = restored.forMode(restored.mode)
-            appliedQuery = sanitized.query
-            draftQuery = sanitized.query
-            appliedSourceScope = SearchSourceScope.fromQuery(appliedQuery)
-            draftSourceScope = appliedSourceScope
-            if (sanitized.removedSourceOwnedTerms) {
-                tagInputValidationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
-            }
-            resetUnsupportedSearchScope()
-            hasExecutedSearch =
-                appliedByMode.containsKey(modeKey(appliedQuery.mode)) ||
-                queryRepository.getScrollOffset(appliedQueryHash) != null
-            initialized = true
+                ?.let { query -> modeKey(mode) to query }
+        }.toMap()
+        val lastApplied = queryRepository.observeAppliedQuery(LAST_ACTIVE_QUERY_KEY).first()
+            ?.takeIf { query -> isModeAvailable(query.mode) }
+        val restored = if (lastApplied != null) {
+            storedByMode[modeKey(lastApplied.mode)] ?: defaultQuery(lastApplied.mode)
+        } else {
+            storedByMode[modeKey(QueryMode.Unified)] ?: defaultQuery()
         }
+        val sanitized = restored.sanitizedForMode(restored.mode)
+        val sourceScope = SearchSourceScope.fromQuery(sanitized.query)
+        val key = executionKey(sanitized.query, sourceScope)
+        initialized = true
+        return SearchInitialization(
+            query = sanitized.query,
+            sourceScope = sourceScope,
+            appliedByMode = storedByMode,
+            availableSources = availableSources,
+            hasExecutedSearch = storedByMode.containsKey(modeKey(sanitized.query.mode)) ||
+                uiRestoreRepository.getSearchScrollState(key) != null,
+            validationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
+                .takeIf { sanitized.removedSourceOwnedTerms },
+        )
     }
 
-    fun onSettingsChanged(settings: AppSettings): Boolean {
-        val previousRuntime = runtimeSettings.runtime
+    internal fun updateEnvironment(settings: AppSettings): SearchEnvironmentChange {
+        val settingsChanged = runtimeSettings.runtime != settings.runtime
         runtimeSettings = settings
-
-        if (!isModeAvailable(draftQuery.mode)) {
-            draftQuery = defaultQuery(QueryMode.Unified)
-            draftSourceScope = SearchSourceScope.GlobalUnified
-            resetUnsupportedSearchScope()
-        }
-        if (!isModeAvailable(appliedQuery.mode)) {
-            appliedQuery = defaultQuery(QueryMode.Unified)
-            appliedSourceScope = SearchSourceScope.GlobalUnified
-        }
-
-        return hasExecutedSearch && previousRuntime != settings.runtime
+        val current = registry.availableSources()
+        val sourcesChanged = current != availableSourcesSnapshot
+        availableSourcesSnapshot = current
+        return SearchEnvironmentChange(settingsChanged, sourcesChanged, current.inPresentationOrder())
     }
 
-    fun onAvailableSourcesChanged(): Boolean {
-        val currentSources = registry.availableSources()
-        val sourcesChanged = currentSources != availableSourcesSnapshot
-        availableSourcesSnapshot = currentSources
-        val cancelledActiveRequest = if (sourcesChanged) {
-            invalidateActiveRequestsForCapabilityChange()
-        } else {
-            false
-        }
-        var modeChanged = false
-
-        if (!isModeAvailable(draftQuery.mode)) {
-            draftQuery = defaultQuery(QueryMode.Unified)
-            draftSourceScope = SearchSourceScope.GlobalUnified
-            resetUnsupportedSearchScope()
-            modeChanged = true
-        }
-        if (!isModeAvailable(appliedQuery.mode)) {
-            appliedQuery = defaultQuery(QueryMode.Unified)
-            appliedSourceScope = SearchSourceScope.GlobalUnified
-            modeChanged = true
-        }
-
-        val reconciledDraftScope = reconcileSourceScope(draftSourceScope, currentSources)
-        if (reconciledDraftScope != draftSourceScope) {
-            draftSourceScope = reconciledDraftScope
-            draftQuery = draftQuery.forMode(reconciledDraftScope.queryMode()).query
-            resetUnsupportedSearchScope()
-            clearTagInputUiState()
-            modeChanged = true
-        }
-        val reconciledAppliedScope = reconcileSourceScope(appliedSourceScope, currentSources)
-        if (reconciledAppliedScope != appliedSourceScope) {
-            appliedSourceScope = reconciledAppliedScope
-            appliedQuery = appliedQuery.forMode(reconciledAppliedScope.queryMode()).query
-            modeChanged = true
-        }
-
-        return cancelledActiveRequest || (hasExecutedSearch && (sourcesChanged || modeChanged))
+    internal fun supportedSearchScopes(mode: QueryMode): List<FacetedSearchScope> {
+        val source = (mode as? QueryMode.Source)?.source ?: return emptyList()
+        val adapter = registry.adapterFor(source) as? FacetedSearchSourceAdapter ?: return emptyList()
+        return adapter.supportedSearchScopes.sortedWith(SEARCH_SCOPE_COMPARATOR)
     }
 
-    private fun invalidateActiveRequestsForCapabilityChange(): Boolean {
-        val jobs = synchronized(searchGenerationLock) {
-            val rootJob = activeRootSearchJob
-            val pageJob = activeLoadMoreJob
-            val hadActiveRequest = activeRootSearch != null || rootJob != null || pageJob != null
-            nextSearchGeneration += 1L
-            activeRootSearch = null
-            activeRootSearchJob = null
-            activeLoadMoreJob = null
-            loading = false
-            loadingMore = false
-            Triple(rootJob, pageJob, hadActiveRequest)
-        }
-        val cancellation = CancellationException("Search capabilities changed")
-        jobs.first?.cancel(cancellation)
-        if (jobs.second !== jobs.first) {
-            jobs.second?.cancel(cancellation)
-        }
-        return jobs.third
+    override fun executionKeyFor(query: Query, sourceScope: SearchSourceScope): String {
+        return executionKey(query.sanitizedForMode(sourceScope.queryMode()).query, sourceScope)
     }
 
-    fun addTagInput(input: String) {
-        val parsed = parseScopedInput(input)
-        if (parsed.value.isBlank()) return
-
-        val term = resolveInputTerm(parsed) ?: return
-        if (parsed.isExclude) {
-            addExcludeTerm(term)
-        } else {
-            addIncludeTerm(term)
-        }
-    }
-
-    fun canCommitTagInput(input: String): Boolean {
-        val trimmed = input.trim()
-        if (trimmed.isBlank()) return false
-        val parsed = parseScopedInput(trimmed)
-        if (parsed.value.isBlank()) return false
-        if (parsed.explicitScope != null && !canUseParsedScope(parsed)) return false
-        if (!requiresGelbooruSuggestionSelection()) return true
-        val normalizedTag = normalizeTypedTag(trimmed)
-        if (normalizedTag.isBlank()) return false
-        return isSuggestedTag(normalizedTag)
-    }
-
-    fun commitTagInput(input: String): Boolean {
-        if (!canCommitTagInput(input)) {
-            val parsed = parseScopedInput(input)
-            if (parsed.explicitScope != null && !canUseParsedScope(parsed)) {
-                tagInputValidationMessage = when (draftQuery.mode) {
-                    QueryMode.Unified -> UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE
-                    is QueryMode.Source -> UNSUPPORTED_SEARCH_SCOPE_MESSAGE
-                }
-            } else if (requiresGelbooruSuggestionSelection()) {
-                tagInputValidationMessage = GELBOORU_SUGGESTION_REQUIRED_MESSAGE
-            }
-            return false
-        }
-        addTagInput(resolveCommittedTagInput(input))
-        tagInputValidationMessage = null
-        return true
-    }
-
-    fun clearTagInputValidationMessage() {
-        tagInputValidationMessage = null
-    }
-
-    /** Clears the engine error after the route owner has acknowledged it. */
-    fun clearErrorMessage() {
-        errorMessage = null
-    }
-
-    fun clearAutocompleteSuggestions() {
-        autocompleteSuggestions = emptyList()
-        facetedAutocompleteSuggestions = emptyList()
-    }
-
-    fun addIncludeTag(tag: String) {
-        val normalized = tag.trim()
-        if (normalized.isBlank()) return
-        addIncludeTerm(SearchTerm(value = normalized))
-    }
-
-    fun addExcludeTag(tag: String) {
-        val normalized = tag.trim()
-        if (normalized.isBlank()) return
-        addExcludeTerm(SearchTerm(value = normalized))
-    }
-
-    fun addIncludeTerm(term: SearchTerm): Boolean {
-        val normalized = term.normalizedOrNull() ?: return false
-        if (!canAddTermToMode(normalized)) return false
-        if (normalized in draftQuery.includeTerms) return false
-        draftQuery = draftQuery.copy(includeTerms = draftQuery.includeTerms + normalized)
-        tagInputValidationMessage = null
-        return true
-    }
-
-    fun addExcludeTerm(term: SearchTerm): Boolean {
-        val normalized = term.normalizedOrNull() ?: return false
-        if (!canAddTermToMode(normalized)) return false
-        if (normalized in draftQuery.excludeTerms) return false
-        draftQuery = draftQuery.copy(excludeTerms = draftQuery.excludeTerms + normalized)
-        tagInputValidationMessage = null
-        return true
-    }
-
-    fun addPostIncludeTerm(post: Post, term: SearchTerm): Boolean {
-        val normalized = term.normalizedOrNull() ?: return false
-        if (!prepareModeForPostTerm(post, normalized)) return false
-        addIncludeTerm(normalized)
-        return normalized in draftQuery.includeTerms
-    }
-
-    fun addPostExcludeTerm(post: Post, term: SearchTerm): Boolean {
-        val normalized = term.normalizedOrNull() ?: return false
-        if (!prepareModeForPostTerm(post, normalized)) return false
-        addExcludeTerm(normalized)
-        return normalized in draftQuery.excludeTerms
-    }
-
-    fun addIncludeSuggestion(suggestion: FacetedTagSuggestion): Boolean {
-        return addIncludeTerm(suggestion.toSearchTerm())
-    }
-
-    fun addExcludeSuggestion(suggestion: FacetedTagSuggestion): Boolean {
-        return addExcludeTerm(suggestion.toSearchTerm())
-    }
-
-    fun addSuggestion(
-        suggestion: FacetedTagSuggestion,
-        excluded: Boolean = false,
-    ): Boolean {
-        return if (excluded) addExcludeSuggestion(suggestion) else addIncludeSuggestion(suggestion)
-    }
-
-    fun removeIncludeTag(tag: String) {
-        draftQuery = draftQuery.copy(
-            includeTerms = draftQuery.includeTerms.filterNot { term ->
-                term.isPortableGeneralTag && term.value == tag
-            },
-        )
-    }
-
-    fun removeExcludeTag(tag: String) {
-        draftQuery = draftQuery.copy(
-            excludeTerms = draftQuery.excludeTerms.filterNot { term ->
-                term.isPortableGeneralTag && term.value == tag
-            },
-        )
-    }
-
-    fun removeIncludeTerm(term: SearchTerm) {
-        draftQuery = draftQuery.copy(
-            includeTerms = draftQuery.includeTerms.filterNot { candidate -> candidate == term },
-        )
-    }
-
-    fun removeExcludeTerm(term: SearchTerm) {
-        draftQuery = draftQuery.copy(
-            excludeTerms = draftQuery.excludeTerms.filterNot { candidate -> candidate == term },
-        )
-    }
-
-    fun selectSearchScope(scope: FacetedSearchScope): Boolean {
-        if (scope !in supportedSearchScopes) return false
-        if (selectedSearchScope == scope) return true
-        selectedSearchScope = scope
-        clearAutocompleteSuggestions()
-        tagInputValidationMessage = null
-        return true
-    }
-
-    fun setMode(mode: QueryMode) {
-        val hadSourceOwnedTerms = draftQuery.hasSourceOwnedTerms()
-        val resolvedMode = when {
-            isModeAvailable(mode) -> mode
-            else -> QueryMode.Unified
-        }
-        val restored = appliedByMode[modeKey(resolvedMode)] ?: defaultQuery(resolvedMode)
-        val sanitized = restored.copy(mode = resolvedMode).forMode(resolvedMode)
-        draftQuery = sanitized.query
-        draftSourceScope = SearchSourceScope.fromQuery(sanitized.query)
-        resetUnsupportedSearchScope()
-        clearTagInputUiState()
-        if (
-            resolvedMode == QueryMode.Unified &&
-            (hadSourceOwnedTerms || sanitized.removedSourceOwnedTerms)
-        ) {
-            tagInputValidationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
-        }
-    }
-
-    /** Adds or removes one available source from the temporary route scope. */
-    fun toggleTemporarySource(source: SourceKey): Boolean {
-        if (source !in registry.availableSources()) return false
-
-        val nextScope = when (val current = draftSourceScope) {
-            SearchSourceScope.GlobalUnified -> return false
-            is SearchSourceScope.Single -> {
-                if (current.source == source) return false
-                SearchSourceScope.fromSources(listOf(current.source, source))
-            }
-
-            is SearchSourceScope.Temporary -> {
-                SearchSourceScope.fromSources(
-                    if (source in current.sources) {
-                        current.sources - source
-                    } else {
-                        current.sources + source
-                    },
+    override suspend fun executeInitial(
+        query: Query,
+        sourceScope: SearchSourceScope,
+    ): SearchExecutionResult {
+        currentCoroutineContext().ensureActive()
+        val sanitized = query.sanitizedForMode(sourceScope.queryMode()).query
+        val enabled = effectiveEnabledSources(sourceScope)
+        val available = availableSources
+        val weights = effectiveWeights(enabled)
+        val key = executionKey(sanitized, sourceScope)
+        return try {
+            when (val mode = sanitized.mode) {
+                QueryMode.Unified -> executeUnifiedInitial(
+                    query = sanitized,
+                    sourceScope = sourceScope,
+                    executionKey = key,
+                    enabledSources = enabled,
+                    availableSources = available,
+                    weights = weights,
+                )
+                is QueryMode.Source -> executeSourceInitial(
+                    query = sanitized,
+                    sourceScope = sourceScope,
+                    executionKey = key,
+                    mode = mode,
+                    enabledSources = enabled,
+                    availableSources = available,
+                    weights = weights,
                 )
             }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            SearchExecutionResult.Failure(
+                executionKey = key,
+                query = sanitized,
+                sourceScope = sourceScope,
+                statuses = emptyList(),
+                message = if (isPixivUnknownError(error, sanitized)) {
+                    PIXIV_UNKNOWN_RETRY_MESSAGE
+                } else error.message ?: "Unknown error",
+            )
         }
-        if (nextScope == draftSourceScope) return false
+    }
 
-        val sanitized = draftQuery.forMode(nextScope.queryMode())
-        draftSourceScope = nextScope
-        draftQuery = sanitized.query
-        resetUnsupportedSearchScope()
-        clearAutocompleteSuggestions()
-        tagInputValidationMessage = if (sanitized.removedSourceOwnedTerms) {
-            UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
-        } else {
-            null
+    private suspend fun executeUnifiedInitial(
+        query: Query,
+        sourceScope: SearchSourceScope,
+        executionKey: String,
+        enabledSources: Set<SourceKey>,
+        availableSources: List<SourceKey>,
+        weights: Map<SourceKey, Double>,
+    ): SearchExecutionResult {
+        val excluded = excludedStatuses(sourceScope, availableSources, enabledSources)
+        if (enabledSources.isEmpty()) {
+            val continuation = continuation(
+                executionKey, query, sourceScope, enabledSources, availableSources, weights,
+            )
+            return SearchExecutionResult.Success(
+                executionKey, query, sourceScope, emptyList(), excluded, continuation,
+            )
         }
-        return true
-    }
-
-    fun setSort(sort: SortMode) {
-        draftQuery = draftQuery.copy(sort = sort)
-    }
-
-    fun setDateRange(range: DateRange?) {
-        draftQuery = draftQuery.copy(dateRange = range)
-    }
-
-    /** Restores compact route input without executing a search or writing search history. */
-    fun restoreDraftQuery(query: Query): Boolean {
-        if (!isModeAvailable(query.mode)) return false
-        val sanitized = query.forMode(query.mode)
-        draftQuery = sanitized.query
-        draftSourceScope = SearchSourceScope.fromQuery(sanitized.query)
-        resetUnsupportedSearchScope()
-        clearTagInputUiState()
-        if (sanitized.removedSourceOwnedTerms) {
-            tagInputValidationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
-        }
-        return true
-    }
-
-    fun resetDraft() {
-        draftQuery = appliedQuery
-        draftSourceScope = appliedSourceScope
-        resetUnsupportedSearchScope()
-        clearTagInputUiState()
-    }
-
-    fun clearDraft() {
-        val mode = draftSourceScope.queryMode().takeIf(::isModeAvailable) ?: QueryMode.Unified
-        draftQuery = defaultQuery(mode)
-        resetUnsupportedSearchScope()
-        clearTagInputUiState()
-    }
-
-    fun prepareTagSearch(
-        includeTags: List<String>,
-        excludeTags: List<String> = emptyList(),
-        mode: QueryMode = QueryMode.Unified,
-    ): Boolean {
-        val normalizedInclude = includeTags
-            .map(String::trim)
-            .filter(String::isNotBlank)
-            .distinct()
-        val normalizedExclude = excludeTags
-            .map(String::trim)
-            .filter(String::isNotBlank)
-            .filterNot { it in normalizedInclude }
-            .distinct()
-        if (normalizedInclude.isEmpty() && normalizedExclude.isEmpty()) return false
-        if (!isModeAvailable(mode)) return false
-        draftQuery = defaultQuery(mode).copy(
-            includeTerms = normalizedInclude.map { value -> SearchTerm(value = value) },
-            excludeTerms = normalizedExclude.map { value -> SearchTerm(value = value) },
+        val overrides = buildUnifiedQueryOverrides(query, enabledSources)
+        currentCoroutineContext().ensureActive()
+        val result = registry.unifiedOrchestrator().search(
+            query = query,
+            enabledSources = enabledSources,
+            pageTokens = emptyMap(),
+            weights = weights,
+            queryOverridesBySource = overrides,
         )
-        draftSourceScope = SearchSourceScope.fromQuery(draftQuery)
-        clearSearchResultsForRetry()
-        statuses = emptyList()
-        errorMessage = null
-        clearTagInputUiState()
-        return true
-    }
-
-    fun prepareTagSearch(tag: String): Boolean {
-        return prepareTagSearch(includeTags = listOf(tag))
-    }
-
-    fun setDateRangePreset(preset: DateRangePreset) {
-        val now = System.currentTimeMillis()
-        val dayMs = 24L * 60L * 60L * 1000L
-        val dateRange = when (preset) {
-            DateRangePreset.NONE -> null
-            DateRangePreset.TODAY -> DateRange(fromEpochMs = now - dayMs, toEpochMs = now)
-            DateRangePreset.LAST_7_DAYS -> DateRange(fromEpochMs = now - 7L * dayMs, toEpochMs = now)
-            DateRangePreset.LAST_30_DAYS -> DateRange(fromEpochMs = now - 30L * dayMs, toEpochMs = now)
-        }
-        draftQuery = draftQuery.copy(dateRange = dateRange)
-    }
-
-    fun setMinScore(minScore: Int?) {
-        draftQuery = draftQuery.copy(minScore = minScore)
-    }
-
-    fun selectedNhentaiLanguageFilter(): NhentaiLanguageFilter {
-        val match = draftQuery.includeTerms.firstNotNullOfOrNull { term ->
-            term.nhentaiLanguageFilterOrNull()
-        }
-        return match ?: NhentaiLanguageFilter.ANY
-    }
-
-    fun setNhentaiLanguageFilter(filter: NhentaiLanguageFilter) {
-        val cleaned = draftQuery.includeTerms.filterNot { term ->
-            term.nhentaiLanguageFilterOrNull() != null
-        }
-        val languageTag = NHENTAI_LANGUAGE_TAG_BY_FILTER[filter]
-        val languageTerm = languageTag?.let { value ->
-            SearchTerm(
-                value = value,
-                facet = SearchFacet.LANGUAGE,
-                sourceNamespace = NHENTAI_LANGUAGE_NAMESPACE,
+        currentCoroutineContext().ensureActive()
+        val statuses = mergeStatuses(excluded, result.statuses)
+        if (isPixivUnknownFailure(result.items, statuses)) {
+            return SearchExecutionResult.Failure(
+                executionKey, query, sourceScope, statuses, PIXIV_UNKNOWN_RETRY_MESSAGE,
             )
         }
-        val nextInclude = if (languageTerm == null || languageTerm in cleaned) {
-            cleaned
-        } else {
-            cleaned + languageTerm
-        }
-        draftQuery = draftQuery.copy(includeTerms = nextInclude)
-    }
-
-    fun selectedNhentaiFullColorFilter(): Boolean {
-        return draftQuery.includeTerms.any { term ->
-            term.isNhentaiFullColorFilter()
-        }
-    }
-
-    fun setNhentaiFullColorFilter(enabled: Boolean) {
-        val cleaned = draftQuery.includeTerms.filterNot { term ->
-            term.isNhentaiFullColorFilter()
-        }
-        val nextInclude = if (enabled) {
-            cleaned + SearchTerm(
-                value = NHENTAI_FULL_COLOR_TAG,
-                facet = SearchFacet.TAG,
-                sourceNamespace = NHENTAI_TAG_NAMESPACE,
-            )
-        } else {
-            cleaned
-        }
-        draftQuery = draftQuery.copy(includeTerms = nextInclude)
-    }
-
-    fun directNhentaiGalleryIdCandidate(query: Query = draftQuery): String? {
-        return query.directNhentaiGalleryIdCandidate()
-    }
-
-    suspend fun resolveNhentaiGalleryById(galleryId: String): Post? {
-        val normalizedId = galleryId.trim().takeIf(String::isDigitsOnly) ?: return null
-        val adapter = registry.adapterFor(SourceKey.NHENTAI) ?: return null
-        return adapter.resolvePost(PostId(source = SourceKey.NHENTAI, sourcePostId = normalizedId))
-    }
-
-    fun resetFilters() {
-        draftQuery = draftQuery.copy(
-            sort = SortMode.NEWEST,
-            dateRange = null,
-            minScore = null,
+        rememberSeenTags(result.items)
+        return SearchExecutionResult.Success(
+            executionKey = executionKey,
+            query = query,
+            sourceScope = sourceScope,
+            posts = result.items,
+            statuses = statuses,
+            continuation = continuation(
+                executionKey, query, sourceScope, enabledSources, availableSources, weights,
+                unifiedPageTokens = result.nextPageTokens,
+                unifiedQueryOverrides = overrides,
+            ),
         )
     }
 
-    suspend fun refreshAutocompleteSuggestions(input: String) {
-        val parsedInput = parseScopedInput(input)
-        val typedPrefix = parsedInput.value
-        if (typedPrefix.isBlank()) {
-            val explicitScope = parsedInput.explicitScope
-            if (explicitScope != null) {
-                when (draftQuery.mode) {
-                    QueryMode.Unified -> {
-                        tagInputValidationMessage = UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE
-                    }
-
-                    is QueryMode.Source -> {
-                        val resolvedScope = resolveSupportedScope(
-                            explicitScope,
-                            supportedSearchScopes,
-                        )
-                        if (resolvedScope == null) {
-                            tagInputValidationMessage = UNSUPPORTED_SEARCH_SCOPE_MESSAGE
-                        } else {
-                            selectedSearchScope = resolvedScope
-                            tagInputValidationMessage = null
-                        }
-                    }
-                }
-            }
-            refreshFeaturedFacetedSuggestions()
-            return
+    private suspend fun executeSourceInitial(
+        query: Query,
+        sourceScope: SearchSourceScope,
+        executionKey: String,
+        mode: QueryMode.Source,
+        enabledSources: Set<SourceKey>,
+        availableSources: List<SourceKey>,
+        weights: Map<SourceKey, Double>,
+    ): SearchExecutionResult {
+        if (!isModeAvailable(mode)) {
+            return SearchExecutionResult.Success(
+                executionKey = executionKey,
+                query = query,
+                sourceScope = sourceScope,
+                posts = emptyList(),
+                statuses = listOf(
+                    SourceRunStatus(
+                        source = mode.source,
+                        state = SourceRunState.EXCLUDED,
+                        errorMessage = "Source not available in this build",
+                    ),
+                ),
+                continuation = continuation(
+                    executionKey, query, sourceScope, enabledSources, availableSources, weights,
+                ),
+            )
         }
+        val adapter = requireNotNull(registry.adapterFor(mode.source)) { "No adapter for ${mode.source}" }
+        val page = adapter.search(query, null)
+        currentCoroutineContext().ensureActive()
+        rememberSeenTags(page.items)
+        return SearchExecutionResult.Success(
+            executionKey = executionKey,
+            query = query,
+            sourceScope = sourceScope,
+            posts = page.items,
+            statuses = listOf(SourceRunStatus(mode.source, SourceRunState.SUCCESS)),
+            continuation = continuation(
+                executionKey, query, sourceScope, enabledSources, availableSources, weights,
+                sourcePageToken = page.nextPageToken,
+            ),
+        )
+    }
 
-        val explicitScope = parsedInput.explicitScope
-        if (explicitScope != null) {
-            when (draftQuery.mode) {
-                QueryMode.Unified -> {
-                    clearAutocompleteSuggestions()
-                    tagInputValidationMessage = UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE
-                    return
-                }
-
-                is QueryMode.Source -> {
-                    val resolvedScope = resolveSupportedScope(explicitScope, supportedSearchScopes)
-                    if (resolvedScope == null) {
-                        clearAutocompleteSuggestions()
-                        tagInputValidationMessage = UNSUPPORTED_SEARCH_SCOPE_MESSAGE
-                        return
-                    }
-                    selectedSearchScope = resolvedScope
-                }
+    override suspend fun executePage(continuation: SearchContinuation): SearchPageResult {
+        currentCoroutineContext().ensureActive()
+        return try {
+            when (val mode = continuation.query.mode) {
+                QueryMode.Unified -> executeUnifiedPage(continuation)
+                is QueryMode.Source -> executeSourcePage(continuation, mode)
             }
-        }
-
-        autocompleteSuggestions = when (val mode = draftQuery.mode) {
-            QueryMode.Unified -> {
-                val enabledSources = effectiveEnabledSources()
-                val fetched = enabledSources
-                    .flatMap { source ->
-                        val sourcePrefix = autocompletePrefixForSource(source, typedPrefix)
-                        val adapter = registry.adapterFor(source)
-                        if (adapter is FacetedSearchSourceAdapter) {
-                            val allScope = FacetedSearchScope.All.takeIf { scope ->
-                                scope in adapter.supportedSearchScopes
-                            } ?: adapter.supportedSearchScopes.firstOrNull { scope ->
-                                scope.facet == SearchFacet.TAG &&
-                                    scope.sourceNamespace in setOf(null, "tag")
-                            }
-                            if (allScope == null) return@flatMap emptyList()
-                            val faceted = try {
-                                adapter.autocompleteFaceted(
-                                    prefix = sourcePrefix,
-                                    scope = allScope,
-                                    limit = FACETED_AUTOCOMPLETE_LIMIT,
-                                )
-                            } catch (error: CancellationException) {
-                                throw error
-                            } catch (_: Throwable) {
-                                emptyList()
-                            }
-                            if (faceted.isNotEmpty()) {
-                                tagSuggestionStore.putFaceted(source, faceted)
-                            }
-                            faceted
-                                .filter(FacetedTagSuggestion::isPortableTagSuggestion)
-                                .map(FacetedTagSuggestion::toPortableLegacySuggestion)
-                        } else {
-                            val suggestions = try {
-                                adapter?.autocompleteTags(prefix = sourcePrefix, limit = 10).orEmpty()
-                            } catch (error: CancellationException) {
-                                throw error
-                            } catch (_: Throwable) {
-                                emptyList()
-                            }
-                            if (suggestions.isNotEmpty()) {
-                                tagSuggestionStore.put(source, suggestions)
-                            }
-                            suggestions.filter(TagSuggestion::isPortableTagSuggestion)
-                        }
-                    }
-                if (fetched.isNotEmpty()) {
-                    rankSuggestionsByPrefix(fetched, prefix = typedPrefix, limit = 20)
-                } else {
-                    val cached = enabledSources
-                        .flatMap { source -> tagSuggestionStore.get(source, limit = 120) }
-                    rankSuggestionsByPrefix(cached, prefix = typedPrefix, limit = 20)
-                }
-            }
-
-            is QueryMode.Source -> {
-                val facetedAdapter = registry.adapterFor(mode.source) as? FacetedSearchSourceAdapter
-                if (facetedAdapter != null) {
-                    val requestedScope = explicitScope
-                        ?.let { prefix -> resolveSupportedScope(prefix, supportedSearchScopes) }
-                        ?: selectedSearchScope.takeIf { scope -> scope in supportedSearchScopes }
-                        ?: FacetedSearchScope.All.takeIf { scope -> scope in supportedSearchScopes }
-                    if (requestedScope == null) {
-                        clearAutocompleteSuggestions()
-                        tagInputValidationMessage = UNSUPPORTED_SEARCH_SCOPE_MESSAGE
-                        return
-                    }
-                    selectedSearchScope = requestedScope
-                    val fetched = try {
-                        facetedAdapter.autocompleteFaceted(
-                            prefix = typedPrefix,
-                            scope = requestedScope,
-                            limit = FACETED_AUTOCOMPLETE_LIMIT,
-                        )
-                    } catch (error: CancellationException) {
-                        throw error
-                    } catch (_: Throwable) {
-                        emptyList()
-                    }
-                    if (fetched.isNotEmpty()) {
-                        tagSuggestionStore.putFaceted(mode.source, fetched)
-                    }
-                    val candidates = if (fetched.isNotEmpty()) {
-                        fetched
-                    } else {
-                        tagSuggestionStore.getFaceted(
-                            source = mode.source,
-                            scope = requestedScope,
-                            limit = FACETED_AUTOCOMPLETE_CACHE_LIMIT,
-                        )
-                    }
-                    val ranked = rankFacetedSuggestionsByPrefix(
-                        suggestions = candidates,
-                        prefix = typedPrefix,
-                        limit = FACETED_AUTOCOMPLETE_LIMIT,
-                    )
-                    facetedAutocompleteSuggestions = ranked
-                    tagInputValidationMessage = null
-                    ranked.map(FacetedTagSuggestion::toLegacySuggestion)
-                } else {
-                    facetedAutocompleteSuggestions = emptyList()
-                    val sourcePrefix = autocompletePrefixForSource(mode.source, typedPrefix)
-                    val fetched = runCatchingPreservingCancellation {
-                        registry.adapterFor(mode.source)?.autocompleteTags(prefix = sourcePrefix, limit = 20).orEmpty()
-                    }.getOrDefault(emptyList())
-                    if (fetched.isNotEmpty()) {
-                        tagSuggestionStore.put(mode.source, fetched)
-                        rankSuggestionsByPrefix(fetched, prefix = typedPrefix, limit = 20)
-                    } else {
-                        val cached = tagSuggestionStore.get(mode.source, limit = 120)
-                        val fallback = if (cached.isNotEmpty()) cached else trendingTags
-                        rankSuggestionsByPrefix(fallback, prefix = typedPrefix, limit = 20)
-                    }
-                }
-            }
-        }
-        if (draftQuery.mode == QueryMode.Unified) {
-            facetedAutocompleteSuggestions = emptyList()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            SearchPageResult.Failure(
+                executionKey = continuation.executionKey,
+                statuses = emptyList(),
+                message = if (isPixivUnknownError(error, continuation.query)) {
+                    PIXIV_UNKNOWN_RETRY_MESSAGE
+                } else error.message ?: "Could not load more results",
+            )
         }
     }
 
-    suspend fun refreshFeaturedFacetedSuggestions() {
-        val mode = draftQuery.mode as? QueryMode.Source
+    private suspend fun executeUnifiedPage(continuation: SearchContinuation): SearchPageResult {
+        val excluded = excludedStatuses(
+            continuation.sourceScope,
+            continuation.availableSources,
+            continuation.enabledSources,
+        )
+        val pageable = continuation.enabledSources.filterTo(mutableSetOf()) { source ->
+            !continuation.unifiedPageTokens[source].isNullOrBlank()
+        }
+        if (pageable.isEmpty()) {
+            return SearchPageResult.Success(
+                continuation.executionKey,
+                emptyList(),
+                excluded,
+                continuation.copy(unifiedPageTokens = emptyMap()),
+            )
+        }
+        val result = registry.unifiedOrchestrator().search(
+            query = continuation.query,
+            enabledSources = pageable,
+            pageTokens = continuation.unifiedPageTokens.filterKeys { it in pageable },
+            weights = SourceWeightNormalization.normalize(pageable, continuation.weights),
+            queryOverridesBySource = continuation.unifiedQueryOverrides.filterKeys { it in pageable },
+        )
+        currentCoroutineContext().ensureActive()
+        val statuses = mergeStatuses(excluded, result.statuses)
+        if (isPixivUnknownFailure(result.items, statuses)) {
+            return SearchPageResult.Failure(
+                continuation.executionKey, statuses, PIXIV_UNKNOWN_RETRY_MESSAGE,
+            )
+        }
+        rememberSeenTags(result.items)
+        val nextTokens = continuation.unifiedPageTokens.toMutableMap().apply {
+            pageable.forEach { source -> put(source, null) }
+            putAll(result.nextPageTokens)
+        }
+        return SearchPageResult.Success(
+            continuation.executionKey,
+            result.items,
+            statuses,
+            continuation.copy(unifiedPageTokens = nextTokens),
+        )
+    }
+
+    private suspend fun executeSourcePage(
+        continuation: SearchContinuation,
+        mode: QueryMode.Source,
+    ): SearchPageResult {
+        val token = continuation.sourcePageToken
+        if (token.isNullOrBlank()) {
+            return SearchPageResult.Success(
+                continuation.executionKey,
+                emptyList(),
+                emptyList(),
+                continuation.copy(sourcePageToken = null),
+            )
+        }
+        val adapter = requireNotNull(registry.adapterFor(mode.source)) { "No adapter for ${mode.source}" }
+        val page = adapter.search(continuation.query, token)
+        currentCoroutineContext().ensureActive()
+        rememberSeenTags(page.items)
+        return SearchPageResult.Success(
+            continuation.executionKey,
+            page.items,
+            listOf(SourceRunStatus(mode.source, SourceRunState.SUCCESS)),
+            continuation.copy(sourcePageToken = page.nextPageToken),
+        )
+    }
+
+    override suspend fun persistAppliedSearch(
+        query: Query,
+        sourceScope: SearchSourceScope,
+        executionKey: String,
+    ) {
+        if (sourceScope is SearchSourceScope.Temporary) return
+        appliedPersistenceMutex.withLock {
+            currentCoroutineContext().ensureActive()
+            queryRepository.upsertAppliedQuery(modeKey(query.mode), query)
+            currentCoroutineContext().ensureActive()
+            queryRepository.upsertAppliedQuery(LAST_ACTIVE_QUERY_KEY, query)
+            currentCoroutineContext().ensureActive()
+            uiRestoreRepository.setSearchScrollState(executionKey, SearchScrollState(0, 0))
+            currentCoroutineContext().ensureActive()
+            recentsRepository.recordSearch(query, executionKey)
+        }
+    }
+
+    internal suspend fun fetchAutocomplete(
+        query: Query,
+        sourceScope: SearchSourceScope,
+        selectedScope: FacetedSearchScope,
+        input: String,
+        trending: List<TagSuggestion>,
+    ): SearchAutocompleteResult {
+        val parsed = parseScopedInput(input)
+        val supported = supportedSearchScopes(query.mode)
+        var scope = selectedScope.takeIf { it in supported } ?: FacetedSearchScope.All
+        parsed.explicitScope?.let { explicit ->
+            if (query.mode == QueryMode.Unified) {
+                return SearchAutocompleteResult(input, scope, UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE)
+            }
+            scope = resolveSupportedScope(explicit, supported)
+                ?: return SearchAutocompleteResult(input, scope, UNSUPPORTED_SEARCH_SCOPE_MESSAGE)
+        }
+        if (parsed.value.isBlank()) return fetchFeaturedAutocomplete(query, scope, input)
+        return when (val mode = query.mode) {
+            QueryMode.Unified -> fetchUnifiedAutocomplete(sourceScope, scope, input, parsed.value)
+            is QueryMode.Source -> fetchSourceAutocomplete(mode, scope, input, parsed.value, trending)
+        }
+    }
+
+    private suspend fun fetchUnifiedAutocomplete(
+        sourceScope: SearchSourceScope,
+        selectedScope: FacetedSearchScope,
+        input: String,
+        prefix: String,
+    ): SearchAutocompleteResult {
+        val enabled = effectiveEnabledSources(sourceScope)
+        val fetched = enabled.flatMap { source -> fetchUnifiedSuggestionsForSource(source, prefix) }
+        val candidates = fetched.ifEmpty { enabled.flatMap { tagSuggestionStore.get(it, 120) } }
+        return SearchAutocompleteResult(
+            input = input,
+            selectedScope = selectedScope,
+            autocomplete = rankSuggestionsByPrefix(candidates, prefix, 20),
+        )
+    }
+
+    private suspend fun fetchUnifiedSuggestionsForSource(
+        source: SourceKey,
+        prefix: String,
+    ): List<TagSuggestion> {
+        val adapter = registry.adapterFor(source)
+        val sourcePrefix = autocompletePrefixForSource(source, prefix)
+        if (adapter !is FacetedSearchSourceAdapter) {
+            val suggestions = runCatchingPreservingCancellation {
+                adapter?.autocompleteTags(sourcePrefix, 10).orEmpty()
+            }.getOrDefault(emptyList())
+            if (suggestions.isNotEmpty()) tagSuggestionStore.put(source, suggestions)
+            return suggestions.filter(TagSuggestion::isPortableTagSuggestion)
+        }
+        val all = FacetedSearchScope.All.takeIf { it in adapter.supportedSearchScopes }
+            ?: adapter.supportedSearchScopes.firstOrNull {
+                it.facet == SearchFacet.TAG && it.sourceNamespace in setOf(null, "tag")
+            }
+            ?: return emptyList()
+        val suggestions = try {
+            adapter.autocompleteFaceted(sourcePrefix, all, FACETED_AUTOCOMPLETE_LIMIT)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            emptyList()
+        }
+        if (suggestions.isNotEmpty()) tagSuggestionStore.putFaceted(source, suggestions)
+        return suggestions.filter(FacetedTagSuggestion::isPortableTagSuggestion)
+            .map(FacetedTagSuggestion::toPortableLegacySuggestion)
+    }
+
+    private suspend fun fetchSourceAutocomplete(
+        mode: QueryMode.Source,
+        selectedScope: FacetedSearchScope,
+        input: String,
+        prefix: String,
+        trending: List<TagSuggestion>,
+    ): SearchAutocompleteResult {
+        val adapter = registry.adapterFor(mode.source)
+        if (adapter is FacetedSearchSourceAdapter) {
+            val supported = supportedSearchScopes(mode)
+            val scope = selectedScope.takeIf { it in supported }
+                ?: FacetedSearchScope.All.takeIf { it in supported }
+                ?: return SearchAutocompleteResult(input, selectedScope, UNSUPPORTED_SEARCH_SCOPE_MESSAGE)
+            val fetched = try {
+                adapter.autocompleteFaceted(prefix, scope, FACETED_AUTOCOMPLETE_LIMIT)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                emptyList()
+            }
+            if (fetched.isNotEmpty()) tagSuggestionStore.putFaceted(mode.source, fetched)
+            val candidates = fetched.ifEmpty {
+                tagSuggestionStore.getFaceted(mode.source, FACETED_AUTOCOMPLETE_CACHE_LIMIT, scope)
+            }
+            val ranked = rankFacetedSuggestionsByPrefix(candidates, prefix, FACETED_AUTOCOMPLETE_LIMIT)
+            return SearchAutocompleteResult(
+                input,
+                scope,
+                autocomplete = ranked.map(FacetedTagSuggestion::toLegacySuggestion),
+                facetedAutocomplete = ranked,
+            )
+        }
+        val sourcePrefix = autocompletePrefixForSource(mode.source, prefix)
+        val fetched = runCatchingPreservingCancellation {
+            adapter?.autocompleteTags(sourcePrefix, 20).orEmpty()
+        }.getOrDefault(emptyList())
+        if (fetched.isNotEmpty()) tagSuggestionStore.put(mode.source, fetched)
+        val candidates = fetched.ifEmpty { tagSuggestionStore.get(mode.source, 120).ifEmpty { trending } }
+        return SearchAutocompleteResult(
+            input,
+            selectedScope,
+            autocomplete = rankSuggestionsByPrefix(candidates, prefix, 20),
+        )
+    }
+
+    private suspend fun fetchFeaturedAutocomplete(
+        query: Query,
+        selectedScope: FacetedSearchScope,
+        input: String,
+    ): SearchAutocompleteResult {
+        val mode = query.mode as? QueryMode.Source
         val adapter = mode?.let { registry.adapterFor(it.source) as? FacetedSearchSourceAdapter }
-        val scope = selectedSearchScope.takeIf { candidate ->
-            !candidate.isAll && candidate in supportedSearchScopes
-        }
+        val scope = selectedScope.takeIf { !it.isAll && it in supportedSearchScopes(query.mode) }
         if (mode == null || adapter == null || scope == null) {
-            clearAutocompleteSuggestions()
-            return
+            return SearchAutocompleteResult(input, selectedScope)
         }
         val featured = try {
             adapter.featuredFacetedSuggestions(scope, FACETED_AUTOCOMPLETE_LIMIT)
@@ -936,1052 +521,392 @@ class SearchCoordinator(
         }
         if (featured.isNotEmpty()) tagSuggestionStore.putFaceted(mode.source, featured)
         val suggestions = featured.ifEmpty {
-            tagSuggestionStore.getFaceted(
-                source = mode.source,
-                scope = scope,
-                limit = FACETED_AUTOCOMPLETE_LIMIT,
-            )
+            tagSuggestionStore.getFaceted(mode.source, FACETED_AUTOCOMPLETE_LIMIT, scope)
         }
-        facetedAutocompleteSuggestions = suggestions
-        autocompleteSuggestions = suggestions.map(FacetedTagSuggestion::toLegacySuggestion)
+        return SearchAutocompleteResult(
+            input,
+            scope,
+            autocomplete = suggestions.map(FacetedTagSuggestion::toLegacySuggestion),
+            facetedAutocomplete = suggestions,
+        )
     }
 
-    suspend fun loadTrendingTags(forceRefresh: Boolean = false) {
-        errorMessage = null
-        val now = clock()
-        when (val mode = draftQuery.mode) {
-            QueryMode.Unified -> {
-                val enabled = effectiveEnabledSources()
-                if (enabled.isEmpty()) {
-                    trendingTags = emptyList()
-                    return
-                }
-
-                val cachedBySource = enabled.associateWith { source ->
-                    tagSuggestionStore.get(source, limit = TRENDING_PER_SOURCE_CACHE_LIMIT)
-                }
-                trendingTags = rankTrendingSuggestions(
-                    suggestions = cachedBySource.values.flatten(),
-                    limit = UNIFIED_TRENDING_LIMIT,
-                )
-
-                val sourcesToRefresh = enabled.filter { source ->
-                    shouldRefreshTrending(
-                        source = source,
-                        nowEpochMs = now,
-                        forceRefresh = forceRefresh,
-                        cached = cachedBySource[source].orEmpty(),
-                    )
-                }
-                if (sourcesToRefresh.isEmpty()) {
-                    return
-                }
-
-                var refreshedAny = false
-                sourcesToRefresh.forEach { source ->
-                    val fetched = fetchTrendingForSource(source = source, limit = TRENDING_FETCH_PER_SOURCE_LIMIT)
-                    if (fetched.isNotEmpty()) {
-                        refreshedAny = true
-                    }
-                }
-                if (refreshedAny || trendingTags.isEmpty()) {
-                    val refreshed = enabled.flatMap { source ->
-                        tagSuggestionStore.get(source, limit = TRENDING_PER_SOURCE_CACHE_LIMIT)
-                    }
-                    trendingTags = rankTrendingSuggestions(
-                        suggestions = refreshed,
-                        limit = UNIFIED_TRENDING_LIMIT,
-                    )
-                }
-            }
-
-            is QueryMode.Source -> {
-                val source = mode.source
-                val cached = tagSuggestionStore.get(source, limit = SOURCE_TRENDING_LIMIT)
-                trendingTags = rankTrendingSuggestions(cached, limit = SOURCE_TRENDING_LIMIT)
-
-                if (!shouldRefreshTrending(source, now, forceRefresh, cached)) {
-                    return
-                }
-
-                val fetched = fetchTrendingForSource(source = source, limit = SOURCE_TRENDING_LIMIT)
-                if (fetched.isNotEmpty() || trendingTags.isEmpty()) {
-                    val refreshed = tagSuggestionStore.get(source, limit = SOURCE_TRENDING_LIMIT)
-                    trendingTags = rankTrendingSuggestions(refreshed, limit = SOURCE_TRENDING_LIMIT)
-                }
-            }
-        }
-    }
-
-    private fun shouldRefreshTrending(
-        source: SourceKey,
-        nowEpochMs: Long,
-        forceRefresh: Boolean,
-        cached: List<TagSuggestion>,
-    ): Boolean {
-        if (forceRefresh) return true
-        if (cached.isEmpty()) return true
-        val lastRefresh = lastTrendingRefreshAtBySource[source] ?: return true
-        return nowEpochMs - lastRefresh >= TRENDING_REFRESH_INTERVAL_MS
-    }
-
-    private suspend fun fetchTrendingForSource(source: SourceKey, limit: Int): List<TagSuggestion> {
-        val fetched = runCatchingPreservingCancellation {
-            registry.adapterFor(source)?.trendingTags(limit = limit).orEmpty()
-        }.getOrDefault(emptyList())
-        lastTrendingRefreshAtBySource[source] = clock()
-        if (fetched.isNotEmpty()) {
-            tagSuggestionStore.put(source, fetched)
-        }
-        return fetched
-    }
-
-    private fun rankTrendingSuggestions(
-        suggestions: List<TagSuggestion>,
-        limit: Int,
+    internal suspend fun fetchTrending(
+        query: Query,
+        sourceScope: SearchSourceScope,
+        forceRefresh: Boolean = false,
     ): List<TagSuggestion> {
-        if (limit <= 0) return emptyList()
-        return suggestions
-            .asSequence()
-            .filter { suggestion -> suggestion.text.isNotBlank() }
-            .distinctBy { suggestion -> normalizeMatchToken(suggestion.text) }
-            .sortedWith(
-                compareByDescending<TagSuggestion> { suggestion -> suggestion.count ?: Int.MIN_VALUE }
-                    .thenBy { suggestion -> suggestion.text.lowercase() }
-            )
-            .take(limit)
-            .toList()
-    }
-
-    suspend fun applyDraft() {
-        val sourceScope = draftSourceScope
-        val sanitized = draftQuery.forMode(sourceScope.queryMode())
-        val request = beginRootSearch(sanitized.query, sourceScope)
-        publishIfCurrent(request) {
-            draftQuery = request.query
-            appliedQuery = request.query
-            draftSourceScope = request.sourceScope
-            appliedSourceScope = request.sourceScope
-            if (request.sourceScope !is SearchSourceScope.Temporary) {
-                appliedByMode[modeKey(request.query.mode)] = request.query
+        val now = clock()
+        return when (val mode = query.mode) {
+            QueryMode.Unified -> {
+                val enabled = effectiveEnabledSources(sourceScope)
+                if (enabled.isEmpty()) return emptyList()
+                val cached = enabled.associateWith { tagSuggestionStore.get(it, TRENDING_PER_SOURCE_CACHE_LIMIT) }
+                enabled.filter {
+                    shouldRefreshTrending(it, now, forceRefresh, cached[it].orEmpty())
+                }.forEach { fetchTrendingForSource(it, TRENDING_FETCH_PER_SOURCE_LIMIT) }
+                rankTrendingSuggestions(
+                    enabled.flatMap { tagSuggestionStore.get(it, TRENDING_PER_SOURCE_CACHE_LIMIT) },
+                    UNIFIED_TRENDING_LIMIT,
+                )
             }
-            if (sanitized.removedSourceOwnedTerms) {
-                tagInputValidationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
-            }
-        }
-        runRootSearch(request, shouldPersistAppliedQuery = true)
-    }
-
-    suspend fun applyHistoricalQuery(query: Query): Boolean {
-        if (!isModeAvailable(query.mode)) return false
-        val sanitized = query.forMode(query.mode)
-        draftQuery = sanitized.query
-        draftSourceScope = SearchSourceScope.fromQuery(sanitized.query)
-        resetUnsupportedSearchScope()
-        clearTagInputUiState()
-        if (sanitized.removedSourceOwnedTerms) {
-            tagInputValidationMessage = UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE
-        }
-        applyDraft()
-        return true
-    }
-
-    suspend fun retry() {
-        runRootSearch(
-            request = beginRootSearch(appliedQuery, appliedSourceScope),
-            shouldPersistAppliedQuery = false,
-        )
-    }
-
-    suspend fun restoreLastAppliedSearchIfNeeded() {
-        if (!hasExecutedSearch) return
-        if (hasPendingChanges) return
-        if (results.isNotEmpty()) return
-        runRootSearch(
-            request = beginRootSearch(appliedQuery, appliedSourceScope),
-            shouldPersistAppliedQuery = false,
-        )
-    }
-
-    suspend fun loadNextPage() {
-        val loadRequest = beginLoadMore() ?: return
-        val request = loadRequest.root
-        try {
-            when (val mode = request.query.mode) {
-                QueryMode.Unified -> {
-                    val enabledSources = request.enabledSources
-                    val disabledStatuses = excludedStatuses(request)
-                    if (enabledSources.isEmpty()) {
-                        publishIfCurrent(request) {
-                            canLoadMore = false
-                            statuses = disabledStatuses
-                        }
-                        return
-                    }
-
-                    val pageableSources = enabledSources.filterTo(mutableSetOf()) { source ->
-                        !loadRequest.unifiedPageTokens[source].isNullOrBlank()
-                    }
-                    if (pageableSources.isEmpty()) {
-                        publishIfCurrent(request) { canLoadMore = false }
-                        return
-                    }
-
-                    val result = registry.unifiedOrchestrator().search(
-                        query = request.query,
-                        enabledSources = pageableSources,
-                        pageTokens = loadRequest.unifiedPageTokens.filterKeys { it in pageableSources },
-                        weights = SourceWeightNormalization.normalize(
-                            sources = pageableSources,
-                            weightsBySource = request.weights,
-                        ),
-                        queryOverridesBySource = loadRequest.unifiedQueryOverrides.filterKeys { it in pageableSources },
-                    )
-                    ensureCurrent(request)
-                    publishIfCurrent(request) {
-                        results = mergeResults(loadRequest.results, result.items)
-                        rememberSeenTags(result.items)
-                        statuses = (result.statuses + disabledStatuses)
-                            .distinctBy { it.source }
-                            .sortedBy { it.source.name }
-                        unifiedNextPageTokens = loadRequest.unifiedPageTokens.toMutableMap().apply {
-                            putAll(result.nextPageTokens)
-                        }
-                        canLoadMore = unifiedNextPageTokens.values.any { !it.isNullOrBlank() }
-                        maybeHandlePixivUnknownFailure()
-                    }
+            is QueryMode.Source -> {
+                val cached = tagSuggestionStore.get(mode.source, SOURCE_TRENDING_LIMIT)
+                if (shouldRefreshTrending(mode.source, now, forceRefresh, cached)) {
+                    fetchTrendingForSource(mode.source, SOURCE_TRENDING_LIMIT)
                 }
+                rankTrendingSuggestions(
+                    tagSuggestionStore.get(mode.source, SOURCE_TRENDING_LIMIT),
+                    SOURCE_TRENDING_LIMIT,
+                )
+            }
+        }
+    }
 
-                is QueryMode.Source -> {
-                    val token = loadRequest.sourcePageToken
-                    if (token.isNullOrBlank()) {
-                        publishIfCurrent(request) { canLoadMore = false }
-                        return
-                    }
-                    val adapter = requireNotNull(registry.adapterFor(mode.source)) {
-                        "No adapter for ${mode.source}"
-                    }
-                    val page = adapter.search(request.query, pageToken = token)
-                    ensureCurrent(request)
-                    publishIfCurrent(request) {
-                        results = mergeResults(loadRequest.results, page.items)
-                        rememberSeenTags(page.items)
-                        statuses = listOf(SourceRunStatus(mode.source, state = SourceRunState.SUCCESS))
-                        sourceNextPageToken = page.nextPageToken
-                        canLoadMore = !sourceNextPageToken.isNullOrBlank()
-                    }
+    internal fun tagVideoCount(
+        source: SourceKey,
+        tag: String,
+        autocomplete: List<TagSuggestion>,
+        trending: List<TagSuggestion>,
+    ): Int? {
+        val normalized = tag.trim()
+        if (normalized.isBlank()) return null
+        return tagSuggestionStore.get(source, TAG_LOOKUP_LIMIT)
+            .firstOrNull { sourceTagsMatch(source, it.text, normalized) }?.count
+            ?: autocomplete.firstOrNull { sourceTagsMatch(source, it.text, normalized) }?.count
+            ?: trending.firstOrNull { sourceTagsMatch(source, it.text, normalized) }?.count
+    }
+
+    fun tagVideoCount(source: SourceKey, tag: String): Int? {
+        return tagVideoCount(source, tag, emptyList(), emptyList())
+    }
+
+    internal suspend fun fetchTagVideoCounts(
+        source: SourceKey,
+        tags: List<String>,
+        autocomplete: List<TagSuggestion>,
+        trending: List<TagSuggestion>,
+    ): Map<String, Int?> {
+        val requested = tags.map(String::trim).filter(String::isNotBlank).distinct()
+        if (requested.isEmpty()) return emptyMap()
+        val resolved = requested.associateWith {
+            tagVideoCount(source, it, autocomplete, trending)
+        }.toMutableMap()
+        var missing = requested.filter { resolved[it] == null }
+        val adapter = registry.adapterFor(source) ?: return resolved
+        if (adapter is TagCountLookupSourceAdapter && missing.isNotEmpty()) {
+            val counts = runCatchingPreservingCancellation {
+                adapter.fetchTagCounts(missing.map { autocompletePrefixForSource(source, it) })
+            }.getOrDefault(emptyMap())
+            if (counts.isNotEmpty()) {
+                tagSuggestionStore.put(source, counts.map { (text, count) ->
+                    TagSuggestion(text, "tag_count_lookup", count)
+                })
+                missing.forEach { tag ->
+                    counts.entries.firstOrNull { sourceTagsMatch(source, it.key, tag) }
+                        ?.value?.let { resolved[tag] = it }
                 }
             }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Throwable) {
-            publishIfCurrent(request) {
-                errorMessage = if (isPixivUnknownError(error, request.query)) {
-                    PIXIV_UNKNOWN_RETRY_MESSAGE
-                } else {
-                    error.message ?: "Could not load more results"
-                }
-                canLoadMore = false
-            }
-        } finally {
-            finishLoadMore(loadRequest)
+            missing = requested.filter { resolved[it] == null }
+        }
+        missing.forEach { tag ->
+            val fetched = runCatchingPreservingCancellation {
+                adapter.autocompleteTags(autocompletePrefixForSource(source, tag), TAG_FETCH_LIMIT)
+            }.getOrDefault(emptyList())
+            if (fetched.isNotEmpty()) tagSuggestionStore.put(source, fetched)
+            val count = fetched.firstOrNull { sourceTagsMatch(source, it.text, tag) }?.count
+                ?: tagVideoCount(source, tag, autocomplete, trending)
+            if (count != null) resolved[tag] = count
+        }
+        return resolved
+    }
+
+    suspend fun fetchTagVideoCounts(source: SourceKey, tags: List<String>): Map<String, Int?> {
+        return fetchTagVideoCounts(source, tags, emptyList(), emptyList())
+    }
+
+    suspend fun resolveNhentaiGalleryById(galleryId: String): Post? {
+        val id = galleryId.trim().takeIf { it.isNotBlank() && it.all(Char::isDigit) } ?: return null
+        return registry.adapterFor(SourceKey.NHENTAI)
+            ?.resolvePost(PostId(SourceKey.NHENTAI, id))
+    }
+
+    internal suspend fun resolvePostForSearch(postId: PostId, executionKey: String): Post? {
+        resolvedPostsByExecution[executionKey]?.get(postId)?.let { return it }
+        if (shouldDeferResolve(postId, executionKey)) return null
+        val adapter = registry.adapterFor(postId.source) ?: return null
+        return try {
+            val resolved = adapter.resolvePost(postId) ?: return null
+            rememberResolvedPost(resolved, executionKey)
+            resolved
+        } catch (error: SourceAdapterException) {
+            if (error.reason != SourceFailureReason.RATE_LIMITED) throw error
+            rememberResolveFailure(postId, error.reason, executionKey)
+            null
         }
     }
 
-    suspend fun persistSearchScrollState(
-        index: Int,
-        offsetPx: Int,
-        queryHash: String = appliedQueryHash,
-    ) {
-        if (isAppliedTemporarySourceScope) return
-        val state = SearchScrollState(
-            firstVisibleItemIndex = index,
-            firstVisibleItemOffsetPx = offsetPx,
-        )
-        withContext(NonCancellable) {
-            scrollPersistenceMutex.withLock {
-                if (persistedScrollStateByQuery[queryHash] == state) return@withLock
-                uiRestoreRepository.setSearchScrollState(queryHash = queryHash, state = state)
-                queryRepository.upsertScrollOffset(queryHash, offsetPx)
-                persistedScrollStateByQuery[queryHash] = state
-            }
-        }
-    }
-
-    suspend fun restoreSearchScrollState(): SearchScrollState? {
-        if (isAppliedTemporarySourceScope) return null
-        val hash = appliedQueryHash
-        val restored = uiRestoreRepository.getSearchScrollState(hash)
-            ?: queryRepository.getScrollOffset(hash)?.let { offset ->
-                SearchScrollState(firstVisibleItemIndex = 0, firstVisibleItemOffsetPx = offset)
-            }
-        if (restored != null) {
-            scrollPersistenceMutex.withLock {
-                persistedScrollStateByQuery[hash] = restored
-            }
-        }
-        return restored
-    }
-
-    fun buildViewerLaunchContext(
-        startIndex: Int,
-        scrollOffsetHint: Int,
-    ): ViewerLaunchContext {
-        return ViewerLaunchContext(
-            queryHash = appliedQueryHash,
-            startIndex = startIndex,
-            streamSource = ViewerStreamSource.SEARCH,
-            scrollOffsetHint = scrollOffsetHint,
-        )
+    suspend fun recoverPostMedia(post: Post, failedMedia: ImageRef): Post? {
+        return recoverRemoteMedia(registry, post, failedMedia)
     }
 
     suspend fun setViewerLaunchContext(context: ViewerLaunchContext?) {
         uiRestoreRepository.setViewerLaunchContext(context)
     }
 
-    fun displayResults(): List<Post> {
-        return results.map(::displayPost)
-    }
-
-    fun displayPost(post: Post): Post {
-        return resolvedPostOverridesByQueryHash[appliedQueryHash]?.get(post.id) ?: post
-    }
-
-    suspend fun resolvePost(postId: PostId): Post? {
-        val adapter = registry.adapterFor(postId.source) ?: return null
-        return adapter.resolvePost(postId)
-    }
-
-    suspend fun recoverPostMedia(post: Post, failedMedia: ImageRef): Post? {
-        val recovered = recoverRemoteMedia(registry, post, failedMedia) ?: return null
-        rememberResolvedPost(recovered)
-        return recovered
-    }
-
-    suspend fun resolvePostForSearch(postId: PostId): Post? {
-        val existing = resolvedPostOverridesByQueryHash[appliedQueryHash]?.get(postId)
-        if (existing != null) return existing
-        if (shouldDeferResolve(postId)) return null
-
-        val adapter = registry.adapterFor(postId.source) ?: return null
-        return try {
-            val resolved = adapter.resolvePost(postId) ?: return null
-            rememberResolvedPost(resolved)
-            resolved
-        } catch (error: SourceAdapterException) {
-            if (error.reason == SourceFailureReason.RATE_LIMITED) {
-                rememberResolveFailure(postId, error.reason)
-                null
-            } else {
-                throw error
-            }
-        }
-    }
-
-    fun rememberResolvedPost(post: Post) {
-        val queryHash = appliedQueryHash
-        val bucket = resolvedPostOverridesByQueryHash.getOrPut(queryHash) { linkedMapOf() }
-        bucket.remove(post.id)
-        bucket[post.id] = post
-        trimResolvedOverrides(bucket)
-        recentResolveFailuresByQueryHash[queryHash]?.remove(post.id)
-        displayResultsVersion += 1
-    }
-
-    fun shouldDeferResolve(postId: PostId): Boolean {
-        val now = clock()
-        val record = recentResolveFailuresByQueryHash[appliedQueryHash]?.get(postId) ?: return false
-        return record.reason == SourceFailureReason.RATE_LIMITED && now < record.backoffUntilMs
-    }
-
-    private suspend fun beginRootSearch(
-        query: Query,
-        sourceScope: SearchSourceScope = SearchSourceScope.fromQuery(query),
-    ): RootSearchRequest {
-        val context = currentCoroutineContext()
-        context.ensureActive()
-        val ownerJob = context[Job]
-        val start = synchronized(searchGenerationLock) {
-            nextSearchGeneration += 1L
-            val enabledSources = effectiveEnabledSources(sourceScope)
-            val request = RootSearchRequest(
-                generation = nextSearchGeneration,
-                query = query,
-                queryHash = executionKey(query, sourceScope),
-                sourceScope = sourceScope,
-                enabledSources = enabledSources,
-                availableSources = availableSources,
-                weights = effectiveWeights(enabledSources),
-                previousResults = results,
-                previousStatuses = statuses,
-                ownerJob = ownerJob,
-            )
-            val previousRootJob = activeRootSearchJob?.takeIf { job -> job !== ownerJob }
-            val previousLoadMoreJob = activeLoadMoreJob?.takeIf { job -> job !== ownerJob }
-            activeRootSearch = request
-            activeRootSearchJob = ownerJob
-            activeLoadMoreJob = null
-            Triple(request, previousRootJob, previousLoadMoreJob)
-        }
-        val request = start.first
-        val previousRootJob = start.second
-        val previousLoadMoreJob = start.third
-        previousRootJob?.cancel(CancellationException("Search superseded by generation ${request.generation}"))
-        previousLoadMoreJob?.cancel(CancellationException("Search page superseded by generation ${request.generation}"))
-        return request
-    }
-
-    private suspend fun runRootSearch(
-        request: RootSearchRequest,
-        shouldPersistAppliedQuery: Boolean,
+    suspend fun persistSearchScrollState(
+        index: Int,
+        offsetPx: Int,
+        queryHash: String,
     ) {
-        var didStartExecution = false
-        try {
-            if (shouldPersistAppliedQuery) {
-                persistAppliedQuery(request)
-            }
-            ensureCurrent(request)
-            didStartExecution = true
-            executeSearch(request)
-        } finally {
-            finishRootSearch(request, didStartExecution)
-        }
-    }
-
-    private suspend fun persistAppliedQuery(request: RootSearchRequest) {
-        if (request.sourceScope is SearchSourceScope.Temporary) return
-        appliedPersistenceMutex.withLock {
-            ensureCurrent(request)
-            queryRepository.upsertAppliedQuery(modeKey(request.query.mode), request.query)
-            ensureCurrent(request)
-            queryRepository.upsertAppliedQuery(LAST_ACTIVE_QUERY_KEY, request.query)
-            ensureCurrent(request)
-            uiRestoreRepository.setSearchScrollState(
-                queryHash = request.queryHash,
-                state = SearchScrollState(
-                    firstVisibleItemIndex = 0,
-                    firstVisibleItemOffsetPx = 0,
-                ),
-            )
-            ensureCurrent(request)
-            queryRepository.upsertScrollOffset(request.queryHash, 0)
-            ensureCurrent(request)
-            recentsRepository.recordSearch(request.query, request.queryHash)
-            ensureCurrent(request)
-        }
-    }
-
-    private suspend fun beginLoadMore(): LoadMoreRequest? {
-        val context = currentCoroutineContext()
-        context.ensureActive()
-        val ownerJob = context[Job]
-        return synchronized(searchGenerationLock) {
-            val root = activeRootSearch ?: return@synchronized null
-            if (loading || loadingMore || !canLoadMore) return@synchronized null
-            activeLoadMoreJob = ownerJob
-            loadingMore = true
-            errorMessage = null
-            LoadMoreRequest(
-                root = root,
-                results = results,
-                unifiedPageTokens = unifiedNextPageTokens,
-                unifiedQueryOverrides = unifiedQueryOverrides,
-                sourcePageToken = sourceNextPageToken,
-                ownerJob = ownerJob,
-            )
-        }
-    }
-
-    private fun finishRootSearch(request: RootSearchRequest, didStartExecution: Boolean) {
-        publishIfCurrent(request) {
-            if (didStartExecution) {
-                hasExecutedSearch = true
-            }
-            loading = false
-            if (activeRootSearchJob === request.ownerJob) {
-                activeRootSearchJob = null
+        val state = SearchScrollState(index.coerceAtLeast(0), offsetPx.coerceAtLeast(0))
+        withContext(NonCancellable) {
+            scrollPersistenceMutex.withLock {
+                if (persistedScrollStateByQuery[queryHash] == state) return@withLock
+                uiRestoreRepository.setSearchScrollState(queryHash, state)
+                persistedScrollStateByQuery[queryHash] = state
             }
         }
     }
 
-    private fun finishLoadMore(loadRequest: LoadMoreRequest) {
-        publishIfCurrent(loadRequest.root) {
-            if (activeLoadMoreJob === loadRequest.ownerJob) {
-                loadingMore = false
-                activeLoadMoreJob = null
-            }
+    internal suspend fun restoreSearchScrollState(
+        queryHash: String,
+        sourceScope: SearchSourceScope,
+    ): SearchScrollState? {
+        if (sourceScope is SearchSourceScope.Temporary) return null
+        val restored = uiRestoreRepository.getSearchScrollState(queryHash)
+        if (restored != null) scrollPersistenceMutex.withLock {
+            persistedScrollStateByQuery[queryHash] = restored
         }
-    }
-
-    private suspend fun ensureCurrent(request: RootSearchRequest) {
-        currentCoroutineContext().ensureActive()
-        if (!isCurrent(request)) {
-            throw CancellationException("Search generation ${request.generation} was superseded")
-        }
-    }
-
-    private fun isCurrent(request: RootSearchRequest): Boolean {
-        return synchronized(searchGenerationLock) {
-            activeRootSearch?.generation == request.generation
-        }
-    }
-
-    private inline fun publishIfCurrent(
-        request: RootSearchRequest,
-        publication: () -> Unit,
-    ): Boolean {
-        return synchronized(searchGenerationLock) {
-            if (activeRootSearch?.generation != request.generation) {
-                false
-            } else {
-                publication()
-                true
-            }
-        }
-    }
-
-    private suspend fun executeSearch(request: RootSearchRequest) {
-        ensureCurrent(request)
-        publishIfCurrent(request) {
-            loading = true
-            loadingMore = false
-            canLoadMore = false
-            unifiedNextPageTokens = emptyMap()
-            unifiedQueryOverrides = emptyMap()
-            sourceNextPageToken = null
-            errorMessage = null
-            statuses = emptyList()
-        }
-        try {
-            when (val mode = request.query.mode) {
-                QueryMode.Unified -> {
-                    val enabledSources = request.enabledSources
-                    val disabledStatuses = excludedStatuses(request)
-                    if (enabledSources.isEmpty()) {
-                        publishIfCurrent(request) {
-                            results = emptyList()
-                            statuses = disabledStatuses
-                        }
-                        return
-                    }
-
-                    val queryOverrides = buildUnifiedQueryOverrides(request)
-                    ensureCurrent(request)
-                    val result = registry.unifiedOrchestrator().search(
-                        query = request.query,
-                        enabledSources = enabledSources,
-                        pageTokens = emptyMap(),
-                        weights = request.weights,
-                        queryOverridesBySource = queryOverrides,
-                    )
-                    ensureCurrent(request)
-                    publishIfCurrent(request) {
-                        results = result.items
-                        rememberSeenTags(result.items)
-                        statuses = (result.statuses + disabledStatuses)
-                            .distinctBy { it.source }
-                            .sortedBy { it.source.name }
-                        unifiedQueryOverrides = queryOverrides
-                        unifiedNextPageTokens = result.nextPageTokens
-                        canLoadMore = unifiedNextPageTokens.values.any { !it.isNullOrBlank() }
-                        maybeHandlePixivUnknownFailure()
-                    }
-                }
-
-                is QueryMode.Source -> {
-                    if (!isModeAvailable(mode)) {
-                        publishIfCurrent(request) {
-                            results = emptyList()
-                            statuses = listOf(
-                                SourceRunStatus(
-                                    source = mode.source,
-                                    state = SourceRunState.EXCLUDED,
-                                    errorMessage = "Source not available in this build",
-                                )
-                            )
-                        }
-                        return
-                    }
-                    val adapter = requireNotNull(registry.adapterFor(mode.source)) {
-                        "No adapter for ${mode.source}"
-                    }
-                    val page = adapter.search(request.query, pageToken = null)
-                    ensureCurrent(request)
-                    publishIfCurrent(request) {
-                        results = page.items
-                        rememberSeenTags(page.items)
-                        statuses = listOf(SourceRunStatus(mode.source, state = SourceRunState.SUCCESS))
-                        sourceNextPageToken = page.nextPageToken
-                        canLoadMore = !sourceNextPageToken.isNullOrBlank()
-                    }
-                }
-            }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Throwable) {
-            publishIfCurrent(request) {
-                if (isPixivUnknownError(error, request.query)) {
-                    clearSearchResultsForRetry()
-                    errorMessage = PIXIV_UNKNOWN_RETRY_MESSAGE
-                } else {
-                    results = request.previousResults
-                    statuses = request.previousStatuses
-                    errorMessage = error.message ?: "Unknown error"
-                    canLoadMore = false
-                }
-            }
-        }
-    }
-
-    private fun maybeHandlePixivUnknownFailure() {
-        if (results.isNotEmpty()) return
-        val hasPixivUnknownFailure = statuses.any { status ->
-            status.source == SourceKey.PIXIV &&
-                status.state == SourceRunState.FAILED &&
-                (
-                    status.failureReason == SourceFailureReason.UNKNOWN ||
-                        status.errorMessage?.contains("PIXIV_UNKNOWN", ignoreCase = true) == true
-                    )
-        }
-        if (hasPixivUnknownFailure) {
-            clearSearchResultsForRetry()
-            errorMessage = PIXIV_UNKNOWN_RETRY_MESSAGE
-        }
-    }
-
-    private fun clearSearchResultsForRetry() {
-        results = emptyList()
-        canLoadMore = false
-        unifiedNextPageTokens = emptyMap()
-        unifiedQueryOverrides = emptyMap()
-        sourceNextPageToken = null
+        return restored
     }
 
     private suspend fun buildUnifiedQueryOverrides(
-        request: RootSearchRequest,
+        query: Query,
+        enabledSources: Set<SourceKey>,
     ): Map<SourceKey, Query> {
-        val query = request.query
-        val enabledSources = request.enabledSources
         if (query.mode != QueryMode.Unified) return emptyMap()
+        val include = query.includeTerms.filter(SearchTerm::isPortableGeneralTag)
+        val exclude = query.excludeTerms.filter(SearchTerm::isPortableGeneralTag)
         val overrides = mutableMapOf<SourceKey, Query>()
-        val portableIncludeTerms = query.includeTerms.filter(SearchTerm::isPortableGeneralTag)
-        val portableExcludeTerms = query.excludeTerms.filter(SearchTerm::isPortableGeneralTag)
-
-        if (SourceKey.GELBOORU in enabledSources) {
-            val gelbooruAdapter = registry.adapterFor(SourceKey.GELBOORU)
-            if (gelbooruAdapter != null) {
-                val includeTags = resolveGelbooruCompatibilityTags(
-                    request,
-                    gelbooruAdapter,
-                    portableIncludeTerms.map(SearchTerm::value),
-                )
-                val excludeTags = resolveGelbooruCompatibilityTags(
-                    request,
-                    gelbooruAdapter,
-                    portableExcludeTerms.map(SearchTerm::value),
-                )
+        registry.adapterFor(SourceKey.GELBOORU)?.takeIf { SourceKey.GELBOORU in enabledSources }
+            ?.let { adapter ->
                 overrides[SourceKey.GELBOORU] = query.copy(
-                    includeTerms = includeTags.map { value -> SearchTerm(value = value) },
-                    excludeTerms = excludeTags.map { value -> SearchTerm(value = value) },
+                    includeTerms = resolveGelbooruCompatibilityTags(adapter, include.map(SearchTerm::value))
+                        .map(::SearchTerm),
+                    excludeTerms = resolveGelbooruCompatibilityTags(adapter, exclude.map(SearchTerm::value))
+                        .map(::SearchTerm),
                 )
             }
-        }
-
         if (SourceKey.PIXIV in enabledSources) {
             overrides[SourceKey.PIXIV] = query.copy(
-                includeTerms = resolvePixivCompatibilityTags(portableIncludeTerms.map(SearchTerm::value))
-                    .map { value -> SearchTerm(value = value) },
-                excludeTerms = resolvePixivCompatibilityTags(portableExcludeTerms.map(SearchTerm::value))
-                    .map { value -> SearchTerm(value = value) },
+                includeTerms = resolvePixivCompatibilityTags(include.map(SearchTerm::value)).map(::SearchTerm),
+                excludeTerms = resolvePixivCompatibilityTags(exclude.map(SearchTerm::value)).map(::SearchTerm),
             )
         }
-
         return overrides
     }
 
     private suspend fun resolveGelbooruCompatibilityTags(
-        request: RootSearchRequest,
         adapter: SourceAdapter,
         tags: List<String>,
     ): List<String> {
-        if (tags.isEmpty()) return emptyList()
-
         val cache = mutableMapOf<String, String>()
         val resolved = mutableListOf<String>()
         tags.forEach { raw ->
+            currentCoroutineContext().ensureActive()
             val normalized = raw.trim()
             if (normalized.isBlank()) return@forEach
-            val key = normalized.lowercase()
-            val mapped = cache.getOrPut(key) {
-                val sourcePrefix = autocompletePrefixForSource(SourceKey.GELBOORU, normalized)
+            val mapped = cache.getOrPut(normalized.lowercase()) {
                 val suggestions = runCatchingPreservingCancellation {
-                    adapter.autocompleteTags(prefix = sourcePrefix, limit = 1)
+                    adapter.autocompleteTags(autocompletePrefixForSource(SourceKey.GELBOORU, normalized), 1)
                 }.getOrDefault(emptyList())
-                ensureCurrent(request)
-                if (suggestions.isNotEmpty()) {
-                    tagSuggestionStore.put(SourceKey.GELBOORU, suggestions)
-                }
+                if (suggestions.isNotEmpty()) tagSuggestionStore.put(SourceKey.GELBOORU, suggestions)
                 suggestions.firstOrNull()?.text?.trim().takeUnless { it.isNullOrBlank() } ?: normalized
             }
-            if (mapped !in resolved) {
-                resolved += mapped
-            }
+            if (mapped !in resolved) resolved += mapped
         }
         return resolved
     }
 
     private fun resolvePixivCompatibilityTags(tags: List<String>): List<String> {
-        if (tags.isEmpty()) return emptyList()
-
-        val resolved = mutableListOf<String>()
         val seen = mutableSetOf<String>()
-        tags.forEach { raw ->
-            val mapped = normalizePixivCompatibilityToken(raw)
-            if (mapped.isBlank()) return@forEach
-
-            val dedupeKey = normalizeMatchToken(mapped)
-            if (seen.add(dedupeKey)) {
-                resolved += mapped
+        return tags.mapNotNull { raw ->
+            var value = raw.trim().removePrefix("-").replace('_', ' ')
+                .replace(WHITESPACE_REGEX, " ").trim()
+            while (value.isNotBlank() && PIXIV_TRAILING_PARENTHESIS_REGEX.containsMatchIn(value)) {
+                value = value.replace(PIXIV_TRAILING_PARENTHESIS_REGEX, "").trim()
             }
+            value.takeIf { it.isNotBlank() && seen.add(normalizeMatchToken(it)) }
         }
-        return resolved
-    }
-
-    private fun normalizePixivCompatibilityToken(raw: String): String {
-        var normalized = raw
-            .trim()
-            .removePrefix("-")
-            .replace('_', ' ')
-            .replace(WHITESPACE_REGEX, " ")
-            .trim()
-        while (normalized.isNotBlank() && PIXIV_TRAILING_PARENTHESIS_REGEX.containsMatchIn(normalized)) {
-            normalized = normalized.replace(PIXIV_TRAILING_PARENTHESIS_REGEX, "").trim()
-        }
-        return normalized
-    }
-
-    private fun isPixivUnknownError(error: Throwable, query: Query = appliedQuery): Boolean {
-        if (error is SourceAdapterException && error.reason == SourceFailureReason.UNKNOWN) {
-            return when (val mode = query.mode) {
-                QueryMode.Unified -> true
-                is QueryMode.Source -> mode.source == SourceKey.PIXIV
-            }
-        }
-        return error.message
-            .orEmpty()
-            .contains("PIXIV_UNKNOWN", ignoreCase = true)
-    }
-
-    private fun mergeResults(
-        current: List<Post>,
-        next: List<Post>,
-    ): List<Post> {
-        if (next.isEmpty()) return current
-        if (current.isEmpty()) return next
-
-        val seen = current
-            .mapTo(mutableSetOf()) { "${it.id.source.name}:${it.id.sourcePostId}" }
-        val merged = current.toMutableList()
-        next.forEach { post ->
-            val key = "${post.id.source.name}:${post.id.sourcePostId}"
-            if (seen.add(key)) {
-                merged += post
-            }
-        }
-        return merged
     }
 
     private fun rememberSeenTags(posts: List<Post>) {
-        if (posts.isEmpty()) return
-
-        posts
-            .groupBy { post -> post.id.source }
-            .forEach { (source, sourcePosts) ->
-                val seenSuggestions = sourcePosts
-                    .asSequence()
-                    .flatMap { post ->
-                        recommendationTaxonomyFor(post)
-                            .asSequence()
-                            .map { term ->
-                                FacetedTagSuggestion(
-                                    text = normalizeStoredTagForSource(source, term.value),
-                                    facet = SearchFacet.TAG,
-                                    sourceNamespace = term.sourceNamespace,
-                                    count = null,
-                                )
-                            }
-                    }
-                    .filter { suggestion -> suggestion.text.isNotBlank() }
-                    .distinctBy { suggestion ->
-                        Triple(
-                            suggestion.facet,
-                            suggestion.sourceNamespace,
-                            sourceTagKey(source, suggestion.text),
-                        )
-                    }
-                    .take(SEEN_TAGS_PER_SOURCE_INGEST_LIMIT)
-                    .toList()
-                if (seenSuggestions.isNotEmpty()) {
-                    tagSuggestionStore.putFaceted(source, seenSuggestions)
+        posts.groupBy { it.id.source }.forEach { (source, sourcePosts) ->
+            val suggestions = sourcePosts.asSequence()
+                .flatMap { post -> recommendationTaxonomyFor(post).asSequence() }
+                .map { term ->
+                    FacetedTagSuggestion(
+                        text = normalizeFavoriteTagForStorage(source, term.value),
+                        facet = SearchFacet.TAG,
+                        sourceNamespace = term.sourceNamespace,
+                    )
                 }
-            }
-    }
-
-    private fun modeKey(mode: QueryMode): String {
-        return when (mode) {
-            QueryMode.Unified -> "unified"
-            is QueryMode.Source -> "source:${mode.source.name}"
+                .filter { it.text.isNotBlank() }
+                .distinctBy { Triple(it.facet, it.sourceNamespace, sourceTagKey(source, it.text)) }
+                .take(SEEN_TAGS_PER_SOURCE_INGEST_LIMIT)
+                .toList()
+            if (suggestions.isNotEmpty()) tagSuggestionStore.putFaceted(source, suggestions)
         }
     }
 
-    private fun isModeAvailable(mode: QueryMode): Boolean {
-        return when (mode) {
-            QueryMode.Unified -> true
-            is QueryMode.Source -> mode.source in registry.availableSources()
+    private fun rememberResolvedPost(post: Post, executionKey: String) {
+        val bucket = resolvedPostsByExecution.getOrPut(executionKey) { linkedMapOf() }
+        bucket.remove(post.id)
+        bucket[post.id] = post
+        while (bucket.size > MAX_RESOLVED_POST_OVERRIDES_PER_QUERY) {
+            bucket.remove(bucket.entries.firstOrNull()?.key ?: break)
         }
-    }
-
-    private fun effectiveEnabledSources(
-        sourceScope: SearchSourceScope = draftSourceScope,
-    ): Set<SourceKey> {
-        val available = registry.availableSources()
-        return when (sourceScope) {
-            SearchSourceScope.GlobalUnified -> runtimeSettings.runtime.enabledSources.intersect(available)
-            is SearchSourceScope.Single -> setOf(sourceScope.source).intersect(available)
-            is SearchSourceScope.Temporary -> sourceScope.sources.toSet().intersect(available)
+        while (resolvedPostsByExecution.size > MAX_REMEMBERED_QUERY_OVERRIDES) {
+            resolvedPostsByExecution.remove(resolvedPostsByExecution.entries.firstOrNull()?.key ?: break)
         }
+        resolveFailuresByExecution[executionKey]?.remove(post.id)
     }
 
-    private fun reconcileSourceScope(
-        sourceScope: SearchSourceScope,
-        availableSources: Set<SourceKey>,
-    ): SearchSourceScope {
-        return when (sourceScope) {
-            SearchSourceScope.GlobalUnified -> sourceScope
-            is SearchSourceScope.Single -> SearchSourceScope.fromSources(
-                listOf(sourceScope.source).filter { source -> source in availableSources },
-            )
-            is SearchSourceScope.Temporary -> SearchSourceScope.fromSources(
-                sourceScope.sources.filter { source -> source in availableSources },
-            )
-        }
-    }
-
-    private fun excludedStatuses(request: RootSearchRequest): List<SourceRunStatus> {
-        if (request.sourceScope != SearchSourceScope.GlobalUnified) return emptyList()
-        return request.availableSources
-            .filterNot { source -> source in request.enabledSources }
-            .map { source ->
-                SourceRunStatus(
-                    source = source,
-                    state = SourceRunState.EXCLUDED,
-                    errorMessage = "Disabled in settings",
-                )
-            }
-    }
-
-    private fun executionKey(
-        query: Query,
-        sourceScope: SearchSourceScope,
-    ): String {
-        val queryHash = QueryHash.from(query)
-        val temporary = sourceScope as? SearchSourceScope.Temporary ?: return queryHash
-        return "$queryHash|temporary-sources:${temporary.sources.joinToString(",") { source -> source.name }}"
-    }
-
-    private fun rememberResolveFailure(postId: PostId, reason: SourceFailureReason) {
+    private fun rememberResolveFailure(
+        postId: PostId,
+        reason: SourceFailureReason,
+        executionKey: String,
+    ) {
         val now = clock()
-        val queryHash = appliedQueryHash
-        val bucket = recentResolveFailuresByQueryHash.getOrPut(queryHash) { linkedMapOf() }
+        val bucket = resolveFailuresByExecution.getOrPut(executionKey) { linkedMapOf() }
         val previous = bucket[postId]
-        val backoffMs = if (
-            previous != null &&
-            previous.reason == SourceFailureReason.RATE_LIMITED &&
+        val backoff = if (previous?.reason == SourceFailureReason.RATE_LIMITED &&
             reason == SourceFailureReason.RATE_LIMITED &&
             now - previous.lastFailureAtMs <= RATE_LIMIT_REPEAT_WINDOW_MS
-        ) {
-            RATE_LIMIT_BACKOFF_REPEAT_MS
-        } else {
-            RATE_LIMIT_BACKOFF_FIRST_MS
-        }
-        bucket[postId] = ResolveFailureRecord(
-            lastFailureAtMs = now,
-            backoffUntilMs = now + backoffMs,
-            reason = reason,
-        )
-        trimResolveFailures(bucket)
-    }
-
-    private fun trimResolvedOverrides(bucket: LinkedHashMap<PostId, Post>) {
-        val maxEntries = results.size
-            .takeIf { it > 0 }
-            ?.coerceAtMost(MAX_RESOLVED_POST_OVERRIDES_PER_QUERY)
-            ?: MAX_RESOLVED_POST_OVERRIDES_PER_QUERY
-        while (bucket.size > maxEntries) {
-            val eldest = bucket.entries.firstOrNull()?.key ?: break
-            bucket.remove(eldest)
-        }
-        while (resolvedPostOverridesByQueryHash.size > MAX_REMEMBERED_QUERY_OVERRIDES) {
-            val eldestQuery = resolvedPostOverridesByQueryHash.entries.firstOrNull()?.key ?: break
-            resolvedPostOverridesByQueryHash.remove(eldestQuery)
-        }
-    }
-
-    private fun trimResolveFailures(bucket: MutableMap<PostId, ResolveFailureRecord>) {
+        ) RATE_LIMIT_BACKOFF_REPEAT_MS else RATE_LIMIT_BACKOFF_FIRST_MS
+        bucket[postId] = ResolveFailureRecord(now, now + backoff, reason)
         while (bucket.size > MAX_RESOLVED_POST_OVERRIDES_PER_QUERY) {
-            val eldest = bucket.entries.firstOrNull()?.key ?: break
-            bucket.remove(eldest)
+            bucket.remove(bucket.entries.firstOrNull()?.key ?: break)
         }
     }
 
-    private fun requiresGelbooruSuggestionSelection(): Boolean {
-        return draftQuery.mode == QueryMode.Source(SourceKey.GELBOORU)
+    private fun shouldDeferResolve(postId: PostId, executionKey: String): Boolean {
+        val record = resolveFailuresByExecution[executionKey]?.get(postId) ?: return false
+        return record.reason == SourceFailureReason.RATE_LIMITED && clock() < record.backoffUntilMs
     }
 
-    private fun normalizeTypedTag(input: String): String {
-        return parseScopedInput(input).value
-    }
-
-    private fun autocompletePrefixForSource(source: SourceKey, input: String): String {
-        val normalized = normalizeTypedTag(input)
-        return when (source) {
-            SourceKey.GELBOORU, SourceKey.IWARA, SourceKey.RULE34XXX -> normalizeGelbooruToken(normalized)
-            else -> normalized
+    private fun effectiveEnabledSources(scope: SearchSourceScope): Set<SourceKey> {
+        val available = registry.availableSources()
+        return when (scope) {
+            SearchSourceScope.GlobalUnified -> runtimeSettings.runtime.enabledSources.intersect(available)
+            is SearchSourceScope.Single -> setOf(scope.source).intersect(available)
+            is SearchSourceScope.Temporary -> scope.sources.toSet().intersect(available)
         }
     }
 
-    private fun resolveCommittedTagInput(input: String): String {
-        val trimmed = input.trim()
-        val source = (draftQuery.mode as? QueryMode.Source)?.source ?: return trimmed
-        if (registry.adapterFor(source) is FacetedSearchSourceAdapter) return trimmed
-        if (source !in SUGGESTION_CANONICALIZATION_SOURCES) return trimmed
+    private fun effectiveWeights(sources: Set<SourceKey>): Map<SourceKey, Double> =
+        SourceWeightNormalization.normalize(sources, runtimeSettings.runtime.sourceWeights)
 
-        val isExclude = trimmed.startsWith("-")
-        val typedTag = normalizeTypedTag(trimmed)
-        val matched = autocompleteSuggestions
-            .firstOrNull { suggestion -> tagsMatchForSource(source, suggestion.text, typedTag) }
-            ?.text
-            ?.trim()
-            .orEmpty()
-            .ifBlank { typedTag }
-        return if (isExclude) "-$matched" else matched
-    }
-
-    private fun tagsMatchForSource(source: SourceKey, suggestionText: String, typedTag: String): Boolean {
-        return sourceTagsMatch(source, suggestionText, typedTag)
-    }
-
-    private fun normalizeStoredTagForSource(source: SourceKey, value: String): String {
-        return normalizeFavoriteTagForStorage(source, value)
-    }
-
-    private fun isSuggestedTag(tag: String): Boolean {
-        return autocompleteSuggestions.any { suggestion ->
-            tagsMatchForSource(SourceKey.GELBOORU, suggestion.text, tag)
+    private fun excludedStatuses(
+        scope: SearchSourceScope,
+        available: List<SourceKey>,
+        enabled: Set<SourceKey>,
+    ): List<SourceRunStatus> {
+        if (scope != SearchSourceScope.GlobalUnified) return emptyList()
+        return available.filterNot { it in enabled }.map { source ->
+            SourceRunStatus(source, SourceRunState.EXCLUDED, errorMessage = "Disabled in settings")
         }
     }
 
-    private fun canUseParsedScope(input: ParsedScopedInput): Boolean {
-        val prefix = input.explicitScope ?: return true
-        if (draftQuery.mode == QueryMode.Unified) return false
-        val mode = draftQuery.mode as? QueryMode.Source ?: return false
-        if (registry.adapterFor(mode.source) !is FacetedSearchSourceAdapter) return false
-        return resolveSupportedScope(prefix, supportedSearchScopes) != null
-    }
+    private fun mergeStatuses(
+        first: List<SourceRunStatus>,
+        second: List<SourceRunStatus>,
+    ): List<SourceRunStatus> = (first + second).associateBy { it.source }.values.sortedBy { it.source.name }
 
-    private fun resolveInputTerm(input: ParsedScopedInput): SearchTerm? {
-        val explicitScope = input.explicitScope
-        if (explicitScope != null) {
-            if (!canUseParsedScope(input)) {
-                tagInputValidationMessage = when (draftQuery.mode) {
-                    QueryMode.Unified -> UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE
-                    is QueryMode.Source -> UNSUPPORTED_SEARCH_SCOPE_MESSAGE
-                }
-                return null
-            }
-            val resolvedScope = requireNotNull(
-                resolveSupportedScope(explicitScope, supportedSearchScopes),
-            )
-            selectedSearchScope = resolvedScope
-            return SearchTerm(
-                value = input.value,
-                facet = requireNotNull(resolvedScope.facet),
-                sourceNamespace = resolvedScope.sourceNamespace ?: explicitScope.sourceNamespace,
-            )
+    private fun isPixivUnknownFailure(posts: List<Post>, statuses: List<SourceRunStatus>): Boolean =
+        posts.isEmpty() && statuses.any { status ->
+            status.source == SourceKey.PIXIV && status.state == SourceRunState.FAILED &&
+                (status.failureReason == SourceFailureReason.UNKNOWN ||
+                    status.errorMessage?.contains("PIXIV_UNKNOWN", ignoreCase = true) == true)
         }
 
-        val selectedScope = selectedSearchScope
-            .takeIf { scope -> !scope.isAll && scope in supportedSearchScopes }
-        return if (selectedScope == null) {
-            SearchTerm(value = input.value)
-        } else {
-            SearchTerm(
-                value = input.value,
-                facet = requireNotNull(selectedScope.facet),
-                sourceNamespace = selectedScope.sourceNamespace,
-            )
+    private fun isPixivUnknownError(error: Throwable, query: Query): Boolean {
+        if (error is SourceAdapterException && error.reason == SourceFailureReason.UNKNOWN) {
+            return query.mode == QueryMode.Unified || query.mode == QueryMode.Source(SourceKey.PIXIV)
         }
+        return error.message.orEmpty().contains("PIXIV_UNKNOWN", ignoreCase = true)
     }
 
-    private fun canAddTermToMode(term: SearchTerm): Boolean {
-        if (draftQuery.mode != QueryMode.Unified || term.isPortableGeneralTag) return true
-        tagInputValidationMessage = UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE
-        return false
+    private fun executionKey(query: Query, scope: SearchSourceScope): String {
+        val queryHash = QueryHash.from(query)
+        val temporary = scope as? SearchSourceScope.Temporary ?: return queryHash
+        return "$queryHash|temporary-sources:${temporary.sources.joinToString(",") { it.name }}"
     }
 
-    private fun prepareModeForPostTerm(post: Post, term: SearchTerm): Boolean {
-        if (term.isPortableGeneralTag) return true
+    private fun continuation(
+        executionKey: String,
+        query: Query,
+        scope: SearchSourceScope,
+        enabled: Set<SourceKey>,
+        available: List<SourceKey>,
+        weights: Map<SourceKey, Double>,
+        unifiedPageTokens: Map<SourceKey, String?> = emptyMap(),
+        unifiedQueryOverrides: Map<SourceKey, Query> = emptyMap(),
+        sourcePageToken: String? = null,
+    ) = SearchContinuation(
+        executionKey,
+        query,
+        scope,
+        enabled,
+        available,
+        weights,
+        unifiedPageTokens,
+        unifiedQueryOverrides,
+        sourcePageToken,
+    )
 
-        val sourceMode = QueryMode.Source(post.id.source)
-        if (!isModeAvailable(sourceMode)) return false
-        if (draftQuery.mode == sourceMode) return true
-
-        draftQuery = draftQuery.copy(
-            mode = sourceMode,
-            includeTerms = draftQuery.includeTerms.filter(SearchTerm::isPortableGeneralTag),
-            excludeTerms = draftQuery.excludeTerms.filter(SearchTerm::isPortableGeneralTag),
-        )
-        draftSourceScope = SearchSourceScope.Single(post.id.source)
-        resetUnsupportedSearchScope()
-        clearTagInputUiState()
-        return true
+    private fun isModeAvailable(mode: QueryMode): Boolean = when (mode) {
+        QueryMode.Unified -> true
+        is QueryMode.Source -> mode.source in registry.availableSources()
     }
 
-    private fun resetUnsupportedSearchScope() {
-        val scopes = supportedSearchScopes
-        if (selectedSearchScope in scopes) return
-        selectedSearchScope = FacetedSearchScope.All.takeIf { scope -> scope in scopes }
-            ?: FacetedSearchScope.All
-        clearAutocompleteSuggestions()
+    private fun shouldRefreshTrending(
+        source: SourceKey,
+        now: Long,
+        force: Boolean,
+        cached: List<TagSuggestion>,
+    ): Boolean = force || cached.isEmpty() ||
+        lastTrendingRefreshAtBySource[source]?.let { now - it >= TRENDING_REFRESH_INTERVAL_MS } != false
+
+    private suspend fun fetchTrendingForSource(source: SourceKey, limit: Int): List<TagSuggestion> {
+        val fetched = runCatchingPreservingCancellation {
+            registry.adapterFor(source)?.trendingTags(limit).orEmpty()
+        }.getOrDefault(emptyList())
+        lastTrendingRefreshAtBySource[source] = clock()
+        if (fetched.isNotEmpty()) tagSuggestionStore.put(source, fetched)
+        return fetched
     }
 
-    private fun clearTagInputUiState() {
-        clearAutocompleteSuggestions()
-        tagInputValidationMessage = null
-    }
+    private fun rankTrendingSuggestions(suggestions: List<TagSuggestion>, limit: Int): List<TagSuggestion> =
+        suggestions.asSequence().filter { it.text.isNotBlank() }
+            .distinctBy { normalizeMatchToken(it.text) }
+            .sortedWith(compareByDescending<TagSuggestion> { it.count ?: Int.MIN_VALUE }
+                .thenBy { it.text.lowercase() })
+            .take(limit).toList()
 
     private fun rankSuggestionsByPrefix(
         suggestions: List<TagSuggestion>,
         prefix: String,
         limit: Int,
     ): List<TagSuggestion> {
-        val normalizedPrefix = normalizeMatchToken(prefix)
-        if (normalizedPrefix.isBlank() || limit <= 0) return emptyList()
-        return suggestions
-            .asSequence()
-            .filter { suggestion ->
-                normalizeMatchToken(suggestion.text).contains(normalizedPrefix)
-            }
-            .distinctBy { suggestion -> suggestion.text.trim().lowercase() }
-            .sortedWith(
-                compareByDescending<TagSuggestion> { suggestion ->
-                    suggestion.count ?: Int.MIN_VALUE
-                }.thenBy { suggestion ->
-                    !normalizeMatchToken(suggestion.text).startsWith(normalizedPrefix)
-                }.thenBy { suggestion -> suggestion.text.lowercase() }
-            )
-            .take(limit)
-            .toList()
+        val normalized = normalizeMatchToken(prefix)
+        return suggestions.asSequence().filter { normalizeMatchToken(it.text).contains(normalized) }
+            .distinctBy { it.text.trim().lowercase() }
+            .sortedWith(compareByDescending<TagSuggestion> { it.count ?: Int.MIN_VALUE }
+                .thenBy { !normalizeMatchToken(it.text).startsWith(normalized) }
+                .thenBy { it.text.lowercase() })
+            .take(limit).toList()
     }
 
     private fun rankFacetedSuggestionsByPrefix(
@@ -1989,79 +914,75 @@ class SearchCoordinator(
         prefix: String,
         limit: Int,
     ): List<FacetedTagSuggestion> {
-        val normalizedPrefix = normalizeMatchToken(prefix)
-        if (normalizedPrefix.isBlank() || limit <= 0) return emptyList()
-        return suggestions
-            .asSequence()
-            .filter { suggestion ->
-                normalizeMatchToken(suggestion.text).contains(normalizedPrefix)
-            }
-            .distinctBy { suggestion ->
-                FacetedSuggestionIdentity(
-                    facet = suggestion.facet,
-                    sourceNamespace = suggestion.sourceNamespace,
-                    normalizedValue = normalizeMatchToken(suggestion.text),
-                )
-            }
-            .sortedWith(
-                compareByDescending<FacetedTagSuggestion> { suggestion ->
-                    suggestion.count ?: Int.MIN_VALUE
-                }.thenBy { suggestion ->
-                    !normalizeMatchToken(suggestion.text).startsWith(normalizedPrefix)
-                }.thenBy { suggestion -> suggestion.text.lowercase() }
-            )
-            .take(limit)
-            .toList()
+        val normalized = normalizeMatchToken(prefix)
+        return suggestions.asSequence().filter { normalizeMatchToken(it.text).contains(normalized) }
+            .distinctBy { Triple(it.facet, it.sourceNamespace, normalizeMatchToken(it.text)) }
+            .sortedWith(compareByDescending<FacetedTagSuggestion> { it.count ?: Int.MIN_VALUE }
+                .thenBy { !normalizeMatchToken(it.text).startsWith(normalized) }
+                .thenBy { it.text.lowercase() })
+            .take(limit).toList()
     }
 
-    private fun effectiveWeights(enabledSources: Set<SourceKey>): Map<SourceKey, Double> {
-        return SourceWeightNormalization.normalize(
-            sources = enabledSources,
-            weightsBySource = runtimeSettings.runtime.sourceWeights,
-        )
+    private fun autocompletePrefixForSource(source: SourceKey, input: String): String {
+        val normalized = parseScopedInput(input).value
+        return when (source) {
+            SourceKey.GELBOORU, SourceKey.IWARA, SourceKey.RULE34XXX -> normalizeGelbooruToken(normalized)
+            else -> normalized
+        }
     }
-
-    private fun defaultQuery(mode: QueryMode = QueryMode.Unified): Query {
-        return Query(
-            mode = mode,
-            includeTags = emptyList(),
-            excludeTags = emptyList(),
-            sort = SortMode.NEWEST,
-            dateRange = null,
-            minScore = null,
-        )
-    }
-
 }
 
-enum class DateRangePreset {
-    NONE,
-    TODAY,
-    LAST_7_DAYS,
-    LAST_30_DAYS,
+
+private data class SanitizedQuery(val query: Query, val removedSourceOwnedTerms: Boolean)
+private fun Query.sanitizedForMode(mode: QueryMode): SanitizedQuery {
+    if (mode != QueryMode.Unified) return SanitizedQuery(copy(mode = mode), false)
+    val include = includeTerms.filter(SearchTerm::isPortableGeneralTag)
+    val exclude = excludeTerms.filter(SearchTerm::isPortableGeneralTag)
+    return SanitizedQuery(
+        copy(mode = mode, includeTerms = include, excludeTerms = exclude),
+        include.size != includeTerms.size || exclude.size != excludeTerms.size,
+    )
 }
 
-enum class NhentaiLanguageFilter {
-    ANY,
-    ENGLISH,
-    CHINESE,
-    JAPANESE,
-}
+private fun FacetedSearchScope.scopeOrder(): Int =
+    if (sourceNamespace == null || facet == SearchFacet.TAG && sourceNamespace == "tag") 0 else 1
+private fun FacetedTagSuggestion.toLegacySuggestion() =
+    TagSuggestion(text, sourceNamespace ?: facet.name.lowercase(), count)
+private fun FacetedTagSuggestion.isPortableTagSuggestion() =
+    facet == SearchFacet.TAG && sourceNamespace in setOf(null, "tag")
+private fun FacetedTagSuggestion.toPortableLegacySuggestion() = TagSuggestion(text, "tag", count)
+private fun TagSuggestion.isPortableTagSuggestion() = type?.trim()?.lowercase() !in setOf(
+    "artist", "character", "series", "parody", "group", "type", "category", "language", "female", "male",
+)
+private fun defaultQuery(mode: QueryMode = QueryMode.Unified) = Query(
+    mode = mode,
+    includeTerms = emptyList(),
+    excludeTerms = emptyList(),
+    sort = SortMode.NEWEST,
+    dateRange = null,
+    minScore = null,
+)
 
+private data class ResolveFailureRecord(
+    val lastFailureAtMs: Long,
+    val backoffUntilMs: Long,
+    val reason: SourceFailureReason,
+)
+
+private val SEARCH_SCOPE_ORDER = listOf(
+    null, SearchFacet.TAG, SearchFacet.ARTIST, SearchFacet.CHARACTER, SearchFacet.SERIES,
+    SearchFacet.GROUP, SearchFacet.TYPE, SearchFacet.LANGUAGE,
+)
+private val SEARCH_SCOPE_COMPARATOR = compareBy<FacetedSearchScope> {
+    SEARCH_SCOPE_ORDER.indexOf(it.facet)
+}.thenBy(FacetedSearchScope::scopeOrder).thenBy { it.sourceNamespace.orEmpty() }
+private const val LAST_ACTIVE_QUERY_KEY = "last_active"
 private const val PIXIV_UNKNOWN_RETRY_MESSAGE =
     "Pixiv returned a temporary unknown error. Search was reset. Please retry."
-private const val GELBOORU_SUGGESTION_REQUIRED_MESSAGE =
-    "For Gelbooru, pick a suggested tag from autocomplete."
-private const val UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE =
-    "Artists, series, characters, groups, types, and languages require a specific source."
-private const val UNIFIED_SOURCE_TERMS_REMOVED_MESSAGE =
-    "Source-specific search terms were removed when switching to Unified."
-private const val UNSUPPORTED_SEARCH_SCOPE_MESSAGE =
-    "That search scope is not supported by this source."
-private const val TAG_LOOKUP_LIMIT = 20_000
-private const val TAG_FETCH_LIMIT = 25
 private const val FACETED_AUTOCOMPLETE_LIMIT = 20
 private const val FACETED_AUTOCOMPLETE_CACHE_LIMIT = 120
+private const val TAG_LOOKUP_LIMIT = 20_000
+private const val TAG_FETCH_LIMIT = 25
 private const val TRENDING_REFRESH_INTERVAL_MS = 12L * 60L * 60L * 1000L
 private const val TRENDING_FETCH_PER_SOURCE_LIMIT = 10
 private const val TRENDING_PER_SOURCE_CACHE_LIMIT = 40
@@ -2073,281 +994,5 @@ private const val MAX_REMEMBERED_QUERY_OVERRIDES = 8
 private const val RATE_LIMIT_BACKOFF_FIRST_MS = 30_000L
 private const val RATE_LIMIT_BACKOFF_REPEAT_MS = 2L * 60L * 1000L
 private const val RATE_LIMIT_REPEAT_WINDOW_MS = 2L * 60L * 1000L
-private const val LAST_ACTIVE_QUERY_KEY = "last_active"
-private val NHENTAI_LANGUAGE_TAG_BY_FILTER = mapOf(
-    NhentaiLanguageFilter.ENGLISH to "english",
-    NhentaiLanguageFilter.CHINESE to "chinese",
-    NhentaiLanguageFilter.JAPANESE to "japanese",
-)
-private const val NHENTAI_FULL_COLOR_TAG = "full color"
-private const val NHENTAI_LANGUAGE_NAMESPACE = "language"
-private const val NHENTAI_TAG_NAMESPACE = "tag"
-private val SUGGESTION_CANONICALIZATION_SOURCES = setOf(
-    SourceKey.PIXIV,
-    SourceKey.GELBOORU,
-    SourceKey.NHENTAI,
-    SourceKey.HITOMI,
-    SourceKey.IWARA,
-    SourceKey.RULE34XXX,
-    SourceKey.RULE34PAHEAL,
-    SourceKey.RULE34VIDEO,
-    SourceKey.RULE34GEN,
-)
 private val WHITESPACE_REGEX = Regex("\\s+")
 private val PIXIV_TRAILING_PARENTHESIS_REGEX = Regex("\\s*\\([^)]*\\)\\s*$")
-
-private val SEARCH_SCOPE_ORDER = listOf(
-    null,
-    SearchFacet.TAG,
-    SearchFacet.ARTIST,
-    SearchFacet.CHARACTER,
-    SearchFacet.SERIES,
-    SearchFacet.GROUP,
-    SearchFacet.TYPE,
-    SearchFacet.LANGUAGE,
-)
-private val SEARCH_SCOPE_COMPARATOR =
-    compareBy<FacetedSearchScope> { scope -> SEARCH_SCOPE_ORDER.indexOf(scope.facet) }
-        .thenBy { scope -> scope.scopeNamespaceOrder() }
-        .thenBy { scope -> scope.sourceNamespace.orEmpty() }
-
-private val SEARCH_SCOPE_PREFIXES = mapOf(
-    "tag" to SearchScopePrefix(SearchFacet.TAG, sourceNamespace = "tag"),
-    "female" to SearchScopePrefix(
-        facet = SearchFacet.TAG,
-        sourceNamespace = "female",
-        requiresExactNamespace = true,
-    ),
-    "male" to SearchScopePrefix(
-        facet = SearchFacet.TAG,
-        sourceNamespace = "male",
-        requiresExactNamespace = true,
-    ),
-    "artist" to SearchScopePrefix(SearchFacet.ARTIST),
-    "character" to SearchScopePrefix(SearchFacet.CHARACTER),
-    "series" to SearchScopePrefix(SearchFacet.SERIES),
-    "parody" to SearchScopePrefix(
-        facet = SearchFacet.SERIES,
-        sourceNamespace = "parody",
-        requiresExactNamespace = true,
-    ),
-    "group" to SearchScopePrefix(SearchFacet.GROUP),
-    "type" to SearchScopePrefix(SearchFacet.TYPE),
-    "category" to SearchScopePrefix(
-        facet = SearchFacet.TYPE,
-        sourceNamespace = "category",
-        requiresExactNamespace = true,
-    ),
-    "language" to SearchScopePrefix(SearchFacet.LANGUAGE),
-)
-
-private fun parseScopedInput(input: String): ParsedScopedInput {
-    val trimmed = input.trim()
-    val isExclude = trimmed.startsWith("-")
-    val unsigned = trimmed.removePrefix("-").trim()
-    val separatorIndex = unsigned.indexOf(':')
-    if (separatorIndex <= 0) {
-        return ParsedScopedInput(
-            value = unsigned,
-            isExclude = isExclude,
-            explicitScope = null,
-        )
-    }
-
-    val rawPrefix = unsigned.substring(0, separatorIndex).trim().lowercase()
-    val scope = SEARCH_SCOPE_PREFIXES[rawPrefix]
-        ?: return ParsedScopedInput(
-            value = unsigned,
-            isExclude = isExclude,
-            explicitScope = null,
-        )
-    return ParsedScopedInput(
-        value = unsigned.substring(separatorIndex + 1).trim(),
-        isExclude = isExclude,
-        explicitScope = scope,
-    )
-}
-
-private fun resolveSupportedScope(
-    prefix: SearchScopePrefix,
-    supportedScopes: List<FacetedSearchScope>,
-): FacetedSearchScope? {
-    val exactNamespace = prefix.sourceNamespace?.let { namespace ->
-        supportedScopes.firstOrNull { scope ->
-            scope.facet == prefix.facet && scope.sourceNamespace == namespace
-        }
-    }
-    if (exactNamespace != null) return exactNamespace
-    if (prefix.requiresExactNamespace) return null
-    return supportedScopes.firstOrNull { scope ->
-        scope.facet == prefix.facet && scope.sourceNamespace == null
-    } ?: supportedScopes.firstOrNull { scope -> scope.facet == prefix.facet }
-}
-
-private fun FacetedSearchScope.scopeNamespaceOrder(): Int {
-    if (sourceNamespace == null) return 0
-    return if (facet == SearchFacet.TAG && sourceNamespace == "tag") 0 else 1
-}
-
-private fun SearchTerm.normalizedOrNull(): SearchTerm? {
-    val normalizedValue = value.trim().takeIf(String::isNotBlank) ?: return null
-    val normalizedNamespace = sourceNamespace?.trim()?.takeIf(String::isNotBlank)
-    return copy(value = normalizedValue, sourceNamespace = normalizedNamespace)
-}
-
-private fun Query.hasSourceOwnedTerms(): Boolean {
-    return (includeTerms + excludeTerms).any { term -> !term.isPortableGeneralTag }
-}
-
-private fun SearchSourceScope.queryMode(): QueryMode {
-    return when (this) {
-        SearchSourceScope.GlobalUnified -> QueryMode.Unified
-        is SearchSourceScope.Single -> QueryMode.Source(source)
-        is SearchSourceScope.Temporary -> QueryMode.Unified
-    }
-}
-
-private fun Query.forMode(mode: QueryMode): ModeQuerySanitization {
-    if (mode != QueryMode.Unified) {
-        return ModeQuerySanitization(query = copy(mode = mode), removedSourceOwnedTerms = false)
-    }
-    val portableIncludes = includeTerms.filter(SearchTerm::isPortableGeneralTag)
-    val portableExcludes = excludeTerms.filter(SearchTerm::isPortableGeneralTag)
-    return ModeQuerySanitization(
-        query = copy(
-            mode = QueryMode.Unified,
-            includeTerms = portableIncludes,
-            excludeTerms = portableExcludes,
-        ),
-        removedSourceOwnedTerms =
-            portableIncludes.size != includeTerms.size || portableExcludes.size != excludeTerms.size,
-    )
-}
-
-private fun FacetedTagSuggestion.toLegacySuggestion(): TagSuggestion {
-    return TagSuggestion(
-        text = text,
-        type = sourceNamespace ?: facet.name.lowercase(),
-        count = count,
-    )
-}
-
-private fun FacetedTagSuggestion.isPortableTagSuggestion(): Boolean {
-    return facet == SearchFacet.TAG && sourceNamespace in setOf(null, "tag")
-}
-
-private fun FacetedTagSuggestion.toPortableLegacySuggestion(): TagSuggestion {
-    return TagSuggestion(
-        text = text,
-        type = "tag",
-        count = count,
-    )
-}
-
-private fun TagSuggestion.isPortableTagSuggestion(): Boolean {
-    return when (type?.trim()?.lowercase()) {
-        "artist", "character", "series", "parody", "group", "type", "category", "language",
-        "female", "male" -> false
-        else -> true
-    }
-}
-
-private fun SearchTerm.nhentaiLanguageFilterOrNull(): NhentaiLanguageFilter? {
-    val hasLanguageMeaning = when {
-        facet == SearchFacet.LANGUAGE ->
-            sourceNamespace == null || sourceNamespace == NHENTAI_LANGUAGE_NAMESPACE
-        isPortableGeneralTag -> true
-        else -> false
-    }
-    if (!hasLanguageMeaning) return null
-    return when (normalizeNhentaiTagFilter(value)) {
-        "english" -> NhentaiLanguageFilter.ENGLISH
-        "chinese" -> NhentaiLanguageFilter.CHINESE
-        "japanese" -> NhentaiLanguageFilter.JAPANESE
-        else -> null
-    }
-}
-
-private fun SearchTerm.isNhentaiFullColorFilter(): Boolean {
-    val hasGeneralTagMeaning = facet == SearchFacet.TAG &&
-        (sourceNamespace == null || sourceNamespace == NHENTAI_TAG_NAMESPACE)
-    return hasGeneralTagMeaning && normalizeNhentaiTagFilter(value) == NHENTAI_FULL_COLOR_TAG
-}
-
-private fun normalizeNhentaiTagFilter(value: String): String {
-    return value
-        .trim()
-        .lowercase()
-        .replace('_', ' ')
-        .replace(WHITESPACE_REGEX, " ")
-}
-
-private fun Query.directNhentaiGalleryIdCandidate(): String? {
-    val supportsDirectLookup = mode == QueryMode.Unified || mode == QueryMode.Source(SourceKey.NHENTAI)
-    if (!supportsDirectLookup) return null
-    if (excludeTerms.isNotEmpty()) return null
-
-    val searchable = includeTerms.filterNot { term ->
-        term.nhentaiLanguageFilterOrNull() != null || term.isNhentaiFullColorFilter()
-    }
-    if (searchable.size != 1) return null
-
-    val candidate = searchable.single()
-    if (!candidate.isPortableGeneralTag) return null
-    return candidate.value.trim().takeIf(String::isDigitsOnly)
-}
-
-private fun String.isDigitsOnly(): Boolean {
-    return isNotBlank() && all { ch -> ch.isDigit() }
-}
-
-private data class RootSearchRequest(
-    val generation: Long,
-    val query: Query,
-    val queryHash: String,
-    val sourceScope: SearchSourceScope,
-    val enabledSources: Set<SourceKey>,
-    val availableSources: List<SourceKey>,
-    val weights: Map<SourceKey, Double>,
-    val previousResults: List<Post>,
-    val previousStatuses: List<SourceRunStatus>,
-    val ownerJob: Job?,
-)
-
-private data class LoadMoreRequest(
-    val root: RootSearchRequest,
-    val results: List<Post>,
-    val unifiedPageTokens: Map<SourceKey, String?>,
-    val unifiedQueryOverrides: Map<SourceKey, Query>,
-    val sourcePageToken: String?,
-    val ownerJob: Job?,
-)
-
-private data class ResolveFailureRecord(
-    val lastFailureAtMs: Long,
-    val backoffUntilMs: Long,
-    val reason: SourceFailureReason,
-)
-
-private data class SearchScopePrefix(
-    val facet: SearchFacet,
-    val sourceNamespace: String? = null,
-    val requiresExactNamespace: Boolean = false,
-)
-
-private data class ParsedScopedInput(
-    val value: String,
-    val isExclude: Boolean,
-    val explicitScope: SearchScopePrefix?,
-)
-
-private data class FacetedSuggestionIdentity(
-    val facet: SearchFacet,
-    val sourceNamespace: String?,
-    val normalizedValue: String,
-)
-
-private data class ModeQuerySanitization(
-    val query: Query,
-    val removedSourceOwnedTerms: Boolean,
-)

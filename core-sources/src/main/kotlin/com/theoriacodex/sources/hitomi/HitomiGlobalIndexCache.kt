@@ -63,8 +63,10 @@ internal class HitomiGlobalIndexCache(
 
     internal suspend fun snapshot(): HitomiGlobalIndexCacheSnapshot = mutex.withLock {
         HitomiGlobalIndexCacheSnapshot(
+            maxBytes = maxBytes,
             activeVersion = activeVersion,
             keysInLruOrder = entries.keys.toList(),
+            weightsInLruOrder = entries.map { (key, entry) -> key to entry.weightBytes },
             cachedBytes = cachedBytes,
             inFlightLoads = inFlight.size,
         )
@@ -94,7 +96,7 @@ internal class HitomiGlobalIndexCache(
     }
 
     private fun put(key: String, ids: IntArray) {
-        val weight = ids.byteWeight()
+        val weight = key.hitomiUtf8ByteWeight() + ids.hitomiByteWeight()
         entries.remove(key)?.let { previous -> cachedBytes -= previous.weightBytes }
         if (weight > maxBytes) return
 
@@ -107,10 +109,6 @@ internal class HitomiGlobalIndexCache(
             entries.remove(eldest.key)
             cachedBytes -= eldest.value.weightBytes
         }
-    }
-
-    private fun IntArray.byteWeight(): Long {
-        return Math.multiplyExact(size.toLong(), Int.SIZE_BYTES.toLong())
     }
 
     private data class CacheEntry(
@@ -129,8 +127,10 @@ internal class HitomiGlobalIndexCache(
 }
 
 internal data class HitomiGlobalIndexCacheSnapshot(
+    val maxBytes: Long,
     val activeVersion: String?,
     val keysInLruOrder: List<String>,
+    val weightsInLruOrder: List<Pair<String, Long>>,
     val cachedBytes: Long,
     val inFlightLoads: Int,
 )

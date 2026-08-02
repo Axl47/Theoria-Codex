@@ -2,6 +2,7 @@ package com.theoriacodex.app.media
 
 import android.content.Context
 import coil.request.ImageRequest
+import coil.size.Precision
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.domain.model.SourceKey
 
@@ -14,6 +15,8 @@ object MediaRequestFactory {
         allowHardware: Boolean = false,
         staticAnimatedWebPFrame: Boolean = false,
         controllableAnimatedWebP: Boolean = false,
+        targetWidthPx: Int? = null,
+        targetHeightPx: Int? = null,
     ): ImageRequest {
         val builder = ImageRequest.Builder(context)
             .data(normalizeMediaUrl(sourceKey, url) ?: url)
@@ -26,6 +29,11 @@ object MediaRequestFactory {
                     else -> null
                 },
             )
+        if (targetWidthPx != null && targetHeightPx != null) {
+            builder
+                .size(targetWidthPx.coerceAtLeast(1), targetHeightPx.coerceAtLeast(1))
+                .precision(Precision.INEXACT)
+        }
         sourceKey.requestHeaders().forEach { (name, value) ->
             builder.addHeader(name, value)
         }

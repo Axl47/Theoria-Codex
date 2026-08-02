@@ -53,7 +53,6 @@ import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
-import com.theoriacodex.app.search.animatedDurationResolutionCandidates
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.PostTagActionSection
@@ -63,11 +62,8 @@ import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.viewer.PixivUgoiraClient
-import com.theoriacodex.app.media.animatedDurationMs
-import com.theoriacodex.app.media.probeRemoteVideoDurationMs
 import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.creator.state.CreatorUiState
-import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
@@ -84,8 +80,6 @@ fun CreatorProfileScreen(
     resolveUnknownAnimatedDurations: Boolean = false,
     onToggleLike: (Post) -> Unit,
     onAction: (CreatorAction) -> Unit,
-    resolvePost: suspend (PostId) -> Post? = { null },
-    rememberResolvedPost: (Post) -> Unit = {},
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
     onOpenUrl: (String) -> Unit,
@@ -142,25 +136,12 @@ fun CreatorProfileScreen(
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
         )
     }
-    val durationResolutionRequests = remember(state.queryHash) { mutableSetOf<PostId>() }
-    LaunchedEffect(state.results, visibilityFilters, unknownAnimatedDurationPolicy, state.queryHash) {
-        if (unknownAnimatedDurationPolicy != UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND) return@LaunchedEffect
-        val candidates = animatedDurationResolutionCandidates(
-            results = state.results,
-            filters = visibilityFilters,
-        ).filter { post -> durationResolutionRequests.add(post.id) }
-            .take(CREATOR_PROFILE_DURATION_RESOLVE_BATCH_SIZE)
-        candidates.forEach { post ->
-            val resolved = runCatchingPreservingCancellation {
-                resolvePost(post.id)
-            }.getOrNull()
-            val candidate = resolved ?: post
-            if (animatedDurationMs(candidate) == null) {
-                val probedDurationMs = probeRemoteVideoDurationMs(candidate)
-                if (probedDurationMs != null) {
-                    rememberResolvedPost(candidate.copy(durationMs = probedDurationMs))
-                }
-            }
+    LaunchedEffect(state.results, animatedDurationFilterActive, unknownAnimatedDurationPolicy, state.queryHash) {
+        val queryHash = state.queryHash
+        if (queryHash != null && animatedDurationFilterActive &&
+            unknownAnimatedDurationPolicy == UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
+        ) {
+            onAction(CreatorAction.RequestAnimatedDurationEnrichment(queryHash))
         }
     }
 
@@ -438,4 +419,3 @@ private fun copyCreatorProfile(context: Context, profileUrl: String) {
 
 private const val CREATOR_PROFILE_PREFETCH_RATIO = 0.7f
 private const val CREATOR_PROFILE_ANIMATED_PREFETCH_MIN_VISIBLE = 6
-private const val CREATOR_PROFILE_DURATION_RESOLVE_BATCH_SIZE = 8
