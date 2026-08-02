@@ -56,6 +56,7 @@ class RoomRecentsLegacyImporter(
     private val dao = database.recentsDao()
     private val contentDao = database.codexLikesDao()
     private val postCodec = LocalPostPayloadCodec(gson)
+    private val sharedPostPayloads = SharedPostPayloadWriter(contentDao, postCodec)
     private val fileStore = AtomicJsonFileStore(ioDispatcher = ioDispatcher, gson = gson)
 
     suspend fun importAndArchive(baseDirectory: File): RecentsImportResult {
@@ -112,14 +113,11 @@ class RoomRecentsLegacyImporter(
     private fun insertPrepared(prepared: PreparedRecents) {
         prepared.watched.forEachIndexed { index, entry ->
             val post = entry.post
-            val entity = PostEntity(post.id.source.name, post.id.sourcePostId, postCodec.encode(post))
-            if (contentDao.insertPost(entity) == -1L) {
-                contentDao.updatePost(entity.source, entity.sourcePostId, entity.payloadJson)
-            }
+            sharedPostPayloads.upsert(post)
             dao.upsertWatched(
                 RecentWatchedEntity(
-                    entity.source,
-                    entity.sourcePostId,
+                    post.id.source.name,
+                    post.id.sourcePostId,
                     entry.viewedAtEpochMs,
                     (prepared.watched.size - index).toLong(),
                     entry.origin.name,

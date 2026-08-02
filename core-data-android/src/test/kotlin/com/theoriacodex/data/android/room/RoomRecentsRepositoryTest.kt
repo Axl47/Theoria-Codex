@@ -86,6 +86,54 @@ class RoomRecentsRepositoryTest {
         assertNull(codex.getPost(shared.id))
     }
 
+    @Test fun `partial Recents snapshots preserve rich shared payload while applying enrichment`() = runTest {
+        val recents = RoomRecentsRepository(database, clock = { now++ })
+        val codex = RoomCodexLikesRepository(database, clock = { now++ }, newId = { "codex" })
+        val rich = recentPost("shared-rich").copy(
+            preview = ImageRef(
+                "https://example.com/preview.jpg",
+                "/cached/preview.jpg",
+                "image/jpeg",
+                progressiveUrls = listOf("https://example.com/progressive.jpg"),
+            ),
+            full = ImageRef("https://example.com/full.jpg", null, "image/jpeg"),
+            media = listOf(
+                ImageRef("https://example.com/page-1.jpg", null, "image/jpeg"),
+                ImageRef("https://example.com/page-2.jpg", null, "image/jpeg"),
+            ),
+            canonicalTags = listOf("rich", "shared"),
+            rawTags = listOf("rich_raw", "shared_raw"),
+            durationMs = 1_000L,
+            title = "original title",
+        )
+        codex.addItem(codex.createCodex("Saved").codexId, rich)
+
+        recents.recordWatchedPost(
+            recentPost("shared-rich").copy(
+                preview = ImageRef(null, null, null),
+                full = null,
+                media = emptyList(),
+                canonicalTags = emptyList(),
+                rawTags = emptyList(),
+                authorName = null,
+                title = "refreshed title",
+                durationMs = 2_000L,
+            ),
+            ViewerStreamSource.SEARCH,
+            null,
+        )
+
+        val stored = requireNotNull(codex.getPost(rich.id))
+        assertEquals(rich.preview, stored.preview)
+        assertEquals(rich.full, stored.full)
+        assertEquals(rich.media, stored.media)
+        assertEquals(rich.canonicalTags, stored.canonicalTags)
+        assertEquals(rich.rawTags, stored.rawTags)
+        assertEquals("artist", stored.authorName)
+        assertEquals("refreshed title", stored.title)
+        assertEquals(2_000L, stored.durationMs)
+    }
+
     @Test fun `failed watched transaction rolls back its shared post`() = runTest {
         database.openHelper.writableDatabase.execSQL(
             "CREATE TRIGGER reject_recent BEFORE INSERT ON recent_watched BEGIN SELECT RAISE(ABORT, 'no'); END"

@@ -26,6 +26,7 @@ class RoomRecentsRepository(
     private val dao = database.recentsDao()
     private val contentDao = database.codexLikesDao()
     private val postCodec = LocalPostPayloadCodec(gson)
+    private val sharedPostPayloads = SharedPostPayloadWriter(contentDao, postCodec)
     private val queryGson = gson
 
     init {
@@ -70,7 +71,7 @@ class RoomRecentsRepository(
         database.withTransaction {
             val previous = dao.watched(post.id.source.name, post.id.sourcePostId)
             val preserve = origin == ViewerStreamSource.RECENTS && previous != null
-            upsertPost(post)
+            sharedPostPayloads.upsert(post)
             dao.upsertWatched(
                 RecentWatchedEntity(
                     post.id.source.name,
@@ -132,13 +133,6 @@ class RoomRecentsRepository(
             dao.deleteWatched()
             dao.deleteSearches()
             contentDao.deleteOrphanPosts()
-        }
-    }
-
-    private fun upsertPost(post: Post) {
-        val entity = PostEntity(post.id.source.name, post.id.sourcePostId, postCodec.encode(post))
-        if (contentDao.insertPost(entity) == -1L) {
-            contentDao.updatePost(entity.source, entity.sourcePostId, entity.payloadJson)
         }
     }
 }

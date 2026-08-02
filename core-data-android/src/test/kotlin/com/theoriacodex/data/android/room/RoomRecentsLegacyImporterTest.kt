@@ -97,6 +97,56 @@ class RoomRecentsLegacyImporterTest {
         assertEquals("refreshed", repository.observeWatchedPosts().first().single().post.title)
     }
 
+    @Test fun `legacy partial snapshot preserves rich shared payload while applying update`() = runTest {
+        val codex = RoomCodexLikesRepository(database, clock = { 1L }, newId = { "codex" })
+        val rich = importerPost("shared-rich").copy(
+            preview = ImageRef(
+                "https://example.com/preview.jpg",
+                "/cached/preview.jpg",
+                "image/jpeg",
+                progressiveUrls = listOf("https://example.com/progressive.jpg"),
+            ),
+            full = ImageRef("https://example.com/full.jpg", null, "image/jpeg"),
+            media = listOf(
+                ImageRef("https://example.com/page-1.jpg", null, "image/jpeg"),
+                ImageRef("https://example.com/page-2.jpg", null, "image/jpeg"),
+            ),
+            canonicalTags = listOf("rich", "shared"),
+            rawTags = listOf("rich_raw", "shared_raw"),
+            title = "original title",
+            durationMs = 1_000L,
+        )
+        codex.addItem(codex.createCodex("Saved").codexId, rich)
+        val partial = importerPost("shared-rich").copy(
+            preview = ImageRef(null, null, null),
+            full = null,
+            media = emptyList(),
+            canonicalTags = emptyList(),
+            rawTags = emptyList(),
+            title = "legacy update",
+            durationMs = 2_000L,
+        )
+        writeLegacy(
+            watched = listOf(
+                LegacyRecentPostRecord(PostStorageCodec.encode(partial), 2L, "SEARCH", null)
+            ),
+        )
+
+        assertTrue(
+            RoomRecentsLegacyImporter(database, registry).importAndArchive(directory) is
+                RecentsImportResult.AlreadyImported
+        )
+
+        val stored = requireNotNull(codex.getPost(rich.id))
+        assertEquals(rich.preview, stored.preview)
+        assertEquals(rich.full, stored.full)
+        assertEquals(rich.media, stored.media)
+        assertEquals(rich.canonicalTags, stored.canonicalTags)
+        assertEquals(rich.rawTags, stored.rawTags)
+        assertEquals("legacy update", stored.title)
+        assertEquals(2_000L, stored.durationMs)
+    }
+
     @Test fun `archive-created source-deleted crash resumes the pending archive proof`() = runTest {
         val source = writeLegacy(
             watched = listOf(LegacyRecentPostRecord(PostStorageCodec.encode(importerPost("one")), 1L, "SEARCH", null)),
