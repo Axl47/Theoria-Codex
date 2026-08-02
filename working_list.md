@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-02T16:32:44-04:00
+updated_at: 2026-08-02T16:49:43-04:00
 ---
 # Working List
 
@@ -8,7 +8,7 @@ updated_at: 2026-08-02T16:32:44-04:00
 
 ### In Progress
 
-None. F21 is verified and ready for its dedicated commit; the integrated review-follow-up matrix runs only after that boundary.
+None. F19–F21 and their bounded integrated host validation are complete; only the clean branch push remains.
 
 ### Pending
 
@@ -17,8 +17,11 @@ None. F21 is verified and ready for its dedicated commit; the integrated review-
 
 ### Done
 
+- [x] Integrated PR review-follow-up validation
+  - Evidence: all seven JVM owners passed 883 tests with zero failures/errors and six unchanged skips (app 398/3, app-logic 60, core-domain 44, core-data 127/3, core-data-android 37, core-sources 205, core-stubs 12). Both Android-test Kotlin compilers, app and Room lint, and app/app-logic/Room Detekt passed; app/Room Detekt retained their known 10/360 analyzer-resolution diagnostics while exiting green. Aggregate Kover XML/verification passed and the F19–F21 range covered 102/121 executable eligible changed lines (84.30%). Ordinary and branch-base hotspot/Detekt-debt gates passed; production duplication remained 195/36,823 lines (0.53%); npm reported zero vulnerabilities; all 36 helper/workflow tests, ExecPlan HTML validation, and working/committed diff checks passed. No device, emulator, package-mutating instrumentation, benchmark, live provider, release mutation, tag, or GitHub thread write ran.
+
 - [x] F21: make animated-duration retries generation/expiry-aware and bounded
-  - Evidence: each explicit same-identity request now advances a short-lived generation, drains a deduplicated candidate snapshot in eight-item batches, and retains only a 128-entry expiring null-decision map aligned with the service's canonical five-minute TTL. Expired nulls retry, successful IDs can re-enter a later generation so refreshed duration-less posts receive the service's positive cache, and active requests still coalesce. Thirteen focused policy/service tests and 27 Search/For You/Creator owner tests passed; app/app-logic Detekt, ExecPlan HTML validation, and diff checks passed. App Detekt retained its known 10 analyzer-resolution diagnostics while exiting green.
+  - Commit: `29328da` — `fix(media): retry animated duration enrichment`. Evidence: each explicit same-identity request now advances a short-lived generation, drains a deduplicated candidate snapshot in eight-item batches, and retains only a 128-entry expiring null-decision map aligned with the service's canonical five-minute TTL. Expired nulls retry, successful IDs can re-enter a later generation so refreshed duration-less posts receive the service's positive cache, and active requests still coalesce. Thirteen focused policy/service tests and 27 Search/For You/Creator owner tests passed; app/app-logic Detekt, ExecPlan HTML validation, and diff checks passed. App Detekt retained its known 10 analyzer-resolution diagnostics while exiting green.
 
 - [x] F20: observe live Settings source availability and persist toggles against the current source set
   - Commit: `1547fc2` — `fix(settings): observe live source availability`. Evidence: the Settings owner now renders from the account-backed source-availability flow and validates mutations against that flow's current value, replacing the construction-time Search snapshot. Eight focused owner tests passed, including a late Rule34 XXX availability emission followed immediately by a persisted toggle before the collector could mask a stale-mutation bug. App compilation through the test lane, app Detekt, ExecPlan HTML validation, and diff checks passed; Detekt retained its known 10 analyzer-resolution diagnostics while exiting green.
