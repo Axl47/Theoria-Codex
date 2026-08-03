@@ -28,6 +28,10 @@ Explain plans, questions, and completed work in plain system-level language. The
 
 `AGENTS.md` should be updated whenever an important finding is made to aid new developers in the project. For example, if testing end-to-end behavior requires a non-standard command, add a note to the file. Whatever could speed up further development should be added, but if anything can be acquired from exploring the codebase trust future developers to explore it first.
 
+## Pixiv Authorization
+
+Pixiv's browser-visible HTTPS authorization callback carries OAuth `state`, but its final native handoff to `pixiv://account/login` can omit that parameter. Accept a missing state only for that exact provider-native callback; the app-owned `theoriacodex://pixiv-auth/callback` remains strict, and either callback must reject a nonblank conflicting state. Keep PKCE verifier binding, the short session lifetime, encrypted durable session storage, and one-shot consumption intact. A compiled or stubbed callback test is not authenticated live-provider proof.
+
 ## Provider Pagination
 
 For page-number providers, derive continuation from authoritative provider metadata when available, otherwise from the number of raw provider records received. Never derive it from the number of records that successfully became `Post` objects: malformed records may be omitted from the visible page without falsely marking that source exhausted in Unified search.

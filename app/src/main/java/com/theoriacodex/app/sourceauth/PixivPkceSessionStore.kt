@@ -56,6 +56,7 @@ internal object PixivPkceSessionPolicy {
         authorizationError: String?,
         nowEpochMs: Long,
         sessionLifetimeMs: Long,
+        allowMissingCallbackState: Boolean = false,
     ): String {
         validatePixivPkceSession(session)
         require(sessionLifetimeMs > 0L) { "Pixiv auth session lifetime must be positive" }
@@ -64,7 +65,10 @@ internal object PixivPkceSessionPolicy {
         if (ageMs < 0L || ageMs >= sessionLifetimeMs) {
             throw IllegalStateException("Pixiv authorization session expired")
         }
-        if (callbackState.isNullOrBlank() || callbackState != session.state) {
+        val hasCallbackState = !callbackState.isNullOrBlank()
+        if ((!hasCallbackState && !allowMissingCallbackState) ||
+            (hasCallbackState && callbackState != session.state)
+        ) {
             throw IllegalStateException("Pixiv authorization state mismatch")
         }
         if (!authorizationError.isNullOrBlank()) {

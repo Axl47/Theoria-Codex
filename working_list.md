@@ -1,8 +1,25 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-02T16:49:43-04:00
+updated_at: 2026-08-03T00:03:12-04:00
 ---
 # Working List
+
+## Current Task: Restore Pixiv Native Authorization Callback Compatibility
+
+### In Progress
+
+None.
+
+### Pending
+
+- [ ] Authenticated live Pixiv completion remains unclaimed until the repaired app is exercised through the provider login flow.
+
+### Done
+
+- [x] Trace and repair the authorization-state mismatch at the callback boundary.
+  - Evidence: Pixiv's provider-native `pixiv://account/login` handoff may omit the browser callback's OAuth state. That exact callback now accepts an absent state while still rejecting a supplied conflict; the app-owned callback continues to require an exact state. PKCE verifier binding, ten-minute expiry, encrypted durable storage, and one-shot consumption are unchanged.
+- [x] Complete bounded host validation.
+  - Evidence: focused `PixivPkceSessionStoreTest` passed, `:app:compileDebugAndroidTestKotlin` passed with regression coverage for both the state-less native success and conflicting-state rejection paths, `:app:detektDebug` passed with its known 10 analyzer-resolution diagnostics, and `git diff --check` passed. No device, emulator, live provider, package mutation, release, tag, push, or publish command ran.
 
 ## Current Task: Close PR #17 Quality-Audit Review Follow-ups
 

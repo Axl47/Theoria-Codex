@@ -40,6 +40,40 @@ class PixivPkceSessionStoreTest {
     }
 
     @Test
+    fun `provider native callback may omit state but still rejects a conflicting state`() {
+        val session = session()
+
+        listOf(null, "").forEach { callbackState ->
+            assertEquals(
+                "authorization-code",
+                PixivPkceSessionPolicy.requireAuthorizationCode(
+                    session = session,
+                    callbackState = callbackState,
+                    authorizationCode = "authorization-code",
+                    authorizationError = null,
+                    nowEpochMs = session.createdAtEpochMs + 1L,
+                    sessionLifetimeMs = DEFAULT_PIXIV_PKCE_SESSION_LIFETIME_MS,
+                    allowMissingCallbackState = true,
+                ),
+            )
+        }
+
+        val mismatch = runCatching {
+            PixivPkceSessionPolicy.requireAuthorizationCode(
+                session = session,
+                callbackState = "other-state",
+                authorizationCode = "authorization-code",
+                authorizationError = null,
+                nowEpochMs = session.createdAtEpochMs + 1L,
+                sessionLifetimeMs = DEFAULT_PIXIV_PKCE_SESSION_LIFETIME_MS,
+                allowMissingCallbackState = true,
+            )
+        }.exceptionOrNull()
+
+        assertEquals("Pixiv authorization state mismatch", mismatch?.message)
+    }
+
+    @Test
     fun `expired and future dated sessions fail before provider values are accepted`() {
         val session = session()
 

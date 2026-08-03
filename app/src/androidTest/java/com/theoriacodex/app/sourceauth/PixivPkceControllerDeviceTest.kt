@@ -68,6 +68,40 @@ class PixivPkceControllerDeviceTest {
     }
 
     @Test
+    fun pixivNativeCallbackCompletesWithoutForwardingBrowserState() = runBlocking {
+        val store = InMemoryPixivPkceSessionStore()
+        val http = RecordingTokenHttpClient()
+        val credentials = RecordingCredentialsProvider()
+        val controller = controller(store, http, credentials)
+        controller.startAuthorizationUri()
+
+        val completed = controller.handleAuthorizationCallback(
+            "pixiv://account/login?code=authorization-code".toUri()
+        )
+
+        assertTrue(completed.isSuccess)
+        assertEquals(1, http.postCalls)
+        assertEquals("access", credentials.savedPixivTokens?.accessToken)
+        assertNull(store.read())
+    }
+
+    @Test
+    fun pixivNativeCallbackStillRejectsAConflictingState() = runBlocking {
+        val store = InMemoryPixivPkceSessionStore()
+        val http = RecordingTokenHttpClient()
+        val controller = controller(store, http, RecordingCredentialsProvider())
+        controller.startAuthorizationUri()
+
+        val result = controller.handleAuthorizationCallback(
+            "pixiv://account/login?code=authorization-code&state=wrong-state".toUri()
+        )
+
+        assertEquals("Pixiv authorization state mismatch", result.exceptionOrNull()?.message)
+        assertEquals(0, http.postCalls)
+        assertNotNull(store.read())
+    }
+
+    @Test
     fun transientTokenExchangeFailurePreservesTheSessionForRetry() = runBlocking {
         val store = InMemoryPixivPkceSessionStore()
         val http = RecordingTokenHttpClient(statusCodes = ArrayDeque(listOf(503, 200)))
