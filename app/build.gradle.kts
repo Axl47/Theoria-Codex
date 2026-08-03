@@ -1,6 +1,8 @@
 import com.android.build.api.artifact.SingleArtifact
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
@@ -38,6 +40,28 @@ abstract class VerifyR8JsonContractsTask @Inject constructor(
                 contractManifest.get().asFile,
                 seedsFile.get().asFile,
             )
+        }
+    }
+}
+
+abstract class VerifyInstallableApplicationIdTask : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val outputMetadata: RegularFileProperty
+
+    @get:Input
+    abstract val expectedApplicationId: Property<String>
+
+    @TaskAction
+    fun verify() {
+        val metadata = outputMetadata.get().asFile.readText()
+        val packagedApplicationIds = Regex("\"applicationId\"\\s*:\\s*\"([^\"]+)\"")
+            .findAll(metadata)
+            .map { match -> match.groupValues[1] }
+            .toSet()
+        check(packagedApplicationIds == setOf(expectedApplicationId.get())) {
+            "Expected packaged application ID ${expectedApplicationId.get()}, " +
+                "but ${outputMetadata.get().asFile} declared $packagedApplicationIds"
         }
     }
 }
@@ -119,6 +143,8 @@ android {
         }
         create("nonMinifiedRelease") {
             signingConfig = signingConfigs.getByName("debug")
+            applicationIdSuffix = ".baselineprofile"
+            versionNameSuffix = "-baselineprofile"
             buildConfigField("boolean", "UPDATER_ENABLED", "false")
         }
     }
@@ -145,6 +171,34 @@ android {
 }
 
 androidComponents {
+    val deviceSafeApplicationIds = mapOf(
+        "debug" to "com.theoriacodex.debug",
+        "releaseAcceptance" to "com.theoriacodex.acceptance",
+        "benchmarkRelease" to "com.theoriacodex.benchmark",
+        "nonMinifiedRelease" to "com.theoriacodex.baselineprofile",
+    )
+    onVariants(selector().all()) { variant ->
+        val expectedApplicationId = deviceSafeApplicationIds[variant.name] ?: return@onVariants
+        val capitalizedVariant = variant.name.replaceFirstChar(Char::uppercaseChar)
+        val verification = tasks.register<VerifyInstallableApplicationIdTask>(
+            "verify${capitalizedVariant}InstallableApplicationId",
+        ) {
+            group = "verification"
+            description = "Fails before device work if ${variant.name} can replace production."
+            dependsOn("package$capitalizedVariant")
+            outputMetadata.set(
+                layout.buildDirectory.file("outputs/apk/${variant.name}/output-metadata.json"),
+            )
+            this.expectedApplicationId.set(expectedApplicationId)
+        }
+        tasks.matching { task ->
+            task.name == "install$capitalizedVariant" ||
+                task.name == "connected${capitalizedVariant}AndroidTest"
+        }.configureEach {
+            dependsOn(verification)
+        }
+    }
+
     onVariants(selector().withBuildType("benchmarkRelease")) { variant ->
         variant.sources.manifests.addStaticManifestFile(
             "src/benchmarkRelease/AndroidManifest.xml",

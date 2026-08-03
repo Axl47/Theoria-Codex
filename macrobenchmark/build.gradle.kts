@@ -58,3 +58,7 @@ val verifyMacrobenchmarkRunnerArtifact = tasks.register<Exec>("verifyMacrobenchm
 tasks.matching { task -> task.name == "assembleBenchmarkRelease" }.configureEach {
     finalizedBy(verifyMacrobenchmarkRunnerArtifact)
 }
+
+tasks.matching { task -> task.name == "connectedBenchmarkReleaseAndroidTest" }.configureEach {
+    dependsOn(":app:verifyBenchmarkReleaseInstallableApplicationId")
+}

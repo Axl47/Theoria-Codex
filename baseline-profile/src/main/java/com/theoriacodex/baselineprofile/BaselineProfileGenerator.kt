@@ -38,7 +38,7 @@ class BaselineProfileGenerator {
     }
 
     private companion object {
-        const val PACKAGE_NAME = "com.theoriacodex"
+        const val PACKAGE_NAME = "com.theoriacodex.baselineprofile"
         const val UI_TIMEOUT_MS = 15_000L
         val TOP_LEVEL_DESTINATIONS = listOf("Search", "Recents", "For You", "Codex", "Settings")
     }

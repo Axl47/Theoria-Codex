@@ -12,6 +12,55 @@ class PerformanceBenchmarkArchitectureTest {
         ?: error("Could not locate repository root")
 
     @Test
+    fun `every connected development app identity is isolated from production`() {
+        val appBuild = file("app/build.gradle.kts").readText()
+        val baselineBuild = file("baseline-profile/build.gradle.kts").readText()
+        val baselineGenerator = file(
+            "baseline-profile/src/main/java/com/theoriacodex/baselineprofile/" +
+                "BaselineProfileGenerator.kt",
+        ).readText()
+        val macrobenchmarkBuild = file("macrobenchmark/build.gradle.kts").readText()
+        val debugStrings = file("app/src/debug/res/values/strings.xml").readText()
+
+        listOf(
+            "debug" to ".debug",
+            "releaseAcceptance" to ".acceptance",
+            "benchmarkRelease" to ".benchmark",
+            "nonMinifiedRelease" to ".baselineprofile",
+        ).forEach { (variant, suffix) ->
+            assertTrue(
+                "$variant must retain a non-production application ID",
+                "\"$variant\" to \"com.theoriacodex$suffix\"" in appBuild &&
+                    "applicationIdSuffix = \"$suffix\"" in appBuild,
+            )
+        }
+        assertTrue(
+            "Every installable development APK must verify packaged output metadata",
+            "VerifyInstallableApplicationIdTask" in appBuild &&
+                "dependsOn(\"package${'$'}capitalizedVariant\")" in appBuild &&
+                "connected${'$'}{capitalizedVariant}AndroidTest" in appBuild &&
+                "install${'$'}capitalizedVariant" in appBuild,
+        )
+        assertTrue(
+            "Baseline-profile collection must target only its isolated sandbox",
+            "PACKAGE_NAME = \"com.theoriacodex.baselineprofile\"" in baselineGenerator &&
+                "verifyNonMinifiedReleaseInstallableApplicationId" in baselineBuild,
+        )
+        assertFalse(
+            "Baseline-profile collection must never target production",
+            "PACKAGE_NAME = \"com.theoriacodex\"" in baselineGenerator,
+        )
+        assertTrue(
+            "Macrobenchmark connected execution must prove its packaged target first",
+            "verifyBenchmarkReleaseInstallableApplicationId" in macrobenchmarkBuild,
+        )
+        assertTrue(
+            "Debug must be visually distinguishable from the production launcher",
+            "<string name=\"app_name\">Theoria Debug</string>" in debugStrings,
+        )
+    }
+
+    @Test
     fun `deterministic fixture is benchmark-release only and storage independent`() {
         val fixture = file(
             "app/src/benchmarkRelease/java/com/theoriacodex/app/benchmark/BenchmarkFixtureActivity.kt",

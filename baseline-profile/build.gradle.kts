@@ -33,3 +33,7 @@ dependencies {
     implementation(libs.androidx.espresso.core)
     implementation(libs.androidx.test.uiautomator)
 }
+
+tasks.matching { task -> task.name == "connectedNonMinifiedReleaseAndroidTest" }.configureEach {
+    dependsOn(":app:verifyNonMinifiedReleaseInstallableApplicationId")
+}

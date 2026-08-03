@@ -81,7 +81,7 @@ The Android manifest handles Pixiv auth callbacks, source post/profile links for
 
 ## Releases And Updates
 
-Release builds enable the startup updater. The updater reads GitHub prereleases for the `main` channel, expects the fixed APK asset name `theoria-codex-main.apk`, validates version metadata/signature, and launches Android's package installer. Debug builds disable the updater and use `applicationIdSuffix ".debug"` plus `versionNameSuffix "-debug"`, so debug and release installs have separate app storage.
+Release builds enable the startup updater. The updater reads GitHub prereleases for the `main` channel, expects the fixed APK asset name `theoria-codex-main.apk`, validates version metadata/signature, and launches Android's package installer. Debug builds appear as **Theoria Debug**, disable the updater, and use `applicationIdSuffix ".debug"` plus `versionNameSuffix "-debug"`, so debug and release installs have separate app storage. Benchmark, release-acceptance, and baseline-profile targets likewise use `.benchmark`, `.acceptance`, and `.baselineprofile` package identities; connected/install tasks verify their packaged metadata before touching a device.
 
 Shipping releases enable R8 and resource shrinking. Durable Gson field names are explicit and every release assembly verifies the optimizer mapping against the checked contract manifest. Checked-in baseline/startup profiles cover cold start and all five top-level destinations. The separate `releaseAcceptance` variant keeps the same optimizer behavior but uses a debug key and updater-disabled package identity for non-debuggable device acceptance.
 
