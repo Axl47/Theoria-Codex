@@ -133,6 +133,7 @@ import com.theoriacodex.app.media.mediaKind
 import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.app.media.progressiveImageCandidates
 import com.theoriacodex.app.media.supportsProgressiveImageCandidates
+import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.tags.PostTagActionSection
@@ -1110,12 +1111,14 @@ internal fun ViewerScreen(
                     }
                 }
 
-                Text(
-                    text = post.title?.takeIf { it.isNotBlank() } ?: post.id.sourcePostId,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                )
+                post.displayTitleOrNull()?.let { title ->
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                    )
+                }
                 Text(
                     text = "${post.id.source.displayName()} • ${post.id.sourcePostId}",
                     style = MaterialTheme.typography.bodySmall,

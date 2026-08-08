@@ -106,6 +106,7 @@ import com.theoriacodex.app.media.isHttpNotFound
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.media.postPreviewImageCandidate
+import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.app.recommend.recommendationIncludeTags
 import com.theoriacodex.app.recommend.recommendationTagsFor
 import com.theoriacodex.app.recommend.associatedDisplayTag
@@ -938,7 +939,8 @@ fun SearchResultCard(
                 onLongClick = onLongPress,
             ),
     ) {
-        val title = effectivePost.title?.takeIf { it.isNotBlank() } ?: effectivePost.id.sourcePostId
+        val title = effectivePost.displayTitleOrNull()
+        val mediaContentDescription = title ?: effectivePost.id.sourcePostId
         val videoRef = remember(
             effectivePost.id.source,
             effectivePost.id.sourcePostId,
@@ -1018,7 +1020,7 @@ fun SearchResultCard(
                     postId = effectivePost.id.sourcePostId,
                     client = requireNotNull(pixivUgoiraClient),
                     modifier = Modifier.fillMaxSize(),
-                    contentDescription = title,
+                    contentDescription = mediaContentDescription,
                     contentScale = ContentScale.Crop,
                     isActive = playbackActive,
                 )
@@ -1041,7 +1043,7 @@ fun SearchResultCard(
             } else if (imageModel != null) {
                 FeedAsyncImage(
                     model = imageModel,
-                    contentDescription = title,
+                    contentDescription = mediaContentDescription,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                     isActive = playbackActive,
@@ -1143,12 +1145,14 @@ fun SearchResultCard(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            title?.let { displayTitle ->
+                Text(
+                    text = displayTitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             val firstTag = displayTag ?: effectivePost.canonicalTags.firstOrNull()
             if (firstTag != null || metadataLabel != null || showSourceBadge) {
                 Row(

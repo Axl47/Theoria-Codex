@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.PostTagActionSection
@@ -364,9 +365,9 @@ private fun RecentWatchedRow(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = entry.post.title?.takeIf(String::isNotBlank)
+                    text = entry.post.displayTitleOrNull()
                         ?: entry.post.authorName?.takeIf(String::isNotBlank)
-                        ?: entry.post.id.sourcePostId,
+                        ?: entry.post.id.source.displayName(),
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

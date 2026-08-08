@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.creator.CreatorProfileActionButton
 import com.theoriacodex.app.media.copyPostTagsToClipboard
 import com.theoriacodex.app.media.copyPostUrlToClipboard
+import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
@@ -133,12 +134,14 @@ fun PostActionSheet(
                     )
                 }
             }
-            Text(
-                text = post.title?.takeIf(String::isNotBlank) ?: post.id.sourcePostId,
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-            )
+            post.displayTitleOrNull()?.let { title ->
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                )
+            }
             if (onOpenCreatorProfile != null && onOpenLegacyCreatorProfile != null) {
                 CreatorProfileActionButton(
                     post = post,
