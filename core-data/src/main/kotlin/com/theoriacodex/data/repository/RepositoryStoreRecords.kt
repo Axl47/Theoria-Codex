@@ -342,28 +342,15 @@ internal data class LegacySearchScrollStateRecord(
 }
 
 internal data class LegacyViewerLaunchContextRecord(
-    @field:SerializedName("queryHash")
-    val queryHash: String = "",
-    @field:SerializedName("startIndex")
-    val startIndex: Int = 0,
-    @field:SerializedName("streamSource")
-    val streamSource: String = ViewerStreamSource.SEARCH.name,
-    @field:SerializedName("scrollOffsetHint")
-    val scrollOffsetHint: Int = 0,
-    @field:SerializedName("recentsSection")
-    val recentsSection: String? = null,
+    @field:SerializedName("queryHash") val queryHash: String = "",
+    @field:SerializedName("startIndex") val startIndex: Int = 0,
+    @field:SerializedName("streamSource") val streamSource: String = ViewerStreamSource.SEARCH.name,
+    @field:SerializedName("scrollOffsetHint") val scrollOffsetHint: Int = 0,
+    @field:SerializedName("recentsSection") val recentsSection: String? = null,
 ) {
-    fun toDomain(): ViewerLaunchContext {
-        val decodedStreamSource = runCatching { ViewerStreamSource.valueOf(streamSource) }
-            .getOrDefault(ViewerStreamSource.SEARCH)
-        return ViewerLaunchContext(
-            queryHash = queryHash,
-            startIndex = startIndex,
-            streamSource = decodedStreamSource,
-            scrollOffsetHint = scrollOffsetHint,
-            recentsSection = decodeRestoredRecentsSection(recentsSection, decodedStreamSource, queryHash),
-        )
-    }
+    fun toDomain(): ViewerLaunchContext = decodeRestoredViewerLaunchContext(
+        queryHash, startIndex, streamSource, scrollOffsetHint, recentsSection,
+    )
 
     companion object {
         fun fromDomain(context: ViewerLaunchContext): LegacyViewerLaunchContextRecord {
@@ -376,6 +363,24 @@ internal data class LegacyViewerLaunchContextRecord(
             )
         }
     }
+}
+
+internal fun decodeRestoredViewerLaunchContext(
+    queryHash: String,
+    startIndex: Int,
+    streamSource: String,
+    scrollOffsetHint: Int,
+    recentsSection: String?,
+): ViewerLaunchContext {
+    val decodedStreamSource = runCatching { ViewerStreamSource.valueOf(streamSource) }
+        .getOrDefault(ViewerStreamSource.SEARCH)
+    return ViewerLaunchContext(
+        queryHash = queryHash,
+        startIndex = startIndex,
+        streamSource = decodedStreamSource,
+        scrollOffsetHint = scrollOffsetHint,
+        recentsSection = decodeRestoredRecentsSection(recentsSection, decodedStreamSource, queryHash),
+    )
 }
 
 internal fun parseLegacyProfileId(

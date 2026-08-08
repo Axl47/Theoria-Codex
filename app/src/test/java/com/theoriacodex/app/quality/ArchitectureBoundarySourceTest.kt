@@ -86,7 +86,7 @@ class ArchitectureBoundarySourceTest {
             "app/src/main/java/com/theoriacodex/app/ui/routes/DestinationStateBoundaries.kt"
         val app = File(repositoryRoot, appPath).readText()
         val shell = app.substringAfter("internal fun TheoriaAppContent(")
-            .substringBefore("private fun StartupUpdatePromptCard(")
+            .substringBefore("private fun openInBrowser(")
         val boundaries = File(repositoryRoot, boundariesPath).readText()
         val forbiddenShellReads = listOf(
             "observeSettings()",

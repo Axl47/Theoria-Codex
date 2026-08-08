@@ -153,35 +153,46 @@ fun CodexDetailScreen(
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text(if (isLikesCodex) "Clear Likes?" else "Delete Codex?") },
-            text = {
-                Text(
-                    if (isLikesCodex) {
-                        "Clear all liked posts from this recommendation profile? The Likes Codex will remain."
-                    } else {
-                        "Delete \"$codexName\" and all saved items in it? This cannot be undone."
-                    },
-                )
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancel")
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteConfirm = false
-                        onDeleteCodex()
-                    },
-                ) {
-                    Text(if (isLikesCodex) "Clear" else "Delete")
-                }
+        CodexDeleteConfirmationDialog(
+            codexName = codexName,
+            isLikesCodex = isLikesCodex,
+            onDismiss = { showDeleteConfirm = false },
+            onConfirm = {
+                showDeleteConfirm = false
+                onDeleteCodex()
             },
         )
     }
+}
+
+@Composable
+private fun CodexDeleteConfirmationDialog(
+    codexName: String,
+    isLikesCodex: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (isLikesCodex) "Clear Likes?" else "Delete Codex?") },
+        text = {
+            Text(
+                if (isLikesCodex) {
+                    "Clear all liked posts from this recommendation profile? The Likes Codex will remain."
+                } else {
+                    "Delete \"$codexName\" and all saved items in it? This cannot be undone."
+                },
+            )
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(if (isLikesCodex) "Clear" else "Delete")
+            }
+        },
+    )
 }
 
 @Composable

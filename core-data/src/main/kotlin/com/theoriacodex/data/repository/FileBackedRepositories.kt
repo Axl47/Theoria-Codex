@@ -1137,68 +1137,6 @@ private data class RecommendationProfileRecord(
     }
 }
 
-private data class UiRestoreStoreFile(
-    @field:SerializedName("lastTab")
-    val lastTab: String? = null,
-    @field:SerializedName("searchScrollStates")
-    val searchScrollStates: Map<String, SearchScrollStateRecord> = emptyMap(),
-    @field:SerializedName("settingsSectionExpansion")
-    val settingsSectionExpansion: Map<String, Boolean> = emptyMap(),
-    @field:SerializedName("viewerLaunchContext")
-    val viewerLaunchContext: ViewerLaunchContextRecord? = null,
-)
-
-private data class UiRestoreMemoryState(
-    val lastTab: String?,
-    val scrollStates: Map<String, SearchScrollState>,
-    val settingsSectionExpansion: Map<String, Boolean>,
-    val viewerLaunchContext: ViewerLaunchContext?,
-)
-
-private data class SearchScrollStateRecord(
-    @field:SerializedName("firstVisibleItemIndex")
-    val firstVisibleItemIndex: Int = 0,
-    @field:SerializedName("firstVisibleItemOffsetPx")
-    val firstVisibleItemOffsetPx: Int = 0,
-)
-
-private data class ViewerLaunchContextRecord(
-    @field:SerializedName("queryHash")
-    val queryHash: String = "",
-    @field:SerializedName("startIndex")
-    val startIndex: Int = 0,
-    @field:SerializedName("streamSource")
-    val streamSource: String = ViewerStreamSource.SEARCH.name,
-    @field:SerializedName("scrollOffsetHint")
-    val scrollOffsetHint: Int = 0,
-    @field:SerializedName("recentsSection")
-    val recentsSection: String? = null,
-) {
-    fun toDomain(): ViewerLaunchContext {
-        val decodedStreamSource = runCatching { ViewerStreamSource.valueOf(streamSource) }
-            .getOrDefault(ViewerStreamSource.SEARCH)
-        return ViewerLaunchContext(
-            queryHash = queryHash,
-            startIndex = startIndex,
-            streamSource = decodedStreamSource,
-            scrollOffsetHint = scrollOffsetHint,
-            recentsSection = decodeRestoredRecentsSection(recentsSection, decodedStreamSource, queryHash),
-        )
-    }
-
-    companion object {
-        fun fromDomain(context: ViewerLaunchContext): ViewerLaunchContextRecord {
-            return ViewerLaunchContextRecord(
-                queryHash = context.queryHash,
-                startIndex = context.startIndex,
-                streamSource = context.streamSource.name,
-                scrollOffsetHint = context.scrollOffsetHint,
-                recentsSection = context.recentsSection?.name,
-            )
-        }
-    }
-}
-
 private data class LikesStoreFile(
     @field:SerializedName("likes")
     val likes: List<LikedPostRecord>? = null,

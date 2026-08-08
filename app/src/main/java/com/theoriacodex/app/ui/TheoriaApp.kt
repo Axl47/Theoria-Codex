@@ -215,7 +215,7 @@ private object AppRoute {
     }
 }
 
-private data class ReleaseChangelogEntry(
+internal data class ReleaseChangelogEntry(
     val releaseId: Long?,
     val versionCode: Int,
     val commitShaShort: String,
@@ -2117,186 +2117,6 @@ internal fun TheoriaAppContent(
     }
 }
 
-@Composable
-private fun StartupUpdatePromptCard(
-    releases: List<ReleaseChangelogEntry>,
-    installedVersionCode: Int,
-    actionEnabled: Boolean,
-    onYes: () -> Unit,
-    onNo: () -> Unit,
-    onRemindLater: () -> Unit,
-) {
-    val latestRelease = releases.firstOrNull()
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .widthIn(max = 560.dp)
-            .padding(horizontal = 16.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                text = "Update available",
-                style = MaterialTheme.typography.titleLarge,
-            )
-            if (latestRelease != null) {
-                val subtitleParts = buildList {
-                    add(releaseDisplayTitle(latestRelease.releaseName, latestRelease.versionCode))
-                    add("vc${latestRelease.versionCode}")
-                    add(latestRelease.commitShaShort)
-                }
-                Text(
-                    text = subtitleParts.joinToString(separator = " • "),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            ReleaseChangelogList(
-                releases = releases,
-                installedVersionCode = installedVersionCode,
-                maxHeight = 240.dp,
-                itemSpacing = 10.dp,
-            )
-
-            StartupUpdatePromptActions(
-                actionEnabled = actionEnabled,
-                onYes = onYes,
-                onNo = onNo,
-                onRemindLater = onRemindLater,
-            )
-        }
-    }
-}
-
-@Composable
-private fun PostInstallChangelogDialog(
-    releases: List<ReleaseChangelogEntry>,
-    installedVersionCode: Int,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Got it")
-            }
-        },
-        title = {
-            Text("What's new")
-        },
-        text = {
-            ReleaseChangelogList(
-                releases = releases,
-                installedVersionCode = installedVersionCode,
-                maxHeight = 320.dp,
-                itemSpacing = 14.dp,
-            )
-        },
-    )
-}
-
-@Composable
-private fun ReleaseHistoryDialog(
-    releases: List<ReleaseChangelogEntry>,
-    installedVersionCode: Int,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close")
-            }
-        },
-        title = {
-            Text("Release changelog")
-        },
-        text = {
-            ReleaseChangelogList(
-                releases = releases,
-                installedVersionCode = installedVersionCode,
-                maxHeight = 420.dp,
-                itemSpacing = 14.dp,
-            )
-        },
-    )
-}
-
-@Composable
-private fun ReleaseChangelogList(
-    releases: List<ReleaseChangelogEntry>,
-    installedVersionCode: Int,
-    maxHeight: Dp,
-    itemSpacing: Dp,
-) {
-    if (releases.isEmpty()) {
-        Text(
-            text = "No changelog details were published for this build.",
-            style = MaterialTheme.typography.bodySmall,
-        )
-        return
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = maxHeight)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(itemSpacing),
-    ) {
-        releases.forEachIndexed { index, release ->
-            ReleaseChangelogEntryContent(
-                release = release,
-                installedVersionCode = installedVersionCode,
-            )
-            if (index != releases.lastIndex) {
-                HorizontalDivider()
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReleaseChangelogEntryContent(
-    release: ReleaseChangelogEntry,
-    installedVersionCode: Int,
-) {
-    val titleBase = releaseDisplayTitle(release.releaseName, release.versionCode)
-    val title = if (release.versionCode == installedVersionCode) {
-        "$titleBase (Current)"
-    } else {
-        titleBase
-    }
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-    )
-    val sections = release.changelogSections.filter { section ->
-        section.bullets.isNotEmpty()
-    }
-    if (sections.isNotEmpty()) {
-        sections.forEach { section ->
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = section.title,
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                section.bullets.forEach { bullet ->
-                    ChangelogBulletText(bullet = bullet)
-                }
-            }
-        }
-    } else {
-        Text(
-            text = firstChangelogLine(release.changelogMarkdown)
-                ?: "No changelog details were published for this build.",
-            style = MaterialTheme.typography.bodySmall,
-        )
-    }
-}
-
 private fun openInBrowser(context: Context, url: String) {
     runCatching {
         val intent = Intent(Intent.ACTION_VIEW, url.toUri()).apply {
@@ -2326,7 +2146,7 @@ private fun isCodexImportUri(context: Context, uri: Uri): Boolean {
 }
 
 @Composable
-private fun ChangelogBulletText(bullet: String) {
+internal fun ChangelogBulletText(bullet: String) {
     val leadingSpaces = bullet.takeWhile { it == ' ' }.length
     val indentLevel = (leadingSpaces / 2).coerceAtLeast(0)
     val normalized = bullet.trimStart()
@@ -2434,13 +2254,13 @@ private fun releaseChangelogNewestFirstComparator(): Comparator<ReleaseChangelog
         .thenByDescending { it.versionCode }
 }
 
-private fun releaseDisplayTitle(releaseName: String?, versionCode: Int): String {
+internal fun releaseDisplayTitle(releaseName: String?, versionCode: Int): String {
     val normalized = releaseName?.trim().orEmpty()
     if (normalized.isNotBlank()) return normalized
     return "vc$versionCode"
 }
 
-private fun firstChangelogLine(markdown: String): String? {
+internal fun firstChangelogLine(markdown: String): String? {
     return markdown
         .lineSequence()
         .map { it.trim() }

@@ -23,10 +23,10 @@ class FeedAutoplayArchitectureTest {
             assertTrue("$path must render SearchResultCard", "SearchResultCard(" in file(path).readText())
         }
 
-        val codex = file(
-            "app/src/main/java/com/theoriacodex/app/codex/CodexDetailScreen.kt",
+        val sharedGrid = file(
+            "app/src/main/java/com/theoriacodex/app/ui/components/PostStaggeredGrid.kt",
         ).readText()
-        assertTrue("Codex cards require canonical stable keys", "key = { _, post ->" in codex)
+        assertTrue("Shared feed cards require canonical stable keys", "key = { _, post ->" in sharedGrid)
     }
 
     @Test

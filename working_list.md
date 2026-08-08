@@ -4,6 +4,33 @@ updated_at: 2026-08-03T00:03:12-04:00
 ---
 # Working List
 
+## Current Task: Prepare v0.8.0 Release
+
+### In Progress
+
+None.
+
+### Pending
+
+- [!] API 35 connected instrumentation is unavailable locally and remains for GitHub Actions.
+
+### Done
+
+- [x] Prepare the approved v0.8.0 release unit.
+  - Evidence: `app/build.gradle.kts` declares `0.8.0` / `1500000800`; `release-notes/v0.8.0.md` contains the approved user-facing notes.
+- [x] Prove device-test package isolation without installing an APK.
+  - Evidence: the connected-test dry run includes `verifyDebugInstallableApplicationId`; a host-built Debug APK passed that verifier and reports `com.theoriacodex.debug`.
+- [x] Repair release-gate drift exposed by focused validation.
+  - Evidence: the Codex delete dialog moved behind a behavior-preserving composable boundary so app Detekt passes; the stable-key architecture guard now checks the shared masonry-grid owner, and all 433 app unit tests pass with three skips.
+- [x] Build and verify the optimized release artifact.
+  - Evidence: `assembleRelease`, release and release-acceptance JSON/R8 contracts, and 36 workflow/helper tests pass; release metadata reports `0.8.0` / `1500000800`.
+- [x] Restore exact hotspot budgets for the five owners grown by post-audit UX work.
+  - Evidence: release changelog UI, Search persistence, Search empty-state policy, Codex dialogs, and UI-restore records now have focused owners; all five inherited files are below their frozen ceilings, CodexList is below the default 900-line limit, exact hotspot debt passes, and production duplication is 0.59% under the 0.60% gate. App/core-data compilation, Detekt, and 560 unit tests pass with three unchanged skips.
+- [x] Rerun the complete host quality and release validation batch.
+  - Evidence: all seven Detekt owners, aggregate Kover XML/verification, hotspot and duplication gates, 36 helper/workflow tests, app/core-data unit suites, final `assembleRelease`, and both release JSON/R8 verifiers pass. Final release metadata reports `com.theoriacodex`, `0.8.0`, and `1500000800`. API 35 connected instrumentation remains explicitly unrun for GitHub Actions.
+- [x] Present and receive approval for the final release diff.
+  - Evidence: the user approved the final v0.8.0 diff, exact `chore(release): prepare v0.8.0` commit message, and future `v0.8.0` tag on 2026-08-08.
+
 ## Current Task: Reuse the Collapsed Search Field for Applied Context
 
 ### In Progress
