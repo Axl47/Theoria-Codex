@@ -1312,7 +1312,7 @@ internal fun TheoriaAppContent(
                                                 }
                                                 topLevelPagerState.scrollToPage(targetIndex)
                                             } else if (topLevelPagerState.currentPage != targetIndex) {
-                                                topLevelPagerState.animateScrollToPage(targetIndex)
+                                                topLevelPagerState.scrollToPage(targetIndex)
                                             }
                                         }
                                     },
@@ -1447,7 +1447,7 @@ internal fun TheoriaAppContent(
                                                     .indexOf(TopLevelDestination.Search)
                                                 homeTabRoute = TopLevelDestination.Search.route
                                                 if (topLevelPagerState.currentPage != targetIndex) {
-                                                    topLevelPagerState.animateScrollToPage(targetIndex)
+                                                    topLevelPagerState.scrollToPage(targetIndex)
                                                 }
                                             },
                                             onShowMessage = { message ->
@@ -1500,7 +1500,7 @@ internal fun TheoriaAppContent(
                                             val targetIndex = TopLevelDestination.entries
                                                 .indexOf(TopLevelDestination.Search)
                                             scope.launch {
-                                                topLevelPagerState.animateScrollToPage(targetIndex)
+                                                topLevelPagerState.scrollToPage(targetIndex)
                                             }
                                         },
                                         onOpenWatchedPost = { index ->
@@ -1570,7 +1570,7 @@ internal fun TheoriaAppContent(
                                                     restoreState = true
                                                 }
                                                 if (topLevelPagerState.currentPage != targetIndex) {
-                                                    topLevelPagerState.animateScrollToPage(targetIndex)
+                                                    topLevelPagerState.scrollToPage(targetIndex)
                                                 }
                                             }
                                         },

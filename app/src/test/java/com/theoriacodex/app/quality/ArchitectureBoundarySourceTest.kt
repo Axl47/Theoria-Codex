@@ -150,6 +150,23 @@ class ArchitectureBoundarySourceTest {
     }
 
     @Test
+    fun `top level destination navigation never animates through intermediate tabs`() {
+        val appPath = "app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt"
+        val app = File(repositoryRoot, appPath).readText()
+        val shell = app.substringAfter("internal fun TheoriaAppContent(")
+            .substringBefore("private fun StartupUpdatePromptCard(")
+
+        assertTrue(
+            "Top-level navigation must jump directly so intermediate feeds are not activated",
+            "animateScrollToPage(" !in shell,
+        )
+        assertTrue(
+            "The top-level pager must retain direct page navigation",
+            "topLevelPagerState.scrollToPage(" in shell,
+        )
+    }
+
+    @Test
     fun `feed composables delegate animated duration enrichment to route owners`() {
         val screens = listOf(
             "app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt",
