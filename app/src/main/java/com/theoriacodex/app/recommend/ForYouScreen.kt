@@ -17,18 +17,15 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -63,6 +60,8 @@ import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedErrorTile
+import com.theoriacodex.app.ui.components.FeedFilterFab
+import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
@@ -190,17 +189,15 @@ fun ForYouScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
-            FloatingActionButton(
+            FeedFilterFab(
                 modifier = Modifier.padding(bottom = 8.dp),
+                active = animatedOnly || animatedDurationFilterActive ||
+                    state.sortMode != SortMode.NEWEST,
+                contentDescription = "Filter and sort recommendations",
                 onClick = {
                     showSortSheet = true
                 },
-            ) {
-                Icon(
-                    imageVector = Icons.Default.FilterList,
-                    contentDescription = "Sort recommendations",
-                )
-            }
+            )
         },
     ) { padding ->
         Column(
@@ -464,13 +461,7 @@ private fun ForYouSortSheet(
     onAnimatedDurationRangeChange: (AnimatedDurationRange) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+    FeedFilterSheet(onDismiss = onDismiss) {
             Text("Media Types", style = MaterialTheme.typography.titleMedium)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item {
@@ -507,7 +498,6 @@ private fun ForYouSortSheet(
                     Text("Close")
                 }
             }
-        }
     }
 }
 

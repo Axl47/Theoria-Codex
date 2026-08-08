@@ -42,7 +42,6 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Collections
@@ -111,6 +110,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -2445,37 +2445,17 @@ private fun ViewerChrome(
     onDownload: () -> Unit,
     onInfo: () -> Unit,
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+    SecondaryScreenAppBar(
+        modifier = modifier,
+        title = "$source • $indexLabel",
+        onBack = onBack,
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
                 if (onToggleLike != null) {
                     IconButton(onClick = onToggleLike) {
                         Icon(
-                            imageVector = if (liked) {
-                                Icons.Default.Favorite
-                            } else {
-                                Icons.Outlined.FavoriteBorder
-                            },
-                            contentDescription = if (liked) {
-                                "Unlike post"
-                            } else {
-                                "Like post"
-                            },
+                            imageVector = if (liked) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                            contentDescription = if (liked) "Unlike post" else "Like post",
                             tint = if (liked) {
                                 MaterialTheme.colorScheme.error
                             } else {
@@ -2484,17 +2464,6 @@ private fun ViewerChrome(
                         )
                     }
                 }
-            }
-            Text(
-                text = "$source • $indexLabel",
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f),
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
                 if (mediaOverviewAvailable) {
                     IconButton(onClick = onToggleMediaOverview) {
                         Icon(
@@ -2609,7 +2578,5 @@ private fun ViewerChrome(
                         }
                     }
                 }
-            }
-        }
     }
 }

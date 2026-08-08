@@ -4,6 +4,31 @@ updated_at: 2026-08-03T00:03:12-04:00
 ---
 # Working List
 
+## Current Task: Standardize Secondary Chrome and Feed Filtering
+
+### In Progress
+
+None.
+
+### Pending
+
+- [ ] Manually confirm secondary-bar geometry and filter-sheet/FAB states in the isolated Debug app.
+
+### Done
+
+- [x] Add focused architecture coverage and run one bounded validation batch.
+  - Evidence: 2 `NavigationChromeArchitectureTest` cases passed with zero failures/errors; `:app:compileDebugKotlin` and `:app:detektDebug` passed, with Detekt retaining its known 10 analyzer-resolution diagnostics. No connected, device, package mutation, or live-provider command ran.
+- [x] Adopt the shared filter sheet and active-state affordance in Search, For You, and Creator Profile.
+  - Evidence: all three routes retain their existing filter values and callbacks but render through `FeedFilterSheet`; `FeedFilterFab` uses route-owned non-default state for tint and accessibility state without adding grid-adjacent summary content.
+- [x] Adopt the shared app bar in Codex detail, Creator Profile, and Viewer.
+  - Evidence: all three routes render through `SecondaryScreenAppBar`; Viewer retains its translucent overlay and moves Like into the right action region, while Codex selection and Creator sharing callbacks remain route-owned.
+- [x] Create shared secondary-app-bar and feed-filter presentation owners.
+  - Evidence: `NavigationChrome.kt` owns the 48dp-minimum back/title/action frame, active-state filter FAB, and dismissible full filter sheet.
+- [x] Trace current secondary chrome and feed-filter ownership.
+  - Evidence: Codex detail uses text actions without a leading back icon; Creator Profile and Viewer each hand-build different back/title/action rows. Search, For You, and Creator each own compatible modal-sheet framing around route-specific filter controls, and none exposes active filter state on the existing FAB.
+- [x] Define the UX-004 implementation boundary before runtime edits.
+  - Evidence: `.docs/exec/standardize-secondary-chrome-and-feed-filtering.html` keeps filter values route-owned while sharing only chrome, transient sheet structure, section presentation, and active-state indication.
+
 ## Current Task: Reduce Settings First-Open Density
 
 ### In Progress

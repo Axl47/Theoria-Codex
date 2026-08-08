@@ -86,6 +86,10 @@ Settings cards use the shared `SettingsSection` composable with independently pe
 
 First-open Settings sections default collapsed only when their persistence key is absent; explicit stored true or false choices remain authoritative. Collapsed summaries expose compact repeated-use state only. Keep credentials, per-source weights, cache-clearing actions, and other sensitive or destructive controls inside expanded content.
 
+## Secondary Chrome And Feed Filters
+
+Codex detail, Creator Profile, Viewer, and future secondary routes use `SecondaryScreenAppBar` for the shared left Back, center title/context, and right action geometry. Search, For You, and Creator Profile use `FeedFilterSheet` and `FeedFilterFab`; filter values and refresh behavior remain route-owned, while the shared FAB shows active state through tint and accessibility state rather than a persistent summary row.
+
 ## Codex Collection Actions
 
 `CodexListScreen` owns one collection-action sheet reached by both the compact tile overflow affordance and tile long-press; keep export/share, search, rename, and delete behavior in that shared surface rather than creating divergent entry-point logic. `CodexDetailScreen` owns explicit multi-post edit selection through `CodexEditSelection`, while long-press retains the full single-post action sheet. Do not add permanent overflow controls to individual feed or Codex post cards to expose these actions.

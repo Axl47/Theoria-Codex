@@ -31,12 +31,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.PostActionSheet
+import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.model.CreatorProfile
@@ -190,27 +190,14 @@ private fun CodexDetailHeader(
     onRemoveSelected: () -> Unit,
     onDeleteCodex: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+    SecondaryScreenAppBar(
+        title = codexName,
+        subtitle = "$itemCount items",
+        onBack = onBack,
     ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = codexName,
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text("$itemCount items", style = MaterialTheme.typography.bodySmall)
-        }
         CodexDetailHeaderActions(
             hasPosts = itemCount > 0,
             editSelection = editSelection,
-            onBack = onBack,
             onBeginEdit = onBeginEdit,
             onCancelEdit = onCancelEdit,
             onRemoveSelected = onRemoveSelected,
@@ -234,7 +221,6 @@ private fun CodexDetailHeader(
 private fun CodexDetailHeaderActions(
     hasPosts: Boolean,
     editSelection: CodexEditSelection,
-    onBack: () -> Unit,
     onBeginEdit: () -> Unit,
     onCancelEdit: () -> Unit,
     onRemoveSelected: () -> Unit,
@@ -250,7 +236,6 @@ private fun CodexDetailHeaderActions(
                 Text("Remove (${editSelection.selectedPostIds.size})")
             }
         } else {
-            TextButton(onClick = onBack) { Text("Back") }
             TextButton(enabled = hasPosts, onClick = onBeginEdit) { Text("Edit") }
             TextButton(onClick = onDeleteCodex) { Text("Delete") }
         }

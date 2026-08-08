@@ -39,11 +39,11 @@ This backlog records agreed product improvements that are not yet scheduled for 
 
 ### UX-004 — Standardize secondary-screen chrome and feed filtering
 
-- [ ] Use one shared secondary-screen app-bar pattern with a left back affordance, title/context in the center area, and compact actions or overflow on the right.
-- [ ] Apply the pattern to Codex detail, Creator Profile, Viewer, and future secondary routes without increasing their existing top-bar height.
-- [ ] Converge Search, For You, and Creator filtering on one shared filter-sheet structure while preserving route-specific options.
-- [ ] Indicate active filters within the existing filter affordance through state, tint, or a small badge/dot instead of adding another persistent filter-summary row.
-- [ ] Keep filter controls transient and dismissible so the media grid remains the dominant surface.
+- [x] Use one shared secondary-screen app-bar pattern with a left back affordance, title/context in the center area, and compact actions or overflow on the right.
+- [x] Apply the pattern to Codex detail, Creator Profile, Viewer, and future secondary routes without increasing their existing top-bar height.
+- [x] Converge Search, For You, and Creator filtering on one shared filter-sheet structure while preserving route-specific options.
+- [x] Indicate active filters within the existing filter affordance through state, tint, or a small badge/dot instead of adding another persistent filter-summary row.
+- [x] Keep filter controls transient and dismissible so the media grid remains the dominant surface.
 
 ### UX-005 — Reuse the collapsed Search field for applied context
 

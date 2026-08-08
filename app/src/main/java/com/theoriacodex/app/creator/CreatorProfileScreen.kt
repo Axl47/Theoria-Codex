@@ -13,20 +13,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,7 +38,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
 import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
@@ -58,8 +53,11 @@ import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedErrorTile
+import com.theoriacodex.app.ui.components.FeedFilterFab
+import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.PostActionSheet
+import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.creator.state.CreatorAction
@@ -194,12 +192,12 @@ fun CreatorProfileScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
-            FloatingActionButton(
+            FeedFilterFab(
                 modifier = Modifier.padding(bottom = 8.dp),
+                active = animatedOnly || hideLiked || hideSaved || animatedDurationFilterActive,
+                contentDescription = "Filter creator uploads",
                 onClick = { showFilterSheet = true },
-            ) {
-                Icon(Icons.Default.FilterList, contentDescription = "Filter creator uploads")
-            }
+            )
         },
     ) { padding ->
         Column(
@@ -209,73 +207,45 @@ fun CreatorProfileScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+            SecondaryScreenAppBar(
+                title = creator.displayName,
+                subtitle = creator.source.displayName(),
+                onBack = { onAction(CreatorAction.Back) },
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    IconButton(onClick = { onAction(CreatorAction.Back) }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                        )
-                    }
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            text = creator.displayName,
-                            style = MaterialTheme.typography.titleLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = creator.source.displayName(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
                 creator.profileUrl?.takeIf { it.isNotBlank() }?.let { profileUrl ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { onOpenUrl(profileUrl) }) {
+                    IconButton(onClick = { onOpenUrl(profileUrl) }) {
+                        Icon(
+                            imageVector = Icons.Default.OpenInBrowser,
+                            contentDescription = "Open creator profile in browser",
+                        )
+                    }
+                    Box {
+                        IconButton(onClick = { showProfileShareMenu = true }) {
                             Icon(
-                                imageVector = Icons.Default.OpenInBrowser,
-                                contentDescription = "Open creator profile in browser",
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "Share creator profile",
                             )
                         }
-                        Box {
-                            IconButton(onClick = { showProfileShareMenu = true }) {
-                                Icon(
-                                    imageVector = Icons.Default.Share,
-                                    contentDescription = "Share creator profile",
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = showProfileShareMenu,
-                                onDismissRequest = { showProfileShareMenu = false },
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Share link") },
-                                    leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
-                                    onClick = {
-                                        showProfileShareMenu = false
-                                        shareCreatorProfile(context = context, profileUrl = profileUrl)
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Copy link") },
-                                    leadingIcon = {
-                                        Icon(Icons.Default.ContentCopy, contentDescription = null)
-                                    },
-                                    onClick = {
-                                        showProfileShareMenu = false
-                                        copyCreatorProfile(context = context, profileUrl = profileUrl)
-                                    },
-                                )
-                            }
+                        DropdownMenu(
+                            expanded = showProfileShareMenu,
+                            onDismissRequest = { showProfileShareMenu = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Share link") },
+                                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                                onClick = {
+                                    showProfileShareMenu = false
+                                    shareCreatorProfile(context = context, profileUrl = profileUrl)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Copy link") },
+                                leadingIcon = { Icon(Icons.Default.ContentCopy, contentDescription = null) },
+                                onClick = {
+                                    showProfileShareMenu = false
+                                    copyCreatorProfile(context = context, profileUrl = profileUrl)
+                                },
+                            )
                         }
                     }
                 }
@@ -336,15 +306,7 @@ fun CreatorProfileScreen(
     }
 
     if (showFilterSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showFilterSheet = false },
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
+        FeedFilterSheet(onDismiss = { showFilterSheet = false }) {
                 Text("Visibility", style = MaterialTheme.typography.titleMedium)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -379,7 +341,6 @@ fun CreatorProfileScreen(
                 ) {
                     Text("Done")
                 }
-            }
         }
     }
 

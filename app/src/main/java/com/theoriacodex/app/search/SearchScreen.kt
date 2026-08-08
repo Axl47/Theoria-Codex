@@ -33,7 +33,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.AssistChip
@@ -44,7 +43,6 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,7 +54,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -118,6 +115,8 @@ import com.theoriacodex.app.source.isRule34Family
 import com.theoriacodex.app.ui.components.AutocompleteListShell
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedErrorTile
+import com.theoriacodex.app.ui.components.FeedFilterFab
+import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
@@ -192,7 +191,6 @@ fun SearchScreen(
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var selectedActionPostResolving by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
     val queryHash = state.query.appliedQueryHash
@@ -205,6 +203,11 @@ fun SearchScreen(
         )
     }
     val animatedDurationFilterActive = !animatedDurationRange.isFullRange && !isNhentaiSourceMode
+    val searchFiltersActive = animatedFilterActive || animatedDurationFilterActive ||
+        hideLiked || hideSaved || state.query.draft.sort != SortMode.NEWEST ||
+        state.query.draft.dateRange != null || state.query.draft.minScore != null ||
+        state.query.nhentaiFullColorFilter ||
+        state.query.nhentaiLanguageFilter != NhentaiLanguageFilter.ANY
     LaunchedEffect(isNhentaiSourceMode) {
         if (isNhentaiSourceMode) {
             animatedOnly = false
@@ -445,15 +448,15 @@ fun SearchScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         floatingActionButton = {
-            FloatingActionButton(
+            FeedFilterFab(
                 modifier = Modifier.padding(bottom = 8.dp),
+                active = searchFiltersActive,
+                contentDescription = "Filter and sort",
                 onClick = {
                     focusManager.clearFocus()
                     showFilterSheet = true
                 },
-            ) {
-                Icon(Icons.Default.FilterList, contentDescription = "Filter and sort")
-            }
+            )
         }
     ) { padding ->
         Column(
@@ -828,13 +831,7 @@ fun SearchScreen(
                 applyDraftAndResetScroll()
             },
             onSortChanged = { applyDraftAndResetScroll() },
-            onDismiss = {
-                scope.launch {
-                    sheetState.hide()
-                    showFilterSheet = false
-                }
-            },
-            sheetState = sheetState,
+            onDismiss = { showFilterSheet = false },
         )
     }
 }
@@ -1275,7 +1272,6 @@ private fun FilterSheet(
     onNhentaiLanguageFilterChange: (NhentaiLanguageFilter) -> Unit,
     onSortChanged: () -> Unit,
     onDismiss: () -> Unit,
-    sheetState: androidx.compose.material3.SheetState,
 ) {
     var minScoreInput by remember(query.minScore) {
         mutableStateOf(query.minScore?.toString().orEmpty())
@@ -1285,16 +1281,7 @@ private fun FilterSheet(
     }
     val focusManager = LocalFocusManager.current
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+    FeedFilterSheet(onDismiss = onDismiss) {
             Text("Visibility", style = MaterialTheme.typography.titleMedium)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (showAnimatedOnlyFilter) {
@@ -1438,7 +1425,6 @@ private fun FilterSheet(
                     Text("Done")
                 }
             }
-        }
     }
 }
 
