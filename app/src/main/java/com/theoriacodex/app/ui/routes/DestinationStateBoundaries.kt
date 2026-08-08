@@ -130,15 +130,18 @@ internal fun BrowsingDestinationStateBoundary(
     content: @Composable (BrowsingDestinationState) -> Unit,
 ) {
     val settingsState = data.settingsRepository.observeSettings()
-        .collectAsStateWithLifecycle(initialValue = AppSettings())
-    DestinationStateBoundary(settingsState) { settings ->
+        .collectAsStateWithLifecycle(initialValue = null)
+    val settings = settingsState.value ?: return
+    DestinationStateBoundary(settingsState) {
         val activeProfile = settings.activeRecommendationProfile()
         val availableSourcesState = sources.availableSources.collectAsStateWithLifecycle()
         val likedPostIdsState = data.likesRepository.observeLikedPostIds(activeProfile.profileId)
-            .collectAsStateWithLifecycle(initialValue = emptySet())
+            .collectAsStateWithLifecycle(initialValue = null)
         val activeProfileLikesState = data.likesRepository.observeLikes(activeProfile.profileId)
-            .collectAsStateWithLifecycle(initialValue = emptyList())
+            .collectAsStateWithLifecycle(initialValue = null)
         val savedPostIds = rememberSavedPostIds(data)
+        val likedPostIds = likedPostIdsState.value ?: return@DestinationStateBoundary
+        val activeProfileLikes = activeProfileLikesState.value ?: return@DestinationStateBoundary
         val availableSources = availableSourcesState.value
         content(
             BrowsingDestinationState(
@@ -148,8 +151,8 @@ internal fun BrowsingDestinationStateBoundary(
                 creatorBrowsingSources = remember(sources.registry, availableSources) {
                     sources.registry.creatorBrowsingSources().intersect(availableSources)
                 },
-                likedPostIds = likedPostIdsState.value,
-                activeProfileLikesCount = activeProfileLikesState.value.size,
+                likedPostIds = likedPostIds,
+                activeProfileLikesCount = activeProfileLikes.size,
                 favoriteTags = remember(settings.favoriteTagsByProfile, activeProfile.profileId) {
                     settings.favoriteTagsByProfile[activeProfile.profileId]
                         .orEmpty()

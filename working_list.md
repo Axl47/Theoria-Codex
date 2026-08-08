@@ -4,6 +4,29 @@ updated_at: 2026-08-03T00:03:12-04:00
 ---
 # Working List
 
+## Current Task: Preserve the For You Feed Until Explicit Refresh
+
+### In Progress
+
+None.
+
+### Pending
+
+None.
+
+### Done
+
+- [x] Create the task checklist before implementation.
+  - Evidence: this section defines the required state flow, restoration behavior, regression coverage, and bounded closeout lane before runtime edits.
+- [x] Trace Search restoration and For You refresh ownership; define the minimal repair.
+  - Evidence: `ForYouCoordinator` already retains the current feed across route recomposition, but `BrowsingDestinationStateBoundary` mounts the route with placeholder `AppSettings()` and empty likes before repository data arrives. `ForYouViewModel.synchronizeEnvironment` treats those placeholders as authoritative, clears the retained feed at zero likes, and refreshes it again on the real emission. The repair belongs at the shared boundary; no durable feed store or ExecPlan is required.
+- [x] Gate browsing-route composition on authoritative settings and likes snapshots.
+  - Evidence: Search and For You now mount only after settings, liked IDs, and active-profile likes have emitted real repository snapshots; page reconstruction can no longer send synthetic empty data into the retained route owners.
+- [x] Add focused boundary regression coverage.
+  - Evidence: `BrowsingDestinationReadinessArchitectureTest` locks nullable loading sentinels for all three inputs and rejects the empty-list likes placeholder that cleared For You.
+- [x] Run one bounded validation batch and close the task.
+  - Evidence: `:app:compileDebugKotlin`, all app debug JVM tests, and `:app:detektDebug` passed; Detekt retained its known 10 analyzer-resolution diagnostics while exiting green. No device, emulator, connected test, package mutation, or live-provider command ran.
+
 ## Current Task: Converge Reversible Deletes and Single Copy Feedback
 
 ### In Progress

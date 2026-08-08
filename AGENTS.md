@@ -44,6 +44,10 @@ The Search route applies persisted scroll position once when the route is restor
 
 `UiRestoreRepository` is the sole live Search scroll store. `query_store.json` owns applied queries only; its pre-F05 `scrollOffsets` field is a one-time DataStore migration input and is removed after a verified import. SearchViewModel owns debounce and registers a closeable scheduler that synchronously waits for its final DataStore write during ViewModel teardown before cancelling that scheduler. This deliberately trades a storage-operation-length teardown stall for a provable final flush; do not move that flush into the already-cancelled `viewModelScope` or add a lossy timeout.
 
+## Browsing Destination Readiness
+
+`BrowsingDestinationStateBoundary` must not mount Search or For You with synthetic `AppSettings()` or empty-like placeholders while repository flows are still loading. Wait for the first authoritative settings, liked-ID, and active-profile likes emissions. For You retains its current feed in its navigation-scoped owner/coordinator; a transient zero-like placeholder clears that cache and regenerates the same recommendation when real data arrives.
+
 ## Recents Section Identity
 
 Watched and Codex are independent Recents memberships, not mutually exclusive labels derived from the latest Viewer origin. One canonical post may have one row in each section while sharing the same `posts` payload. Keep section in the `recent_watched` identity, preserve exact launch origin as row metadata, carry the section explicitly through `ViewerLaunchContext` when reopening from Recents, and clear or route by section. The combined All activity view may collapse duplicate canonical posts to the newest membership, but the filtered sections must retain both.
