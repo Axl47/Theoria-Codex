@@ -4,6 +4,27 @@ updated_at: 2026-08-03T00:03:12-04:00
 ---
 # Working List
 
+## Current Task: Reduce Settings First-Open Density
+
+### In Progress
+
+None.
+
+### Pending
+
+- [ ] Manually confirm first-open density and summary readability in the isolated Debug app.
+
+### Done
+
+- [x] Run the focused Settings validation batch and close deterministic UX-003 evidence.
+  - Evidence: 9 `SettingsViewModelTest` and 3 `SettingsSummaryPresentationTest` cases passed with zero failures/errors; `:app:compileDebugKotlin` and `:app:detektDebug` passed, with Detekt retaining its known 10 analyzer-resolution diagnostics. HTML validation and `git diff --check` passed. No connected, device, package mutation, or live-provider command ran.
+- [x] Implement collapsed defaults and compact live summaries.
+  - Evidence: absent expansion keys now default collapsed while explicit persisted booleans remain authoritative. Shared collapsed headers show active-profile, enabled-source, blacklist, account, cache, and developer-scenario state; credentials, weights, and clearing controls remain inside expanded content.
+- [x] Trace Settings expansion, persistence, section content, and test ownership.
+  - Evidence: `SettingsSectionExpansionState` owns keyed defaults, `SettingsViewModel` restores and persists the full map through `UiRestoreRepository`, and `SettingsScreen` owns all seven shared cards. Missing persisted keys are the only safe default boundary; stored keys remain authoritative.
+- [x] Define the UX-003 implementation and acceptance plan before runtime edits.
+  - Evidence: `.docs/exec/reduce-settings-first-open-density.html` bounds summaries to repeated-use state and keeps credentials, source weights, and storage clearing controls inside expanded sections.
+
 ## Current Task: Preserve the For You Feed Until Explicit Refresh
 
 ### In Progress

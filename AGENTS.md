@@ -84,6 +84,8 @@ For a new or changed device command, use a host-only dry run to inspect its task
 
 Settings cards use the shared `SettingsSection` composable with independently persisted expanded state owned by `TheoriaAppContent` and stored through `UiRestoreRepository`, so leaving and reopening the app does not reset the user's choices. New settings groups should use the same header and right-side chevron pattern rather than introducing another section-specific collapse control.
 
+First-open Settings sections default collapsed only when their persistence key is absent; explicit stored true or false choices remain authoritative. Collapsed summaries expose compact repeated-use state only. Keep credentials, per-source weights, cache-clearing actions, and other sensitive or destructive controls inside expanded content.
+
 ## Codex Collection Actions
 
 `CodexListScreen` owns one collection-action sheet reached by both the compact tile overflow affordance and tile long-press; keep export/share, search, rename, and delete behavior in that shared surface rather than creating divergent entry-point logic. `CodexDetailScreen` owns explicit multi-post edit selection through `CodexEditSelection`, while long-press retains the full single-post action sheet. Do not add permanent overflow controls to individual feed or Codex post cards to expose these actions.

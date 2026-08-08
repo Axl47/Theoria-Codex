@@ -20,9 +20,9 @@ enum class SettingsSectionKey {
 
 data class SettingsSectionExpansionState(
     val expandedBySection: Map<SettingsSectionKey, Boolean> = SettingsSectionKey.entries
-        .associateWith { true },
+        .associateWith { false },
 ) {
-    operator fun get(section: SettingsSectionKey): Boolean = expandedBySection[section] ?: true
+    operator fun get(section: SettingsSectionKey): Boolean = expandedBySection[section] ?: false
 
     fun updated(section: SettingsSectionKey, expanded: Boolean): SettingsSectionExpansionState {
         return copy(expandedBySection = expandedBySection + (section to expanded))
@@ -36,7 +36,7 @@ data class SettingsSectionExpansionState(
         fun fromPersistenceMap(persisted: Map<String, Boolean>): SettingsSectionExpansionState {
             return SettingsSectionExpansionState(
                 expandedBySection = SettingsSectionKey.entries.associateWith { section ->
-                    persisted[section.name] ?: true
+                    persisted[section.name] ?: false
                 },
             )
         }

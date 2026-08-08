@@ -32,10 +32,10 @@ This backlog records agreed product improvements that are not yet scheduled for 
 
 ### UX-003 — Reduce Settings first-open density
 
-- [ ] Change first-run Settings expansion defaults so the page does not initially open with every section expanded.
-- [ ] Preserve each existing user's persisted expansion choices; the default change must not reset current UI-restore state.
-- [ ] Add compact collapsed summaries where they help repeated use, such as enabled-source count, account connection state, cache usage, or active recommendation profile.
-- [ ] Keep credentials, per-source weights, and destructive storage controls inside their expanded sections rather than exposing more permanent page content.
+- [x] Change first-run Settings expansion defaults so the page does not initially open with every section expanded.
+- [x] Preserve each existing user's persisted expansion choices; the default change must not reset current UI-restore state.
+- [x] Add compact collapsed summaries where they help repeated use, such as enabled-source count, account connection state, cache usage, or active recommendation profile.
+- [x] Keep credentials, per-source weights, and destructive storage controls inside their expanded sections rather than exposing more permanent page content.
 
 ### UX-004 — Standardize secondary-screen chrome and feed filtering
 

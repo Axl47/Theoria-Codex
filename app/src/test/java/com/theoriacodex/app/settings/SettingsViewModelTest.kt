@@ -38,7 +38,7 @@ class SettingsViewModelTest {
 
         assertFalse(owner.state.value.sectionExpansion[SettingsSectionKey.SOURCE_ACCOUNTS])
         assertTrue(owner.state.value.sectionExpansion[SettingsSectionKey.UPDATES])
-        assertTrue(owner.state.value.sectionExpansion[SettingsSectionKey.STORAGE_AND_CACHING])
+        assertFalse(owner.state.value.sectionExpansion[SettingsSectionKey.STORAGE_AND_CACHING])
 
         owner.onAction(
             SettingsAction.SetSectionExpanded(SettingsSectionKey.UPDATES, expanded = false),
@@ -48,7 +48,29 @@ class SettingsViewModelTest {
         val persisted = restoreRepository.getSettingsSectionExpansion()
         assertFalse(persisted.getValue(SettingsSectionKey.SOURCE_ACCOUNTS.name))
         assertFalse(persisted.getValue(SettingsSectionKey.UPDATES.name))
-        assertTrue(persisted.getValue(SettingsSectionKey.STORAGE_AND_CACHING.name))
+        assertFalse(persisted.getValue(SettingsSectionKey.STORAGE_AND_CACHING.name))
+    }
+
+    @Test
+    fun `first open starts collapsed without overriding explicit restored choices`() = runTest {
+        val firstOpen = owner()
+        runCurrent()
+
+        assertTrue(SettingsSectionKey.entries.none { firstOpen.state.value.sectionExpansion[it] })
+
+        val restored = owner(
+            uiRestoreRepository = InMemoryUiRestoreRepository().apply {
+                setSettingsSectionExpansion(
+                    SettingsSectionKey.entries.associate { section ->
+                        section.name to (section == SettingsSectionKey.UPDATES)
+                    },
+                )
+            },
+        )
+        runCurrent()
+
+        assertTrue(restored.state.value.sectionExpansion[SettingsSectionKey.UPDATES])
+        assertFalse(restored.state.value.sectionExpansion[SettingsSectionKey.SOURCE_ACCOUNTS])
     }
 
     @Test

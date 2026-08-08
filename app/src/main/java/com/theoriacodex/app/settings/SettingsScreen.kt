@@ -59,6 +59,7 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "Recommendation Profiles",
+            summary = "${state.activeProfile.name} · ${state.activeProfileLikesCount} liked",
             expanded = state.sectionExpansion[SettingsSectionKey.RECOMMENDATION_PROFILES],
             onToggle = {
                 onAction(
@@ -118,6 +119,7 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "Unified Mode",
+            summary = "${state.settings.runtime.enabledSources.intersect(state.availableSources.toSet()).size} of ${state.availableSources.size} sources enabled",
             expanded = state.sectionExpansion[SettingsSectionKey.UNIFIED_MODE],
             onToggle = {
                 onAction(
@@ -167,6 +169,7 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "For You Blacklist",
+            summary = "${state.activeProfileBlacklist.size} hidden ${if (state.activeProfileBlacklist.size == 1) "set" else "sets"} · ${state.activeProfile.name}",
             expanded = state.sectionExpansion[SettingsSectionKey.FOR_YOU_BLACKLIST],
             onToggle = {
                 onAction(
@@ -212,6 +215,7 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "Source Accounts",
+            summary = sourceAccountsSummary(state.accounts),
             expanded = state.sectionExpansion[SettingsSectionKey.SOURCE_ACCOUNTS],
             onToggle = {
                 onAction(
@@ -333,6 +337,7 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "Storage & Caching",
+            summary = cacheSummary(state.cacheSnapshot.thumbnailCount, state.cacheSnapshot.fullImageCount),
             expanded = state.sectionExpansion[SettingsSectionKey.STORAGE_AND_CACHING],
             onToggle = {
                 onAction(
@@ -413,6 +418,7 @@ fun SettingsScreen(
         if (state.showDeveloperScenarios) {
             SettingsSection(
                 title = "Developer scenarios",
+                summary = scenarioLabel(state.settings.scenarioPreset),
                 expanded = state.sectionExpansion[SettingsSectionKey.DEVELOPER_SCENARIOS],
                 onToggle = {
                     onAction(
@@ -487,9 +493,31 @@ internal fun legacyRecoverySummary(
     append(").")
 }
 
+internal fun sourceAccountsSummary(accounts: SettingsAccountUiState): String {
+    val configuredCount = listOf(
+        accounts.pixivConnected,
+        accounts.gelbooruStatusLabel == "Configured",
+        accounts.rule34XxxStatusLabel == "Configured",
+    ).count { it }
+    return "$configuredCount of 3 configured"
+}
+
+internal fun cacheSummary(thumbnailCount: Int, fullImageCount: Int): String {
+    val itemCount = thumbnailCount + fullImageCount
+    return "$itemCount cached ${if (itemCount == 1) "item" else "items"}"
+}
+
+internal fun scenarioLabel(scenario: ScenarioPreset): String = when (scenario) {
+    ScenarioPreset.NORMAL -> "Normal"
+    ScenarioPreset.PARTIAL_FAILURE -> "Partial failure"
+    ScenarioPreset.EMPTY_RESULTS -> "Empty results"
+    ScenarioPreset.SLOW_NETWORK -> "Slow network"
+}
+
 @Composable
 internal fun SettingsSection(
     title: String,
+    summary: String? = null,
     expanded: Boolean,
     onToggle: () -> Unit,
     contentSpacing: Dp = 10.dp,
@@ -514,10 +542,11 @@ internal fun SettingsSection(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = title,
+                SettingsSectionHeaderText(
+                    title = title,
+                    summary = summary,
+                    expanded = expanded,
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
                 )
                 Icon(
                     imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
@@ -533,6 +562,26 @@ internal fun SettingsSection(
                     content = content,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SettingsSectionHeaderText(
+    title: String,
+    summary: String?,
+    expanded: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Text(text = title, style = MaterialTheme.typography.titleMedium)
+        if (!expanded && !summary.isNullOrBlank()) {
+            Text(
+                text = summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
         }
     }
 }
