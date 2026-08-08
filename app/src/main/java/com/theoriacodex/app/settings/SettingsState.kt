@@ -70,7 +70,6 @@ data class SettingsUiState(
     val showDeveloperScenarios: Boolean = false,
     val sectionExpansion: SettingsSectionExpansionState = SettingsSectionExpansionState(),
     val accounts: SettingsAccountUiState = SettingsAccountUiState(),
-    val newProfileName: String = "",
     val profileDeleteTargetId: String? = null,
     val showClearCacheOptions: Boolean = false,
     val changelogLoading: Boolean = false,
@@ -80,8 +79,7 @@ data class SettingsUiState(
 sealed interface SettingsAction {
     data class SetSectionExpanded(val section: SettingsSectionKey, val expanded: Boolean) : SettingsAction
     data class SetActiveProfile(val profileId: String) : SettingsAction
-    data class SetNewProfileName(val name: String) : SettingsAction
-    data object AddProfile : SettingsAction
+    data class AddProfile(val name: String) : SettingsAction
     data class RequestRemoveProfile(val profileId: String) : SettingsAction
     data object DismissRemoveProfile : SettingsAction
     data object ConfirmRemoveProfile : SettingsAction

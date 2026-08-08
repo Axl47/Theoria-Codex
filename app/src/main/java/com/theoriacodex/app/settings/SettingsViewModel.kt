@@ -274,8 +274,7 @@ internal class SettingsViewModel(
             is SettingsAction.SetActiveProfile -> launchMutation {
                 dependencies.settingsRepository.setActiveProfile(action.profileId)
             }
-            is SettingsAction.SetNewProfileName -> updateState { copy(newProfileName = action.name) }
-            SettingsAction.AddProfile -> addProfile()
+            is SettingsAction.AddProfile -> addProfile(action.name)
             is SettingsAction.RequestRemoveProfile -> updateState { copy(profileDeleteTargetId = action.profileId) }
             SettingsAction.DismissRemoveProfile -> updateState { copy(profileDeleteTargetId = null) }
             SettingsAction.ConfirmRemoveProfile -> removeRequestedProfile()
@@ -385,10 +384,9 @@ internal class SettingsViewModel(
         }
     }
 
-    private fun addProfile() {
-        val name = state.value.newProfileName.trim()
+    private fun addProfile(requestedName: String) {
+        val name = requestedName.trim()
         if (name.isBlank()) return
-        updateState { copy(newProfileName = "") }
         launchMutation { dependencies.settingsRepository.addRecommendationProfile(name) }
     }
 

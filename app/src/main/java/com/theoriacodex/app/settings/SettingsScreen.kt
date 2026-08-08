@@ -9,13 +9,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -26,9 +31,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -42,6 +53,8 @@ fun SettingsScreen(
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
 ) {
+    var showAddProfileDialog by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -79,36 +92,39 @@ fun SettingsScreen(
                         FilterChip(
                             selected = state.activeProfile.profileId == profile.profileId,
                             onClick = { onAction(SettingsAction.SetActiveProfile(profile.profileId)) },
-                            label = { Text(profile.name) },
+                            label = {
+                                Text(
+                                    if (state.activeProfile.profileId == profile.profileId) {
+                                        "${profile.name} · ${state.activeProfileLikesCount} liked"
+                                    } else {
+                                        profile.name
+                                    },
+                                )
+                            },
                         )
-                        TextButton(
+                        IconButton(
                             enabled = state.settings.recommendationProfiles.size > 1,
                             onClick = { onAction(SettingsAction.RequestRemoveProfile(profile.profileId)) },
                         ) {
-                            Text("Remove")
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete ${profile.name} profile",
+                            )
                         }
                     }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    OutlinedTextField(
-                        modifier = Modifier.weight(1f),
-                        value = state.newProfileName,
-                        onValueChange = { onAction(SettingsAction.SetNewProfileName(it)) },
-                        label = { Text("New profile") },
-                        singleLine = true,
-                    )
-                    Button(onClick = { onAction(SettingsAction.AddProfile) }) {
-                        Text("Add")
+                    IconButton(onClick = { showAddProfileDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add recommendation profile",
+                        )
                     }
                 }
-                Text(
-                    text = "Liked posts in active profile: ${state.activeProfileLikesCount}",
-                    style = MaterialTheme.typography.bodySmall,
-                )
                 TextButton(
                     enabled = state.activeProfileLikesCount > 0,
                     onClick = { onAction(SettingsAction.ClearActiveProfileLikes) },
@@ -476,7 +492,54 @@ fun SettingsScreen(
                 },
             )
         }
+
+        if (showAddProfileDialog) {
+            RecommendationProfileNameDialog(
+                onDismiss = { showAddProfileDialog = false },
+                onSave = { name ->
+                    onAction(SettingsAction.AddProfile(name))
+                    showAddProfileDialog = false
+                },
+            )
+        }
     }
+}
+
+@Composable
+private fun RecommendationProfileNameDialog(
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var value by remember { mutableStateOf("") }
+    fun saveIfValid() {
+        val trimmed = value.trim()
+        if (trimmed.isNotBlank()) onSave(trimmed)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Recommendation Profile") },
+        text = {
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = value,
+                onValueChange = { value = it.replace("\n", " ") },
+                label = { Text("Name") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Text,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(onDone = { saveIfValid() }),
+            )
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+        confirmButton = {
+            TextButton(onClick = { saveIfValid() }) { Text("Save") }
+        },
+    )
 }
 
 internal fun legacyRecoverySummary(
