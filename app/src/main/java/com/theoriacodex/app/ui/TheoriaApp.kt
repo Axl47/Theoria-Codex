@@ -1440,6 +1440,7 @@ internal fun TheoriaAppContent(
                                             settings = state.settings,
                                             activeProfileLikesCount = state.activeProfileLikesCount,
                                             availableSources = state.availableSources,
+                                            creatorBrowsingSources = state.creatorBrowsingSources,
                                             likedPostIds = state.likedPostIds,
                                             resolveUnknownAnimatedDurations =
                                                 state.settings.contentFilters.resolveUnknownAnimatedDurations,
@@ -1477,6 +1478,32 @@ internal fun TheoriaAppContent(
                                             },
                                             onToggleLike = { post ->
                                                 scope.launch { toggleLikeAndSyncCodex(post) }
+                                            },
+                                            onRequestSaveToCodex = { post ->
+                                                pendingSavePost = post
+                                                showSaveSheet = true
+                                            },
+                                            onSaveToDevice = ::requestSaveToDevice,
+                                            onOpenCreatorProfile = { creator ->
+                                                scope.launch { openCreatorProfile(creator) }
+                                            },
+                                            onOpenLegacyCreatorProfile = { post ->
+                                                scope.launch { openCreatorProfile(post) }
+                                            },
+                                            onAddIncludeTerm = ::addSearchIncludeTerm,
+                                            onAddExcludeTerm = ::addSearchExcludeTerm,
+                                            onRemoveIncludeTerm = { _, term -> removeSearchIncludeTerm(term) },
+                                            onRemoveExcludeTerm = { _, term -> removeSearchExcludeTerm(term) },
+                                            onFavoriteTagLongPress = addFavoriteTag,
+                                            onGoToSearch = {
+                                                val targetIndex = TopLevelDestination.entries
+                                                    .indexOf(TopLevelDestination.Search)
+                                                homeTabRoute = TopLevelDestination.Search.route
+                                                scope.launch {
+                                                    if (topLevelPagerState.currentPage != targetIndex) {
+                                                        topLevelPagerState.scrollToPage(targetIndex)
+                                                    }
+                                                }
                                             },
                                         ),
                                         onOwnerAvailable = forYouRouteOwnerBinding::publish,

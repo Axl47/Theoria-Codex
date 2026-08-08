@@ -60,14 +60,18 @@ import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.FeedErrorTile
 import com.theoriacodex.app.ui.components.FeedLoadingState
+import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.ui.components.expandableControlSemantics
 import com.theoriacodex.app.viewer.PixivUgoiraClient
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.collect
@@ -82,10 +86,22 @@ fun ForYouScreen(
     onToggleLike: (Post) -> Unit,
     onAction: (ForYouAction) -> Unit,
     displayTagFor: (Post) -> String? = { null },
+    creatorBrowsingSources: Set<SourceKey> = emptySet(),
+    onRequestSaveToCodex: (Post) -> Unit,
+    onSaveToDevice: (Post) -> Unit,
+    onOpenCreatorProfile: (CreatorProfile) -> Unit,
+    onOpenLegacyCreatorProfile: (Post) -> Unit,
+    onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
+    onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
+    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
+    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
+    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
+    onGoToSearch: () -> Unit,
 ) {
     val gridState = rememberLazyStaggeredGridState()
     var showSortSheet by remember { mutableStateOf(false) }
     var showSourceMenu by remember { mutableStateOf(false) }
+    var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var animatedOnly by rememberSaveable { mutableStateOf(false) }
     var durationMinBucket by rememberSaveable { mutableIntStateOf(ANIMATED_DURATION_MIN_BUCKET) }
     var durationMaxBucket by rememberSaveable { mutableIntStateOf(ANIMATED_DURATION_MAX_BUCKET) }
@@ -320,11 +336,35 @@ fun ForYouScreen(
                                 )
                             )
                         },
+                        onLongPress = { selectedActionPost = post },
                     )
                 }
             }
         }
         }
+    }
+
+    selectedActionPost?.let { post ->
+        PostActionSheet(
+            post = post,
+            creatorBrowsingSources = creatorBrowsingSources,
+            onDismiss = { selectedActionPost = null },
+            onSaveToDevice = { onSaveToDevice(post) },
+            onSaveToCodex = { onRequestSaveToCodex(post) },
+            onOpenCreatorProfile = onOpenCreatorProfile,
+            onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
+            onGoToSearch = onGoToSearch,
+            tagContent = {
+                PostTagActionSection(
+                    post = post,
+                    onAddIncludeTerm = { term -> onAddIncludeTerm(post, term) },
+                    onAddExcludeTerm = { term -> onAddExcludeTerm(post, term) },
+                    onRemoveIncludeTerm = { term -> onRemoveIncludeTerm(post, term) },
+                    onRemoveExcludeTerm = { term -> onRemoveExcludeTerm(post, term) },
+                    onFavoriteTagLongPress = onFavoriteTagLongPress,
+                )
+            },
+        )
     }
 
     if (showSortSheet) {

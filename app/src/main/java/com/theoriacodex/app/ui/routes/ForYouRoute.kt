@@ -18,8 +18,10 @@ import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import java.io.Closeable
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +31,7 @@ internal data class ForYouRouteConfig(
     val settings: AppSettings,
     val activeProfileLikesCount: Int,
     val availableSources: Set<SourceKey>,
+    val creatorBrowsingSources: Set<SourceKey>,
     val likedPostIds: Set<PostId>,
     val resolveUnknownAnimatedDurations: Boolean,
 )
@@ -40,6 +43,16 @@ internal data class ForYouRouteCallbacks(
     val onShowMessage: (String) -> Unit,
     val onSeedHidden: suspend (profileId: String, entries: List<ForYouBlacklistEntry>) -> Boolean,
     val onToggleLike: (Post) -> Unit,
+    val onRequestSaveToCodex: (Post) -> Unit,
+    val onSaveToDevice: (Post) -> Unit,
+    val onOpenCreatorProfile: (CreatorProfile) -> Unit,
+    val onOpenLegacyCreatorProfile: (Post) -> Unit,
+    val onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
+    val onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
+    val onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
+    val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
+    val onFavoriteTagLongPress: (SourceKey, String) -> Unit,
+    val onGoToSearch: () -> Unit,
 )
 
 /** Non-owning access used by Viewer and other destinations while Home owns the ViewModel. */
@@ -136,6 +149,17 @@ internal fun ForYouRoute(
         onToggleLike = callbacks.onToggleLike,
         onAction = owner::onAction,
         displayTagFor = owner::displayTagFor,
+        creatorBrowsingSources = config.creatorBrowsingSources,
+        onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
+        onSaveToDevice = callbacks.onSaveToDevice,
+        onOpenCreatorProfile = callbacks.onOpenCreatorProfile,
+        onOpenLegacyCreatorProfile = callbacks.onOpenLegacyCreatorProfile,
+        onAddIncludeTerm = callbacks.onAddIncludeTerm,
+        onAddExcludeTerm = callbacks.onAddExcludeTerm,
+        onRemoveIncludeTerm = callbacks.onRemoveIncludeTerm,
+        onRemoveExcludeTerm = callbacks.onRemoveExcludeTerm,
+        onFavoriteTagLongPress = callbacks.onFavoriteTagLongPress,
+        onGoToSearch = callbacks.onGoToSearch,
     )
 }
 
