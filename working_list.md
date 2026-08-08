@@ -4,6 +4,27 @@ updated_at: 2026-08-03T00:03:12-04:00
 ---
 # Working List
 
+## Current Task: Repair Codex Visible-Post Recording Handoff
+
+### In Progress
+
+None.
+
+### Pending
+
+None.
+
+### Done
+
+- [x] Reproduce the remaining failure in the runtime data flow.
+  - Evidence: `ViewerRoute` renders from its own active session, but `TheoriaApp` records through `ViewerDestinationState.session`; the latter can be temporarily null while `ViewerSessionRetentionViewModel.handoffTo()` clears retention before the outer owner snapshot catches up, causing `recordVisiblePost` to default to Search/Watched.
+- [x] Record visible posts with the authoritative Viewer route session.
+  - Evidence: `ViewerRoute` now pairs each visible post with `viewerOwner.session.value` and sends both through one callback; the shell no longer collects or reads a second Viewer session for Recents persistence.
+- [x] Add regression coverage for the session-handoff boundary.
+  - Evidence: `ViewerRecentsRecordingSourceTest` locks the route-owned callback, shell usage, and removal of duplicate destination session ownership.
+- [x] Run one bounded app validation batch and close the ExecPlan.
+  - Evidence: 404 app tests passed with zero failures/errors and three unchanged opt-in skips; app compilation and `:app:detektDebug` passed with its known 10 analyzer-resolution diagnostics; `git diff --check` passed. No device, emulator, connected test, package mutation, live provider, release, tag, or push command ran.
+
 ## Current Task: Track Watched and Codex Recents Independently
 
 ### In Progress

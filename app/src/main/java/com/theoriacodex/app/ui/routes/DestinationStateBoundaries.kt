@@ -109,7 +109,6 @@ internal data class ViewerDestinationState(
     val search: com.theoriacodex.app.search.state.SearchUiState,
     val forYou: com.theoriacodex.app.recommend.state.ForYouUiState,
     val creator: com.theoriacodex.app.creator.state.CreatorUiState,
-    val session: com.theoriacodex.app.viewer.ViewerSession?,
 )
 
 /** The state read belongs to this restart scope, never to the caller's shell scope. */
@@ -331,26 +330,21 @@ internal fun ViewerDestinationStateBoundary(
     searchOwner: SearchRouteOwnerHandle?,
     forYouOwner: ForYouRouteOwnerHandle?,
     creatorOwner: CreatorRouteOwnerHandle?,
-    viewerOwner: ViewerRouteOwnerHandle?,
-    retainedSession: State<com.theoriacodex.app.viewer.ViewerSession?>,
     content: @Composable (ViewerDestinationState) -> Unit,
 ) {
     BrowsingDestinationStateBoundary(data, sources) { browsing ->
         val emptySearch = remember { MutableStateFlow(com.theoriacodex.app.search.state.SearchUiState()) }
         val emptyForYou = remember { MutableStateFlow(com.theoriacodex.app.recommend.state.ForYouUiState()) }
         val emptyCreator = remember { MutableStateFlow(com.theoriacodex.app.creator.state.CreatorUiState()) }
-        val emptySession = remember { MutableStateFlow<com.theoriacodex.app.viewer.ViewerSession?>(null) }
         val searchState = (searchOwner?.state ?: emptySearch).collectAsStateWithLifecycle()
         val forYouState = (forYouOwner?.state ?: emptyForYou).collectAsStateWithLifecycle()
         val creatorState = (creatorOwner?.state ?: emptyCreator).collectAsStateWithLifecycle()
-        val routeSession = (viewerOwner?.session ?: emptySession).collectAsStateWithLifecycle()
         content(
             ViewerDestinationState(
                 browsing = browsing,
                 search = searchState.value,
                 forYou = forYouState.value,
                 creator = creatorState.value,
-                session = routeSession.value ?: retainedSession.value,
             ),
         )
     }

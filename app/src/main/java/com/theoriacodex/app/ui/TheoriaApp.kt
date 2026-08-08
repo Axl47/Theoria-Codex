@@ -1812,8 +1812,6 @@ internal fun TheoriaAppContent(
                             searchOwner = searchRouteOwner,
                             forYouOwner = forYouRouteOwner,
                             creatorOwner = creatorRouteOwner,
-                            viewerOwner = activeViewerOwner,
-                            retainedSession = viewerSessionOwner.session,
                         ) { state ->
                             ViewerRoute(
                             dependencies = ViewerRouteDependencies(
@@ -1917,9 +1915,9 @@ internal fun TheoriaAppContent(
                                             .setInvertMultiImageScrollDirection(enabled)
                                     }
                                 },
-                                onVisiblePostChanged = { post ->
+                                onVisiblePostChanged = { post, session ->
                                     scope.launch {
-                                        viewerRouteWorkflow.recordVisiblePost(post, state.session)
+                                        viewerRouteWorkflow.recordVisiblePost(post, session)
                                     }
                                 },
                                 onOpenInBrowser = { post ->
