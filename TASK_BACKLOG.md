@@ -47,8 +47,8 @@ This backlog records agreed product improvements that are not yet scheduled for 
 
 ### UX-005 — Reuse the collapsed Search field for applied context
 
-- [ ] When Search is unfocused and has an applied query, reuse the existing search-field text area for a compact one-line summary such as `Pixiv · klee · 2 filters` instead of showing the generic entry placeholder.
-- [ ] Keep the collapsed Search field at its current height; do not add a persistent chip row, applied-query row, or explanatory copy.
-- [ ] Restore the normal text-entry presentation when the field receives focus.
-- [ ] Ellipsize or compact the summary when several terms or source names cannot fit, while retaining the most useful source, query, and filter context.
-- [ ] If active filters are not already clear in the collapsed summary, optionally show one small status dot inside the existing filter FAB; do not show both a redundant summary indicator and badge count.
+- [x] When Search is unfocused and has an applied query, reuse the existing search-field text area for a compact one-line summary such as `Pixiv · klee · 2 filters` instead of showing the generic entry placeholder.
+- [x] Keep the collapsed Search field at its current height; do not add a persistent chip row, applied-query row, or explanatory copy.
+- [x] Restore the normal text-entry presentation when the field receives focus.
+- [x] Ellipsize or compact the summary when several terms or source names cannot fit, while retaining the most useful source, query, and filter context.
+- [x] If active filters are not already clear in the collapsed summary, optionally show one small status dot inside the existing filter FAB; do not show both a redundant summary indicator and badge count.

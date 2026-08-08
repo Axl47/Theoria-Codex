@@ -208,6 +208,26 @@ fun SearchScreen(
         state.query.draft.dateRange != null || state.query.draft.minScore != null ||
         state.query.nhentaiFullColorFilter ||
         state.query.nhentaiLanguageFilter != NhentaiLanguageFilter.ANY
+    val appliedFilterCount = activeSearchFilterCount(
+        appliedQuery = state.query.applied,
+        animatedOnly = animatedFilterActive,
+        animatedDurationActive = animatedDurationFilterActive,
+        hideLiked = hideLiked,
+        hideSaved = hideSaved,
+        fullColor = state.query.nhentaiFullColorFilter,
+        language = state.query.nhentaiLanguageFilter,
+    )
+    val collapsedSearchContext = if (
+        state.content.hasExecutedSearch || state.query.appliedQueryHash.isNotBlank()
+    ) {
+        collapsedSearchContextSummary(
+            appliedSourceScope = state.query.appliedSourceScope,
+            appliedQuery = state.query.applied,
+            activeFilterCount = appliedFilterCount,
+        )
+    } else {
+        null
+    }
     LaunchedEffect(isNhentaiSourceMode) {
         if (isNhentaiSourceMode) {
             animatedOnly = false
@@ -491,11 +511,13 @@ fun SearchScreen(
                 placeholder = if (!searchFieldFocused) {
                     {
                         Text(
-                            if (supportedSearchScopes.isEmpty()) {
+                            text = collapsedSearchContext ?: if (supportedSearchScopes.isEmpty()) {
                                 "tag or -tag"
                             } else {
                                 "tag, artist:, or -tag"
                             },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 } else {

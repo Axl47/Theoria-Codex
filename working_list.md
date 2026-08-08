@@ -4,6 +4,29 @@ updated_at: 2026-08-03T00:03:12-04:00
 ---
 # Working List
 
+## Current Task: Reuse the Collapsed Search Field for Applied Context
+
+### In Progress
+
+None.
+
+### Pending
+
+- [ ] Manually confirm collapsed summary, focus transition, and ellipsis in the isolated Debug app.
+
+### Done
+
+- [x] Run one bounded validation batch and close deterministic UX-005 evidence.
+  - Evidence: 3 `CollapsedSearchContextTest` and 1 `CollapsedSearchFieldArchitectureTest` cases passed with zero failures/errors; `:app:compileDebugKotlin` and `:app:detektDebug` passed. No connected, device, package mutation, or live-provider command ran.
+- [x] Add focused summary and Search ownership regression coverage.
+  - Evidence: formatter tests cover single, Unified, temporary, excluded-only, and filtered context; the architecture guard locks applied-state ownership, placeholder rendering, focus behavior, and the no-new-row constraint.
+- [x] Implement the compact applied-context presentation in the existing field.
+  - Evidence: the unfocused empty field now shows source, first useful applied term, and filter count; the real input remains unchanged, focus removes the placeholder, and long summaries ellipsize within the current single-line field.
+- [x] Trace Search focus, applied-query, source-scope, and filter-state ownership.
+  - Evidence: `SearchScreen` already owns focus and route-local visibility filters; `SearchQueryUiState` separately owns authoritative applied query/source scope. The existing unfocused placeholder slot can render applied context without changing field height, input state, persistence, or the pending-draft flow.
+- [x] Define the UX-005 implementation boundary before runtime edits.
+  - Evidence: `.docs/exec/reuse-collapsed-search-field-for-applied-context.html` defines source/query/filter priority, focus transitions, ellipsis, and the no-new-row constraint.
+
 ## Current Task: Standardize Secondary Chrome and Feed Filtering
 
 ### In Progress

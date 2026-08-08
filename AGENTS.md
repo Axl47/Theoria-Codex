@@ -44,6 +44,8 @@ The Search route applies persisted scroll position once when the route is restor
 
 `UiRestoreRepository` is the sole live Search scroll store. `query_store.json` owns applied queries only; its pre-F05 `scrollOffsets` field is a one-time DataStore migration input and is removed after a verified import. SearchViewModel owns debounce and registers a closeable scheduler that synchronously waits for its final DataStore write during ViewModel teardown before cancelling that scheduler. This deliberately trades a storage-operation-length teardown stall for a provable final flush; do not move that flush into the already-cancelled `viewModelScope` or add a lossy timeout.
 
+The collapsed Search field renders applied context through its existing unfocused placeholder slot. Build that summary only from `applied` query/source state plus current visibility-filter state; never copy the summary into the real text input or present draft terms as applied. Keep it one line with ellipsis and do not add a separate applied-query row.
+
 ## Browsing Destination Readiness
 
 `BrowsingDestinationStateBoundary` must not mount Search or For You with synthetic `AppSettings()` or empty-like placeholders while repository flows are still loading. Wait for the first authoritative settings, liked-ID, and active-profile likes emissions. For You retains its current feed in its navigation-scoped owner/coordinator; a transient zero-like placeholder clears that cache and regenerates the same recommendation when real data arrives.
