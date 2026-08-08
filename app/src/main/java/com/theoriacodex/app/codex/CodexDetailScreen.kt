@@ -8,9 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -37,6 +35,7 @@ import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.FeedEmptyTile
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
+import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.model.CreatorProfile
@@ -271,27 +270,21 @@ private fun CodexDetailGrid(
         )
         return
     }
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+    TwoColumnPostStaggeredGrid(
+        posts = posts,
+        state = rememberLazyStaggeredGridState(),
         modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        itemsIndexed(
-            items = posts,
-            key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" },
-        ) { index, post ->
-            CodexSelectablePostCard(
-                post = post,
-                index = index,
-                editSelection = editSelection,
-                pixivUgoiraClient = pixivUgoiraClient,
-                resolvePostById = resolvePostById,
-                onOpenViewer = onOpenViewer,
-                onToggleSelection = onToggleSelection,
-                onOpenPostActions = onOpenPostActions,
-            )
-        }
+    ) { index, post ->
+        CodexSelectablePostCard(
+            post = post,
+            index = index,
+            editSelection = editSelection,
+            pixivUgoiraClient = pixivUgoiraClient,
+            resolvePostById = resolvePostById,
+            onOpenViewer = onOpenViewer,
+            onToggleSelection = onToggleSelection,
+            onOpenPostActions = onOpenPostActions,
+        )
     }
 }
 
