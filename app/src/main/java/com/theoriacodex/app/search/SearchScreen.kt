@@ -1099,7 +1099,7 @@ fun SearchResultCard(
             } else {
                 Box(
                     modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.TopStart,
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = "No preview",
@@ -1130,7 +1130,7 @@ fun SearchResultCard(
                             role = Role.Checkbox,
                             onClick = onToggleLike,
                         ),
-                    contentAlignment = Alignment.Center,
+                    contentAlignment = Alignment.TopStart,
                 ) {
                     Surface(
                         modifier = Modifier
