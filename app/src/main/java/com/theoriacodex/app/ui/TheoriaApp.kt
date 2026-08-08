@@ -41,6 +41,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Scaffold
@@ -1009,7 +1010,12 @@ internal fun TheoriaAppContent(
     val showBottomBar = currentRoute == AppRoute.Home
     val currentContext = LocalContext.current
     val configuration = LocalConfiguration.current
-    val windowHeightDp = LocalWindowInfo.current.containerSize.height / LocalDensity.current.density
+    val density = LocalDensity.current
+    val windowHeightDp = LocalWindowInfo.current.containerSize.height / density.density
+    val bottomBarWindowInsets = NavigationBarDefaults.windowInsets
+    val bottomSystemInsetDp = with(density) {
+        bottomBarWindowInsets.getBottom(this).toDp().value
+    }
     val installedVersionCode = remember(appContext) { installedAppVersionCode(appContext) }
     val hostActivity = remember(currentContext) { currentContext.findActivity() }
     val topLevelPagerState = rememberPagerState(
@@ -1018,18 +1024,14 @@ internal fun TheoriaAppContent(
     val selectedTopLevelIndex = topLevelPagerState.currentPage
         .coerceIn(0, TopLevelDestination.entries.lastIndex)
     var persistedHomeTabRoute by rememberSaveable { mutableStateOf<String?>(null) }
-    val bottomBarHeightDp = remember(windowHeightDp) {
-        (windowHeightDp * BOTTOM_BAR_HEIGHT_RATIO)
-            .toInt()
-            .coerceIn(MIN_BOTTOM_BAR_HEIGHT_DP, MAX_BOTTOM_BAR_HEIGHT_DP)
+    val bottomNavigationSizing = remember(windowHeightDp, bottomSystemInsetDp) {
+        calculateBottomNavigationSizing(
+            windowHeightDp = windowHeightDp,
+            bottomSystemInsetDp = bottomSystemInsetDp,
+        )
     }
-    val bottomBarIconSizeDp = remember(bottomBarHeightDp) {
-        (bottomBarHeightDp * BOTTOM_BAR_ICON_RATIO)
-            .toInt()
-            .coerceIn(MIN_BOTTOM_BAR_ICON_DP, MAX_BOTTOM_BAR_ICON_DP)
-    }
-    val bottomBarHeight = bottomBarHeightDp.dp
-    val bottomBarIconSize = bottomBarIconSizeDp.dp
+    val bottomBarHeight = bottomNavigationSizing.totalHeightDp.dp
+    val bottomBarIconSize = bottomNavigationSizing.iconSizeDp.dp
 
     CollectRouteEffects(settingsOwner.effects) { effect ->
         when (effect) {
@@ -1293,6 +1295,7 @@ internal fun TheoriaAppContent(
                     if (showBottomBar) {
                         NavigationBar(
                             modifier = Modifier.height(bottomBarHeight),
+                            windowInsets = bottomBarWindowInsets,
                         ) {
                             TopLevelDestination.entries.forEach { destination ->
                                 val selected = selectedTopLevelIndex == TopLevelDestination.entries.indexOf(destination)
@@ -2438,11 +2441,5 @@ private fun parseGelbooruProfileOwner(html: String): String? {
     return owner?.trim()?.takeIf(String::isNotBlank)
 }
 
-private const val BOTTOM_BAR_HEIGHT_RATIO = 0.085f
-private const val BOTTOM_BAR_ICON_RATIO = 0.38f
-private const val MIN_BOTTOM_BAR_HEIGHT_DP = 68
-private const val MAX_BOTTOM_BAR_HEIGHT_DP = 88
-private const val MIN_BOTTOM_BAR_ICON_DP = 24
-private const val MAX_BOTTOM_BAR_ICON_DP = 30
 private val CODEX_IMPORT_MIME_TYPES = setOf("application/json", "text/json")
 private val GELBOORU_PROFILE_OWNER_REGEX = Regex("""user:([A-Za-z0-9_:-]+)""", RegexOption.IGNORE_CASE)
