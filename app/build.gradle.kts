@@ -89,8 +89,8 @@ android {
         targetSdk = 37
         // Keep this calculation aligned with MainReleaseTagParser and the release workflow:
         // 1_500_000_000 + major * 10_000 + minor * 100 + patch.
-        versionCode = 1_500_000_801
-        versionName = "0.8.1"
+        versionCode = 1_500_000_802
+        versionName = "0.8.2"
         if (versionCodeOverride != null) {
             versionCode = versionCodeOverride
         }
