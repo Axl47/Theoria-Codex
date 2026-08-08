@@ -872,6 +872,7 @@ fun SearchResultCard(
     pixivUgoiraClient: PixivUgoiraClient?,
     showSourceBadge: Boolean = false,
     displayTag: String? = null,
+    metadataLabel: String? = null,
     liked: Boolean = false,
     onToggleLike: (() -> Unit)? = null,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
@@ -1149,7 +1150,7 @@ fun SearchResultCard(
                 overflow = TextOverflow.Ellipsis,
             )
             val firstTag = displayTag ?: effectivePost.canonicalTags.firstOrNull()
-            if (firstTag != null || showSourceBadge) {
+            if (firstTag != null || metadataLabel != null || showSourceBadge) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1165,9 +1166,24 @@ fun SearchResultCard(
                     } else {
                         Spacer(modifier = Modifier.weight(1f))
                     }
+                    if (metadataLabel != null) {
+                        Text(
+                            text = metadataLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(start = 6.dp),
+                        )
+                    }
                     if (showSourceBadge) {
                         SourceBadge(
                             source = effectivePost.id.source,
+                            modifier = if (metadataLabel != null) {
+                                Modifier.padding(start = 6.dp)
+                            } else {
+                                Modifier
+                            },
                         )
                     }
                 }

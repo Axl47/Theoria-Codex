@@ -1470,9 +1470,36 @@ internal fun TheoriaAppContent(
                                         activity = state.activity,
                                         pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                         likedPostIds = state.likedPostIds,
+                                        creatorBrowsingSources = sourceDependencies.registry.creatorBrowsingSources(),
+                                        tagVideoCountProvider = featureDependencies.search::tagVideoCount,
+                                        fetchTagVideoCounts = featureDependencies.search::fetchTagVideoCounts,
                                         onToggleLike = { post ->
                                             scope.launch {
                                                 toggleLikeAndSyncCodex(post)
+                                            }
+                                        },
+                                        onRequestSaveToCodex = { post ->
+                                            pendingSavePost = post
+                                            showSaveSheet = true
+                                        },
+                                        onSaveToDevice = ::requestSaveToDevice,
+                                        onOpenCreatorProfile = { creator ->
+                                            scope.launch { openCreatorProfile(creator) }
+                                        },
+                                        onOpenLegacyCreatorProfile = { post ->
+                                            scope.launch { openCreatorProfile(post) }
+                                        },
+                                        onAddIncludeTerm = ::addSearchIncludeTerm,
+                                        onAddExcludeTerm = ::addSearchExcludeTerm,
+                                        onRemoveIncludeTerm = { _, term -> removeSearchIncludeTerm(term) },
+                                        onRemoveExcludeTerm = { _, term -> removeSearchExcludeTerm(term) },
+                                        onFavoriteTagLongPress = addFavoriteTag,
+                                        onGoToSearch = {
+                                            homeTabRoute = TopLevelDestination.Search.route
+                                            val targetIndex = TopLevelDestination.entries
+                                                .indexOf(TopLevelDestination.Search)
+                                            scope.launch {
+                                                topLevelPagerState.animateScrollToPage(targetIndex)
                                             }
                                         },
                                         onOpenWatchedPost = { index ->

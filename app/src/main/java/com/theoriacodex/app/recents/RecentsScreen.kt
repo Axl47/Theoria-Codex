@@ -10,9 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
@@ -34,16 +32,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.tags.PostTagActionSection
+import com.theoriacodex.app.ui.components.PostActionSheet
+import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
+import com.theoriacodex.domain.model.SourceKey
 import java.util.Locale
 
 @Composable
@@ -55,6 +59,19 @@ fun RecentsScreen(
     pixivUgoiraClient: PixivUgoiraClient? = null,
     likedPostIds: Set<PostId> = emptySet(),
     onToggleLike: ((Post) -> Unit)? = null,
+    creatorBrowsingSources: Set<SourceKey> = emptySet(),
+    tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
+    fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
+    onRequestSaveToCodex: (Post) -> Unit,
+    onSaveToDevice: (Post) -> Unit,
+    onOpenCreatorProfile: (CreatorProfile) -> Unit,
+    onOpenLegacyCreatorProfile: (Post) -> Unit,
+    onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
+    onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
+    onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
+    onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
+    onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
+    onGoToSearch: () -> Unit,
     onOpenWatchedPost: (Int) -> Unit,
     onOpenCodexPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
@@ -64,7 +81,8 @@ fun RecentsScreen(
     onClearAll: () -> Unit,
 ) {
     var filter by rememberSaveable { mutableStateOf(RecentsFilter.WATCHED) }
-    val now = remember(watchedPosts, searches, activity) { System.currentTimeMillis() }
+    val now = remember(watchedPosts, codexPosts, searches, activity) { System.currentTimeMillis() }
+    var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     val hasContent = when (filter) {
         RecentsFilter.WATCHED -> watchedPosts.isNotEmpty()
         RecentsFilter.CODEX -> codexPosts.isNotEmpty()
@@ -120,6 +138,7 @@ fun RecentsScreen(
                 likedPostIds = likedPostIds,
                 onToggleLike = onToggleLike,
                 onOpenWatchedPost = onOpenWatchedPost,
+                onLongPress = { selectedActionPost = it },
             )
 
             RecentsFilter.CODEX -> WatchedGrid(
@@ -129,6 +148,7 @@ fun RecentsScreen(
                 likedPostIds = likedPostIds,
                 onToggleLike = onToggleLike,
                 onOpenWatchedPost = onOpenCodexPost,
+                onLongPress = { selectedActionPost = it },
                 emptyMessage = "Posts appear here after you open them from Codex.",
             )
 
@@ -149,6 +169,31 @@ fun RecentsScreen(
             )
         }
     }
+
+    selectedActionPost?.let { post ->
+        PostActionSheet(
+            post = post,
+            creatorBrowsingSources = creatorBrowsingSources,
+            onDismiss = { selectedActionPost = null },
+            onSaveToDevice = { onSaveToDevice(post) },
+            onSaveToCodex = { onRequestSaveToCodex(post) },
+            onOpenCreatorProfile = onOpenCreatorProfile,
+            onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
+            onGoToSearch = onGoToSearch,
+            tagContent = {
+                PostTagActionSection(
+                    post = post,
+                    tagVideoCountProvider = tagVideoCountProvider,
+                    fetchTagVideoCounts = fetchTagVideoCounts,
+                    onAddIncludeTerm = { term -> onAddIncludeTerm(post, term) },
+                    onAddExcludeTerm = { term -> onAddExcludeTerm(post, term) },
+                    onRemoveIncludeTerm = { term -> onRemoveIncludeTerm(post, term) },
+                    onRemoveExcludeTerm = { term -> onRemoveExcludeTerm(post, term) },
+                    onFavoriteTagLongPress = onFavoriteTagLongPress,
+                )
+            },
+        )
+    }
 }
 
 @Composable
@@ -159,42 +204,31 @@ private fun WatchedGrid(
     likedPostIds: Set<PostId>,
     onToggleLike: ((Post) -> Unit)?,
     onOpenWatchedPost: (Int) -> Unit,
+    onLongPress: (Post) -> Unit,
     emptyMessage: String = "Posts appear here after you open them in Viewer.",
 ) {
     if (watchedPosts.isEmpty()) {
         EmptyRecentState(emptyMessage)
         return
     }
+    val posts = remember(watchedPosts) { watchedPosts.map(RecentPostEntry::post) }
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+    TwoColumnPostStaggeredGrid(
+        posts = posts,
+        state = rememberLazyStaggeredGridState(),
         modifier = Modifier.fillMaxSize(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        itemsIndexed(
-            items = watchedPosts,
-            key = { _, entry -> "${entry.post.id.source.name}:${entry.post.id.sourcePostId}" },
-        ) { index, entry ->
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                SearchResultCard(
-                    post = entry.post,
-                    pixivUgoiraClient = pixivUgoiraClient,
-                    showSourceBadge = true,
-                    liked = entry.post.id in likedPostIds,
-                    onToggleLike = onToggleLike?.let { toggle -> { toggle(entry.post) } },
-                    onClick = { onOpenWatchedPost(index) },
-                )
-                Text(
-                    text = relativeTimeLabel(now, entry.viewedAtEpochMs),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 4.dp),
-                )
-            }
-        }
+    ) { index, post ->
+        val entry = watchedPosts[index]
+        SearchResultCard(
+            post = post,
+            pixivUgoiraClient = pixivUgoiraClient,
+            showSourceBadge = true,
+            metadataLabel = relativeTimeLabel(now, entry.viewedAtEpochMs),
+            liked = post.id in likedPostIds,
+            onToggleLike = onToggleLike?.let { toggle -> { toggle(post) } },
+            onClick = { onOpenWatchedPost(index) },
+            onLongPress = { onLongPress(post) },
+        )
     }
 }
 
