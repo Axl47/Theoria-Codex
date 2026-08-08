@@ -157,7 +157,7 @@ class ForYouViewModelTest {
                 seedId = "seed",
             )
             refreshResult = listOf(first)
-            blacklistAdditions = 0
+            blacklistAdditions = emptyList()
         }
         val viewModel = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
         advanceUntilIdle()
@@ -169,8 +169,42 @@ class ForYouViewModelTest {
         advanceUntilIdle()
 
         val message = effect.await() as ForYouEffect.ShowMessage
-        assertTrue(message.message.contains("already blacklisted"))
+        assertTrue(message.message.contains("already hidden"))
         assertEquals("empty-seed", viewModel.state.value.seedId)
+    }
+
+    @Test
+    fun `successful seed hide publishes exact undo payload and undo returns it to engine`() = runTest {
+        val added = listOf(
+            ForYouBlacklistEntry(SourceKey.PIXIV, listOf("seed")),
+            ForYouBlacklistEntry(SourceKey.GELBOORU, listOf("night")),
+        )
+        val engine = FakeForYouRouteEngine().apply {
+            current = current.copy(
+                activeProfileId = "profile-main",
+                activeProfileLikesCount = 1,
+                results = listOf(testPost(sourcePostId = "first")),
+                seedSummaryBySource = mapOf(SourceKey.PIXIV to listOf("seed")),
+                seedId = "seed",
+            )
+            blacklistAdditions = added
+        }
+        val viewModel = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        advanceUntilIdle()
+        viewModel.synchronizeEnvironment(AppSettings(), activeProfileLikesCount = 1)
+        advanceUntilIdle()
+
+        val effect = async { viewModel.effects.first() }
+        viewModel.onAction(ForYouAction.BlacklistCurrentSeed)
+        advanceUntilIdle()
+        val hidden = effect.await() as ForYouEffect.SeedHidden
+
+        assertEquals("profile-main", hidden.profileId)
+        assertEquals(added, hidden.entries)
+
+        viewModel.onAction(ForYouAction.UndoSeedBlacklist(hidden.profileId, hidden.entries))
+        advanceUntilIdle()
+        assertEquals("profile-main" to added, engine.undoneBlacklist)
     }
 
     @Test
@@ -305,7 +339,10 @@ private class FakeForYouRouteEngine(
     var refreshCanLoadMore = false
     var pageResults: List<Post> = emptyList()
     var pageError: String? = null
-    var blacklistAdditions = 1
+    var blacklistAdditions = listOf(
+        ForYouBlacklistEntry(SourceKey.PIXIV, listOf("seed")),
+    )
+    var undoneBlacklist: Pair<String, List<ForYouBlacklistEntry>>? = null
     var settingsChangedResult = false
     var firstRefreshStarted: CompletableDeferred<Unit>? = null
     var firstRefreshRelease: CompletableDeferred<Unit>? = null
@@ -382,7 +419,7 @@ private class FakeForYouRouteEngine(
         refresh(shuffle = false)
     }
 
-    override suspend fun blacklistCurrentSeedAndRefresh(): Int {
+    override suspend fun blacklistCurrentSeedAndRefresh(): List<ForYouBlacklistEntry> {
         current = current.copy(
             results = emptyList(),
             seedSummaryBySource = emptyMap(),
@@ -390,6 +427,11 @@ private class FakeForYouRouteEngine(
             canLoadMore = false,
         )
         return blacklistAdditions
+    }
+
+    override suspend fun undoBlacklistAndRefresh(profileId: String, entries: List<ForYouBlacklistEntry>) {
+        undoneBlacklist = profileId to entries
+        refresh(shuffle = true)
     }
 
     override suspend fun loadNextPage() {

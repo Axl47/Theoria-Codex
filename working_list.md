@@ -4,6 +4,37 @@ updated_at: 2026-08-03T00:03:12-04:00
 ---
 # Working List
 
+## Current Task: Add Selective Actionable Transient Feedback
+
+### In Progress
+
+- [~] Await manual UX-002 acceptance in the isolated Debug app.
+
+### Pending
+
+- [ ] Confirm snackbar placement, contextual copy, and Undo behavior on an interactive app surface.
+
+### Done
+
+- [x] Run one bounded validation batch and prepare UX-002 for manual acceptance.
+  - Evidence: 133 core-data, 39 Room, and 414 app JVM tests passed with zero failures/errors (five core-data and three app opt-in skips); app Android-test compilation, app Detekt, Room Detekt, core-data main-source Detekt, HTML validation, and diff checks passed. Generic core-data Detekt remains red only on inherited findings in untouched migration/settings/legacy test files; no connected, device, package mutation, or live-provider lane ran.
+
+- [x] Make each Recents clear target reversible with exact snapshot restoration.
+  - Evidence: `RecentsClearWorkflow` maps Watched, Codex, Searches, and All to independent repository clears and contextual Undo copy; `RecentsRepository.restoreEntries` preserves timestamps, origin, query hashes, section identity, and ordering without replacing newer activity. Focused in-memory and Room tests pass.
+- [x] Add one shell-owned snackbar host and actionable feedback boundary.
+  - Evidence: the outer `TheoriaAppContent` Scaffold owns the sole `SnackbarHostState` and renders its host above bottom navigation; feature routes request actions through callbacks while existing passive messages remain Toasts.
+- [x] Make recommendation-seed hiding reversible through `Seed hidden` with Undo.
+  - Evidence: For You carries only newly persisted blacklist entries and the originating profile through typed effects; Undo removes those exact entries through the existing coordinator refresh path. Focused state and ViewModel tests pass.
+- [x] Add focused repository, state, route, and architecture regression coverage.
+  - Evidence: focused Recents repository/workflow and For You state/ViewModel/coordinator tests pass; an architecture guard covers single-host ownership and the retained passive Toast lane.
+
+- [x] Create and validate the UX-002 ExecPlan from the traced shell, Recents, and For You flows.
+  - Evidence: `.docs/exec/actionable-transient-feedback.html` records the shell/feature/data boundaries, exact Undo semantics, failure paths, acceptance checks, and recovery guidance; both active HTML plans pass `html-validate`.
+- [x] Close UX-001 manual acceptance.
+  - Evidence: the user tested the collection overflow and Codex selection interaction and reported that it looks good; the UX-001 ExecPlan now records complete manual acceptance.
+- [x] Trace current feedback, Recents clearing, and seed-blacklisting ownership before the first UX-002 runtime patch.
+  - Evidence: `TheoriaAppContent` owns the only outer `Scaffold` and bottom navigation; Recents already has section-specific repository clears but no feedback; For You persists seed entries through `ForYouCoordinator` and emits a passive toast after refresh. Exact Recents restoration requires repository ownership, while snackbar rendering belongs only to the shell.
+
 ## Current Task: Make Codex Actions Discoverable Without Card Clutter
 
 ### In Progress

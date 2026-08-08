@@ -22,13 +22,13 @@ This backlog records agreed product improvements that are not yet scheduled for 
 
 ### UX-002 — Add selective, actionable transient feedback
 
-- [ ] Add one shell-owned snackbar host positioned transiently above the bottom navigation.
-- [ ] Keep toasts for passive confirmations that require no response, such as copied content or a successfully queued download.
-- [ ] Use short, contextual snackbars only when the user can take a useful immediate action, such as Undo, Retry, Open, or Settings.
-- [ ] Make Recents clearing context-specific after invocation, without adding persistent copy to the header; clearly distinguish watched, Codex-origin, search, and all-history clearing.
-- [ ] Make recommendation-seed blacklisting reversible through a short `Seed hidden` snackbar with Undo instead of adding a permanent verbose control label.
-- [ ] Reserve confirmation dialogs for irreversible or materially destructive operations; do not require confirmation for ordinary reversible actions.
-- [ ] Do not migrate every toast to a snackbar; use the shared in-app feedback path only where it provides recovery, navigation, or reversal.
+- [x] Add one shell-owned snackbar host positioned transiently above the bottom navigation.
+- [x] Keep toasts for passive confirmations that require no response, such as copied content or a successfully queued download.
+- [x] Use short, contextual snackbars only when the user can take a useful immediate action, such as Undo, Retry, Open, or Settings.
+- [x] Make Recents clearing context-specific after invocation, without adding persistent copy to the header; clearly distinguish watched, Codex-origin, search, and all-history clearing.
+- [x] Make recommendation-seed blacklisting reversible through a short `Seed hidden` snackbar with Undo instead of adding a permanent verbose control label.
+- [x] Reserve confirmation dialogs for irreversible or materially destructive operations; do not require confirmation for ordinary reversible actions.
+- [x] Do not migrate every toast to a snackbar; use the shared in-app feedback path only where it provides recovery, navigation, or reversal.
 
 ### UX-003 — Reduce Settings first-open density
 

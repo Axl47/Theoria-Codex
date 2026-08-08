@@ -71,6 +71,10 @@ sealed interface ForYouAction {
     data class SelectSource(val source: SourceKey?) : ForYouAction
     data class SelectSort(val sortMode: SortMode) : ForYouAction
     data object BlacklistCurrentSeed : ForYouAction
+    data class UndoSeedBlacklist(
+        val profileId: String,
+        val entries: List<ForYouBlacklistEntry>,
+    ) : ForYouAction
     data object LoadNextPage : ForYouAction
     data class OpenResult(
         val index: Int,
@@ -135,6 +139,12 @@ sealed interface ForYouEffect {
         val seedSummaryBySource: Map<SourceKey, List<String>>,
     ) : ForYouEffect
 
+    data class UndoSeedBlacklist(
+        override val request: ForYouRequestIdentity,
+        val profileId: String,
+        val entries: List<ForYouBlacklistEntry>,
+    ) : ForYouEffect
+
     data class LoadNextPage(
         override val request: ForYouRequestIdentity,
     ) : ForYouEffect
@@ -148,6 +158,13 @@ sealed interface ForYouEffect {
     }
 
     data object NavigateToSearch : ForYouEffect {
+        override val request: ForYouRequestIdentity? = null
+    }
+
+    data class SeedHidden(
+        val profileId: String,
+        val entries: List<ForYouBlacklistEntry>,
+    ) : ForYouEffect {
         override val request: ForYouRequestIdentity? = null
     }
 
@@ -287,6 +304,20 @@ fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
                         request = request,
                         profileId = activeProfileId,
                         seedSummaryBySource = seedSummaryBySource.mapValues { (_, tags) -> tags.toList() },
+                    )
+                }
+            }
+        }
+
+        is ForYouAction.UndoSeedBlacklist -> {
+            if (action.entries.isEmpty()) {
+                unchanged()
+            } else {
+                beginRefresh { request ->
+                    ForYouEffect.UndoSeedBlacklist(
+                        request = request,
+                        profileId = action.profileId,
+                        entries = action.entries.toList(),
                     )
                 }
             }

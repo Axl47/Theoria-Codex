@@ -17,6 +17,7 @@ import com.theoriacodex.app.recommend.state.ForYouEffect
 import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -37,6 +38,7 @@ internal data class ForYouRouteCallbacks(
     val onOpenViewer: suspend (ForYouEffect.OpenViewer) -> Unit,
     val onNavigateToSearch: suspend () -> Unit,
     val onShowMessage: (String) -> Unit,
+    val onSeedHidden: suspend (profileId: String, entries: List<ForYouBlacklistEntry>) -> Boolean,
     val onToggleLike: (Post) -> Unit,
 )
 
@@ -110,12 +112,18 @@ internal fun ForYouRoute(
             is ForYouEffect.OpenViewer -> callbacks.onOpenViewer(effect)
             ForYouEffect.NavigateToSearch -> callbacks.onNavigateToSearch()
             is ForYouEffect.ShowMessage -> callbacks.onShowMessage(effect.message)
+            is ForYouEffect.SeedHidden -> {
+                if (callbacks.onSeedHidden(effect.profileId, effect.entries)) {
+                    owner.onAction(ForYouAction.UndoSeedBlacklist(effect.profileId, effect.entries))
+                }
+            }
             is ForYouEffect.BlacklistSeed,
             is ForYouEffect.ChangeProfile,
             is ForYouEffect.ChangeSort,
             is ForYouEffect.ChangeSource,
             is ForYouEffect.LoadNextPage,
             is ForYouEffect.RefreshFeed,
+            is ForYouEffect.UndoSeedBlacklist,
             -> Unit
         }
     }

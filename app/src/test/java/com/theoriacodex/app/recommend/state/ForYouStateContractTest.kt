@@ -104,6 +104,29 @@ class ForYouStateContractTest {
     }
 
     @Test
+    fun `seed blacklist undo carries the exact profile and entries into refresh`() {
+        val entry = ForYouBlacklistEntry(SourceKey.PIXIV, listOf("sky", "night"))
+        val state = snapshot(likesCount = 2, seedId = "PIXIV:sky+night").toUiState()
+
+        val transition = state.reduce(
+            ForYouAction.UndoSeedBlacklist(
+                profileId = "profile-main",
+                entries = listOf(entry),
+            )
+        )
+
+        assertTrue(transition.state.isRefreshing)
+        assertEquals(
+            ForYouEffect.UndoSeedBlacklist(
+                request = requireNotNull(transition.state.activeRequest),
+                profileId = "profile-main",
+                entries = listOf(entry),
+            ),
+            transition.effect,
+        )
+    }
+
+    @Test
     fun `paging transitions merge identities and retain incoming hydration`() {
         val sparse = testPost(sourcePostId = "1", title = null)
         val hydrated = sparse.copy(title = "Hydrated")

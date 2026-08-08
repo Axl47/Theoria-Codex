@@ -76,10 +76,7 @@ fun RecentsScreen(
     onOpenWatchedPost: (Int) -> Unit,
     onOpenCodexPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
-    onClearWatched: () -> Unit,
-    onClearCodex: () -> Unit,
-    onClearSearches: () -> Unit,
-    onClearAll: () -> Unit,
+    onClear: (RecentsClearTarget) -> Unit,
 ) {
     var filter by rememberSaveable { mutableStateOf(RecentsFilter.WATCHED) }
     val now = remember(watchedPosts, codexPosts, searches, activity) { System.currentTimeMillis() }
@@ -106,12 +103,7 @@ fun RecentsScreen(
             TextButton(
                 enabled = hasContent,
                 onClick = {
-                    when (filter) {
-                        RecentsFilter.WATCHED -> onClearWatched()
-                        RecentsFilter.CODEX -> onClearCodex()
-                        RecentsFilter.SEARCHES -> onClearSearches()
-                        RecentsFilter.ALL -> onClearAll()
-                    }
+                    onClear(filter.clearTarget)
                 },
             ) {
                 Text("Clear")
@@ -447,11 +439,14 @@ private fun EmptyRecentState(message: String) {
     }
 }
 
-private enum class RecentsFilter(val label: String) {
-    WATCHED("Watched"),
-    CODEX("Codex"),
-    SEARCHES("Searches"),
-    ALL("All"),
+private enum class RecentsFilter(
+    val label: String,
+    val clearTarget: RecentsClearTarget,
+) {
+    WATCHED("Watched", RecentsClearTarget.WATCHED),
+    CODEX("Codex", RecentsClearTarget.CODEX),
+    SEARCHES("Searches", RecentsClearTarget.SEARCHES),
+    ALL("All", RecentsClearTarget.ALL),
 }
 
 private fun activityKey(entry: RecentActivityEntry): String {

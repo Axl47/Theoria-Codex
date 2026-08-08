@@ -249,6 +249,22 @@ class InMemoryRecentsRepository(
         }
     }
 
+    override suspend fun restoreEntries(
+        watchedPosts: List<RecentPostEntry>,
+        searches: List<RecentSearchEntry>,
+    ) {
+        mutex.withLock {
+            watched.value = RepositoryPolicies.normalizeRecentWatched(
+                entries = watched.value + watchedPosts,
+                limit = watchedLimit,
+            )
+            this.searches.value = RepositoryPolicies.normalizeRecentSearches(
+                entries = this.searches.value + searches,
+                limit = searchLimit,
+            )
+        }
+    }
+
     override suspend fun clearWatchedPosts() {
         mutex.withLock {
             watched.value = emptyList()

@@ -114,6 +114,38 @@ class RoomRecentsRepositoryTest {
         assertEquals(1, database.codexLikesDao().posts().size)
     }
 
+    @Test fun `restore preserves exact rows and keeps newer activity`() = runTest {
+        val repository = RoomRecentsRepository(database, clock = { now++ })
+        val shared = recentPost("restore-shared")
+        val codex = recentPost("restore-codex")
+        val query = recentQuery("restore")
+        repository.recordWatchedPost(shared, ViewerStreamSource.SEARCH, "search:restore")
+        repository.recordWatchedPost(codex, ViewerStreamSource.CODEX, "codex:restore")
+        repository.recordSearch(query, "restore-query")
+        val watchedSnapshot = repository.observeWatchedPosts().first()
+        val searchSnapshot = repository.observeSearches().first()
+
+        repository.clearAll()
+        now = 500L
+        repository.recordWatchedPost(shared, ViewerStreamSource.FOR_YOU, "newer")
+        repository.recordSearch(recentQuery("newer"), "restore-query")
+        repository.restoreEntries(watchedSnapshot, searchSnapshot)
+
+        val restoredWatched = repository.observeWatchedPosts().first()
+        val restoredSearch = repository.observeSearches().first().single()
+        assertEquals(2, restoredWatched.size)
+        assertEquals(
+            ViewerStreamSource.FOR_YOU,
+            restoredWatched.single { it.post.id == shared.id }.origin,
+        )
+        assertEquals(
+            watchedSnapshot.single { it.section == RecentPostSection.CODEX },
+            restoredWatched.single { it.section == RecentPostSection.CODEX },
+        )
+        assertEquals(recentQuery("newer"), restoredSearch.query)
+        assertEquals(501L, restoredSearch.searchedAtEpochMs)
+    }
+
     @Test fun `partial Recents snapshots preserve rich shared payload while applying enrichment`() = runTest {
         val recents = RoomRecentsRepository(database, clock = { now++ })
         val codex = RoomCodexLikesRepository(database, clock = { now++ }, newId = { "codex" })

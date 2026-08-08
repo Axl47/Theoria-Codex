@@ -110,6 +110,52 @@ class RoomRecentsRepository(
         }
     }
 
+    override suspend fun restoreEntries(
+        watchedPosts: List<RecentPostEntry>,
+        searches: List<RecentSearchEntry>,
+    ) {
+        database.withTransaction {
+            watchedPosts.asReversed().forEach { entry ->
+                val post = entry.post
+                val existing = dao.watched(post.id.source.name, post.id.sourcePostId, entry.section.name)
+                if (existing == null || entry.viewedAtEpochMs > existing.viewedAtEpochMs) {
+                    sharedPostPayloads.upsert(post)
+                    dao.upsertWatched(
+                        RecentWatchedEntity(
+                            post.id.source.name,
+                            post.id.sourcePostId,
+                            entry.section.name,
+                            entry.viewedAtEpochMs,
+                            dao.nextWatchedSequence(),
+                            entry.origin.name,
+                            entry.originQueryHash,
+                        )
+                    )
+                }
+            }
+            searches.asReversed().forEach { entry ->
+                val queryHash = entry.queryHash.trim()
+                val existing = queryHash.takeIf(String::isNotBlank)?.let(dao::search)
+                if (
+                    queryHash.isNotBlank() &&
+                    (existing == null || entry.searchedAtEpochMs > existing.searchedAtEpochMs)
+                ) {
+                    dao.upsertSearch(
+                        RecentSearchEntity(
+                            queryHash,
+                            QueryStorageCodec.encodeJson(entry.query, queryGson),
+                            entry.searchedAtEpochMs,
+                            dao.nextSearchSequence(),
+                        )
+                    )
+                }
+            }
+            dao.trimWatched(watchedLimit)
+            dao.trimSearches(searchLimit)
+            contentDao.deleteOrphanPosts()
+        }
+    }
+
     override suspend fun clearWatchedPosts() {
         database.withTransaction {
             dao.deleteWatched()

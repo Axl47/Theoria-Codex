@@ -45,6 +45,9 @@ import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -103,6 +106,7 @@ import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.recommend.trainingTagsFor
 import com.theoriacodex.app.recents.RecentsScreen
+import com.theoriacodex.app.recents.RecentsClearWorkflow
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.source.ExternalCreatorDeepLink
 import com.theoriacodex.app.source.ExternalPostDeepLink
@@ -293,6 +297,17 @@ internal fun TheoriaAppContent(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val dataDependencies = appContainer.data
+    val snackbarHostState = remember { SnackbarHostState() }
+    val recentsClearWorkflow = remember(dataDependencies.recentsRepository) {
+        RecentsClearWorkflow(dataDependencies.recentsRepository)
+    }
+    suspend fun showActionableFeedback(message: String, actionLabel: String): Boolean {
+        return snackbarHostState.showSnackbar(
+            message = message,
+            actionLabel = actionLabel,
+            withDismissAction = false,
+        ) == SnackbarResult.ActionPerformed
+    }
     val sourceDependencies = appContainer.sources
     val updateDependencies = appContainer.updates
     val featureDependencies = appContainer.features
@@ -1291,6 +1306,7 @@ internal fun TheoriaAppContent(
             }
         } else {
             Scaffold(
+                snackbarHost = { SnackbarHost(snackbarHostState) },
                 bottomBar = {
                     if (showBottomBar) {
                         NavigationBar(
@@ -1456,6 +1472,9 @@ internal fun TheoriaAppContent(
                                             onShowMessage = { message ->
                                                 Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
                                             },
+                                            onSeedHidden = { _, _ ->
+                                                showActionableFeedback("Seed hidden", "Undo")
+                                            },
                                             onToggleLike = { post ->
                                                 scope.launch { toggleLikeAndSyncCodex(post) }
                                             },
@@ -1577,25 +1596,16 @@ internal fun TheoriaAppContent(
                                                 }
                                             }
                                         },
-                                        onClearWatched = {
+                                        onClear = { target ->
                                             scope.launch {
-                                                dataDependencies.recentsRepository.clearWatchedPosts(
-                                                    RecentPostSection.WATCHED,
+                                                recentsClearWorkflow.clear(
+                                                    target = target,
+                                                    watchedPosts = state.watchedPosts,
+                                                    codexPosts = state.codexPosts,
+                                                    searches = state.searches,
+                                                    showActionableFeedback = ::showActionableFeedback,
                                                 )
                                             }
-                                        },
-                                        onClearCodex = {
-                                            scope.launch {
-                                                dataDependencies.recentsRepository.clearWatchedPosts(
-                                                    RecentPostSection.CODEX,
-                                                )
-                                            }
-                                        },
-                                        onClearSearches = {
-                                            scope.launch { dataDependencies.recentsRepository.clearSearches() }
-                                        },
-                                        onClearAll = {
-                                            scope.launch { dataDependencies.recentsRepository.clearAll() }
                                         },
                                     )
                                     }

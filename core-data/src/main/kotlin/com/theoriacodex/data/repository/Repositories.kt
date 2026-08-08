@@ -87,6 +87,10 @@ interface RecentsRepository {
         section: RecentPostSection = RecentPostSection.fromOrigin(origin),
     )
     suspend fun recordSearch(query: Query, queryHash: String)
+    suspend fun restoreEntries(
+        watchedPosts: List<RecentPostEntry> = emptyList(),
+        searches: List<RecentSearchEntry> = emptyList(),
+    )
     suspend fun clearWatchedPosts()
     suspend fun clearWatchedPosts(section: RecentPostSection)
     suspend fun clearSearches()

@@ -4,6 +4,7 @@ import com.theoriacodex.app.search.NoOpTagSuggestionStore
 import com.theoriacodex.app.search.TagSuggestionStore
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.InMemoryLikesRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.LikedPost
@@ -167,11 +168,11 @@ class ForYouCoordinator(
         executeFeed(shuffle = false)
     }
 
-    suspend fun blacklistCurrentSeedAndRefresh(): Int {
+    suspend fun blacklistCurrentSeedAndRefresh(): List<ForYouBlacklistEntry> {
         val currentSeed = seedSummaryBySource
-        if (currentSeed.isEmpty()) return 0
+        if (currentSeed.isEmpty()) return emptyList()
 
-        var additions = 0
+        val additions = mutableListOf<ForYouBlacklistEntry>()
         currentSeed.forEach { (source, tags) ->
             val added = settingsRepository.addForYouBlacklistEntry(
                 profileId = activeProfileId,
@@ -179,13 +180,24 @@ class ForYouCoordinator(
                 tags = tags,
             )
             if (added) {
-                additions += 1
+                additions += ForYouBlacklistEntry(source = source, tags = tags)
             }
         }
 
         runtimeSettings = settingsRepository.observeSettings().first()
         refresh(shuffle = true)
         return additions
+    }
+
+    suspend fun undoBlacklistAndRefresh(
+        profileId: String,
+        entries: List<ForYouBlacklistEntry>,
+    ) {
+        entries.forEach { entry ->
+            settingsRepository.removeForYouBlacklistEntry(profileId, entry.source, entry.tags)
+        }
+        runtimeSettings = settingsRepository.observeSettings().first()
+        refresh(shuffle = true)
     }
 
     fun clear() {

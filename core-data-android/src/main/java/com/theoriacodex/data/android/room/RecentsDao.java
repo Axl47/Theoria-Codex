@@ -28,6 +28,8 @@ public interface RecentsDao {
     Flow<List<RecentSearchEntity>> observeSearches();
     @Query("SELECT * FROM recent_searches ORDER BY searched_at_epoch_ms DESC, sort_sequence DESC, query_hash ASC")
     List<RecentSearchEntity> searches();
+    @Query("SELECT * FROM recent_searches WHERE query_hash = :queryHash LIMIT 1")
+    RecentSearchEntity search(String queryHash);
     @Insert(onConflict = OnConflictStrategy.REPLACE) void upsertSearch(RecentSearchEntity entity);
     @Query("SELECT COALESCE(MAX(sort_sequence), 0) + 1 FROM recent_searches") long nextSearchSequence();
     @Query("DELETE FROM recent_searches WHERE query_hash IN (SELECT query_hash FROM recent_searches ORDER BY searched_at_epoch_ms DESC, sort_sequence DESC, query_hash ASC LIMIT -1 OFFSET :limit)")

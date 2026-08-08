@@ -115,6 +115,48 @@ class RepositoryContractTest(
     }
 
     @Test
+    fun `recents restore preserves exact cleared entries without replacing newer activity`() = runTest {
+        assumeTrue("Room owns the second durable Recents contract lane", backend == Backend.IN_MEMORY)
+        var now = 100L
+        val repository = createRecentsRepository(clock = { now++ })
+        val watchedPost = repositoryTestPost(id = "watched")
+        val codexPost = repositoryTestPost(id = "codex")
+        val query = Query(
+            mode = QueryMode.Source(SourceKey.PIXIV),
+            includeTags = listOf("restore"),
+            excludeTags = emptyList(),
+            sort = SortMode.NEWEST,
+            dateRange = null,
+            minScore = null,
+        )
+        repository.recordWatchedPost(watchedPost, ViewerStreamSource.SEARCH, "search:restore")
+        repository.recordWatchedPost(codexPost, ViewerStreamSource.CODEX, "codex:restore")
+        repository.recordSearch(query, "restore-query")
+        val watchedSnapshot = repository.observeWatchedPosts().first()
+        val searchSnapshot = repository.observeSearches().first()
+
+        repository.clearAll()
+        now = 500L
+        repository.recordWatchedPost(watchedPost, ViewerStreamSource.FOR_YOU, "newer")
+        repository.recordSearch(query.copy(includeTerms = listOf(SearchTerm("newer"))), "restore-query")
+        repository.restoreEntries(watchedSnapshot, searchSnapshot)
+
+        val restoredWatched = repository.observeWatchedPosts().first()
+        val restoredSearch = repository.observeSearches().first().single()
+        assertEquals(2, restoredWatched.size)
+        assertEquals(
+            ViewerStreamSource.FOR_YOU,
+            restoredWatched.single { it.post.id == watchedPost.id }.origin,
+        )
+        assertEquals(
+            watchedSnapshot.single { it.section == RecentPostSection.CODEX },
+            restoredWatched.single { it.section == RecentPostSection.CODEX },
+        )
+        assertEquals(listOf("newer"), restoredSearch.query.includeTags)
+        assertEquals(501L, restoredSearch.searchedAtEpochMs)
+    }
+
+    @Test
     fun `recents preserves a posts section when it is reopened from history`() = runTest {
         assumeTrue("Room owns the second durable Recents contract lane", backend == Backend.IN_MEMORY)
         var now = 100L

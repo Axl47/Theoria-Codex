@@ -55,7 +55,8 @@ internal interface ForYouRouteEngine {
     suspend fun selectProfile(settings: AppSettings, profileId: String)
     suspend fun setSourceSelection(source: SourceKey?)
     suspend fun setSortMode(sort: SortMode)
-    suspend fun blacklistCurrentSeedAndRefresh(): Int
+    suspend fun blacklistCurrentSeedAndRefresh(): List<ForYouBlacklistEntry>
+    suspend fun undoBlacklistAndRefresh(profileId: String, entries: List<ForYouBlacklistEntry>)
     suspend fun loadNextPage()
     fun clear()
     suspend fun resolvePost(postId: PostId): Post?
@@ -106,7 +107,12 @@ internal class CoordinatorForYouRouteEngine(
 
     override suspend fun setSourceSelection(source: SourceKey?) = coordinator.setSourceSelection(source)
     override suspend fun setSortMode(sort: SortMode) = coordinator.setSortMode(sort)
-    override suspend fun blacklistCurrentSeedAndRefresh(): Int = coordinator.blacklistCurrentSeedAndRefresh()
+    override suspend fun blacklistCurrentSeedAndRefresh(): List<ForYouBlacklistEntry> =
+        coordinator.blacklistCurrentSeedAndRefresh()
+
+    override suspend fun undoBlacklistAndRefresh(profileId: String, entries: List<ForYouBlacklistEntry>) {
+        coordinator.undoBlacklistAndRefresh(profileId, entries)
+    }
     override suspend fun loadNextPage() = coordinator.loadNextPage()
     override fun clear() = coordinator.clear()
     override suspend fun resolvePost(postId: PostId): Post? = coordinator.resolvePostForFeed(postId)
@@ -301,18 +307,26 @@ internal class ForYouViewModel(
             is ForYouEffect.BlacklistSeed -> launchRefresh(effect.request) {
                 val additions = engine.blacklistCurrentSeedAndRefresh()
                 effectChannel.trySend(
-                    ForYouEffect.ShowMessage(
-                        if (additions > 0) {
-                            "Blacklisted $additions recommendation tag set${if (additions == 1) "" else "s"}"
-                        } else {
-                            "Current recommendation is already blacklisted"
-                        }
-                    )
+                    if (additions.isNotEmpty()) {
+                        ForYouEffect.SeedHidden(
+                            profileId = effect.profileId,
+                            entries = additions,
+                        )
+                    } else {
+                        ForYouEffect.ShowMessage(
+                            "Current recommendation is already hidden",
+                        )
+                    }
                 )
+            }
+
+            is ForYouEffect.UndoSeedBlacklist -> launchRefresh(effect.request) {
+                engine.undoBlacklistAndRefresh(effect.profileId, effect.entries)
             }
 
             is ForYouEffect.LoadNextPage -> launchPage(effect.request)
             is ForYouEffect.OpenViewer,
+            is ForYouEffect.SeedHidden,
             ForYouEffect.NavigateToSearch,
             is ForYouEffect.ShowMessage,
             -> effectChannel.trySend(effect)
