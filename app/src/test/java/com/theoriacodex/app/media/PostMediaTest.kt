@@ -33,6 +33,28 @@ class PostMediaTest {
     }
 
     @Test
+    fun `pixiv preview uses saved aspect preserving progressive image`() {
+        val full = ref("original.jpg", "image/jpeg").copy(
+            progressiveUrls = listOf(
+                "https://example.test/medium.jpg",
+                "https://example.test/large.jpg",
+            ),
+        )
+        val pixivPost = post(SourceKey.PIXIV, full)
+
+        val preview = requireNotNull(postPreviewImageCandidate(pixivPost))
+
+        assertEquals("https://example.test/medium.jpg", preview.ref.url)
+        assertEquals(
+            listOf(
+                "https://example.test/large.jpg",
+                "https://example.test/original.jpg",
+            ),
+            preview.ref.progressiveUrls,
+        )
+    }
+
+    @Test
     fun `clipboard tag format deduplicates canonical and raw tags`() {
         val post = post(SourceKey.PIXIV, null).copy(
             canonicalTags = listOf("sky", "-lowres", " sky "),

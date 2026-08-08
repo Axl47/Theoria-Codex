@@ -420,7 +420,7 @@ class PixivSourceAdapterTest {
         val post = adapter.search(sampleQuery(), pageToken = null).items.first()
         val media = post.media.first()
 
-        assertEquals("https://i.pximg.net/square.jpg", post.preview.url)
+        assertEquals("https://i.pximg.net/medium.jpg", post.preview.url)
         assertEquals("https://i.pximg.net/original.jpg", post.full?.url)
         assertEquals(
             listOf(

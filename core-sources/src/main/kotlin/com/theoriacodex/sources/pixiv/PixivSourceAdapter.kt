@@ -273,7 +273,7 @@ class PixivSourceAdapter(
         val isUgoira = raw.stringValue("type") == "ugoira"
         val imageUrls = raw.optionalJsonObject("image_urls")
         val previewUrl = normalizedUrl(
-            imageUrls?.stringValue("square_medium") ?: imageUrls?.stringValue("medium"),
+            imageUrls?.stringValue("medium") ?: imageUrls?.stringValue("square_medium"),
         )
         val singlePageMediumUrl = normalizedUrl(imageUrls?.stringValue("medium"))
         val singlePageLargeUrl = normalizedUrl(imageUrls?.stringValue("large"))

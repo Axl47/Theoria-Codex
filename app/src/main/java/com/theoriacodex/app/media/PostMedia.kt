@@ -31,6 +31,19 @@ fun postPreviewImageCandidate(post: Post): PostMediaCandidate? {
             return post.candidate(full, url, PostMediaSelectionReason.FULL_ANIMATED_IMAGE)
         }
     }
+    if (post.id.source == SourceKey.PIXIV && full != null) {
+        full.progressiveUrls.firstOrNull(String::isNotBlank)?.let { mediumUrl ->
+            val aspectPreservingPreview = full.copy(
+                url = mediumUrl,
+                progressiveUrls = full.progressiveUrls.drop(1) + listOfNotNull(full.url),
+            )
+            return post.candidate(
+                aspectPreservingPreview,
+                mediumUrl,
+                PostMediaSelectionReason.FULL_MEDIA,
+            )
+        }
+    }
     return buildList {
         add(post.preview to PostMediaSelectionReason.PREVIEW_MEDIA)
         post.full?.let { add(it to PostMediaSelectionReason.FULL_MEDIA) }
