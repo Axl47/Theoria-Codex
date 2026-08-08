@@ -185,6 +185,11 @@ class CompactControlAccessibilityDeviceTest {
             MaterialTheme {
                 SettingsScreen(
                     state = SettingsUiState(
+                        sectionExpansion = SettingsSectionExpansionState(
+                            expandedBySection = mapOf(
+                                SettingsSectionKey.STORAGE_AND_CACHING to true,
+                            ),
+                        ),
                         legacyJsonRecoveries = listOf(
                             CorruptionRecovery(
                                 reason = "query_store.json contains malformed JSON",
