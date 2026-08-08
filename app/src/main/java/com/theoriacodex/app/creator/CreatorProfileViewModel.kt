@@ -43,7 +43,7 @@ internal interface CreatorRouteEngine {
     suspend fun open(creator: CreatorProfile)
     suspend fun refresh()
     suspend fun loadNextPage()
-    fun onAvailableSourcesChanged(): Boolean
+    fun onAvailableSourcesChanged(): CreatorSourceAvailabilityChange
     suspend fun resolvePost(postId: PostId): Post?
     fun rememberResolvedPost(post: Post)
 }
@@ -74,7 +74,8 @@ internal class CoordinatorCreatorRouteEngine(
     override suspend fun open(creator: CreatorProfile) = coordinator.open(creator)
     override suspend fun refresh() = coordinator.refresh()
     override suspend fun loadNextPage() = coordinator.loadNextPage()
-    override fun onAvailableSourcesChanged(): Boolean = coordinator.onAvailableSourcesChanged()
+    override fun onAvailableSourcesChanged(): CreatorSourceAvailabilityChange =
+        coordinator.onAvailableSourcesChanged()
     override suspend fun resolvePost(postId: PostId): Post? = coordinator.resolvePostForCreator(postId)
     override fun rememberResolvedPost(post: Post) = coordinator.rememberResolvedPost(post)
 }
@@ -130,7 +131,8 @@ internal class CreatorProfileViewModel(
 
     /** Reconciles the current creator when credential/source capability changes. */
     fun onSourceAvailabilityChanged() {
-        val shouldRefresh = engine.onAvailableSourcesChanged()
+        val change = engine.onAvailableSourcesChanged()
+        if (change == CreatorSourceAvailabilityChange.UNCHANGED) return
         val previous = mutableState.value
         val snapshot = engine.snapshot()
         mutableState.value = snapshot.toUiState().copy(
@@ -139,7 +141,7 @@ internal class CreatorProfileViewModel(
         )
         rootJob?.cancel(CancellationException("Creator capabilities changed"))
         pageJob?.cancel(CancellationException("Creator capabilities changed"))
-        if (shouldRefresh && snapshot.creator != null) {
+        if (change == CreatorSourceAvailabilityChange.REFRESH_REQUIRED && snapshot.creator != null) {
             onAction(CreatorAction.Refresh)
         }
     }

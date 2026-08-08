@@ -84,6 +84,29 @@ class CreatorProfileViewModelTest {
     }
 
     @Test
+    fun `unchanged capability observation does not cancel initial creator load`() = runTest {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val creator = creator(SourceKey.PIXIV, "creator")
+        val engine = FakeCreatorRouteEngine().apply {
+            firstOpenStarted = started
+            firstOpenRelease = release
+            firstOpenResults = listOf(testPost(sourcePostId = "loaded"))
+        }
+        val viewModel = CreatorProfileViewModel(engine, SavedStateHandle(), coroutineScope = this)
+
+        viewModel.onAction(CreatorAction.OpenCreator(creator))
+        runCurrent()
+        started.await()
+        viewModel.onSourceAvailabilityChanged()
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(listOf("loaded"), viewModel.state.value.results.map { it.id.sourcePostId })
+        assertFalse(viewModel.state.value.isRefreshing)
+    }
+
+    @Test
     fun `creator replacement cancels old owner and rejects late completion`() = runTest {
         val started = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
@@ -298,15 +321,15 @@ private class FakeCreatorRouteEngine : CreatorRouteEngine {
         )
     }
 
-    override fun onAvailableSourcesChanged(): Boolean {
-        if (capabilityAvailable) return false
+    override fun onAvailableSourcesChanged(): CreatorSourceAvailabilityChange {
+        if (capabilityAvailable) return CreatorSourceAvailabilityChange.UNCHANGED
         current = current.copy(
             results = emptyList(),
             canLoadMore = false,
             errorMessage = "Creator browsing is not available",
             failureReason = CreatorFailureReason.UNSUPPORTED_SOURCE,
         )
-        return false
+        return CreatorSourceAvailabilityChange.RECONCILED
     }
 
     override suspend fun resolvePost(postId: PostId): Post? = null

@@ -42,14 +42,18 @@ class CreatorProfileCoordinator(
     val activeQueryHash: String?
         get() = activeCreator?.let(::creatorQueryHash)
 
-    fun onAvailableSourcesChanged(): Boolean {
+    internal fun onAvailableSourcesChanged(): CreatorSourceAvailabilityChange {
         val currentSources = registry.availableSources()
         val changed = currentSources != availableSourcesSnapshot
         availableSourcesSnapshot = currentSources
-        if (!changed) return false
-        val creator = activeCreator ?: return false
+        if (!changed) return CreatorSourceAvailabilityChange.UNCHANGED
+        val creator = activeCreator ?: return CreatorSourceAvailabilityChange.RECONCILED
         if (creator.source in currentSources) {
-            return errorMessage?.startsWith("Creator browsing is not available") == true
+            return if (errorMessage?.startsWith("Creator browsing is not available") == true) {
+                CreatorSourceAvailabilityChange.REFRESH_REQUIRED
+            } else {
+                CreatorSourceAvailabilityChange.RECONCILED
+            }
         }
         invalidateActiveRequest()
         results = emptyList()
@@ -58,7 +62,7 @@ class CreatorProfileCoordinator(
         canLoadMore = false
         nextPageToken = null
         errorMessage = "Creator browsing is not available for ${creator.source.name.lowercase()}."
-        return false
+        return CreatorSourceAvailabilityChange.RECONCILED
     }
 
     suspend fun open(creator: CreatorProfile) {
@@ -258,6 +262,12 @@ class CreatorProfileCoordinator(
     private fun Post.idKey(): String {
         return "${id.source.name}:${id.sourcePostId}"
     }
+}
+
+internal enum class CreatorSourceAvailabilityChange {
+    UNCHANGED,
+    RECONCILED,
+    REFRESH_REQUIRED,
 }
 
 private fun creatorQueryHash(creator: CreatorProfile): String {

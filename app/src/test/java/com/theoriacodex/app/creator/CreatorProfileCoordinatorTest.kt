@@ -190,7 +190,10 @@ class CreatorProfileCoordinatorTest {
         started.await()
 
         capabilities.value = emptySet()
-        assertFalse(coordinator.onAvailableSourcesChanged())
+        assertEquals(
+            CreatorSourceAvailabilityChange.RECONCILED,
+            coordinator.onAvailableSourcesChanged(),
+        )
         assertTrue(coordinator.results.isEmpty())
         assertFalse(coordinator.loading)
         assertFalse(coordinator.canLoadMore)
