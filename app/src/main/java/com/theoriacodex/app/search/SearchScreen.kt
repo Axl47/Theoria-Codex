@@ -1099,7 +1099,7 @@ fun SearchResultCard(
             } else {
                 Box(
                     modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
+                    contentAlignment = Alignment.TopStart,
                 ) {
                     Text(
                         text = "No preview",
