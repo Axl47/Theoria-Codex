@@ -118,6 +118,7 @@ class RoomRecentsLegacyImporter(
                 RecentWatchedEntity(
                     post.id.source.name,
                     post.id.sourcePostId,
+                    entry.section.name,
                     entry.viewedAtEpochMs,
                     (prepared.watched.size - index).toLong(),
                     entry.origin.name,

@@ -87,7 +87,7 @@ internal object RepositoryPolicies {
     ): List<RecentPostEntry> {
         return entries
             .sortedByDescending { entry -> entry.viewedAtEpochMs }
-            .distinctBy { entry -> entry.post.id }
+            .distinctBy { entry -> entry.post.id to entry.section }
             .take(limit.coerceAtLeast(0))
     }
 
@@ -129,7 +129,10 @@ internal object RepositoryPolicies {
         searches: List<RecentSearchEntry>,
     ): List<RecentActivityEntry> {
         return buildList {
-            watched.forEach { entry -> add(RecentActivityEntry.Watched(entry)) }
+            watched
+                .sortedByDescending { entry -> entry.viewedAtEpochMs }
+                .distinctBy { entry -> entry.post.id }
+                .forEach { entry -> add(RecentActivityEntry.Watched(entry)) }
             searches.forEach { entry -> add(RecentActivityEntry.Search(entry)) }
         }.sortedByDescending { entry -> entry.occurredAtEpochMs }
     }

@@ -414,10 +414,11 @@ class DataStoreRepositoriesTest {
         val firstScope = newScope()
         val first = DataStoreUiRestoreRepository(directory, firstScope)
         val launch = ViewerLaunchContext(
-            queryHash = "query-124",
+            queryHash = "recents:watched",
             startIndex = 124,
-            streamSource = ViewerStreamSource.SEARCH,
+            streamSource = ViewerStreamSource.RECENTS,
             scrollOffsetHint = 15,
+            recentsSection = RecentPostSection.WATCHED,
         )
         first.setLastTab("settings")
         first.setViewerLaunchContext(launch)

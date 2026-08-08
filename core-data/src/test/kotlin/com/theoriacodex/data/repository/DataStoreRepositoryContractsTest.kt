@@ -76,6 +76,7 @@ class DataStoreRepositoryContractsTest(
             startIndex = 4,
             streamSource = ViewerStreamSource.CODEX,
             scrollOffsetHint = 21,
+            recentsSection = RecentPostSection.CODEX,
         )
 
         assertEquals("codex", repository.migrateLegacyLastTab(" codex "))

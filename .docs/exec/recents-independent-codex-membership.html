@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Track Watched and Codex Recents Independently</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#f7f7f4; --surface:#fff; --text:#202124; --muted:#5f6368; --border:#d7d7d0; --accent:#0f766e; --accent-soft:#dff3ef; --risk:#9a3412; --risk-soft:#ffedd5; --code:#111827; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#151716; --surface:#202321; --text:#f0f2ef; --muted:#b8beb7; --border:#3a403c; --accent:#5eead4; --accent-soft:#123b37; --risk:#fdba74; --risk-soft:#43230f; --code:#0b0f0d; } }
+    * { box-sizing:border-box; } body { margin:0; font:15px/1.55 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
+    header,main { max-width:1180px; margin:0 auto; padding:24px; } header { padding-top:36px; } h1,h2,h3 { line-height:1.15; margin:0 0 12px; } h1 { font-size:clamp(2rem,4vw,3.25rem); } h2 { margin-top:36px; font-size:1.55rem; } h3 { margin-top:24px; font-size:1.1rem; } p { margin:0 0 14px; } a { color:var(--accent); }
+    nav { position:sticky; top:0; z-index:10; border-block:1px solid var(--border); background:var(--surface); } nav ul { display:flex; gap:6px; max-width:1180px; margin:0 auto; padding:8px 24px; list-style:none; overflow-x:auto; } nav a { display:block; padding:6px 10px; border-radius:6px; text-decoration:none; white-space:nowrap; } nav a:hover { background:var(--accent-soft); }
+    section { padding:22px; margin:18px 0; border:1px solid var(--border); border-radius:8px; background:var(--surface); } table { width:100%; border-collapse:collapse; margin:12px 0; font-size:.95rem; } th,td { padding:9px 10px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; } th { color:var(--muted); font-weight:650; } code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.92em; } pre { overflow-x:auto; padding:14px; border-radius:8px; background:var(--code); color:#f8fafc; }
+    .meta { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; color:var(--muted); } .pill { padding:4px 8px; border:1px solid var(--border); border-radius:999px; background:var(--surface); } .dashboard { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin:18px 0 0; } .card { padding:14px; border:1px solid var(--border); border-radius:8px; background:var(--surface); } .card strong { display:block; margin-bottom:4px; color:var(--muted); font-size:.82rem; text-transform:uppercase; }
+    .callout { margin:14px 0; padding:12px 14px; border-left:4px solid var(--accent); background:var(--accent-soft); border-radius:6px; } .risk { border-left-color:var(--risk); background:var(--risk-soft); } .status-table td:first-child { width:180px; color:var(--muted); font-weight:650; }
+    @media print { nav { position:static; } section,.card { break-inside:avoid; } body { background:#fff; color:#000; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Track Watched and Codex Recents Independently</h1>
+    <p>A post opened from Codex will appear in the Codex Recents section even when the same canonical post already belongs to Watched, without moving or deleting either membership.</p>
+    <div class="meta"><span class="pill">Status: Complete</span><span class="pill">Owner: Codex</span><span class="pill">Created: 2026-08-07</span><span class="pill">Updated: 2026-08-07</span><span class="pill">Baseline: fa8c6a8</span></div>
+    <div class="dashboard">
+      <div class="card"><strong>Next Action</strong>Optional manual confirmation: open one post from Search and Codex and inspect both filters.</div>
+      <div class="card"><strong>Main Risk</strong>The Room primary-key change must preserve existing history and shared post ownership.</div>
+      <div class="card"><strong>Validation</strong>Core repository tests, Room tests and schema compilation, app tests and compilation, HTML and diff checks.</div>
+      <div class="card"><strong>Affected Areas</strong>core-data Recents contract, Room schema/repository/importer, Viewer launch context, Recents routing.</div>
+    </div>
+  </header>
+  <nav aria-label="Plan sections"><ul><li><a href="#purpose">Purpose</a></li><li><a href="#context">Context</a></li><li><a href="#phases">Phases</a></li><li><a href="#work-plan">Work Plan</a></li><li><a href="#validation">Validation</a></li><li><a href="#living-log">Living Log</a></li><li><a href="#recovery">Recovery</a></li></ul></nav>
+  <main>
+    <section id="purpose"><h2>Purpose / Big Picture</h2><p>Recents has separate Watched and Codex filters, but the database currently stores only one history row per post. The latest opening origin therefore chooses one section and displaces the other. After this change, section membership is an explicit identity dimension: Watched and Codex may each retain their own latest view of the same post. A user can verify this by opening a post from Search, opening that same post from Codex, and seeing it in both filters.</p></section>
+    <section id="context"><h2>Context And Orientation</h2><p>A <em>canonical post</em> is identified by provider source plus provider post ID. A <em>Recents section</em> is the user-facing Watched or Codex category. A <em>Viewer origin</em> records the route that launched Viewer and remains useful provenance, but it is not sufficient as section identity.</p>
+      <table><thead><tr><th>File or module</th><th>Role</th></tr></thead><tbody>
+        <tr><td><code>core-data/.../Repositories.kt</code></td><td>Defines RecentPostEntry, RecentsRepository, ViewerLaunchContext, and the new typed section.</td></tr>
+        <tr><td><code>core-data/.../RepositoryPolicies.kt</code></td><td>Normalizes in-memory history by post plus section and controls the combined activity view.</td></tr>
+        <tr><td><code>core-data-android/.../RecentWatchedEntity.java</code></td><td>Changes durable identity from two columns to source, post ID, and section.</td></tr>
+        <tr><td><code>core-data-android/.../TheoriaRoomDatabase.java</code></td><td>Bumps schema 2 to 3 and migrates every existing row into its current section.</td></tr>
+        <tr><td><code>app/.../ViewerRouteWorkflow.kt</code></td><td>Writes the visible post into the section carried by the Viewer session.</td></tr>
+        <tr><td><code>app/.../DestinationStateBoundaries.kt</code> and <code>RecentsScreen.kt</code></td><td>Partition and route entries by section while preserving the committed grid/action UI.</td></tr>
+      </tbody></table>
+      <div class="callout risk">Schema 2 never stored two memberships for one post, so migration can preserve the current membership only. It must not guess missing history. Future opens create the independent membership.</div>
+    </section>
+    <section id="phases"><h2>Phases</h2>
+      <h3>Phase 1: Make section membership explicit</h3><table class="status-table"><tbody><tr><td>Goal</td><td>In-memory Recents can retain one Watched and one Codex entry for the same post.</td></tr><tr><td>Checks</td><td><code>./gradlew :core-data:test</code></td></tr><tr><td>Acceptance</td><td>Recording both sections produces two memberships; reopens and clears affect only the selected section.</td></tr></tbody></table>
+      <h3>Phase 2: Persist independent membership safely</h3><table class="status-table"><tbody><tr><td>Goal</td><td>Room schema 3 stores the composite identity and migrates schema 2 without data loss.</td></tr><tr><td>Checks</td><td><code>./gradlew :core-data-android:testDebugUnitTest :core-data-android:compileDebugAndroidTestKotlin</code></td></tr><tr><td>Acceptance</td><td>Room repository tests prove dual membership, independent clear/orphan behavior, and migration source compiles against exported schema 3.</td></tr></tbody></table>
+      <h3>Phase 3: Preserve section through Viewer and UI</h3><table class="status-table"><tbody><tr><td>Goal</td><td>Direct and Recents launches record the correct section, including process-restorable Recents context.</td></tr><tr><td>Checks</td><td><code>./gradlew :app:testDebugUnitTest :app:compileDebugKotlin</code></td></tr><tr><td>Acceptance</td><td>Codex openings never erase Watched membership, and All/filter taps route through the matching static stream.</td></tr></tbody></table>
+    </section>
+    <section id="work-plan"><h2>Work Plan</h2><ol>
+      <li>Add <code>RecentPostSection</code>, store it on <code>RecentPostEntry</code>, pass it through <code>RecentsRepository.recordWatchedPost</code>, and key normalization by post plus section.</li>
+      <li>Add optional <code>recentsSection</code> to <code>ViewerLaunchContext</code> and its Gson-backed records. Non-Recents contexts remain null; Recents launches set it explicitly.</li>
+      <li>Replace origin-filtered clear operations with section-filtered clear operations. Keep exact launch origin and query hash as metadata inside each section row.</li>
+      <li>Change Room entity/row/DAO/repository/importer. Bump to schema 3 using create-copy-drop-rename migration; map existing CODEX origins to CODEX and all others to WATCHED.</li>
+      <li>Update the Recents destination split and All routing to use section. The combined activity feed shows the newest membership for a duplicated canonical post so All does not render duplicate post rows.</li>
+      <li>Add contract, Room, migration-source, Viewer workflow/context persistence, and UI routing tests. Update AGENTS.md with the durable section-identity rule.</li>
+    </ol></section>
+    <section id="validation"><h2>Validation And Acceptance</h2><table><thead><tr><th>Check</th><th>Command/action</th><th>Expected result</th></tr></thead><tbody>
+      <tr><td>Core contract</td><td><code>./gradlew :core-data:test</code></td><td>All repository and persistence tests pass.</td></tr>
+      <tr><td>Room owner</td><td><code>./gradlew :core-data-android:testDebugUnitTest :core-data-android:compileDebugAndroidTestKotlin</code></td><td>Room unit tests pass and schema instrumentation owner compiles.</td></tr>
+      <tr><td>App owner</td><td><code>./gradlew :app:testDebugUnitTest :app:compileDebugKotlin</code></td><td>Viewer/Recents behavior and app compilation pass.</td></tr>
+      <tr><td>Static integrity</td><td><code>git diff --check</code> and repository HTML validator</td><td>No whitespace or plan-format findings.</td></tr>
+      <tr><td>Manual follow-up</td><td>Open identical post from Search and Codex, then inspect both filters and clear one.</td><td>Both filters initially contain it; clearing one leaves the other. No connected lane is required for implementation closeout.</td></tr>
+    </tbody></table></section>
+    <section id="living-log"><h2>Living Log</h2><h3>Progress</h3><ul><li>[x] 2026-08-07 — Confirmed clean committed baseline <code>fa8c6a8</code> and traced write, read, reopen, clear, and migration boundaries.</li><li>[x] 2026-08-07 — Implemented typed section ownership, section-scoped reopen/clear behavior, canonical All deduplication, and optional persisted Viewer section; <code>:core-data:test</code> passed.</li><li>[x] 2026-08-07 — Added schema 3 composite membership identity, a preserving 2→3 migration, section-aware DAO/repository/importer behavior, and exported schema 3; focused Room tests and schema-owner compilation passed.</li><li>[x] 2026-08-07 — Integrated typed section through Recents launches, Viewer write/restore, destination partitioning, filtered clears, and All routing; app compilation and 401 tests passed with three unchanged opt-in skips.</li><li>[x] 2026-08-07 — Final CI-aligned validation passed 571 tests with zero failures/errors and seven unchanged skips, all three Detekt lanes, both lint owners, both compilation owners, HTML validation, and diff checks.</li></ul>
+      <h3>Surprises And Discoveries</h3><ul><li>The UI already records Codex opens; the loss occurs because both repository normalization and Room primary key deduplicate only by canonical post ID.</li><li>The committed Recents grid/action changes touch UI files needed here, but the section fix preserves their presentation and callbacks.</li><li>The aggregate <code>:core-data:detekt</code> task reports five inherited main/test findings; the repository's baselined CI owner is <code>:core-data:detektMain</code>, which passed. No unrelated debt was changed.</li></ul>
+      <h3>Decision Log</h3><ul><li>Decision: Separate section from origin. Rationale: origin remains diagnostic provenance while section is stable user-facing membership. Date/Author: 2026-08-07 / Codex.</li><li>Decision: Carry section as typed Viewer context instead of parsing query-hash strings in repositories. Rationale: process restoration and reopen writes remain explicit. Date/Author: 2026-08-07 / Codex.</li><li>Decision: Migrate only the currently stored membership. Rationale: inventing a missing second history record would fabricate user activity. Date/Author: 2026-08-07 / Codex.</li></ul>
+      <h3>Outcomes And Retrospective</h3><p>Complete. Watched and Codex now have independent durable memberships for the same canonical post, while All presents only the newest duplicate and both sections retain independent reopen/clear behavior. Schema 2 rows migrate into their truthful current section; missing historical membership is not fabricated. Host tests, lint, Detekt, compilation, HTML, and diff checks passed. The Room migration instrumentation owner compiled but was not device-executed, and no device package or production data was touched.</p></section>
+    <section id="recovery"><h2>Idempotence And Recovery</h2><p>All Gradle checks are safe to rerun. The migration uses a transaction-managed Room migration and creates a temporary table before replacing the old one. If implementation is interrupted before commit, inspect <code>git status</code> and resume from the first unchecked working-list item; do not reset or overwrite unrelated work. No device install, database deletion, or production-data mutation is part of this plan.</p></section>
+  </main>
+</body>
+</html>

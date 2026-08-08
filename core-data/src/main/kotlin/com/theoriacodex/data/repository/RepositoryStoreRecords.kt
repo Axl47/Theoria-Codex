@@ -350,14 +350,18 @@ internal data class LegacyViewerLaunchContextRecord(
     val streamSource: String = ViewerStreamSource.SEARCH.name,
     @field:SerializedName("scrollOffsetHint")
     val scrollOffsetHint: Int = 0,
+    @field:SerializedName("recentsSection")
+    val recentsSection: String? = null,
 ) {
     fun toDomain(): ViewerLaunchContext {
+        val decodedStreamSource = runCatching { ViewerStreamSource.valueOf(streamSource) }
+            .getOrDefault(ViewerStreamSource.SEARCH)
         return ViewerLaunchContext(
             queryHash = queryHash,
             startIndex = startIndex,
-            streamSource = runCatching { ViewerStreamSource.valueOf(streamSource) }
-                .getOrDefault(ViewerStreamSource.SEARCH),
+            streamSource = decodedStreamSource,
             scrollOffsetHint = scrollOffsetHint,
+            recentsSection = decodeRestoredRecentsSection(recentsSection, decodedStreamSource, queryHash),
         )
     }
 
@@ -368,6 +372,7 @@ internal data class LegacyViewerLaunchContextRecord(
                 startIndex = context.startIndex,
                 streamSource = context.streamSource.name,
                 scrollOffsetHint = context.scrollOffsetHint,
+                recentsSection = context.recentsSection?.name,
             )
         }
     }

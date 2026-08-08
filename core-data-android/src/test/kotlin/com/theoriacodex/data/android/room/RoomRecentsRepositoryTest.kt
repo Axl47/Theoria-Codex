@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.RecentActivityEntry
+import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -44,7 +45,12 @@ class RoomRecentsRepositoryTest {
         val repository = RoomRecentsRepository(database, watchedLimit = 2, searchLimit = 2, clock = { now })
         repository.recordWatchedPost(recentPost("b"), ViewerStreamSource.SEARCH, "original")
         repository.recordWatchedPost(recentPost("a"), ViewerStreamSource.CODEX, "codex")
-        repository.recordWatchedPost(recentPost("b").copy(title = "refreshed"), ViewerStreamSource.RECENTS, "ignored")
+        repository.recordWatchedPost(
+            recentPost("b").copy(title = "refreshed"),
+            ViewerStreamSource.RECENTS,
+            "ignored",
+            RecentPostSection.WATCHED,
+        )
         repository.recordWatchedPost(recentPost("c"), ViewerStreamSource.FOR_YOU, null)
         repository.recordSearch(recentQuery("one"), " b ")
         repository.recordSearch(recentQuery("two"), "a")
@@ -74,16 +80,38 @@ class RoomRecentsRepositoryTest {
         val codexId = codex.createCodex("Saved").codexId
         codex.addItem(codexId, shared)
         recents.recordWatchedPost(shared, ViewerStreamSource.SEARCH, null)
+        recents.recordWatchedPost(shared, ViewerStreamSource.CODEX, null)
         recents.recordWatchedPost(recentsOnly, ViewerStreamSource.FOR_YOU, null)
 
-        recents.clearWatchedPosts(ViewerStreamSource.FOR_YOU)
+        recents.clearWatchedPosts(RecentPostSection.WATCHED)
         assertNull(codex.getPost(recentsOnly.id))
         assertEquals(shared, codex.getPost(shared.id))
+        assertEquals(
+            listOf(RecentPostSection.CODEX),
+            recents.observeWatchedPosts().first().map { entry -> entry.section },
+        )
 
-        recents.clearWatchedPostsExcept(ViewerStreamSource.CODEX)
+        recents.clearWatchedPosts(RecentPostSection.CODEX)
         assertEquals(shared, codex.getPost(shared.id))
         codex.deleteCodex(codexId)
         assertNull(codex.getPost(shared.id))
+    }
+
+    @Test fun `same post retains independent watched and codex memberships`() = runTest {
+        val repository = RoomRecentsRepository(database, clock = { now++ })
+        val post = recentPost("shared-membership")
+
+        repository.recordWatchedPost(post, ViewerStreamSource.SEARCH, "search")
+        repository.recordWatchedPost(post, ViewerStreamSource.CODEX, "codex")
+
+        val memberships = repository.observeWatchedPosts().first()
+        assertEquals(2, memberships.size)
+        assertEquals(
+            setOf(RecentPostSection.WATCHED, RecentPostSection.CODEX),
+            memberships.map { entry -> entry.section }.toSet(),
+        )
+        assertEquals(1, repository.observeActivity().first().filterIsInstance<RecentActivityEntry.Watched>().size)
+        assertEquals(1, database.codexLikesDao().posts().size)
     }
 
     @Test fun `partial Recents snapshots preserve rich shared payload while applying enrichment`() = runTest {

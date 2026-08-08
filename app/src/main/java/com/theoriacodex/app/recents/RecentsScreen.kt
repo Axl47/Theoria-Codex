@@ -38,8 +38,8 @@ import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
+import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
-import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -330,7 +330,7 @@ private fun openRecentPost(
     onOpenWatchedPost: (Int) -> Unit,
     onOpenCodexPost: (Int) -> Unit,
 ) {
-    val isCodex = postEntry.origin == ViewerStreamSource.CODEX
+    val isCodex = postEntry.section == RecentPostSection.CODEX
     val sourcePosts = if (isCodex) codexPosts else watchedPosts
     val index = sourcePosts.indexOfFirst { candidate -> candidate.post.id == postEntry.post.id }
     if (index < 0) return

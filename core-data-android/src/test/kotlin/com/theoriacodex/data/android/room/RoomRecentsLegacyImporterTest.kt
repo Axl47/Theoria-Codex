@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.google.gson.Gson
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
 import com.theoriacodex.data.storage.LegacyRecentPostRecord
 import com.theoriacodex.data.storage.LegacyRecentSearchRecord
@@ -89,7 +90,12 @@ class RoomRecentsLegacyImporterTest {
         val importer = RoomRecentsLegacyImporter(database, registry)
         assertTrue(importer.importAndArchive(directory) is RecentsImportResult.AlreadyImported)
         val repository = RoomRecentsRepository(database, clock = { 10L })
-        repository.recordWatchedPost(importerPost("one").copy(title = "refreshed"), ViewerStreamSource.RECENTS, null)
+        repository.recordWatchedPost(
+            importerPost("one").copy(title = "refreshed"),
+            ViewerStreamSource.RECENTS,
+            null,
+            RecentPostSection.WATCHED,
+        )
         repository.recordSearch(importerQuery("live"), "live")
 
         val restarted = RoomRecentsLegacyImporter(database, LegacyJsonRecoveryRegistry())

@@ -36,11 +36,24 @@ interface QueryRepository {
     suspend fun upsertAppliedQuery(modeKey: String, query: Query)
 }
 
+enum class RecentPostSection {
+    WATCHED,
+    CODEX,
+    ;
+
+    companion object {
+        fun fromOrigin(origin: ViewerStreamSource): RecentPostSection {
+            return if (origin == ViewerStreamSource.CODEX) CODEX else WATCHED
+        }
+    }
+}
+
 data class RecentPostEntry(
     val post: Post,
     val viewedAtEpochMs: Long,
     val origin: ViewerStreamSource,
     val originQueryHash: String?,
+    val section: RecentPostSection = RecentPostSection.fromOrigin(origin),
 )
 
 data class RecentSearchEntry(
@@ -67,11 +80,15 @@ interface RecentsRepository {
     fun observeWatchedPosts(): Flow<List<RecentPostEntry>>
     fun observeSearches(): Flow<List<RecentSearchEntry>>
     fun observeActivity(): Flow<List<RecentActivityEntry>>
-    suspend fun recordWatchedPost(post: Post, origin: ViewerStreamSource, originQueryHash: String?)
+    suspend fun recordWatchedPost(
+        post: Post,
+        origin: ViewerStreamSource,
+        originQueryHash: String?,
+        section: RecentPostSection = RecentPostSection.fromOrigin(origin),
+    )
     suspend fun recordSearch(query: Query, queryHash: String)
     suspend fun clearWatchedPosts()
-    suspend fun clearWatchedPosts(origin: ViewerStreamSource)
-    suspend fun clearWatchedPostsExcept(origin: ViewerStreamSource)
+    suspend fun clearWatchedPosts(section: RecentPostSection)
     suspend fun clearSearches()
     suspend fun clearAll()
 }
@@ -313,7 +330,24 @@ data class ViewerLaunchContext(
     val startIndex: Int,
     val streamSource: ViewerStreamSource,
     val scrollOffsetHint: Int,
+    val recentsSection: RecentPostSection? = null,
 )
+
+internal fun decodeRestoredRecentsSection(
+    encoded: String?,
+    streamSource: ViewerStreamSource,
+    queryHash: String,
+): RecentPostSection? {
+    val decoded = encoded?.let { value ->
+        runCatching { RecentPostSection.valueOf(value) }.getOrNull()
+    }
+    if (decoded != null || streamSource != ViewerStreamSource.RECENTS) return decoded
+    return when (queryHash) {
+        "recents:codex" -> RecentPostSection.CODEX
+        "recents:watched" -> RecentPostSection.WATCHED
+        else -> null
+    }
+}
 
 data class SearchScrollState(
     val firstVisibleItemIndex: Int,

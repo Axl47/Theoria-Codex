@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.google.gson.Gson
 import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
+import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -38,7 +39,9 @@ class RoomRecentsRepository(
             val post = postCodec.decode(PostEntity(row.source, row.sourcePostId, row.payloadJson))
             val origin = runCatching { ViewerStreamSource.valueOf(row.origin) }
                 .getOrElse { error("Invalid recent watched origin ${row.origin}") }
-            RecentPostEntry(post, row.viewedAtEpochMs, origin, row.originQueryHash)
+            val section = runCatching { RecentPostSection.valueOf(row.section) }
+                .getOrElse { error("Invalid recent watched section ${row.section}") }
+            RecentPostEntry(post, row.viewedAtEpochMs, origin, row.originQueryHash, section)
         }
     }
 
@@ -54,8 +57,10 @@ class RoomRecentsRepository(
 
     override fun observeActivity(): Flow<List<RecentActivityEntry>> =
         combine(observeWatchedPosts(), observeSearches()) { watched, searches ->
-            buildList {
-                watched.forEach { add(RecentActivityEntry.Watched(it)) }
+            buildList<RecentActivityEntry> {
+                watched
+                    .distinctBy { entry -> entry.post.id }
+                    .forEach { add(RecentActivityEntry.Watched(it)) }
                 searches.forEach { add(RecentActivityEntry.Search(it)) }
             }.sortedWith(
                 compareByDescending<RecentActivityEntry> { it.occurredAtEpochMs }
@@ -67,15 +72,17 @@ class RoomRecentsRepository(
         post: Post,
         origin: ViewerStreamSource,
         originQueryHash: String?,
+        section: RecentPostSection,
     ) {
         database.withTransaction {
-            val previous = dao.watched(post.id.source.name, post.id.sourcePostId)
+            val previous = dao.watched(post.id.source.name, post.id.sourcePostId, section.name)
             val preserve = origin == ViewerStreamSource.RECENTS && previous != null
             sharedPostPayloads.upsert(post)
             dao.upsertWatched(
                 RecentWatchedEntity(
                     post.id.source.name,
                     post.id.sourcePostId,
+                    section.name,
                     clock(),
                     dao.nextWatchedSequence(),
                     if (preserve) previous.origin else origin.name,
@@ -110,16 +117,9 @@ class RoomRecentsRepository(
         }
     }
 
-    override suspend fun clearWatchedPosts(origin: ViewerStreamSource) {
+    override suspend fun clearWatchedPosts(section: RecentPostSection) {
         database.withTransaction {
-            dao.deleteWatchedOrigin(origin.name)
-            contentDao.deleteOrphanPosts()
-        }
-    }
-
-    override suspend fun clearWatchedPostsExcept(origin: ViewerStreamSource) {
-        database.withTransaction {
-            dao.deleteWatchedExceptOrigin(origin.name)
+            dao.deleteWatchedSection(section.name)
             contentDao.deleteOrphanPosts()
         }
     }

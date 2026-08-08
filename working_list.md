@@ -4,6 +4,33 @@ updated_at: 2026-08-03T00:03:12-04:00
 ---
 # Working List
 
+## Current Task: Track Watched and Codex Recents Independently
+
+### In Progress
+
+None.
+
+### Pending
+
+None.
+
+### Done
+
+- [x] Confirm the clean committed baseline and required data flow.
+  - Evidence: `fa8c6a8` is clean and the write/read/reopen/clear/migration boundaries were traced before the first runtime patch.
+- [x] Create the standalone implementation ExecPlan.
+  - Evidence: `.docs/exec/recents-independent-codex-membership.html` records scope, migration behavior, validation, decisions, and recovery.
+- [x] Add typed Recents section ownership to the shared repository and Viewer contracts.
+  - Evidence: normalization keys watched entries by canonical post plus section, reopening preserves metadata inside the selected section, All deduplicates canonical posts, Viewer context persists an optional typed section, and `./gradlew :core-data:test --no-configuration-cache` passed.
+- [x] Migrate Room Recents to schema 3 with post-plus-section identity.
+  - Evidence: schema 3 keys `recent_watched` by source, post ID, and section; `MIGRATION_2_3` maps current CODEX origins to CODEX and every other row to WATCHED; Room dual-membership, clear/orphan, importer, and schema-test compilation passed in `:core-data-android:testDebugUnitTest :core-data-android:compileDebugAndroidTestKotlin`.
+- [x] Route Recents filters, clear actions, reopen behavior, and All activity by section.
+  - Evidence: Recents launches persist an explicit typed section, Viewer records and restores only that section, destination/UI routing reads section rather than origin, and 401 app tests passed with three unchanged opt-in skips after updating the durable Gson manifest.
+- [x] Complete bounded core-data, Room, app, HTML, and diff validation.
+  - Evidence: the corrected CI-aligned Gradle batch passed 571 tests with zero failures/errors and seven unchanged skips; core-data main, Room debug, and app debug Detekt passed; Room/app lint passed; both app and Room compilation owners passed. App and Room Detekt retained their known 10/361 analyzer-resolution diagnostics while exiting green. `html-validate` and `git diff --check` passed.
+- [x] Update the ExecPlan, AGENTS.md, and closeout evidence.
+  - Evidence: the ExecPlan records the implemented schema/runtime decisions and validation, while AGENTS.md now protects independent Recents section identity. No device, emulator, connected test, package mutation, live provider, release, tag, or push command ran.
+
 ## Current Task: Restore Pixiv Native Authorization Callback Compatibility
 
 ### In Progress

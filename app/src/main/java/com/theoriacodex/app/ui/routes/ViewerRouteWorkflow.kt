@@ -13,6 +13,7 @@ import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.requiresPrelaunchViewerPostResolution
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -135,6 +136,10 @@ internal class ViewerRouteWorkflow(
             ViewerStreamSource.RECENTS -> data.recentsRepository
                 .observeWatchedPosts()
                 .first()
+                .filter { entry ->
+                    restoredContext.recentsSection == null ||
+                        entry.section == restoredContext.recentsSection
+                }
                 .map { entry -> entry.post }
             ViewerStreamSource.CODEX -> identity.queryHash
                 ?.removePrefix("codex:")
@@ -158,12 +163,19 @@ internal class ViewerRouteWorkflow(
     }
 
     suspend fun recordVisiblePost(post: Post, session: ViewerSession?) {
+        val origin = session?.context?.streamSource ?: ViewerStreamSource.SEARCH
         data.recentsRepository.recordWatchedPost(
             post = post,
-            origin = session?.context?.streamSource ?: ViewerStreamSource.SEARCH,
+            origin = origin,
             originQueryHash = session?.context?.queryHash,
+            section = recentPostSectionForViewer(session?.context),
         )
     }
+}
+
+internal fun recentPostSectionForViewer(context: ViewerLaunchContext?): RecentPostSection {
+    val origin = context?.streamSource ?: ViewerStreamSource.SEARCH
+    return context?.recentsSection ?: RecentPostSection.fromOrigin(origin)
 }
 
 internal fun shareViewerPostMessage(context: Context, post: Post?): String {

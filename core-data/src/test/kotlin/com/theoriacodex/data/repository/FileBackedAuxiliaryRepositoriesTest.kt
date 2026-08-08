@@ -110,10 +110,11 @@ internal class FileBackedAuxiliaryRepositoriesTest : FileBackedRepositoryTestFix
         val dir = tempDir("ui-restore-store-")
         val first = FileBackedUiRestoreRepository(dir)
         val context = ViewerLaunchContext(
-            queryHash = "qhash",
+            queryHash = "recents:codex",
             startIndex = 4,
-            streamSource = ViewerStreamSource.CODEX,
+            streamSource = ViewerStreamSource.RECENTS,
             scrollOffsetHint = 90,
+            recentsSection = RecentPostSection.CODEX,
         )
 
         first.setLastTab("settings")

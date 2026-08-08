@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
@@ -123,13 +124,55 @@ class RepositoryContractTest(
 
         repository.recordWatchedPost(codexPost, ViewerStreamSource.CODEX, "codex:art")
         repository.recordWatchedPost(watchedPost, ViewerStreamSource.SEARCH, "search:art")
-        repository.recordWatchedPost(codexPost, ViewerStreamSource.RECENTS, "recents:codex")
-        repository.recordWatchedPost(watchedPost, ViewerStreamSource.RECENTS, "recents:watched")
+        repository.recordWatchedPost(
+            codexPost,
+            ViewerStreamSource.RECENTS,
+            "recents:codex",
+            RecentPostSection.CODEX,
+        )
+        repository.recordWatchedPost(
+            watchedPost,
+            ViewerStreamSource.RECENTS,
+            "recents:watched",
+            RecentPostSection.WATCHED,
+        )
 
         val watched = repository.observeWatchedPosts().first()
         assertEquals(ViewerStreamSource.SEARCH, watched.first { it.post.id == watchedPost.id }.origin)
         assertEquals(ViewerStreamSource.CODEX, watched.first { it.post.id == codexPost.id }.origin)
         assertEquals("codex:art", watched.first { it.post.id == codexPost.id }.originQueryHash)
+    }
+
+    @Test
+    fun `recents keeps independent watched and codex memberships for one post`() = runTest {
+        assumeTrue("Room owns the second durable Recents contract lane", backend == Backend.IN_MEMORY)
+        var now = 100L
+        val repository = createRecentsRepository(clock = { now++ })
+        val post = repositoryTestPost(id = "shared-post")
+
+        repository.recordWatchedPost(post, ViewerStreamSource.SEARCH, "search:art")
+        repository.recordWatchedPost(post, ViewerStreamSource.CODEX, "codex:art")
+
+        val watched = repository.observeWatchedPosts().first()
+        assertEquals(2, watched.size)
+        assertEquals(
+            setOf(RecentPostSection.WATCHED, RecentPostSection.CODEX),
+            watched.map { entry -> entry.section }.toSet(),
+        )
+        assertEquals(1, repository.observeActivity().first().filterIsInstance<RecentActivityEntry.Watched>().size)
+    }
+
+    @Test
+    fun `legacy Recents viewer identities restore their typed section`() {
+        assertEquals(
+            RecentPostSection.CODEX,
+            decodeRestoredRecentsSection(null, ViewerStreamSource.RECENTS, "recents:codex"),
+        )
+        assertEquals(
+            RecentPostSection.WATCHED,
+            decodeRestoredRecentsSection(null, ViewerStreamSource.RECENTS, "recents:watched"),
+        )
+        assertNull(decodeRestoredRecentsSection(null, ViewerStreamSource.SEARCH, "recents:codex"))
     }
 
     @Test
@@ -140,10 +183,10 @@ class RepositoryContractTest(
         repository.recordWatchedPost(repositoryTestPost(id = "codex-post"), ViewerStreamSource.CODEX, null)
         repository.recordWatchedPost(repositoryTestPost(id = "watched-post"), ViewerStreamSource.SEARCH, null)
 
-        repository.clearWatchedPostsExcept(ViewerStreamSource.CODEX)
-        assertEquals(listOf(ViewerStreamSource.CODEX), repository.observeWatchedPosts().first().map { it.origin })
+        repository.clearWatchedPosts(RecentPostSection.WATCHED)
+        assertEquals(listOf(RecentPostSection.CODEX), repository.observeWatchedPosts().first().map { it.section })
 
-        repository.clearWatchedPosts(ViewerStreamSource.CODEX)
+        repository.clearWatchedPosts(RecentPostSection.CODEX)
         assertTrue(repository.observeWatchedPosts().first().isEmpty())
     }
 

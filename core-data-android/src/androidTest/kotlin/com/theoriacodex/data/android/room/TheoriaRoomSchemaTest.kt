@@ -70,6 +70,31 @@ class TheoriaRoomSchemaTest {
         assertTrue(tables.containsAll(setOf("recent_watched", "recent_searches", "recents_migration_metadata")))
     }
 
+    @Test
+    fun migrationTwoToThreePreservesRowsAndAddsIndependentSectionIdentity() {
+        migrationHelper.createDatabase(TEST_DATABASE_NAME, 2).apply {
+            execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('PIXIV','watched','{}')")
+            execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('PIXIV','codex','{}')")
+            execSQL("INSERT INTO recent_watched(source,source_post_id,viewed_at_epoch_ms,sort_sequence,origin,origin_query_hash) VALUES('PIXIV','watched',10,1,'SEARCH','search')")
+            execSQL("INSERT INTO recent_watched(source,source_post_id,viewed_at_epoch_ms,sort_sequence,origin,origin_query_hash) VALUES('PIXIV','codex',11,2,'CODEX','codex')")
+            close()
+        }
+
+        val database = migrationHelper.runMigrationsAndValidate(
+            TEST_DATABASE_NAME,
+            3,
+            true,
+            TheoriaRoomDatabase.MIGRATION_2_3,
+        )
+        val memberships = linkedMapOf<String, String>()
+        database.query("SELECT source_post_id, section FROM recent_watched ORDER BY source_post_id").use { cursor ->
+            while (cursor.moveToNext()) memberships[cursor.getString(0)] = cursor.getString(1)
+        }
+        database.close()
+
+        assertEquals(mapOf("codex" to "CODEX", "watched" to "WATCHED"), memberships)
+    }
+
     companion object {
         private const val TEST_DATABASE_NAME = "theoria-room-schema-test"
     }

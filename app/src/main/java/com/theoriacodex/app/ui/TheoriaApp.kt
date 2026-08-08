@@ -168,6 +168,7 @@ import com.theoriacodex.app.viewer.requiresViewerPostResolution
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.RecommendationProfile
+import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.storage.ApplicationDataState
@@ -1510,6 +1511,7 @@ internal fun TheoriaAppContent(
                                                     startIndex = index.coerceIn(0, posts.lastIndex),
                                                     streamSource = ViewerStreamSource.RECENTS,
                                                     scrollOffsetHint = 0,
+                                                    recentsSection = RecentPostSection.WATCHED,
                                                 )
                                                 scope.launch {
                                                     val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
@@ -1536,6 +1538,7 @@ internal fun TheoriaAppContent(
                                                     startIndex = index.coerceIn(0, posts.lastIndex),
                                                     streamSource = ViewerStreamSource.RECENTS,
                                                     scrollOffsetHint = 0,
+                                                    recentsSection = RecentPostSection.CODEX,
                                                 )
                                                 scope.launch {
                                                     val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(posts, context)
@@ -1573,15 +1576,15 @@ internal fun TheoriaAppContent(
                                         },
                                         onClearWatched = {
                                             scope.launch {
-                                                dataDependencies.recentsRepository.clearWatchedPostsExcept(
-                                                    ViewerStreamSource.CODEX,
+                                                dataDependencies.recentsRepository.clearWatchedPosts(
+                                                    RecentPostSection.WATCHED,
                                                 )
                                             }
                                         },
                                         onClearCodex = {
                                             scope.launch {
                                                 dataDependencies.recentsRepository.clearWatchedPosts(
-                                                    ViewerStreamSource.CODEX,
+                                                    RecentPostSection.CODEX,
                                                 )
                                             }
                                         },

@@ -32,6 +32,7 @@ import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
+import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.SettingsRepository
@@ -180,8 +181,8 @@ internal fun RecentsDestinationStateBoundary(
         val watched = watchedState.value
         content(
             RecentsDestinationState(
-                watchedPosts = watched.filterNot { it.origin == ViewerStreamSource.CODEX },
-                codexPosts = watched.filter { it.origin == ViewerStreamSource.CODEX },
+                watchedPosts = watched.filter { it.section == RecentPostSection.WATCHED },
+                codexPosts = watched.filter { it.section == RecentPostSection.CODEX },
                 searches = searchesState.value,
                 activity = activityState.value,
                 likedPostIds = likedState.value,

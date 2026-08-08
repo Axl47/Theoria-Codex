@@ -12,6 +12,7 @@ import com.theoriacodex.app.viewer.state.ViewerEffect
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.data.repository.ViewerLaunchContext
+import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -24,6 +25,27 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ViewerRoutePolicyTest {
+    @Test
+    fun `Recents Viewer records the explicit section while direct launches derive it`() {
+        val recentsCodex = ViewerLaunchContext(
+            queryHash = "recents:codex",
+            startIndex = 0,
+            streamSource = ViewerStreamSource.RECENTS,
+            scrollOffsetHint = 0,
+            recentsSection = RecentPostSection.CODEX,
+        )
+
+        assertEquals(RecentPostSection.CODEX, recentPostSectionForViewer(recentsCodex))
+        assertEquals(
+            RecentPostSection.CODEX,
+            recentPostSectionForViewer(recentsCodex.copy(streamSource = ViewerStreamSource.CODEX)),
+        )
+        assertEquals(
+            RecentPostSection.WATCHED,
+            recentPostSectionForViewer(recentsCodex.copy(streamSource = ViewerStreamSource.SEARCH, recentsSection = null)),
+        )
+    }
+
     @Test
     fun `live source requires exact query identity and reapplies search visibility`() {
         val liked = post("liked")

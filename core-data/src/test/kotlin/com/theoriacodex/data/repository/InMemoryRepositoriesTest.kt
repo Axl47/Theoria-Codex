@@ -113,7 +113,7 @@ class InMemoryRepositoriesTest {
     fun `recents repository dedupes watched posts and searches by newest activity`() = runTest {
         var now = 1_000L
         val repo = InMemoryRecentsRepository(
-            watchedLimit = 2,
+            watchedLimit = 3,
             searchLimit = 2,
             clock = { now },
         )
@@ -147,9 +147,10 @@ class InMemoryRepositoriesTest {
         val searches = repo.observeSearches().first()
         val activity = repo.observeActivity().first()
 
-        assertEquals(listOf(thirdPost.id, firstPost.id), watched.map { entry -> entry.post.id })
+        assertEquals(listOf(thirdPost.id, firstPost.id, secondPost.id), watched.map { entry -> entry.post.id })
         assertEquals("updated", watched[1].post.title)
         assertEquals(ViewerStreamSource.CODEX, watched[1].origin)
+        assertEquals(RecentPostSection.CODEX, watched[1].section)
         assertEquals(listOf("query-3", "query-1"), searches.map { entry -> entry.queryHash })
         assertEquals(listOf("sketch"), searches[1].query.excludeTags)
         assertEquals(searches.first().searchedAtEpochMs, activity.first().occurredAtEpochMs)
