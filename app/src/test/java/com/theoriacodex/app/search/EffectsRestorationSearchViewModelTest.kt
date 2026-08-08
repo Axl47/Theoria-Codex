@@ -140,6 +140,7 @@ internal class EffectsRestorationSearchViewModelTest : SearchViewModelTestFixtur
                 SearchRestorationUiState.Restored(
                     restoredQuery = true,
                     scrollState = com.theoriacodex.data.repository.SearchScrollState(4, 19),
+                    scrollRequestId = 1L,
                 ),
                 restored.restoration,
             )

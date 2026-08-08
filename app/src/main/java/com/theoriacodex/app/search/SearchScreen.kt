@@ -194,7 +194,6 @@ fun SearchScreen(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
-    var pendingScrollRestoration by remember { mutableStateOf(false) }
     val queryHash = state.query.appliedQueryHash
     val isNhentaiSourceMode = state.query.draft.mode == QueryMode.Source(SourceKey.NHENTAI)
     val animatedFilterActive = animatedOnly && !isNhentaiSourceMode
@@ -328,29 +327,25 @@ fun SearchScreen(
         onAction(SearchAction.ScrollChanged(0, 0))
     }
 
-    LaunchedEffect(state.restoration) {
-        if (state.restoration is SearchRestorationUiState.Restored) {
-            // Restoration is a route-entry concern. Keep it pending until the first result set is
-            // available, but never make later page appends eligible to replay the old position.
-            pendingScrollRestoration = true
-        }
-    }
+    val scrollRestoration = (state.restoration as? SearchRestorationUiState.Restored)
+        ?.takeIf { restored -> restored.scrollState != null }
+    LaunchedEffect(
+        scrollRestoration?.scrollRequestId,
+        visibleResults.isNotEmpty(),
+        animatedFilterActive,
+    ) {
+        val request = scrollRestoration ?: return@LaunchedEffect
+        val restored = request.scrollState ?: return@LaunchedEffect
+        if (animatedFilterActive || visibleResults.isEmpty()) return@LaunchedEffect
 
-    LaunchedEffect(pendingScrollRestoration, visibleResults.size, animatedFilterActive) {
-        if (!pendingScrollRestoration || animatedFilterActive) return@LaunchedEffect
-        val restored = (state.restoration as? SearchRestorationUiState.Restored)?.scrollState
-        if (restored == null) {
-            pendingScrollRestoration = false
-            return@LaunchedEffect
-        }
-        if (visibleResults.isNotEmpty()) {
-            val lastIndex = visibleResults.lastIndex.coerceAtLeast(0)
-            gridState.scrollToItem(
-                index = restored.firstVisibleItemIndex.coerceIn(0, lastIndex),
-                scrollOffset = restored.firstVisibleItemOffsetPx.coerceAtLeast(0),
-            )
-            pendingScrollRestoration = false
-        }
+        // A request is issued only for route entry/re-entry and acknowledged after it is applied.
+        // Page appends therefore cannot replay the saved position and jump the grid unexpectedly.
+        val lastIndex = visibleResults.lastIndex.coerceAtLeast(0)
+        gridState.scrollToItem(
+            index = restored.firstVisibleItemIndex.coerceIn(0, lastIndex),
+            scrollOffset = restored.firstVisibleItemOffsetPx.coerceAtLeast(0),
+        )
+        onAction(SearchAction.ScrollRestorationApplied(request.scrollRequestId))
     }
 
     LaunchedEffect(queryHash, animatedFilterActive) {

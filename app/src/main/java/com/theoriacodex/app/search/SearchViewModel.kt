@@ -232,7 +232,10 @@ internal class SearchViewModel(
 
             SearchAction.Restore -> restore()
 
-            SearchAction.Resume -> resumeSearchIfNeeded()
+            SearchAction.Resume -> {
+                requestRouteEntryScrollRestoration()
+                resumeSearchIfNeeded()
+            }
 
             is SearchAction.CommitTagInput -> commitTagInput(action.input)
 
@@ -273,6 +276,10 @@ internal class SearchViewModel(
             is SearchAction.RequestAnimatedDurationEnrichment -> durationEnrichmentOwner.request(action.queryHash)
 
             is SearchAction.ScrollChanged -> persistScroll(action)
+
+            is SearchAction.ScrollRestorationApplied -> reduce(
+                SearchStateChange.ScrollRestorationApplied(action.requestId),
+            )
 
             is SearchAction.OpenResult -> publishReduction(
                 SearchStateReducer.reduce(mutableState.value, action),
@@ -793,8 +800,8 @@ internal class SearchViewModel(
                 } == true
                 val restoredQuery = restoreSavedDraft()
                 val scroll = restoreScrollState()
-                mutableState.value = mutableState.value.copy(
-                    restoration = SearchRestorationUiState.Restored(
+                reduce(
+                    SearchStateChange.RestorationCompleted(
                         restoredQuery = restoredQuery,
                         scrollState = scroll,
                     ),
@@ -898,6 +905,12 @@ internal class SearchViewModel(
                 state = SearchScrollState(index, offset),
             ),
         )
+    }
+
+    private fun requestRouteEntryScrollRestoration() {
+        if (mutableState.value.restoration !is SearchRestorationUiState.Restored) return
+        val scrollState = savedStateHandle.savedSearchScrollState() ?: return
+        reduce(SearchStateChange.RouteEntryScrollRestorationRequested(scrollState))
     }
 
     private fun persistDraftQuery() {

@@ -53,6 +53,14 @@ sealed interface SearchStateChange {
         val scrollState: SearchScrollState? = null,
     ) : SearchStateChange
 
+    data class RouteEntryScrollRestorationRequested(
+        val scrollState: SearchScrollState,
+    ) : SearchStateChange
+
+    data class ScrollRestorationApplied(
+        val requestId: Long,
+    ) : SearchStateChange
+
     data class RestorationFailed(
         val message: String,
     ) : SearchStateChange
@@ -93,9 +101,16 @@ object SearchStateReducer {
                     restoration = SearchRestorationUiState.Restored(
                         restoredQuery = change.restoredQuery,
                         scrollState = change.scrollState,
+                        scrollRequestId = if (change.scrollState == null) 0L else 1L,
                     ),
                 ),
             )
+
+            is SearchStateChange.RouteEntryScrollRestorationRequested ->
+                requestRouteEntryScrollRestoration(state, change)
+
+            is SearchStateChange.ScrollRestorationApplied ->
+                applyScrollRestoration(state, change)
 
             is SearchStateChange.RestorationFailed -> SearchReduction(
                 state = state.copy(
@@ -103,6 +118,36 @@ object SearchStateReducer {
                 ),
             )
         }
+    }
+
+    private fun requestRouteEntryScrollRestoration(
+        state: SearchUiState,
+        change: SearchStateChange.RouteEntryScrollRestorationRequested,
+    ): SearchReduction {
+        val restored = state.restoration as? SearchRestorationUiState.Restored
+            ?: return SearchReduction(state)
+        return SearchReduction(
+            state = state.copy(
+                restoration = restored.copy(
+                    scrollState = change.scrollState,
+                    scrollRequestId = restored.scrollRequestId + 1L,
+                ),
+            ),
+        )
+    }
+
+    private fun applyScrollRestoration(
+        state: SearchUiState,
+        change: SearchStateChange.ScrollRestorationApplied,
+    ): SearchReduction {
+        val restored = state.restoration as? SearchRestorationUiState.Restored
+            ?: return SearchReduction(state)
+        if (restored.scrollRequestId != change.requestId) return SearchReduction(state)
+        return SearchReduction(
+            state = state.copy(
+                restoration = restored.copy(scrollState = null),
+            ),
+        )
     }
 
     fun reduce(state: SearchUiState, action: SearchAction.OpenResult): SearchReduction {

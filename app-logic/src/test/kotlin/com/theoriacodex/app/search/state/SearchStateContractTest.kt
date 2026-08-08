@@ -334,11 +334,69 @@ class SearchStateContractTest {
 
         assertEquals(SearchRestorationUiState.Restoring, restoring.restoration)
         assertEquals(
-            SearchRestorationUiState.Restored(true, SearchScrollState(2, 8)),
+            SearchRestorationUiState.Restored(
+                restoredQuery = true,
+                scrollState = SearchScrollState(2, 8),
+                scrollRequestId = 1L,
+            ),
             restored.restoration,
         )
+
         assertEquals(SearchRestorationUiState.Failed("restore failed"), failed.restoration)
         assertEquals(listOf(result), failed.content.results)
+    }
+
+    @Test
+    fun `scroll restoration is one shot and stale acknowledgements cannot clear reentry requests`() {
+        val restored = SearchUiState(
+            restoration = SearchRestorationUiState.Restored(
+                restoredQuery = true,
+                scrollState = SearchScrollState(2, 8),
+                scrollRequestId = 1L,
+            ),
+        )
+        val applied = SearchStateReducer.reduce(
+            restored,
+            SearchStateChange.ScrollRestorationApplied(requestId = 1L),
+        ).state
+        val reentered = SearchStateReducer.reduce(
+            applied,
+            SearchStateChange.RouteEntryScrollRestorationRequested(SearchScrollState(7, 24)),
+        ).state
+        val staleAcknowledgement = SearchStateReducer.reduce(
+            reentered,
+            SearchStateChange.ScrollRestorationApplied(requestId = 1L),
+        ).state
+        val reapplied = SearchStateReducer.reduce(
+            staleAcknowledgement,
+            SearchStateChange.ScrollRestorationApplied(requestId = 2L),
+        ).state
+
+        assertEquals(
+            SearchRestorationUiState.Restored(
+                restoredQuery = true,
+                scrollState = null,
+                scrollRequestId = 1L,
+            ),
+            applied.restoration,
+        )
+        assertEquals(
+            SearchRestorationUiState.Restored(
+                restoredQuery = true,
+                scrollState = SearchScrollState(7, 24),
+                scrollRequestId = 2L,
+            ),
+            reentered.restoration,
+        )
+        assertSame(reentered, staleAcknowledgement)
+        assertEquals(
+            SearchRestorationUiState.Restored(
+                restoredQuery = true,
+                scrollState = null,
+                scrollRequestId = 2L,
+            ),
+            reapplied.restoration,
+        )
     }
 
     private fun query(tag: String): Query {

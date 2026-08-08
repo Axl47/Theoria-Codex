@@ -144,6 +144,7 @@ sealed interface SearchRestorationUiState {
     data class Restored(
         val restoredQuery: Boolean,
         val scrollState: SearchScrollState? = null,
+        val scrollRequestId: Long = 0L,
     ) : SearchRestorationUiState
 
     data class Failed(
@@ -195,6 +196,10 @@ sealed interface SearchAction {
     data class ScrollChanged(
         val firstVisibleItemIndex: Int,
         val firstVisibleItemOffsetPx: Int,
+    ) : SearchAction
+
+    data class ScrollRestorationApplied(
+        val requestId: Long,
     ) : SearchAction
 
     data class OpenResult(

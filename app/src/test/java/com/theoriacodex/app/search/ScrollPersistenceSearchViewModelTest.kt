@@ -233,7 +233,11 @@ internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture
             restore(recreated)
             val restored = recreated.state.value.restoration
             assertEquals(
-                SearchRestorationUiState.Restored(false, SearchScrollState(4, 19)),
+                SearchRestorationUiState.Restored(
+                    restoredQuery = false,
+                    scrollState = SearchScrollState(4, 19),
+                    scrollRequestId = 1L,
+                ),
                 restored,
             )
 
@@ -242,6 +246,34 @@ internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture
 
             assertEquals(restored, recreated.state.value.restoration)
             assertEquals(listOf("paged-result", "paged-page"), resultIds(recreated))
+        }
+
+    @Test
+    fun `route reentry republishes the latest saved scroll position exactly once`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val owner = viewModel(
+                adapter = ViewModelSearchAdapter(),
+                scrollPersistenceDispatcher = mainDispatcherRule.dispatcher,
+            )
+            restore(owner)
+            owner.onAction(SearchAction.ScrollChanged(6, 32))
+
+            owner.onAction(SearchAction.Resume)
+
+            val requested = owner.state.value.restoration as SearchRestorationUiState.Restored
+            assertEquals(SearchScrollState(6, 32), requested.scrollState)
+            assertEquals(1L, requested.scrollRequestId)
+
+            owner.onAction(SearchAction.ScrollRestorationApplied(requested.scrollRequestId))
+
+            assertEquals(
+                SearchRestorationUiState.Restored(
+                    restoredQuery = false,
+                    scrollState = null,
+                    scrollRequestId = 1L,
+                ),
+                owner.state.value.restoration,
+            )
         }
 
 }
