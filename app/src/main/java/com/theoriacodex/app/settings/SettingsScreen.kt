@@ -54,6 +54,8 @@ fun SettingsScreen(
     onAction: (SettingsAction) -> Unit,
 ) {
     var showAddProfileDialog by remember { mutableStateOf(false) }
+    val recommendationProfilesExpanded =
+        state.sectionExpansion[SettingsSectionKey.RECOMMENDATION_PROFILES]
 
     Column(
         modifier = Modifier
@@ -73,14 +75,24 @@ fun SettingsScreen(
         SettingsSection(
             title = "Recommendation Profiles",
             summary = "${state.activeProfile.name} · ${state.activeProfileLikesCount} liked",
-            expanded = state.sectionExpansion[SettingsSectionKey.RECOMMENDATION_PROFILES],
+            expanded = recommendationProfilesExpanded,
             onToggle = {
                 onAction(
                     SettingsAction.SetSectionExpanded(
                         SettingsSectionKey.RECOMMENDATION_PROFILES,
-                        !state.sectionExpansion[SettingsSectionKey.RECOMMENDATION_PROFILES],
+                        !recommendationProfilesExpanded,
                     )
                 )
+            },
+            headerAction = {
+                if (recommendationProfilesExpanded) {
+                    IconButton(onClick = { showAddProfileDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add recommendation profile",
+                        )
+                    }
+                }
             },
         ) {
                 state.settings.recommendationProfiles.forEach { profile ->
@@ -111,18 +123,6 @@ fun SettingsScreen(
                                 contentDescription = "Delete ${profile.name} profile",
                             )
                         }
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = { showAddProfileDialog = true }) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Add recommendation profile",
-                        )
                     }
                 }
         }
@@ -578,6 +578,7 @@ internal fun SettingsSection(
     expanded: Boolean,
     onToggle: () -> Unit,
     contentSpacing: Dp = 10.dp,
+    headerAction: @Composable (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -605,6 +606,7 @@ internal fun SettingsSection(
                     expanded = expanded,
                     modifier = Modifier.weight(1f),
                 )
+                headerAction?.invoke()
                 Icon(
                     imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                     contentDescription = null,
