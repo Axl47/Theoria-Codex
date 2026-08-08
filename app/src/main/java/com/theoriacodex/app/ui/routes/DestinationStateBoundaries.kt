@@ -88,6 +88,7 @@ internal data class CodexDetailDestinationState(
     val codex: Codex?,
     val items: List<CodexItem>,
     val posts: List<Post>,
+    val activeProfile: RecommendationProfile,
     val creatorBrowsingSources: Set<SourceKey>,
 )
 
@@ -248,17 +249,23 @@ internal fun CodexDetailDestinationStateBoundary(
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val postsState = data.codexRepository.observeCodexPosts(codexId, sortMode)
         .collectAsStateWithLifecycle(initialValue = emptyList())
+    val settingsState = data.settingsRepository.observeSettings()
+        .collectAsStateWithLifecycle(initialValue = null)
+    val settings = settingsState.value ?: return
     val availableState = sources.availableSources.collectAsStateWithLifecycle()
-    content(
-        CodexDetailDestinationState(
-            codex = codexState.value,
-            items = itemsState.value,
-            posts = postsState.value,
-            creatorBrowsingSources = remember(sources.registry, availableState.value) {
-                sources.registry.creatorBrowsingSources().intersect(availableState.value)
-            },
-        ),
-    )
+    DestinationStateBoundary(settingsState) {
+        content(
+            CodexDetailDestinationState(
+                codex = codexState.value,
+                items = itemsState.value,
+                posts = postsState.value,
+                activeProfile = settings.activeRecommendationProfile(),
+                creatorBrowsingSources = remember(sources.registry, availableState.value) {
+                    sources.registry.creatorBrowsingSources().intersect(availableState.value)
+                },
+            ),
+        )
+    }
 }
 
 @Composable

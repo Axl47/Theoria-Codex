@@ -87,6 +87,7 @@ fun CodexListScreen(
     onCreateCodex: (String) -> Unit,
     onRenameCodex: (String, String) -> Unit,
     onDeleteCodex: (String) -> Unit,
+    likesCodexId: String,
 ) {
     var showCreateDialog by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<Codex?>(null) }
@@ -338,11 +339,18 @@ fun CodexListScreen(
 
     val delete = deleteTarget
     if (delete != null) {
+        val clearsLikes = delete.codexId == likesCodexId
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
-            title = { Text("Delete Codex?") },
+            title = { Text(if (clearsLikes) "Clear Likes?" else "Delete Codex?") },
             text = {
-                Text("Delete \"${delete.name}\" and all saved items in it? This cannot be undone.")
+                Text(
+                    if (clearsLikes) {
+                        "Clear all liked posts from this recommendation profile? The Likes Codex will remain."
+                    } else {
+                        "Delete \"${delete.name}\" and all saved items in it? This cannot be undone."
+                    },
+                )
             },
             dismissButton = {
                 TextButton(onClick = { deleteTarget = null }) {
@@ -356,7 +364,7 @@ fun CodexListScreen(
                         deleteTarget = null
                     },
                 ) {
-                    Text("Delete")
+                    Text(if (clearsLikes) "Clear" else "Delete")
                 }
             },
         )
@@ -364,6 +372,7 @@ fun CodexListScreen(
 
     val actionCodex = actionTarget
     if (actionCodex != null) {
+        val clearsLikes = actionCodex.codexId == likesCodexId
         val searchOptions = codexSearchSourceOptions[actionCodex.codexId].orEmpty()
         ModalBottomSheet(
             onDismissRequest = { actionTarget = null },
@@ -432,7 +441,7 @@ fun CodexListScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete codex",
+                            contentDescription = if (clearsLikes) "Clear likes" else "Delete codex",
                         )
                     }
                 }

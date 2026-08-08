@@ -149,7 +149,6 @@ internal class DefaultSettingsAccountGateway(
 }
 
 internal interface SettingsProfileMutations {
-    suspend fun clearLikes(profileId: String)
     suspend fun removeProfileData(profileId: String)
 }
 
@@ -157,8 +156,6 @@ internal class DefaultSettingsProfileMutations(
     private val likesCodexSync: LikesCodexSyncService,
     private val codexRepository: CodexRepository,
 ) : SettingsProfileMutations {
-    override suspend fun clearLikes(profileId: String) = likesCodexSync.clearProfile(profileId)
-
     override suspend fun removeProfileData(profileId: String) {
         likesCodexSync.clearProfile(profileId)
         likesCodexSync.removeProfileCodex(profileId)
@@ -278,9 +275,6 @@ internal class SettingsViewModel(
             is SettingsAction.RequestRemoveProfile -> updateState { copy(profileDeleteTargetId = action.profileId) }
             SettingsAction.DismissRemoveProfile -> updateState { copy(profileDeleteTargetId = null) }
             SettingsAction.ConfirmRemoveProfile -> removeRequestedProfile()
-            SettingsAction.ClearActiveProfileLikes -> launchMutation {
-                dependencies.profileMutations.clearLikes(state.value.activeProfile.profileId)
-            }
             is SettingsAction.RemoveBlacklistEntry -> launchMutation {
                 dependencies.settingsRepository.removeForYouBlacklistEntry(
                     profileId = state.value.activeProfile.profileId,

@@ -125,12 +125,6 @@ fun SettingsScreen(
                         )
                     }
                 }
-                TextButton(
-                    enabled = state.activeProfileLikesCount > 0,
-                    onClick = { onAction(SettingsAction.ClearActiveProfileLikes) },
-                ) {
-                    Text("Clear active profile likes")
-                }
         }
 
         SettingsSection(

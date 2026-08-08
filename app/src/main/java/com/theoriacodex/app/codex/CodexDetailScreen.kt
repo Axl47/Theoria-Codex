@@ -70,6 +70,7 @@ fun CodexDetailScreen(
     onGoToSearch: (() -> Unit)? = null,
     onBack: () -> Unit,
     onDeleteCodex: () -> Unit,
+    isLikesCodex: Boolean,
 ) {
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -113,6 +114,7 @@ fun CodexDetailScreen(
                 onRemovePosts(selected)
             },
             onDeleteCodex = { showDeleteConfirm = true },
+            isLikesCodex = isLikesCodex,
         )
         CodexDetailGrid(
             posts = posts,
@@ -154,9 +156,15 @@ fun CodexDetailScreen(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete Codex?") },
+            title = { Text(if (isLikesCodex) "Clear Likes?" else "Delete Codex?") },
             text = {
-                Text("Delete \"$codexName\" and all saved items in it? This cannot be undone.")
+                Text(
+                    if (isLikesCodex) {
+                        "Clear all liked posts from this recommendation profile? The Likes Codex will remain."
+                    } else {
+                        "Delete \"$codexName\" and all saved items in it? This cannot be undone."
+                    },
+                )
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
@@ -170,7 +178,7 @@ fun CodexDetailScreen(
                         onDeleteCodex()
                     },
                 ) {
-                    Text("Delete")
+                    Text(if (isLikesCodex) "Clear" else "Delete")
                 }
             },
         )
@@ -189,6 +197,7 @@ private fun CodexDetailHeader(
     onCancelEdit: () -> Unit,
     onRemoveSelected: () -> Unit,
     onDeleteCodex: () -> Unit,
+    isLikesCodex: Boolean,
 ) {
     SecondaryScreenAppBar(
         title = codexName,
@@ -202,6 +211,7 @@ private fun CodexDetailHeader(
             onCancelEdit = onCancelEdit,
             onRemoveSelected = onRemoveSelected,
             onDeleteCodex = onDeleteCodex,
+            isLikesCodex = isLikesCodex,
         )
     }
     if (!editSelection.active) {
@@ -225,6 +235,7 @@ private fun CodexDetailHeaderActions(
     onCancelEdit: () -> Unit,
     onRemoveSelected: () -> Unit,
     onDeleteCodex: () -> Unit,
+    isLikesCodex: Boolean,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         if (editSelection.active) {
@@ -237,7 +248,7 @@ private fun CodexDetailHeaderActions(
             }
         } else {
             TextButton(enabled = hasPosts, onClick = onBeginEdit) { Text("Edit") }
-            TextButton(onClick = onDeleteCodex) { Text("Delete") }
+            TextButton(onClick = onDeleteCodex) { Text(if (isLikesCodex) "Clear" else "Delete") }
         }
     }
 }

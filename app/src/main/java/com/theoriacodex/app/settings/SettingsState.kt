@@ -83,7 +83,6 @@ sealed interface SettingsAction {
     data class RequestRemoveProfile(val profileId: String) : SettingsAction
     data object DismissRemoveProfile : SettingsAction
     data object ConfirmRemoveProfile : SettingsAction
-    data object ClearActiveProfileLikes : SettingsAction
     data class RemoveBlacklistEntry(val source: SourceKey, val tags: List<String>) : SettingsAction
     data class SetEnabledSources(val sources: Set<SourceKey>) : SettingsAction
     data class SetSourceWeights(val weights: Map<SourceKey, Double>) : SettingsAction

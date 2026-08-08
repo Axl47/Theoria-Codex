@@ -293,6 +293,5 @@ private class FakeSettingsAccountGateway(
 }
 
 private data object NoOpSettingsProfileMutations : SettingsProfileMutations {
-    override suspend fun clearLikes(profileId: String) = Unit
     override suspend fun removeProfileData(profileId: String) = Unit
 }

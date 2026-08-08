@@ -94,6 +94,7 @@ import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.CodexRemovalWorkflow
 import com.theoriacodex.app.codex.SaveToCodexSheet
 import com.theoriacodex.app.codex.profileScopedCodexId
+import com.theoriacodex.app.codex.likesCodexIdForProfile
 import com.theoriacodex.app.codex.transfer.CodexExportResult
 import com.theoriacodex.app.codex.transfer.CodexImportResult
 import com.theoriacodex.app.appshell.AppShellAction
@@ -1692,8 +1693,15 @@ internal fun TheoriaAppContent(
                                             scope.launch { dataDependencies.codexRepository.renameCodex(codexId, name) }
                                         },
                                         onDeleteCodex = { codexId ->
-                                            scope.launch { dataDependencies.codexRepository.deleteCodex(codexId) }
+                                            scope.launch {
+                                                if (codexId == likesCodexIdForProfile(state.activeProfile.profileId)) {
+                                                    workflowDependencies.likesCodexSync.clearProfile(state.activeProfile.profileId)
+                                                } else {
+                                                    dataDependencies.codexRepository.deleteCodex(codexId)
+                                                }
+                                            }
                                         },
+                                        likesCodexId = likesCodexIdForProfile(state.activeProfile.profileId),
                                     )
                                     }
                                 }
@@ -1793,11 +1801,16 @@ internal fun TheoriaAppContent(
                             },
                             onDeleteCodex = {
                                 scope.launch {
-                                    dataDependencies.codexRepository.deleteCodex(codexId)
-                                    homeTabRoute = TopLevelDestination.Codex.route
-                                    navController.popBackStack(AppRoute.Home, inclusive = false)
+                                    if (codexId == likesCodexIdForProfile(state.activeProfile.profileId)) {
+                                        workflowDependencies.likesCodexSync.clearProfile(state.activeProfile.profileId)
+                                    } else {
+                                        dataDependencies.codexRepository.deleteCodex(codexId)
+                                        homeTabRoute = TopLevelDestination.Codex.route
+                                        navController.popBackStack(AppRoute.Home, inclusive = false)
+                                    }
                                 }
                             },
+                            isLikesCodex = codexId == likesCodexIdForProfile(state.activeProfile.profileId),
                         )
                         }
                     }
