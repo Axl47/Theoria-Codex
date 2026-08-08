@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
@@ -302,6 +303,7 @@ fun CodexListScreen(
                         itemCount = itemCounts[codex.codexId] ?: 0,
                         coverModel = codexCoverModels[codex.codexId],
                         onOpen = { onOpenCodex(codex.codexId) },
+                        onOpenActions = { actionTarget = codex },
                         onLongPress = { actionTarget = codex },
                     )
                 }
@@ -807,6 +809,7 @@ private fun CodexGridTile(
     itemCount: Int,
     coverModel: Any?,
     onOpen: () -> Unit,
+    onOpenActions: () -> Unit,
     onLongPress: () -> Unit,
 ) {
     Column(
@@ -848,8 +851,27 @@ private fun CodexGridTile(
 
         }
 
+        CodexTileMetadata(
+            codex = codex,
+            itemCount = itemCount,
+            onOpenActions = onOpenActions,
+        )
+    }
+}
+
+@Composable
+private fun CodexTileMetadata(
+    codex: Codex,
+    itemCount: Int,
+    onOpenActions: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
@@ -862,6 +884,12 @@ private fun CodexGridTile(
                 text = "$itemCount items",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        IconButton(onClick = onOpenActions) {
+            Icon(
+                imageVector = Icons.Default.MoreVert,
+                contentDescription = "Actions for ${codex.name}",
             )
         }
     }

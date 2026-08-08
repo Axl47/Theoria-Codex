@@ -14,11 +14,11 @@ This backlog records agreed product improvements that are not yet scheduled for 
 
 ### UX-001 — Make collection and post actions discoverable without cluttering every card
 
-- [ ] Add a compact overflow affordance to each Codex collection tile, integrated into its existing title/item-count area, for collection-level actions such as export, share, search, rename, and delete.
-- [ ] Do not add a permanent overflow button to every Search, Recents, For You, Creator, or Codex post card.
-- [ ] Give Codex detail a screen-level Edit/selection mode for removing one or more posts without relying exclusively on card long-press.
-- [ ] Keep long-press as an efficient shortcut for experienced users, while ensuring every important action also has an explicit path through the collection screen, selection mode, or Viewer.
-- [ ] Keep transient action surfaces compact; prefer recognizable icons with short labels where ambiguity remains, not explanatory sentences.
+- [x] Add a compact overflow affordance to each Codex collection tile, integrated into its existing title/item-count area, for collection-level actions such as export, share, search, rename, and delete.
+- [x] Do not add a permanent overflow button to every Search, Recents, For You, Creator, or Codex post card.
+- [x] Give Codex detail a screen-level Edit/selection mode for removing one or more posts without relying exclusively on card long-press.
+- [x] Keep long-press as an efficient shortcut for experienced users, while ensuring every important action also has an explicit path through the collection screen, selection mode, or Viewer.
+- [x] Keep transient action surfaces compact; prefer recognizable icons with short labels where ambiguity remains, not explanatory sentences.
 
 ### UX-002 — Add selective, actionable transient feedback
 

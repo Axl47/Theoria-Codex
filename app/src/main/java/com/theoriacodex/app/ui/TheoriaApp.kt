@@ -1711,13 +1711,15 @@ internal fun TheoriaAppContent(
                                     navController.navigate(AppRoute.Viewer)
                                 }
                             },
-                            onRemovePost = { post ->
+                            onRemovePosts = { posts ->
                                 scope.launch {
-                                    dataDependencies.codexRepository.removeItem(
-                                        codexId = codexId,
-                                        sourceKey = post.id.source,
-                                        sourcePostId = post.id.sourcePostId,
-                                    )
+                                    posts.forEach { post ->
+                                        dataDependencies.codexRepository.removeItem(
+                                            codexId = codexId,
+                                            sourceKey = post.id.source,
+                                            sourcePostId = post.id.sourcePostId,
+                                        )
+                                    }
                                 }
                             },
                             onSavePostToDevice = { post ->

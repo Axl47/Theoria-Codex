@@ -4,6 +4,30 @@ updated_at: 2026-08-03T00:03:12-04:00
 ---
 # Working List
 
+## Current Task: Make Codex Actions Discoverable Without Card Clutter
+
+### In Progress
+
+None.
+
+### Pending
+
+
+### Done
+
+- [x] Run one bounded app validation batch and close the ExecPlan.
+  - Evidence: full `:app:testDebugUnitTest` passed 409 tests with zero failures/errors and three unchanged opt-in skips; `:app:compileDebugAndroidTestKotlin`, the final focused `:app:compileDebugKotlin`, and `:app:detektDebug` passed, with Detekt retaining its known 10 analyzer-resolution diagnostics. `npx --yes html-validate` and `git diff --check` passed. The first Detekt attempt exposed shared composable size/complexity, which was repaired through focused component extraction rather than suppression. No device, emulator, connected test, package mutation, live provider, release, tag, or push command ran.
+- [x] Add focused selection-state regression coverage.
+  - Evidence: `CodexEditSelectionTest` covers inactive taps, select/deselect, stale-post reconciliation, exit, and clean restart; 3 tests passed with zero failures/errors/skips.
+- [x] Add explicit Codex-detail edit/selection mode with multi-post removal.
+  - Evidence: `CodexEditSelection` owns immutable begin/toggle/reconcile/exit transitions; Codex detail switches taps from Viewer opening to selection, renders selected/unselected markers, offers Cancel and count-aware Remove, preserves long-press actions outside edit mode, and routes selected posts through existing idempotent repository membership removal. Focused file diff checks pass.
+- [x] Add a compact collection-tile overflow entry point to the existing action sheet.
+  - Evidence: each `CodexGridTile` now places one labeled overflow icon in its existing title/item-count row and routes it to the same `actionTarget` sheet as long-press; the focused file diff check passes.
+- [x] Create and validate the UX-001 ExecPlan from the traced Codex runtime.
+  - Evidence: `.docs/exec/codex-action-discoverability-and-selection.html` records the bounded data flow, UI states, error boundaries, acceptance checks, and recovery guidance; `npx --yes html-validate` passes.
+- [x] Trace the collection list, collection detail, action, sharing, navigation, and repository boundaries before the first runtime patch.
+  - Evidence: `CodexListScreen` already owns one compact action sheet reached only by tile long-press; `CodexDetailScreen` exposes single-post removal only through a long-press sheet; `TheoriaApp` already routes share/export, search, rename, delete, and repository removal operations. No new persistence or feed-card action surface is required.
+
 ## Current Task: Repair Codex Visible-Post Recording Handoff
 
 ### In Progress

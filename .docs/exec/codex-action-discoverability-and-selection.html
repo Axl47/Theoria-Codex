@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Make Codex actions discoverable</title>
+  <style>
+    :root { color-scheme:light dark; --bg:#f5f6f4; --surface:#fff; --text:#20231f; --muted:#626860; --border:#d7dbd4; --accent:#176b5b; --soft:#dff2eb; --risk:#9a4b18; --risk-soft:#ffeadb; --code:#111813; }
+    @media (prefers-color-scheme:dark) { :root { --bg:#151815; --surface:#202520; --text:#edf1ec; --muted:#b7beb5; --border:#3b443b; --accent:#6ee7c5; --soft:#153b31; --risk:#fdba74; --risk-soft:#492812; --code:#0b100c; } }
+    * { box-sizing:border-box; } body { margin:0; font:15px/1.55 system-ui,sans-serif; background:var(--bg); color:var(--text); }
+    header,main { max-width:1100px; margin:auto; padding:24px; } header { padding-top:36px; } h1,h2,h3 { line-height:1.2; margin:0 0 12px; } p { margin:0 0 12px; }
+    nav { position:sticky; top:0; z-index:2; border-block:1px solid var(--border); background:var(--surface); } nav ul { display:flex; gap:6px; max-width:1100px; margin:auto; padding:8px 24px; list-style:none; overflow:auto; } nav a { color:var(--accent); padding:6px; white-space:nowrap; }
+    section { margin:18px 0; padding:20px; border:1px solid var(--border); border-radius:9px; background:var(--surface); }
+    .meta,.dashboard { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; } .pill,.card { border:1px solid var(--border); border-radius:8px; padding:8px 10px; background:var(--surface); } .card { flex:1 1 210px; } .card strong { display:block; color:var(--muted); font-size:.8rem; text-transform:uppercase; }
+    table { width:100%; border-collapse:collapse; } th,td { padding:9px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; } th { color:var(--muted); } code { font-family:ui-monospace,monospace; } pre { overflow:auto; padding:14px; border-radius:8px; background:var(--code); color:#f5f7f5; }
+    .callout { padding:12px; border-left:4px solid var(--accent); background:var(--soft); border-radius:6px; } .risk { border-left-color:var(--risk); background:var(--risk-soft); }
+    @media print { nav { position:static; } section,.card { break-inside:avoid; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Codex action discoverability and selection</h1>
+    <p>Give every Codex collection an explicit compact action entry point and give Codex detail a screen-level selection mode for removing one or many posts, while preserving the media-forward grids and existing long-press shortcuts.</p>
+    <div class="meta"><span class="pill">Status: Complete (device acceptance pending)</span><span class="pill">Owner: Codex</span><span class="pill">Created: 2026-08-07</span><span class="pill">Updated: 2026-08-07</span><span class="pill">Backlog: UX-001</span></div>
+    <div class="dashboard">
+      <div class="card"><strong>Next action</strong>Exercise the interaction on the next safely isolated Android device.</div>
+      <div class="card"><strong>Main risk</strong>Selection must not interfere with normal Viewer opening or the existing post action sheet.</div>
+      <div class="card"><strong>Validation</strong>Focused state tests, full app unit tests, app compilation, Detekt, HTML, and diff checks.</div>
+      <div class="card"><strong>Affected areas</strong>Codex list/detail UI, TheoriaApp callback wiring, focused tests.</div>
+    </div>
+  </header>
+  <nav><ul><li><a href="#purpose">Purpose</a></li><li><a href="#context">Context</a></li><li><a href="#phases">Phases</a></li><li><a href="#work">Work plan</a></li><li><a href="#validation">Validation</a></li><li><a href="#log">Living log</a></li><li><a href="#recovery">Recovery</a></li></ul></nav>
+  <main>
+    <section id="purpose"><h2>Purpose / Big Picture</h2><p>A user can tap a small overflow icon beside a collection title and item count to export, share, search, rename, or delete it. Inside a collection, tapping Edit enters selection mode; card taps select posts and one Remove action removes the selected set. Long-press remains available for the full single-post action sheet. Search, Recents, For You, Creator, and ordinary Codex post cards gain no permanent overflow button.</p></section>
+    <section id="context"><h2>Context And Orientation</h2><p>A “Codex” is the app's saved collection. <code>CodexListScreen.kt</code> renders collection tiles and already owns the complete collection action sheet, but that sheet is reachable only by long-press. <code>CodexDetailScreen.kt</code> renders shared <code>SearchResultCard</code> cards and currently exposes removal only inside the long-press <code>PostActionSheet</code>. <code>TheoriaApp.kt</code> connects both screens to existing transfer and repository operations.</p>
+      <table><thead><tr><th>File</th><th>Role</th></tr></thead><tbody>
+        <tr><td><code>app/src/main/java/com/theoriacodex/app/codex/CodexListScreen.kt</code></td><td>Add one overflow button inside each tile's existing title/count region and open the existing action sheet.</td></tr>
+        <tr><td><code>app/src/main/java/com/theoriacodex/app/codex/CodexDetailScreen.kt</code></td><td>Render Edit, selection indicators, Cancel, and Remove without changing shared feed-card internals.</td></tr>
+        <tr><td><code>app/src/main/java/com/theoriacodex/app/codex/CodexEditSelection.kt</code></td><td>Own immutable start, toggle, reconcile, and finish transitions independently of Compose.</td></tr>
+        <tr><td><code>app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt</code></td><td>Apply one selected-post list through the existing repository removal operation.</td></tr>
+        <tr><td><code>app/src/test/java/com/theoriacodex/app/codex/CodexEditSelectionTest.kt</code></td><td>Prove selection transitions and stale-post reconciliation.</td></tr>
+      </tbody></table>
+      <p class="callout risk">The tile overflow must be a nested click target so it opens actions without opening the collection. In detail, normal card taps open Viewer only outside edit mode; edit-mode taps only change selection. Long-press continues to open the existing single-post action sheet outside edit mode.</p>
+    </section>
+    <section id="phases"><h2>Phases</h2>
+      <h3>1. Explicit collection actions</h3><p>Add a compact overflow icon beside the existing title and item count. It targets the same <code>actionTarget</code> state as long-press, so export/share/search/rename/delete retain one owner and one set of dialogs.</p>
+      <h3>2. Explicit post selection</h3><p>Add immutable edit-selection state. Edit is disabled for an empty Codex. While active, cards show a compact selected/unselected marker; card taps toggle membership; Cancel exits without mutation; Remove exits mode and submits the selected posts through one callback.</p>
+      <h3>3. Bounded verification</h3><p>Test state transitions, compile Android UI wiring, run the app unit suite and Detekt once, validate this plan, and record exact evidence. Device interaction is not required for host implementation and will not be inferred if it is not run.</p>
+    </section>
+    <section id="work"><h2>Work Plan</h2><ol>
+      <li>Extend <code>CodexGridTile</code> with an <code>onOpenActions</code> callback and a labeled overflow icon in the metadata row.</li>
+      <li>Add <code>CodexEditSelection</code> as the single state transition owner, including reconciliation when observed posts change.</li>
+      <li>Update <code>CodexDetailScreen</code> to switch header and card behavior by selection mode while leaving the long-press action sheet intact.</li>
+      <li>Change detail removal wiring to accept a list and remove each selected membership through <code>CodexRepository.removeItem</code>.</li>
+      <li>Add focused tests, run one validation batch, then update the checklist and this plan with outcomes.</li>
+    </ol></section>
+    <section id="validation"><h2>Validation And Acceptance</h2><table><thead><tr><th>Check</th><th>Command or action</th><th>Expected result</th></tr></thead><tbody>
+      <tr><td>Focused state</td><td><code>./gradlew :app:testDebugUnitTest --tests '*CodexEditSelectionTest'</code></td><td>Start, toggle, reconcile, cancel, and finish contracts pass.</td></tr>
+      <tr><td>App regression</td><td><code>./gradlew :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:detektDebug --no-configuration-cache</code></td><td>App tests, UI test compilation, and static analysis pass.</td></tr>
+      <tr><td>Plan and diff</td><td><code>npx --yes html-validate .docs/exec/codex-action-discoverability-and-selection.html</code> and <code>git diff --check</code></td><td>The living plan is valid standalone HTML and the diff has no whitespace errors.</td></tr>
+      <tr><td>Manual acceptance</td><td>Open Codex list and detail on Android; use overflow, Edit, multi-select, Cancel, Remove, and long-press.</td><td>Overflow does not open the collection; selection does not open Viewer; removal affects only selected posts; Cancel changes nothing; long-press still opens full actions.</td></tr>
+    </tbody></table></section>
+    <section id="log"><h2>Living Log</h2><h3>Progress</h3><ul><li>[x] 2026-08-07 — Traced list/detail UI, action sheets, transfer flow, navigation callbacks, and repository removal.</li><li>[x] 2026-08-07 — Defined the bounded UX-001 implementation and validation contract.</li><li>[x] 2026-08-07 — Implemented collection overflow and immutable detail selection with bulk removal.</li><li>[x] 2026-08-07 — Passed focused and full host validation and recorded evidence.</li><li>[ ] Manual Android interaction acceptance; no device or emulator lane ran.</li></ul>
+      <h3>Surprises And Discoveries</h3><ul><li>The collection-level action sheet already contains every requested action, including source/tag-scoped Search; discoverability needed a second entry point, not a second action implementation.</li><li>The shared feed card has no modifier hook for selection decoration. The detail screen preserves that shared owner by wrapping cards and rendering a route-local selection marker rather than changing all five feeds.</li><li>The first Detekt pass identified that the new branches pushed existing composables over complexity and length limits. Extracting the metadata row, detail header/actions, selectable grid, and card reduced ownership size without suppressing the rules.</li></ul>
+      <h3>Decision Log</h3><ul><li>Decision: treat UX-001 as the complete first backlog item. Rationale: its acceptance bullets define one cohesive discoverability change across collection list and detail. Date/Author: 2026-08-07 / Codex.</li><li>Decision: keep bulk removal as repeated existing membership removals rather than add a repository transaction. Rationale: the backlog asks for UI selection and does not require new persistence semantics; each existing operation is already idempotent. Date/Author: 2026-08-07 / Codex.</li><li>Decision: keep delete confirmation but do not confirm ordinary selected-post removal. Rationale: deleting a collection is explicitly irreversible, while removing selected memberships is an ordinary, recoverable collection edit. Date/Author: 2026-08-07 / Codex.</li></ul>
+      <h3>Outcomes And Retrospective</h3><p>UX-001 is implemented. Every Codex tile exposes its existing collection actions through a labeled overflow icon while long-press remains available. Codex detail has an explicit Edit mode with selected/unselected markers, Cancel, and count-aware removal; normal card taps and long-press retain Viewer and full-action behavior outside edit mode. The immutable selection owner drops posts removed by observed repository updates. Focused selection tests passed 3/3; the full app lane passed 409 tests with zero failures/errors and three unchanged opt-in skips; Android-test Kotlin compilation and Detekt passed, with Detekt retaining its known 10 analyzer-resolution diagnostics. HTML and diff checks are recorded separately at closeout. No device, emulator, connected test, package mutation, live provider, release, tag, or push command ran.</p>
+    </section>
+    <section id="recovery"><h2>Idempotence And Recovery</h2><p>All planned Gradle, HTML, and diff checks are safe to rerun. The implementation adds no schema, file format, migration, or destructive script. If interrupted, inspect this plan, <code>working_list.md</code>, and <code>git diff</code>; selection is ephemeral Compose state and repository removals remain idempotent for already-removed memberships.</p></section>
+  </main>
+</body>
+</html>
