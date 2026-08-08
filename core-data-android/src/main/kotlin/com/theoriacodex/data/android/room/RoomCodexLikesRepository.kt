@@ -161,6 +161,41 @@ class RoomCodexLikesRepository(
         }
     }
 
+    override suspend fun removeItems(codexId: String, postIds: Set<PostId>) {
+        if (postIds.isEmpty()) return
+        database.withTransaction {
+            var removed = false
+            postIds.forEach { postId ->
+                removed = dao.deleteCodexItem(codexId, postId.source.name, postId.sourcePostId) > 0 || removed
+            }
+            if (removed) cleanupOrphanPostsInside()
+        }
+    }
+
+    override suspend fun restoreItems(items: List<CodexItem>, posts: List<Post>) {
+        if (items.isEmpty()) return
+        val postsById = posts.associateBy(Post::id)
+        database.withTransaction {
+            items.forEach { item ->
+                val post = postsById[item.postId] ?: return@forEach
+                if (
+                    dao.codex(item.codexId) != null &&
+                    dao.codexItem(item.codexId, item.postId.source.name, item.postId.sourcePostId) == null
+                ) {
+                    upsertPostInside(post)
+                    dao.insertCodexItem(
+                        CodexItemEntity(
+                            item.codexId,
+                            item.postId.source.name,
+                            item.postId.sourcePostId,
+                            item.savedAtEpochMs,
+                        )
+                    )
+                }
+            }
+        }
+    }
+
     override fun observeLikes(profileId: String): Flow<List<LikedPost>> {
         val normalized = CodexLikesPolicy.normalizeProfileId(profileId)
         return dao.observeLikes(normalized).map { entities -> entities.mapNotNull(codec::decodeLike) }

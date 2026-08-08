@@ -165,6 +165,40 @@ class InMemoryCodexRepository : CodexRepository {
             itemsByCodex.value = itemsByCodex.value + (codexId to updated)
         }
     }
+
+    override suspend fun removeItems(codexId: String, postIds: Set<PostId>) {
+        if (postIds.isEmpty()) return
+        mutex.withLock {
+            val existing = itemsByCodex.value[codexId].orEmpty()
+            itemsByCodex.value = itemsByCodex.value + (
+                codexId to existing.filterNot { item -> item.postId in postIds }
+            )
+        }
+    }
+
+    override suspend fun restoreItems(items: List<CodexItem>, posts: List<Post>) {
+        if (items.isEmpty()) return
+        mutex.withLock {
+            val validCodexIds = codices.value.mapTo(mutableSetOf(), Codex::codexId)
+            val postsBySnapshotId = posts.associateBy(Post::id)
+            val restoredPosts = mutableMapOf<PostId, Post>()
+            val restoredItems = itemsByCodex.value.toMutableMap()
+            items.groupBy(CodexItem::codexId).forEach { (codexId, snapshots) ->
+                if (codexId !in validCodexIds) return@forEach
+                val existing = restoredItems[codexId].orEmpty()
+                val existingIds = existing.mapTo(mutableSetOf(), CodexItem::postId)
+                val additions = snapshots.filter { item ->
+                    item.postId !in existingIds && postsBySnapshotId[item.postId] != null
+                }
+                additions.forEach { item -> restoredPosts[item.postId] = postsBySnapshotId.getValue(item.postId) }
+                restoredItems[codexId] = existing + additions
+            }
+            postsById.value = restoredPosts.entries.fold(postsById.value) { current, (postId, post) ->
+                if (postId in current) current else current + (postId to post)
+            }
+            itemsByCodex.value = restoredItems
+        }
+    }
 }
 
 class InMemoryQueryRepository : QueryRepository {

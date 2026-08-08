@@ -34,6 +34,19 @@ class ActionableFeedbackArchitectureTest {
         )
     }
 
+    @Test
+    fun `clipboard writes and success feedback share one version aware boundary`() {
+        val clipboard = source("app/src/main/java/com/theoriacodex/app/media/PostClipboard.kt")
+        val production = File(repositoryRoot, "app/src/main/java")
+            .walkTopDown()
+            .filter { file -> file.isFile && file.extension == "kt" }
+            .joinToString("\n") { file -> file.readText() }
+
+        assertEquals("Clipboard writes must remain centralized", 1, production.count("setPrimaryClip("))
+        assertTrue("Copy confirmation must stop before Android's system UI would duplicate it", "VERSION_CODES.S_V2" in clipboard)
+        assertFalse("The removed generic copy toast must not be app-owned", "\"Copied.\"" in production)
+    }
+
     private fun source(path: String): String = File(repositoryRoot, path).readText()
 
     private fun String.count(needle: String): Int = windowed(needle.length).count { it == needle }

@@ -219,6 +219,45 @@ class FileBackedCodexRepository(
         }
     }
 
+    override suspend fun removeItems(codexId: String, postIds: Set<PostId>) {
+        if (postIds.isEmpty()) return
+        mutex.withLock {
+            val existing = itemsFlow.value[codexId].orEmpty()
+            val updated = existing.filterNot { item -> item.postId in postIds }
+            if (updated != existing) {
+                commitMutation { itemsFlow.value = itemsFlow.value + (codexId to updated) }
+            }
+        }
+    }
+
+    override suspend fun restoreItems(items: List<CodexItem>, posts: List<Post>) {
+        if (items.isEmpty()) return
+        mutex.withLock {
+            val validCodexIds = codicesFlow.value.mapTo(mutableSetOf(), Codex::codexId)
+            val postsBySnapshotId = posts.associateBy(Post::id)
+            val restoredItems = itemsFlow.value.toMutableMap()
+            val restoredPosts = postsFlow.value.toMutableMap()
+            items.groupBy(CodexItem::codexId).forEach { (codexId, snapshots) ->
+                if (codexId !in validCodexIds) return@forEach
+                val existing = restoredItems[codexId].orEmpty()
+                val existingIds = existing.mapTo(mutableSetOf(), CodexItem::postId)
+                val additions = snapshots.filter { item ->
+                    item.postId !in existingIds && postsBySnapshotId[item.postId] != null
+                }
+                additions.forEach { item ->
+                    restoredPosts.putIfAbsent(item.postId, postsBySnapshotId.getValue(item.postId))
+                }
+                restoredItems[codexId] = existing + additions
+            }
+            if (restoredItems != itemsFlow.value || restoredPosts != postsFlow.value) {
+                commitMutation {
+                    itemsFlow.value = restoredItems
+                    postsFlow.value = restoredPosts
+                }
+            }
+        }
+    }
+
     private suspend inline fun <T> commitMutation(mutate: () -> T): T {
         return mutateAndPersistWithRollback(
             snapshot = { Triple(codicesFlow.value, itemsFlow.value, postsFlow.value) },

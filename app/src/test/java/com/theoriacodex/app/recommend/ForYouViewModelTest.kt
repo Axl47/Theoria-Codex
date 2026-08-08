@@ -208,6 +208,40 @@ class ForYouViewModelTest {
     }
 
     @Test
+    fun `settings refresh cannot cancel seed hidden feedback`() = runTest {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val added = listOf(ForYouBlacklistEntry(SourceKey.PIXIV, listOf("seed")))
+        val engine = FakeForYouRouteEngine().apply {
+            current = current.copy(
+                activeProfileLikesCount = 1,
+                results = listOf(testPost(sourcePostId = "first")),
+                seedSummaryBySource = mapOf(SourceKey.PIXIV to listOf("seed")),
+                seedId = "seed",
+            )
+            blacklistAdditions = added
+            blacklistStarted = started
+            blacklistRelease = release
+        }
+        val viewModel = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        advanceUntilIdle()
+        viewModel.synchronizeEnvironment(AppSettings(), activeProfileLikesCount = 1)
+        advanceUntilIdle()
+
+        val feedback = async { viewModel.effects.first { it is ForYouEffect.SeedHidden } }
+        viewModel.onAction(ForYouAction.BlacklistCurrentSeed)
+        started.await()
+
+        engine.settingsChangedResult = true
+        viewModel.synchronizeEnvironment(AppSettings(), activeProfileLikesCount = 1)
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        val hidden = feedback.await() as ForYouEffect.SeedHidden
+        assertEquals(added, hidden.entries)
+    }
+
+    @Test
     fun `duration lane advances past eight negative decisions to enrich ninth immutably`() = runTest {
         val posts = (1..9).map { index -> animatedTestPost(sourcePostId = "animated-$index") }
         val ninth = posts.last()
@@ -347,6 +381,8 @@ private class FakeForYouRouteEngine(
     var firstRefreshStarted: CompletableDeferred<Unit>? = null
     var firstRefreshRelease: CompletableDeferred<Unit>? = null
     var firstRefreshResult: List<Post> = emptyList()
+    var blacklistStarted: CompletableDeferred<Unit>? = null
+    var blacklistRelease: CompletableDeferred<Unit>? = null
     private var refreshCalls = 0
 
     override suspend fun initialize() {
@@ -420,6 +456,10 @@ private class FakeForYouRouteEngine(
     }
 
     override suspend fun blacklistCurrentSeedAndRefresh(): List<ForYouBlacklistEntry> {
+        blacklistStarted?.complete(Unit)
+        blacklistRelease?.let { release ->
+            withContext(NonCancellable) { release.await() }
+        }
         current = current.copy(
             results = emptyList(),
             seedSummaryBySource = emptyMap(),

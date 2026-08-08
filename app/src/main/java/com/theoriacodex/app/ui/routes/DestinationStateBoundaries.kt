@@ -38,6 +38,7 @@ import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Codex
+import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -85,6 +86,7 @@ internal data class CodexDestinationState(
 
 internal data class CodexDetailDestinationState(
     val codex: Codex?,
+    val items: List<CodexItem>,
     val posts: List<Post>,
     val creatorBrowsingSources: Set<SourceKey>,
 )
@@ -239,12 +241,15 @@ internal fun CodexDetailDestinationStateBoundary(
 ) {
     val codexState = data.codexRepository.observeCodex(codexId)
         .collectAsStateWithLifecycle(initialValue = null)
+    val itemsState = data.codexRepository.observeCodexItems(codexId)
+        .collectAsStateWithLifecycle(initialValue = emptyList())
     val postsState = data.codexRepository.observeCodexPosts(codexId, sortMode)
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val availableState = sources.availableSources.collectAsStateWithLifecycle()
     content(
         CodexDetailDestinationState(
             codex = codexState.value,
+            items = itemsState.value,
             posts = postsState.value,
             creatorBrowsingSources = remember(sources.registry, availableState.value) {
                 sources.registry.creatorBrowsingSources().intersect(availableState.value)

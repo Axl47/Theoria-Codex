@@ -4,6 +4,7 @@ import android.content.Context
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
 import com.theoriacodex.app.media.PostDownloadService
+import com.theoriacodex.app.media.appClipboardConfirmationMessage
 import com.theoriacodex.app.media.copyPostUrlToClipboard
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.recoverRemoteMedia
@@ -178,9 +179,9 @@ internal fun recentPostSectionForViewer(context: ViewerLaunchContext?): RecentPo
     return context?.recentsSection ?: RecentPostSection.fromOrigin(origin)
 }
 
-internal fun shareViewerPostMessage(context: Context, post: Post?): String {
+internal fun shareViewerPostMessage(context: Context, post: Post?): String? {
     val copied = post?.let { copyPostUrlToClipboard(context, it) } == true
-    return if (copied) "Post URL copied" else "No post URL available"
+    return if (copied) appClipboardConfirmationMessage("Post URL copied") else "No post URL available"
 }
 
 internal suspend fun downloadViewerMediaMessage(

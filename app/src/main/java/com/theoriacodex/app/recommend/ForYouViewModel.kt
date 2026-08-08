@@ -158,6 +158,7 @@ internal class ForYouViewModel(
     private var latestSettings: AppSettings? = null
     private var rootJob: Job? = null
     private var pageJob: Job? = null
+    private var seedMutationJob: Job? = null
 
     private val mutableState = MutableStateFlow(
         engine.snapshot(initialProfiles, emptyList()).toUiState().copy(
@@ -304,7 +305,7 @@ internal class ForYouViewModel(
                 engine.setSortMode(effect.sortMode)
             }
 
-            is ForYouEffect.BlacklistSeed -> launchRefresh(effect.request) {
+            is ForYouEffect.BlacklistSeed -> launchSeedMutation(effect.request) {
                 val additions = engine.blacklistCurrentSeedAndRefresh()
                 effectChannel.trySend(
                     if (additions.isNotEmpty()) {
@@ -320,7 +321,7 @@ internal class ForYouViewModel(
                 )
             }
 
-            is ForYouEffect.UndoSeedBlacklist -> launchRefresh(effect.request) {
+            is ForYouEffect.UndoSeedBlacklist -> launchSeedMutation(effect.request) {
                 engine.undoBlacklistAndRefresh(effect.profileId, effect.entries)
             }
 
@@ -347,6 +348,25 @@ internal class ForYouViewModel(
                 throw error
             } catch (error: Throwable) {
                 onAction(ForYouAction.RefreshFailed(request, error.message ?: "Could not load recommendations"))
+            } finally {
+                if (!isActive) onAction(ForYouAction.RequestCancelled(request))
+            }
+        }
+    }
+
+    private fun launchSeedMutation(
+        request: ForYouRequestIdentity,
+        operation: suspend () -> Unit,
+    ) {
+        seedMutationJob?.cancel(CancellationException("For You seed mutation replaced"))
+        seedMutationJob = ownerScope.launch {
+            try {
+                operation()
+                onAction(ForYouAction.RefreshCompleted(request, snapshot()))
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                onAction(ForYouAction.RefreshFailed(request, error.message ?: "Could not update recommendations"))
             } finally {
                 if (!isActive) onAction(ForYouAction.RequestCancelled(request))
             }

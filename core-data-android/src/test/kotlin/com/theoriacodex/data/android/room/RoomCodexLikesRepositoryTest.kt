@@ -82,6 +82,32 @@ class RoomCodexLikesRepositoryTest {
     }
 
     @Test
+    fun `bulk membership restore preserves timestamps without replacing newer membership`() = runTest {
+        val repository = repository()
+        val codex = repository.createCodex("Saved")
+        val first = post("first")
+        val second = post("second")
+        repository.addItem(codex.codexId, first)
+        repository.addItem(codex.codexId, second)
+        val snapshots = repository.observeCodexItems(codex.codexId).first()
+
+        repository.removeItems(codex.codexId, setOf(first.id, second.id))
+        assertTrue(repository.observeCodexItems(codex.codexId).first().isEmpty())
+
+        repository.restoreItems(snapshots, listOf(first, second))
+        assertEquals(snapshots, repository.observeCodexItems(codex.codexId).first())
+
+        repository.removeItem(codex.codexId, first.id.source, first.id.sourcePostId)
+        repository.addItem(codex.codexId, first)
+        val newerFirst = repository.observeCodexItems(codex.codexId).first().single { it.postId == first.id }
+        repository.restoreItems(snapshots.filter { it.postId == first.id }, listOf(first))
+        assertEquals(
+            newerFirst,
+            repository.observeCodexItems(codex.codexId).first().single { it.postId == first.id },
+        )
+    }
+
+    @Test
     fun `bulk import commits one deduplicated membership set`() = runTest {
         val repository = repository()
         val first = post("1")

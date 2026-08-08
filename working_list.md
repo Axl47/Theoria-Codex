@@ -4,6 +4,36 @@ updated_at: 2026-08-03T00:03:12-04:00
 ---
 # Working List
 
+## Current Task: Converge Reversible Deletes and Single Copy Feedback
+
+### In Progress
+
+None.
+
+### Pending
+
+- [ ] Manually re-accept the three corrected interactions in the isolated Debug app.
+
+### Done
+
+- [x] Run one bounded validation batch and update UX-002 evidence.
+  - Evidence: the integrated run passed 133 core-data, 40 Room, and 421 app JVM tests with zero failures/errors (five core-data and three app opt-in skips), app Android-test compilation, app Detekt, Room Detekt, core-data main-source Detekt, HTML validation, and diff checks. The final Detekt-driven helper extraction was rechecked by the four focused app regression suites. No connected, device, package mutation, release, or live-provider command ran.
+
+- [x] Add focused race, restoration, and feedback-policy regression coverage.
+  - Evidence: focused tests reproduce the settings-refresh feedback race, verify exact multi-membership restoration and newer re-add protection in Room, exercise bulk workflow dismissal/Undo, enforce Android-version copy policy, and guard centralized clipboard/snackbar ownership; all focused lanes pass.
+
+- [x] Eliminate duplicate copy feedback across every clipboard entry point.
+  - Evidence: all clipboard writes now use one helper; feature-specific success Toasts remain through Android 12L, while Android 13+ relies on its single system-owned clipboard confirmation as required by the supported platform contract. Tags, post URLs, Viewer sharing, and creator links share the policy; focused policy and architecture tests pass.
+
+- [x] Add exact Undo for Codex detail bulk removal through the shell snackbar.
+  - Evidence: Codex detail now snapshots exact memberships, removes the selected IDs atomically, reports `Post removed` or a count-aware bulk message through the shell, and restores original saved timestamps/payloads on Undo without replacing a newer re-add. Focused in-memory workflow and Room persistence tests pass.
+
+- [x] Make For You seed hiding deliver Undo even when its settings write refreshes the route.
+  - Evidence: seed hide/undo writes now run in a mutation job that route-environment refresh cancellation does not own; the focused `ForYouViewModelTest` suite passes, including a regression that refreshes settings while the hide mutation is suspended and still receives the exact `SeedHidden` payload.
+
+- [x] Trace the three reported runtime paths before patching.
+  - Evidence: the For You settings emission can cancel the refresh-owned job that currently carries `SeedHidden`; Codex detail removes memberships directly with no recovery path; the generic `Copied.` string does not exist in app code and is Android 13+ system clipboard feedback triggered by `setPrimaryClip`.
+
 ## Current Task: Add Selective Actionable Transient Feedback
 
 ### In Progress

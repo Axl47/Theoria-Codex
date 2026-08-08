@@ -86,7 +86,9 @@ Settings cards use the shared `SettingsSection` composable with independently pe
 
 ## Actionable Transient Feedback
 
-`TheoriaAppContent` owns the app's single `SnackbarHost`, positioned by the outer Scaffold above bottom navigation. Feature routes send typed requests to that shell boundary; keep passive confirmations on Toast and reserve snackbars for immediate Undo or Retry actions. Recents clear Undo restores exact repository snapshots so timestamps, provenance, search identity, and Watched/Codex section membership survive. For You seed Undo carries the originating profile and only the blacklist entries newly added by that hide action, so it cannot remove pre-existing exclusions.
+`TheoriaAppContent` owns the app's single `SnackbarHost`, positioned by the outer Scaffold above bottom navigation. Feature routes send typed requests to that shell boundary; keep passive confirmations on Toast and reserve snackbars for immediate Undo or Retry actions. Recents clear Undo restores exact repository snapshots so timestamps, provenance, search identity, and Watched/Codex section membership survive. Codex detail removal uses the same boundary and restores exact saved timestamps/payloads for single or bulk selection. For You seed mutations run independently from settings-triggered route refresh cancellation; Undo carries the originating profile and only the blacklist entries newly added by that hide action, so it cannot remove pre-existing exclusions.
+
+Android 13 and newer render their own clipboard confirmation. All clipboard writes go through the shared clipboard helper, which shows feature-specific success Toasts only through Android 12L and relies on the single system confirmation on newer releases. Failure feedback remains app-owned on every version; do not add unconditional copy-success Toasts at call sites.
 
 ## Releases
 

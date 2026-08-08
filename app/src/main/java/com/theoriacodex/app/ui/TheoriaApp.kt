@@ -91,6 +91,7 @@ import com.theoriacodex.app.media.PostDownloadService
 import com.theoriacodex.app.media.normalizeMediaUrl
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexListScreen
+import com.theoriacodex.app.codex.CodexRemovalWorkflow
 import com.theoriacodex.app.codex.SaveToCodexSheet
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.codex.transfer.CodexExportResult
@@ -300,6 +301,9 @@ internal fun TheoriaAppContent(
     val snackbarHostState = remember { SnackbarHostState() }
     val recentsClearWorkflow = remember(dataDependencies.recentsRepository) {
         RecentsClearWorkflow(dataDependencies.recentsRepository)
+    }
+    val codexRemovalWorkflow = remember(dataDependencies.codexRepository) {
+        CodexRemovalWorkflow(dataDependencies.codexRepository)
     }
     suspend fun showActionableFeedback(message: String, actionLabel: String): Boolean {
         return snackbarHostState.showSnackbar(
@@ -1750,13 +1754,12 @@ internal fun TheoriaAppContent(
                             },
                             onRemovePosts = { posts ->
                                 scope.launch {
-                                    posts.forEach { post ->
-                                        dataDependencies.codexRepository.removeItem(
-                                            codexId = codexId,
-                                            sourceKey = post.id.source,
-                                            sourcePostId = post.id.sourcePostId,
-                                        )
-                                    }
+                                    codexRemovalWorkflow.remove(
+                                        codexId = codexId,
+                                        items = state.items,
+                                        posts = posts,
+                                        showActionableFeedback = ::showActionableFeedback,
+                                    )
                                 }
                             },
                             onSavePostToDevice = { post ->
@@ -1910,11 +1913,9 @@ internal fun TheoriaAppContent(
                                     showSaveSheet = true
                                 },
                                 onSharePost = { post ->
-                                    Toast.makeText(
-                                        appContext,
-                                        shareViewerPostMessage(appContext, post),
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
+                                    shareViewerPostMessage(appContext, post)?.let { message ->
+                                        Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
+                                    }
                                 },
                                 onDownloadMedia = { request ->
                                     val message = downloadViewerMediaMessage(

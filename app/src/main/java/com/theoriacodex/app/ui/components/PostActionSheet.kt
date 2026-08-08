@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.components
 
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.creator.CreatorProfileActionButton
 import com.theoriacodex.app.media.copyPostTagsToClipboard
 import com.theoriacodex.app.media.copyPostUrlToClipboard
+import com.theoriacodex.app.media.showClipboardCopyConfirmation
 import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -107,8 +109,7 @@ fun PostActionSheet(
                 }
                 IconButton(
                     onClick = {
-                        copyPostTagsToClipboard(context, post)
-                        Toast.makeText(context, "Tags copied", Toast.LENGTH_SHORT).show()
+                        copyPostTagsWithFeedback(context, post)
                         onDismiss()
                     },
                 ) {
@@ -119,12 +120,7 @@ fun PostActionSheet(
                 }
                 IconButton(
                     onClick = {
-                        val copied = copyPostUrlToClipboard(context, post)
-                        Toast.makeText(
-                            context,
-                            if (copied) "Post URL copied" else "No post URL available",
-                            Toast.LENGTH_SHORT,
-                        ).show()
+                        copyPostUrlWithFeedback(context, post)
                         onDismiss()
                     },
                 ) {
@@ -167,5 +163,21 @@ fun PostActionSheet(
                 Text("Cancel")
             }
         }
+    }
+}
+
+private fun copyPostTagsWithFeedback(context: Context, post: Post) {
+    if (copyPostTagsToClipboard(context, post)) {
+        showClipboardCopyConfirmation(context, "Tags copied")
+    } else {
+        Toast.makeText(context, "Could not copy tags", Toast.LENGTH_SHORT).show()
+    }
+}
+
+private fun copyPostUrlWithFeedback(context: Context, post: Post) {
+    if (copyPostUrlToClipboard(context, post)) {
+        showClipboardCopyConfirmation(context, "Post URL copied")
+    } else {
+        Toast.makeText(context, "No post URL available", Toast.LENGTH_SHORT).show()
     }
 }

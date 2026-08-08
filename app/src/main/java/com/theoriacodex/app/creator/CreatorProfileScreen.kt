@@ -1,7 +1,5 @@
 package com.theoriacodex.app.creator
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
@@ -49,6 +47,8 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
 import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.media.copyTextToClipboard
+import com.theoriacodex.app.media.showClipboardCopyConfirmation
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.SearchVisibilityFilters
@@ -412,9 +412,11 @@ private fun shareCreatorProfile(context: Context, profileUrl: String) {
 }
 
 private fun copyCreatorProfile(context: Context, profileUrl: String) {
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    clipboard.setPrimaryClip(ClipData.newPlainText("Creator profile", profileUrl))
-    Toast.makeText(context, "Creator link copied", Toast.LENGTH_SHORT).show()
+    if (copyTextToClipboard(context, "Creator profile", profileUrl)) {
+        showClipboardCopyConfirmation(context, "Creator link copied")
+    } else {
+        Toast.makeText(context, "Could not copy creator link", Toast.LENGTH_SHORT).show()
+    }
 }
 
 private const val CREATOR_PROFILE_PREFETCH_RATIO = 0.7f

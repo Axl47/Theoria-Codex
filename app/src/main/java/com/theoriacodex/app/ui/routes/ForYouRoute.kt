@@ -121,24 +121,7 @@ internal fun ForYouRoute(
     }
 
     CollectRouteEffects(owner.effects) { effect ->
-        when (effect) {
-            is ForYouEffect.OpenViewer -> callbacks.onOpenViewer(effect)
-            ForYouEffect.NavigateToSearch -> callbacks.onNavigateToSearch()
-            is ForYouEffect.ShowMessage -> callbacks.onShowMessage(effect.message)
-            is ForYouEffect.SeedHidden -> {
-                if (callbacks.onSeedHidden(effect.profileId, effect.entries)) {
-                    owner.onAction(ForYouAction.UndoSeedBlacklist(effect.profileId, effect.entries))
-                }
-            }
-            is ForYouEffect.BlacklistSeed,
-            is ForYouEffect.ChangeProfile,
-            is ForYouEffect.ChangeSort,
-            is ForYouEffect.ChangeSource,
-            is ForYouEffect.LoadNextPage,
-            is ForYouEffect.RefreshFeed,
-            is ForYouEffect.UndoSeedBlacklist,
-            -> Unit
-        }
+        handleForYouRouteEffect(effect, callbacks, owner)
     }
 
     ForYouScreen(
@@ -161,6 +144,31 @@ internal fun ForYouRoute(
         onFavoriteTagLongPress = callbacks.onFavoriteTagLongPress,
         onGoToSearch = callbacks.onGoToSearch,
     )
+}
+
+private suspend fun handleForYouRouteEffect(
+    effect: ForYouEffect,
+    callbacks: ForYouRouteCallbacks,
+    owner: ForYouViewModel,
+) {
+    when (effect) {
+        is ForYouEffect.OpenViewer -> callbacks.onOpenViewer(effect)
+        ForYouEffect.NavigateToSearch -> callbacks.onNavigateToSearch()
+        is ForYouEffect.ShowMessage -> callbacks.onShowMessage(effect.message)
+        is ForYouEffect.SeedHidden -> {
+            if (callbacks.onSeedHidden(effect.profileId, effect.entries)) {
+                owner.onAction(ForYouAction.UndoSeedBlacklist(effect.profileId, effect.entries))
+            }
+        }
+        is ForYouEffect.BlacklistSeed,
+        is ForYouEffect.ChangeProfile,
+        is ForYouEffect.ChangeSort,
+        is ForYouEffect.ChangeSource,
+        is ForYouEffect.LoadNextPage,
+        is ForYouEffect.RefreshFeed,
+        is ForYouEffect.UndoSeedBlacklist,
+        -> Unit
+    }
 }
 
 private const val FOR_YOU_ROUTE_OWNER_KEY = "for-you-route-owner"

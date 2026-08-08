@@ -68,6 +68,10 @@ public interface CodexLikesDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     long insertCodexItem(CodexItemEntity entity);
 
+    @Query("SELECT * FROM codex_items WHERE codex_id = :codexId AND source = :source "
+            + "AND source_post_id = :sourcePostId LIMIT 1")
+    CodexItemEntity codexItem(String codexId, String source, String sourcePostId);
+
     @Query("DELETE FROM codex_items WHERE codex_id = :codexId "
             + "AND source = :source AND source_post_id = :sourcePostId")
     int deleteCodexItem(String codexId, String source, String sourcePostId);

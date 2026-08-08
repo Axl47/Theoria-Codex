@@ -23,6 +23,8 @@ interface CodexRepository {
     suspend fun addItem(codexId: String, post: Post)
     suspend fun updatePost(post: Post)
     suspend fun removeItem(codexId: String, sourceKey: SourceKey, sourcePostId: String)
+    suspend fun removeItems(codexId: String, postIds: Set<PostId>)
+    suspend fun restoreItems(items: List<CodexItem>, posts: List<Post>)
 }
 
 enum class CodexSortMode {
