@@ -8,12 +8,13 @@ updated_at: 2026-08-10T18:10:00-04:00
 
 ### In Progress
 
-- [~] Run the final host acceptance batch and stop before the post-fix physical benchmark.
-  - Required evidence: all deterministic correctness lanes and benchmark package guards pass; changed files are clean under static analysis; the frozen benchmark contract remains unchanged; the preserved physical baseline remains intact.
+- [~] Paused at the requested boundary immediately before the post-fix physical benchmark.
+  - No connected task has run against the rebuilt implementation. Host acceptance and the safe task-graph preflight are complete, so no host work remains before the user reconnects the same physical device.
 
 ### Pending
 
 - [ ] With the user ready and the same physical device connected again, run the one frozen post-fix benchmark and compare it with the preserved baseline.
+- [ ] After the benchmark, perform isolated real-source Debug acceptance for Hitomi badge arrival/filtering, scroll smoothness, relaunch cache reuse, Viewer round trip, and GIF playback without clearing or uninstalling either package.
 
 ### Done
 
@@ -35,6 +36,8 @@ updated_at: 2026-08-10T18:10:00-04:00
   - Evidence: pure MP4 and WebM parsers cover valid, truncated, malformed, missing-duration, head/tail, and overflow inputs. The application probe uses source headers, validates exact 256 KiB head/tail range responses, enforces body and 12-second time bounds, and maps transport/parser outcomes into typed coordinator state. Provider resolution and probing now share one acquisition engine; production remote `MediaMetadataRetriever` is removed while the frozen benchmark-only baseline subject remains. The focused parser, probe, acquisition, coordinator, architecture, HTTP transport, app-logic, Debug, and benchmark compilation batch passes. App Detekt reports only its four inherited untouched UI findings.
 - [x] Phase 4: migrate routes, players, badges, filters, and pagination to separate metadata state.
   - Evidence: Search, For You, Creator, Codex detail, Recents, and Viewer now share navigation-scoped delta owners over one application coordinator. Badges and filters read route-only metadata without rewriting Posts; existing authoritative players publish once; pending decisions block duration-driven page refill and restart it on settlement; static/unsupported/unresolved rows remain excluded; speculative background work defaults off; old lanes/service/actions are removed. Focused route, coordinator, key/fingerprint, filtering, architecture, settings, Debug, and benchmarkRelease checks pass. Changed app files are clean under Detekt; only the four inherited findings remain.
+- [x] Complete the bounded host acceptance and stop before the final connected run.
+  - Evidence: the integrated application, app-logic, provider, persistence, Room, Android-test compilation, Debug/benchmarkRelease compilation, Kover, and packaged-artifact batch passed; the two remaining JVM owners also pass. Across all seven modules, 1,044 tests report zero failures/errors and 10 intentional skips. Aggregate Kover verification passes, and platform-free changes cover 530/568 executable lines (93.31%) against baseline commit `6bd7536`. The benchmark target remains isolated as `com.theoriacodex.benchmark` in `:benchmarkFixture`, with the same 32,502-byte media asset and SHA-256 `ac3213320cd1c8acbf081cb13ce652c8706dcda37e3a18bc1af31e23a5335403`; the runner has no configured listener. The frozen physical baseline still has JSON SHA-256 `7bec5987398fcff307e12f6743481e6cccf257dd4942bc896a9f860b31bd04c1` and 35 traces. A host-only dry run succeeds and schedules `:app:verifyBenchmarkReleaseInstallableApplicationId` before the connected benchmark task. No connected/device command ran.
 
 ## Current Task: Repair Animated Duration Metadata And Filtering
 

@@ -116,7 +116,7 @@
     <h1>Rebuild duration metadata without slowing autoplay</h1>
     <p>This plan first measures the current duration-enrichment penalty on physical hardware, then replaces eager route-local enrichment with one capability-aware, prioritized, persistent metadata system. The same frozen benchmark is run again at completion so the result is comparative evidence, not an impression.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: In progress — physical baseline preserved</span>
+      <span class="pill">Status: Paused before the final physical benchmark</span>
       <span class="pill">Owner: Codex</span>
       <span class="pill">Created: 2026-08-10</span>
       <span class="pill">Updated: 2026-08-10</span>
@@ -157,7 +157,7 @@
     <section id="status">
       <h2>Current Status</h2>
       <table class="status-table"><tbody>
-        <tr><td>Plan state</td><td>In progress. The immutable physical baseline and duration rebuild through all production routes are complete; final host acceptance is active.</td></tr>
+        <tr><td>Plan state</td><td>The immutable physical baseline, duration rebuild, and bounded host acceptance are complete. Work is intentionally paused before the final connected benchmark; no post-fix device run or live-source Debug acceptance is claimed.</td></tr>
         <tr><td>Repository baseline</td><td><code>main</code> at <code>6bd7536</code> (<code>fix(performance): reset benchmark fixture between iterations</code>), after benchmark-only instrumentation and before any duration behavior repair.</td></tr>
         <tr><td>Working tree</td><td>Phase 0 evidence is preserved under <code>build/reports/duration-metadata-performance/baseline-6bd7536/</code>. Phases 1 through 4 have rebuilt acquisition, scheduling, persistence, bounded parsing, route demand, publication, filtering, and pagination.</td></tr>
         <tr><td>Current live evidence</td><td>All five physical benchmark methods passed on Samsung SM-S926U / Android 16. The duration journey settled 24/24 decisions in every iteration while every visible preview continued playing.</td></tr>
@@ -393,11 +393,11 @@
 
       <article id="phase-5">
         <h3>Phase 5: Run bounded host acceptance, then repeat the frozen physical benchmark</h3>
-        <p class="phase-status">Status: In progress — host acceptance only; connected final run intentionally paused.</p>
+        <p class="phase-status">Status: Host portion complete — connected final run intentionally paused.</p>
         <table class="status-table"><tbody>
           <tr><td>Goal</td><td>Prove correctness first, then measure the final system against the preserved baseline and control.</td></tr>
           <tr><td>Primary files</td><td>This ExecPlan, <code>working_list.md</code>, benchmark README/tests, and any durable project rule discovered during validation.</td></tr>
-          <tr><td>Commit</td><td><code>test(performance): verify duration metadata rebuild gains</code></td></tr>
+          <tr><td>Commit</td><td><code>test(performance): verify duration rebuild host gates</code></td></tr>
         </tbody></table>
         <ol>
           <li>Run the focused unit, Room migration, architecture, Detekt, Kover changed-line, Debug compilation, and benchmark artifact batch. Repair common causes in one patch and rerun only affected lanes.</li>
@@ -408,6 +408,8 @@
           <li>Perform isolated Debug acceptance against real sources only after verifying the packaged Debug application ID. Observe Hitomi badge arrival/filtering, scroll smoothness, relaunch cache reuse, Viewer round trip, and GIF playback. Never clear or uninstall either package.</li>
           <li>Update Progress, Discoveries, Decisions, Outcomes, exact metrics, artifact paths, and any remaining evidence gap before closing.</li>
         </ol>
+        <p><strong>Host evidence:</strong> the bounded Gradle batch passed all application logic, application integration, provider, repository, Room, Android-test compilation, Debug/benchmarkRelease compilation, Kover, and benchmark-package owners. The seven JVM modules report 1,044 tests, zero failures/errors, and 10 intentional skips (three opt-in live application tests and seven retired repository parameters). Aggregate Kover verification passed; eligible platform-free production changes cover 530/568 executable lines (93.31%) against the frozen baseline commit <code>6bd7536</code>. The packaged target remains <code>com.theoriacodex.benchmark</code> in <code>:benchmarkFixture</code>, contains the same 32,502-byte asset with SHA-256 <code>ac3213320cd1c8acbf081cb13ce652c8706dcda37e3a18bc1af31e23a5335403</code>, and the runner remains AndroidJUnitRunner with no configured listener. A host-only dry run of the final connected task succeeds and explicitly schedules <code>:app:verifyBenchmarkReleaseInstallableApplicationId</code> before <code>:macrobenchmark:connectedBenchmarkReleaseAndroidTest</code>. No connected task ran.</p>
+        <p><strong>Frozen evidence:</strong> the physical baseline remains intact with JSON SHA-256 <code>7bec5987398fcff307e12f6743481e6cccf257dd4942bc896a9f860b31bd04c1</code> and all 35 Perfetto traces. Source contracts still lock 24 initially unknown cards, the autoplay-only control, three downward and three upward Search flings, five interaction iterations, 10 startup iterations, and the 24/24 readiness/settled assertions.</p>
         <p><strong>Acceptance:</strong> all deterministic correctness lanes pass; the final benchmark completes every duration decision and simultaneous-autoplay assertion; the normalized p90 frame penalty shrinks materially as defined below; workload/probe counts do not regress; artifacts are preserved; real-source Debug behavior matches the user-visible contract.</p>
       </article>
     </section>
@@ -524,7 +526,7 @@ Overrun penalty p90 = duration-on Search frameOverrunMs p90
         <li class="done">[x] 2026-08-10 — Phase 2: added the pure bounded priority scheduler and one application-scoped coordinator with observable metadata state, cross-route single-flight, scroll/lifecycle gates, consumer-isolated cancellation, background preemption, trace events, and no publication restart.</li>
         <li class="done">[x] 2026-08-10 — Phase 3: added the bounded schema 5 decision store, pure MP4/WebM parsers, strict range transport, and one shared provider/probe acquisition engine; removed production remote <code>MediaMetadataRetriever</code>.</li>
         <li class="done">[x] 2026-08-10 — Phase 4: switched every route, badge, filter, pagination owner, and authoritative player seam to separate coordinator metadata; removed the old lanes and list mutation.</li>
-        <li>[~] Phase 5 — Complete host acceptance, then pause before the user reconnects the device for the one final physical benchmark.</li>
+        <li>[~] 2026-08-10 — Phase 5 host acceptance passed: 1,044 JVM tests have zero failures/errors, changed-line coverage is 93.31%, Android/benchmark compilation and packaged guards pass, the frozen baseline remains byte-for-byte identified, and the final connected task graph includes the non-production application-ID guard. Paused before the one final physical benchmark by explicit user direction.</li>
       </ul>
 
       <h3>Surprises And Discoveries</h3>
@@ -544,6 +546,7 @@ Overrun penalty p90 = duration-on Search frameOverrunMs p90
         <li><strong>Observation:</strong> a range response is safe for metadata parsing only when its <code>Content-Range</code>, body length, and known total length agree with the requested window. Treating a server's silent full-body fallback as success would defeat the memory/network budget.</li>
         <li><strong>Observation:</strong> continuous Viewer timeline callbacks are not a safe duration-publication seam: GIF progress runs at frame cadence and would enqueue unchanged metadata repeatedly. Duration publication now occurs once when each authoritative player's total duration becomes known.</li>
         <li><strong>Observation:</strong> pagination effects must key the pending-decision count itself. A page that settles entirely Unsupported or outside the selected range does not change the visible result count, so keying only visible/base list sizes would leave refill permanently paused.</li>
+        <li><strong>Observation:</strong> the final connected benchmark task graph can be inspected without touching a device. Its successful dry run schedules the isolated benchmark APK, <code>:app:verifyBenchmarkReleaseInstallableApplicationId</code>, the runner APK, and only then <code>:macrobenchmark:connectedBenchmarkReleaseAndroidTest</code>.</li>
       </ul>
 
       <h3>Decision Log</h3>
@@ -557,7 +560,7 @@ Overrun penalty p90 = duration-on Search frameOverrunMs p90
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>Phase 0 froze and preserved the benchmark contract. Phases 1 through 3 rebuilt bounded acquisition, scheduling, persistence, and parsing. Phase 4 now keeps duration metadata separate from Post lists across every browsing route, reconciles only demand deltas, accepts one-shot authoritative player metadata, and prevents unresolved filters from cascading pages. Complete the host-only Phase 5 batch, preserve the baseline, and pause before the final connected benchmark as requested.</p>
+      <p>Phase 0 froze and preserved the physical benchmark. Phases 1 through 3 rebuilt bounded acquisition, scheduling, persistence, and parsing. Phase 4 keeps duration metadata separate from Post lists across every browsing route, reconciles only demand deltas, accepts one-shot authoritative player metadata, and prevents unresolved filters from cascading pages. Phase 5's host portion now proves the deterministic behavior, coverage, compilation, frozen workload, isolated APK identities, and safe final task graph. The plan is paused at the requested boundary: the post-fix physical benchmark and isolated live-source Debug acceptance remain deliberately unrun.</p>
     </section>
 
     <section id="recovery">
