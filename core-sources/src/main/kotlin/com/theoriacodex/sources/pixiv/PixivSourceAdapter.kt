@@ -30,7 +30,6 @@ import com.theoriacodex.sources.common.parseJsonObject
 import com.theoriacodex.sources.common.sourceNetworkFailure
 import com.theoriacodex.sources.common.sourceQuickQuery
 import com.theoriacodex.sources.common.stringValue
-import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.media.inferMimeFromUrl
@@ -44,8 +43,12 @@ import kotlinx.coroutines.sync.withLock
 
 class PixivSourceAdapter(
     private val httpClient: SourceHttpClient,
-    private val credentialsProvider: SourceCredentialsProvider,
-    private val authApi: PixivAuthApi = PixivAuthApi(httpClient),
+    credentialsProvider: SourceCredentialsProvider,
+    authApi: PixivAuthApi = PixivAuthApi(httpClient),
+    private val tokenCoordinator: PixivTokenCoordinator = PixivTokenCoordinator(
+        credentialsProvider = credentialsProvider,
+        authApi = authApi,
+    ),
     private val gson: Gson = Gson(),
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val minRequestIntervalMs: Long = 350L,
@@ -196,7 +199,7 @@ class PixivSourceAdapter(
         query: Map<String, String>,
     ): String {
         throttle()
-        val currentTokens = activeTokens()
+        val currentTokens = tokenCoordinator.activeTokens()
         val response = try {
             httpClient.get(
                 url = url,
@@ -208,7 +211,7 @@ class PixivSourceAdapter(
         }
 
         if (response.statusCode == 401 || response.statusCode == 403) {
-            val refreshed = refreshTokens(currentTokens.refreshToken)
+            val refreshed = tokenCoordinator.refreshAfterAuthFailure(currentTokens)
             val retry = try {
                 httpClient.get(
                     url = url,
@@ -235,26 +238,6 @@ class PixivSourceAdapter(
         }
 
         return response.body
-    }
-
-    private suspend fun activeTokens(): PixivAuthTokens {
-        val current = credentialsProvider.getPixivTokens()
-            ?: throw SourceAdapterException(
-                reason = SourceFailureReason.AUTH_REQUIRED,
-                message = "Pixiv credentials not configured",
-            )
-
-        return if (clock() + 60_000L < current.expiresAtEpochMs) {
-            current
-        } else {
-            refreshTokens(current.refreshToken)
-        }
-    }
-
-    private suspend fun refreshTokens(refreshToken: String): PixivAuthTokens {
-        val refreshed = authApi.refresh(refreshToken)
-        credentialsProvider.savePixivTokens(refreshed)
-        return refreshed
     }
 
     private suspend fun throttle() {

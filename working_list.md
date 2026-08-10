@@ -8,15 +8,16 @@ updated_at: 2026-08-10T20:05:00-04:00
 
 ### In Progress
 
-- [~] Phase 5: bound Pixiv Ugoira loading and share token refresh.
+- [~] Phase 6: reuse bounded Hitomi gallery manifests.
 
 ### Pending
 
-- [ ] Phase 6: reuse bounded Hitomi gallery manifests.
 - [ ] Phase 7: run integrated validation and close the living ExecPlan.
 
 ### Done
 
+- [x] Phase 5: bound Pixiv Ugoira loading and share token refresh.
+  - Evidence: ordinary Pixiv and Ugoira requests share one durable re-checking refresh mutex; per-post archive and per-size decode single-flight isolate consumers; atomic disk archives enforce 96 MiB compressed, 256 MiB expanded, per-frame/name/count/correspondence bounds; card/Viewer/export size buckets, pixel limits, a 512 MiB disk LRU, and a 96 MiB allocation-weighted decoded LRU replace full-ZIP/all-frame/eight-item retention. Thirty-six focused tests and `:app:compileDebugKotlin` pass. Core-sources Detekt reports only its documented inherited untouched long/complex owners.
 - [x] Phase 4: open Viewer before provider refresh when usable media already exists.
   - Evidence: prelaunch policy now treats local, primary, progressive, and preview locations as immediately attemptable across Pixiv, Gelbooru, NHentai, and Hitomi. A delayed fake provider is not invoked for viable media; stale remote posts still refresh from the mounted Viewer and persist healing, while genuinely location-less posts retain the blocking resolution path. Twenty-nine focused tests and `:app:compileDebugKotlin` pass.
 - [x] Phase 3: prefetch the true Viewer neighborhood through the shared Media3 cache.

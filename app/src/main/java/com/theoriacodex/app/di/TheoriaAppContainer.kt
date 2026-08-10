@@ -61,6 +61,7 @@ import com.theoriacodex.sources.RealAdapterRegistry
 import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.pixiv.PixivAuthApi
+import com.theoriacodex.sources.pixiv.PixivTokenCoordinator
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -147,6 +148,10 @@ internal class DefaultTheoriaAppContainer(
         delegate = AndroidSecureSourceCredentialsStore(appContext),
     )
     private val pixivAuthApi = PixivAuthApi(sourceHttpClient)
+    private val pixivTokenCoordinator = PixivTokenCoordinator(
+        credentialsProvider = accountStore,
+        authApi = pixivAuthApi,
+    )
     private val pixivAuthController = PixivPkceController(
         authApi = pixivAuthApi,
         credentialsProvider = accountStore,
@@ -155,11 +160,14 @@ internal class DefaultTheoriaAppContainer(
     private val pixivUgoiraClient = PixivUgoiraClient(
         credentialsProvider = accountStore,
         httpClient = sourceHttpClient,
+        tokenCoordinator = pixivTokenCoordinator,
+        archiveDirectory = File(appContext.cacheDir, "theoria_codex/pixiv/ugoira"),
     )
     private val allPotentialSourceRegistry = RealAdapterRegistry(
         credentialsProvider = accountStore,
         httpClient = sourceHttpClient,
         exposedSources = exposedRealSources(rule34XxxConfigured = true),
+        pixivTokenCoordinator = pixivTokenCoordinator,
     )
     private val sourceRegistry = AvailabilityAwareSourceAdapterRegistry(
         delegate = allPotentialSourceRegistry,

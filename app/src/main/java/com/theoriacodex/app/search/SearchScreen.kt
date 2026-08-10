@@ -137,6 +137,7 @@ import com.theoriacodex.app.tags.FavoriteTagActionGrid
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
+import com.theoriacodex.app.viewer.UgoiraSizeBucket
 import com.theoriacodex.app.viewer.mediaTestTagPart
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
@@ -1134,6 +1135,7 @@ fun SearchResultCard(
                     modifier = Modifier.fillMaxSize(),
                     contentDescription = mediaContentDescription,
                     contentScale = ContentScale.Crop,
+                    sizeBucket = UgoiraSizeBucket.CARD,
                     isActive = playbackActive,
                     onDurationKnown = onAuthoritativeDurationKnown,
                 )

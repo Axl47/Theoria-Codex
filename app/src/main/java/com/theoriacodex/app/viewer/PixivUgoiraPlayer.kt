@@ -44,41 +44,87 @@ import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.pixiv.PixivAuthApi
-import java.io.ByteArrayInputStream
+import com.theoriacodex.sources.pixiv.PixivTokenCoordinator
 import java.io.File
 import java.io.FileDescriptor
+import java.io.FileOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.zip.ZipFile
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-class PixivUgoiraClient(
-    private val credentialsProvider: SourceCredentialsProvider,
-    private val httpClient: SourceHttpClient,
-    private val authApi: PixivAuthApi = PixivAuthApi(httpClient),
+class PixivUgoiraClient internal constructor(
+    credentialsProvider: SourceCredentialsProvider,
+    httpClient: SourceHttpClient,
+    authApi: PixivAuthApi = PixivAuthApi(httpClient),
+    private val tokenCoordinator: PixivTokenCoordinator = PixivTokenCoordinator(
+        credentialsProvider = credentialsProvider,
+        authApi = authApi,
+    ),
+    private val archiveDirectory: File = File(
+        System.getProperty("java.io.tmpdir").orEmpty(),
+        "theoria_codex/pixiv/ugoira",
+    ),
     private val gson: Gson = Gson(),
-    private val clock: () -> Long = { System.currentTimeMillis() },
+    private val metadataFetcher: ((String, String) -> TextResponse)? = null,
+    private val zipDownloader: ((String, String, File) -> BinaryResponse)? = null,
 ) {
     private val cacheLock = Any()
-    private val playbackCache = LinkedHashMap<String, UgoiraPlayback>(
-        UGOIRA_PLAYBACK_CACHE_SIZE,
+    private val loadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val playbackCache = LinkedHashMap<UgoiraLoadKey, UgoiraPlayback>(
+        4,
         0.75f,
         true,
     )
+    private val loadFlights = mutableMapOf<UgoiraLoadKey, SharedUgoiraLoad>()
+    private val archiveCache = LinkedHashMap<String, UgoiraArchive>(16, 0.75f, true)
+    private val archiveFlights = mutableMapOf<String, Deferred<UgoiraArchive>>()
+    private var decodedCacheBytes = 0L
 
-    fun cached(postId: String): UgoiraPlayback? = synchronized(cacheLock) {
-        playbackCache[postId]
+    fun cached(
+        postId: String,
+        sizeBucket: UgoiraSizeBucket = UgoiraSizeBucket.VIEWER,
+    ): UgoiraPlayback? = synchronized(cacheLock) {
+        playbackCache[UgoiraLoadKey(postId, sizeBucket)]
     }
 
-    suspend fun load(postId: String): Result<UgoiraPlayback> {
-        cached(postId)?.let { return Result.success(it) }
-        return runCatchingPreservingCancellation {
-            loadOrThrow(postId).also { playback ->
-                cachePlayback(postId, playback)
+    suspend fun load(
+        postId: String,
+        sizeBucket: UgoiraSizeBucket = UgoiraSizeBucket.VIEWER,
+    ): Result<UgoiraPlayback> {
+        cached(postId, sizeBucket)?.let { return Result.success(it) }
+        val key = UgoiraLoadKey(postId, sizeBucket)
+        val shared = synchronized(cacheLock) {
+            loadFlights[key]?.also { flight -> flight.consumers += 1 } ?: run {
+                val deferred = loadScope.async {
+                    loadOrThrow(postId, sizeBucket).also { playback -> cachePlayback(key, playback) }
+                }
+                SharedUgoiraLoad(deferred = deferred, consumers = 1).also { flight ->
+                    loadFlights[key] = flight
+                    deferred.invokeOnCompletion {
+                        synchronized(cacheLock) {
+                            if (loadFlights[key] === flight) loadFlights.remove(key)
+                        }
+                    }
+                }
+            }
+        }
+        return try {
+            runCatchingPreservingCancellation { shared.deferred.await() }
+        } finally {
+            synchronized(cacheLock) {
+                shared.consumers -= 1
+                if (shared.consumers == 0 && !shared.deferred.isCompleted) shared.deferred.cancel()
             }
         }
     }
@@ -93,24 +139,65 @@ class PixivUgoiraClient(
         }
     }
 
-    private suspend fun loadOrThrow(postId: String): UgoiraPlayback = withContext(Dispatchers.IO) {
-        val currentTokens = activeTokens()
-        val (metadata, tokensAfterMetadata) = fetchMetadataWithRetry(
-            postId = postId,
-            initialTokens = currentTokens,
+    private suspend fun loadOrThrow(
+        postId: String,
+        sizeBucket: UgoiraSizeBucket,
+    ): UgoiraPlayback = withContext(Dispatchers.IO) {
+        val archive = archiveFor(postId)
+        UgoiraPlayback(
+            frames = decodeFrames(
+                archive = archive.file,
+                specs = archive.metadata.frames,
+                maxDimension = sizeBucket.maxDimension,
+            ),
         )
-        val zipBytes = downloadZipWithRetry(
+    }
+
+    private suspend fun archiveFor(postId: String): UgoiraArchive {
+        synchronized(cacheLock) { archiveCache[postId] }?.let { return it }
+        val deferred = synchronized(cacheLock) {
+            archiveFlights[postId] ?: loadScope.async { loadArchiveOrThrow(postId) }.also { flight ->
+                archiveFlights[postId] = flight
+                flight.invokeOnCompletion {
+                    synchronized(cacheLock) {
+                        if (archiveFlights[postId] === flight) archiveFlights.remove(postId)
+                    }
+                }
+            }
+        }
+        return deferred.await().also { archive ->
+            synchronized(cacheLock) {
+                archiveCache[postId] = archive
+                while (archiveCache.size > UGOIRA_ARCHIVE_MEMORY_ENTRY_LIMIT) {
+                    archiveCache.remove(archiveCache.entries.first().key)
+                }
+            }
+        }
+    }
+
+    private suspend fun loadArchiveOrThrow(postId: String): UgoiraArchive {
+        val currentTokens = tokenCoordinator.activeTokens()
+        val (metadata, tokensAfterMetadata) = fetchMetadataWithRetry(postId, currentTokens)
+        if (!archiveDirectory.exists() && !archiveDirectory.mkdirs()) {
+            throw IOException("Could not create Pixiv ugoira cache directory")
+        }
+        val archive = File(archiveDirectory, "${postId.safeCacheComponent()}.zip")
+        if (archive.isFile) {
+            val valid = runCatching { validateUgoiraArchive(archive, metadata.frames) }.isSuccess
+            if (valid) {
+                archive.setLastModified(System.currentTimeMillis())
+                return UgoiraArchive(metadata = metadata, file = archive)
+            }
+            archive.delete()
+        }
+        downloadZipWithRetry(
             url = metadata.zipUrl,
             initialTokens = tokensAfterMetadata,
+            destination = archive,
         )
-
-        val playback = UgoiraPlayback(
-            frames = decodeFrames(
-                zipBytes = zipBytes,
-                specs = metadata.frames,
-            )
-        )
-        playback
+        validateUgoiraArchive(archive, metadata.frames)
+        pruneArchiveDirectory(protected = archive)
+        return UgoiraArchive(metadata = metadata, file = archive)
     }
 
     private suspend fun fetchMetadataWithRetry(
@@ -121,7 +208,16 @@ class PixivUgoiraClient(
         var didRefreshAfterAuthFailure = false
 
         repeat(UGOIRA_NETWORK_MAX_ATTEMPTS) { attempt ->
-            val metadataResponse = fetchMetadata(postId, tokens.accessToken)
+            val metadataResponse = try {
+                runInterruptible(Dispatchers.IO) {
+                    metadataFetcher?.invoke(postId, tokens.accessToken)
+                        ?: fetchMetadata(postId, tokens.accessToken)
+                }
+            } catch (error: IOException) {
+                if (attempt >= UGOIRA_NETWORK_MAX_ATTEMPTS - 1) throw error
+                delay(ugoiraRetryDelayMs(attempt))
+                return@repeat
+            }
             when {
                 metadataResponse.statusCode in 200..299 -> {
                     return parseMetadata(metadataResponse.body) to tokens
@@ -131,7 +227,7 @@ class PixivUgoiraClient(
                     if (didRefreshAfterAuthFailure) {
                         throw IOException("Pixiv ugoira metadata request failed (${metadataResponse.statusCode})")
                     }
-                    tokens = refreshTokens(tokens.refreshToken)
+                    tokens = tokenCoordinator.refreshAfterAuthFailure(tokens)
                     didRefreshAfterAuthFailure = true
                 }
 
@@ -151,20 +247,30 @@ class PixivUgoiraClient(
     private suspend fun downloadZipWithRetry(
         url: String,
         initialTokens: PixivAuthTokens,
-    ): ByteArray {
+        destination: File,
+    ) {
         var tokens = initialTokens
         var didRefreshAfterAuthFailure = false
 
         repeat(UGOIRA_NETWORK_MAX_ATTEMPTS) { attempt ->
-            val zipResponse = downloadZip(url = url, accessToken = tokens.accessToken)
+            val zipResponse = try {
+                runInterruptible(Dispatchers.IO) {
+                    zipDownloader?.invoke(url, tokens.accessToken, destination)
+                        ?: downloadZip(url, tokens.accessToken, destination)
+                }
+            } catch (error: IOException) {
+                if (attempt >= UGOIRA_NETWORK_MAX_ATTEMPTS - 1) throw error
+                delay(ugoiraRetryDelayMs(attempt))
+                return@repeat
+            }
             when {
-                zipResponse.statusCode in 200..299 -> return zipResponse.body
+                zipResponse.statusCode in 200..299 -> return
 
                 zipResponse.statusCode == 401 || zipResponse.statusCode == 403 -> {
                     if (didRefreshAfterAuthFailure) {
                         throw IOException("Pixiv ugoira zip request failed (${zipResponse.statusCode})")
                     }
-                    tokens = refreshTokens(tokens.refreshToken)
+                    tokens = tokenCoordinator.refreshAfterAuthFailure(tokens)
                     didRefreshAfterAuthFailure = true
                 }
 
@@ -184,10 +290,7 @@ class PixivUgoiraClient(
         postId: String,
         title: String?,
     ): Uri = withContext(Dispatchers.IO) {
-        val playback = cached(postId)
-            ?: loadOrThrow(postId).also { loaded ->
-                cachePlayback(postId, loaded)
-            }
+        val playback = load(postId, UgoiraSizeBucket.EXPORT).getOrThrow()
         val fileName = buildMp4FileName(postId = postId, title = title)
 
         val mediaStoreResult = runCatching {
@@ -513,37 +616,60 @@ class PixivUgoiraClient(
         return cleaned.ifBlank { "pixiv" }
     }
 
-    private suspend fun activeTokens(): PixivAuthTokens {
-        val current = credentialsProvider.getPixivTokens()
-            ?: throw IllegalStateException("Pixiv credentials are not configured")
-        return if (clock() + 60_000L < current.expiresAtEpochMs) {
-            current
-        } else {
-            refreshTokens(current.refreshToken)
-        }
-    }
-
-    private suspend fun refreshTokens(refreshToken: String): PixivAuthTokens {
-        val refreshed = authApi.refresh(refreshToken)
-        credentialsProvider.savePixivTokens(refreshed)
-        return refreshed
-    }
-
     private fun fetchMetadata(postId: String, accessToken: String): TextResponse {
         val url = "${PIXIV_API_BASE}/v1/ugoira/metadata?illust_id=$postId"
         val connection = openConnection(url, accessToken)
-        val status = connection.responseCode
-        val stream = if (status in 200..299) connection.inputStream else connection.errorStream ?: connection.inputStream
-        val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-        return TextResponse(statusCode = status, body = body)
+        return try {
+            val status = connection.responseCode
+            val stream = if (status in 200..299) {
+                connection.inputStream
+            } else {
+                connection.errorStream
+            }
+            val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            TextResponse(statusCode = status, body = body)
+        } finally {
+            connection.disconnect()
+        }
     }
 
-    private fun downloadZip(url: String, accessToken: String): BinaryResponse {
+    private fun downloadZip(
+        url: String,
+        accessToken: String,
+        destination: File,
+    ): BinaryResponse {
         val connection = openConnection(url, accessToken)
-        val status = connection.responseCode
-        val stream = if (status in 200..299) connection.inputStream else connection.errorStream ?: connection.inputStream
-        val body = stream?.use { it.readBytes() } ?: ByteArray(0)
-        return BinaryResponse(statusCode = status, body = body)
+        val temporary = File(destination.parentFile, ".${destination.name}.${System.nanoTime()}.tmp")
+        return try {
+            val status = connection.responseCode
+            if (status in 200..299) {
+                connection.inputStream.use { input ->
+                    FileOutputStream(temporary).use { output ->
+                        val buffer = ByteArray(UGOIRA_DOWNLOAD_BUFFER_BYTES)
+                        var written = 0L
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            written += read
+                            if (written > UGOIRA_MAX_COMPRESSED_BYTES) {
+                                throw IOException("Pixiv ugoira archive exceeds compressed-byte limit")
+                            }
+                            output.write(buffer, 0, read)
+                        }
+                        output.fd.sync()
+                    }
+                }
+                if (!temporary.renameTo(destination)) {
+                    throw IOException("Could not publish Pixiv ugoira archive")
+                }
+            } else {
+                connection.errorStream?.close()
+            }
+            BinaryResponse(statusCode = status)
+        } finally {
+            connection.disconnect()
+            if (temporary.exists()) temporary.delete()
+        }
     }
 
     private fun openConnection(url: String, accessToken: String): HttpURLConnection {
@@ -587,26 +713,38 @@ class PixivUgoiraClient(
     }
 
     private fun decodeFrames(
-        zipBytes: ByteArray,
+        archive: File,
         specs: List<UgoiraFrameSpec>,
+        maxDimension: Int,
     ): List<UgoiraFrame> {
-        val bytesByName = linkedMapOf<String, ByteArray>()
-        java.util.zip.ZipInputStream(ByteArrayInputStream(zipBytes)).use { zip ->
-            while (true) {
-                val entry = zip.nextEntry ?: break
-                if (!entry.isDirectory) {
-                    val key = entry.name.substringAfterLast('/')
-                    bytesByName[key] = zip.readBytes()
+        validateUgoiraArchive(archive, specs)
+        val frames = mutableListOf<UgoiraFrame>()
+        var decodedBytes = 0L
+        try {
+            ZipFile(archive).use { zip ->
+                specs.forEach { spec ->
+                    val entry = zip.getEntry(spec.fileName)
+                        ?: throw IOException("Pixiv ugoira frame is missing")
+                    val frameBytes = zip.getInputStream(entry).use { it.readBytes() }
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeByteArray(frameBytes, 0, frameBytes.size, bounds)
+                    validateFrameDimensions(bounds.outWidth, bounds.outHeight)
+                    val options = BitmapFactory.Options().apply {
+                        inSampleSize = ugoiraSampleSize(bounds.outWidth, bounds.outHeight, maxDimension)
+                    }
+                    val bitmap = BitmapFactory.decodeByteArray(frameBytes, 0, frameBytes.size, options)
+                        ?: throw IOException("Pixiv ugoira frame could not be decoded")
+                    decodedBytes += bitmap.allocationByteCount.toLong()
+                    if (decodedBytes > UGOIRA_MAX_DECODED_PLAYBACK_BYTES) {
+                        bitmap.recycle()
+                        throw IOException("Pixiv ugoira decoded frames exceed memory limit")
+                    }
+                    frames += UgoiraFrame(bitmap = bitmap, delayMs = spec.delayMs)
                 }
-                zip.closeEntry()
             }
-        }
-
-        val frames = specs.mapNotNull { spec ->
-            val frameBytes = bytesByName[spec.fileName] ?: return@mapNotNull null
-            val bitmap = BitmapFactory.decodeByteArray(frameBytes, 0, frameBytes.size)
-                ?: return@mapNotNull null
-            UgoiraFrame(bitmap = bitmap, delayMs = spec.delayMs)
+        } catch (error: Throwable) {
+            frames.forEach { frame -> frame.bitmap.recycle() }
+            throw error
         }
         if (frames.isEmpty()) {
             throw IOException("Pixiv ugoira zip could not be decoded")
@@ -614,15 +752,24 @@ class PixivUgoiraClient(
         return frames
     }
 
-    private fun cachePlayback(postId: String, playback: UgoiraPlayback) {
+    private fun cachePlayback(key: UgoiraLoadKey, playback: UgoiraPlayback) {
         synchronized(cacheLock) {
-            playbackCache[postId] = playback
-            while (playbackCache.size > UGOIRA_PLAYBACK_CACHE_SIZE) {
+            val weight = playback.allocationBytes
+            if (weight > UGOIRA_DECODED_CACHE_MAX_BYTES) return
+            playbackCache.put(key, playback)?.let { previous ->
+                decodedCacheBytes -= previous.allocationBytes
+            }
+            decodedCacheBytes += weight
+            while (decodedCacheBytes > UGOIRA_DECODED_CACHE_MAX_BYTES) {
                 val eldestKey = playbackCache.entries.firstOrNull()?.key ?: break
-                playbackCache.remove(eldestKey)
+                playbackCache.remove(eldestKey)?.let { removed ->
+                    decodedCacheBytes -= removed.allocationBytes
+                }
             }
         }
     }
+
+    internal fun cachedDecodedBytes(): Long = synchronized(cacheLock) { decodedCacheBytes }
 
     private fun isRetryableUgoiraStatus(statusCode: Int): Boolean {
         return statusCode == 429 || statusCode in 500..599
@@ -631,6 +778,44 @@ class PixivUgoiraClient(
     private fun ugoiraRetryDelayMs(attempt: Int): Long {
         val cappedAttempt = attempt.coerceAtLeast(0).coerceAtMost(6)
         return UGOIRA_RETRY_BASE_DELAY_MS * (1L shl cappedAttempt)
+    }
+
+    private fun String.safeCacheComponent(): String {
+        return replace(Regex("[^A-Za-z0-9._-]"), "_").take(120).ifBlank { "ugoira" }
+    }
+
+    private fun pruneArchiveDirectory(protected: File) {
+        val archives = archiveDirectory.listFiles { file -> file.isFile && file.extension == "zip" }
+            ?.sortedByDescending(File::lastModified)
+            .orEmpty()
+        var retainedBytes = 0L
+        archives.forEach { archive ->
+            if (archive == protected || retainedBytes + archive.length() <= UGOIRA_ARCHIVE_CACHE_MAX_BYTES) {
+                retainedBytes += archive.length()
+            } else {
+                archive.delete()
+            }
+        }
+    }
+
+    private fun validateFrameDimensions(width: Int, height: Int) {
+        val pixels = width.toLong() * height.toLong()
+        if (
+            width <= 0 || height <= 0 ||
+            width > UGOIRA_MAX_FRAME_DIMENSION || height > UGOIRA_MAX_FRAME_DIMENSION ||
+            pixels > UGOIRA_MAX_FRAME_PIXELS
+        ) {
+            throw IOException("Pixiv ugoira frame dimensions exceed supported limits")
+        }
+    }
+
+    private fun ugoiraSampleSize(width: Int, height: Int, maxDimension: Int): Int {
+        if (maxDimension == Int.MAX_VALUE) return 1
+        var sampleSize = 1
+        while (max(width, height) / sampleSize > maxDimension && sampleSize < 16) {
+            sampleSize *= 2
+        }
+        return sampleSize
     }
 }
 
@@ -641,6 +826,7 @@ fun PixivUgoiraPlayer(
     modifier: Modifier = Modifier,
     contentDescription: String?,
     contentScale: ContentScale = ContentScale.Fit,
+    sizeBucket: UgoiraSizeBucket = UgoiraSizeBucket.VIEWER,
     showProgressBar: Boolean = false,
     isActive: Boolean = true,
     isPlaying: Boolean? = null,
@@ -655,7 +841,9 @@ fun PixivUgoiraPlayer(
     onDurationKnown: (Long) -> Unit = {},
     onError: (String) -> Unit = {},
 ) {
-    var playback by remember(postId, client, loadGeneration) { mutableStateOf(client.cached(postId)) }
+    var playback by remember(postId, client, sizeBucket, loadGeneration) {
+        mutableStateOf(client.cached(postId, sizeBucket))
+    }
     var errorMessage by remember(postId, loadGeneration) { mutableStateOf<String?>(null) }
     var frameIndex by remember(postId, loadGeneration) { mutableIntStateOf(0) }
     var elapsedInLoopMs by remember(postId, loadGeneration) { mutableLongStateOf(0L) }
@@ -664,15 +852,15 @@ fun PixivUgoiraPlayer(
     val effectivePlaybackRate = playbackRate.coerceAtLeast(0.1f)
     val effectivePlaybackPaused = isPlaying?.not() ?: playbackPaused
 
-    LaunchedEffect(postId, client, isActive, loadGeneration) {
+    LaunchedEffect(postId, client, sizeBucket, isActive, loadGeneration) {
         frameIndex = 0
         elapsedInLoopMs = 0L
         isScrubbing = false
         playbackPaused = false
         errorMessage = null
-        playback = client.cached(postId)
+        playback = client.cached(postId, sizeBucket)
         if (playback != null || !isActive) return@LaunchedEffect
-        val result = client.load(postId)
+        val result = client.load(postId, sizeBucket)
         result.onSuccess { loaded ->
             playback = loaded
         }.onFailure { error ->
@@ -810,7 +998,9 @@ fun PixivUgoiraPlayer(
 
 data class UgoiraPlayback(
     val frames: List<UgoiraFrame>,
-)
+) {
+    val allocationBytes: Long = frames.sumOf { frame -> frame.bitmap.allocationByteCount.toLong() }
+}
 
 data class UgoiraFrame(
     val bitmap: Bitmap,
@@ -822,20 +1012,37 @@ private data class ParsedMetadata(
     val frames: List<UgoiraFrameSpec>,
 )
 
-private data class UgoiraFrameSpec(
-    val fileName: String,
-    val delayMs: Int,
-)
-
-private data class TextResponse(
+internal data class TextResponse(
     val statusCode: Int,
     val body: String,
 )
 
-private data class BinaryResponse(
+internal data class BinaryResponse(
     val statusCode: Int,
-    val body: ByteArray,
 )
+
+private data class UgoiraArchive(
+    val metadata: ParsedMetadata,
+    val file: File,
+)
+
+private data class UgoiraLoadKey(
+    val postId: String,
+    val sizeBucket: UgoiraSizeBucket,
+)
+
+private data class SharedUgoiraLoad(
+    val deferred: Deferred<UgoiraPlayback>,
+    var consumers: Int,
+)
+
+enum class UgoiraSizeBucket(
+    internal val maxDimension: Int,
+) {
+    CARD(720),
+    VIEWER(2_048),
+    EXPORT(Int.MAX_VALUE),
+}
 
 private const val PIXIV_API_BASE = "https://app-api.pixiv.net"
 private const val UGOIRA_MP4_MIME_TYPE = "video/avc"
@@ -845,6 +1052,12 @@ private const val UGOIRA_MIN_DELAY_MS = 16
 private const val UGOIRA_BITRATE_PER_PIXEL = 6
 private const val UGOIRA_MIN_BITRATE = 900_000
 private const val UGOIRA_MAX_BITRATE = 12_000_000
-private const val UGOIRA_PLAYBACK_CACHE_SIZE = 8
 private const val UGOIRA_NETWORK_MAX_ATTEMPTS = 6
 private const val UGOIRA_RETRY_BASE_DELAY_MS = 350L
+private const val UGOIRA_DOWNLOAD_BUFFER_BYTES = 64 * 1024
+internal const val UGOIRA_DECODED_CACHE_MAX_BYTES = 96L * 1024L * 1024L
+internal const val UGOIRA_MAX_DECODED_PLAYBACK_BYTES = 192L * 1024L * 1024L
+internal const val UGOIRA_MAX_FRAME_DIMENSION = 8_192
+internal const val UGOIRA_MAX_FRAME_PIXELS = 40_000_000L
+internal const val UGOIRA_ARCHIVE_CACHE_MAX_BYTES = 512L * 1024L * 1024L
+private const val UGOIRA_ARCHIVE_MEMORY_ENTRY_LIMIT = 32
