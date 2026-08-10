@@ -2,9 +2,12 @@ package com.theoriacodex.app.recommend
 
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.InMemoryLikesRepository
+import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.SourceRuntimeSettings
+import com.theoriacodex.data.repository.RecentPostSection
+import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.repository.defaultRecommendationProfiles
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
@@ -23,6 +26,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -33,6 +37,34 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ForYouCoordinatorTest {
+    @Test
+    fun `accepted recommendation root and page are recorded in FYP Recents`() = runTest {
+        val recents = InMemoryRecentsRepository(clock = { 100L })
+        val likes = InMemoryLikesRepository()
+        likes.toggleLike(
+            profileId = defaultRecommendationProfiles().first().profileId,
+            postId = PostId(SourceKey.PIXIV, "liked-pixiv"),
+            tags = listOf("favorite"),
+        )
+        val coordinator = ForYouCoordinator(
+            registry = registryOf(FakeAdapter(SourceKey.PIXIV, "pixiv-post")),
+            settingsRepository = InMemorySettingsRepository(),
+            likesRepository = likes,
+            recentsRepository = recents,
+        )
+
+        coordinator.initialize()
+        coordinator.refresh(shuffle = false)
+        coordinator.loadNextPage()
+
+        val entries = recents.observeWatchedPosts().first()
+        assertEquals(setOf("pixiv-post", "pixiv-post-next"), entries.map { it.post.id.sourcePostId }.toSet())
+        assertTrue(entries.all { it.section == RecentPostSection.FYP })
+        assertTrue(entries.all { it.origin == ViewerStreamSource.FOR_YOU })
+        assertTrue(entries.all { it.originQueryHash == "for_you:${coordinator.seedId}" })
+        assertEquals(2, recents.observeActivity().first().size)
+    }
+
     @Test
     fun `shuffled recommendations use the injected seed source`() = runTest {
         var seedReads = 0
@@ -207,6 +239,7 @@ class ForYouCoordinatorTest {
         val capabilities = MutableStateFlow(setOf(SourceKey.PIXIV, SourceKey.RULE34XXX))
         val registry = mutableRegistryOf(capabilities, pixiv, rule34)
         val likesRepository = InMemoryLikesRepository()
+        val recentsRepository = InMemoryRecentsRepository()
         val profileId = defaultRecommendationProfiles().first().profileId
         likesRepository.toggleLike(profileId, PostId(SourceKey.PIXIV, "liked-pixiv"), listOf("pixiv seed"))
         likesRepository.toggleLike(profileId, PostId(SourceKey.RULE34XXX, "liked-rule34"), listOf("rule34 seed"))
@@ -214,6 +247,7 @@ class ForYouCoordinatorTest {
             registry = registry,
             settingsRepository = InMemorySettingsRepository(),
             likesRepository = likesRepository,
+            recentsRepository = recentsRepository,
         )
         coordinator.initialize()
 
@@ -233,6 +267,10 @@ class ForYouCoordinatorTest {
 
         assertEquals(listOf(SourceKey.PIXIV), coordinator.results.map { it.id.source }.distinct())
         assertEquals("pixiv-current", coordinator.results.single().id.sourcePostId)
+        assertEquals(
+            listOf(SourceKey.PIXIV),
+            recentsRepository.observeWatchedPosts().first().map { it.post.id.source }.distinct(),
+        )
         assertFalse(coordinator.loading)
         assertNull(coordinator.errorMessage)
     }

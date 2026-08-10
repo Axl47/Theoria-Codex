@@ -1,6 +1,8 @@
 package com.theoriacodex.app.recents
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,6 +59,7 @@ import java.util.Locale
 fun RecentsScreen(
     watchedPosts: List<RecentPostEntry>,
     codexPosts: List<RecentPostEntry>,
+    fypPosts: List<RecentPostEntry>,
     searches: List<RecentSearchEntry>,
     activity: List<RecentActivityEntry>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
@@ -77,15 +80,17 @@ fun RecentsScreen(
     onGoToSearch: () -> Unit,
     onOpenWatchedPost: (Int) -> Unit,
     onOpenCodexPost: (Int) -> Unit,
+    onOpenFypPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
     onClear: (RecentsClearTarget) -> Unit,
 ) {
     var filter by rememberSaveable { mutableStateOf(RecentsFilter.WATCHED) }
-    val now = remember(watchedPosts, codexPosts, searches, activity) { System.currentTimeMillis() }
+    val now = remember(watchedPosts, codexPosts, fypPosts, searches, activity) { System.currentTimeMillis() }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     val hasContent = when (filter) {
         RecentsFilter.WATCHED -> watchedPosts.isNotEmpty()
         RecentsFilter.CODEX -> codexPosts.isNotEmpty()
+        RecentsFilter.FYP -> fypPosts.isNotEmpty()
         RecentsFilter.SEARCHES -> searches.isNotEmpty()
         RecentsFilter.ALL -> activity.isNotEmpty()
     }
@@ -113,6 +118,9 @@ fun RecentsScreen(
         }
 
         Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -147,6 +155,17 @@ fun RecentsScreen(
                 emptyMessage = "Posts appear here after you open them from Codex.",
             )
 
+            RecentsFilter.FYP -> WatchedGrid(
+                watchedPosts = fypPosts,
+                now = now,
+                pixivUgoiraClient = pixivUgoiraClient,
+                likedPostIds = likedPostIds,
+                onToggleLike = onToggleLike,
+                onOpenWatchedPost = onOpenFypPost,
+                onLongPress = { selectedActionPost = it },
+                emptyMessage = "Recommendations appear here after For You generates them.",
+            )
+
             RecentsFilter.SEARCHES -> SearchHistoryList(
                 searches = searches,
                 now = now,
@@ -157,9 +176,11 @@ fun RecentsScreen(
                 activity = activity,
                 watchedPosts = watchedPosts,
                 codexPosts = codexPosts,
+                fypPosts = fypPosts,
                 now = now,
                 onOpenWatchedPost = onOpenWatchedPost,
                 onOpenCodexPost = onOpenCodexPost,
+                onOpenFypPost = onOpenFypPost,
                 onOpenSearch = onOpenSearch,
             )
         }
@@ -257,13 +278,15 @@ private fun ActivityList(
     activity: List<RecentActivityEntry>,
     watchedPosts: List<RecentPostEntry>,
     codexPosts: List<RecentPostEntry>,
+    fypPosts: List<RecentPostEntry>,
     now: Long,
     onOpenWatchedPost: (Int) -> Unit,
     onOpenCodexPost: (Int) -> Unit,
+    onOpenFypPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
 ) {
     if (activity.isEmpty()) {
-        EmptyRecentState("Watched posts and applied searches appear here.")
+        EmptyRecentState("Recent posts and applied searches appear here.")
         return
     }
 
@@ -276,9 +299,11 @@ private fun ActivityList(
                 entry = entry,
                 watchedPosts = watchedPosts,
                 codexPosts = codexPosts,
+                fypPosts = fypPosts,
                 now = now,
                 onOpenWatchedPost = onOpenWatchedPost,
                 onOpenCodexPost = onOpenCodexPost,
+                onOpenFypPost = onOpenFypPost,
                 onOpenSearch = onOpenSearch,
             )
         }
@@ -290,9 +315,11 @@ private fun RecentActivityRow(
     entry: RecentActivityEntry,
     watchedPosts: List<RecentPostEntry>,
     codexPosts: List<RecentPostEntry>,
+    fypPosts: List<RecentPostEntry>,
     now: Long,
     onOpenWatchedPost: (Int) -> Unit,
     onOpenCodexPost: (Int) -> Unit,
+    onOpenFypPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
 ) {
     when (entry) {
@@ -304,8 +331,10 @@ private fun RecentActivityRow(
                     postEntry = entry.entry,
                     watchedPosts = watchedPosts,
                     codexPosts = codexPosts,
+                    fypPosts = fypPosts,
                     onOpenWatchedPost = onOpenWatchedPost,
                     onOpenCodexPost = onOpenCodexPost,
+                    onOpenFypPost = onOpenFypPost,
                 )
             },
         )
@@ -322,14 +351,23 @@ private fun openRecentPost(
     postEntry: RecentPostEntry,
     watchedPosts: List<RecentPostEntry>,
     codexPosts: List<RecentPostEntry>,
+    fypPosts: List<RecentPostEntry>,
     onOpenWatchedPost: (Int) -> Unit,
     onOpenCodexPost: (Int) -> Unit,
+    onOpenFypPost: (Int) -> Unit,
 ) {
-    val isCodex = postEntry.section == RecentPostSection.CODEX
-    val sourcePosts = if (isCodex) codexPosts else watchedPosts
+    val sourcePosts = when (postEntry.section) {
+        RecentPostSection.WATCHED -> watchedPosts
+        RecentPostSection.CODEX -> codexPosts
+        RecentPostSection.FYP -> fypPosts
+    }
     val index = sourcePosts.indexOfFirst { candidate -> candidate.post.id == postEntry.post.id }
     if (index < 0) return
-    if (isCodex) onOpenCodexPost(index) else onOpenWatchedPost(index)
+    when (postEntry.section) {
+        RecentPostSection.WATCHED -> onOpenWatchedPost(index)
+        RecentPostSection.CODEX -> onOpenCodexPost(index)
+        RecentPostSection.FYP -> onOpenFypPost(index)
+    }
 }
 
 @Composable
@@ -477,13 +515,14 @@ private enum class RecentsFilter(
 ) {
     WATCHED("Watched", RecentsClearTarget.WATCHED),
     CODEX("Codex", RecentsClearTarget.CODEX),
+    FYP("FYP", RecentsClearTarget.FYP),
     SEARCHES("Searches", RecentsClearTarget.SEARCHES),
     ALL("All", RecentsClearTarget.ALL),
 }
 
 private fun activityKey(entry: RecentActivityEntry): String {
     return when (entry) {
-        is RecentActivityEntry.Watched -> "watched:${entry.entry.post.id.source.name}:${entry.entry.post.id.sourcePostId}:${entry.occurredAtEpochMs}"
+        is RecentActivityEntry.Watched -> "watched:${entry.entry.section.name}:${entry.entry.post.id.source.name}:${entry.entry.post.id.sourcePostId}:${entry.occurredAtEpochMs}"
         is RecentActivityEntry.Search -> "search:${entry.entry.queryHash}:${entry.occurredAtEpochMs}"
     }
 }

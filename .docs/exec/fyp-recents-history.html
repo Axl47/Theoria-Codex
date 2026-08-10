@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FYP Recents History ExecPlan</title>
+</head>
+<body>
+  <main>
+    <h1>FYP Recommendation History in Recents</h1>
+    <p>Status: implementation and deterministic host validation complete; manual isolated-Debug acceptance remains. Owner: current Codex task.</p>
+
+    <h2>Purpose</h2>
+    <p>Add an FYP section to Recents that durably captures accepted recommendation results and includes those memberships in All without conflating them with Watched or Codex.</p>
+
+    <h2>Runtime flow</h2>
+    <ol>
+      <li>For You accepts a root recommendation generation or appended page in <code>ForYouCoordinator</code>.</li>
+      <li>The coordinator records the accepted page as one bounded Recents batch with <code>FOR_YOU</code> origin, the current seed identity, and the independent <code>FYP</code> section.</li>
+      <li>The existing Room post payload and section-keyed membership table persist and deduplicate canonical posts; no schema migration is needed.</li>
+      <li>The Recents boundary projects Watched, Codex, and FYP independently. FYP renders through the shared post grid and All receives FYP through the existing activity merge.</li>
+      <li>Opening an FYP item from either FYP or All creates a static Recents Viewer session scoped to the FYP membership list.</li>
+    </ol>
+
+    <h2>Behavior and error boundaries</h2>
+    <ul>
+      <li>Only admitted root/page results are recorded; stale, cancelled, and failed provider work never enters Recents.</li>
+      <li>Root generation records its accepted page; pagination records only the accepted appended page.</li>
+      <li>A canonical post can independently belong to Watched, Codex, and FYP.</li>
+      <li>FYP clear has exact Undo. All clear/Undo includes FYP alongside the existing sections and searches.</li>
+      <li>A Recents write failure must not discard an otherwise valid recommendation feed; cancellation still propagates.</li>
+      <li>The existing global Recents bound remains authoritative for post history.</li>
+    </ul>
+
+    <h2>Acceptance and validation</h2>
+    <ul>
+      <li>Repository tests prove atomic batch recording, FYP identity, deduplication, and Room persistence.</li>
+      <li>Coordinator tests prove accepted root/page recommendations are recorded and failed/stale work is not.</li>
+      <li>Clear workflow tests prove FYP and All snapshots restore exactly.</li>
+      <li>Route/architecture coverage proves FYP projection and FYP Viewer navigation from the standalone and All surfaces.</li>
+      <li>Run focused JVM tests, Debug compilation, relevant Detekt owners, HTML validation, and diff checks once.</li>
+      <li>Leave grid/filter spacing and interactive navigation for manual isolated-Debug acceptance; run no connected or package-mutating command.</li>
+    </ul>
+
+    <h2>Progress</h2>
+    <ul>
+      <li>Complete: traced authoritative generation, persistence, UI, clear/Undo, and Viewer boundaries.</li>
+      <li>Complete: accepted root/page results write deduplicated FYP memberships; stale and cancelled work is excluded.</li>
+      <li>Complete: FYP is projected through its shared post grid, All, section-aware Viewer reopening, and exact clear/Undo.</li>
+      <li>Complete: 56 focused tests passed with zero failures/errors and six intentional file-backed skips; app compilation, app/Room Detekt, HTML validation, and diff checks passed.</li>
+      <li>Pending: manual FYP grid, filter-row scrolling, and All navigation acceptance in the isolated Debug app.</li>
+    </ul>
+  </main>
+</body>
+</html>

@@ -177,6 +177,7 @@ import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.RecentPostSection
+import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -1520,9 +1521,41 @@ internal fun TheoriaAppContent(
 
                                 TopLevelDestination.Recents -> {
                                     RecentsDestinationStateBoundary(dataDependencies) { state ->
+                                        val openRecentSection = {
+                                            entries: List<RecentPostEntry>,
+                                            index: Int,
+                                            section: RecentPostSection ->
+                                            val posts = entries.map { entry -> entry.post }
+                                            if (posts.isNotEmpty()) {
+                                                val context = ViewerLaunchContext(
+                                                    queryHash = "recents:${section.name.lowercase()}",
+                                                    startIndex = index.coerceIn(0, posts.lastIndex),
+                                                    streamSource = ViewerStreamSource.RECENTS,
+                                                    scrollOffsetHint = 0,
+                                                    recentsSection = section,
+                                                )
+                                                scope.launch {
+                                                    val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
+                                                        posts,
+                                                        context,
+                                                    )
+                                                    viewerSessionOwner.retain(
+                                                        ViewerSession(
+                                                            posts = preparedPosts,
+                                                            context = context,
+                                                            liveSearchBinding = false,
+                                                        ),
+                                                    )
+                                                    dataDependencies.uiRestoreRepository
+                                                        .setViewerLaunchContext(context)
+                                                    navController.navigate(AppRoute.Viewer)
+                                                }
+                                            }
+                                        }
                                         RecentsScreen(
                                         watchedPosts = state.watchedPosts,
                                         codexPosts = state.codexPosts,
+                                        fypPosts = state.fypPosts,
                                         searches = state.searches,
                                         activity = state.activity,
                                         pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
@@ -1560,55 +1593,25 @@ internal fun TheoriaAppContent(
                                             }
                                         },
                                         onOpenWatchedPost = { index ->
-                                            val posts = state.watchedPosts.map { entry -> entry.post }
-                                            if (posts.isNotEmpty()) {
-                                                val context = ViewerLaunchContext(
-                                                    queryHash = "recents:watched",
-                                                    startIndex = index.coerceIn(0, posts.lastIndex),
-                                                    streamSource = ViewerStreamSource.RECENTS,
-                                                    scrollOffsetHint = 0,
-                                                    recentsSection = RecentPostSection.WATCHED,
-                                                )
-                                                scope.launch {
-                                                    val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
-                                                        posts,
-                                                        context,
-                                                    )
-                                                    viewerSessionOwner.retain(
-                                                        ViewerSession(
-                                                            posts = preparedPosts,
-                                                            context = context,
-                                                            liveSearchBinding = false,
-                                                        ),
-                                                    )
-                                                    dataDependencies.uiRestoreRepository.setViewerLaunchContext(context)
-                                                    navController.navigate(AppRoute.Viewer)
-                                                }
-                                            }
+                                            openRecentSection(
+                                                state.watchedPosts,
+                                                index,
+                                                RecentPostSection.WATCHED,
+                                            )
                                         },
                                         onOpenCodexPost = { index ->
-                                            val posts = state.codexPosts.map { entry -> entry.post }
-                                            if (posts.isNotEmpty()) {
-                                                val context = ViewerLaunchContext(
-                                                    queryHash = "recents:codex",
-                                                    startIndex = index.coerceIn(0, posts.lastIndex),
-                                                    streamSource = ViewerStreamSource.RECENTS,
-                                                    scrollOffsetHint = 0,
-                                                    recentsSection = RecentPostSection.CODEX,
-                                                )
-                                                scope.launch {
-                                                    val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(posts, context)
-                                                    viewerSessionOwner.retain(
-                                                        ViewerSession(
-                                                            posts = preparedPosts,
-                                                            context = context,
-                                                            liveSearchBinding = false,
-                                                        ),
-                                                    )
-                                                    dataDependencies.uiRestoreRepository.setViewerLaunchContext(context)
-                                                    navController.navigate(AppRoute.Viewer)
-                                                }
-                                            }
+                                            openRecentSection(
+                                                state.codexPosts,
+                                                index,
+                                                RecentPostSection.CODEX,
+                                            )
+                                        },
+                                        onOpenFypPost = { index ->
+                                            openRecentSection(
+                                                state.fypPosts,
+                                                index,
+                                                RecentPostSection.FYP,
+                                            )
                                         },
                                         onOpenSearch = { entry ->
                                             scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -1647,6 +1650,7 @@ internal fun TheoriaAppContent(
                                                     target = target,
                                                     watchedPosts = state.watchedPosts,
                                                     codexPosts = state.codexPosts,
+                                                    fypPosts = state.fypPosts,
                                                     searches = state.searches,
                                                     showActionableFeedback = ::showActionableFeedback,
                                                 )

@@ -245,23 +245,39 @@ class InMemoryRecentsRepository(
         origin: ViewerStreamSource,
         originQueryHash: String?,
         section: RecentPostSection,
+    ) = recordRecentPosts(listOf(post), origin, originQueryHash, section)
+
+    override suspend fun recordRecentPosts(
+        posts: List<Post>,
+        origin: ViewerStreamSource,
+        originQueryHash: String?,
+        section: RecentPostSection,
     ) {
+        val canonicalPosts = posts.distinctBy(Post::id)
+        if (canonicalPosts.isEmpty()) return
         mutex.withLock {
-            val previousEntry = watched.value.firstOrNull { entry ->
-                entry.post.id == post.id && entry.section == section
-            }
-            val effectiveOrigin = previousEntry?.origin.takeIf { origin == ViewerStreamSource.RECENTS } ?: origin
-            val effectiveQueryHash = previousEntry?.originQueryHash.takeIf { origin == ViewerStreamSource.RECENTS }
-                ?: originQueryHash
-            watched.value = RepositoryPolicies.recordWatched(
-                entries = watched.value,
-                entry = RecentPostEntry(
+            val recordedAt = clock()
+            val replacements = canonicalPosts.map { post ->
+                val previousEntry = watched.value.firstOrNull { entry ->
+                    entry.post.id == post.id && entry.section == section
+                }
+                val effectiveOrigin = previousEntry?.origin
+                    .takeIf { origin == ViewerStreamSource.RECENTS } ?: origin
+                val effectiveQueryHash = previousEntry?.originQueryHash
+                    .takeIf { origin == ViewerStreamSource.RECENTS } ?: originQueryHash
+                RecentPostEntry(
                     post = post,
-                    viewedAtEpochMs = clock(),
+                    viewedAtEpochMs = recordedAt,
                     origin = effectiveOrigin,
                     originQueryHash = effectiveQueryHash,
                     section = section,
-                ),
+                )
+            }
+            val replacementIds = replacements.mapTo(mutableSetOf()) { entry -> entry.post.id to entry.section }
+            watched.value = RepositoryPolicies.normalizeRecentWatched(
+                entries = replacements + watched.value.filterNot { entry ->
+                    (entry.post.id to entry.section) in replacementIds
+                },
                 limit = watchedLimit,
             )
         }

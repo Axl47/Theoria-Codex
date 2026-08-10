@@ -249,6 +249,7 @@ internal class DefaultTheoriaAppContainer(
             registry = sourceRegistry,
             settingsRepository = settingsRepository,
             likesRepository = likesRepository,
+            recentsRepository = recentsRepository,
             tagSuggestionStore = tagSuggestionStore,
         ),
         creatorProfile = CreatorProfileCoordinator(registry = sourceRegistry),

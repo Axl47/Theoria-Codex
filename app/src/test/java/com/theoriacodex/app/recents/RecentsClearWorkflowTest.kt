@@ -20,6 +20,11 @@ class RecentsClearWorkflowTest {
         val repository = InMemoryRecentsRepository(clock = { now++ })
         repository.recordWatchedPost(testPost(sourcePostId = "watched"), ViewerStreamSource.SEARCH, "search")
         repository.recordWatchedPost(testPost(sourcePostId = "codex"), ViewerStreamSource.CODEX, "codex")
+        repository.recordRecentPosts(
+            listOf(testPost(sourcePostId = "fyp")),
+            ViewerStreamSource.FOR_YOU,
+            "for_you:seed",
+        )
         repository.recordSearch(recentQuery(), "query")
         val watched = repository.observeWatchedPosts().first()
         val searches = repository.observeSearches().first()
@@ -29,6 +34,7 @@ class RecentsClearWorkflowTest {
             target = RecentsClearTarget.ALL,
             watchedPosts = watched.filter { it.section == RecentPostSection.WATCHED },
             codexPosts = watched.filter { it.section == RecentPostSection.CODEX },
+            fypPosts = watched.filter { it.section == RecentPostSection.FYP },
             searches = searches,
             showActionableFeedback = { message, action ->
                 feedback += message to action
@@ -53,6 +59,7 @@ class RecentsClearWorkflowTest {
             target = RecentsClearTarget.WATCHED,
             watchedPosts = watched.filter { it.section == RecentPostSection.WATCHED },
             codexPosts = watched.filter { it.section == RecentPostSection.CODEX },
+            fypPosts = watched.filter { it.section == RecentPostSection.FYP },
             searches = repository.observeSearches().first(),
             showActionableFeedback = { message, action ->
                 assertEquals("Watched history cleared", message)
@@ -66,6 +73,32 @@ class RecentsClearWorkflowTest {
             repository.observeWatchedPosts().first().map { it.section },
         )
         assertEquals(1, repository.observeSearches().first().size)
+    }
+
+    @Test
+    fun `FYP clear undo restores generated recommendation memberships`() = runTest {
+        val repository = InMemoryRecentsRepository(clock = { 100L })
+        repository.recordRecentPosts(
+            posts = listOf(testPost(sourcePostId = "first"), testPost(sourcePostId = "second")),
+            origin = ViewerStreamSource.FOR_YOU,
+            originQueryHash = "for_you:seed",
+        )
+        val fyp = repository.observeWatchedPosts().first()
+
+        RecentsClearWorkflow(repository).clear(
+            target = RecentsClearTarget.FYP,
+            watchedPosts = emptyList(),
+            codexPosts = emptyList(),
+            fypPosts = fyp,
+            searches = emptyList(),
+            showActionableFeedback = { message, action ->
+                assertEquals("FYP history cleared", message)
+                assertEquals("Undo", action)
+                true
+            },
+        )
+
+        assertEquals(fyp, repository.observeWatchedPosts().first())
     }
 
     private fun recentQuery(): Query = Query(

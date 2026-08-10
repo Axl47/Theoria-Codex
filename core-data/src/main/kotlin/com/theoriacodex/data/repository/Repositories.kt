@@ -42,11 +42,16 @@ interface QueryRepository {
 enum class RecentPostSection {
     WATCHED,
     CODEX,
+    FYP,
     ;
 
     companion object {
         fun fromOrigin(origin: ViewerStreamSource): RecentPostSection {
-            return if (origin == ViewerStreamSource.CODEX) CODEX else WATCHED
+            return when (origin) {
+                ViewerStreamSource.CODEX -> CODEX
+                ViewerStreamSource.FOR_YOU -> FYP
+                else -> WATCHED
+            }
         }
     }
 }
@@ -103,6 +108,12 @@ interface RecentsRepository {
     fun observeActivity(): Flow<List<RecentActivityEntry>>
     suspend fun recordWatchedPost(
         post: Post,
+        origin: ViewerStreamSource,
+        originQueryHash: String?,
+        section: RecentPostSection = RecentPostSection.fromOrigin(origin),
+    )
+    suspend fun recordRecentPosts(
+        posts: List<Post>,
         origin: ViewerStreamSource,
         originQueryHash: String?,
         section: RecentPostSection = RecentPostSection.fromOrigin(origin),
@@ -374,6 +385,7 @@ internal fun decodeRestoredRecentsSection(
     if (decoded != null || streamSource != ViewerStreamSource.RECENTS) return decoded
     return when (queryHash) {
         "recents:codex" -> RecentPostSection.CODEX
+        "recents:fyp" -> RecentPostSection.FYP
         "recents:watched" -> RecentPostSection.WATCHED
         else -> null
     }

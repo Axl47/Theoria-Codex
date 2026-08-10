@@ -69,6 +69,7 @@ internal data class BrowsingDestinationState(
 internal data class RecentsDestinationState(
     val watchedPosts: List<RecentPostEntry>,
     val codexPosts: List<RecentPostEntry>,
+    val fypPosts: List<RecentPostEntry>,
     val searches: List<RecentSearchEntry>,
     val activity: List<RecentActivityEntry>,
     val likedPostIds: Set<PostId>,
@@ -188,6 +189,7 @@ internal fun RecentsDestinationStateBoundary(
             RecentsDestinationState(
                 watchedPosts = watched.filter { it.section == RecentPostSection.WATCHED },
                 codexPosts = watched.filter { it.section == RecentPostSection.CODEX },
+                fypPosts = watched.filter { it.section == RecentPostSection.FYP },
                 searches = searchesState.value,
                 activity = activityState.value,
                 likedPostIds = likedState.value,

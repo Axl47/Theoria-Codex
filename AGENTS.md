@@ -54,6 +54,8 @@ The collapsed Search field renders applied context through its existing unfocuse
 
 Watched and Codex are independent Recents memberships, not mutually exclusive labels derived from the latest Viewer origin. One canonical post may have one row in each section while sharing the same `posts` payload. Keep section in the `recent_watched` identity, preserve exact launch origin as row metadata, carry the section explicitly through `ViewerLaunchContext` when reopening from Recents, and clear or route by section. The combined All activity view may collapse duplicate canonical posts to the newest membership, but the filtered sections must retain both.
 
+FYP is a third independent post membership. `ForYouCoordinator` records only accepted root/page results as bounded batches with `FOR_YOU` origin, seed identity, and the `FYP` section; stale, cancelled, failed, or merely recomposed work must not enter Recents. Opening from FYP or All uses a static Recents Viewer session scoped to FYP, while direct For You Viewer activity refreshes that same membership. Keep FYP in section clear/Undo and All snapshots without converting it into Watched.
+
 Recent Searches preserve the accepted execution kind and participating sources. Temporary multi-source executions are recorded and reopen as Multi-Search with their explicit source set, but they remain excluded from durable applied-query and Search-scroll restoration. Room stores this metadata in the versioned recent-search wrapper inside the existing query payload column; keep decoding the legacy raw Query payload so existing history remains readable without a database migration.
 
 ## Legacy JSON Recovery

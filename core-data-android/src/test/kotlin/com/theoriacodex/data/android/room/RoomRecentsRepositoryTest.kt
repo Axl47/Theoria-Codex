@@ -59,6 +59,27 @@ class RoomRecentsRepositoryTest {
         assertEquals(listOf(SourceKey.GELBOORU, SourceKey.PIXIV), restored.sources)
     }
 
+    @Test fun `generated FYP batch is deduplicated and remains independent from watched`() = runTest {
+        val repository = RoomRecentsRepository(database, clock = { now++ })
+        val shared = recentPost("shared-fyp")
+        val generated = recentPost("generated-fyp")
+        repository.recordWatchedPost(shared, ViewerStreamSource.SEARCH, "search:seed")
+
+        repository.recordRecentPosts(
+            posts = listOf(shared, generated, generated),
+            origin = ViewerStreamSource.FOR_YOU,
+            originQueryHash = "for_you:seed",
+        )
+
+        val entries = repository.observeWatchedPosts().first()
+        assertEquals(3, entries.size)
+        assertEquals(2, entries.count { it.section == RecentPostSection.FYP })
+        assertTrue(entries.filter { it.section == RecentPostSection.FYP }.all {
+            it.origin == ViewerStreamSource.FOR_YOU && it.originQueryHash == "for_you:seed"
+        })
+        assertEquals(2, entries.count { it.post.id == shared.id })
+    }
+
     @Test fun `dedupe caps deterministic ties and origin preservation match Recents contract`() = runTest {
         val repository = RoomRecentsRepository(database, watchedLimit = 2, searchLimit = 2, clock = { now })
         repository.recordWatchedPost(recentPost("b"), ViewerStreamSource.SEARCH, "original")
@@ -99,7 +120,7 @@ class RoomRecentsRepositoryTest {
         codex.addItem(codexId, shared)
         recents.recordWatchedPost(shared, ViewerStreamSource.SEARCH, null)
         recents.recordWatchedPost(shared, ViewerStreamSource.CODEX, null)
-        recents.recordWatchedPost(recentsOnly, ViewerStreamSource.FOR_YOU, null)
+        recents.recordWatchedPost(recentsOnly, ViewerStreamSource.SEARCH, null)
 
         recents.clearWatchedPosts(RecentPostSection.WATCHED)
         assertNull(codex.getPost(recentsOnly.id))
@@ -145,7 +166,12 @@ class RoomRecentsRepositoryTest {
 
         repository.clearAll()
         now = 500L
-        repository.recordWatchedPost(shared, ViewerStreamSource.FOR_YOU, "newer")
+        repository.recordWatchedPost(
+            shared,
+            ViewerStreamSource.FOR_YOU,
+            "newer",
+            RecentPostSection.WATCHED,
+        )
         repository.recordSearch(recentQuery("newer"), "restore-query")
         repository.restoreEntries(watchedSnapshot, searchSnapshot)
 

@@ -6,9 +6,12 @@ import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.InMemoryLikesRepository
+import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.LikedPost
 import com.theoriacodex.data.repository.LikesRepository
+import com.theoriacodex.data.repository.RecentPostSection
+import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.defaultRecommendationProfiles
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -40,6 +43,7 @@ class ForYouCoordinator(
     private val registry: SourceAdapterRegistry,
     private val settingsRepository: SettingsRepository = InMemorySettingsRepository(),
     private val likesRepository: LikesRepository = InMemoryLikesRepository(),
+    private val recentsRepository: RecentsRepository = InMemoryRecentsRepository(),
     private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
     private val seedSource: () -> Long = System::currentTimeMillis,
 ) {
@@ -239,6 +243,7 @@ class ForYouCoordinator(
                 putAll(pageResult.nextPageTokens)
             }
             canLoadMore = nextPageTokens.values.any { token -> !token.isNullOrBlank() }
+            recordRecommendations(pageResult.items)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
@@ -451,7 +456,7 @@ class ForYouCoordinator(
         val ownerJob: Job?,
     )
 
-    private fun applyFeedResult(
+    private suspend fun applyFeedResult(
         seed: Map<SourceKey, List<String>>,
         result: UnifiedSearchResult,
     ) {
@@ -461,6 +466,19 @@ class ForYouCoordinator(
         canLoadMore = nextPageTokens.values.any { token -> !token.isNullOrBlank() }
         seedSummaryBySource = seed
         seedId = buildSeedId(seed)
+        recordRecommendations(result.items)
+    }
+
+    private suspend fun recordRecommendations(posts: List<Post>) {
+        if (posts.isEmpty()) return
+        runCatchingPreservingCancellation {
+            recentsRepository.recordRecentPosts(
+                posts = posts,
+                origin = ViewerStreamSource.FOR_YOU,
+                originQueryHash = "for_you:$seedId",
+                section = RecentPostSection.FYP,
+            )
+        }
     }
 
     private suspend fun runUnifiedSearch(

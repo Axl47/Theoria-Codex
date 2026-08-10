@@ -4,6 +4,31 @@ updated_at: 2026-08-03T00:03:12-04:00
 ---
 # Working List
 
+## Current Task: Add FYP Recommendation History to Recents
+
+### In Progress
+
+None.
+
+### Pending
+
+- [ ] Manually confirm the FYP grid, filter-row layout, and All navigation in the isolated Debug app.
+
+### Done
+
+- [x] Trace authoritative FYP generation, Recents membership, All merging, clear/Undo, and Viewer reopening.
+  - Evidence: `ForYouCoordinator` owns accepted root/page results; `recent_watched` already supports independent section identity; `observeActivity` merges all stored post memberships; and Recents/Viewer routing currently branches only between Watched and Codex. The smallest complete repair is a bulk FYP membership write at accepted coordinator results plus one new section through the existing Recents boundaries.
+- [x] Define the implementation boundary before runtime edits.
+  - Evidence: `.docs/exec/fyp-recents-history.html` fixes generation/page recording, membership identity, FYP/All UI behavior, clear/Undo, failure isolation, and bounded validation.
+- [x] Implement accepted FYP generation recording as an independent Recents membership.
+  - Evidence: `ForYouCoordinator` records accepted root pages and appended pages through one deduplicated repository batch with `FOR_YOU` origin, seed identity, and `FYP` section. Local Recents failures do not discard a valid feed, while cancellation still propagates; direct For You Viewer activity resolves to the same FYP membership.
+- [x] Add the FYP section through Recents, All, Viewer navigation, and clear/Undo.
+  - Evidence: the destination boundary projects FYP independently; the horizontally scrollable filter row exposes FYP; FYP uses the shared post grid; All receives FYP from the existing activity merge and routes by exact section; FYP and All clear snapshots restore exact memberships.
+- [x] Add focused repository, coordinator, clear/Undo, and route regression coverage.
+  - Evidence: 56 focused tests passed with zero failures/errors; six unrelated file-backed contract cases remained intentionally skipped. Coverage includes in-memory/Room batch identity, accepted root/page recording, stale request exclusion, FYP clear/Undo, and Viewer section derivation.
+- [x] Run one bounded host validation batch and close deterministic evidence.
+  - Evidence: focused tests, `:app:compileDebugKotlin`, `:app:detektDebug`, `:core-data-android:detektDebug`, `html-validate`, and `git diff --check` passed. No device, connected, install, package mutation, or live-provider lane ran.
+
 ## Current Task: Make Recent Searches Source-Aware
 
 ### In Progress

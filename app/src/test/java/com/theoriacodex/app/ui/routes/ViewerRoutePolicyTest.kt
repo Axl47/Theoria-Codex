@@ -44,6 +44,10 @@ class ViewerRoutePolicyTest {
             RecentPostSection.WATCHED,
             recentPostSectionForViewer(recentsCodex.copy(streamSource = ViewerStreamSource.SEARCH, recentsSection = null)),
         )
+        assertEquals(
+            RecentPostSection.FYP,
+            recentPostSectionForViewer(recentsCodex.copy(streamSource = ViewerStreamSource.FOR_YOU, recentsSection = null)),
+        )
     }
 
     @Test

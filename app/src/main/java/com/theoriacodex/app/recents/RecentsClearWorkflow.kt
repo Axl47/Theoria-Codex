@@ -12,6 +12,7 @@ enum class RecentsClearTarget(
 ) {
     WATCHED("Watched history cleared", "watched history"),
     CODEX("Codex history cleared", "Codex history"),
+    FYP("FYP history cleared", "FYP history"),
     SEARCHES("Search history cleared", "search history"),
     ALL("All history cleared", "all history"),
 }
@@ -23,6 +24,7 @@ internal class RecentsClearWorkflow(
         target: RecentsClearTarget,
         watchedPosts: List<RecentPostEntry>,
         codexPosts: List<RecentPostEntry>,
+        fypPosts: List<RecentPostEntry>,
         searches: List<RecentSearchEntry>,
         showActionableFeedback: suspend (message: String, actionLabel: String) -> Boolean,
     ) {
@@ -36,8 +38,9 @@ internal class RecentsClearWorkflow(
         val watchedSnapshot = when (target) {
             RecentsClearTarget.WATCHED -> watchedPosts
             RecentsClearTarget.CODEX -> codexPosts
+            RecentsClearTarget.FYP -> fypPosts
             RecentsClearTarget.SEARCHES -> emptyList()
-            RecentsClearTarget.ALL -> watchedPosts + codexPosts
+            RecentsClearTarget.ALL -> watchedPosts + codexPosts + fypPosts
         }
         val searchSnapshot = when (target) {
             RecentsClearTarget.SEARCHES,
@@ -58,6 +61,7 @@ internal class RecentsClearWorkflow(
         when (target) {
             RecentsClearTarget.WATCHED -> repository.clearWatchedPosts(RecentPostSection.WATCHED)
             RecentsClearTarget.CODEX -> repository.clearWatchedPosts(RecentPostSection.CODEX)
+            RecentsClearTarget.FYP -> repository.clearWatchedPosts(RecentPostSection.FYP)
             RecentsClearTarget.SEARCHES -> repository.clearSearches()
             RecentsClearTarget.ALL -> repository.clearAll()
         }

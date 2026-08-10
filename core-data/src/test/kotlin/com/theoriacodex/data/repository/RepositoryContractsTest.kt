@@ -97,7 +97,12 @@ class RepositoryContractTest(
         )
 
         repository.recordWatchedPost(post, ViewerStreamSource.SEARCH, "old-query")
-        repository.recordWatchedPost(post, ViewerStreamSource.FOR_YOU, "new-query")
+        repository.recordWatchedPost(
+            post,
+            ViewerStreamSource.FOR_YOU,
+            "new-query",
+            RecentPostSection.WATCHED,
+        )
         repository.recordSearch(query, " query-hash ")
         repository.recordSearch(
             query.copy(includeTerms = listOf(SearchTerm("updated"))),
@@ -137,7 +142,12 @@ class RepositoryContractTest(
 
         repository.clearAll()
         now = 500L
-        repository.recordWatchedPost(watchedPost, ViewerStreamSource.FOR_YOU, "newer")
+        repository.recordWatchedPost(
+            watchedPost,
+            ViewerStreamSource.FOR_YOU,
+            "newer",
+            RecentPostSection.WATCHED,
+        )
         repository.recordSearch(query.copy(includeTerms = listOf(SearchTerm("newer"))), "restore-query")
         repository.restoreEntries(watchedSnapshot, searchSnapshot)
 
@@ -205,6 +215,29 @@ class RepositoryContractTest(
     }
 
     @Test
+    fun `recents batch records generated FYP posts as independent memberships`() = runTest {
+        assumeTrue("Room owns the second durable Recents contract lane", backend == Backend.IN_MEMORY)
+        val repository = createRecentsRepository(clock = { 100L })
+        val shared = repositoryTestPost(id = "shared-fyp")
+        val generated = repositoryTestPost(id = "generated-fyp")
+        repository.recordWatchedPost(shared, ViewerStreamSource.SEARCH, "search:seed")
+
+        repository.recordRecentPosts(
+            posts = listOf(shared, generated, generated),
+            origin = ViewerStreamSource.FOR_YOU,
+            originQueryHash = "for_you:seed",
+        )
+
+        val entries = repository.observeWatchedPosts().first()
+        assertEquals(3, entries.size)
+        assertEquals(2, entries.count { it.section == RecentPostSection.FYP })
+        assertTrue(entries.filter { it.section == RecentPostSection.FYP }.all {
+            it.origin == ViewerStreamSource.FOR_YOU && it.originQueryHash == "for_you:seed"
+        })
+        assertEquals(2, entries.count { it.post.id == shared.id })
+    }
+
+    @Test
     fun `legacy Recents viewer identities restore their typed section`() {
         assertEquals(
             RecentPostSection.CODEX,
@@ -213,6 +246,10 @@ class RepositoryContractTest(
         assertEquals(
             RecentPostSection.WATCHED,
             decodeRestoredRecentsSection(null, ViewerStreamSource.RECENTS, "recents:watched"),
+        )
+        assertEquals(
+            RecentPostSection.FYP,
+            decodeRestoredRecentsSection(null, ViewerStreamSource.RECENTS, "recents:fyp"),
         )
         assertNull(decodeRestoredRecentsSection(null, ViewerStreamSource.SEARCH, "recents:codex"))
     }
