@@ -56,14 +56,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.TagSelectionSurface
 import com.theoriacodex.domain.model.Codex
@@ -72,10 +70,10 @@ import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CodexListScreen(
+internal fun CodexListScreen(
     codices: List<Codex>,
     itemCounts: Map<String, Int>,
-    codexCoverModels: Map<String, Any?>,
+    codexCoverCandidates: Map<String, List<CodexCoverCandidate>>,
     codexSearchSourceOptions: Map<String, List<CodexSearchSourceOption>>,
     codexSearchTagOptions: Map<String, Map<SourceKey, List<CodexSearchTagOption>>>,
     onOpenCodex: (String) -> Unit,
@@ -209,20 +207,17 @@ fun CodexListScreen(
                                     .background(MaterialTheme.colorScheme.surface),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                val cover = codexCoverModels[codex.codexId]
-                                if (cover != null) {
-                                    AsyncImage(
-                                        model = cover,
-                                        contentDescription = codex.name,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop,
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Default.Image,
-                                        contentDescription = null,
-                                    )
-                                }
+                                CodexCoverImage(
+                                    candidates = codexCoverCandidates[codex.codexId].orEmpty(),
+                                    contentDescription = codex.name,
+                                    modifier = Modifier.fillMaxSize(),
+                                    fallback = {
+                                        Icon(
+                                            imageVector = Icons.Default.Image,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                )
                             }
 
                             Column(
@@ -302,7 +297,7 @@ fun CodexListScreen(
                     CodexGridTile(
                         codex = codex,
                         itemCount = itemCounts[codex.codexId] ?: 0,
-                        coverModel = codexCoverModels[codex.codexId],
+                        coverCandidates = codexCoverCandidates[codex.codexId].orEmpty(),
                         onOpen = { onOpenCodex(codex.codexId) },
                         onOpenActions = { actionTarget = codex },
                         onLongPress = { actionTarget = codex },
@@ -816,7 +811,7 @@ private const val MAX_CODEX_RANDOM_TAG_AMOUNT = 10
 private fun CodexGridTile(
     codex: Codex,
     itemCount: Int,
-    coverModel: Any?,
+    coverCandidates: List<CodexCoverCandidate>,
     onOpen: () -> Unit,
     onOpenActions: () -> Unit,
     onLongPress: () -> Unit,
@@ -837,26 +832,24 @@ private fun CodexGridTile(
                 .clip(RoundedCornerShape(22.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
-            if (coverModel != null) {
-                AsyncImage(
-                    model = coverModel,
-                    contentDescription = codex.name,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-            } else {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Image,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(28.dp),
-                    )
-                }
-            }
+            CodexCoverImage(
+                candidates = coverCandidates,
+                contentDescription = codex.name,
+                modifier = Modifier.fillMaxSize(),
+                fallback = {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Image,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(28.dp),
+                        )
+                    }
+                },
+            )
 
         }
 

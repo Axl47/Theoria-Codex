@@ -41,25 +41,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.domain.model.Codex
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SaveToCodexSheet(
+internal fun SaveToCodexSheet(
     profiles: List<RecommendationProfile>,
     initialProfileId: String,
     codicesByProfile: Map<String, List<Codex>>,
     codexItemCounts: Map<String, Int>,
-    codexCoverModels: Map<String, Any?>,
+    codexCoverCandidates: Map<String, List<CodexCoverCandidate>>,
     onCreateCodex: (String, String) -> Unit,
     onSelectCodex: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -152,7 +150,7 @@ fun SaveToCodexSheet(
                         CodexPickerRow(
                             codex = codex,
                             itemCount = codexItemCounts[codex.codexId] ?: 0,
-                            coverModel = codexCoverModels[codex.codexId],
+                            coverCandidates = codexCoverCandidates[codex.codexId].orEmpty(),
                             onClick = { onSelectCodex(codex.codexId) },
                         )
                     }
@@ -196,7 +194,7 @@ fun SaveToCodexSheet(
 private fun CodexPickerRow(
     codex: Codex,
     itemCount: Int,
-    coverModel: Any?,
+    coverCandidates: List<CodexCoverCandidate>,
     onClick: () -> Unit,
 ) {
     Surface(
@@ -220,20 +218,18 @@ private fun CodexPickerRow(
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center,
             ) {
-                if (coverModel != null) {
-                    AsyncImage(
-                        model = coverModel,
-                        contentDescription = codex.name,
-                        modifier = Modifier.fillMaxWidth(),
-                        contentScale = ContentScale.Crop,
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.Collections,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                CodexCoverImage(
+                    candidates = coverCandidates,
+                    contentDescription = codex.name,
+                    modifier = Modifier.fillMaxWidth(),
+                    fallback = {
+                        Icon(
+                            imageVector = Icons.Default.Collections,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                )
             }
 
             Column(

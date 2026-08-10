@@ -13,12 +13,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import com.theoriacodex.app.appshell.PendingIncomingUri
+import com.theoriacodex.app.codex.CodexCoverCandidate
 import com.theoriacodex.app.codex.CodexSearchSourceOption
 import com.theoriacodex.app.codex.CodexSearchTagOption
 import com.theoriacodex.app.codex.codexBelongsToProfile
 import com.theoriacodex.app.codex.codexSearchSourceOptions
 import com.theoriacodex.app.codex.codexSearchTagOptions
-import com.theoriacodex.app.appshell.PendingIncomingUri
+import com.theoriacodex.app.codex.resolveCodexCoverCandidates
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
@@ -27,7 +29,6 @@ import com.theoriacodex.app.settings.SettingsScreen
 import com.theoriacodex.app.settings.SettingsViewModel
 import com.theoriacodex.app.source.creatorBrowsingSources
 import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
-import com.theoriacodex.app.ui.resolveCodexCoverModel
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecentActivityEntry
@@ -81,7 +82,7 @@ internal data class CodexDestinationState(
     val visibleCodices: List<Codex>,
     val activeProfile: RecommendationProfile,
     val itemCounts: Map<String, Int>,
-    val coverModels: Map<String, Any?>,
+    val coverCandidates: Map<String, List<CodexCoverCandidate>>,
     val searchSourceOptions: Map<String, List<CodexSearchSourceOption>>,
     val searchTagOptions: Map<String, Map<SourceKey, List<CodexSearchTagOption>>>,
 )
@@ -99,12 +100,12 @@ internal data class SaveToCodexDestinationState(
     val activeProfile: RecommendationProfile,
     val codicesByProfile: Map<String, List<Codex>>,
     val itemCounts: Map<String, Int>,
-    val coverModels: Map<String, Any?>,
+    val coverCandidates: Map<String, List<CodexCoverCandidate>>,
 )
 
 private data class CodexCollectionState(
     val itemCounts: Map<String, Int>,
-    val coverModels: Map<String, Any?>,
+    val coverCandidates: Map<String, List<CodexCoverCandidate>>,
     val searchSourceOptions: Map<String, List<CodexSearchSourceOption>>,
     val searchTagOptions: Map<String, Map<SourceKey, List<CodexSearchTagOption>>>,
 )
@@ -231,7 +232,7 @@ internal fun CodexDestinationStateBoundary(
                 },
                 activeProfile = profile,
                 itemCounts = collection.itemCounts,
-                coverModels = collection.coverModels,
+                coverCandidates = collection.coverCandidates,
                 searchSourceOptions = collection.searchSourceOptions,
                 searchTagOptions = collection.searchTagOptions,
             ),
@@ -297,7 +298,7 @@ internal fun SaveToCodexDestinationStateBoundary(
                     }
                 },
                 itemCounts = collection.itemCounts,
-                coverModels = collection.coverModels,
+                coverCandidates = collection.coverCandidates,
             ),
         )
     }
@@ -394,15 +395,16 @@ private fun rememberCodexCollectionState(
     refreshKey: Any? = Unit,
 ): CodexCollectionState {
     val itemCounts = remember { mutableStateMapOf<String, Int>() }
-    val coverModels = remember { mutableStateMapOf<String, Any?>() }
+    val coverCandidates = remember { mutableStateMapOf<String, List<CodexCoverCandidate>>() }
     val sourceOptions = remember { mutableStateMapOf<String, List<CodexSearchSourceOption>>() }
     val tagOptions = remember { mutableStateMapOf<String, Map<SourceKey, List<CodexSearchTagOption>>>() }
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(lifecycleOwner, codices.map(Codex::codexId), availableSources, refreshKey) {
         val activeIds = codices.map(Codex::codexId).toSet()
-        listOf(itemCounts, coverModels, sourceOptions, tagOptions).forEach { map ->
-            map.keys.filterNot(activeIds::contains).toList().forEach(map::remove)
-        }
+        itemCounts.keys.filterNot(activeIds::contains).toList().forEach(itemCounts::remove)
+        coverCandidates.keys.filterNot(activeIds::contains).toList().forEach(coverCandidates::remove)
+        sourceOptions.keys.filterNot(activeIds::contains).toList().forEach(sourceOptions::remove)
+        tagOptions.keys.filterNot(activeIds::contains).toList().forEach(tagOptions::remove)
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             coroutineScope {
                 codices.forEach { codex ->
@@ -414,9 +416,10 @@ private fun rememberCodexCollectionState(
                     launch {
                         data.codexRepository.observeCodexPosts(codex.codexId, CodexSortMode.NEWEST_SAVED)
                             .collect { posts ->
-                                coverModels[codex.codexId] = posts.firstOrNull()?.let { post ->
-                                    resolveCodexCoverModel(data.storageDirectory, post)
-                                }
+                                coverCandidates[codex.codexId] = resolveCodexCoverCandidates(
+                                    storageDirectory = data.storageDirectory,
+                                    posts = posts,
+                                )
                                 if (availableSources != null) {
                                     val options = codexSearchSourceOptions(posts, availableSources)
                                     sourceOptions[codex.codexId] = options
@@ -430,10 +433,10 @@ private fun rememberCodexCollectionState(
             }
         }
     }
-    return remember(itemCounts, coverModels, sourceOptions, tagOptions) {
+    return remember(itemCounts, coverCandidates, sourceOptions, tagOptions) {
         CodexCollectionState(
             itemCounts = itemCounts,
-            coverModels = coverModels,
+            coverCandidates = coverCandidates,
             searchSourceOptions = sourceOptions,
             searchTagOptions = tagOptions,
         )

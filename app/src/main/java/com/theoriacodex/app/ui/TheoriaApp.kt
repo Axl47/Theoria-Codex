@@ -89,7 +89,6 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.PostDownloadService
-import com.theoriacodex.app.media.normalizeMediaUrl
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.CodexRemovalWorkflow
@@ -192,7 +191,6 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
-import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CancellationException
@@ -1692,7 +1690,7 @@ internal fun TheoriaAppContent(
                                         CodexListScreen(
                                         codices = state.visibleCodices,
                                         itemCounts = state.itemCounts,
-                                        codexCoverModels = state.coverModels,
+                                        codexCoverCandidates = state.coverCandidates,
                                         codexSearchSourceOptions = state.searchSourceOptions,
                                         codexSearchTagOptions = state.searchTagOptions,
                                         onOpenCodex = { codexId ->
@@ -2063,7 +2061,7 @@ internal fun TheoriaAppContent(
                 initialProfileId = state.activeProfile.profileId,
                 codicesByProfile = state.codicesByProfile,
                 codexItemCounts = state.itemCounts,
-                codexCoverModels = state.coverModels,
+                codexCoverCandidates = state.coverCandidates,
                 onCreateCodex = { profileId, name ->
                     scope.launch {
                         val codex = dataDependencies.codexRepository.ensureCodex(
@@ -2305,40 +2303,6 @@ internal fun firstChangelogLine(markdown: String): String? {
         .lineSequence()
         .map { it.trim() }
         .firstOrNull { it.isNotBlank() && !it.startsWith("#") }
-}
-
-internal fun resolveCodexCoverModel(
-    storageDirectory: File,
-    post: Post,
-): Any? {
-    val key = "${post.id.source.name}_${post.id.sourcePostId}"
-    val thumbnailDirectory = storageDirectory.resolve("cache/thumbnails")
-    val localCover = thumbnailDirectory
-        .listFiles()
-        ?.firstOrNull { file ->
-            file.isFile && file.name.startsWith("$key.") && !file.name.endsWith(".url")
-        }
-    if (localCover != null) {
-        return localCover
-    }
-
-    val remotePointer = thumbnailDirectory.resolve("$key.url")
-    if (remotePointer.exists()) {
-        val remoteUrl = runCatching { remotePointer.readText().trim() }.getOrNull()
-        if (!remoteUrl.isNullOrBlank()) {
-            return normalizeMediaUrl(post.id.source, remoteUrl)
-        }
-    }
-
-    val previewLocalPath = post.preview.localPath
-    if (!previewLocalPath.isNullOrBlank()) {
-        val previewFile = File(previewLocalPath)
-        if (previewFile.exists()) {
-            return previewFile
-        }
-    }
-
-    return normalizeMediaUrl(post.id.source, post.preview.url)
 }
 
 private suspend fun DataDependencies.currentSettingsSnapshot(): AppSettings {
