@@ -5,6 +5,11 @@ import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.media.AnimatedDurationEnricher
 import com.theoriacodex.app.media.AnimatedDurationEnrichmentService
+import com.theoriacodex.app.media.MediaDurationAcquirer
+import com.theoriacodex.app.media.MediaDurationCoordinator
+import com.theoriacodex.app.media.MediaDurationProvenance
+import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.MediaDurationUnsupportedReason
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.app.recommend.ForYouCoordinator
@@ -100,6 +105,7 @@ data class FeatureDependencies(
     val forYou: ForYouCoordinator,
     val creatorProfile: CreatorProfileCoordinator,
     val animatedDurationEnricher: AnimatedDurationEnricher,
+    val mediaDurationCoordinator: MediaDurationCoordinator,
     val appUsageTracker: AppUsageTracker,
 )
 
@@ -163,6 +169,19 @@ internal class DefaultTheoriaAppContainer(
     )
     private val animatedDurationEnricher = AnimatedDurationEnrichmentService(
         registry = sourceRegistry,
+    )
+    private val mediaDurationCoordinator = MediaDurationCoordinator(
+        acquirer = MediaDurationAcquirer { post ->
+            animatedDurationEnricher.enrich(post)?.let { enrichment ->
+                MediaDurationState.Known(
+                    durationMs = enrichment.durationMs,
+                    provenance = MediaDurationProvenance.CONTAINER_PROBE,
+                )
+            } ?: MediaDurationState.Unsupported(
+                reason = MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA,
+            )
+        },
+        parentScope = durableStoreScope,
     )
 
     private val contentDatabase = TheoriaRoomDatabase.create(appContext)
@@ -270,6 +289,7 @@ internal class DefaultTheoriaAppContainer(
         ),
         creatorProfile = CreatorProfileCoordinator(registry = sourceRegistry),
         animatedDurationEnricher = animatedDurationEnricher,
+        mediaDurationCoordinator = mediaDurationCoordinator,
         appUsageTracker = appUsageTracker,
     )
 

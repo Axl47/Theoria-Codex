@@ -247,6 +247,40 @@ class ArchitectureBoundarySourceTest {
             "The application-owned service guard became vacuous",
             serviceConstruction.containsMatchIn(File(repositoryRoot, containerPath).readText()),
         )
+        val coordinatorConstruction = Regex("""\bMediaDurationCoordinator\s*\(""")
+        val coordinatorPath = "app/src/main/java/com/theoriacodex/app/media/MediaDurationCoordinator.kt"
+        val coordinatorConstructionViolations = appProductionSources()
+            .filter { source -> relativePath(source) !in setOf(containerPath, coordinatorPath) }
+            .filter { source -> coordinatorConstruction.containsMatchIn(source.readText()) }
+            .map(::relativePath)
+            .toList()
+        assertNoViolations(
+            rule = "The application container must be the sole duration-coordinator owner",
+            violations = coordinatorConstructionViolations,
+        )
+        val container = File(repositoryRoot, containerPath).readText()
+        assertTrue(
+            "The application-owned duration coordinator guard became vacuous",
+            coordinatorConstruction.containsMatchIn(container) &&
+                "val mediaDurationCoordinator: MediaDurationCoordinator" in container,
+        )
+        val coordinator = File(
+            repositoryRoot,
+            coordinatorPath,
+        ).readText()
+        assertTrue(
+            "Duration publication must stay separate from demand submission",
+            "private fun publishKnownLocked" in coordinator &&
+                "metadata publication never becomes a new demand input" in coordinator,
+        )
+        listOf(
+            "TheoriaDurationDemand",
+            "TheoriaDurationPublish",
+            "TheoriaDurationSettled",
+            "TheoriaDurationWorkload",
+        ).forEach { traceName ->
+            assertTrue("The duration coordinator must retain $traceName", traceName in coordinator)
+        }
         val service = File(repositoryRoot, servicePath).readText()
         val sourceAdapter = File(
             repositoryRoot,
