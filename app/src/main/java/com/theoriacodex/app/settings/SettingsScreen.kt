@@ -678,6 +678,7 @@ private fun CodexUsageStat(title: String, row: CodexUsageStatistic?) {
     StatisticValueRow(
         label = row?.name ?: "None yet",
         value = row?.entryCount?.let(::codexEntryCountLabel).orEmpty(),
+        nested = true,
     )
 }
 
