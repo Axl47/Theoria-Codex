@@ -216,14 +216,6 @@ class ForYouCoordinator(
         affinityStatsBySource = emptyMap()
     }
 
-    fun displayTagFor(post: Post): String? {
-        return associatedDisplayTag(
-            post = post,
-            seedTagsBySource = seedSummaryBySource,
-            affinityBySource = affinityStatsBySource,
-        )
-    }
-
     suspend fun loadNextPage() {
         if (loading || loadingMore || !canLoadMore) return
         val request = beginRequest(FeedRequestKind.PAGE)

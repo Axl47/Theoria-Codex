@@ -500,5 +500,4 @@ private class FakeForYouRouteEngine(
             results = current.results.toMutableList().apply { this[index] = post },
         )
     }
-    override fun displayTagFor(post: Post): String? = null
 }

@@ -71,6 +71,38 @@ class SearchScreenMediaBehaviorTest {
         )
     }
 
+    @Test
+    fun `titleless cards omit the footer and overlay required context`() {
+        assertEquals(
+            SearchCardSupportingContentPlacement.NONE,
+            searchCardSupportingContentPlacement(
+                title = null,
+                metadataLabel = null,
+                showSourceBadge = false,
+            ),
+        )
+        assertEquals(
+            SearchCardSupportingContentPlacement.PREVIEW_OVERLAY,
+            searchCardSupportingContentPlacement(
+                title = null,
+                metadataLabel = "2h",
+                showSourceBadge = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `titled cards retain their footer without requiring secondary metadata`() {
+        assertEquals(
+            SearchCardSupportingContentPlacement.FOOTER,
+            searchCardSupportingContentPlacement(
+                title = "A meaningful title",
+                metadataLabel = null,
+                showSourceBadge = false,
+            ),
+        )
+    }
+
     private fun samplePost(source: SourceKey): Post {
         return Post(
             id = PostId(source = source, sourcePostId = "1"),

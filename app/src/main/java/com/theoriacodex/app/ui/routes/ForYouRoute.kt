@@ -131,7 +131,6 @@ internal fun ForYouRoute(
         resolveUnknownAnimatedDurations = config.resolveUnknownAnimatedDurations,
         onToggleLike = callbacks.onToggleLike,
         onAction = owner::onAction,
-        displayTagFor = owner::displayTagFor,
         creatorBrowsingSources = config.creatorBrowsingSources,
         onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
         onSaveToDevice = callbacks.onSaveToDevice,

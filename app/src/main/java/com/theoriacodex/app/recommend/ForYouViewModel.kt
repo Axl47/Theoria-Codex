@@ -61,7 +61,6 @@ internal interface ForYouRouteEngine {
     fun clear()
     suspend fun resolvePost(postId: PostId): Post?
     fun rememberResolvedPost(post: Post)
-    fun displayTagFor(post: Post): String?
 }
 
 internal class CoordinatorForYouRouteEngine(
@@ -117,7 +116,6 @@ internal class CoordinatorForYouRouteEngine(
     override fun clear() = coordinator.clear()
     override suspend fun resolvePost(postId: PostId): Post? = coordinator.resolvePostForFeed(postId)
     override fun rememberResolvedPost(post: Post) = coordinator.rememberResolvedPost(post)
-    override fun displayTagFor(post: Post): String? = coordinator.displayTagFor(post)
 }
 
 /**
@@ -255,8 +253,6 @@ internal class ForYouViewModel(
         engine.rememberResolvedPost(post)
         publishSnapshot(activeLikesOverride = mutableState.value.activeProfileLikesCount)
     }
-
-    fun displayTagFor(post: Post): String? = engine.displayTagFor(post)
 
     private fun requestAnimatedDurationEnrichment(seedId: String) {
         durationEnrichmentLane.request(seedId)

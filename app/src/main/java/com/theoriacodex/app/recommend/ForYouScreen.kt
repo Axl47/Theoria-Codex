@@ -84,7 +84,6 @@ fun ForYouScreen(
     resolveUnknownAnimatedDurations: Boolean = false,
     onToggleLike: (Post) -> Unit,
     onAction: (ForYouAction) -> Unit,
-    displayTagFor: (Post) -> String? = { null },
     creatorBrowsingSources: Set<SourceKey> = emptySet(),
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
@@ -320,7 +319,6 @@ fun ForYouScreen(
                         post = post,
                         pixivUgoiraClient = pixivUgoiraClient,
                         showSourceBadge = true,
-                        displayTag = displayTagFor(post),
                         liked = post.id in likedPostIds,
                         onToggleLike = { onToggleLike(post) },
                         onClick = {

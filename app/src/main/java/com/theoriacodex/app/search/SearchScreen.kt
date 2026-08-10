@@ -104,10 +104,6 @@ import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.media.postPreviewImageCandidate
 import com.theoriacodex.app.post.displayTitleOrNull
-import com.theoriacodex.app.recommend.recommendationIncludeTags
-import com.theoriacodex.app.recommend.recommendationTagsFor
-import com.theoriacodex.app.recommend.associatedDisplayTag
-import com.theoriacodex.app.recommend.buildSourceTagAffinity
 import com.theoriacodex.app.R
 import com.theoriacodex.app.source.SourceLogo
 import com.theoriacodex.app.source.displayName
@@ -285,44 +281,6 @@ fun SearchScreen(
                 selectedActionPost = resolved ?: displayPost
                 selectedActionPostResolving = false
             }
-        }
-    }
-    val displayTagSeedBySource = remember(
-        state.query.applied.mode,
-        state.query.applied.includeTerms,
-        visibleResults,
-    ) {
-        val recommendationTags = state.query.applied.recommendationIncludeTags()
-        when (val mode = state.query.applied.mode) {
-            is QueryMode.Source -> mapOf(mode.source to recommendationTags)
-            QueryMode.Unified -> {
-                val sources = visibleResults
-                    .asSequence()
-                    .map { post -> post.id.source }
-                    .toSet()
-                sources.associateWith { recommendationTags }
-            }
-        }
-    }
-    val displayTagAffinityBySource = remember(visibleResults) {
-        val documentsBySource = visibleResults
-            .groupBy { post -> post.id.source }
-            .mapValues { (_, posts) ->
-                posts.map(::recommendationTagsFor)
-            }
-        buildSourceTagAffinity(documentsBySource = documentsBySource)
-    }
-    val displayTagByPostId = remember(
-        visibleResults,
-        displayTagSeedBySource,
-        displayTagAffinityBySource,
-    ) {
-        visibleResults.associate { post ->
-            post.id to associatedDisplayTag(
-                post = post,
-                seedTagsBySource = displayTagSeedBySource,
-                affinityBySource = displayTagAffinityBySource,
-            )
         }
     }
     val sourceDisplayOrder = remember(state.query.modeOptions) {
@@ -741,7 +699,6 @@ fun SearchScreen(
                                 post = post,
                                 pixivUgoiraClient = pixivUgoiraClient,
                                 showSourceBadge = state.query.appliedSourceScope !is SearchSourceScope.Single,
-                                displayTag = displayTagByPostId[post.id],
                                 liked = post.id in likedPostIds,
                                 onToggleLike = onToggleLike?.let { toggle ->
                                     { toggle(post) }
@@ -891,7 +848,6 @@ fun SearchResultCard(
     post: Post,
     pixivUgoiraClient: PixivUgoiraClient?,
     showSourceBadge: Boolean = false,
-    displayTag: String? = null,
     metadataLabel: String? = null,
     liked: Boolean = false,
     onToggleLike: (() -> Unit)? = null,
@@ -959,6 +915,11 @@ fun SearchResultCard(
             ),
     ) {
         val title = effectivePost.displayTitleOrNull()
+        val supportingContentPlacement = searchCardSupportingContentPlacement(
+            title = title,
+            metadataLabel = metadataLabel,
+            showSourceBadge = showSourceBadge,
+        )
         val mediaContentDescription = title ?: effectivePost.id.sourcePostId
         val videoRef = remember(
             effectivePost.id.source,
@@ -1158,60 +1119,97 @@ fun SearchResultCard(
                     }
                 }
             }
-        }
-
-        Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            title?.let { displayTitle ->
-                Text(
-                    text = displayTitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            val firstTag = displayTag ?: effectivePost.canonicalTags.firstOrNull()
-            if (firstTag != null || metadataLabel != null || showSourceBadge) {
+            if (supportingContentPlacement == SearchCardSupportingContentPlacement.PREVIEW_OVERLAY) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (firstTag != null) {
-                        Text(
-                            text = "#$firstTag",
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                    } else {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
                     if (metadataLabel != null) {
-                        Text(
-                            text = metadataLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(start = 6.dp),
-                        )
+                        PreviewMetadataLabel(metadataLabel)
                     }
                     if (showSourceBadge) {
-                        SourceBadge(
-                            source = effectivePost.id.source,
-                            modifier = if (metadataLabel != null) {
-                                Modifier.padding(start = 6.dp)
-                            } else {
-                                Modifier
-                            },
-                        )
+                        SourceBadge(source = effectivePost.id.source)
                     }
                 }
             }
         }
+
+        if (supportingContentPlacement == SearchCardSupportingContentPlacement.FOOTER) {
+            Column(
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = requireNotNull(title),
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (metadataLabel != null || showSourceBadge) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Spacer(modifier = Modifier.weight(1f))
+                        if (metadataLabel != null) {
+                            Text(
+                                text = metadataLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        if (showSourceBadge) {
+                            SourceBadge(
+                                source = effectivePost.id.source,
+                                modifier = Modifier.padding(start = 6.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+internal enum class SearchCardSupportingContentPlacement {
+    NONE,
+    FOOTER,
+    PREVIEW_OVERLAY,
+}
+
+internal fun searchCardSupportingContentPlacement(
+    title: String?,
+    metadataLabel: String?,
+    showSourceBadge: Boolean,
+): SearchCardSupportingContentPlacement {
+    return when {
+        title != null -> SearchCardSupportingContentPlacement.FOOTER
+        metadataLabel != null || showSourceBadge -> SearchCardSupportingContentPlacement.PREVIEW_OVERLAY
+        else -> SearchCardSupportingContentPlacement.NONE
+    }
+}
+
+@Composable
+private fun PreviewMetadataLabel(label: String) {
+    Surface(
+        color = Color.Black.copy(alpha = 0.55f),
+        shape = RoundedCornerShape(6.dp),
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+    ) {
+        Text(
+            text = label,
+            color = Color.White,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+        )
     }
 }
 
