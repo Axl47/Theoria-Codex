@@ -217,6 +217,10 @@ internal class RoutingHitomiHttpClient : SourceHttpClient {
 
     private val activeGalleryRequests = AtomicInteger(0)
 
+    fun galleryRequestCount(galleryId: Int): Int = synchronized(textRequests) {
+        textRequests.count { request -> request.url == HitomiProtocol.galleryUrl(galleryId) }
+    }
+
     override suspend fun get(
         url: String,
         query: Map<String, String>,

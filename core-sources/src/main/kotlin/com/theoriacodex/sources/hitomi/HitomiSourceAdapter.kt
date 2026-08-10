@@ -72,6 +72,9 @@ class HitomiSourceAdapter(
     randomSnapshotNowMillis: () -> Long = System::currentTimeMillis,
     knownSizeCacheMaxBytes: Long = DEFAULT_KNOWN_SIZE_CACHE_BYTES,
     suggestionCountCacheMaxBytes: Long = DEFAULT_SUGGESTION_COUNT_CACHE_BYTES,
+    galleryManifestCacheMaxBytes: Long = DEFAULT_GALLERY_MANIFEST_CACHE_BYTES,
+    galleryManifestTtlMillis: Long = DEFAULT_GALLERY_MANIFEST_TTL_MILLIS,
+    galleryManifestNowMillis: () -> Long = System::currentTimeMillis,
     private val mediaCandidates: suspend (HitomiMediaFile) -> List<HitomiMediaCandidate> = { file ->
         mediaUrlResolver.candidates(file)
     },
@@ -121,6 +124,11 @@ class HitomiSourceAdapter(
         maxBytes = randomSnapshotCacheMaxBytes,
         initialReuseTtlMillis = randomSnapshotReuseTtlMillis,
         nowMillis = randomSnapshotNowMillis,
+    )
+    private val galleryManifests = HitomiGalleryManifestStore(
+        maxBytes = galleryManifestCacheMaxBytes,
+        ttlMillis = galleryManifestTtlMillis,
+        nowMillis = galleryManifestNowMillis,
     )
 
     init {
@@ -802,6 +810,13 @@ class HitomiSourceAdapter(
     }
 
     private suspend fun fetchGallery(galleryId: Int, sparse: Boolean): Post? {
+        val gallery = galleryManifests.getOrLoad(galleryId) { loadGalleryManifest(galleryId) }
+            ?: return null
+        if (gallery.intValue("blocked") == 1) return null
+        return gallery.toPost(galleryId, sparse)
+    }
+
+    private suspend fun loadGalleryManifest(galleryId: Int): HitomiGalleryManifest? {
         val url = HitomiProtocol.galleryUrl(galleryId)
         val response = try {
             requestText(url)
@@ -829,7 +844,10 @@ class HitomiSourceAdapter(
             )
         }
         if (gallery.intValue("blocked") == 1) return null
-        return gallery.toPost(galleryId, sparse)
+        return HitomiGalleryManifest(
+            gallery = gallery,
+            payloadBytes = response.body.hitomiUtf8ByteWeight(),
+        )
     }
 
     private suspend fun JsonObject.toPost(fallbackGalleryId: Int, sparse: Boolean): Post {
@@ -1535,6 +1553,8 @@ class HitomiSourceAdapter(
         private const val MAX_RANDOM_GALLERY_IDS = HitomiNozomi.MAX_GALLERY_IDS
         internal const val DEFAULT_KNOWN_SIZE_CACHE_BYTES = 256L * 1024L
         internal const val DEFAULT_SUGGESTION_COUNT_CACHE_BYTES = 256L * 1024L
+        internal const val DEFAULT_GALLERY_MANIFEST_CACHE_BYTES = 8L * 1024L * 1024L
+        internal const val DEFAULT_GALLERY_MANIFEST_TTL_MILLIS = 2L * 60L * 1000L
         private const val LEGACY_PAGE_TOKEN_VERSION = 2
         private const val PREVIOUS_PAGE_TOKEN_VERSION = 3
         private const val PAGE_TOKEN_VERSION = 4

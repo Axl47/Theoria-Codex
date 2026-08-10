@@ -8,14 +8,15 @@ updated_at: 2026-08-10T20:05:00-04:00
 
 ### In Progress
 
-- [~] Phase 6: reuse bounded Hitomi gallery manifests.
+- [~] Phase 7: run integrated validation and close the living ExecPlan.
 
 ### Pending
 
-- [ ] Phase 7: run integrated validation and close the living ExecPlan.
 
 ### Done
 
+- [x] Phase 6: reuse bounded Hitomi gallery manifests.
+  - Evidence: sparse Search and full Viewer resolution share successful parsed manifests for two minutes through an 8 MiB byte-weighted LRU and per-gallery single-flight. Missing/blocked/malformed/failed/expired/over-budget values are not cached, while every projection reruns the existing live CDN candidate resolver. Search-to-Viewer uses one manifest request but still expands candidate derivation from the sparse poster to all 44 full pages. Thirty focused Hitomi tests pass.
 - [x] Phase 5: bound Pixiv Ugoira loading and share token refresh.
   - Evidence: ordinary Pixiv and Ugoira requests share one durable re-checking refresh mutex; per-post archive and per-size decode single-flight isolate consumers; atomic disk archives enforce 96 MiB compressed, 256 MiB expanded, per-frame/name/count/correspondence bounds; card/Viewer/export size buckets, pixel limits, a 512 MiB disk LRU, and a 96 MiB allocation-weighted decoded LRU replace full-ZIP/all-frame/eight-item retention. Thirty-six focused tests and `:app:compileDebugKotlin` pass. Core-sources Detekt reports only its documented inherited untouched long/complex owners.
 - [x] Phase 4: open Viewer before provider refresh when usable media already exists.
