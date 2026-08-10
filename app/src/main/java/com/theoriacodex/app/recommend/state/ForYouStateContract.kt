@@ -1,6 +1,7 @@
 package com.theoriacodex.app.recommend.state
 
 import com.theoriacodex.app.recommend.ForYouCoordinator
+import com.theoriacodex.app.recommend.buildForYouSeedId
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
@@ -70,6 +71,10 @@ sealed interface ForYouAction {
     data class SelectProfile(val profileId: String) : ForYouAction
     data class SelectSource(val source: SourceKey?) : ForYouAction
     data class SelectSort(val sortMode: SortMode) : ForYouAction
+    data class ReplaySearch(
+        val seedBySource: Map<SourceKey, List<String>>,
+        val sortMode: SortMode,
+    ) : ForYouAction
     data object BlacklistCurrentSeed : ForYouAction
     data class UndoSeedBlacklist(
         val profileId: String,
@@ -130,6 +135,12 @@ sealed interface ForYouEffect {
 
     data class ChangeSort(
         override val request: ForYouRequestIdentity,
+        val sortMode: SortMode,
+    ) : ForYouEffect
+
+    data class ReplaySearch(
+        override val request: ForYouRequestIdentity,
+        val seedBySource: Map<SourceKey, List<String>>,
         val sortMode: SortMode,
     ) : ForYouEffect
 
@@ -292,6 +303,25 @@ fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
                     .beginRefresh { request ->
                         ForYouEffect.ChangeSort(request = request, sortMode = action.sortMode)
                     }
+            }
+        }
+
+        is ForYouAction.ReplaySearch -> {
+            if (action.seedBySource.isEmpty()) {
+                unchanged()
+            } else {
+                copy(
+                    selectedSource = action.seedBySource.keys.singleOrNull(),
+                    sortMode = action.sortMode,
+                    seedId = buildForYouSeedId(action.seedBySource),
+                    seedSummaryBySource = action.seedBySource.mapValues { (_, tags) -> tags.toList() },
+                ).beginRefresh { request ->
+                    ForYouEffect.ReplaySearch(
+                        request = request,
+                        seedBySource = action.seedBySource.mapValues { (_, tags) -> tags.toList() },
+                        sortMode = action.sortMode,
+                    )
+                }
             }
         }
 

@@ -55,6 +55,7 @@ internal interface ForYouRouteEngine {
     suspend fun selectProfile(settings: AppSettings, profileId: String)
     suspend fun setSourceSelection(source: SourceKey?)
     suspend fun setSortMode(sort: SortMode)
+    suspend fun replaySearch(seedBySource: Map<SourceKey, List<String>>, sort: SortMode)
     suspend fun blacklistCurrentSeedAndRefresh(): List<ForYouBlacklistEntry>
     suspend fun undoBlacklistAndRefresh(profileId: String, entries: List<ForYouBlacklistEntry>)
     suspend fun loadNextPage()
@@ -106,6 +107,8 @@ internal class CoordinatorForYouRouteEngine(
 
     override suspend fun setSourceSelection(source: SourceKey?) = coordinator.setSourceSelection(source)
     override suspend fun setSortMode(sort: SortMode) = coordinator.setSortMode(sort)
+    override suspend fun replaySearch(seedBySource: Map<SourceKey, List<String>>, sort: SortMode) =
+        coordinator.replaySearch(seedBySource, sort)
     override suspend fun blacklistCurrentSeedAndRefresh(): List<ForYouBlacklistEntry> =
         coordinator.blacklistCurrentSeedAndRefresh()
 
@@ -299,6 +302,10 @@ internal class ForYouViewModel(
 
             is ForYouEffect.ChangeSort -> launchRefresh(effect.request) {
                 engine.setSortMode(effect.sortMode)
+            }
+
+            is ForYouEffect.ReplaySearch -> launchRefresh(effect.request) {
+                engine.replaySearch(effect.seedBySource, effect.sortMode)
             }
 
             is ForYouEffect.BlacklistSeed -> launchSeedMutation(effect.request) {

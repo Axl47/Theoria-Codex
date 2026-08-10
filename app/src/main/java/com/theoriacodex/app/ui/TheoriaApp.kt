@@ -108,6 +108,8 @@ import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.recommend.trainingTagsFor
 import com.theoriacodex.app.recents.RecentsScreen
+import com.theoriacodex.app.recents.fypSeedBySource
+import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recents.RecentsClearWorkflow
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSourceScope
@@ -349,6 +351,7 @@ internal fun TheoriaAppContent(
     }
     var pendingCreatorProfile by remember { mutableStateOf<CreatorProfile?>(null) }
     val pendingSearchActions = remember { PendingRouteActions<SearchAction>() }
+    val pendingForYouActions = remember { PendingRouteActions<ForYouAction>() }
     val viewerRouteWorkflow = remember(dataDependencies, sourceDependencies) {
         ViewerRouteWorkflow(
             data = dataDependencies,
@@ -362,6 +365,11 @@ internal fun TheoriaAppContent(
     fun dispatchOrQueueSearchAction(action: SearchAction): Boolean {
         return pendingSearchActions.dispatchOrEnqueue(action) { queuedAction ->
             searchRouteOwner?.dispatch(queuedAction) == true
+        }
+    }
+    fun dispatchOrQueueForYouAction(action: ForYouAction): Boolean {
+        return pendingForYouActions.dispatchOrEnqueue(action) { queuedAction ->
+            forYouRouteOwner?.dispatch(queuedAction) == true
         }
     }
     fun addSearchIncludeTerm(post: Post, term: SearchTerm): Boolean {
@@ -1514,7 +1522,10 @@ internal fun TheoriaAppContent(
                                                 }
                                             },
                                         ),
-                                        onOwnerAvailable = forYouRouteOwnerBinding::publish,
+                                        onOwnerAvailable = { owner ->
+                                            forYouRouteOwnerBinding.publish(owner)
+                                            pendingForYouActions.flush(owner::dispatch)
+                                        },
                                     )
                                     }
                                 }
@@ -1633,6 +1644,22 @@ internal fun TheoriaAppContent(
                                                     launchSingleTop = true
                                                     restoreState = true
                                                 }
+                                                if (topLevelPagerState.currentPage != targetIndex) {
+                                                    topLevelPagerState.scrollToPage(targetIndex)
+                                                }
+                                            }
+                                        },
+                                        onOpenFypSearch = { entry ->
+                                            dispatchOrQueueForYouAction(
+                                                ForYouAction.ReplaySearch(
+                                                    seedBySource = entry.fypSeedBySource(),
+                                                    sortMode = entry.query.sort,
+                                                ),
+                                            )
+                                            val targetIndex = TopLevelDestination.entries
+                                                .indexOf(TopLevelDestination.ForYou)
+                                            homeTabRoute = TopLevelDestination.ForYou.route
+                                            scope.launch {
                                                 if (topLevelPagerState.currentPage != targetIndex) {
                                                     topLevelPagerState.scrollToPage(targetIndex)
                                                 }

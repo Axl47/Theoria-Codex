@@ -18,12 +18,14 @@ private data class RecentSearchPayloadRecord(
     @field:SerializedName("query") val query: QueryStorageRecord? = null,
     @field:SerializedName("kind") val kind: String? = null,
     @field:SerializedName("sources") val sources: List<String>? = null,
+    @field:SerializedName("sourceTags") val sourceTags: Map<String, List<String>>? = null,
 )
 
 data class RecentSearchPayload(
     val query: Query,
     val kind: RecentSearchKind,
     val sources: List<SourceKey>,
+    val sourceTags: Map<SourceKey, List<String>> = emptyMap(),
 )
 
 /** Backward-compatible payload stored in the existing Room recent-search query column. */
@@ -32,6 +34,7 @@ object RecentSearchPayloadCodec {
         query = entry.query,
         kind = entry.kind,
         sources = entry.sources,
+        sourceTags = entry.sourceTags,
         gson = gson,
     )
 
@@ -39,16 +42,21 @@ object RecentSearchPayloadCodec {
         query: Query,
         kind: RecentSearchKind,
         sources: List<SourceKey>,
+        sourceTags: Map<SourceKey, List<String>> = emptyMap(),
         gson: Gson = Gson(),
     ): String {
         val normalizedSources = sources.distinct()
-        validate(query, kind, normalizedSources)
+        val normalizedSourceTags = normalizedSources.associateWith { source ->
+            sourceTags[source].orEmpty().toList()
+        }.filterValues(List<String>::isNotEmpty)
+        validate(query, kind, normalizedSources, normalizedSourceTags)
         return gson.toJson(
             RecentSearchPayloadRecord(
                 schemaVersion = CURRENT_RECENT_SEARCH_PAYLOAD_VERSION,
                 query = QueryStorageCodec.encode(query),
                 kind = kind.name,
                 sources = normalizedSources.map(SourceKey::name),
+                sourceTags = normalizedSourceTags.mapKeys { (source, _) -> source.name },
             )
         )
     }
@@ -79,11 +87,24 @@ object RecentSearchPayloadCodec {
             }
         }
         require(sources == sources.distinct()) { "Stored recent search sources must be distinct" }
-        validate(query, kind, sources)
-        return RecentSearchPayload(query, kind, sources)
+        val sourceTags = record.sourceTags.orEmpty().mapKeys { (rawSource, _) ->
+            runCatching { SourceKey.valueOf(rawSource) }.getOrElse {
+                error("Stored recent search has an invalid source-tag source")
+            }
+        }
+        validate(query, kind, sources, sourceTags)
+        return RecentSearchPayload(query, kind, sources, sourceTags)
     }
 
-    private fun validate(query: Query, kind: RecentSearchKind, sources: List<SourceKey>) {
+    private fun validate(
+        query: Query,
+        kind: RecentSearchKind,
+        sources: List<SourceKey>,
+        sourceTags: Map<SourceKey, List<String>> = emptyMap(),
+    ) {
+        require(sourceTags.keys.all { source -> source in sources }) {
+            "Recent search source tags must belong to participating sources"
+        }
         when (kind) {
             RecentSearchKind.SOURCE -> {
                 val source = (query.mode as? QueryMode.Source)?.source

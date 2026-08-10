@@ -81,6 +81,7 @@ fun RecentsScreen(
     onOpenWatchedPost: (Int) -> Unit,
     onOpenCodexPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
+    onOpenFypSearch: (RecentSearchEntry) -> Unit,
     onClear: (RecentsClearTarget) -> Unit,
 ) {
     var filter by rememberSaveable { mutableStateOf(RecentsFilter.WATCHED) }
@@ -157,7 +158,7 @@ fun RecentsScreen(
             RecentsFilter.FYP -> SearchHistoryList(
                 searches = fypSearches,
                 now = now,
-                onOpenSearch = null,
+                onOpenSearch = onOpenFypSearch,
                 emptyMessage = "Recommendation searches appear here after For You generates them.",
             )
 
@@ -175,6 +176,7 @@ fun RecentsScreen(
                 onOpenWatchedPost = onOpenWatchedPost,
                 onOpenCodexPost = onOpenCodexPost,
                 onOpenSearch = onOpenSearch,
+                onOpenFypSearch = onOpenFypSearch,
             )
         }
     }
@@ -276,6 +278,7 @@ private fun ActivityList(
     onOpenWatchedPost: (Int) -> Unit,
     onOpenCodexPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
+    onOpenFypSearch: (RecentSearchEntry) -> Unit,
 ) {
     if (activity.isEmpty()) {
         EmptyRecentState("Recent posts and applied searches appear here.")
@@ -295,6 +298,7 @@ private fun ActivityList(
                 onOpenWatchedPost = onOpenWatchedPost,
                 onOpenCodexPost = onOpenCodexPost,
                 onOpenSearch = onOpenSearch,
+                onOpenFypSearch = onOpenFypSearch,
             )
         }
     }
@@ -309,6 +313,7 @@ private fun RecentActivityRow(
     onOpenWatchedPost: (Int) -> Unit,
     onOpenCodexPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
+    onOpenFypSearch: (RecentSearchEntry) -> Unit,
 ) {
     when (entry) {
         is RecentActivityEntry.Watched -> RecentWatchedRow(
@@ -328,8 +333,12 @@ private fun RecentActivityRow(
         is RecentActivityEntry.Search -> RecentSearchRow(
             entry = entry.entry,
             now = now,
-            onClick = if (entry.entry.kind == RecentSearchKind.FYP) null else {
-                { onOpenSearch(entry.entry) }
+            onClick = {
+                if (entry.entry.kind == RecentSearchKind.FYP) {
+                    onOpenFypSearch(entry.entry)
+                } else {
+                    onOpenSearch(entry.entry)
+                }
             },
         )
     }
@@ -503,8 +512,8 @@ private enum class RecentsFilter(
 ) {
     WATCHED("Watched", RecentsClearTarget.WATCHED),
     CODEX("Codex", RecentsClearTarget.CODEX),
-    FYP("FYP", RecentsClearTarget.FYP),
     SEARCHES("Searches", RecentsClearTarget.SEARCHES),
+    FYP("FYP", RecentsClearTarget.FYP),
     ALL("All", RecentsClearTarget.ALL),
 }
 
@@ -532,6 +541,12 @@ internal fun recentSearchPresentation(entry: RecentSearchEntry): RecentSearchPre
         RecentSearchKind.FYP -> sourceList
     }
     return RecentSearchPresentation(title, subtitle)
+}
+
+internal fun RecentSearchEntry.fypSeedBySource(): Map<SourceKey, List<String>> {
+    return sourceTags.ifEmpty {
+        sources.associateWith { query.includeTags }
+    }
 }
 
 private fun relativeTimeLabel(now: Long, eventAt: Long): String {

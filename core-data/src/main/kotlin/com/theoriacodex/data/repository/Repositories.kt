@@ -70,6 +70,7 @@ data class RecentSearchEntry(
     val searchedAtEpochMs: Long,
     val kind: RecentSearchKind = query.defaultRecentSearchKind(),
     val sources: List<SourceKey> = query.defaultRecentSearchSources(),
+    val sourceTags: Map<SourceKey, List<String>> = emptyMap(),
 )
 
 enum class RecentSearchKind {
@@ -118,6 +119,7 @@ interface RecentsRepository {
         queryHash: String,
         kind: RecentSearchKind = query.defaultRecentSearchKind(),
         sources: List<SourceKey> = query.defaultRecentSearchSources(),
+        sourceTags: Map<SourceKey, List<String>> = emptyMap(),
     )
     suspend fun restoreEntries(
         watchedPosts: List<RecentPostEntry> = emptyList(),

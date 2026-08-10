@@ -57,6 +57,7 @@ class RoomRecentsRepository(
                 searchedAtEpochMs = row.searchedAtEpochMs,
                 kind = payload.kind,
                 sources = payload.sources,
+                sourceTags = payload.sourceTags,
             )
         }
     }
@@ -107,6 +108,7 @@ class RoomRecentsRepository(
         queryHash: String,
         kind: RecentSearchKind,
         sources: List<SourceKey>,
+        sourceTags: Map<SourceKey, List<String>>,
     ) {
         val normalized = queryHash.trim()
         if (normalized.isBlank()) return
@@ -114,7 +116,7 @@ class RoomRecentsRepository(
             dao.upsertSearch(
                 RecentSearchEntity(
                     normalized,
-                    RecentSearchPayloadCodec.encodeJson(query, kind, sources, queryGson),
+                    RecentSearchPayloadCodec.encodeJson(query, kind, sources, sourceTags, queryGson),
                     clock(),
                     dao.nextSearchSequence(),
                 )

@@ -276,6 +276,7 @@ class InMemoryRecentsRepository(
         queryHash: String,
         kind: RecentSearchKind,
         sources: List<SourceKey>,
+        sourceTags: Map<SourceKey, List<String>>,
     ) {
         val normalizedHash = queryHash.trim()
         if (normalizedHash.isBlank()) return
@@ -288,6 +289,7 @@ class InMemoryRecentsRepository(
                     searchedAtEpochMs = clock(),
                     kind = kind,
                     sources = sources.distinct(),
+                    sourceTags = sourceTags.mapValues { (_, tags) -> tags.toList() },
                 ),
                 limit = searchLimit,
             )

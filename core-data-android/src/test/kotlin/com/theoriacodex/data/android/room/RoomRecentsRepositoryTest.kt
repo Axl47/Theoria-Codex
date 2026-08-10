@@ -62,12 +62,14 @@ class RoomRecentsRepositoryTest {
     @Test fun `FYP search persists and clears independently from applied searches`() = runTest {
         val repository = RoomRecentsRepository(database, clock = { now++ })
         val fypQuery = recentQuery("favorite").copy(mode = QueryMode.Unified)
+        val sourceTags = mapOf(SourceKey.PIXIV to listOf("favorite"))
         repository.recordSearch(recentQuery("manual"), "search:manual")
         repository.recordSearch(
             query = fypQuery,
             queryHash = "for_you:seed",
             kind = RecentSearchKind.FYP,
             sources = listOf(SourceKey.PIXIV),
+            sourceTags = sourceTags,
         )
         repository.recordWatchedPost(
             recentPost("legacy-fyp"),
@@ -79,6 +81,7 @@ class RoomRecentsRepositoryTest {
         val restored = repository.observeSearches().first().first { it.kind == RecentSearchKind.FYP }
         assertEquals(fypQuery, restored.query)
         assertEquals(listOf(SourceKey.PIXIV), restored.sources)
+        assertEquals(sourceTags, restored.sourceTags)
         assertTrue(repository.observeActivity().first().none { it is RecentActivityEntry.Watched })
         repository.clearSearches("for_you:")
         assertEquals(listOf("search:manual"), repository.observeSearches().first().map { it.queryHash })

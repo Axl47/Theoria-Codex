@@ -165,6 +165,7 @@ private suspend fun handleForYouRouteEffect(
         is ForYouEffect.ChangeSource,
         is ForYouEffect.LoadNextPage,
         is ForYouEffect.RefreshFeed,
+        is ForYouEffect.ReplaySearch,
         is ForYouEffect.UndoSeedBlacklist,
         -> Unit
     }

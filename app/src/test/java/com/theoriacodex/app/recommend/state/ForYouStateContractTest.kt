@@ -83,6 +83,34 @@ class ForYouStateContractTest {
     }
 
     @Test
+    fun `historical search starts a refresh with exact source tags and sort`() {
+        val state = snapshot(
+            likesCount = 2,
+            availableSources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU),
+        ).toUiState()
+        val seed = linkedMapOf(
+            SourceKey.PIXIV to listOf("pixiv seed"),
+            SourceKey.GELBOORU to listOf("gelbooru seed"),
+        )
+
+        val transition = state.reduce(ForYouAction.ReplaySearch(seed, SortMode.TOP))
+
+        assertTrue(transition.state.isRefreshing)
+        assertEquals(SortMode.TOP, transition.state.sortMode)
+        assertNull(transition.state.selectedSource)
+        assertEquals(seed, transition.state.seedSummaryBySource)
+        assertEquals("GELBOORU:gelbooru seed|PIXIV:pixiv seed", transition.state.seedId)
+        assertEquals(
+            ForYouEffect.ReplaySearch(
+                request = requireNotNull(transition.state.activeRequest),
+                seedBySource = seed,
+                sortMode = SortMode.TOP,
+            ),
+            transition.effect,
+        )
+    }
+
+    @Test
     fun `empty error and blacklist exhausted snapshots stay distinguishable`() {
         val noSources = snapshot(seedId = "empty-enabled", likesCount = 2).toUiState()
         val exhausted = snapshot(

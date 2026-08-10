@@ -167,6 +167,28 @@ class ArchitectureBoundarySourceTest {
     }
 
     @Test
+    fun `FYP Recents replay targets For You and Searches precedes FYP`() {
+        val app = File(
+            repositoryRoot,
+            "app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt",
+        ).readText()
+        val recents = File(
+            repositoryRoot,
+            "app/src/main/java/com/theoriacodex/app/recents/RecentsScreen.kt",
+        ).readText()
+        val filterOrder = recents.substringAfter("private enum class RecentsFilter")
+            .substringBefore("private fun activityKey")
+
+        assertTrue("FYP rows must dispatch their exact historical seed", "entry.fypSeedBySource()" in app)
+        assertTrue("FYP replay must use the navigation-owned route action", "ForYouAction.ReplaySearch(" in app)
+        assertTrue("FYP replay must target the For You tab", "homeTabRoute = TopLevelDestination.ForYou.route" in app)
+        assertTrue(
+            "Searches must appear before FYP in Recents",
+            filterOrder.indexOf("SEARCHES(") < filterOrder.indexOf("FYP("),
+        )
+    }
+
+    @Test
     fun `feed composables delegate animated duration enrichment to route owners`() {
         val screens = listOf(
             "app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt",

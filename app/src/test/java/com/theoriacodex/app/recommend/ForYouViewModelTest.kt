@@ -455,6 +455,15 @@ private class FakeForYouRouteEngine(
         refresh(shuffle = false)
     }
 
+    override suspend fun replaySearch(seedBySource: Map<SourceKey, List<String>>, sort: SortMode) {
+        current = current.copy(
+            selectedSource = seedBySource.keys.singleOrNull(),
+            sortMode = sort,
+            seedSummaryBySource = seedBySource,
+            seedId = "historical",
+        )
+    }
+
     override suspend fun blacklistCurrentSeedAndRefresh(): List<ForYouBlacklistEntry> {
         blacklistStarted?.complete(Unit)
         blacklistRelease?.let { release ->

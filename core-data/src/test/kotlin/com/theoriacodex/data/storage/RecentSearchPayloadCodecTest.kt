@@ -39,6 +39,26 @@ class RecentSearchPayloadCodecTest {
         assertEquals(listOf(SourceKey.PIXIV), decoded.sources)
     }
 
+    @Test
+    fun `FYP payload round trips exact tags by source`() {
+        val sourceTags = linkedMapOf(
+            SourceKey.GELBOORU to listOf("gelbooru seed"),
+            SourceKey.PIXIV to listOf("pixiv seed", "night"),
+        )
+        val entry = RecentSearchEntry(
+            query = query(QueryMode.Unified),
+            queryHash = "for_you:seed",
+            searchedAtEpochMs = 1L,
+            kind = RecentSearchKind.FYP,
+            sources = sourceTags.keys.toList(),
+            sourceTags = sourceTags,
+        )
+
+        val decoded = RecentSearchPayloadCodec.decodeJson(RecentSearchPayloadCodec.encodeJson(entry))
+
+        assertEquals(sourceTags, decoded.sourceTags)
+    }
+
     private fun query(mode: QueryMode) = Query(
         mode = mode,
         includeTags = listOf("landscape"),

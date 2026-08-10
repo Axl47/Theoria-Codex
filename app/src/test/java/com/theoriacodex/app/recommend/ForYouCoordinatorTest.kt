@@ -61,10 +61,35 @@ class ForYouCoordinatorTest {
         assertEquals(RecentSearchKind.FYP, entry.kind)
         assertEquals(listOf(SourceKey.PIXIV), entry.sources)
         assertEquals(listOf("favorite"), entry.query.includeTags)
+        assertEquals(mapOf(SourceKey.PIXIV to listOf("favorite")), entry.sourceTags)
         assertEquals("for_you:${coordinator.seedId}", entry.queryHash)
         assertEquals(rootEntries, recents.observeSearches().first())
         assertTrue(recents.observeWatchedPosts().first().isEmpty())
         assertEquals(1, recents.observeActivity().first().size)
+    }
+
+    @Test
+    fun `saved FYP search replays exact source tags and sort`() = runTest {
+        val pixiv = FakeAdapter(SourceKey.PIXIV, "pixiv-post")
+        val gelbooru = FakeAdapter(SourceKey.GELBOORU, "gelbooru-post")
+        val coordinator = ForYouCoordinator(
+            registry = registryOf(pixiv, gelbooru),
+            settingsRepository = InMemorySettingsRepository(),
+        )
+        val seed = linkedMapOf(
+            SourceKey.GELBOORU to listOf("gelbooru seed"),
+            SourceKey.PIXIV to listOf("pixiv seed", "night"),
+        )
+
+        coordinator.initialize()
+        coordinator.replaySearch(seed, SortMode.TOP)
+
+        assertEquals(seed, coordinator.seedSummaryBySource)
+        assertEquals(SortMode.TOP, coordinator.sortMode)
+        assertNull(coordinator.selectedSource)
+        assertEquals(listOf("gelbooru seed"), gelbooru.lastSearchQuery?.includeTags)
+        assertEquals(listOf("pixiv seed", "night"), pixiv.lastSearchQuery?.includeTags)
+        assertEquals(SortMode.TOP, pixiv.lastSearchQuery?.sort)
     }
 
     @Test

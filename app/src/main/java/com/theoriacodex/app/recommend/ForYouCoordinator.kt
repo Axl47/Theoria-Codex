@@ -159,6 +159,17 @@ class ForYouCoordinator(
         executeFeed(shuffle = shuffle)
     }
 
+    suspend fun replaySearch(
+        seedBySource: Map<SourceKey, List<String>>,
+        sort: SortMode,
+    ) {
+        executeFeed(
+            shuffle = false,
+            historicalSeed = seedBySource.mapValues { (_, tags) -> tags.toList() },
+            historicalSort = sort,
+        )
+    }
+
     suspend fun setSortMode(mode: SortMode) {
         if (sortMode == mode) return
         sortMode = mode
@@ -238,7 +249,7 @@ class ForYouCoordinator(
                 pageTokens = nextPageTokens.filterKeys { source -> source in pageableSources },
             )
             ensureCurrent(request)
-            results = mergeResults(results, pageResult.items)
+            results = mergeForYouResults(results, pageResult.items)
             statuses = pageResult.statuses.sortedBy { it.source.name }
             nextPageTokens = nextPageTokens.toMutableMap().apply {
                 putAll(pageResult.nextPageTokens)
@@ -283,9 +294,27 @@ class ForYouCoordinator(
         }
     }
 
-    private suspend fun executeFeed(shuffle: Boolean) {
+    private suspend fun executeFeed(
+        shuffle: Boolean,
+        historicalSeed: Map<SourceKey, List<String>>? = null,
+        historicalSort: SortMode? = null,
+    ) {
         val request = beginRequest(FeedRequestKind.ROOT)
         try {
+            if (historicalSeed != null) {
+                require(historicalSeed.isNotEmpty()) { "Saved FYP search has no sources" }
+                val unavailableSources = historicalSeed.keys - allEnabledSources()
+                require(unavailableSources.isEmpty()) {
+                    "Saved FYP sources are currently unavailable"
+                }
+                sortMode = historicalSort ?: sortMode
+                selectedSource = historicalSeed.keys.singleOrNull()
+                affinityStatsBySource = emptyMap()
+                val historicalResult = runFeedSeed(request, historicalSeed)
+                ensureCurrent(request)
+                applyFeedResult(seed = historicalSeed, result = historicalResult)
+                return
+            }
             val enabledSources = effectiveEnabledSources()
             val blacklistedSeedKeys = blacklistedSeedKeysBySource()
             val likes = likesRepository.observeLikes(activeProfileId).first()
@@ -372,7 +401,7 @@ class ForYouCoordinator(
     ): UnifiedSearchResult {
         ensureCurrent(request)
         queryOverridesBySource = seed.mapValues { (source, includeTags) ->
-            sourceQuery(source = source, includeTags = includeTags)
+            forYouSourceQuery(source = source, includeTags = includeTags, sortMode = sortMode)
         }
         return runUnifiedSearch(
             sources = seed.keys,
@@ -465,7 +494,7 @@ class ForYouCoordinator(
         nextPageTokens = result.nextPageTokens
         canLoadMore = nextPageTokens.values.any { token -> !token.isNullOrBlank() }
         seedSummaryBySource = seed
-        seedId = buildSeedId(seed)
+        seedId = buildForYouSeedId(seed)
         recordRecommendationSearch(seed)
     }
 
@@ -481,6 +510,7 @@ class ForYouCoordinator(
                 queryHash = "for_you:$seedId",
                 kind = RecentSearchKind.FYP,
                 sources = seed.keys.inPresentationOrder(),
+                sourceTags = seed,
             )
         }
     }
@@ -597,20 +627,6 @@ class ForYouCoordinator(
             .map { suggestion -> suggestion.text }
     }
 
-    private fun sourceQuery(
-        source: SourceKey,
-        includeTags: List<String>,
-    ): Query {
-        return Query(
-            mode = QueryMode.Source(source),
-            includeTags = includeTags,
-            excludeTags = emptyList(),
-            sort = sortMode,
-            dateRange = null,
-            minScore = null,
-        )
-    }
-
     private fun effectiveEnabledSources(): Set<SourceKey> {
         val enabledSources = allEnabledSources()
         return selectedSource?.let { source ->
@@ -638,34 +654,6 @@ class ForYouCoordinator(
             dateRange = null,
             minScore = null,
         )
-    }
-
-    private fun mergeResults(
-        current: List<Post>,
-        next: List<Post>,
-    ): List<Post> {
-        if (next.isEmpty()) return current
-        if (current.isEmpty()) return next
-
-        val seen = current
-            .mapTo(mutableSetOf()) { post -> "${post.id.source.name}:${post.id.sourcePostId}" }
-        val merged = current.toMutableList()
-        next.forEach { post ->
-            val key = "${post.id.source.name}:${post.id.sourcePostId}"
-            if (seen.add(key)) {
-                merged += post
-            }
-        }
-        return merged
-    }
-
-    private fun buildSeedId(seed: Map<SourceKey, List<String>>): String {
-        if (seed.isEmpty()) return "none"
-        return seed.entries
-            .sortedBy { it.key.name }
-            .joinToString(separator = "|") { (source, tags) ->
-                "${source.name}:${tags.joinToString(separator = "+")}"
-            }
     }
 
     private fun buildAffinityBySource(

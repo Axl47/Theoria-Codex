@@ -8,7 +8,7 @@
 <body>
   <main>
     <h1>FYP Recommendation History in Recents</h1>
-    <p>Status: corrected implementation and deterministic host validation complete; manual isolated-Debug acceptance remains. Owner: current Codex task.</p>
+    <p>Status: exact historical replay and deterministic host validation complete; manual isolated-Debug acceptance remains. Owner: current Codex task.</p>
 
     <h2>Purpose</h2>
     <p>Add an FYP section to Recents that durably captures recommendation searches, not their result posts, and includes those searches in All.</p>
@@ -16,10 +16,10 @@
     <h2>Runtime flow</h2>
     <ol>
       <li>For You accepts a root recommendation generation in <code>ForYouCoordinator</code>.</li>
-      <li>The coordinator records one FYP search with the generated seed tags, participating sources, and seed identity.</li>
-      <li>The versioned recent-search payload persists the FYP kind through the existing Room column; no schema migration is needed.</li>
+      <li>The coordinator records one FYP search with exact tags per source, participating-source order, sort, and seed identity.</li>
+      <li>The versioned recent-search payload persists the FYP kind and source-specific tags through the existing Room column; no schema migration is needed.</li>
       <li>The Recents boundary separates normal Searches from FYP searches while the existing activity merge includes both in All.</li>
-      <li>FYP rows are historical generation records rather than replayable Search queries because providers may have received different seed tags.</li>
+      <li>Clicking an FYP row dispatches a typed replay to the navigation-owned For You route, then jumps directly to For You. The coordinator rebuilds the original per-source query overrides and sort.</li>
     </ol>
 
     <h2>Behavior and error boundaries</h2>
@@ -28,7 +28,10 @@
       <li>Result posts are not recorded as FYP history. A post opened from For You follows the existing Watched contract.</li>
       <li>FYP clear has exact Undo without clearing normal Searches. All clear/Undo includes both.</li>
       <li>A Recents write failure must not discard an otherwise valid recommendation feed; cancellation still propagates.</li>
+      <li>An FYP replay supersedes automatic/current refresh work. If a saved source is unavailable, For You shows the existing refresh error instead of silently changing the search.</li>
+      <li>Legacy FYP rows without source-specific metadata remain clickable by applying their saved aggregate tags to each participating source.</li>
       <li>Search titles show every tag and wrap instead of truncating with an ellipsis.</li>
+      <li>Recents filter order is Watched, Codex, Searches, FYP, All.</li>
     </ul>
 
     <h2>Acceptance and validation</h2>
@@ -37,6 +40,7 @@
       <li>Coordinator tests prove one accepted root search is recorded and pagination does not add history.</li>
       <li>Clear workflow tests prove FYP and All snapshots restore exactly.</li>
       <li>Presentation coverage proves FYP source context and full tag-title construction.</li>
+      <li>Replay coverage proves payload/Room round trips, exact coordinator queries, typed route-owner dispatch, compatibility fallback, and tab order.</li>
       <li>Run focused JVM tests, Debug compilation, relevant Detekt owners, HTML validation, and diff checks once.</li>
       <li>Leave row wrapping and filter scrolling for manual isolated-Debug acceptance; run no connected or package-mutating command.</li>
     </ul>
@@ -46,7 +50,9 @@
       <li>Complete: corrected the durable unit from result-post membership to one accepted root recommendation search.</li>
       <li>Complete: FYP is projected as search rows, included in All, and independently clearable with Undo.</li>
       <li>Complete: search tag titles no longer impose a one-line ellipsis.</li>
-      <li>Complete: 68 focused tests ran with zero failures/errors and seven intentional file-backed skips; app compilation, app/Room Detekt, HTML validation, and diff checks passed.</li>
+      <li>Complete: exact FYP source tags and sort now replay through For You from both FYP and All.</li>
+      <li>Complete: Searches now appears before FYP in the Recents filter row.</li>
+      <li>Complete: 91 focused tests ran with zero failures/errors and seven intentional file-backed skips; app compilation, app/Room Detekt, HTML validation, and diff checks passed.</li>
       <li>Pending: manual FYP row wrapping and filter-row scrolling acceptance in the isolated Debug app.</li>
     </ul>
   </main>

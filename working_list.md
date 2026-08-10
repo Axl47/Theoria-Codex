@@ -16,6 +16,14 @@ None.
 
 ### Done
 
+- [x] Persist and replay the exact source-by-source FYP seed through the For You route owner.
+  - Evidence: the versioned recent-search payload now carries source-specific seed tags; `ReplaySearch` supersedes current For You work and executes those exact per-source queries and sort through `ForYouCoordinator`.
+- [x] Make FYP rows navigate to For You and reorder Searches before FYP.
+  - Evidence: both the FYP section and All dispatch through a queued navigation-owner action before jumping directly to For You; Recents filter order is Watched, Codex, Searches, FYP, All.
+- [x] Add focused persistence, coordinator, reducer, and navigation regression coverage.
+  - Evidence: payload/Room round trips, exact coordinator replay, typed reducer handoff, compatibility fallback, direct navigation ownership, and tab order all pass their focused host tests.
+- [x] Run one bounded host validation batch and update the ExecPlan evidence.
+  - Evidence: 91 focused tests ran with zero failures/errors and seven intentional file-backed skips; app compilation, app/Room Detekt, HTML validation, and diff checks passed. No device, connected, install, package mutation, or live-provider lane ran.
 - [x] Correct the feature boundary to FYP searches rather than result posts.
   - Evidence: `ForYouCoordinator` owns the accepted root generation and exact seed/source context. It now records one typed recent search after root acceptance; pagination and result posts do not write FYP history, while direct Viewer activity continues through Watched.
 - [x] Define the implementation boundary before runtime edits.
