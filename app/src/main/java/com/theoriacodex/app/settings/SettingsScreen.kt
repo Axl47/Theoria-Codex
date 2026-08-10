@@ -168,17 +168,19 @@ fun SettingsScreen(
                         },
                     )
                 }
-                val weight = state.settings.runtime.sourceWeights[source]?.toFloat() ?: 0f
-                Slider(
-                    value = weight,
-                    onValueChange = { raw ->
-                        val updated = state.settings.runtime.sourceWeights.toMutableMap()
-                        updated[source] = raw.toDouble()
-                        onAction(SettingsAction.SetSourceWeights(updated))
-                    },
-                    valueRange = 0f..1f,
-                )
-                Text("Weight: %.2f".format(weight), style = MaterialTheme.typography.bodySmall)
+                if (isEnabled) {
+                    val weight = state.settings.runtime.sourceWeights[source]?.toFloat() ?: 0f
+                    Slider(
+                        value = weight,
+                        onValueChange = { raw ->
+                            val updated = state.settings.runtime.sourceWeights.toMutableMap()
+                            updated[source] = raw.toDouble()
+                            onAction(SettingsAction.SetSourceWeights(updated))
+                        },
+                        valueRange = 0f..1f,
+                    )
+                    Text("Weight: %.2f".format(weight), style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
 
