@@ -34,10 +34,16 @@ fun filterSearchResults(
     savedPostIds: Set<PostId>,
     watchedPostIds: Set<PostId> = emptySet(),
     unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy = UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
+    knownDurationMsByPostId: Map<PostId, Long> = emptyMap(),
 ): List<Post> {
     return results.filter { post ->
         (!filters.animatedOnly || isAnimatedPost(post)) &&
-            matchesAnimatedDurationFilter(post, filters, unknownAnimatedDurationPolicy) &&
+            matchesAnimatedDurationFilter(
+                post,
+                filters,
+                unknownAnimatedDurationPolicy,
+                knownDurationMsByPostId[post.id],
+            ) &&
             (!filters.hideLiked || post.id !in likedPostIds) &&
             (!filters.hideSaved || post.id !in savedPostIds) &&
             (!filters.hideWatched || post.id !in watchedPostIds)
@@ -48,11 +54,13 @@ private fun matchesAnimatedDurationFilter(
     post: Post,
     filters: SearchVisibilityFilters,
     unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy,
+    acquiredDurationMs: Long?,
 ): Boolean {
     val range = filters.animatedDurationRange
     if (range.isFullRange) return true
     if (!isAnimatedPost(post)) return false
-    val durationMs = animatedDurationMs(post) ?: return when (unknownAnimatedDurationPolicy) {
+    val durationMs = animatedDurationMs(post) ?: acquiredDurationMs?.takeIf { it > 0L }
+        ?: return when (unknownAnimatedDurationPolicy) {
         UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
         UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND,
         -> false

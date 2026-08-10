@@ -17,9 +17,6 @@ import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchEffect
 import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchSourceScope
-import com.theoriacodex.app.testing.TestAnimatedDurationEnricher
-import com.theoriacodex.app.testing.animatedTestPost
-import com.theoriacodex.app.media.AnimatedDurationEnricher
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -79,7 +76,6 @@ internal abstract class SearchViewModelTestFixture {
         uiRestoreRepository: UiRestoreRepository = InMemoryUiRestoreRepository(),
         scrollPersistenceDelayMs: Long = 0L,
         scrollPersistenceDispatcher: CoroutineDispatcher = mainDispatcherRule.dispatcher,
-        animatedDurationEnricher: AnimatedDurationEnricher = TestAnimatedDurationEnricher { null },
         recentsRepository: RecentsRepository = InMemoryRecentsRepository(),
         executionService: ((SearchCoordinator) -> SearchExecutionService)? = null,
     ): SearchViewModel {
@@ -97,7 +93,6 @@ internal abstract class SearchViewModelTestFixture {
             autocompleteDelayMs = autocompleteDelayMs,
             scrollPersistenceDelayMs = scrollPersistenceDelayMs,
             scrollPersistenceDispatcher = scrollPersistenceDispatcher,
-            animatedDurationEnricher = animatedDurationEnricher,
         )
     }
 

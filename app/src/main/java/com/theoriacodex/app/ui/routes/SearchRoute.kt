@@ -17,7 +17,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.SearchScreen
 import com.theoriacodex.app.search.SearchViewModel
-import com.theoriacodex.app.media.AnimatedDurationEnricher
+import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchEffect
 import com.theoriacodex.app.search.state.SearchUiState
@@ -261,7 +261,7 @@ internal class SearchRouteResumeObserver(
 @Composable
 internal fun SearchRoute(
     coordinator: SearchCoordinator,
-    animatedDurationEnricher: AnimatedDurationEnricher,
+    mediaDurationCoordinator: MediaDurationCoordinator,
     pixivUgoiraClient: PixivUgoiraClient?,
     config: SearchRouteConfig,
     callbacks: SearchRouteCallbacks,
@@ -269,9 +269,17 @@ internal fun SearchRoute(
 ) {
     val owner = viewModel<SearchViewModel>(
         key = SEARCH_ROUTE_OWNER_KEY,
-        factory = SearchViewModel.factory(coordinator, animatedDurationEnricher),
+        factory = SearchViewModel.factory(coordinator),
     )
     val state by owner.state.collectAsStateWithLifecycle()
+    val duration = rememberMediaDurationRouteBinding(
+        coordinator = mediaDurationCoordinator,
+        routeName = "search",
+        ownerKey = SEARCH_DURATION_OWNER_KEY,
+        contentIdentity = state.query.appliedQueryHash.ifBlank { "unapplied" },
+        posts = state.content.results,
+        resolveInBackground = config.resolveUnknownAnimatedDurations,
+    )
     val ownerHandle = remember(owner) { SearchRouteOwnerHandle(owner) }
     val currentOnOwnerAvailable by rememberUpdatedState(onOwnerAvailable)
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -300,24 +308,54 @@ internal fun SearchRoute(
         }
     }
 
+    SearchRouteContent(
+        state = state,
+        owner = owner,
+        coordinator = coordinator,
+        duration = duration,
+        pixivUgoiraClient = pixivUgoiraClient,
+        config = config,
+        callbacks = callbacks,
+    )
+}
+
+@Composable
+private fun SearchRouteContent(
+    state: SearchUiState,
+    owner: SearchViewModel,
+    coordinator: SearchCoordinator,
+    duration: MediaDurationRouteBinding,
+    pixivUgoiraClient: PixivUgoiraClient?,
+    config: SearchRouteConfig,
+    callbacks: SearchRouteCallbacks,
+) {
     SearchScreen(
         state = state,
         creatorBrowsingSources = config.creatorBrowsingSources,
         onAction = owner::onAction,
-        resolvePostById = { postId -> coordinator.resolvePostForSearch(postId, state.query.appliedQueryHash) },
+        resolvePostById = { id -> coordinator.resolvePostForSearch(id, state.query.appliedQueryHash) },
         recoverPostMedia = coordinator::recoverPostMedia,
-        tagVideoCountProvider = { source, tag -> coordinator.tagVideoCount(
-            source, tag, state.suggestions.autocomplete, state.suggestions.trending,
-        ) },
-        fetchTagVideoCounts = { source, tags -> coordinator.fetchTagVideoCounts(
-            source, tags, state.suggestions.autocomplete, state.suggestions.trending,
-        ) },
+        tagVideoCountProvider = { source, tag ->
+            coordinator.tagVideoCount(
+                source, tag, state.suggestions.autocomplete, state.suggestions.trending,
+            )
+        },
+        fetchTagVideoCounts = { source, tags ->
+            coordinator.fetchTagVideoCounts(
+                source, tags, state.suggestions.autocomplete, state.suggestions.trending,
+            )
+        },
         pixivUgoiraClient = pixivUgoiraClient,
         likedPostIds = config.likedPostIds,
         savedPostIds = config.savedPostIds,
         watchedPostIds = config.watchedPostIds,
         favoriteTags = config.favoriteTags,
         resolveUnknownAnimatedDurations = config.resolveUnknownAnimatedDurations,
+        durationStates = duration.states,
+        onDurationFilterChanged = duration.owner::onFilterChanged,
+        onDurationPostVisibilityChanged = duration.owner::onPostVisibilityChanged,
+        onDurationEnvironmentChanged = duration.owner::onEnvironmentChanged,
+        onAuthoritativeDurationKnown = duration.owner::publishPlayerDuration,
         onToggleLike = callbacks.onToggleLike,
         onOpenCreatorProfile = callbacks.onOpenCreatorProfile,
         onOpenLegacyCreatorProfile = callbacks.onOpenLegacyCreatorProfile,
@@ -330,4 +368,5 @@ internal fun SearchRoute(
 }
 
 private const val SEARCH_ROUTE_OWNER_KEY = "search-route-owner"
+private const val SEARCH_DURATION_OWNER_KEY = "search-duration-owner"
 private const val ROUTE_OWNER_LEASE_KEY = "route-owner-lease"

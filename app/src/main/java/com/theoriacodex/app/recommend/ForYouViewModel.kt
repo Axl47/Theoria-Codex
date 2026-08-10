@@ -7,11 +7,6 @@ import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.theoriacodex.app.media.AnimatedDurationEnricher
-import com.theoriacodex.app.media.AnimatedDurationEnrichment
-import com.theoriacodex.app.media.AnimatedDurationEnrichmentLane
-import com.theoriacodex.app.media.NoOpAnimatedDurationEnricher
-import com.theoriacodex.app.media.animatedDurationMs
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouCoordinatorSnapshot
 import com.theoriacodex.app.recommend.state.ForYouEffect
@@ -133,18 +128,15 @@ internal class ForYouViewModel(
     private val savedStateHandle: SavedStateHandle,
     initialProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
     coroutineScope: CoroutineScope? = null,
-    private val animatedDurationEnricher: AnimatedDurationEnricher = NoOpAnimatedDurationEnricher,
 ) : ViewModel(), RouteStateOwner<ForYouUiState, ForYouAction, ForYouEffect> {
     constructor(
         coordinator: ForYouCoordinator,
         savedStateHandle: SavedStateHandle,
         initialProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
-        animatedDurationEnricher: AnimatedDurationEnricher = NoOpAnimatedDurationEnricher,
     ) : this(
         engine = CoordinatorForYouRouteEngine(coordinator),
         savedStateHandle = savedStateHandle,
         initialProfiles = initialProfiles,
-        animatedDurationEnricher = animatedDurationEnricher,
     )
 
     private val ownerScope = coroutineScope ?: viewModelScope
@@ -178,14 +170,6 @@ internal class ForYouViewModel(
 
     private val effectChannel = Channel<ForYouEffect>(capacity = Channel.BUFFERED)
     override val effects: Flow<ForYouEffect> = effectChannel.receiveAsFlow()
-    private val durationEnrichmentLane = AnimatedDurationEnrichmentLane(
-        scope = ownerScope,
-        enricher = animatedDurationEnricher,
-        currentIdentity = { mutableState.value.seedId },
-        currentPosts = { mutableState.value.results },
-        applyEnrichments = ::applyAnimatedDurationEnrichments,
-    )
-
     init {
         ownerScope.launch {
             engine.initialize()
@@ -195,10 +179,6 @@ internal class ForYouViewModel(
     }
 
     override fun onAction(action: ForYouAction) {
-        if (action is ForYouAction.RequestAnimatedDurationEnrichment) {
-            requestAnimatedDurationEnrichment(action.seedId)
-            return
-        }
         if (action is ForYouAction.ReplaySearch && !isReplayReady()) {
             pendingReplaySearch = action
             return
@@ -284,28 +264,6 @@ internal class ForYouViewModel(
     fun rememberResolvedPost(post: Post) {
         engine.rememberResolvedPost(post)
         publishSnapshot(activeLikesOverride = mutableState.value.activeProfileLikesCount)
-    }
-
-    private fun requestAnimatedDurationEnrichment(seedId: String) {
-        durationEnrichmentLane.request(seedId)
-    }
-
-    private fun applyAnimatedDurationEnrichments(
-        seedId: String,
-        enrichments: List<AnimatedDurationEnrichment>,
-    ) {
-        if (mutableState.value.seedId != seedId) return
-        var changed = false
-        enrichments.forEach { result ->
-            val latestPost = mutableState.value.results.firstOrNull { post -> post.id == result.postId }
-                ?: return@forEach
-            if (animatedDurationMs(latestPost) != null) return@forEach
-            engine.rememberResolvedPost(latestPost.copy(durationMs = result.durationMs))
-            changed = true
-        }
-        if (changed) {
-            publishSnapshot(activeLikesOverride = mutableState.value.activeProfileLikesCount)
-        }
     }
 
     private fun handleEffect(effect: ForYouEffect) {
@@ -474,14 +432,12 @@ internal class ForYouViewModel(
         fun factory(
             coordinator: ForYouCoordinator,
             initialProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
-            animatedDurationEnricher: AnimatedDurationEnricher,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 ForYouViewModel(
                     coordinator = coordinator,
                     savedStateHandle = createSavedStateHandle(),
                     initialProfiles = initialProfiles,
-                    animatedDurationEnricher = animatedDurationEnricher,
                 )
             }
         }

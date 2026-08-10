@@ -315,7 +315,7 @@ data class CacheSettings(
 )
 
 data class ContentFilterSettings(
-    val resolveUnknownAnimatedDurations: Boolean = true,
+    val resolveUnknownAnimatedDurations: Boolean = false,
 )
 
 data class ViewerSettings(

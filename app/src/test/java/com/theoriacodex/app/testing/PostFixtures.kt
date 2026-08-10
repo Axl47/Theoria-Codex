@@ -6,8 +6,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.app.media.AnimatedDurationEnricher
-import com.theoriacodex.app.media.AnimatedDurationEnrichment
 
 internal fun testPost(
     source: SourceKey = SourceKey.PIXIV,
@@ -79,14 +77,3 @@ internal fun animatedTestPost(
     durationMs = durationMs,
     title = title,
 )
-
-internal class TestAnimatedDurationEnricher(
-    private val block: suspend (Post) -> Long?,
-) : AnimatedDurationEnricher {
-    val requestedPostIds = mutableListOf<PostId>()
-
-    override suspend fun enrich(post: Post): AnimatedDurationEnrichment? {
-        requestedPostIds += post.id
-        return block(post)?.let { duration -> AnimatedDurationEnrichment(post.id, duration) }
-    }
-}

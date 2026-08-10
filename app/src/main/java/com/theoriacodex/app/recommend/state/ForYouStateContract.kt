@@ -88,8 +88,6 @@ sealed interface ForYouAction {
         val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
     ) : ForYouAction
     data object GoToSearch : ForYouAction
-    data class RequestAnimatedDurationEnrichment(val seedId: String) : ForYouAction
-
     data class RefreshCompleted(
         val request: ForYouRequestIdentity,
         val snapshot: ForYouCoordinatorSnapshot,
@@ -394,7 +392,6 @@ fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
         }
 
         ForYouAction.GoToSearch -> ForYouTransition(this, ForYouEffect.NavigateToSearch)
-        is ForYouAction.RequestAnimatedDurationEnrichment -> unchanged()
         is ForYouAction.RefreshCompleted -> {
             if (!accepts(action.request, ForYouRequestKind.REFRESH)) {
                 unchanged()

@@ -49,7 +49,12 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
 import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
-import com.theoriacodex.app.media.shouldRequestAnimatedDurationEnrichment
+import com.theoriacodex.app.media.MediaDurationKey
+import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.durationFilterReadiness
+import com.theoriacodex.app.media.durationStatesByPostId
+import com.theoriacodex.app.media.knownMediaDurations
+import com.theoriacodex.app.media.mediaDurationKeysByPostId
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
@@ -64,6 +69,7 @@ import com.theoriacodex.app.ui.components.FeedErrorTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.ui.components.FeedLoadingState
+import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.ui.components.expandableControlSemantics
@@ -83,6 +89,11 @@ fun ForYouScreen(
     likedPostIds: Set<PostId>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     resolveUnknownAnimatedDurations: Boolean = false,
+    durationStates: Map<MediaDurationKey, MediaDurationState> = emptyMap(),
+    onDurationFilterChanged: (Boolean) -> Unit = {},
+    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
+    onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
+    onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
     onToggleLike: (Post) -> Unit,
     onAction: (ForYouAction) -> Unit,
     creatorBrowsingSources: Set<SourceKey> = emptySet(),
@@ -125,20 +136,45 @@ fun ForYouScreen(
             UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
         }
     }
-    val visibleResults = remember(state.results, visibilityFilters, unknownAnimatedDurationPolicy) {
+    val durationKeysByPostId = remember(state.results) {
+        mediaDurationKeysByPostId(state.results)
+    }
+    val acquiredDurations = remember(state.results, durationStates, durationKeysByPostId) {
+        knownMediaDurations(state.results, durationStates, durationKeysByPostId)
+    }
+    val durationDecisionStates = remember(state.results, durationStates, durationKeysByPostId) {
+        durationStatesByPostId(state.results, durationStates, durationKeysByPostId)
+    }
+    val durationReadiness = remember(
+        state.results,
+        animatedDurationFilterActive,
+        durationDecisionStates,
+    ) {
+        durationFilterReadiness(
+            state.results,
+            animatedDurationFilterActive,
+            durationDecisionStates,
+        )
+    }
+    val visibleResults = remember(
+        state.results,
+        visibilityFilters,
+        unknownAnimatedDurationPolicy,
+        acquiredDurations,
+    ) {
         filterSearchResults(
             results = state.results,
             filters = visibilityFilters,
             likedPostIds = emptySet(),
             savedPostIds = emptySet(),
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
+            knownDurationMsByPostId = acquiredDurations,
         )
     }
-    LaunchedEffect(state.results, resolveUnknownAnimatedDurations, state.seedId) {
-        if (shouldRequestAnimatedDurationEnrichment(state.results, resolveUnknownAnimatedDurations)) {
-            onAction(ForYouAction.RequestAnimatedDurationEnrichment(state.seedId))
-        }
+    LaunchedEffect(animatedDurationFilterActive) {
+        onDurationFilterChanged(animatedDurationFilterActive)
     }
+    DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
 
     LaunchedEffect(
         animatedOnly,
@@ -147,12 +183,14 @@ fun ForYouScreen(
         state.isPaging,
         state.canLoadMore,
         animatedDurationFilterActive,
+        durationReadiness.pendingCount,
     ) {
         snapshotFlow {
             (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to state.isPaging
         }.collect { (lastVisibleIndex, loadingMoreState) ->
             if (loadingMoreState) return@collect
             if (state.isRefreshing || state.isPaging || !state.canLoadMore) return@collect
+            if (durationReadiness.isResolving) return@collect
             if (visibleResults.isEmpty() || lastVisibleIndex < 0) {
                 if (animatedDurationFilterActive && state.results.isNotEmpty()) {
                     onAction(ForYouAction.LoadNextPage)
@@ -177,11 +215,13 @@ fun ForYouScreen(
         state.isPaging,
         state.canLoadMore,
         animatedDurationFilterActive,
+        durationReadiness.pendingCount,
     ) {
         if (!animatedOnly && !animatedDurationFilterActive) return@LaunchedEffect
         if (visibleResults.isNotEmpty()) return@LaunchedEffect
         if (state.results.isEmpty()) return@LaunchedEffect
         if (state.isRefreshing || state.isPaging || !state.canLoadMore) return@LaunchedEffect
+        if (durationReadiness.isResolving) return@LaunchedEffect
         onAction(ForYouAction.LoadNextPage)
     }
 
@@ -296,7 +336,9 @@ fun ForYouScreen(
 
             visibleResults.isEmpty() -> {
                 FeedEmptyTile(
-                    message = if (animatedOnly && state.results.isNotEmpty()) {
+                    message = if (durationReadiness.isResolving) {
+                            "Resolving durations…"
+                        } else if (animatedOnly && state.results.isNotEmpty()) {
                             if (!visibilityFilters.animatedDurationRange.isFullRange) {
                                 "No animated media found in the selected duration range."
                             } else {
@@ -314,10 +356,16 @@ fun ForYouScreen(
                     state = gridState,
                     modifier = Modifier.fillMaxSize(),
                     showPagingTile = state.isPaging,
+                    footerMessage = if (durationReadiness.isResolving) {
+                        "Resolving durations…"
+                    } else {
+                        null
+                    },
                 ) { index, post ->
                     SearchResultCard(
                         post = post,
                         pixivUgoiraClient = pixivUgoiraClient,
+                        acquiredDurationMs = acquiredDurations[post.id],
                         showSourceBadge = true,
                         liked = post.id in likedPostIds,
                         onToggleLike = { onToggleLike(post) },
@@ -332,6 +380,12 @@ fun ForYouScreen(
                             )
                         },
                         onLongPress = { selectedActionPost = post },
+                        onViewportChanged = { visible ->
+                            onDurationPostVisibilityChanged(post, visible)
+                        },
+                        onAuthoritativeDurationKnown = { durationMs ->
+                            onAuthoritativeDurationKnown(post, durationMs)
+                        },
                     )
                 }
             }

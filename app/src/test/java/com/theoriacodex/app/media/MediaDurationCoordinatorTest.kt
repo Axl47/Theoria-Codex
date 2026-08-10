@@ -180,6 +180,27 @@ class MediaDurationCoordinatorTest {
     }
 
     @Test
+    fun `repeated identical player publication does not republish metadata`() = runTest {
+        val traces = RecordingTraceRecorder()
+        val coordinator = coordinator(
+            scope = this,
+            acquirer = MediaDurationAcquirer { known(1_000L) },
+            traceRecorder = traces,
+        )
+        val key = key(post("player"))
+
+        coordinator.publishKnown(key, 6_000L, MediaDurationProvenance.ACTIVE_PLAYER)
+        coordinator.publishKnown(key, 6_000L, MediaDurationProvenance.ACTIVE_PLAYER)
+
+        assertEquals(1, traces.publications)
+        assertEquals(
+            MediaDurationState.Known(6_000L, MediaDurationProvenance.ACTIVE_PLAYER),
+            coordinator.states.value[key],
+        )
+        coordinator.close()
+    }
+
+    @Test
     fun `default coordinator executes at most one acquisition at a time`() = runTest {
         val releaseFirst = CompletableDeferred<Unit>()
         var active = 0

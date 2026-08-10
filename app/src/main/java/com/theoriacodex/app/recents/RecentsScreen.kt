@@ -35,12 +35,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.post.displayTitleOrNull
+import com.theoriacodex.app.media.MediaDurationKey
+import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.knownMediaDurations
+import com.theoriacodex.app.media.mediaDurationKeysByPostId
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.SourceLogo
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
+import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
@@ -63,6 +68,10 @@ fun RecentsScreen(
     fypSearches: List<RecentSearchEntry>,
     activity: List<RecentActivityEntry>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
+    durationStates: Map<MediaDurationKey, MediaDurationState> = emptyMap(),
+    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
+    onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
+    onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
     likedPostIds: Set<PostId> = emptySet(),
     onToggleLike: ((Post) -> Unit)? = null,
     creatorBrowsingSources: Set<SourceKey> = emptySet(),
@@ -88,6 +97,15 @@ fun RecentsScreen(
     var filter by rememberSaveable { mutableStateOf(RecentsFilter.WATCHED) }
     val now = remember(watchedPosts, codexPosts, searches, fypSearches, activity) { System.currentTimeMillis() }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
+    val durationPosts = remember(watchedPosts, codexPosts) {
+        (watchedPosts + codexPosts).map(RecentPostEntry::post).distinctBy(Post::id)
+    }
+    val durationKeysByPostId = remember(durationPosts) {
+        mediaDurationKeysByPostId(durationPosts)
+    }
+    val acquiredDurations = remember(durationPosts, durationStates, durationKeysByPostId) {
+        knownMediaDurations(durationPosts, durationStates, durationKeysByPostId)
+    }
     val hasContent = when (filter) {
         RecentsFilter.WATCHED -> watchedPosts.isNotEmpty()
         RecentsFilter.CODEX -> codexPosts.isNotEmpty()
@@ -140,6 +158,10 @@ fun RecentsScreen(
                 now = now,
                 pixivUgoiraClient = pixivUgoiraClient,
                 likedPostIds = likedPostIds,
+                acquiredDurations = acquiredDurations,
+                onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
+                onDurationEnvironmentChanged = onDurationEnvironmentChanged,
+                onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
                 onToggleLike = onToggleLike,
                 onOpenWatchedPost = onOpenWatchedPost,
                 onLongPress = { selectedActionPost = it },
@@ -150,6 +172,10 @@ fun RecentsScreen(
                 now = now,
                 pixivUgoiraClient = pixivUgoiraClient,
                 likedPostIds = likedPostIds,
+                acquiredDurations = acquiredDurations,
+                onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
+                onDurationEnvironmentChanged = onDurationEnvironmentChanged,
+                onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
                 onToggleLike = onToggleLike,
                 onOpenWatchedPost = onOpenCodexPost,
                 onLongPress = { selectedActionPost = it },
@@ -215,6 +241,10 @@ private fun WatchedGrid(
     now: Long,
     pixivUgoiraClient: PixivUgoiraClient?,
     likedPostIds: Set<PostId>,
+    acquiredDurations: Map<PostId, Long>,
+    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
+    onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit,
+    onAuthoritativeDurationKnown: (Post, Long) -> Unit,
     onToggleLike: ((Post) -> Unit)?,
     onOpenWatchedPost: (Int) -> Unit,
     onLongPress: (Post) -> Unit,
@@ -225,22 +255,29 @@ private fun WatchedGrid(
         return
     }
     val posts = remember(watchedPosts) { watchedPosts.map(RecentPostEntry::post) }
+    val gridState = rememberLazyStaggeredGridState()
+    DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
 
     TwoColumnPostStaggeredGrid(
         posts = posts,
-        state = rememberLazyStaggeredGridState(),
+        state = gridState,
         modifier = Modifier.fillMaxSize(),
     ) { index, post ->
         val entry = watchedPosts[index]
         SearchResultCard(
             post = post,
             pixivUgoiraClient = pixivUgoiraClient,
+            acquiredDurationMs = acquiredDurations[post.id],
             showSourceBadge = true,
             metadataLabel = relativeTimeLabel(now, entry.viewedAtEpochMs),
             liked = post.id in likedPostIds,
             onToggleLike = onToggleLike?.let { toggle -> { toggle(post) } },
             onClick = { onOpenWatchedPost(index) },
             onLongPress = { onLongPress(post) },
+            onViewportChanged = { visible -> onDurationPostVisibilityChanged(post, visible) },
+            onAuthoritativeDurationKnown = { durationMs ->
+                onAuthoritativeDurationKnown(post, durationMs)
+            },
         )
     }
 }

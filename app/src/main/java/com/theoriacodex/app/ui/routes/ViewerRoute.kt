@@ -10,12 +10,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
+import com.theoriacodex.app.media.MediaDurationCoordinator
+import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
@@ -45,6 +48,7 @@ internal data class ViewerRouteDependencies(
     val sessionRetentionOwner: ViewerSessionRetentionViewModel,
     val postResolver: ViewerPostResolver,
     val mediaPrefetcher: ViewerMediaPrefetcher,
+    val mediaDurationCoordinator: MediaDurationCoordinator,
     val restoreSession: suspend (ViewerSessionIdentity) -> ViewerSession?,
 )
 
@@ -198,6 +202,13 @@ internal fun ViewerRoute(
         )
     }
     val viewerOwner = viewModel<ViewerViewModel>(factory = ownerFactory)
+    val durationOwner = viewModel<MediaDurationRouteViewModel>(
+        key = "viewer-duration-owner",
+        factory = MediaDurationRouteViewModel.factory(
+            dependencies.mediaDurationCoordinator,
+            "viewer",
+        ),
+    )
     val ownerHandle = remember(viewerOwner) { ViewerRouteOwnerHandle(viewerOwner) }
     val viewerState by viewerOwner.state.collectAsStateWithLifecycle()
     val session by viewerOwner.session.collectAsStateWithLifecycle()
@@ -353,6 +364,13 @@ internal fun ViewerRoute(
         ?.takeIf { sourceState -> sourceState.queryHash == activeSession.context.queryHash }
     val canLoadMoreFromSource = activeSession.liveSearchBinding &&
         matchingSourceState?.canLoadMore == true
+    SideEffect {
+        durationOwner.synchronize(
+            identity = activeSession.sessionId,
+            posts = viewerState.pages.map { page -> page.post },
+            resolveInBackground = false,
+        )
+    }
 
     ViewerScreen(
         uiState = viewerState,
@@ -383,6 +401,7 @@ internal fun ViewerRoute(
                 latestScreenCallbacks.value.onVisiblePostChanged(post, currentSession)
             }
         },
+        onAuthoritativeDurationKnown = durationOwner::publishPlayerDuration,
         onOpenInBrowser = screenCallbacks.onOpenInBrowser,
         onRemoveIncludeTerm = screenCallbacks.onRemoveIncludeTerm,
         onRemoveExcludeTerm = screenCallbacks.onRemoveExcludeTerm,

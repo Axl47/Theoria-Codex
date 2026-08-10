@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -92,7 +94,10 @@ fun FeedEmptyTile(
 }
 
 @Composable
-fun FeedPagingTile(modifier: Modifier = Modifier) {
+fun FeedPagingTile(
+    modifier: Modifier = Modifier,
+    message: String? = null,
+) {
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -104,7 +109,17 @@ fun FeedPagingTile(modifier: Modifier = Modifier) {
                 .padding(vertical = 12.dp),
             contentAlignment = Alignment.Center,
         ) {
-            CircularProgressIndicator()
+            if (message == null) {
+                CircularProgressIndicator()
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Text(message, style = MaterialTheme.typography.labelMedium)
+                }
+            }
         }
     }
 }

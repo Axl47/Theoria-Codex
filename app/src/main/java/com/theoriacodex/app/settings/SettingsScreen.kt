@@ -398,10 +398,16 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = "Resolve unknown animation durations",
+                    Column(
                         modifier = Modifier.weight(1f),
-                    )
+                    ) {
+                        Text("Find animation durations in background")
+                        Text(
+                            text = "Uses low-priority network work while browsing",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Switch(
                         checked = state.settings.contentFilters.resolveUnknownAnimatedDurations,
                         onCheckedChange = {

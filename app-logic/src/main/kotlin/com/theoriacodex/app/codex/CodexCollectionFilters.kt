@@ -5,6 +5,7 @@ import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.search.filterSearchResults
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.sourceTagKey
@@ -32,6 +33,7 @@ fun filterCodexCollectionPosts(
     posts: List<Post>,
     filters: CodexCollectionFilters,
     unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy,
+    knownDurationMsByPostId: Map<PostId, Long> = emptyMap(),
 ): List<Post> {
     return filterSearchResults(
         results = posts,
@@ -42,6 +44,7 @@ fun filterCodexCollectionPosts(
         likedPostIds = emptySet(),
         savedPostIds = emptySet(),
         unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
+        knownDurationMsByPostId = knownDurationMsByPostId,
     ).filter { post ->
         (filters.source == null || post.id.source == filters.source) &&
             matchesLanguage(post, filters.language) &&

@@ -157,9 +157,9 @@ fun animatedDurationMs(post: Post): Long? {
     return post.durationMs?.takeIf { it > 0L }
 }
 
-fun animatedDurationLabel(post: Post): String? {
+fun animatedDurationLabel(post: Post, acquiredDurationMs: Long? = null): String? {
     if (!isAnimatedPost(post)) return null
-    val durationMs = animatedDurationMs(post) ?: return null
+    val durationMs = animatedDurationMs(post) ?: acquiredDurationMs?.takeIf { it > 0L } ?: return null
     return formatCompactDuration(durationMs)
 }
 

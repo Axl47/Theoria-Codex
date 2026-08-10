@@ -129,7 +129,7 @@ class DataStoreRepositoriesTest {
         assertEquals(setOf(SourceKey.PIXIV, SourceKey.HITOMI), settings.runtime.enabledSources)
         assertEquals(settings.runtime.enabledSources, settings.runtime.sourceWeights.keys)
         assertTrue(settings.cache.cacheFullImageOnSave)
-        assertTrue(settings.contentFilters.resolveUnknownAnimatedDurations)
+        assertFalse(settings.contentFilters.resolveUnknownAnimatedDurations)
         assertEquals(1, repository.storageStatus.value.imports.single().sourceSchemaVersion)
         closeScope(scope)
     }

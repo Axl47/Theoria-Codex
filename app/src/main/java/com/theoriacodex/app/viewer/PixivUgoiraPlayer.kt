@@ -651,6 +651,7 @@ fun PixivUgoiraPlayer(
     onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
     onTogglePlayback: (() -> Unit)? = null,
     onProgressChanged: (Long, Long?) -> Unit = { _, _ -> },
+    onDurationKnown: (Long) -> Unit = {},
 ) {
     var playback by remember(postId, client) { mutableStateOf(client.cached(postId)) }
     var errorMessage by remember(postId) { mutableStateOf<String?>(null) }
@@ -698,6 +699,9 @@ fun PixivUgoiraPlayer(
 
     val totalDurationMs = remember(activePlayback) {
         activePlayback.frames.sumOf { it.delayMs.coerceAtLeast(16) }.coerceAtLeast(1)
+    }
+    LaunchedEffect(postId, totalDurationMs) {
+        onDurationKnown(totalDurationMs.toLong())
     }
     val maxSeekablePositionMs = remember(totalDurationMs) {
         (totalDurationMs - 1).coerceAtLeast(0).toLong()

@@ -42,7 +42,12 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
 import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
-import com.theoriacodex.app.media.shouldRequestAnimatedDurationEnrichment
+import com.theoriacodex.app.media.MediaDurationKey
+import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.durationFilterReadiness
+import com.theoriacodex.app.media.durationStatesByPostId
+import com.theoriacodex.app.media.knownMediaDurations
+import com.theoriacodex.app.media.mediaDurationKeysByPostId
 import com.theoriacodex.app.media.copyTextToClipboard
 import com.theoriacodex.app.media.showClipboardCopyConfirmation
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
@@ -57,6 +62,7 @@ import com.theoriacodex.app.ui.components.FeedErrorTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.ui.components.FeedLoadingState
+import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
@@ -77,6 +83,11 @@ fun CreatorProfileScreen(
     savedPostIds: Set<PostId>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     resolveUnknownAnimatedDurations: Boolean = false,
+    durationStates: Map<MediaDurationKey, MediaDurationState> = emptyMap(),
+    onDurationFilterChanged: (Boolean) -> Unit = {},
+    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
+    onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
+    onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
     onToggleLike: (Post) -> Unit,
     onAction: (CreatorAction) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
@@ -121,12 +132,33 @@ fun CreatorProfileScreen(
             UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
         }
     }
+    val durationKeysByPostId = remember(state.results) {
+        mediaDurationKeysByPostId(state.results)
+    }
+    val acquiredDurations = remember(state.results, durationStates, durationKeysByPostId) {
+        knownMediaDurations(state.results, durationStates, durationKeysByPostId)
+    }
+    val durationDecisionStates = remember(state.results, durationStates, durationKeysByPostId) {
+        durationStatesByPostId(state.results, durationStates, durationKeysByPostId)
+    }
+    val durationReadiness = remember(
+        state.results,
+        animatedDurationFilterActive,
+        durationDecisionStates,
+    ) {
+        durationFilterReadiness(
+            state.results,
+            animatedDurationFilterActive,
+            durationDecisionStates,
+        )
+    }
     val visibleResults = remember(
         state.results,
         visibilityFilters,
         likedPostIds,
         savedPostIds,
         unknownAnimatedDurationPolicy,
+        acquiredDurations,
     ) {
         filterSearchResults(
             results = state.results,
@@ -134,18 +166,13 @@ fun CreatorProfileScreen(
             likedPostIds = likedPostIds,
             savedPostIds = savedPostIds,
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
+            knownDurationMsByPostId = acquiredDurations,
         )
     }
-    LaunchedEffect(state.results, resolveUnknownAnimatedDurations, state.queryHash) {
-        val queryHash = state.queryHash
-        if (queryHash != null && shouldRequestAnimatedDurationEnrichment(
-                posts = state.results,
-                resolveUnknownAnimatedDurations = resolveUnknownAnimatedDurations,
-            )
-        ) {
-            onAction(CreatorAction.RequestAnimatedDurationEnrichment(queryHash))
-        }
+    LaunchedEffect(animatedDurationFilterActive) {
+        onDurationFilterChanged(animatedDurationFilterActive)
     }
+    DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
 
     LaunchedEffect(
         visibleResults.size,
@@ -155,12 +182,14 @@ fun CreatorProfileScreen(
         state.canLoadMore,
         animatedOnly,
         animatedDurationFilterActive,
+        durationReadiness.pendingCount,
     ) {
         snapshotFlow {
             (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to state.isPaging
         }.collect { (lastVisibleIndex, loadingMoreState) ->
             if (loadingMoreState) return@collect
             if (state.isRefreshing || state.isPaging || !state.canLoadMore) return@collect
+            if (durationReadiness.isResolving) return@collect
 
             val totalVisible = visibleResults.size
             val shouldTriggerByThreshold = if (totalVisible > 0 && lastVisibleIndex >= 0) {
@@ -269,7 +298,9 @@ fun CreatorProfileScreen(
 
                 visibleResults.isEmpty() -> {
                     FeedEmptyTile(
-                        message = if (
+                        message = if (durationReadiness.isResolving) {
+                            "Resolving durations…"
+                        } else if (
                                 state.results.isNotEmpty() &&
                                 !visibilityFilters.animatedDurationRange.isFullRange
                             ) {
@@ -285,10 +316,16 @@ fun CreatorProfileScreen(
                         posts = visibleResults,
                         modifier = Modifier.fillMaxSize(),
                         state = gridState,
+                        footerMessage = if (durationReadiness.isResolving) {
+                            "Resolving durations…"
+                        } else {
+                            null
+                        },
                     ) { index, post ->
                         SearchResultCard(
                             post = post,
                             pixivUgoiraClient = pixivUgoiraClient,
+                            acquiredDurationMs = acquiredDurations[post.id],
                             liked = post.id in likedPostIds,
                             onToggleLike = { onToggleLike(post) },
                             onClick = {
@@ -302,6 +339,12 @@ fun CreatorProfileScreen(
                                 )
                             },
                             onLongPress = { selectedActionPost = post },
+                            onViewportChanged = { visible ->
+                                onDurationPostVisibilityChanged(post, visible)
+                            },
+                            onAuthoritativeDurationKnown = { durationMs ->
+                                onAuthoritativeDurationKnown(post, durationMs)
+                            },
                         )
                     }
                 }

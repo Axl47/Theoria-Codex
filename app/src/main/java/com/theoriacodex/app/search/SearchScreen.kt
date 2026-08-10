@@ -95,6 +95,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
 import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.media.isAuthoritativeDurationMedia
+import com.theoriacodex.app.media.MediaDurationKey
+import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.durationFilterReadiness
+import com.theoriacodex.app.media.durationStatesByPostId
+import com.theoriacodex.app.media.knownMediaDurations
+import com.theoriacodex.app.media.mediaDurationKeysByPostId
 import com.theoriacodex.app.media.animatedDurationBucketLabel
 import com.theoriacodex.app.media.animatedDurationLabel
 import com.theoriacodex.app.media.animatedDurationMs
@@ -105,7 +112,6 @@ import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.mergeResolvedPostForPresentation
 import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.media.postPreviewImageCandidate
-import com.theoriacodex.app.media.shouldRequestAnimatedDurationEnrichment
 import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.app.R
 import com.theoriacodex.app.source.SourceLogo
@@ -117,6 +123,7 @@ import com.theoriacodex.app.ui.components.FeedErrorTile
 import com.theoriacodex.app.ui.components.FeedFilterFab
 import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.ui.components.FeedLoadingState
+import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.search.state.SearchAction
@@ -171,6 +178,11 @@ fun SearchScreen(
     watchedPostIds: Set<PostId> = emptySet(),
     favoriteTags: Map<SourceKey, List<String>> = emptyMap(),
     resolveUnknownAnimatedDurations: Boolean = false,
+    durationStates: Map<MediaDurationKey, MediaDurationState> = emptyMap(),
+    onDurationFilterChanged: (Boolean) -> Unit = {},
+    onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
+    onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
+    onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
     onToggleLike: ((Post) -> Unit)? = null,
     onOpenCreatorProfile: (CreatorProfile) -> Unit,
     onOpenLegacyCreatorProfile: (Post) -> Unit,
@@ -263,6 +275,26 @@ fun SearchScreen(
     val displayResults = remember(state.content.results, state.content.displayVersion, queryHash) {
         state.content.results
     }
+    val durationKeysByPostId = remember(displayResults) {
+        mediaDurationKeysByPostId(displayResults)
+    }
+    val acquiredDurations = remember(displayResults, durationStates, durationKeysByPostId) {
+        knownMediaDurations(displayResults, durationStates, durationKeysByPostId)
+    }
+    val durationDecisionStates = remember(displayResults, durationStates, durationKeysByPostId) {
+        durationStatesByPostId(displayResults, durationStates, durationKeysByPostId)
+    }
+    val durationReadiness = remember(
+        displayResults,
+        animatedDurationFilterActive,
+        durationDecisionStates,
+    ) {
+        durationFilterReadiness(
+            posts = displayResults,
+            durationFilterActive = animatedDurationFilterActive,
+            stateByPostId = durationDecisionStates,
+        )
+    }
     val visibleResults = remember(
         displayResults,
         visibilityFilters,
@@ -270,6 +302,7 @@ fun SearchScreen(
         savedPostIds,
         watchedPostIds,
         unknownAnimatedDurationPolicy,
+        acquiredDurations,
     ) {
         filterSearchResults(
             results = displayResults,
@@ -278,13 +311,13 @@ fun SearchScreen(
             savedPostIds = savedPostIds,
             watchedPostIds = watchedPostIds,
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
+            knownDurationMsByPostId = acquiredDurations,
         )
     }
-    LaunchedEffect(displayResults, resolveUnknownAnimatedDurations, queryHash) {
-        if (shouldRequestAnimatedDurationEnrichment(displayResults, resolveUnknownAnimatedDurations)) {
-            onAction(SearchAction.RequestAnimatedDurationEnrichment(queryHash))
-        }
+    LaunchedEffect(animatedDurationFilterActive) {
+        onDurationFilterChanged(animatedDurationFilterActive)
     }
+    DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
     fun openPostActionSheet(post: Post) {
         focusManager.clearFocus()
         val displayPost = state.content.results.firstOrNull { candidate -> candidate.id == post.id } ?: post
@@ -368,12 +401,14 @@ fun SearchScreen(
         state.loadingMore,
         animatedFilterActive,
         animatedDurationFilterActive,
+        durationReadiness.pendingCount,
     ) {
         snapshotFlow {
             (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to state.loadingMore
         }.collect { (lastVisibleIndex, loadingMoreState) ->
             if (loadingMoreState) return@collect
             if (state.loading || state.loadingMore || !state.content.canLoadMore) return@collect
+            if (durationReadiness.isResolving) return@collect
 
             val totalVisible = visibleResults.size
             val shouldTriggerByThreshold = if (totalVisible > 0 && lastVisibleIndex >= 0) {
@@ -681,7 +716,12 @@ fun SearchScreen(
                                     },
                                 )
                             }
-                            if (!state.content.hasExecutedSearch && !animatedFilterActive) {
+                            if (durationReadiness.isResolving) {
+                                EmptyBlock(
+                                    hasPendingChanges = false,
+                                    messageOverride = "Resolving durations…",
+                                )
+                            } else if (!state.content.hasExecutedSearch && !animatedFilterActive) {
                                 SearchStartSplash(
                                     modifier = Modifier.fillMaxWidth(),
                                 )
@@ -720,10 +760,16 @@ fun SearchScreen(
                             state = gridState,
                             modifier = Modifier.weight(1f),
                             showPagingTile = state.loadingMore,
+                            footerMessage = if (durationReadiness.isResolving) {
+                                "Resolving durations…"
+                            } else {
+                                null
+                            },
                         ) { _, post ->
                             SearchResultCard(
                                 post = post,
                                 pixivUgoiraClient = pixivUgoiraClient,
+                                acquiredDurationMs = acquiredDurations[post.id],
                                 showSourceBadge = state.query.appliedSourceScope !is SearchSourceScope.Single,
                                 liked = post.id in likedPostIds,
                                 onToggleLike = onToggleLike?.let { toggle ->
@@ -743,6 +789,12 @@ fun SearchScreen(
                                     ))
                                 },
                                 onLongPress = { openPostActionSheet(post) },
+                                onViewportChanged = { visible ->
+                                    onDurationPostVisibilityChanged(post, visible)
+                                },
+                                onAuthoritativeDurationKnown = { durationMs ->
+                                    onAuthoritativeDurationKnown(post, durationMs)
+                                },
                             )
                         }
                     }
@@ -876,6 +928,7 @@ private fun SearchStartSplash(
 fun SearchResultCard(
     post: Post,
     pixivUgoiraClient: PixivUgoiraClient?,
+    acquiredDurationMs: Long? = null,
     showSourceBadge: Boolean = false,
     metadataLabel: String? = null,
     liked: Boolean = false,
@@ -886,6 +939,8 @@ fun SearchResultCard(
     playbackDiagnosticsEnabled: Boolean = false,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
+    onViewportChanged: (Boolean) -> Unit = {},
+    onAuthoritativeDurationKnown: (Long) -> Unit = {},
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -904,6 +959,12 @@ fun SearchResultCard(
     val effectivePost = resolvedPostOverride?.let { resolved ->
         mergeResolvedPostForPresentation(original = post, resolved = resolved)
     } ?: post
+
+    DisposableEffect(post.id) {
+        onDispose {
+            if (isInViewport) onViewportChanged(false)
+        }
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, _ ->
@@ -937,7 +998,10 @@ fun SearchResultCard(
             .onGloballyPositioned { coordinates ->
                 val visible = coordinates.isAttached &&
                     isVisibleFeedBounds(coordinates.boundsInWindow(clipBounds = true))
-                if (isInViewport != visible) isInViewport = visible
+                if (isInViewport != visible) {
+                    isInViewport = visible
+                    onViewportChanged(visible)
+                }
             }
             .testTag(searchCardTestTag(post.id))
             .combinedClickable(
@@ -946,7 +1010,7 @@ fun SearchResultCard(
             ),
     ) {
         val title = effectivePost.displayTitleOrNull()
-        val durationLabel = animatedDurationLabel(effectivePost)
+        val durationLabel = animatedDurationLabel(effectivePost, acquiredDurationMs)
         val supportingContent = searchCardSupportingContent(
             title = title,
             metadataLabel = metadataLabel,
@@ -1035,6 +1099,7 @@ fun SearchResultCard(
                     contentDescription = mediaContentDescription,
                     contentScale = ContentScale.Crop,
                     isActive = playbackActive,
+                    onDurationKnown = onAuthoritativeDurationKnown,
                 )
             } else if (videoRef != null && !videoPlaybackFailed) {
                 SearchVideoPreview(
@@ -1049,6 +1114,11 @@ fun SearchResultCard(
                         videoPlaybackFailed = true
                         if (resolvedPostOverride == null) {
                             requestResolvedCardPreview(force = refreshOnPreviewError)
+                        }
+                    },
+                    onDurationKnown = { durationMs ->
+                        if (isAuthoritativeDurationMedia(effectivePost, videoRef)) {
+                            onAuthoritativeDurationKnown(durationMs)
                         }
                     },
                 )

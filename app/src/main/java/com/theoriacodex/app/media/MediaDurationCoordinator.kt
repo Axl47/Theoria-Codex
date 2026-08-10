@@ -107,6 +107,7 @@ class MediaDurationCoordinator(
     private val active = mutableMapOf<MediaDurationKey, ActiveWork>()
     private val retainedStates = LinkedHashMap<MediaDurationKey, MediaDurationState>(16, 0.75f, true)
     private val mutableStates = MutableStateFlow<Map<MediaDurationKey, MediaDurationState>>(emptyMap())
+    private val executionEnvironments = mutableMapOf<String, DurationExecutionGate>()
     private val traceCookie = AtomicInteger(0)
     private var gate = DurationExecutionGate(lifecycleStarted = false, scrollIdle = true)
     private var hadOutstandingWork = false
@@ -188,33 +189,56 @@ class MediaDurationCoordinator(
         return true
     }
 
-    suspend fun releaseIdentity(identity: String) = lock.withLock {
-        require(identity.isNotBlank()) { "Duration demand identity must not be blank" }
-        val queuedAffected = scheduler.removeIdentity(identity)
-        queuedAffected.forEach(::discardUnownedPendingKeyLocked)
+    suspend fun releaseIdentity(identity: String) = releaseIdentities(setOf(identity))
 
-        active.values.toList().forEach { work ->
-            if (work.demands.remove(identity) == null) return@forEach
-            if (work.demands.isEmpty()) {
-                cancelActiveLocked(work, requeue = false)
-                discardUnownedPendingKeyLocked(work.key)
-            } else {
-                work.priority = work.demands.values.minOf(DurationDemand::priority)
+    suspend fun releaseIdentities(identities: Set<String>) = lock.withLock {
+        identities.forEach { identity ->
+            require(identity.isNotBlank()) { "Duration demand identity must not be blank" }
+            val queuedAffected = scheduler.removeIdentity(identity)
+            queuedAffected.forEach(::discardUnownedPendingKeyLocked)
+
+            active.values.toList().forEach { work ->
+                if (work.demands.remove(identity) == null) return@forEach
+                if (work.demands.isEmpty()) {
+                    cancelActiveLocked(work, requeue = false)
+                    discardUnownedPendingKeyLocked(work.key)
+                } else {
+                    work.priority = work.demands.values.minOf(DurationDemand::priority)
+                }
             }
         }
         pumpLocked()
         recordSettledIfNeededLocked()
     }
 
-    suspend fun updateEnvironment(lifecycleStarted: Boolean, scrollIdle: Boolean) = lock.withLock {
-        gate = DurationExecutionGate(
+    suspend fun updateEnvironment(
+        identity: String,
+        lifecycleStarted: Boolean,
+        scrollIdle: Boolean,
+    ) = lock.withLock {
+        require(identity.isNotBlank()) { "Duration environment identity must not be blank" }
+        executionEnvironments[identity] = DurationExecutionGate(
             lifecycleStarted = lifecycleStarted,
             scrollIdle = scrollIdle,
         )
+        gate = aggregateExecutionGate()
         active.values.toList().forEach { work ->
-            val mustPause = !lifecycleStarted ||
-                (!scrollIdle && work.priority == DurationDemandPriority.BACKGROUND_IDLE)
+            val mustPause = !gate.lifecycleStarted ||
+                (!gate.scrollIdle && work.priority == DurationDemandPriority.BACKGROUND_IDLE)
             if (mustPause) cancelActiveLocked(work, requeue = true)
+        }
+        pumpLocked()
+    }
+
+    suspend fun updateEnvironment(lifecycleStarted: Boolean, scrollIdle: Boolean) {
+        updateEnvironment(LEGACY_ENVIRONMENT_IDENTITY, lifecycleStarted, scrollIdle)
+    }
+
+    suspend fun releaseEnvironment(identity: String) = lock.withLock {
+        executionEnvironments.remove(identity)
+        gate = aggregateExecutionGate()
+        if (!gate.lifecycleStarted) {
+            active.values.toList().forEach { work -> cancelActiveLocked(work, requeue = true) }
         }
         pumpLocked()
     }
@@ -226,18 +250,26 @@ class MediaDurationCoordinator(
     ) {
         require(durationMs > 0L) { "Published duration must be positive" }
         val state = MediaDurationState.Known(durationMs, provenance)
-        lock.withLock { publishKnownLocked(key, state) }
-        persistState(key, state)
+        val changed = lock.withLock { publishKnownLocked(key, state) }
+        if (changed) persistState(key, state)
     }
 
     override fun close() {
         coordinatorJob.cancel(CancellationException("Media duration coordinator closed"))
     }
 
+    internal fun releaseLater(demandIdentities: Set<String>, environmentIdentity: String) {
+        scope.launch {
+            releaseIdentities(demandIdentities)
+            releaseEnvironment(environmentIdentity)
+        }
+    }
+
     private fun publishKnownLocked(
         key: MediaDurationKey,
         state: MediaDurationState.Known,
-    ) {
+    ): Boolean {
+        if (retainedStates[key] == state) return false
         scheduler.removeKey(key)
         active[key]?.let { work -> cancelActiveLocked(work, requeue = false) }
         posts.remove(key)
@@ -245,6 +277,7 @@ class MediaDurationCoordinator(
         traceRecorder.publication()
         pumpLocked()
         recordSettledIfNeededLocked()
+        return true
     }
 
     private fun preemptBackgroundForLocked(priority: DurationDemandPriority) {
@@ -410,6 +443,14 @@ class MediaDurationCoordinator(
         }
     }
 
+    private fun aggregateExecutionGate(): DurationExecutionGate {
+        val started = executionEnvironments.values.filter(DurationExecutionGate::lifecycleStarted)
+        return DurationExecutionGate(
+            lifecycleStarted = started.isNotEmpty(),
+            scrollIdle = started.all(DurationExecutionGate::scrollIdle),
+        )
+    }
+
     private data class ActiveWork(
         val key: MediaDurationKey,
         var priority: DurationDemandPriority,
@@ -424,6 +465,7 @@ class MediaDurationCoordinator(
         const val DEFAULT_MAX_QUEUED_KEYS = 512
         const val DEFAULT_MAX_CONCURRENT_WORK = 1
         const val DEFAULT_MAX_RETAINED_STATES = 2_048
+        const val LEGACY_ENVIRONMENT_IDENTITY = "legacy-duration-environment"
     }
 }
 

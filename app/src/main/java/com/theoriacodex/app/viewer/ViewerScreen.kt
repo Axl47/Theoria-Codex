@@ -149,6 +149,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.app.media.isAuthoritativeDurationMedia
 import kotlinx.coroutines.delay
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -177,6 +178,7 @@ internal fun ViewerScreen(
     likedPostIds: Set<PostId> = emptySet(),
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)? = null,
     onVisiblePostChanged: ((Post) -> Unit)? = null,
+    onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
     onOpenInBrowser: (Post) -> Unit,
     onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
     onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
@@ -766,6 +768,9 @@ internal fun ViewerScreen(
                                     onProgressChanged = { positionMs, durationMs ->
                                         onAction(ViewerAction.TimelineProgressChanged(positionMs, durationMs))
                                     },
+                                    onDurationKnown = { durationMs ->
+                                        onAuthoritativeDurationKnown(post, durationMs)
+                                    },
                                 )
                             }
                         } else if (isVideoMedia) {
@@ -789,6 +794,11 @@ internal fun ViewerScreen(
                                 onProgressChanged = { positionMs, durationMs ->
                                     onAction(ViewerAction.TimelineProgressChanged(positionMs, durationMs))
                                 },
+                                onDurationKnown = { durationMs ->
+                                    if (isAuthoritativeDurationMedia(post, media)) {
+                                        onAuthoritativeDurationKnown(post, durationMs)
+                                    }
+                                },
                             )
                         } else if (isGifMedia && gifLocations.isNotEmpty()) {
                             ViewerGifPlayer(
@@ -807,6 +817,11 @@ internal fun ViewerScreen(
                                 onTogglePlayback = { onAction(ViewerAction.TogglePlayback) },
                                 onProgressChanged = { positionMs, durationMs ->
                                     onAction(ViewerAction.TimelineProgressChanged(positionMs, durationMs))
+                                },
+                                onDurationKnown = { durationMs ->
+                                    if (isAuthoritativeDurationMedia(post, media)) {
+                                        onAuthoritativeDurationKnown(post, durationMs)
+                                    }
                                 },
                             )
                         } else if (isControlledAnimatedWebP && activeImageUrl != null) {
@@ -1447,6 +1462,7 @@ private fun ViewerVideoPlayer(
     onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
     onTogglePlayback: (() -> Unit)? = null,
     onProgressChanged: (Long, Long?) -> Unit = { _, _ -> },
+    onDurationKnown: (Long) -> Unit = {},
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -1489,6 +1505,10 @@ private fun ViewerVideoPlayer(
     var lastSeekDispatchTargetMs by remember(playbackLocation) { mutableLongStateOf(0L) }
     val effectivePlaybackRate = playbackRate.coerceAtLeast(MIN_PLAYBACK_RATE)
     val effectivePlaybackPaused = isPlaying?.not() ?: playbackPaused
+
+    LaunchedEffect(playbackLocation, durationMs) {
+        if (durationMs > 0L) onDurationKnown(durationMs)
+    }
 
     DisposableEffect(playbackLocation, sourceKey) {
         loading = true
@@ -1944,6 +1964,7 @@ private fun ViewerGifPlayer(
     onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
     onTogglePlayback: (() -> Unit)? = null,
     onProgressChanged: (Long, Long?) -> Unit = { _, _ -> },
+    onDurationKnown: (Long) -> Unit = {},
 ) {
     val context = LocalContext.current
     var movie by remember(locations) { mutableStateOf<Movie?>(null) }
@@ -2022,7 +2043,9 @@ private fun ViewerGifPlayer(
     val durationMs = remember(activeMovie) {
         activeMovie.duration().takeIf { it > 0 }?.toLong() ?: GIF_FALLBACK_DURATION_MS
     }
-
+    LaunchedEffect(activeMovie, durationMs) {
+        onDurationKnown(durationMs)
+    }
 
     LaunchedEffect(restartRequest) {
         if (restartRequest > 0L) positionMs = 0L

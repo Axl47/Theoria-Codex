@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -54,6 +55,7 @@ internal fun SearchVideoPreview(
     modifier: Modifier = Modifier,
     previewModel: Any? = null,
     onPlaybackError: () -> Unit = {},
+    onDurationKnown: (Long) -> Unit = {},
 ) {
     val context = LocalContext.current
     val location = media.localPath ?: media.url
@@ -83,6 +85,7 @@ internal fun SearchVideoPreview(
         sourceKey = sourceKey,
         isActive = isActive,
         onPlaybackError = onPlaybackError,
+        onDurationKnown = onDurationKnown,
     )
     PreparedSearchVideoPreview(
         state = playerState,
@@ -119,10 +122,12 @@ private fun rememberFeedPreviewPlayerState(
     sourceKey: SourceKey,
     isActive: Boolean,
     onPlaybackError: () -> Unit,
+    onDurationKnown: (Long) -> Unit,
 ): FeedPreviewPlayerState {
     val context = LocalContext.current
     val state = remember(location, sourceKey) { FeedPreviewPlayerState() }
     val latestOnPlaybackError by rememberUpdatedState(onPlaybackError)
+    val latestOnDurationKnown by rememberUpdatedState(onDurationKnown)
     val latestIsActive by rememberUpdatedState(isActive)
 
     DisposableEffect(location, sourceKey) {
@@ -141,6 +146,7 @@ private fun rememberFeedPreviewPlayerState(
             player = player,
             isActive = { latestIsActive },
             onPlaybackError = { latestOnPlaybackError() },
+            onDurationKnown = { durationMs -> latestOnDurationKnown(durationMs) },
         )
         player.addListener(listener)
         state.player = player
@@ -164,11 +170,18 @@ private fun feedPreviewPlayerListener(
     player: ExoPlayer,
     isActive: () -> Boolean,
     onPlaybackError: () -> Unit,
+    onDurationKnown: (Long) -> Unit,
 ): Player.Listener {
     val firstFrameTraceGate = FirstFrameTraceGate()
     return object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
-            if (state.player !== player || playbackState != Player.STATE_READY || !isActive()) return
+            if (state.player !== player || playbackState != Player.STATE_READY) return
+            val durationMs = player.duration
+            if (!state.didPublishDuration && durationMs > 0L && durationMs != C.TIME_UNSET) {
+                state.didPublishDuration = true
+                onDurationKnown(durationMs)
+            }
+            if (!isActive()) return
             runCatching {
                 player.playWhenReady = true
                 player.play()
@@ -272,11 +285,13 @@ private class FeedPreviewPlayerState {
     var player by mutableStateOf<ExoPlayer?>(null)
     var playerView: PlayerView? = null
     var didNotifyError = false
+    var didPublishDuration = false
     var hasRenderedFirstFrame by mutableStateOf(false)
     var isActuallyPlaying by mutableStateOf(false)
 
     fun reset() {
         didNotifyError = false
+        didPublishDuration = false
         hasRenderedFirstFrame = false
         isActuallyPlaying = false
     }

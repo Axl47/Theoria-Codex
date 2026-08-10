@@ -54,6 +54,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -93,7 +94,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.PostDownloadService
 import com.theoriacodex.app.codex.CodexDetailScreen
-import com.theoriacodex.app.codex.CodexDetailDurationViewModel
+import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.CodexRemovalWorkflow
 import com.theoriacodex.app.codex.SaveToCodexSheet
@@ -1447,7 +1448,7 @@ internal fun TheoriaAppContent(
                                     BrowsingDestinationStateBoundary(dataDependencies, sourceDependencies) { state ->
                                         SearchRoute(
                                         coordinator = featureDependencies.search,
-                                        animatedDurationEnricher = featureDependencies.animatedDurationEnricher,
+                                        mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
                                         pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                         config = SearchRouteConfig(
                                             settings = state.settings,
@@ -1510,7 +1511,7 @@ internal fun TheoriaAppContent(
                                     BrowsingDestinationStateBoundary(dataDependencies, sourceDependencies) { state ->
                                         ForYouRoute(
                                         coordinator = featureDependencies.forYou,
-                                        animatedDurationEnricher = featureDependencies.animatedDurationEnricher,
+                                        mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
                                         pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                         config = ForYouRouteConfig(
                                             settings = state.settings,
@@ -1623,6 +1624,23 @@ internal fun TheoriaAppContent(
                                                 }
                                             }
                                         }
+                                        val recentsDurationOwner = viewModel<MediaDurationRouteViewModel>(
+                                            key = "recents-duration-owner",
+                                            factory = MediaDurationRouteViewModel.factory(
+                                                featureDependencies.mediaDurationCoordinator,
+                                                "recents",
+                                            ),
+                                        )
+                                        val recentsDurationStates by recentsDurationOwner.states
+                                            .collectAsStateWithLifecycle()
+                                        SideEffect {
+                                            recentsDurationOwner.synchronize(
+                                                identity = "recents",
+                                                posts = (state.watchedPosts + state.codexPosts)
+                                                    .map(RecentPostEntry::post),
+                                                resolveInBackground = false,
+                                            )
+                                        }
                                         RecentsScreen(
                                         watchedPosts = state.watchedPosts,
                                         codexPosts = state.codexPosts,
@@ -1630,6 +1648,13 @@ internal fun TheoriaAppContent(
                                         fypSearches = state.fypSearches,
                                         activity = state.activity,
                                         pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
+                                        durationStates = recentsDurationStates,
+                                        onDurationPostVisibilityChanged =
+                                            recentsDurationOwner::onPostVisibilityChanged,
+                                        onDurationEnvironmentChanged =
+                                            recentsDurationOwner::onEnvironmentChanged,
+                                        onAuthoritativeDurationKnown =
+                                            recentsDurationOwner::publishPlayerDuration,
                                         likedPostIds = state.likedPostIds,
                                         creatorBrowsingSources = sourceDependencies.registry.creatorBrowsingSources(),
                                         tagVideoCountProvider = featureDependencies.search::tagVideoCount,
@@ -1830,38 +1855,36 @@ internal fun TheoriaAppContent(
                             }
                         }
                         var sortMode by rememberSaveable(codexId) { mutableStateOf(CodexSortMode.NEWEST_SAVED) }
-                        val durationOwner = viewModel<CodexDetailDurationViewModel>(
+                        val durationOwner = viewModel<MediaDurationRouteViewModel>(
                             key = "codex-detail-duration-$codexId",
-                            factory = CodexDetailDurationViewModel.factory(
-                                featureDependencies.animatedDurationEnricher,
+                            factory = MediaDurationRouteViewModel.factory(
+                                featureDependencies.mediaDurationCoordinator,
+                                "codex-detail:$codexId",
                             ),
                         )
-                        val durationState by durationOwner.state.collectAsStateWithLifecycle()
+                        val durationStates by durationOwner.states.collectAsStateWithLifecycle()
                         CodexDetailDestinationStateBoundary(
                             codexId = codexId,
                             sortMode = sortMode,
                             data = dataDependencies,
                             sources = sourceDependencies,
                         ) { state ->
-                            LaunchedEffect(durationOwner, codexId, state.posts) {
-                                durationOwner.synchronize(codexId, state.posts)
-                            }
-                            val displayPosts = if (
-                                durationState.codexId == codexId &&
-                                durationState.posts.map(Post::id) == state.posts.map(Post::id)
-                            ) {
-                                durationState.posts
-                            } else {
-                                state.posts
+                            SideEffect {
+                                durationOwner.synchronize(
+                                    identity = codexId,
+                                    posts = state.posts,
+                                    resolveInBackground = state.resolveUnknownAnimatedDurations,
+                                )
                             }
                             CodexDetailScreen(
                             codexName = state.codex?.name,
-                            posts = displayPosts,
+                            posts = state.posts,
                             sortMode = sortMode,
                             availableSources = state.availableSources,
                             creatorBrowsingSources = state.creatorBrowsingSources,
                             pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                             resolveUnknownAnimatedDurations = state.resolveUnknownAnimatedDurations,
+                            durationStates = durationStates,
                             tagVideoCountProvider = { source, tag ->
                                 featureDependencies.search.tagVideoCount(source, tag)
                             },
@@ -1869,10 +1892,10 @@ internal fun TheoriaAppContent(
                                 featureDependencies.search.fetchTagVideoCounts(source, tags)
                             },
                             onSortChange = { sortMode = it },
-                            onRequestAnimatedDurationEnrichment = {
-                                durationOwner.synchronize(codexId, state.posts)
-                                durationOwner.requestEnrichment(codexId)
-                            },
+                            onDurationFilterChanged = durationOwner::onFilterChanged,
+                            onDurationPostVisibilityChanged = durationOwner::onPostVisibilityChanged,
+                            onDurationEnvironmentChanged = durationOwner::onEnvironmentChanged,
+                            onAuthoritativeDurationKnown = durationOwner::publishPlayerDuration,
                             resolvePostById = { postId ->
                                 viewerRouteWorkflow.resolvePost(postId, ViewerStreamSource.CODEX)
                             },
@@ -1958,7 +1981,7 @@ internal fun TheoriaAppContent(
                         BrowsingDestinationStateBoundary(dataDependencies, sourceDependencies) { state ->
                             CreatorRoute(
                             coordinator = featureDependencies.creatorProfile,
-                            animatedDurationEnricher = featureDependencies.animatedDurationEnricher,
+                            mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
                             pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                             config = CreatorRouteConfig(
                                 activeCreator = pendingCreatorProfile,
@@ -2025,6 +2048,7 @@ internal fun TheoriaAppContent(
                                 mediaPrefetcher = ViewerMediaPrefetcher { _, media ->
                                     prefetchViewerMedia(appContext, media)
                                 },
+                                mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
                                 restoreSession = viewerRouteWorkflow::restoreSession,
                             ),
                             renderConfig = ViewerRouteRenderConfig(

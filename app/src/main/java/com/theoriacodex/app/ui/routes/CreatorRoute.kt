@@ -11,7 +11,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.creator.CreatorProfileScreen
 import com.theoriacodex.app.creator.CreatorProfileViewModel
-import com.theoriacodex.app.media.AnimatedDurationEnricher
+import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.creator.state.CreatorEffect
 import com.theoriacodex.app.creator.state.CreatorUiState
@@ -83,16 +83,24 @@ internal class CreatorRouteOwnerHandle(
 @Composable
 internal fun CreatorRoute(
     coordinator: CreatorProfileCoordinator,
-    animatedDurationEnricher: AnimatedDurationEnricher,
+    mediaDurationCoordinator: MediaDurationCoordinator,
     pixivUgoiraClient: PixivUgoiraClient?,
     config: CreatorRouteConfig,
     callbacks: CreatorRouteCallbacks,
     onOwnerAvailable: (CreatorRouteOwnerHandle) -> Unit = {},
 ) {
     val owner = viewModel<CreatorProfileViewModel>(
-        factory = CreatorProfileViewModel.factory(coordinator, animatedDurationEnricher),
+        factory = CreatorProfileViewModel.factory(coordinator),
     )
     val state by owner.state.collectAsStateWithLifecycle()
+    val duration = rememberMediaDurationRouteBinding(
+        coordinator = mediaDurationCoordinator,
+        routeName = "creator",
+        ownerKey = CREATOR_DURATION_OWNER_KEY,
+        contentIdentity = state.queryHash ?: "no-creator",
+        posts = state.results,
+        resolveInBackground = config.resolveUnknownAnimatedDurations,
+    )
     val ownerHandle = remember(owner) { CreatorRouteOwnerHandle(owner) }
     val currentOnOwnerAvailable by rememberUpdatedState(onOwnerAvailable)
 
@@ -126,6 +134,11 @@ internal fun CreatorRoute(
         savedPostIds = config.savedPostIds,
         pixivUgoiraClient = pixivUgoiraClient,
         resolveUnknownAnimatedDurations = config.resolveUnknownAnimatedDurations,
+        durationStates = duration.states,
+        onDurationFilterChanged = duration.owner::onFilterChanged,
+        onDurationPostVisibilityChanged = duration.owner::onPostVisibilityChanged,
+        onDurationEnvironmentChanged = duration.owner::onEnvironmentChanged,
+        onAuthoritativeDurationKnown = duration.owner::publishPlayerDuration,
         onToggleLike = callbacks.onToggleLike,
         onAction = owner::onAction,
         onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
@@ -138,3 +151,5 @@ internal fun CreatorRoute(
         onRemoveExcludeTerm = callbacks.onRemoveExcludeTerm,
     )
 }
+
+private const val CREATOR_DURATION_OWNER_KEY = "creator-duration-owner"

@@ -19,8 +19,6 @@ import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.search.state.SearchQueryUiState
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.modeKey
-import com.theoriacodex.app.media.AnimatedDurationEnricher
-import com.theoriacodex.app.media.NoOpAnimatedDurationEnricher
 import com.theoriacodex.app.ui.state.RouteStateOwner
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.AppSettings
@@ -68,7 +66,6 @@ internal class SearchViewModel(
     private val autocompleteDelayMs: Long = DEFAULT_AUTOCOMPLETE_DELAY_MS,
     scrollPersistenceDelayMs: Long = DEFAULT_SCROLL_PERSISTENCE_DELAY_MS,
     scrollPersistenceDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val animatedDurationEnricher: AnimatedDurationEnricher = NoOpAnimatedDurationEnricher,
 ) : ViewModel(), RouteStateOwner<SearchUiState, SearchAction, SearchEffect> {
     private val initialSources = coordinator.availableSources
     private val initialQuery = com.theoriacodex.app.search.state.emptySearchQuery()
@@ -113,11 +110,6 @@ internal class SearchViewModel(
             )
         },
     )
-    private val durationEnrichmentOwner = SearchAnimatedDurationEnrichmentOwner(
-        scope = viewModelScope, enricher = animatedDurationEnricher,
-        currentState = { mutableState.value }, applyResolvedPosts = ::applyResolvedPosts,
-    )
-
     init {
         addCloseable(SEARCH_SCROLL_PERSISTENCE_KEY, scrollPersistence)
     }
@@ -272,8 +264,6 @@ internal class SearchViewModel(
             is SearchAction.RememberResolvedPost -> {
                 applyResolvedPosts(mutableState.value.query.appliedQueryHash, listOf(action.post))
             }
-
-            is SearchAction.RequestAnimatedDurationEnrichment -> durationEnrichmentOwner.request(action.queryHash)
 
             is SearchAction.ScrollChanged -> persistScroll(action)
 
@@ -1003,15 +993,12 @@ internal class SearchViewModel(
     }
 
     companion object {
-        fun factory(
-            coordinator: SearchCoordinator, animatedDurationEnricher: AnimatedDurationEnricher,
-        ): ViewModelProvider.Factory {
+        fun factory(coordinator: SearchCoordinator): ViewModelProvider.Factory {
             return viewModelFactory {
                 initializer {
                     SearchViewModel(
                         coordinator = coordinator,
                         savedStateHandle = createSavedStateHandle(),
-                        animatedDurationEnricher = animatedDurationEnricher,
                     )
                 }
             }

@@ -937,7 +937,7 @@ private data class SettingsStoreFile(
     @field:SerializedName("cacheFullImageOnSave")
     val cacheFullImageOnSave: Boolean = false,
     @field:SerializedName("resolveUnknownAnimatedDurations")
-    val resolveUnknownAnimatedDurations: Boolean = true,
+    val resolveUnknownAnimatedDurations: Boolean = false,
     @field:SerializedName("invertMultiImageScrollDirection")
     val invertMultiImageScrollDirection: Boolean = false,
     @field:SerializedName("scenarioPreset")

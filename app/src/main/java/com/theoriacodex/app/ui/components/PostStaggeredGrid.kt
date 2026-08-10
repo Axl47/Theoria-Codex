@@ -18,6 +18,7 @@ fun TwoColumnPostStaggeredGrid(
     state: LazyStaggeredGridState,
     modifier: Modifier = Modifier,
     showPagingTile: Boolean = false,
+    footerMessage: String? = null,
     itemContent: @Composable LazyStaggeredGridItemScope.(index: Int, post: Post) -> Unit,
 ) {
     LazyVerticalStaggeredGrid(
@@ -32,8 +33,8 @@ fun TwoColumnPostStaggeredGrid(
             key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" },
             itemContent = itemContent,
         )
-        if (showPagingTile) {
-            item { FeedPagingTile() }
+        if (showPagingTile || footerMessage != null) {
+            item { FeedPagingTile(message = footerMessage) }
         }
     }
 }

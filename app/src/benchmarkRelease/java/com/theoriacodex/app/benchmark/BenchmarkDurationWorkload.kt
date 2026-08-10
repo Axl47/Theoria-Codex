@@ -5,18 +5,21 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Resources
 import android.media.MediaMetadataRetriever
-import android.os.Build
 import android.os.Trace
 import com.theoriacodex.app.R
-import com.theoriacodex.app.media.AnimatedDurationEnrichment
-import com.theoriacodex.app.media.AnimatedDurationEnrichmentLane
-import com.theoriacodex.app.media.AnimatedDurationEnrichmentService
-import com.theoriacodex.app.media.NoOpMediaDurationTraceRecorder
-import com.theoriacodex.domain.adapter.DurationMetadataSourceResult
+import com.theoriacodex.app.media.DurationDemand
+import com.theoriacodex.app.media.DurationDemandPriority
+import com.theoriacodex.app.media.DurationDemandReason
+import com.theoriacodex.app.media.MediaDurationCoordinator
+import com.theoriacodex.app.media.MediaDurationProvenance
+import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.mediaDurationKey
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Explicit benchmark-only signal; the production app never registers this receiver. */
@@ -41,74 +44,62 @@ internal object BenchmarkDurationStartSignal {
 }
 
 /**
- * Drives the pre-rebuild route lane and service against the bundled MP4. This keeps the baseline
- * offline while retaining the current batching, worker contention, probing, and immutable post-list
- * publication that compete with visible autoplay in production.
+ * Drives the production duration coordinator against the bundled MP4 while remaining offline.
+ * The baseline commit exercised the legacy path; the final run keeps the same posts and gestures
+ * but now observes separate coordinator metadata instead of rewriting the feed list.
  */
 internal class BenchmarkDurationWorkload(
-    scope: CoroutineScope,
+    private val scope: CoroutineScope,
     resources: Resources,
     initialPosts: List<Post>,
-    private val currentPosts: () -> List<Post>,
-    private val publishPosts: (List<Post>) -> Unit,
 ) : AutoCloseable {
-    private val initialPostsById = initialPosts.associateBy(Post::id)
-    private val service = AnimatedDurationEnrichmentService(
-        hasProviderDurationResolver = { true },
-        resolveProviderDuration = { post ->
-            traceDurationSuspend(TRACE_DURATION_RESOLVE) {
-                initialPostsById[post.id]?.full
-                    ?.let(DurationMetadataSourceResult::AuthoritativeMedia)
-                    ?: DurationMetadataSourceResult.Unsupported
-            }
-        },
-        probeDurationMs = {
+    private val posts = initialPosts
+    private val coordinator = MediaDurationCoordinator(
+        acquirer = { _ ->
+            recordDurationTraceEvent(TRACE_DURATION_RESOLVE)
             traceDurationSuspend(TRACE_DURATION_PROBE) {
-                probeBundledDurationMs(resources)
+                probeBundledDurationMs(resources)?.let { durationMs ->
+                    MediaDurationState.Known(
+                        durationMs = durationMs,
+                        provenance = MediaDurationProvenance.CONTAINER_PROBE,
+                    )
+                } ?: MediaDurationState.Unsupported(
+                    com.theoriacodex.app.media.MediaDurationUnsupportedReason.UNSUPPORTED_CONTAINER,
+                )
             }
         },
-        traceRecorder = NoOpMediaDurationTraceRecorder,
-    )
-    private val lane = AnimatedDurationEnrichmentLane(
-        scope = scope,
-        enricher = service,
-        currentIdentity = { DURATION_WORKLOAD_IDENTITY },
-        currentPosts = currentPosts,
-        applyEnrichments = ::applyEnrichments,
+        parentScope = scope,
     )
     private var started = false
-    private var settled = false
+
+    val states: StateFlow<Map<com.theoriacodex.app.media.MediaDurationKey, MediaDurationState>> =
+        coordinator.states
 
     fun start() {
         if (started) return
         started = true
-        recordDurationTraceEvent(TRACE_DURATION_DEMAND)
-        beginDurationAsyncTrace()
-        lane.request(DURATION_WORKLOAD_IDENTITY)
+        scope.launch {
+            coordinator.updateEnvironment(
+                identity = DURATION_WORKLOAD_IDENTITY,
+                lifecycleStarted = true,
+                scrollIdle = true,
+            )
+            posts.forEach { post ->
+                coordinator.submit(
+                    post = post,
+                    demand = DurationDemand(
+                        identity = DURATION_WORKLOAD_IDENTITY,
+                        key = mediaDurationKey(post),
+                        priority = DurationDemandPriority.BACKGROUND_IDLE,
+                        reason = DurationDemandReason.APPEND,
+                    ),
+                )
+            }
+        }
     }
 
     override fun close() {
-        if (started && !settled) endDurationAsyncTrace()
-        service.close()
-    }
-
-    private fun applyEnrichments(
-        identity: String,
-        enrichments: List<AnimatedDurationEnrichment>,
-    ) {
-        if (identity != DURATION_WORKLOAD_IDENTITY || enrichments.isEmpty()) return
-        val durationsByPostId = enrichments.associate { result -> result.postId to result.durationMs }
-        val updatedPosts = currentPosts().map { post ->
-            durationsByPostId[post.id]?.let { durationMs -> post.copy(durationMs = durationMs) } ?: post
-        }
-        traceDurationSection(TRACE_DURATION_PUBLISH) {
-            publishPosts(updatedPosts)
-        }
-        if (!settled && updatedPosts.size == SEARCH_POST_COUNT && updatedPosts.all { it.durationMs != null }) {
-            settled = true
-            recordDurationTraceEvent(TRACE_DURATION_SETTLED)
-            endDurationAsyncTrace()
-        }
+        coordinator.close()
     }
 }
 
@@ -138,30 +129,9 @@ private suspend inline fun <T> traceDurationSuspend(
     }
 }
 
-private inline fun <T> traceDurationSection(name: String, block: () -> T): T {
-    Trace.beginSection(name)
-    return try {
-        block()
-    } finally {
-        Trace.endSection()
-    }
-}
-
 private fun recordDurationTraceEvent(name: String) {
     Trace.beginSection(name)
     Trace.endSection()
-}
-
-private fun beginDurationAsyncTrace() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        Trace.beginAsyncSection(TRACE_DURATION_WORKLOAD, DURATION_TRACE_COOKIE)
-    }
-}
-
-private fun endDurationAsyncTrace() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        Trace.endAsyncSection(TRACE_DURATION_WORKLOAD, DURATION_TRACE_COOKIE)
-    }
 }
 
 internal const val ACTION_BENCHMARK_DURATION_START =
@@ -175,4 +145,3 @@ internal const val TRACE_DURATION_PUBLISH = "TheoriaDurationPublish"
 internal const val TRACE_DURATION_SETTLED = "TheoriaDurationSettled"
 internal const val TRACE_DURATION_WORKLOAD = "TheoriaDurationWorkload"
 private const val DURATION_WORKLOAD_IDENTITY = "benchmark-duration-workload"
-private const val DURATION_TRACE_COOKIE = 1

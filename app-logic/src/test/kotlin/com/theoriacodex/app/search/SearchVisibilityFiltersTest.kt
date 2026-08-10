@@ -174,6 +174,29 @@ class SearchVisibilityFiltersTest {
     }
 
     @Test
+    fun `filterSearchResults uses separate acquired metadata without rewriting posts`() {
+        val acquiredMatch = samplePost(
+            id = "acquired",
+            source = SourceKey.HITOMI,
+            fullMime = "video/mp4",
+            fullUrl = "https://cdn.test/acquired.mp4",
+        )
+
+        val visible = filterSearchResults(
+            results = listOf(acquiredMatch),
+            filters = SearchVisibilityFilters(
+                animatedDurationRange = AnimatedDurationRange(minBucket = 2, maxBucket = 4),
+            ),
+            likedPostIds = emptySet(),
+            savedPostIds = emptySet(),
+            knownDurationMsByPostId = mapOf(acquiredMatch.id to 15_000L),
+        )
+
+        assertEquals(listOf(acquiredMatch.id), visible.map { it.id })
+        assertEquals(null, acquiredMatch.durationMs)
+    }
+
+    @Test
     fun `filterSearchResults keeps unknown animated durations when range is full`() {
         val unknownAnimated = samplePost(
             id = "unknown",

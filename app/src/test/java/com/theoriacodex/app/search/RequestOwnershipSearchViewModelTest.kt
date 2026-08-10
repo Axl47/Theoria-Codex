@@ -17,9 +17,6 @@ import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchEffect
 import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchSourceScope
-import com.theoriacodex.app.testing.TestAnimatedDurationEnricher
-import com.theoriacodex.app.testing.animatedTestPost
-import com.theoriacodex.app.media.AnimatedDurationEnricher
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -175,66 +172,6 @@ internal class RequestOwnershipSearchViewModelTest : SearchViewModelTestFixture(
             assertEquals(SearchSourceScope.GlobalUnified, query.appliedSourceScope)
             assertEquals(QueryMode.Unified, query.draft.mode)
             assertTrue(viewModel.state.value.hasPendingChanges)
-        }
-
-    @Test
-    fun `duration enrichment copies into current search results`() =
-        runTest(mainDispatcherRule.dispatcher) {
-            val post = animatedTestPost(sourcePostId = "animated-result")
-            val adapter = ViewModelSearchAdapter().apply {
-                resultFactory = { listOf(post) }
-            }
-            val enricher = TestAnimatedDurationEnricher { 4_500L }
-            val viewModel = viewModel(adapter, animatedDurationEnricher = enricher)
-            restore(viewModel)
-            viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
-            viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("animated")))
-            viewModel.onAction(SearchAction.ApplyDraft)
-            advanceUntilIdle()
-            val queryHash = requireNotNull(viewModel.state.value.query.appliedQueryHash)
-
-            viewModel.onAction(SearchAction.RequestAnimatedDurationEnrichment(queryHash))
-            advanceUntilIdle()
-
-            assertEquals(4_500L, viewModel.state.value.content.results.single().durationMs)
-            assertEquals(null, post.durationMs)
-        }
-
-    @Test
-    fun `duration completion from replaced query cannot update fresh results`() =
-        runTest(mainDispatcherRule.dispatcher) {
-            val oldPost = animatedTestPost(sourcePostId = "shared", title = "old")
-            val freshPost = animatedTestPost(sourcePostId = "shared", title = "fresh")
-            val started = CompletableDeferred<Unit>()
-            val release = CompletableDeferred<Unit>()
-            val adapter = ViewModelSearchAdapter().apply {
-                resultFactory = { tag -> listOf(if (tag == "old") oldPost else freshPost) }
-            }
-            val enricher = TestAnimatedDurationEnricher {
-                started.complete(Unit)
-                release.await()
-                7_000L
-            }
-            val viewModel = viewModel(adapter, animatedDurationEnricher = enricher)
-            restore(viewModel)
-            viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
-            viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("old")))
-            viewModel.onAction(SearchAction.ApplyDraft)
-            advanceUntilIdle()
-            val oldQueryHash = requireNotNull(viewModel.state.value.query.appliedQueryHash)
-            viewModel.onAction(SearchAction.RequestAnimatedDurationEnrichment(oldQueryHash))
-            runCurrent()
-            started.await()
-
-            viewModel.onAction(SearchAction.ClearDraft)
-            viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("fresh")))
-            viewModel.onAction(SearchAction.ApplyDraft)
-            runCurrent()
-            release.complete(Unit)
-            advanceUntilIdle()
-
-            assertEquals("fresh", viewModel.state.value.content.results.single().title)
-            assertEquals(null, viewModel.state.value.content.results.single().durationMs)
         }
 
     @Test

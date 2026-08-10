@@ -3,8 +3,6 @@ package com.theoriacodex.app.di
 import android.content.Context
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
-import com.theoriacodex.app.media.AnimatedDurationEnricher
-import com.theoriacodex.app.media.AnimatedDurationEnrichmentService
 import com.theoriacodex.app.media.BoundedMediaDurationProbe
 import com.theoriacodex.app.media.MediaDurationAcquisitionEngine
 import com.theoriacodex.app.media.MediaDurationCoordinator
@@ -105,7 +103,6 @@ data class FeatureDependencies(
     val search: SearchCoordinator,
     val forYou: ForYouCoordinator,
     val creatorProfile: CreatorProfileCoordinator,
-    val animatedDurationEnricher: AnimatedDurationEnricher,
     val mediaDurationCoordinator: MediaDurationCoordinator,
     val appUsageTracker: AppUsageTracker,
 )
@@ -174,9 +171,6 @@ internal class DefaultTheoriaAppContainer(
     private val mediaDurationAcquisitionEngine = MediaDurationAcquisitionEngine(
         registry = sourceRegistry,
         probe = boundedMediaDurationProbe,
-    )
-    private val animatedDurationEnricher = AnimatedDurationEnrichmentService(
-        acquisitionEngine = mediaDurationAcquisitionEngine,
     )
     private val mediaDurationCoordinator = MediaDurationCoordinator(
         acquirer = mediaDurationAcquisitionEngine,
@@ -288,7 +282,6 @@ internal class DefaultTheoriaAppContainer(
             tagSuggestionStore = tagSuggestionStore,
         ),
         creatorProfile = CreatorProfileCoordinator(registry = sourceRegistry),
-        animatedDurationEnricher = animatedDurationEnricher,
         mediaDurationCoordinator = mediaDurationCoordinator,
         appUsageTracker = appUsageTracker,
     )

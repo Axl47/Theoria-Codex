@@ -63,7 +63,7 @@ class AppLogicArchitectureTest {
             "SearchScopedInputPolicy.kt",
             "SearchVisibilityFilters.kt",
             "FeedPlaybackPolicy.kt",
-            "AnimatedDurationEnrichmentPolicy.kt",
+            "DurationFilterReadiness.kt",
             "PostMediaPolicy.kt",
             "TrainingTags.kt",
             "TagAssociation.kt",

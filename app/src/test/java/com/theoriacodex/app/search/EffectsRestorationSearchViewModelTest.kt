@@ -17,9 +17,6 @@ import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchEffect
 import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchSourceScope
-import com.theoriacodex.app.testing.TestAnimatedDurationEnricher
-import com.theoriacodex.app.testing.animatedTestPost
-import com.theoriacodex.app.media.AnimatedDurationEnricher
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter

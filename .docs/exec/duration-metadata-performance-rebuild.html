@@ -124,7 +124,7 @@
       <span class="pill">Plan: .docs/exec/duration-metadata-performance-rebuild.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next action</strong>Migrate every browsing route, player publication seam, badge, filter, and pagination owner onto the application coordinator.</div>
+      <div class="card"><strong>Next action</strong>Run the bounded host acceptance and benchmark package guards, then pause immediately before the post-fix physical benchmark.</div>
       <div class="card"><strong>Primary risk</strong>Background duration work currently competes with visible playback and can cause pagination to create more work.</div>
       <div class="card"><strong>Final proof</strong>Same device, asset, workload, gestures, iterations, metrics, and artifact-retention procedure before and after.</div>
       <div class="card"><strong>Protected behavior</strong>Every visibly presented animated or video card continues autoplaying simultaneously.</div>
@@ -157,11 +157,11 @@
     <section id="status">
       <h2>Current Status</h2>
       <table class="status-table"><tbody>
-        <tr><td>Plan state</td><td>In progress. The immutable physical baseline, capability-aware acquisition, application-wide scheduling, and durable decision store are complete.</td></tr>
+        <tr><td>Plan state</td><td>In progress. The immutable physical baseline and duration rebuild through all production routes are complete; final host acceptance is active.</td></tr>
         <tr><td>Repository baseline</td><td><code>main</code> at <code>6bd7536</code> (<code>fix(performance): reset benchmark fixture between iterations</code>), after benchmark-only instrumentation and before any duration behavior repair.</td></tr>
-        <tr><td>Working tree</td><td>Phase 0 evidence is preserved under <code>build/reports/duration-metadata-performance/baseline-6bd7536/</code>. Phases 1 through 3 have rebuilt acquisition, scheduling, persistence, and bounded parsing; route migration is next.</td></tr>
+        <tr><td>Working tree</td><td>Phase 0 evidence is preserved under <code>build/reports/duration-metadata-performance/baseline-6bd7536/</code>. Phases 1 through 4 have rebuilt acquisition, scheduling, persistence, bounded parsing, route demand, publication, filtering, and pagination.</td></tr>
         <tr><td>Current live evidence</td><td>All five physical benchmark methods passed on Samsung SM-S926U / Android 16. The duration journey settled 24/24 decisions in every iteration while every visible preview continued playing.</td></tr>
-        <tr><td>Next action</td><td>Implement Phase 4's route/player/filter migration, then delete the transitional duration lanes and service.</td></tr>
+        <tr><td>Next action</td><td>Complete deterministic host acceptance and verify the frozen benchmark artifacts, then stop before any connected benchmark command.</td></tr>
       </tbody></table>
       <div class="callout risk"><strong>Baseline gate:</strong> only benchmark harness, trace instrumentation, tests, and documentation may change before the first physical run. If any user-visible or duration-selection behavior changes first, reset the measurement sequence by capturing a new baseline from the last pre-fix commit.</div>
     </section>
@@ -370,7 +370,7 @@
 
       <article id="phase-4">
         <h3>Phase 4: Switch routes, players, badges, filters, and pagination</h3>
-        <p class="phase-status">Status: Not started.</p>
+        <p class="phase-status done">Status: Completed 2026-08-10.</p>
         <table class="status-table"><tbody>
           <tr><td>Goal</td><td>Remove route-local drains and make metadata publication independent from base post lists while preserving exact browsing behavior.</td></tr>
           <tr><td>Primary files</td><td>Search, For You, Creator Profile, Recents, Codex detail, shared card/media components, Viewer/Ugoira/GIF/WebP players, route ViewModels, filtering policy, and architecture tests.</td></tr>
@@ -386,12 +386,14 @@
           <li>Apply the shared metadata path to Search, For You, Creator Profile, Recents, and Codex detail. Viewer receives the same duration state without requiring a route round trip. Do not rewrite Codex snapshots.</li>
           <li>Update the Settings label to clarify speculative background behavior. Default missing/new values to off while preserving stored choices.</li>
         </ol>
+        <p><strong>Result:</strong> one shared navigation-scoped binding now connects Search, For You, Creator Profile, Codex detail, Recents, and Viewer to the application coordinator. Route owners reconcile per-media append/filter/viewport deltas, observe only their own metadata keys, and leave base Post lists unchanged. Cards cache fingerprint keys per result snapshot; existing full-media video, Ugoira, and GIF players publish one-shot duration events. Active filters consume the separate metadata snapshot, block page refill while loaded candidates are unresolved, and resume on the exact pending-count transition.</p>
+        <p><strong>Evidence:</strong> focused coordinator, route-delta, state-isolation, key/fingerprint, filter-readiness, visibility-filter, architecture, settings-default, Debug, and benchmarkRelease checks pass. The old route lanes, service, duration actions, and duration-only list mutation tests are removed. App Detekt reports only the four inherited findings in untouched <code>CodexListScreen</code>, <code>SaveToCodexSheet</code>, and <code>SearchEmptyStatePolicy</code>; all changed app files are clean.</p>
         <p><strong>Acceptance:</strong> Hitomi anime duration can appear without opening Viewer; opening/exiting Viewer causes no one-second badge disappearance; narrowed filters contain only known matching animated posts; pending work does not trigger page cascades; metadata publication triggers no new demand; all visible cards still autoplay; player prepare counts do not increase from badge updates.</p>
       </article>
 
       <article id="phase-5">
         <h3>Phase 5: Run bounded host acceptance, then repeat the frozen physical benchmark</h3>
-        <p class="phase-status">Status: Not started.</p>
+        <p class="phase-status">Status: In progress — host acceptance only; connected final run intentionally paused.</p>
         <table class="status-table"><tbody>
           <tr><td>Goal</td><td>Prove correctness first, then measure the final system against the preserved baseline and control.</td></tr>
           <tr><td>Primary files</td><td>This ExecPlan, <code>working_list.md</code>, benchmark README/tests, and any durable project rule discovered during validation.</td></tr>
@@ -521,8 +523,8 @@ Overrun penalty p90 = duration-on Search frameOverrunMs p90
         <li class="done">[x] 2026-08-10 — Phase 1: added pure state/fingerprint/planning contracts, optional provider metadata capability, direct-full-video acquisition, unsupported short-circuiting, one worker, and the 12-second timeout.</li>
         <li class="done">[x] 2026-08-10 — Phase 2: added the pure bounded priority scheduler and one application-scoped coordinator with observable metadata state, cross-route single-flight, scroll/lifecycle gates, consumer-isolated cancellation, background preemption, trace events, and no publication restart.</li>
         <li class="done">[x] 2026-08-10 — Phase 3: added the bounded schema 5 decision store, pure MP4/WebM parsers, strict range transport, and one shared provider/probe acquisition engine; removed production remote <code>MediaMetadataRetriever</code>.</li>
-        <li>[ ] Phase 4 — Switch every route/player/filter and remove the old lanes.</li>
-        <li>[ ] Phase 5 — Complete host acceptance, repeat the physical benchmark, compare, and close out.</li>
+        <li class="done">[x] 2026-08-10 — Phase 4: switched every route, badge, filter, pagination owner, and authoritative player seam to separate coordinator metadata; removed the old lanes and list mutation.</li>
+        <li>[~] Phase 5 — Complete host acceptance, then pause before the user reconnects the device for the one final physical benchmark.</li>
       </ul>
 
       <h3>Surprises And Discoveries</h3>
@@ -540,6 +542,8 @@ Overrun penalty p90 = duration-on Search frameOverrunMs p90
         <li><strong>Observation:</strong> a single total acquisition permit is a safe strict bound for the transitional coordinator adapter: it implies at most one probe and one provider request while route migration is incomplete. Phase 3 will move provider/probe classification behind the durable acquisition engine without loosening the probe bound.</li>
         <li><strong>Observation:</strong> the repository module cannot import the application-owned duration state without creating a dependency cycle. The durable contract therefore owns a smaller Pending-free stored state and the app owns the exhaustive typed mapping at the coordinator boundary.</li>
         <li><strong>Observation:</strong> a range response is safe for metadata parsing only when its <code>Content-Range</code>, body length, and known total length agree with the requested window. Treating a server's silent full-body fallback as success would defeat the memory/network budget.</li>
+        <li><strong>Observation:</strong> continuous Viewer timeline callbacks are not a safe duration-publication seam: GIF progress runs at frame cadence and would enqueue unchanged metadata repeatedly. Duration publication now occurs once when each authoritative player's total duration becomes known.</li>
+        <li><strong>Observation:</strong> pagination effects must key the pending-decision count itself. A page that settles entirely Unsupported or outside the selected range does not change the visible result count, so keying only visible/base list sizes would leave refill permanently paused.</li>
       </ul>
 
       <h3>Decision Log</h3>
@@ -553,7 +557,7 @@ Overrun penalty p90 = duration-on Search frameOverrunMs p90
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>Phase 0 froze and preserved the benchmark contract. Phase 1 bounded capability-aware acquisition. Phase 2 added one application coordinator. Phase 3 now preserves terminal decisions independently from posts and replaces open-ended native remote probing with strict MP4/WebM range parsing through one shared acquisition engine. Continue with Phase 4: move route demand, badge reads, authoritative player publication, duration-filter readiness, and pagination onto this coordinator, then remove the transitional lanes.</p>
+      <p>Phase 0 froze and preserved the benchmark contract. Phases 1 through 3 rebuilt bounded acquisition, scheduling, persistence, and parsing. Phase 4 now keeps duration metadata separate from Post lists across every browsing route, reconciles only demand deltas, accepts one-shot authoritative player metadata, and prevents unresolved filters from cascading pages. Complete the host-only Phase 5 batch, preserve the baseline, and pause before the final connected benchmark as requested.</p>
     </section>
 
     <section id="recovery">

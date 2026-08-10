@@ -8,12 +8,12 @@ updated_at: 2026-08-10T18:10:00-04:00
 
 ### In Progress
 
-- [~] Phase 4: migrate routes, players, badges, filters, and pagination to separate metadata state.
-  - Required evidence: route identity/demand deltas rather than list-keyed drains; separate badge metadata without post-list rewrites; authoritative full-player publication; pending-aware duration pagination; speculative background setting defaults off; old lanes/service removed after the final consumer moves.
+- [~] Run the final host acceptance batch and stop before the post-fix physical benchmark.
+  - Required evidence: all deterministic correctness lanes and benchmark package guards pass; changed files are clean under static analysis; the frozen benchmark contract remains unchanged; the preserved physical baseline remains intact.
 
 ### Pending
 
-- [ ] Run the final host acceptance batch and stop before the post-fix physical benchmark.
+- [ ] With the user ready and the same physical device connected again, run the one frozen post-fix benchmark and compare it with the preserved baseline.
 
 ### Done
 
@@ -33,6 +33,8 @@ updated_at: 2026-08-10T18:10:00-04:00
   - Evidence: the Pending-free repository contract and in-memory owner preserve typed terminal decisions. Room schema 5 adds an independent post/fingerprint-keyed table with no URLs or headers, deterministic 4,096-row pruning, expired-retry deletion, and an explicit host-tested 4-to-5 migration that preserves existing content. The coordinator consults it before queueing and persists results after releasing its state lock. Three repository, four Room/migration, three mapping, eight coordinator, and eight architecture tests pass; Android migration-test and Debug/benchmark compilation pass. Changed persistence files are absent from broad Detekt findings; only the documented inherited core-data and app findings remain.
 - [x] Phase 3b: replace remote retriever probing with bounded MP4/WebM parsing.
   - Evidence: pure MP4 and WebM parsers cover valid, truncated, malformed, missing-duration, head/tail, and overflow inputs. The application probe uses source headers, validates exact 256 KiB head/tail range responses, enforces body and 12-second time bounds, and maps transport/parser outcomes into typed coordinator state. Provider resolution and probing now share one acquisition engine; production remote `MediaMetadataRetriever` is removed while the frozen benchmark-only baseline subject remains. The focused parser, probe, acquisition, coordinator, architecture, HTTP transport, app-logic, Debug, and benchmark compilation batch passes. App Detekt reports only its four inherited untouched UI findings.
+- [x] Phase 4: migrate routes, players, badges, filters, and pagination to separate metadata state.
+  - Evidence: Search, For You, Creator, Codex detail, Recents, and Viewer now share navigation-scoped delta owners over one application coordinator. Badges and filters read route-only metadata without rewriting Posts; existing authoritative players publish once; pending decisions block duration-driven page refill and restart it on settlement; static/unsupported/unresolved rows remain excluded; speculative background work defaults off; old lanes/service/actions are removed. Focused route, coordinator, key/fingerprint, filtering, architecture, settings, Debug, and benchmarkRelease checks pass. Changed app files are clean under Detekt; only the four inherited findings remain.
 
 ## Current Task: Repair Animated Duration Metadata And Filtering
 

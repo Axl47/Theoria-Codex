@@ -11,7 +11,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.recommend.ForYouCoordinator
 import com.theoriacodex.app.recommend.ForYouScreen
 import com.theoriacodex.app.recommend.ForYouViewModel
-import com.theoriacodex.app.media.AnimatedDurationEnricher
+import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouEffect
 import com.theoriacodex.app.recommend.state.ForYouUiState
@@ -91,7 +91,7 @@ internal class ForYouRouteOwnerHandle(
 @Composable
 internal fun ForYouRoute(
     coordinator: ForYouCoordinator,
-    animatedDurationEnricher: AnimatedDurationEnricher,
+    mediaDurationCoordinator: MediaDurationCoordinator,
     pixivUgoiraClient: PixivUgoiraClient?,
     config: ForYouRouteConfig,
     callbacks: ForYouRouteCallbacks,
@@ -102,10 +102,17 @@ internal fun ForYouRoute(
         factory = ForYouViewModel.factory(
             coordinator = coordinator,
             initialProfiles = config.settings.recommendationProfiles,
-            animatedDurationEnricher = animatedDurationEnricher,
         ),
     )
     val state by owner.state.collectAsStateWithLifecycle()
+    val duration = rememberMediaDurationRouteBinding(
+        coordinator = mediaDurationCoordinator,
+        routeName = "for-you",
+        ownerKey = FOR_YOU_DURATION_OWNER_KEY,
+        contentIdentity = state.seedId.ifBlank { "unseeded" },
+        posts = state.results,
+        resolveInBackground = config.resolveUnknownAnimatedDurations,
+    )
     val ownerHandle = remember(owner) { ForYouRouteOwnerHandle(owner) }
     val currentOnOwnerAvailable by rememberUpdatedState(onOwnerAvailable)
 
@@ -130,6 +137,11 @@ internal fun ForYouRoute(
         likedPostIds = config.likedPostIds,
         pixivUgoiraClient = pixivUgoiraClient,
         resolveUnknownAnimatedDurations = config.resolveUnknownAnimatedDurations,
+        durationStates = duration.states,
+        onDurationFilterChanged = duration.owner::onFilterChanged,
+        onDurationPostVisibilityChanged = duration.owner::onPostVisibilityChanged,
+        onDurationEnvironmentChanged = duration.owner::onEnvironmentChanged,
+        onAuthoritativeDurationKnown = duration.owner::publishPlayerDuration,
         onToggleLike = callbacks.onToggleLike,
         onAction = owner::onAction,
         creatorBrowsingSources = config.creatorBrowsingSources,
@@ -146,6 +158,8 @@ internal fun ForYouRoute(
         onGoToSearch = callbacks.onGoToSearch,
     )
 }
+
+private const val FOR_YOU_DURATION_OWNER_KEY = "for-you-duration-owner"
 
 private suspend fun handleForYouRouteEffect(
     effect: ForYouEffect,

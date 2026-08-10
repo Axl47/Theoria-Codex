@@ -213,13 +213,28 @@ class ArchitectureBoundarySourceTest {
             violations = violations,
         )
         screens.forEach { path ->
+            val text = File(repositoryRoot, path).readText()
             assertTrue(
-                "$path must retain its typed duration-enrichment action",
-                "RequestAnimatedDurationEnrichment" in File(repositoryRoot, path).readText(),
+                "$path must read separate duration state and emit typed route events",
+                "durationStates" in text &&
+                    "onDurationFilterChanged" in text &&
+                    "onDurationPostVisibilityChanged" in text,
             )
             assertTrue(
-                "$path must proactively request enabled unknown durations",
-                "shouldRequestAnimatedDurationEnrichment" in File(repositoryRoot, path).readText(),
+                "$path must not retain the result-list enrichment trigger",
+                "RequestAnimatedDurationEnrichment" !in text &&
+                    "shouldRequestAnimatedDurationEnrichment" !in text,
+            )
+        }
+        listOf(
+            "app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt",
+            "app/src/main/java/com/theoriacodex/app/recommend/ForYouScreen.kt",
+            "app/src/main/java/com/theoriacodex/app/creator/CreatorProfileScreen.kt",
+        ).forEach { path ->
+            val text = File(repositoryRoot, path).readText()
+            assertTrue(
+                "$path must restart pagination when pending duration decisions settle",
+                "durationReadiness.pendingCount" in text,
             )
         }
         listOf(
@@ -231,21 +246,22 @@ class ArchitectureBoundarySourceTest {
             assertTrue("$path must not accept resolved-post mutation", "rememberResolvedPost:" !in text)
         }
 
-        val servicePath = "app/src/main/java/com/theoriacodex/app/media/AnimatedDurationEnrichmentService.kt"
         val containerPath = "app/src/main/java/com/theoriacodex/app/di/TheoriaAppContainer.kt"
-        val serviceConstruction = Regex("""\bAnimatedDurationEnrichmentService\s*\(""")
-        val constructionViolations = appProductionSources()
-            .filter { source -> relativePath(source) !in setOf(servicePath, containerPath) }
-            .filter { source -> serviceConstruction.containsMatchIn(source.readText()) }
-            .map(::relativePath)
-            .toList()
-        assertNoViolations(
-            rule = "The application container must be the sole enrichment-service owner",
-            violations = constructionViolations,
-        )
         assertTrue(
-            "The application-owned service guard became vacuous",
-            serviceConstruction.containsMatchIn(File(repositoryRoot, containerPath).readText()),
+            "The transitional duration lanes and service must be removed",
+            !File(
+                repositoryRoot,
+                "app/src/main/java/com/theoriacodex/app/media/AnimatedDurationEnrichmentService.kt",
+            ).exists() &&
+                !File(
+                    repositoryRoot,
+                    "app/src/main/java/com/theoriacodex/app/search/" +
+                        "SearchAnimatedDurationEnrichmentOwner.kt",
+                ).exists() &&
+                !File(
+                    repositoryRoot,
+                    "app/src/main/java/com/theoriacodex/app/codex/CodexDetailDurationViewModel.kt",
+                ).exists(),
         )
         val coordinatorConstruction = Regex("""\bMediaDurationCoordinator\s*\(""")
         val coordinatorPath = "app/src/main/java/com/theoriacodex/app/media/MediaDurationCoordinator.kt"
@@ -272,6 +288,25 @@ class ArchitectureBoundarySourceTest {
             "Duration publication must stay separate from demand submission",
             "private fun publishKnownLocked" in coordinator &&
                 "metadata publication never becomes a new demand input" in coordinator,
+        )
+        val routeOwner = File(
+            repositoryRoot,
+            "app/src/main/java/com/theoriacodex/app/media/MediaDurationRouteViewModel.kt",
+        ).readText()
+        assertTrue(
+            "Route demand must reconcile deltas instead of rescanning work through feed state",
+            "reconcileDemandLane" in routeOwner &&
+                "desired - current" in routeOwner &&
+                "current - desired" in routeOwner,
+        )
+        val viewer = File(
+            repositoryRoot,
+            "app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt",
+        ).readText()
+        assertTrue(
+            "Viewer duration publication must use one-shot player callbacks",
+            "onDurationKnown: (Long) -> Unit" in viewer &&
+                "onAuthoritativeDurationKnown(post, durationMs)" in viewer,
         )
         listOf(
             "TheoriaDurationDemand",
@@ -312,7 +347,6 @@ class ArchitectureBoundarySourceTest {
                 "loadStoredState(demand.key)" in coordinator &&
                 "persistState(work.key, state)" in coordinator,
         )
-        val service = File(repositoryRoot, servicePath).readText()
         val acquisitionEngine = File(
             repositoryRoot,
             "app/src/main/java/com/theoriacodex/app/media/MediaDurationAcquisitionEngine.kt",
@@ -337,7 +371,7 @@ class ArchitectureBoundarySourceTest {
         )
         assertTrue(
             "Duration acquisition must retain one worker and a 12-second timeout",
-            "DEFAULT_MAX_CONCURRENT_WORK = 1" in service &&
+            "DEFAULT_MAX_CONCURRENT_WORK = 1" in coordinator &&
                 "DEFAULT_DURATION_ACQUISITION_TIMEOUT_MS = 12_000L" in acquisitionEngine &&
                 "withTimeoutOrNull(operationTimeoutMs)" in acquisitionEngine,
         )

@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -28,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.theoriacodex.app.R
 import com.theoriacodex.app.search.SearchResultCard
+import com.theoriacodex.app.media.MediaDurationState
+import com.theoriacodex.app.media.mediaDurationKeysByPostId
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
 import com.theoriacodex.app.viewer.ViewerScreen
 import com.theoriacodex.app.viewer.state.ViewerAction
@@ -77,28 +80,28 @@ private fun BenchmarkSearchFixture(
     mediaUri: String,
     durationEnrichmentEnabled: Boolean,
 ) {
-    var posts by remember(mediaUri, durationEnrichmentEnabled) {
-        mutableStateOf(
-            benchmarkPosts(
-                prefix = "benchmark_search",
-                count = SEARCH_POST_COUNT,
-                mediaUri = mediaUri,
-                durationMs = if (durationEnrichmentEnabled) null else BENCHMARK_MEDIA_DURATION_MS,
-            ),
+    val posts = remember(mediaUri, durationEnrichmentEnabled) {
+        benchmarkPosts(
+            prefix = "benchmark_search",
+            count = SEARCH_POST_COUNT,
+            mediaUri = mediaUri,
+            durationMs = if (durationEnrichmentEnabled) null else BENCHMARK_MEDIA_DURATION_MS,
         )
     }
-    if (durationEnrichmentEnabled) {
-        val scope = rememberCoroutineScope()
-        val resources = LocalContext.current.resources
-        val workload = remember(mediaUri) {
+    val scope = rememberCoroutineScope()
+    val resources = LocalContext.current.resources
+    val workload = remember(mediaUri, durationEnrichmentEnabled) {
+        if (durationEnrichmentEnabled) {
             BenchmarkDurationWorkload(
                 scope = scope,
                 resources = resources,
                 initialPosts = posts,
-                currentPosts = { posts },
-                publishPosts = { updated -> posts = updated },
             )
+        } else {
+            null
         }
+    }
+    if (workload != null) {
         DisposableEffect(workload) {
             onDispose(workload::close)
         }
@@ -108,7 +111,12 @@ private fun BenchmarkSearchFixture(
             }
         }
     }
-    val resolvedCount = posts.count { post -> post.durationMs != null }
+    val durationStates = workload?.states?.collectAsState()?.value.orEmpty()
+    val durationKeysByPostId = remember(posts) { mediaDurationKeysByPostId(posts) }
+    val resolvedCount = posts.count { post ->
+        post.durationMs != null ||
+            durationKeysByPostId[post.id]?.let(durationStates::get) is MediaDurationState.Known
+    }
     val statusDescription = when {
         resolvedCount == SEARCH_POST_COUNT -> DURATION_SETTLED_DESCRIPTION
         resolvedCount == 0 -> "Waiting 0/$SEARCH_POST_COUNT"
@@ -144,6 +152,9 @@ private fun BenchmarkSearchFixture(
                 SearchResultCard(
                     post = post,
                     pixivUgoiraClient = null,
+                    acquiredDurationMs = durationKeysByPostId[post.id]
+                        ?.let(durationStates::get)
+                        ?.let { state -> (state as? MediaDurationState.Known)?.durationMs },
                     playbackDiagnosticsEnabled = true,
                     onClick = {},
                 )
