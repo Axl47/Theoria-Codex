@@ -46,14 +46,20 @@ internal fun requiresViewerPostResolution(post: Post, streamSource: ViewerStream
     return requiresLazyMediaResolution(post)
 }
 
-internal fun requiresPrelaunchViewerPostResolution(
-    post: Post,
-    streamSource: ViewerStreamSource,
-): Boolean {
-    if (post.id.source == SourceKey.HITOMI && streamSource == ViewerStreamSource.SEARCH) {
-        return false
+internal fun requiresPrelaunchViewerPostResolution(post: Post): Boolean {
+    return !hasUsableViewerMedia(post)
+}
+
+internal fun hasUsableViewerMedia(post: Post): Boolean {
+    return sequence {
+        yieldAll(post.media)
+        post.full?.let { yield(it) }
+        yield(post.preview)
+    }.any { media ->
+        !media.localPath.isNullOrBlank() ||
+            !media.url.isNullOrBlank() ||
+            media.progressiveUrls.any { location -> location.isNotBlank() }
     }
-    return requiresViewerPostResolution(post, streamSource)
 }
 
 internal fun requiresLazyMediaResolution(post: Post): Boolean {
@@ -81,6 +87,19 @@ private fun hasRemoteViewerMedia(post: Post): Boolean {
     return primaryMedia.any { ref ->
         !ref.url.isNullOrBlank() && ref.localPath.isNullOrBlank()
     }
+}
+
+internal suspend fun prepareViewerPostsForLaunch(
+    posts: List<Post>,
+    context: ViewerLaunchContext,
+    resolvePost: suspend (Post) -> Post?,
+): List<Post> {
+    if (posts.isEmpty()) return posts
+    val startIndex = context.startIndex.coerceIn(0, posts.lastIndex)
+    val selectedPost = posts[startIndex]
+    if (!requiresPrelaunchViewerPostResolution(selectedPost)) return posts
+    val resolved = resolvePost(selectedPost) ?: return posts
+    return posts.toMutableList().apply { this[startIndex] = resolved }
 }
 
 internal fun mergeViewerPosts(current: List<Post>, incoming: List<Post>): List<Post> {

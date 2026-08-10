@@ -12,7 +12,7 @@ import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.statistics.statisticsTagsForPost
 import com.theoriacodex.app.viewer.ViewerSession
-import com.theoriacodex.app.viewer.requiresPrelaunchViewerPostResolution
+import com.theoriacodex.app.viewer.prepareViewerPostsForLaunch
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecentPostSection
@@ -105,14 +105,11 @@ internal class ViewerRouteWorkflow(
         posts: List<Post>,
         context: ViewerLaunchContext,
     ): List<Post> {
-        if (posts.isEmpty()) return posts
-        val startIndex = context.startIndex.coerceIn(0, posts.lastIndex)
-        val selectedPost = posts[startIndex]
-        if (!requiresPrelaunchViewerPostResolution(selectedPost, context.streamSource)) return posts
-        val resolved = runCatchingPreservingCancellation {
-            resolvePost(selectedPost.id, context.streamSource)
-        }.getOrNull() ?: return posts
-        return posts.toMutableList().apply { this[startIndex] = resolved }
+        return prepareViewerPostsForLaunch(posts, context) { selectedPost ->
+            runCatchingPreservingCancellation {
+                resolvePost(selectedPost.id, context.streamSource)
+            }.getOrNull()
+        }
     }
 
     suspend fun restoreSession(identity: ViewerSessionIdentity): ViewerSession? {

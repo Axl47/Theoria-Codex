@@ -8,16 +8,17 @@ updated_at: 2026-08-10T20:05:00-04:00
 
 ### In Progress
 
-- [~] Phase 4: open Viewer before provider refresh when usable media already exists.
+- [~] Phase 5: bound Pixiv Ugoira loading and share token refresh.
 
 ### Pending
 
-- [ ] Phase 5: bound Pixiv Ugoira loading and share token refresh.
 - [ ] Phase 6: reuse bounded Hitomi gallery manifests.
 - [ ] Phase 7: run integrated validation and close the living ExecPlan.
 
 ### Done
 
+- [x] Phase 4: open Viewer before provider refresh when usable media already exists.
+  - Evidence: prelaunch policy now treats local, primary, progressive, and preview locations as immediately attemptable across Pixiv, Gelbooru, NHentai, and Hitomi. A delayed fake provider is not invoked for viable media; stale remote posts still refresh from the mounted Viewer and persist healing, while genuinely location-less posts retain the blocking resolution path. Twenty-nine focused tests and `:app:compileDebugKotlin` pass.
 - [x] Phase 3: prefetch the true Viewer neighborhood through the shared Media3 cache.
   - Evidence: the pure planner selects the nearest three media per side across post boundaries; the route owner caps cancellable work at two and reports warmed/skipped/failed truthfully; video warming uses a cancellable 24 MiB CacheWriter request through the exact 256 MiB playback LRU, cache key, headers, and data-source factory. The parallel 750 MiB manual cache owner is retired without destructive cleanup. Fifty focused tests and `:app:compileDebugKotlin` pass.
 - [x] Phase 2: centralize Preview and Viewer candidate intent.

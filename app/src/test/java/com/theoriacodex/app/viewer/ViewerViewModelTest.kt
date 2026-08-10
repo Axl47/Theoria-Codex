@@ -272,6 +272,41 @@ class ViewerViewModelTest {
     }
 
     @Test
+    fun `known stale media mounts before route owned provider refresh starts`() = runTest {
+        val refreshStarted = CompletableDeferred<Unit>()
+        val stale = post(
+            id = "stale-video",
+            source = SourceKey.GELBOORU,
+            media = listOf(video("stale-video.mp4")),
+        )
+        val codexSession = session("optimistic", listOf(stale)).let { current ->
+            current.copy(context = current.context.copy(streamSource = ViewerStreamSource.CODEX))
+        }
+        val owner = ViewerViewModel(
+            savedStateHandle = SavedStateHandle(),
+            postResolver = ViewerPostResolver { _, _ ->
+                refreshStarted.complete(Unit)
+                awaitCancellation()
+            },
+            scopeOverride = this,
+        )
+
+        owner.replaceSession(codexSession)
+        runCurrent()
+
+        assertFalse(refreshStarted.isCompleted)
+        assertEquals("stale-video", owner.state.value.currentPage?.post?.id?.sourcePostId)
+        assertEquals(ViewerResolutionStatus.IDLE, owner.state.value.currentPage?.resolution?.status)
+        assertTrue(owner.state.value.currentMedia?.displayLocation?.endsWith("stale-video.mp4") == true)
+
+        owner.onAction(ViewerAction.RequestCurrentPageResolution)
+        runCurrent()
+
+        assertTrue(refreshStarted.isCompleted)
+        owner.clearSession()
+    }
+
+    @Test
     fun `prefetch limits active work and cancels neighbors that are no longer desired`() = runTest {
         val active = AtomicInteger()
         val peak = AtomicInteger()

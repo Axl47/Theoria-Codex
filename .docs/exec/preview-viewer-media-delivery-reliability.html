@@ -211,14 +211,14 @@
     <h1>Make Preview and Viewer media delivery faster and more reliable</h1>
     <p>This plan makes existing Pixiv, Gelbooru, NHentai, and Hitomi media appear with less avoidable waiting and recover cleanly when a request fails. It repairs generic retry, chooses the media nearest to the current Viewer position for prefetch, reuses one playback cache, distinguishes quality upgrades from failure fallbacks, bounds Pixiv Ugoira memory, and removes duplicate provider work without changing the app's simultaneous-autoplay contract.</p>
     <div class="meta" role="group" aria-label="Plan metadata">
-      <span class="pill">Status: In progress — Phase 3 complete</span>
+      <span class="pill">Status: In progress — Phase 4 complete</span>
       <span class="pill">Owner: Codex</span>
       <span class="pill">Created: 2026-08-10</span>
       <span class="pill">Updated: 2026-08-10</span>
       <span class="pill">Plan: .docs/exec/preview-viewer-media-delivery-reliability.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next action</strong>Implement Phase 4 by removing provider resolution from Viewer launch paths that already contain usable media.</div>
+      <div class="card"><strong>Next action</strong>Implement Phase 5 by bounding Pixiv Ugoira archive/decoded memory and unifying token refresh.</div>
       <div class="card"><strong>Main risk</strong>Viewer, player ownership, and Pixiv Ugoira overlap the active performance work. Starting early could invalidate both baselines or reintroduce lifecycle churn.</div>
       <div class="card"><strong>Validation</strong>Deterministic retry/candidate/prefetch tests, provider adapter tests, isolated Debug behavior, request-count traces, same-device cold/warm timings, and bounded-memory evidence.</div>
       <div class="card"><strong>Affected areas</strong>Shared media policy, Search cards, Viewer reducer/route/prefetch, Media3 infrastructure, Pixiv auth/Ugoira, and Hitomi gallery hydration.</div>
@@ -257,7 +257,7 @@
       <h2>Current Status</h2>
       <table class="status-table">
         <tbody>
-          <tr><td>Plan state</td><td>In progress. Phases 1–3 now provide truthful Retry, typed candidate intent, and adjacent shared-cache prefetch. Phase 4 removes provider waiting from viable Viewer launches.</td></tr>
+          <tr><td>Plan state</td><td>In progress. Phases 1–4 now provide truthful Retry, typed candidates, adjacent shared-cache prefetch, and immediate Viewer launch for attemptable media. Phase 5 addresses Pixiv Ugoira and token ownership.</td></tr>
           <tr><td>Audit evidence</td><td>On 2026-08-10, 85 focused JVM tests across Viewer, media recovery, video prefetch, Pixiv Ugoira, and the four provider adapters passed with zero failures or errors. This proves the current contracts, not live performance or device reliability.</td></tr>
           <tr><td>Implementation gate</td><td>Satisfied by the user's explicit implementation instruction after <code>91dd752</code>. That commit's reusable player pool, stable-visibility gate, prepare pacing, and asynchronous teardown are the fixed ownership baseline; this plan must not restore pre-repair player behavior.</td></tr>
           <tr><td>Current checkout rule</td><td>Do not change <code>working_list.md</code> while authoring and committing this plan. When implementation is explicitly started, use the then-current project workflow without rewriting existing checklist history.</td></tr>
@@ -414,7 +414,7 @@
 
       <article>
         <h3>Phase 4: Remove provider resolution from viable Viewer launch paths</h3>
-        <p class="phase-status">Status: Proposed.</p>
+        <p class="phase-status">Status: Complete. Viable launch and route-owned refresh contracts pass on the host.</p>
         <table class="status-table">
           <tbody>
             <tr><td>Goal</td><td>Viewer navigation no longer waits for a provider when the selected post already has media that can be attempted.</td></tr>
@@ -429,6 +429,7 @@
           <li>Keep durable healing in <code>ViewerRouteWorkflow.persistResolvedPost</code>. Optimistic opening must not stop a later successful refresh from updating Codex/Recents/cache data.</li>
           <li>Verify Gelbooru search video, Gelbooru Codex media, NHentai gallery, Hitomi sparse Search, Pixiv static illustration, and a genuinely unresolved post separately.</li>
         </ol>
+        <p><strong>Result:</strong> prelaunch resolution now runs only when the selected post has no nonblank local, primary, progressive, or preview location the Viewer can attempt. Gelbooru video/Codex, NHentai gallery, Hitomi sparse Search, and Pixiv static posts therefore retain and navigate immediately; stale remote posts remain marked for route-owned refresh after mount, and successful refresh still persists through the existing workflow. A delayed fake provider is never invoked for viable media, while a genuinely location-less post still waits for resolution. Twenty-nine focused tests plus Debug compilation pass.</p>
       </article>
 
       <article>
@@ -567,7 +568,7 @@
         <li>[x] 2026-08-10 — Phase 1: added reducer-owned per-media reload generations, one shared renderer error/Retry surface, generic provider resolution fallback, and stale-session-safe healing. Thirty-one focused tests plus Debug compilation pass.</li>
         <li>[x] 2026-08-10 — Phase 2: centralized typed candidate intent, proactive Pixiv/Gelbooru upgrades, failure-only NHentai/Hitomi alternatives, Preview page-one fallback, and higher-page Viewer isolation. Thirty-three focused tests plus Debug compilation pass.</li>
         <li>[x] 2026-08-10 — Phase 3: replaced first-six/manual video prefetch with exact adjacent planning, a two-worker cancellable queue, truthful outcomes, and 24 MiB warming through the shared Media3 cache. Fifty focused tests plus Debug compilation pass.</li>
-        <li>[ ] Phase 4 — Remove provider resolution from viable Viewer launch paths.</li>
+        <li>[x] 2026-08-10 — Phase 4: made local, primary, progressive, and preview locations sufficient for immediate Viewer launch while preserving route-owned refresh and durable healing. Twenty-nine focused tests plus Debug compilation pass.</li>
         <li>[ ] Phase 5 — Bound Pixiv Ugoira and unify token refresh.</li>
         <li>[ ] Phase 6 — Reuse bounded Hitomi gallery manifests.</li>
         <li>[ ] Phase 7 — Complete integrated host/device/live-provider acceptance and retrospective.</li>
@@ -581,6 +582,7 @@
         <li><strong>Observation:</strong> the current prefetch window contains six items but is unrelated to the current flattened position after the beginning of a session. <strong>Evidence:</strong> <code>ViewerScreen</code> filters the current key and then calls <code>take(left + right)</code> from the start.</li>
         <li><strong>Observation:</strong> video prefetch treats unsupported work as success. <strong>Evidence:</strong> <code>ViewerVideoPrefetchAction.SKIP</code> returns <code>true</code>, after which reducer state adds the key to <code>ready</code>.</li>
         <li><strong>Observation:</strong> the retired video-prefetch path owned a separate 750 MiB full-file cache in addition to the 256 MiB Media3 LRU. <strong>Consequence:</strong> no destructive migration is needed; new work ignores the legacy directory and normal app-cache management may remove it later.</li>
+        <li><strong>Observation:</strong> the Viewer already marks refreshable posts as <code>IDLE</code> and begins resolution from a post-mount effect. <strong>Consequence:</strong> removing the prelaunch wait does not remove provider healing or require another background-job owner.</li>
         <li><strong>Observation:</strong> NHentai mirror extension fallbacks share the same <code>progressiveUrls</code> field used for Pixiv/Gelbooru quality ladders. <strong>Evidence:</strong> <code>imageUrlCandidates</code> appends WebP/JPG/PNG/GIF alternatives while Viewer proactively prepares the next candidate after success.</li>
         <li><strong>Observation:</strong> Hitomi's CDN resolver is already bounded, mutex-protected, version-aware, and refreshes once per failed configuration. The repeated work is gallery-manifest acquisition, not CDN derivation.</li>
         <li><strong>Observation:</strong> the shared <code>DefaultSourceHttpClient</code> already retries I/O and retryable statuses with cancellation-safe connection teardown. Pixiv Ugoira bypasses that behavior for binary work and must reproduce equivalent bounded guarantees if it remains app-owned.</li>
@@ -594,12 +596,13 @@
         <li><strong>Decision:</strong> type media candidate intent in application logic without changing durable <code>ImageRef</code>. <strong>Rationale:</strong> this fixes quality/failover semantics without a Room/Gson compatibility migration. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
         <li><strong>Decision:</strong> prefer one Media3 preload/playback cache and keep Coil and Ugoira as separate format-appropriate owners. <strong>Rationale:</strong> one cache per transport identity makes warm state and eviction truthful without forcing images/archives into video infrastructure. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
         <li><strong>Decision:</strong> use <code>CacheWriter</code> rather than promote <code>DefaultPreloadManager</code>. <strong>Rationale:</strong> the Viewer needs bounded byte warming, not another player/ranking lifecycle owner; <code>CacheWriter</code> directly reuses the existing playback <code>SimpleCache</code>, custom cache key, request-scoped headers, and data-source factory while remaining cancellable by Viewer demand. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
+        <li><strong>Decision:</strong> define prelaunch viability by attemptable media location rather than provider or origin. <strong>Rationale:</strong> Search, Codex, Recents, and creator launches should all mount known bytes first; source-specific freshness remains an independent Viewer resolution policy. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
         <li><strong>Decision:</strong> cache Hitomi provider manifests, not derived CDN URLs. <strong>Rationale:</strong> Search-to-Viewer avoids a duplicate request while live <code>gg.js</code> configuration and recovery stay authoritative. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
         <li><strong>Decision:</strong> preserve all-visible autoplay. <strong>Rationale:</strong> lower player count is not an acceptable substitute for better selection, caching, scheduling, and bounded decoding. <strong>Date/Author:</strong> 2026-08-10 / User and Codex.</li>
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>Phases 1–3 remove the false Retry and prefetch-ready contracts and centralize provider-aware media ordering. Remaining work is provider critical-path removal, bounded Pixiv Ugoira/token ownership, Hitomi manifest reuse, and integrated acceptance. Host contracts pass, but no device is connected, so warm-cache timing and byte-reuse improvements are not yet claimed as measured device gains.</p>
+      <p>Phases 1–4 remove false Retry/prefetch-ready state, centralize provider-aware ordering, and keep provider refresh off every viable launch critical path. Remaining work is bounded Pixiv Ugoira/token ownership, Hitomi manifest reuse, and integrated acceptance. Host contracts pass, but no device is connected, so timing and cache improvements are not yet claimed as measured device gains.</p>
     </section>
 
     <section id="recovery">
