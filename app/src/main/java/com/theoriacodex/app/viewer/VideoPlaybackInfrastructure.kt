@@ -21,8 +21,8 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 
-internal const val VIDEO_PLAYBACK_CACHE_MAX_BYTES = 64L * 1024L * 1024L
-internal const val FEED_PREVIEW_TARGET_BUFFER_BYTES = 6 * 1024 * 1024
+internal const val VIDEO_PLAYBACK_CACHE_MAX_BYTES = 256L * 1024L * 1024L
+internal const val FEED_PREVIEW_TARGET_BUFFER_BYTES = 2 * 1024 * 1024
 internal const val FEED_PREVIEW_MIN_BUFFER_MS = 6_000
 internal const val FEED_PREVIEW_MAX_BUFFER_MS = 12_000
 internal const val FEED_PREVIEW_PLAYBACK_BUFFER_MS = 750

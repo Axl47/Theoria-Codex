@@ -3,16 +3,23 @@
 package com.theoriacodex.app.viewer
 
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.os.Trace
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import java.util.ArrayDeque
 import java.util.IdentityHashMap
+import java.util.LinkedHashMap
 
 internal const val FEED_PREVIEW_MAX_IDLE_PLAYERS = 8
+internal const val FEED_PREVIEW_MAX_WARM_IDLE_PLAYERS = 2
+internal const val FEED_PREVIEW_WARM_IDLE_GRACE_MS = 750L
+internal const val FEED_PREVIEW_COOL_SPACING_MS = 250L
+internal const val FEED_PREVIEW_PREPARE_SPACING_MS = 60L
 internal const val FEED_PREVIEW_IDLE_TIMEOUT_MS = 30_000L
 internal const val FEED_PREVIEW_EXCESS_RELEASE_DELAY_MS = 5_000L
 internal const val FEED_PREVIEW_RELEASE_SPACING_MS = 1_000L
@@ -20,8 +27,9 @@ internal const val FEED_PREVIEW_RELEASE_SPACING_MS = 1_000L
 /**
  * Application-owned preview players outlive individual lazy-grid items.
  *
- * Returning a lease only pauses the player. Slow codec/thread release is paced after the UI path,
- * so disposing a route cannot synchronously release every visible player one by one.
+ * Returning a lease pauses the player immediately. Excess idle bindings cool after a short grace
+ * period so their codecs do not accumulate, while slow player/thread release remains paced after
+ * the UI path and route disposal never synchronously releases every visible player one by one.
  */
 internal class FeedPreviewPlayerPool(
     context: Context,
@@ -37,10 +45,41 @@ internal class FeedPreviewPlayerPool(
         createResource = ::createPlayer,
     )
     private var cleanupScheduled = false
+    private var coolingScheduled = false
+    private var prepareScheduled = false
+    private val pendingPrepares = LinkedHashMap<ExoPlayer, ReusableVideoSlotPool.Lease<ExoPlayer>>()
+    private val prepareRunnable = Runnable {
+        prepareScheduled = false
+        val iterator = pendingPrepares.entries.iterator()
+        if (!iterator.hasNext()) return@Runnable
+        val entry = iterator.next()
+        iterator.remove()
+        val didPrepare = slots.isActive(entry.value)
+        if (didPrepare) {
+            traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_PREPARE) {
+                entry.key.prepare()
+            }
+        }
+        schedulePrepare(if (didPrepare) FEED_PREVIEW_PREPARE_SPACING_MS else 0L)
+    }
+    private val coolingRunnable = Runnable {
+        coolingScheduled = false
+        slots.pollIdleBindingToClear(
+            maxWarmIdleResources = FEED_PREVIEW_MAX_WARM_IDLE_PLAYERS,
+            graceMs = FEED_PREVIEW_WARM_IDLE_GRACE_MS,
+        )?.let { player ->
+            traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_COOL) {
+                player.stop()
+                player.clearMediaItems()
+            }
+        }
+        scheduleCooling(FEED_PREVIEW_COOL_SPACING_MS)
+    }
     private val cleanupRunnable = Runnable {
         cleanupScheduled = false
         slots.pollExpired()?.let { player ->
             traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_RELEASE) { player.release() }
+            publishTraceCounters()
         }
         scheduleCleanup(FEED_PREVIEW_RELEASE_SPACING_MS)
     }
@@ -53,10 +92,18 @@ internal class FeedPreviewPlayerPool(
         val request = infrastructure.bind(location, headers)
         val slotLease = slots.acquire(request.identity)
         if (slotLease.requiresBinding || slotLease.resource.playerError != null) {
+            if (slotLease.resource.mediaItemCount > 0 || slotLease.resource.playerError != null) {
+                traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_REBIND) {
+                    slotLease.resource.stop()
+                    slotLease.resource.clearMediaItems()
+                }
+            }
             val mediaSource = request.mediaSourceFactory.createMediaSource(request.mediaItem)
             slotLease.resource.setMediaSource(mediaSource, true)
-            slotLease.resource.prepare()
+            enqueuePrepare(slotLease)
         }
+        publishTraceCounters()
+        scheduleCooling()
         scheduleCleanup()
         return FeedPreviewPlayerLease(slotLease)
     }
@@ -66,11 +113,16 @@ internal class FeedPreviewPlayerPool(
         retainBinding: Boolean,
     ) {
         checkMainThread()
+        val cancelledPendingPrepare = cancelPrepare(lease.slotLease)
         runCatching {
             lease.player.playWhenReady = false
             lease.player.pause()
         }
-        if (slots.recycle(lease.slotLease, retainBinding)) scheduleCleanup()
+        if (slots.recycle(lease.slotLease, retainBinding && !cancelledPendingPrepare)) {
+            publishTraceCounters()
+            scheduleCooling()
+            scheduleCleanup()
+        }
     }
 
     internal fun activePlayerCount(): Int = slots.activeResourceCount
@@ -104,6 +156,49 @@ internal class FeedPreviewPlayerPool(
         if (cleanupScheduled) handler.removeCallbacks(cleanupRunnable)
         cleanupScheduled = true
         handler.postDelayed(cleanupRunnable, maxOf(minimumDelayMs, nextDelayMs))
+    }
+
+    private fun scheduleCooling(minimumDelayMs: Long = 0L) {
+        val nextDelayMs = slots.nextBindingClearDelayMs(
+            maxWarmIdleResources = FEED_PREVIEW_MAX_WARM_IDLE_PLAYERS,
+            graceMs = FEED_PREVIEW_WARM_IDLE_GRACE_MS,
+        ) ?: run {
+            if (coolingScheduled) handler.removeCallbacks(coolingRunnable)
+            coolingScheduled = false
+            return
+        }
+        if (coolingScheduled) handler.removeCallbacks(coolingRunnable)
+        coolingScheduled = true
+        handler.postDelayed(coolingRunnable, maxOf(minimumDelayMs, nextDelayMs))
+    }
+
+    private fun enqueuePrepare(lease: ReusableVideoSlotPool.Lease<ExoPlayer>) {
+        pendingPrepares.remove(lease.resource)
+        pendingPrepares[lease.resource] = lease
+        schedulePrepare()
+    }
+
+    private fun cancelPrepare(lease: ReusableVideoSlotPool.Lease<ExoPlayer>): Boolean {
+        if (pendingPrepares[lease.resource]?.token != lease.token) return false
+        pendingPrepares.remove(lease.resource)
+        if (pendingPrepares.isEmpty() && prepareScheduled) {
+            handler.removeCallbacks(prepareRunnable)
+            prepareScheduled = false
+        }
+        return true
+    }
+
+    private fun schedulePrepare(minimumDelayMs: Long = 0L) {
+        if (pendingPrepares.isEmpty()) return
+        if (prepareScheduled) return
+        prepareScheduled = true
+        handler.postDelayed(prepareRunnable, minimumDelayMs)
+    }
+
+    private fun publishTraceCounters() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        Trace.setCounter(MediaTraceCounters.PREVIEW_ACTIVE_PLAYERS, slots.activeResourceCount.toLong())
+        Trace.setCounter(MediaTraceCounters.PREVIEW_TOTAL_PLAYERS, slots.totalResourceCount.toLong())
     }
 
     private fun checkMainThread() {
@@ -150,6 +245,9 @@ internal class ReusableVideoSlotPool<Resource : Any, Identity : Any>(
     val idleResourceCount: Int
         get() = idleSlots.size
 
+    val totalResourceCount: Int
+        get() = slotsByResource.size
+
     init {
         require(maxIdleResources >= 0) { "Idle resource bound must not be negative" }
         require(idleTimeoutMs > 0L) { "Idle timeout must be positive" }
@@ -179,6 +277,11 @@ internal class ReusableVideoSlotPool<Resource : Any, Identity : Any>(
         return true
     }
 
+    fun isActive(lease: Lease<Resource>): Boolean {
+        val slot = slotsByResource[lease.resource] ?: return false
+        return slot.active && slot.token == lease.token
+    }
+
     fun pollExpired(nowMs: Long = clock()): Resource? {
         if (activeResourceCount > 0) return null
         val candidate = when {
@@ -189,6 +292,49 @@ internal class ReusableVideoSlotPool<Resource : Any, Identity : Any>(
         } ?: return null
         slotsByResource.remove(candidate.resource)
         return candidate.resource
+    }
+
+    fun pollIdleBindingToClear(
+        maxWarmIdleResources: Int,
+        graceMs: Long,
+        nowMs: Long = clock(),
+    ): Resource? {
+        require(maxWarmIdleResources >= 0) { "Warm idle resource bound must not be negative" }
+        require(graceMs >= 0L) { "Warm idle grace must not be negative" }
+        var warmIdleCount = 0
+        var candidate: Slot<Resource, Identity>? = null
+        idleSlots.forEach { slot ->
+            if (slot.boundIdentity != null) {
+                warmIdleCount += 1
+                if (candidate == null && nowMs - slot.idleSinceMs >= graceMs) {
+                    candidate = slot
+                }
+            }
+        }
+        if (warmIdleCount <= maxWarmIdleResources) return null
+        val selected = candidate ?: return null
+        selected.boundIdentity = null
+        return selected.resource
+    }
+
+    fun nextBindingClearDelayMs(
+        maxWarmIdleResources: Int,
+        graceMs: Long,
+        nowMs: Long = clock(),
+    ): Long? {
+        require(maxWarmIdleResources >= 0) { "Warm idle resource bound must not be negative" }
+        require(graceMs >= 0L) { "Warm idle grace must not be negative" }
+        var warmIdleCount = 0
+        var oldestWarmSlot: Slot<Resource, Identity>? = null
+        idleSlots.forEach { slot ->
+            if (slot.boundIdentity != null) {
+                warmIdleCount += 1
+                if (oldestWarmSlot == null) oldestWarmSlot = slot
+            }
+        }
+        if (warmIdleCount <= maxWarmIdleResources) return null
+        val oldest = oldestWarmSlot ?: return null
+        return (graceMs - (nowMs - oldest.idleSinceMs)).coerceAtLeast(0L)
     }
 
     fun nextCleanupDelayMs(nowMs: Long = clock()): Long? {

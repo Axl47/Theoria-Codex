@@ -41,9 +41,15 @@ class FeedAutoplayArchitectureTest {
             "app/src/main/java/com/theoriacodex/app/viewer/FeedPreviewPlayerPool.kt",
         ).readText()
         assertTrue("Viewport must be clipped through actual layout coordinates", "boundsInWindow(clipBounds = true)" in search)
-        assertTrue("Never-visible videos must return before player state is created", "if (!shouldOwnPlayer)" in feedMedia)
-        assertTrue("Activation must be retained per media identity", "FeedPlayerActivationState()" in feedMedia)
-        assertTrue("Player ownership must exclude lifecycle owner from its identity", "DisposableEffect(location, sourceKey)" in feedMedia)
+        assertTrue(
+            "Transiently visible videos must return before a player is leased",
+            "if (!shouldLeasePlayer)" in feedMedia,
+        )
+        assertTrue("Stable visibility must gate player leasing", "delay(FEED_PLAYER_ACTIVATION_DELAY_MS)" in feedMedia)
+        assertTrue(
+            "Only visibly presented cards may hold a player lease",
+            "DisposableEffect(location, sourceKey, isActive)" in feedMedia,
+        )
         assertFalse(
             "Lifecycle identity changes must not recreate a key-stable player",
             "DisposableEffect(location, sourceKey, lifecycleOwner)" in feedMedia,
@@ -96,6 +102,12 @@ class FeedAutoplayArchitectureTest {
         assertTrue("Muted previews must not select audio decoders", "setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)" in feedPool)
         assertTrue("Lazy-grid media views must opt into reuse", "onReset =" in feedMedia)
         assertFalse("Card disposal must not synchronously release players", "player.release()" in feedMedia)
+        assertTrue("Excess idle decoders must cool without capping visible players", "PREVIEW_PLAYER_COOL" in feedPool)
+        assertTrue("Cooled players must discard old media resources", "clearMediaItems()" in feedPool)
+        assertTrue("Rebinding must stop the previous media before preparing a new identity", "PREVIEW_PLAYER_REBIND" in feedPool)
+        assertTrue("Visible decoder startup must use the cancellation-aware prepare queue", "pendingPrepares" in feedPool)
+        assertTrue("Decoder startup must be paced instead of bursting in one frame", "FEED_PREVIEW_PREPARE_SPACING_MS" in feedPool)
+        assertTrue("Device traces must expose active player ownership", "PREVIEW_ACTIVE_PLAYERS" in feedPool)
         assertTrue("Slow release must be paced outside route disposal", "FEED_PREVIEW_RELEASE_SPACING_MS" in feedPool)
     }
 

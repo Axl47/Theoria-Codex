@@ -22,25 +22,12 @@ fun shouldFeedMediaPlay(
     isLifecycleStarted: Boolean,
 ): Boolean = isInViewport && isLifecycleStarted
 
-data class FeedPlayerActivationDecision(
-    val shouldPrepare: Boolean,
-    val shouldRetainPlayer: Boolean,
-    val shouldPlay: Boolean,
-)
+const val FEED_PLAYER_ACTIVATION_DELAY_MS = 180L
 
-class FeedPlayerActivationState {
-    private var hasActivated = false
-
-    fun update(isActive: Boolean): FeedPlayerActivationDecision {
-        val shouldPrepare = isActive && !hasActivated
-        if (shouldPrepare) hasActivated = true
-        return FeedPlayerActivationDecision(
-            shouldPrepare = shouldPrepare,
-            shouldRetainPlayer = hasActivated,
-            shouldPlay = isActive && hasActivated,
-        )
-    }
-}
+fun shouldAcquireFeedPlayerLease(
+    isActive: Boolean,
+    stableVisibilityElapsed: Boolean,
+): Boolean = isActive && stableVisibilityElapsed
 
 fun hasVisibleFeedArea(width: Float, height: Float): Boolean = width > 0f && height > 0f
 

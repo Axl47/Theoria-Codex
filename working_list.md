@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-10T19:00:00-04:00
+updated_at: 2026-08-10T19:15:00-04:00
 ---
 # Working List
 
@@ -12,11 +12,14 @@ None.
 
 ### Pending
 
-- [ ] On the isolated Debug package, reproduce both the original long-scroll journey and animated Search-to-tab transitions; collect frame/player evidence before claiming the freeze resolved.
 - [ ] Keep the separate frozen post-fix physical benchmark unrun until the user is ready for that planned evidence gate.
 
 ### Done
 
+- [x] Reproduce the crash and rank the complete long-scroll/player failure path on the isolated Debug package.
+  - Evidence: Samsung SM-S926U (`R5CWC0SXR3A`) ran only signed `com.theoriacodex.debug` `0.8.2-debug`; no uninstall, clear, or production-package action ran. The rejected warm-idle-only attempt created 61 hardware codecs, reached the 16-codec ceiling, spent 33.0 seconds in 175 allocation-GC waits, and crashed at the 256 MiB Java heap limit while detaching a recycled `PlayerView`. A later no-gate rapid-fling trace proved that viewport intersection alone still let 291 transient cards inflate hosts, 102 reach preparation, and MediaCodec create 202 decoders.
+- [x] Bound player acquisition by stable visibility, preserve simultaneous settled autoplay, and repeat long-scroll plus tab-switch acceptance.
+  - Evidence: every continuously visible animated card receives an independent lease after 180 ms, while transient fling cards remain image previews. An exact 18-swipe stress trace survived with one eight-player pool, 0-8 active players (4.704 average), 107 host requests, 60 actual prepares, and 119 decoder creations. Against the same paced no-gate stress, jank fell from 14.42% to 8.86%, p90/p95/p99 fell from 34/69/200 ms to 8/29/150 ms, host requests fell 63%, and decoder creations fell 41%; Java heap PSS was 125,444 KiB and no frame reached 400 ms. A synchronized Settings-to-Search trace preserved PID `21204`, measured 3.28% jank with 7/10 ms p95/p99, and inflated only the eight pooled hosts on return; codec shutdown remained asynchronous instead of blocking navigation. The final host batch passes app and app-logic tests, app-logic Detekt, Debug Android-test compilation, Debug assembly, aggregate Kover XML, and the coverage floor.
 - [x] Trace every feed hot-path owner and rank confirmed costs rather than stopping at the first plausible cause.
   - Result: synchronous per-card player disposal and replacement dominated; PlayerView inflation/preparation, caller-context duration bookkeeping, route-wide duration publication/recomposition, full-feed key rebuilding on appends, cache contention, audio decoding, and large-object collection were additional scaling costs.
 - [x] Move feed preview lifetime above cards and route disposal without reducing simultaneous autoplay.

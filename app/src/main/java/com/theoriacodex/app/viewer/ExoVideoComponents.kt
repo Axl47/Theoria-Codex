@@ -53,10 +53,18 @@ internal object MediaTraceSections {
     const val PREVIEW_PREPARE = "TheoriaPreviewPrepare"
     const val PREVIEW_FIRST_FRAME = "TheoriaPreviewFirstFrame"
     const val PREVIEW_PLAYER_CREATE = "TheoriaPreviewPlayerCreate"
+    const val PREVIEW_PLAYER_PREPARE = "TheoriaPreviewPlayerPrepare"
+    const val PREVIEW_PLAYER_REBIND = "TheoriaPreviewPlayerRebind"
+    const val PREVIEW_PLAYER_COOL = "TheoriaPreviewPlayerCool"
     const val PREVIEW_PLAYER_RELEASE = "TheoriaPreviewPlayerRelease"
     const val VIEWER_PREPARE = "TheoriaViewerPrepare"
     const val VIEWER_FIRST_FRAME = "TheoriaViewerFirstFrame"
     const val MEDIA_LOAD = "TheoriaMediaLoad"
+}
+
+internal object MediaTraceCounters {
+    const val PREVIEW_ACTIVE_PLAYERS = "TheoriaPreviewActivePlayers"
+    const val PREVIEW_TOTAL_PLAYERS = "TheoriaPreviewTotalPlayers"
 }
 
 internal inline fun <T> traceMediaSection(name: String, block: () -> T): T {

@@ -72,6 +72,11 @@ class MediaPlaybackSemanticsTest {
     fun `media trace names remain stable for benchmark comparison`() {
         assertEquals("TheoriaPreviewPrepare", MediaTraceSections.PREVIEW_PREPARE)
         assertEquals("TheoriaPreviewFirstFrame", MediaTraceSections.PREVIEW_FIRST_FRAME)
+        assertEquals("TheoriaPreviewPlayerPrepare", MediaTraceSections.PREVIEW_PLAYER_PREPARE)
+        assertEquals("TheoriaPreviewPlayerRebind", MediaTraceSections.PREVIEW_PLAYER_REBIND)
+        assertEquals("TheoriaPreviewPlayerCool", MediaTraceSections.PREVIEW_PLAYER_COOL)
+        assertEquals("TheoriaPreviewActivePlayers", MediaTraceCounters.PREVIEW_ACTIVE_PLAYERS)
+        assertEquals("TheoriaPreviewTotalPlayers", MediaTraceCounters.PREVIEW_TOTAL_PLAYERS)
         assertEquals("TheoriaViewerPrepare", MediaTraceSections.VIEWER_PREPARE)
         assertEquals("TheoriaViewerFirstFrame", MediaTraceSections.VIEWER_FIRST_FRAME)
         assertEquals("TheoriaMediaLoad", MediaTraceSections.MEDIA_LOAD)

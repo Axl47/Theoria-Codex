@@ -45,6 +45,7 @@ import com.theoriacodex.app.viewer.videoPlaybackInfrastructure
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.delay
 
 @Composable
 internal fun SearchVideoPreview(
@@ -65,14 +66,19 @@ internal fun SearchVideoPreview(
         return
     }
 
-    val activation = remember(location, sourceKey) { FeedPlayerActivationState() }
-    var shouldOwnPlayer by remember(location, sourceKey) { mutableStateOf(false) }
-    LaunchedEffect(activation, isActive) {
-        if (activation.update(isActive).shouldPrepare) {
-            shouldOwnPlayer = true
+    var shouldLeasePlayer by remember(location, sourceKey) { mutableStateOf(false) }
+    LaunchedEffect(location, sourceKey, isActive) {
+        if (!isActive) {
+            shouldLeasePlayer = false
+            return@LaunchedEffect
         }
+        delay(FEED_PLAYER_ACTIVATION_DELAY_MS)
+        shouldLeasePlayer = shouldAcquireFeedPlayerLease(
+            isActive = isActive,
+            stableVisibilityElapsed = true,
+        )
     }
-    if (!shouldOwnPlayer) {
+    if (!shouldLeasePlayer) {
         UnpreparedSearchVideoPreview(
             postId = postId,
             previewModel = previewModel,
@@ -84,7 +90,7 @@ internal fun SearchVideoPreview(
     val playerState = rememberFeedPreviewPlayerState(
         location = location,
         sourceKey = sourceKey,
-        isActive = isActive,
+        isActive = shouldLeasePlayer,
         onPlaybackError = onPlaybackError,
         onDurationKnown = onDurationKnown,
     )
@@ -93,7 +99,7 @@ internal fun SearchVideoPreview(
         postId = postId,
         previewModel = previewModel,
         playbackDiagnosticsEnabled = playbackDiagnosticsEnabled,
-        isActive = isActive,
+        isActive = shouldLeasePlayer,
         modifier = modifier,
     )
 }
@@ -131,7 +137,8 @@ private fun rememberFeedPreviewPlayerState(
     val latestOnDurationKnown by rememberUpdatedState(onDurationKnown)
     val latestIsActive by rememberUpdatedState(isActive)
 
-    DisposableEffect(location, sourceKey) {
+    DisposableEffect(location, sourceKey, isActive) {
+        if (!isActive) return@DisposableEffect onDispose {}
         state.reset()
         val pool = context.videoPlaybackInfrastructure().feedPreviewPlayerPool
         val lease = traceMediaSection(MediaTraceSections.PREVIEW_PREPARE) {
@@ -223,10 +230,6 @@ private fun recycleFeedPreviewPlayer(
     pool: FeedPreviewPlayerPool,
 ) {
     lease.player.removeListener(listener)
-    runCatching {
-        lease.player.playWhenReady = false
-        lease.player.pause()
-    }
     runCatching { state.playerView?.player = null }
     pool.recycle(lease, retainBinding = !state.didNotifyError)
     if (state.player === lease.player) state.player = null

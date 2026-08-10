@@ -7,48 +7,40 @@ import org.junit.Test
 
 class FeedMediaLifecycleTest {
     @Test
-    fun `never-visible card performs no prepare`() {
-        val state = FeedPlayerActivationState()
-
-        repeat(4) {
-            val decision = state.update(isActive = false)
-            assertFalse(decision.shouldPrepare)
-            assertFalse(decision.shouldRetainPlayer)
-            assertFalse(decision.shouldPlay)
-        }
-    }
-
-    @Test
-    fun `first visibility prepares once and retained visibility changes do not reprepare`() {
-        val state = FeedPlayerActivationState()
-
-        val firstVisible = state.update(isActive = true)
-        val recomposedVisible = state.update(isActive = true)
-        val offscreen = state.update(isActive = false)
-        val visibleAgain = state.update(isActive = true)
-
-        assertTrue(firstVisible.shouldPrepare)
-        assertEquals(
-            1,
-            listOf(firstVisible, recomposedVisible, offscreen, visibleAgain).count { it.shouldPrepare },
+    fun `never-visible card cannot acquire a player lease`() {
+        assertFalse(
+            shouldAcquireFeedPlayerLease(
+                isActive = false,
+                stableVisibilityElapsed = true,
+            ),
         )
-        assertTrue(offscreen.shouldRetainPlayer)
-        assertFalse(offscreen.shouldPlay)
-        assertTrue(visibleAgain.shouldPlay)
     }
 
     @Test
-    fun `lifecycle stop and start toggle playback without another prepare`() {
-        val state = FeedPlayerActivationState()
+    fun `stable visibility is required before acquiring a player lease`() {
+        assertFalse(
+            shouldAcquireFeedPlayerLease(
+                isActive = true,
+                stableVisibilityElapsed = false,
+            ),
+        )
+        assertTrue(
+            shouldAcquireFeedPlayerLease(
+                isActive = true,
+                stableVisibilityElapsed = true,
+            ),
+        )
+        assertEquals(180L, FEED_PLAYER_ACTIVATION_DELAY_MS)
+    }
 
-        val started = state.update(isActive = true)
-        val stopped = state.update(isActive = false)
-        val restarted = state.update(isActive = true)
-
-        assertTrue(started.shouldPrepare)
-        assertFalse(stopped.shouldPlay)
-        assertFalse(restarted.shouldPrepare)
-        assertTrue(restarted.shouldPlay)
+    @Test
+    fun `lifecycle stop releases eligibility even after the visibility delay`() {
+        assertFalse(
+            shouldAcquireFeedPlayerLease(
+                isActive = false,
+                stableVisibilityElapsed = true,
+            ),
+        )
     }
 
     @Test
