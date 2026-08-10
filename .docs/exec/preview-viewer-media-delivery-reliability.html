@@ -211,14 +211,14 @@
     <h1>Make Preview and Viewer media delivery faster and more reliable</h1>
     <p>This plan makes existing Pixiv, Gelbooru, NHentai, and Hitomi media appear with less avoidable waiting and recover cleanly when a request fails. It repairs generic retry, chooses the media nearest to the current Viewer position for prefetch, reuses one playback cache, distinguishes quality upgrades from failure fallbacks, bounds Pixiv Ugoira memory, and removes duplicate provider work without changing the app's simultaneous-autoplay contract.</p>
     <div class="meta" role="group" aria-label="Plan metadata">
-      <span class="pill">Status: Proposed — wait for duration/scroll acceptance</span>
+      <span class="pill">Status: In progress — Phase 0 complete</span>
       <span class="pill">Owner: Codex</span>
       <span class="pill">Created: 2026-08-10</span>
       <span class="pill">Updated: 2026-08-10</span>
       <span class="pill">Plan: .docs/exec/preview-viewer-media-delivery-reliability.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next action</strong>After the current duration/scroll work reaches an accepted commit, rerun Phase 0 against that exact HEAD and freeze the media-delivery baseline before changing behavior.</div>
+      <div class="card"><strong>Next action</strong>Implement Phase 1 against the reconciled <code>91dd752</code> player and Viewer ownership baseline, preserving the accepted feed lifetime boundaries.</div>
       <div class="card"><strong>Main risk</strong>Viewer, player ownership, and Pixiv Ugoira overlap the active performance work. Starting early could invalidate both baselines or reintroduce lifecycle churn.</div>
       <div class="card"><strong>Validation</strong>Deterministic retry/candidate/prefetch tests, provider adapter tests, isolated Debug behavior, request-count traces, same-device cold/warm timings, and bounded-memory evidence.</div>
       <div class="card"><strong>Affected areas</strong>Shared media policy, Search cards, Viewer reducer/route/prefetch, Media3 infrastructure, Pixiv auth/Ugoira, and Hitomi gallery hydration.</div>
@@ -257,9 +257,9 @@
       <h2>Current Status</h2>
       <table class="status-table">
         <tbody>
-          <tr><td>Plan state</td><td>Proposed. The repository audit is complete; implementation has not begun.</td></tr>
+          <tr><td>Plan state</td><td>In progress. Phase 0 reconciled the audit against the accepted long-scroll repair at <code>91dd752</code>; behavior work begins with truthful Viewer Retry.</td></tr>
           <tr><td>Audit evidence</td><td>On 2026-08-10, 85 focused JVM tests across Viewer, media recovery, video prefetch, Pixiv Ugoira, and the four provider adapters passed with zero failures or errors. This proves the current contracts, not live performance or device reliability.</td></tr>
-          <tr><td>Implementation gate</td><td>Wait until the duration/scroll owner records an accepted stopping commit. Re-read affected files and update this plan if player or Viewer ownership changed. Do not build on stale line numbers or restore pre-repair player behavior.</td></tr>
+          <tr><td>Implementation gate</td><td>Satisfied by the user's explicit implementation instruction after <code>91dd752</code>. That commit's reusable player pool, stable-visibility gate, prepare pacing, and asynchronous teardown are the fixed ownership baseline; this plan must not restore pre-repair player behavior.</td></tr>
           <tr><td>Current checkout rule</td><td>Do not change <code>working_list.md</code> while authoring and committing this plan. When implementation is explicitly started, use the then-current project workflow without rewriting existing checklist history.</td></tr>
           <tr><td>Out of scope</td><td>New providers, provider scraping rewrites, source search semantics, duration acquisition, single-active-card playback, reducing visible autoplay, database changes to saved posts, production-package installation, and speculative CDN host rewrites.</td></tr>
         </tbody>
@@ -330,7 +330,7 @@
 
       <article>
         <h3>Phase 0: Reconcile ownership and freeze a media-delivery baseline</h3>
-        <p class="phase-status">Status: Proposed. Must start only after duration/scroll acceptance has a stable commit.</p>
+        <p class="phase-status done">Status: Completed 2026-08-10 against <code>91dd752</code>.</p>
         <table class="status-table">
           <tbody>
             <tr><td>Goal</td><td>Prove the implementation target still matches this audit and capture comparable correctness, request, timing, cache, and memory evidence before behavior changes.</td></tr>
@@ -345,6 +345,7 @@
           <li>Add or reuse trace/test hooks that record Preview request start/success/failure, Viewer mount/first image/first video frame/Ugoira first frame, prefetch key/outcome/bytes, provider resolve count, and Ugoira compressed/decoded bytes. Do not add frame-cadence logging.</li>
           <li>On isolated Debug only, measure repeated cold and warm opens for one representative post per source plus one multi-page and one video/animated case where available. Record p50 and p90 separately; do not average unlike sources together.</li>
         </ol>
+        <p><strong>Result:</strong> all named owners were reread after the long-scroll repair. The current feed player pool, Media3 factory, Viewer renderers, provider adapters, and duration boundaries still match the audit; the implementation must preserve stable visibility, the prepare queue, simultaneous visible autoplay, and asynchronous player teardown. The focused baseline now covers 148 tests with zero failures, errors, or skips across Viewer/media and the four providers. No Android device was connected, so cold/warm timing, request-count, cache-size, and Ugoira heap baselines remain explicitly unproven rather than being inferred from host tests.</p>
       </article>
 
       <article>
@@ -559,7 +560,7 @@
         <li>[x] 2026-08-10 — Audited Preview/Viewer media selection, retry, resolution, prefetch, transport, and cache ownership for Pixiv, Gelbooru, NHentai, and Hitomi.</li>
         <li>[x] 2026-08-10 — Ran 85 focused host tests with zero failures/errors and separated this audit from the active duration/scroll work.</li>
         <li>[x] 2026-08-10 — Authored this standalone implementation plan without editing <code>working_list.md</code> or the active duration plan.</li>
-        <li>[ ] Phase 0 — Reconcile against the accepted duration/scroll HEAD and freeze baseline evidence.</li>
+        <li>[x] 2026-08-10 — Phase 0: reconciled against <code>91dd752</code> and froze 148 passing focused host contracts; recorded the disconnected-device evidence gap.</li>
         <li>[ ] Phase 1 — Make Retry truthful across all Viewer media renderers.</li>
         <li>[ ] Phase 2 — Centralize candidate intent and Preview fallback.</li>
         <li>[ ] Phase 3 — Replace first-six/manual video prefetch with adjacent, bounded, shared-cache preloading.</li>
@@ -571,6 +572,8 @@
 
       <h3>Surprises And Discoveries</h3>
       <ul>
+        <li><strong>Observation:</strong> the accepted long-scroll repair expanded the shared Media3 cache to 256 MiB and moved Preview player lifetime into an application-owned reusable pool. <strong>Consequence:</strong> Viewer preloading must reuse that cache/data-source identity without entering the feed lease or preparation owners.</li>
+        <li><strong>Observation:</strong> no Android device was connected at Phase 0. <strong>Consequence:</strong> deterministic behavior can proceed, but final device timing, request, cache, and heap gates remain unproven until hardware is available.</li>
         <li><strong>Observation:</strong> the visible image Retry control is not a generic reload. It only requests optional provider recovery, and only Hitomi implements that interface. <strong>Evidence:</strong> <code>ViewerRoute.recoverAndApplyMedia</code> returns when <code>recoverRemoteMedia</code> returns null.</li>
         <li><strong>Observation:</strong> the current prefetch window contains six items but is unrelated to the current flattened position after the beginning of a session. <strong>Evidence:</strong> <code>ViewerScreen</code> filters the current key and then calls <code>take(left + right)</code> from the start.</li>
         <li><strong>Observation:</strong> video prefetch treats unsupported work as success. <strong>Evidence:</strong> <code>ViewerVideoPrefetchAction.SKIP</code> returns <code>true</code>, after which reducer state adds the key to <code>ready</code>.</li>
@@ -581,6 +584,7 @@
 
       <h3>Decision Log</h3>
       <ul>
+        <li><strong>Decision:</strong> use <code>91dd752</code> as the implementation baseline after the user's explicit start instruction. <strong>Rationale:</strong> it is the accepted long-scroll ownership commit and the current tree is clean; the separately frozen duration Macrobenchmark remains outside this plan. <strong>Date/Author:</strong> 2026-08-10 / User and Codex.</li>
         <li><strong>Decision:</strong> do not begin implementation until duration/scroll acceptance stabilizes. <strong>Rationale:</strong> both plans touch Viewer, player/cache ownership, and Ugoira; sequential ownership preserves a trustworthy baseline. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
         <li><strong>Decision:</strong> make Retry a local renderer generation change before provider recovery. <strong>Rationale:</strong> retry must work for every source and transient failure even when no specialized adapter exists. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
         <li><strong>Decision:</strong> type media candidate intent in application logic without changing durable <code>ImageRef</code>. <strong>Rationale:</strong> this fixes quality/failover semantics without a Room/Gson compatibility migration. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>

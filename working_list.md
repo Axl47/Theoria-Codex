@@ -1,8 +1,30 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-10T19:15:00-04:00
+updated_at: 2026-08-10T20:05:00-04:00
 ---
 # Working List
+
+## Current Task: Improve Preview And Viewer Media Delivery
+
+### In Progress
+
+- [~] Phase 1: make Retry restart image, video, GIF/WebP, and Ugoira loads.
+
+### Pending
+
+- [ ] Phase 2: centralize Preview and Viewer candidate intent.
+- [ ] Phase 3: prefetch the true Viewer neighborhood through the shared Media3 cache.
+- [ ] Phase 4: open Viewer before provider refresh when usable media already exists.
+- [ ] Phase 5: bound Pixiv Ugoira loading and share token refresh.
+- [ ] Phase 6: reuse bounded Hitomi gallery manifests.
+- [ ] Phase 7: run integrated validation and close the living ExecPlan.
+
+### Done
+
+- [x] Phase 0: reconcile ownership at `91dd752` and freeze baseline contracts/evidence.
+  - Evidence: 148 focused Viewer/media/provider tests pass with zero failures, errors, or skips. The tree was clean at reconciliation; no Android device was connected, so physical timing/cache/heap evidence is explicitly pending rather than inferred.
+- [x] Audit current Pixiv, Gelbooru, NHentai, and Hitomi Preview/Viewer delivery.
+  - Evidence: the committed ExecPlan records eight ranked findings and 85 passing focused host tests at audit commit `03950a8`.
 
 ## Current Task: Eliminate The Remaining Multi-Second Feed Scroll Stalls
 
