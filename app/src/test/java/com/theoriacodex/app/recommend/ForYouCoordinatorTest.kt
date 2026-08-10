@@ -4,6 +4,7 @@ import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.InMemoryLikesRepository
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
+import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.SourceRuntimeSettings
 import com.theoriacodex.data.repository.RecentSearchKind
@@ -40,6 +41,7 @@ class ForYouCoordinatorTest {
     fun `accepted recommendation root records one FYP search and pagination records none`() = runTest {
         val recents = InMemoryRecentsRepository(clock = { 100L })
         val likes = InMemoryLikesRepository()
+        val statistics = InMemoryStatisticsRepository()
         likes.toggleLike(
             profileId = defaultRecommendationProfiles().first().profileId,
             postId = PostId(SourceKey.PIXIV, "liked-pixiv"),
@@ -50,6 +52,7 @@ class ForYouCoordinatorTest {
             settingsRepository = InMemorySettingsRepository(),
             likesRepository = likes,
             recentsRepository = recents,
+            statisticsRepository = statistics,
         )
 
         coordinator.initialize()
@@ -66,6 +69,7 @@ class ForYouCoordinatorTest {
         assertEquals(rootEntries, recents.observeSearches().first())
         assertTrue(recents.observeWatchedPosts().first().isEmpty())
         assertEquals(1, recents.observeActivity().first().size)
+        assertEquals(1L, statistics.observeStatistics().first().forYouSearchCount)
     }
 
     @Test

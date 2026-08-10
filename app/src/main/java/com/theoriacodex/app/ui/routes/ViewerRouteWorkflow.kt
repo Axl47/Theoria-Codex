@@ -10,6 +10,7 @@ import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.recoverRemoteMedia
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.search.state.SearchAction
+import com.theoriacodex.app.statistics.statisticsTagsForPost
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.requiresPrelaunchViewerPostResolution
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
@@ -165,6 +166,12 @@ internal class ViewerRouteWorkflow(
 
     suspend fun recordVisiblePost(post: Post, session: ViewerSession?) {
         val origin = session?.context?.streamSource ?: ViewerStreamSource.SEARCH
+        runCatchingPreservingCancellation {
+            data.statisticsRepository.recordWatchedPost(
+                source = post.id.source,
+                tags = statisticsTagsForPost(post),
+            )
+        }
         data.recentsRepository.recordWatchedPost(
             post = post,
             origin = origin,
@@ -179,8 +186,13 @@ internal fun recentPostSectionForViewer(context: ViewerLaunchContext?): RecentPo
     return context?.recentsSection ?: RecentPostSection.fromOrigin(origin)
 }
 
-internal fun shareViewerPostMessage(context: Context, post: Post?): String? {
+internal fun shareViewerPostMessage(
+    context: Context,
+    post: Post?,
+    onPostUrlCopied: () -> Unit = {},
+): String? {
     val copied = post?.let { copyPostUrlToClipboard(context, it) } == true
+    if (copied) onPostUrlCopied()
     return if (copied) appClipboardConfirmationMessage("Post URL copied") else "No post URL available"
 }
 

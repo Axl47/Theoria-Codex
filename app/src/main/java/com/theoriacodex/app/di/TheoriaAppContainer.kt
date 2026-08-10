@@ -11,6 +11,7 @@ import com.theoriacodex.app.recommend.ForYouCoordinator
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.loadSeedTagSuggestions
+import com.theoriacodex.app.statistics.AppUsageTracker
 import com.theoriacodex.app.source.exposedRealSources
 import com.theoriacodex.app.sourceauth.AndroidSecureSourceCredentialsStore
 import com.theoriacodex.app.sourceauth.AndroidPixivPkceSessionStore
@@ -32,11 +33,13 @@ import com.theoriacodex.data.repository.CodexLikesTransactions
 import com.theoriacodex.data.repository.FileBackedCacheRepository
 import com.theoriacodex.data.repository.FileBackedQueryRepository
 import com.theoriacodex.data.repository.DataStoreSettingsRepository
+import com.theoriacodex.data.repository.DataStoreStatisticsRepository
 import com.theoriacodex.data.repository.DataStoreUiRestoreRepository
 import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.data.repository.QueryRepository
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SettingsRepository
+import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
@@ -70,6 +73,7 @@ data class DataDependencies(
     val queryRepository: QueryRepository,
     val recentsRepository: RecentsRepository,
     val settingsRepository: SettingsRepository,
+    val statisticsRepository: StatisticsRepository,
     val cacheRepository: CacheRepository,
     val uiRestoreRepository: UiRestoreRepository,
     val legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>>,
@@ -96,6 +100,7 @@ data class FeatureDependencies(
     val forYou: ForYouCoordinator,
     val creatorProfile: CreatorProfileCoordinator,
     val animatedDurationEnricher: AnimatedDurationEnricher,
+    val appUsageTracker: AppUsageTracker,
 )
 
 data class WorkflowDependencies(
@@ -179,9 +184,17 @@ internal class DefaultTheoriaAppContainer(
         baseDirectory = storageDirectory,
         scope = durableStoreScope,
     )
+    private val statisticsRepository = DataStoreStatisticsRepository(
+        baseDirectory = storageDirectory,
+        scope = durableStoreScope,
+    )
     private val cacheRepository = FileBackedCacheRepository(storageDirectory)
     private val uiRestoreRepository = DataStoreUiRestoreRepository(
         baseDirectory = storageDirectory,
+        scope = durableStoreScope,
+    )
+    private val appUsageTracker = AppUsageTracker(
+        repository = statisticsRepository,
         scope = durableStoreScope,
     )
 
@@ -215,6 +228,7 @@ internal class DefaultTheoriaAppContainer(
         queryRepository = queryRepository,
         recentsRepository = recentsRepository,
         settingsRepository = settingsRepository,
+        statisticsRepository = statisticsRepository,
         cacheRepository = cacheRepository,
         uiRestoreRepository = uiRestoreRepository,
         legacyJsonRecoveries = legacyJsonRecoveryRegistry.recoveries,
@@ -243,6 +257,7 @@ internal class DefaultTheoriaAppContainer(
             settingsRepository = settingsRepository,
             uiRestoreRepository = uiRestoreRepository,
             recentsRepository = recentsRepository,
+            statisticsRepository = statisticsRepository,
             tagSuggestionStore = tagSuggestionStore,
         ),
         forYou = ForYouCoordinator(
@@ -250,10 +265,12 @@ internal class DefaultTheoriaAppContainer(
             settingsRepository = settingsRepository,
             likesRepository = likesRepository,
             recentsRepository = recentsRepository,
+            statisticsRepository = statisticsRepository,
             tagSuggestionStore = tagSuggestionStore,
         ),
         creatorProfile = CreatorProfileCoordinator(registry = sourceRegistry),
         animatedDurationEnricher = animatedDurationEnricher,
+        appUsageTracker = appUsageTracker,
     )
 
     override val workflows = WorkflowDependencies(
@@ -272,9 +289,11 @@ internal class DefaultTheoriaAppContainer(
     /** Complete typed-store migration before any route can observe default placeholder state. */
     suspend fun awaitDurableStores() = coroutineScope {
         val settingsReady = async { settingsRepository.awaitReady() }
+        val statisticsReady = async { statisticsRepository.awaitReady() }
         val uiRestoreReady = async { uiRestoreRepository.awaitReady() }
         val contentReady = async { awaitContentStore() }
         settingsReady.await()
+        statisticsReady.await()
         uiRestoreReady.await()
         contentReady.await()
     }

@@ -70,6 +70,7 @@ fun RecentsScreen(
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
+    onPostUrlCopied: (Post) -> Unit = {},
     onOpenCreatorProfile: (CreatorProfile) -> Unit,
     onOpenLegacyCreatorProfile: (Post) -> Unit,
     onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
@@ -191,6 +192,7 @@ fun RecentsScreen(
             onOpenCreatorProfile = onOpenCreatorProfile,
             onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
             onGoToSearch = onGoToSearch,
+            onPostUrlCopied = onPostUrlCopied,
             tagContent = {
                 PostTagActionSection(
                     post = post,

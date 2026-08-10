@@ -75,6 +75,7 @@ fun CodexDetailScreen(
     resolvePostById: suspend (PostId) -> Post? = { null },
     onRemovePosts: (List<Post>) -> Unit,
     onSavePostToDevice: (Post) -> Unit,
+    onPostUrlCopied: (Post) -> Unit = {},
     onOpenCreatorProfile: (CreatorProfile) -> Unit,
     onOpenLegacyCreatorProfile: (Post) -> Unit,
     tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
@@ -256,6 +257,7 @@ fun CodexDetailScreen(
             onOpenCreatorProfile = onOpenCreatorProfile,
             onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
             onGoToSearch = onGoToSearch,
+            onPostUrlCopied = onPostUrlCopied,
             tagContent = {
                 PostTagActionSection(
                     post = post,

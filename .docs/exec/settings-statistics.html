@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Add Durable Settings Statistics</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f6f3;
+      --surface: #fff;
+      --text: #202124;
+      --muted: #626862;
+      --border: #d7dad5;
+      --accent: #0f766e;
+      --soft: #dff3ef;
+      --risk: #9a3412;
+      --risk-soft: #ffedd5;
+      --code: #111827;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151716;
+        --surface: #202321;
+        --text: #f0f2ef;
+        --muted: #b8beb7;
+        --border: #3a403c;
+        --accent: #5eead4;
+        --soft: #123b37;
+        --risk: #fdba74;
+        --risk-soft: #43230f;
+        --code: #0b0f0d;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px/1.55 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    header, main { max-width: 1120px; margin: 0 auto; padding: 24px; }
+    h1, h2, h3 { line-height: 1.2; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3rem); }
+    h2 { margin-top: 8px; font-size: 1.5rem; }
+    h3 { margin-top: 22px; font-size: 1.1rem; }
+    p { margin: 0 0 14px; }
+    code { font-family: ui-monospace, monospace; font-size: .92em; }
+    pre { overflow-x: auto; padding: 14px; border-radius: 8px; background: var(--code); color: #f8fafc; }
+    nav { position: sticky; top: 0; z-index: 5; border-block: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(10px); }
+    nav ul { display: flex; gap: 6px; max-width: 1120px; margin: 0 auto; padding: 8px 24px; list-style: none; overflow-x: auto; }
+    nav a { display: block; padding: 6px 10px; color: var(--accent); text-decoration: none; white-space: nowrap; }
+    section { margin: 18px 0; padding: 22px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    th { color: var(--muted); }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; color: var(--muted); }
+    .pill { padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
+    .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+    .card { padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    .card strong { display: block; margin-bottom: 4px; color: var(--muted); font-size: .8rem; text-transform: uppercase; }
+    .callout { margin: 14px 0; padding: 12px 14px; border-left: 4px solid var(--accent); border-radius: 6px; background: var(--soft); }
+    .risk { border-left-color: var(--risk); background: var(--risk-soft); }
+    details { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; }
+    summary { cursor: pointer; font-weight: 700; }
+    @media print { nav { position: static; } section, .card { break-inside: avoid; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Durable App Statistics In Settings</h1>
+    <p>Add one persisted, collapsible Stats section that combines forward-looking lifetime activity with a live projection of the active profile's current Codex library.</p>
+    <div class="meta">
+      <span class="pill">Status: Host implementation complete</span>
+      <span class="pill">Owner: Codex</span>
+      <span class="pill">Created: 2026-08-10</span>
+      <span class="pill">Updated: 2026-08-10</span>
+      <span class="pill">Plan: .docs/exec/settings-statistics.html</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next action</strong>Manually accept the complete flow in the isolated Debug app after package-identity proof.</div>
+      <div class="card"><strong>Main risk</strong>Live device behavior remains unobserved; host coverage fixes event ownership and timing semantics.</div>
+      <div class="card"><strong>Validation</strong>31 focused tests, Debug compilation, app-logic Detekt, changed-owner static review, HTML, and diff checks.</div>
+      <div class="card"><strong>Affected areas</strong>core-data, app-logic, app lifecycle/navigation, search/FYP, Viewer, shared post actions, Settings.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#contract">Contract</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#work-plan">Work Plan</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#log">Living Log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>The Settings screen will expose one Stats card with App, Posts, Search, Tags, and Codex groups. It will answer how the app is used without sending analytics off-device. Counts and duration remain local, survive relaunch, and update from real feature outcomes rather than UI impressions.</p>
+      <p>A user can open Settings, expand Stats, and see total foreground time, route-category time, watched/search/share activity, source participation, top watched and saved tags, current saved-post composition, and the most/least entered Codex for the active recommendation profile.</p>
+      <div class="callout">Lifetime event counters begin when this feature is installed. Current saved-post, source, and tag composition is derived from the active profile's live Codices and therefore includes data saved before this version.</div>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <p><strong>Lifetime statistics</strong> are cumulative local counters. They do not decrease when Recents is cleared or a Codex is deleted. <strong>Current library statistics</strong> are recalculated from canonical posts currently saved in the active profile's visible Codices. <strong>Source participation</strong> means one Unified or Multi-Search may increment several source rows while incrementing the overall search count once.</p>
+      <table>
+        <thead><tr><th>File or module</th><th>Role</th></tr></thead>
+        <tbody>
+          <tr><td><code>core-data/.../Repositories.kt</code></td><td>Public statistics aggregate and mutation contract.</td></tr>
+          <tr><td><code>core-data/.../StatisticsRepositories.kt</code></td><td>In-memory and typed DataStore owners for atomic local updates.</td></tr>
+          <tr><td><code>app-logic/.../statistics/StatisticsProjection.kt</code></td><td>Platform-free percentages, rankings, active-profile Codex projection, and duration formatting inputs.</td></tr>
+          <tr><td><code>app/.../statistics/AppUsageTracker.kt</code></td><td>Monotonic foreground/category timing and one-second live deltas.</td></tr>
+          <tr><td><code>SearchCoordinator.kt</code>, <code>ForYouCoordinator.kt</code></td><td>Accepted root-search boundaries. Pagination is excluded.</td></tr>
+          <tr><td><code>ViewerRouteWorkflow.kt</code></td><td>Canonical visible-post boundary used for watched totals, source, and tag counts.</td></tr>
+          <tr><td><code>PostActionSheet.kt</code>, Viewer share workflow</td><td>Successful URL-copy boundary. Tag copies and browser opens are excluded.</td></tr>
+          <tr><td><code>TheoriaApp.kt</code></td><td>Process lifecycle, route category, successful save origin, Codex entry, and callback wiring.</td></tr>
+          <tr><td><code>SettingsViewModel.kt</code>, <code>SettingsScreen.kt</code></td><td>Combine lifetime/live/current-library state and render the persisted section.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="contract">
+      <h2>Counting, State, And Error Contract</h2>
+      <table>
+        <thead><tr><th>Statistic</th><th>Authoritative meaning</th></tr></thead>
+        <tbody>
+          <tr><td>Times App Opened</td><td>One count each time the application process enters the foreground, including returning after a real background session; Compose recomposition and Activity recreation must not increment it.</td></tr>
+          <tr><td>Time Spent in App</td><td>Monotonic time while the application process is foregrounded. Wall-clock changes cannot alter it.</td></tr>
+          <tr><td>Browsing</td><td>Foreground time on Search, For You, Recents, or Creator Profile. Only one route category is active at a time.</td></tr>
+          <tr><td>Watching</td><td>Foreground time while Viewer is the current destination.</td></tr>
+          <tr><td>Codex</td><td>Foreground time on the Codex top-level tab or Codex detail. Settings and startup remain total-only.</td></tr>
+          <tr><td>Posts Watched</td><td>Each canonical Viewer page transition accepted by the existing one-shot visible-post effect; rewatching counts again.</td></tr>
+          <tr><td>Posts Liked/Saved</td><td>Unique canonical posts currently present in any Codex visible to the active recommendation profile. Cross-Codex duplicates count once.</td></tr>
+          <tr><td>Posts Saved from For You</td><td>A successful save submission whose sheet was opened from the For You feed or a Viewer session launched from For You.</td></tr>
+          <tr><td>Posts Shared</td><td>A successful copy of a post page URL. Tag copies, browser opens, downloads, and Codex-file shares are excluded.</td></tr>
+          <tr><td>Searches Done</td><td>Accepted Search root executions. Paging, failed/cancelled work, restoration, and recomposition do not count.</td></tr>
+          <tr><td>For You Searches Done</td><td>Accepted For You root generations. Paging, stale/cancelled/failed generations do not count.</td></tr>
+          <tr><td>Top watched tags</td><td>Source-aware tag occurrences across watched events; percentage is occurrence count divided by watched-post count, so rows may total more than 100%.</td></tr>
+          <tr><td>Top saved tags</td><td>Source-aware tag occurrences across unique currently saved posts; percentage uses the saved-post count.</td></tr>
+          <tr><td>Most/least used Codex</td><td>Highest/lowest route-entry count among Codices visible to the active profile. Existing zero-entry Codices participate in “least”; deleted/hidden Codices do not render.</td></tr>
+        </tbody>
+      </table>
+      <h3>States</h3>
+      <ul>
+        <li>Before the statistics store is ready, Settings keeps the safe zero/empty projection.</li>
+        <li>Empty rankings render a short “No … yet” message rather than fake source or tag rows.</li>
+        <li>Percentages use zero-safe denominators and whole-number rounding.</li>
+        <li>All durable counters are non-negative <code>Long</code> values; additions saturate at <code>Long.MAX_VALUE</code>.</li>
+      </ul>
+      <h3>Error paths</h3>
+      <ul>
+        <li>Statistics writes are best-effort side effects and must never turn a successful search, save, share, or Viewer transition into a feature failure.</li>
+        <li>Cancellation still propagates from coordinator work; ordinary statistics storage failures are isolated.</li>
+        <li>The typed store rejects unsupported newer schemas. Corrupt bytes use the existing DataStore preservation/reset behavior.</li>
+        <li>Foreground duration is flushed before changing category or entering background. A later failed persistence attempt does not duplicate already captured time in the same process.</li>
+      </ul>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+      <h3>Phase 1: Durable aggregate and projection</h3>
+      <p>Add a schema-versioned <code>statistics_store_v1.json</code>, atomic mutation methods, normalization, and platform-free projection tests. The new store has no legacy input: counters default to zero while current Codex projections can immediately show existing saved data.</p>
+      <h3>Phase 2: Authoritative event wiring</h3>
+      <p>Add process lifecycle/category timing, accepted search recording, watched-page recording, successful URL-copy callbacks, successful For You save attribution, and Codex-entry recording. Analytics calls remain outcome-adjacent and failure-isolated.</p>
+      <h3>Phase 3: Settings presentation</h3>
+      <p>Add <code>SettingsSectionKey.STATS</code>, feed its live state from the Settings owner, and render five compact groups with nested source/tag rows and explicit empty states.</p>
+      <h3>Phase 4: Bounded verification and durable guidance</h3>
+      <p>Run one focused host batch. Update this plan, <code>working_list.md</code>, and <code>AGENTS.md</code> with only findings that future developers cannot cheaply rediscover.</p>
+    </section>
+
+    <section id="work-plan">
+      <h2>Work Plan</h2>
+      <ol>
+        <li>Define <code>LifetimeStatistics</code>, source/tag keys, usage categories/deltas, and <code>StatisticsRepository</code> in core-data.</li>
+        <li>Implement DataStore and in-memory owners with one normalization path, schema validation, saturation, and repository contract tests. Register the DataStore in <code>DefaultTheoriaAppContainer</code> and its readiness gate.</li>
+        <li>Add <code>StatisticsProjection</code> in app-logic. Deduplicate current Codex posts by <code>Post.id</code>, normalize source-aware tags, rank deterministically by count then source/tag/name, and filter Codices with the established profile visibility policy before projection.</li>
+        <li>Add <code>AppUsageTracker</code> using elapsed realtime. Register it against process lifecycle and map the current navigation destination/top-level tab to Browsing, Watching, Codex, or uncategorized total-only time.</li>
+        <li>Inject the statistics repository into Search and For You coordinators. Record only after accepted root persistence/publication, separately from Recents error handling.</li>
+        <li>Extend <code>ViewerRouteWorkflow.recordVisiblePost</code> to record watched source/tags. Route successful URL-copy callbacks from the shared action sheet and Viewer to the same repository mutation.</li>
+        <li>Carry a pending save origin beside the pending post. Record a For You save only after <code>CodexRepository.addItem</code> returns. Record Codex entry from the destination back-stack entry, not from a tile press.</li>
+        <li>Extend the Settings owner with live statistics/current Codex collection, add the Stats expansion key, and render the requested hierarchy.</li>
+        <li>Add focused repository, projection, timing, coordinator, presentation, and architecture tests; update R8/Gson wire manifests for durable record fields.</li>
+      </ol>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <table>
+        <thead><tr><th>Check</th><th>Command or action</th><th>Expected result</th></tr></thead>
+        <tbody>
+          <tr><td>Focused unit tests</td><td><code>./gradlew :core-data:test :app-logic:test :app:testDebugUnitTest</code> with focused <code>--tests</code> selectors</td><td>Repository round-trip, saturation, projection/ranking, usage timing, event ownership, and Settings formatting tests pass.</td></tr>
+          <tr><td>Compilation</td><td><code>./gradlew :app:compileDebugKotlin</code></td><td>All route and callback wiring compiles.</td></tr>
+          <tr><td>Static checks</td><td><code>./gradlew :core-data:detekt :app-logic:detekt :app:detektDebug</code></td><td>No new findings in changed owners; inherited unrelated findings are reported separately if present.</td></tr>
+          <tr><td>Plan and diff</td><td><code>xmllint --html --noout .docs/exec/settings-statistics.html</code> and <code>git diff --check</code></td><td>The plan parses and the diff has no whitespace errors.</td></tr>
+          <tr><td>Manual isolated Debug</td><td>Verify package identity before any install, then foreground/background, switch routes, view posts, run single/Unified/FYP searches, copy URLs, save from FYP, enter Codices, and relaunch.</td><td>Each count changes once at its authoritative outcome; timers stop in background; rankings and active-profile Codex composition are correct; section expansion and values survive relaunch.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout risk">No connected, install, device, or package-mutating command is part of the host validation batch. Physical acceptance remains explicitly pending unless the isolated Debug identity is proven first.</div>
+    </section>
+
+    <section id="log">
+      <h2>Living Log</h2>
+      <h3>Progress</h3>
+      <ul>
+        <li>[x] 2026-08-10 — Traced Settings, container, DataStore, Search/FYP acceptance, Viewer, save, share, Codex visibility, and navigation seams.</li>
+        <li>[x] 2026-08-10 — Fixed counting semantics, UI states, failure isolation, and the bounded validation lane before runtime edits.</li>
+        <li>[x] 2026-08-10 — Added the typed v1 DataStore/in-memory repository and platform-free current-library projection.</li>
+        <li>[x] 2026-08-10 — Wired process timing and authoritative Search, FYP, Viewer, URL-copy, save-origin, and Codex-entry outcomes.</li>
+        <li>[x] 2026-08-10 — Added the persisted Settings section, five requested groups, compact summary, profile context, percentages, and empty states.</li>
+        <li>[x] 2026-08-10 — Closed the bounded host batch with 31 passing focused tests, Debug compilation, app-logic Detekt, changed-owner static review, HTML validation, and diff checks.</li>
+      </ul>
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li>Saved composition cannot be inferred from Likes alone because ordinary Codices and the system Likes Codex share canonical posts. The projection must union all visible Codex posts by <code>Post.id</code>.</li>
+        <li>Android 13+ suppresses the app-owned successful clipboard Toast, so a non-null confirmation message is not a reliable URL-copy success signal. Tracking must occur directly beside the boolean clipboard result.</li>
+        <li>The existing Viewer visible-post effect is keyed by canonical post ID and page index, providing the correct one-shot watched event without adding a second observation loop.</li>
+        <li>The broader Gson contract exposed a pre-existing manifest omission for <code>CodexAutomaticTagRecord</code>; the keep rules and wire manifest now match the already-durable Codex record fields.</li>
+      </ul>
+      <h3>Decision Log</h3>
+      <ul>
+        <li>Decision: keep analytics entirely on-device. Rationale: no remote analytics requirement exists and the data describes private viewing behavior. Date/Author: 2026-08-10 / Codex.</li>
+        <li>Decision: use a separate typed DataStore rather than AppSettings, UI restore, or Recents. Rationale: statistics are durable app data, not preferences, UI restoration, or clearable history. Date/Author: 2026-08-10 / Codex.</li>
+        <li>Decision: derive current saved composition and persist only irreversible lifetime event aggregates. Rationale: this avoids duplicated Codex truth and stale results after removal/profile changes. Date/Author: 2026-08-10 / Codex.</li>
+        <li>Decision: use process lifecycle and elapsed realtime. Rationale: Activity recreation must not create opens, and wall-clock changes must not alter duration. Date/Author: 2026-08-10 / Codex.</li>
+      </ul>
+      <h3>Outcomes And Retrospective</h3>
+      <p>The host implementation is complete. Thirty-one focused tests pass with no failures, errors, or skips; Debug Kotlin compilation and app-logic Detekt pass. App Detekt remains red only on four inherited findings in <code>CodexListScreen</code>, <code>SaveToCodexSheet</code>, and <code>SearchEmptyStatePolicy</code>. Core-data Detekt remains red only on five inherited migration, policy, and repository-test findings; neither lane reports a statistics owner. Manual isolated-Debug acceptance remains pending, and no device, install, connected, package-mutation, release, or live-provider command ran.</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <p>All planned Gradle, HTML, and diff checks are safe to rerun. The new DataStore update operations are atomic. No destructive migration or cleanup is required; absence of the file creates a zero-valued v1 store.</p>
+      <p>If interrupted, resume from <code>working_list.md</code> and this plan's Progress section. If the store contract changes before release, advance its schema deliberately and update serializer tests and the R8/Gson field manifest together. Do not delete an existing store to hide a schema failure.</p>
+      <details>
+        <summary>Manual acceptance note</summary>
+        <p>Device validation must use only the isolated <code>com.theoriacodex.debug</code> package after host-side artifact verification. Production package data is outside this plan.</p>
+      </details>
+    </section>
+  </main>
+</body>
+</html>

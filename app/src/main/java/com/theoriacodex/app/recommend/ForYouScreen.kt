@@ -87,6 +87,7 @@ fun ForYouScreen(
     creatorBrowsingSources: Set<SourceKey> = emptySet(),
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
+    onPostUrlCopied: (Post) -> Unit = {},
     onOpenCreatorProfile: (CreatorProfile) -> Unit,
     onOpenLegacyCreatorProfile: (Post) -> Unit,
     onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
@@ -349,6 +350,7 @@ fun ForYouScreen(
             onOpenCreatorProfile = onOpenCreatorProfile,
             onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
             onGoToSearch = onGoToSearch,
+            onPostUrlCopied = onPostUrlCopied,
             tagContent = {
                 PostTagActionSection(
                     post = post,

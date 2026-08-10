@@ -174,6 +174,7 @@ fun SearchScreen(
     onOpenLegacyCreatorProfile: (Post) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
+    onPostUrlCopied: (Post) -> Unit = {},
     onAddFavoriteTag: (SourceKey, String) -> Unit = { _, _ -> },
     onRemoveFavoriteTag: (SourceKey, String) -> Unit = { _, _ -> },
 ) {
@@ -763,6 +764,7 @@ fun SearchScreen(
             onSaveToCodex = { onRequestSaveToCodex(post) },
             onOpenCreatorProfile = onOpenCreatorProfile,
             onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
+            onPostUrlCopied = onPostUrlCopied,
             tagContent = {
                 if (selectedActionPostResolving && !post.hasActionableTags()) {
                     Text(

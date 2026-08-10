@@ -44,6 +44,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.statistics.SourceStatistic
+import com.theoriacodex.app.statistics.StatisticsSummary
+import com.theoriacodex.app.statistics.TagStatistic
+import com.theoriacodex.app.statistics.formatStatisticsDuration
 import com.theoriacodex.app.ui.components.expandableControlSemantics
 import com.theoriacodex.data.repository.ScenarioPreset
 import com.theoriacodex.data.storage.CorruptionRecovery
@@ -221,6 +225,25 @@ fun SettingsScreen(
                         }
                     }
                 }
+        }
+
+        SettingsSection(
+            title = "Stats",
+            summary = statsSummary(state.statistics),
+            expanded = state.sectionExpansion[SettingsSectionKey.STATS],
+            onToggle = {
+                onAction(
+                    SettingsAction.SetSectionExpanded(
+                        SettingsSectionKey.STATS,
+                        !state.sectionExpansion[SettingsSectionKey.STATS],
+                    )
+                )
+            },
+        ) {
+            StatisticsContent(
+                statistics = state.statistics,
+                activeProfileName = state.activeProfile.name,
+            )
         }
 
         SettingsSection(
@@ -569,6 +592,195 @@ internal fun scenarioLabel(scenario: ScenarioPreset): String = when (scenario) {
     ScenarioPreset.PARTIAL_FAILURE -> "Partial failure"
     ScenarioPreset.EMPTY_RESULTS -> "Empty results"
     ScenarioPreset.SLOW_NETWORK -> "Slow network"
+}
+
+internal fun statsSummary(statistics: StatisticsSummary): String {
+    return "${statistics.watchedPostCount} watched · ${statistics.savedPostCount} saved · " +
+        formatStatisticsDuration(statistics.totalForegroundMs)
+}
+
+@Composable
+private fun StatisticsContent(
+    statistics: StatisticsSummary,
+    activeProfileName: String,
+) {
+    Text(
+        text = "Lifetime counters begin with this version. Saved-library stats reflect current data.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    AppStatisticsGroup(statistics)
+    PostStatisticsGroup(statistics, activeProfileName)
+    SearchStatisticsGroup(statistics)
+    TagStatisticsGroup(statistics)
+    CodexStatisticsGroup(statistics, activeProfileName)
+}
+
+@Composable
+private fun AppStatisticsGroup(statistics: StatisticsSummary) {
+    StatisticsGroupTitle("App Stats")
+    StatisticValueRow("Times App has been Opened", statistics.appOpenCount.toString())
+    StatisticValueRow("Time Spent in App", formatStatisticsDuration(statistics.totalForegroundMs))
+    StatisticValueRow("Time Spent Browsing", formatStatisticsDuration(statistics.browsingMs), nested = true)
+    StatisticValueRow("Time Spent Watching", formatStatisticsDuration(statistics.watchingMs), nested = true)
+    StatisticValueRow("Time Spent in Codex", formatStatisticsDuration(statistics.codexMs), nested = true)
+}
+
+@Composable
+private fun PostStatisticsGroup(
+    statistics: StatisticsSummary,
+    activeProfileName: String,
+) {
+    StatisticsGroupTitle("Post Stats")
+    StatisticValueRow("Posts Watched", statistics.watchedPostCount.toString())
+    SourceBreakdown(
+        rows = statistics.watchedSources,
+        denominator = statistics.watchedPostCount,
+        emptyMessage = "No watched-source data yet.",
+    )
+    StatisticValueRow("Posts Liked/Saved", statistics.savedPostCount.toString())
+    Text(
+        text = "Current library · $activeProfileName",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    SourceBreakdown(
+        rows = statistics.savedSources,
+        denominator = statistics.savedPostCount,
+        emptyMessage = "No saved-source data yet.",
+    )
+    StatisticValueRow("Posts Saved from For You", statistics.forYouSaveCount.toString())
+    StatisticValueRow("Posts Shared (copied URL)", statistics.postUrlCopyCount.toString())
+}
+
+@Composable
+private fun SearchStatisticsGroup(statistics: StatisticsSummary) {
+    StatisticsGroupTitle("Search Stats")
+    StatisticValueRow("Searches Done", statistics.searchCount.toString())
+    SourceBreakdown(
+        rows = statistics.searchSources,
+        denominator = statistics.searchCount,
+        emptyMessage = "No search-source data yet.",
+    )
+    StatisticValueRow("For You Searches Done", statistics.forYouSearchCount.toString())
+    Text(
+        text = "Unified and Multi-Search can participate in more than one source.",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun TagStatisticsGroup(statistics: StatisticsSummary) {
+    StatisticsGroupTitle("Tag Stats")
+    Text("Top 5 Tags Watched", style = MaterialTheme.typography.bodyMedium)
+    TagBreakdown(statistics.topWatchedTags, "No watched tags yet.")
+    Text("Top 5 Tags Saved", style = MaterialTheme.typography.bodyMedium)
+    TagBreakdown(statistics.topSavedTags, "No saved tags yet.")
+}
+
+@Composable
+private fun CodexStatisticsGroup(
+    statistics: StatisticsSummary,
+    activeProfileName: String,
+) {
+    StatisticsGroupTitle("Codex Stats")
+    Text(
+        text = "Current Codices · $activeProfileName",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    StatisticValueRow(
+        label = "Most Used Codex",
+        value = statistics.mostUsedCodex?.let { row -> "${row.name} · ${row.entryCount} entries" } ?: "None yet",
+    )
+    StatisticValueRow(
+        label = "Least Used Codex",
+        value = statistics.leastUsedCodex?.let { row -> "${row.name} · ${row.entryCount} entries" } ?: "None yet",
+    )
+    Text("Top Sources in Codex", style = MaterialTheme.typography.bodyMedium)
+    SourceBreakdown(
+        rows = statistics.topCodexSources,
+        denominator = statistics.savedPostCount,
+        emptyMessage = "No saved-source data yet.",
+        showDenominator = true,
+    )
+}
+
+@Composable
+private fun StatisticsGroupTitle(title: String) {
+    Text(text = title, style = MaterialTheme.typography.titleSmall)
+}
+
+@Composable
+private fun StatisticValueRow(
+    label: String,
+    value: String,
+    nested: Boolean = false,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = if (nested) 12.dp else 0.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.weight(1f),
+            style = if (nested) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            text = value,
+            style = if (nested) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+        )
+    }
+}
+
+@Composable
+private fun SourceBreakdown(
+    rows: List<SourceStatistic>,
+    denominator: Long,
+    emptyMessage: String,
+    showDenominator: Boolean = false,
+) {
+    if (rows.isEmpty()) {
+        Text(
+            text = emptyMessage,
+            modifier = Modifier.padding(start = 12.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+    rows.forEach { row ->
+        val amount = if (showDenominator) {
+            "${row.percentage}% (${row.count} / $denominator)"
+        } else {
+            "${row.percentage}% (${row.count})"
+        }
+        StatisticValueRow(row.source.displayName(), amount, nested = true)
+    }
+}
+
+@Composable
+private fun TagBreakdown(rows: List<TagStatistic>, emptyMessage: String) {
+    if (rows.isEmpty()) {
+        Text(
+            text = emptyMessage,
+            modifier = Modifier.padding(start = 12.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+    rows.forEach { row ->
+        StatisticValueRow(
+            label = "${row.key.tag} · ${row.key.source.displayName()}",
+            value = "${row.percentage}% (${row.count} posts)",
+            nested = true,
+        )
+    }
 }
 
 @Composable

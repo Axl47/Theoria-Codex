@@ -35,6 +35,7 @@ class DataStoreRepositoriesTest {
 
         DataStoreSettingsRepository(directory, scope)
         DataStoreUiRestoreRepository(directory, scope)
+        DataStoreStatisticsRepository(directory, scope)
 
         assertTrue(directory.listFiles().orEmpty().isEmpty())
         scope.cancel()

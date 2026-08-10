@@ -52,6 +52,7 @@ internal data class SearchRouteCallbacks(
     val onOpenLegacyCreatorProfile: (Post) -> Unit,
     val onRequestSaveToCodex: (Post) -> Unit,
     val onSaveToDevice: (Post) -> Unit,
+    val onPostUrlCopied: (Post) -> Unit = {},
     val onAddFavoriteTag: (SourceKey, String) -> Unit,
     val onRemoveFavoriteTag: (SourceKey, String) -> Unit,
 )
@@ -322,6 +323,7 @@ internal fun SearchRoute(
         onOpenLegacyCreatorProfile = callbacks.onOpenLegacyCreatorProfile,
         onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
         onSaveToDevice = callbacks.onSaveToDevice,
+        onPostUrlCopied = callbacks.onPostUrlCopied,
         onAddFavoriteTag = callbacks.onAddFavoriteTag,
         onRemoveFavoriteTag = callbacks.onRemoveFavoriteTag,
     )

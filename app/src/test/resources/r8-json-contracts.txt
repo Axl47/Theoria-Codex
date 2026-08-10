@@ -7,6 +7,9 @@ com.theoriacodex.data.storage.CreatorProfileStorageRecord|source,displayName,pro
 com.theoriacodex.data.storage.ImageRefStorageRecord|url,localPath,mime,progressiveUrls,isAnimated
 com.theoriacodex.data.repository.SettingsDataStoreFile|schemaVersion,settings,legacyImports
 com.theoriacodex.data.repository.UiRestoreDataStoreFile|schemaVersion,state,legacyImports
+com.theoriacodex.data.repository.StatisticsDataStoreFile|schemaVersion,statistics
+com.theoriacodex.data.repository.StatisticsStoreRecord|appOpenCount,totalForegroundMs,browsingMs,watchingMs,codexMs,watchedPostCount,watchedBySource,watchedByTag,searchCount,searchesBySource,forYouSearchCount,forYouSaveCount,postUrlCopyCount,codexEntryCounts
+com.theoriacodex.data.repository.StatisticsTagCountRecord|source,tag,count
 com.theoriacodex.data.repository.LegacySettingsStoreRecord|sourceCatalogVersion,enabledSources,sourceWeights,cacheFullImageOnSave,resolveUnknownAnimatedDurations,invertMultiImageScrollDirection,scenarioPreset,lastSelectedTabRoute,recommendationProfiles,activeProfileId,activeProfile,forYouBlacklistByProfile,favoriteTagsByProfile,providerHealth
 com.theoriacodex.data.repository.LegacyProviderHealthSnapshotRecord|source,status,checkedAtEpochMs,latencyMs,failureReason,message
 com.theoriacodex.data.repository.LegacyFavoriteTagEntryRecord|source,tag
@@ -16,7 +19,8 @@ com.theoriacodex.data.repository.LegacyUiRestoreStoreRecord|lastTab,searchScroll
 com.theoriacodex.data.repository.LegacySearchScrollStateRecord|firstVisibleItemIndex,firstVisibleItemOffsetPx
 com.theoriacodex.data.repository.LegacyViewerLaunchContextRecord|queryHash,startIndex,streamSource,scrollOffsetHint,recentsSection
 com.theoriacodex.data.repository.CodexStoreFile|codices,items,posts
-com.theoriacodex.data.repository.CodexRecord|codexId,name,createdAtEpochMs
+com.theoriacodex.data.repository.CodexRecord|codexId,name,createdAtEpochMs,automaticTags
+com.theoriacodex.data.repository.CodexAutomaticTagRecord|source,tag
 com.theoriacodex.data.repository.CodexItemRecord|codexId,source,sourcePostId,savedAtEpochMs
 com.theoriacodex.data.repository.QueryStoreFile|queries
 com.theoriacodex.data.storage.QueryStorageRecord|schemaVersion,modeType,modeSource,includeTags,excludeTags,sort,dateFromEpochMs,dateToEpochMs,minScore,includeTerms,excludeTerms

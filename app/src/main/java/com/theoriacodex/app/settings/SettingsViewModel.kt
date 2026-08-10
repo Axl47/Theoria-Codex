@@ -9,6 +9,7 @@ import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.PROFILE_CODEX_ID_PREFIX
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.source.inPresentationOrder
+import com.theoriacodex.app.statistics.AppUsageTracker
 import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
 import com.theoriacodex.app.sourceauth.CredentialStoreUnavailableException
 import com.theoriacodex.app.sourceauth.PixivPkceController
@@ -20,6 +21,7 @@ import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.data.repository.SettingsRepository
+import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
@@ -39,6 +41,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -170,6 +173,9 @@ internal data class SettingsOwnerDependencies(
     val cacheRepository: CacheRepository,
     val uiRestoreRepository: UiRestoreRepository,
     val likesRepository: LikesRepository,
+    val codexRepository: CodexRepository,
+    val statisticsRepository: StatisticsRepository,
+    val appUsageTracker: AppUsageTracker,
     val profileMutations: SettingsProfileMutations,
     val accounts: SettingsAccountGateway,
     val availableSources: StateFlow<Set<SourceKey>>,
@@ -240,6 +246,17 @@ internal class SettingsViewModel(
         ownerScope.launch {
             dependencies.cacheRepository.observeSnapshot().collect { snapshot ->
                 updateState { copy(cacheSnapshot = snapshot) }
+            }
+        }
+        ownerScope.launch {
+            SettingsStatisticsSource(
+                statisticsRepository = dependencies.statisticsRepository,
+                codexRepository = dependencies.codexRepository,
+                appUsageTracker = dependencies.appUsageTracker,
+            ).observe(
+                dependencies.settingsRepository.observeSettings().map { settings -> settings.activeProfileId }
+            ).collect { statistics ->
+                updateState { copy(statistics = statistics) }
             }
         }
         ownerScope.launch {
@@ -637,6 +654,9 @@ internal class SettingsViewModel(
                         cacheRepository = container.data.cacheRepository,
                         uiRestoreRepository = container.data.uiRestoreRepository,
                         likesRepository = container.data.likesRepository,
+                        codexRepository = container.data.codexRepository,
+                        statisticsRepository = container.data.statisticsRepository,
+                        appUsageTracker = container.features.appUsageTracker,
                         profileMutations = DefaultSettingsProfileMutations(
                             likesCodexSync = container.workflows.likesCodexSync,
                             codexRepository = container.data.codexRepository,

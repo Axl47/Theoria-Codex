@@ -32,6 +32,18 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
+-keepclassmembers class com.theoriacodex.data.repository.StatisticsDataStoreFile {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}
+-keepclassmembers class com.theoriacodex.data.repository.StatisticsStoreRecord {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}
+-keepclassmembers class com.theoriacodex.data.repository.StatisticsTagCountRecord {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}
 -keepclassmembers class com.theoriacodex.data.repository.LegacySettingsStoreRecord {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
@@ -70,6 +82,10 @@
     @com.google.gson.annotations.SerializedName <fields>;
 }
 -keepclassmembers class com.theoriacodex.data.repository.CodexRecord {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}
+-keepclassmembers class com.theoriacodex.data.repository.CodexAutomaticTagRecord {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }

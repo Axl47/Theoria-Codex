@@ -10,12 +10,14 @@ import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
+import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.data.repository.QueryRepository
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.SettingsRepository
+import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.adapter.FacetedSearchScope
@@ -70,6 +72,7 @@ class SearchCoordinator(
     private val settingsRepository: SettingsRepository = InMemorySettingsRepository(),
     private val uiRestoreRepository: UiRestoreRepository = InMemoryUiRestoreRepository(),
     private val recentsRepository: RecentsRepository = InMemoryRecentsRepository(),
+    private val statisticsRepository: StatisticsRepository = InMemoryStatisticsRepository(),
     private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : SearchExecutionService {
@@ -384,6 +387,7 @@ class SearchCoordinator(
             val searchedSources = effectiveEnabledSources(sourceScope).inPresentationOrder()
             if (sourceScope is SearchSourceScope.Temporary) {
                 recentsRepository.recordSearch(query, executionKey, searchKind, searchedSources)
+                recordAcceptedSearch(searchedSources)
                 return@withLock
             }
             queryRepository.upsertAppliedQuery(modeKey(query.mode), query)
@@ -393,6 +397,13 @@ class SearchCoordinator(
             uiRestoreRepository.setSearchScrollState(executionKey, SearchScrollState(0, 0))
             currentCoroutineContext().ensureActive()
             recentsRepository.recordSearch(query, executionKey, searchKind, searchedSources)
+            recordAcceptedSearch(searchedSources)
+        }
+    }
+
+    private suspend fun recordAcceptedSearch(sources: List<SourceKey>) {
+        runCatchingPreservingCancellation {
+            statisticsRepository.recordSearch(sources.toSet())
         }
     }
 

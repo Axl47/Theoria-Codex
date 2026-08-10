@@ -92,6 +92,14 @@ Settings cards use the shared `SettingsSection` composable with independently pe
 
 First-open Settings sections default collapsed only when their persistence key is absent; explicit stored true or false choices remain authoritative. Collapsed summaries expose compact repeated-use state only. Keep credentials, per-source weights, cache-clearing actions, and other sensitive or destructive controls inside expanded content.
 
+## Local Statistics
+
+`StatisticsRepository` owns forward-only, on-device lifetime counters; it must not duplicate current Codex library state. Saved post, saved source, saved tag, and top-Codex-source statistics are live projections of the active profile's visible Codices, deduplicated by canonical `Post.id`. Lifetime counters begin when the statistics store is introduced and are not backfilled from clearable Recents data.
+
+Record events only at their authoritative outcome: accepted root Search and For You executions, one-shot Viewer page visibility, successful post-URL clipboard copies, completed Codex saves originating from For You, and Codex detail route entries. Pagination, failed or stale work, browser opens, tag copies, and recomposition do not count. Unified and Multi-Search source rows describe participation and may therefore sum above the overall search total. Watched and saved tags remain source-aware.
+
+Foreground timing uses process lifecycle plus monotonic elapsed time. Total app time includes every foreground route, while Browsing, Watching, and Codex are mutually exclusive route categories; Settings remains total-only. Statistics writes are best-effort side effects and must never turn a successful user action into a feature failure. Keep the typed store schema, R8/Gson wire manifest, repository tests, and projection tests synchronized whenever the durable aggregate changes.
+
 ## Secondary Chrome And Feed Filters
 
 Codex detail, Creator Profile, Viewer, and future secondary routes use `SecondaryScreenAppBar` for the shared left Back, center title/context, and right action geometry. Search, For You, and Creator Profile use `FeedFilterSheet` and `FeedFilterFab`; filter values and refresh behavior remain route-owned, while the shared FAB shows active state through tint and accessibility state rather than a persistent summary row.

@@ -1,8 +1,39 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-10T02:32:39-04:00
+updated_at: 2026-08-10T02:58:58-04:00
 ---
 # Working List
+
+## Current Task: Add Durable App, Post, Search, Tag, And Codex Stats
+
+### In Progress
+
+None.
+
+### Pending
+
+- [ ] Manually confirm live accumulation, background/foreground timing, rankings, and relaunch persistence in the isolated Debug app.
+
+### Done
+
+- [x] Create the task checklist before runtime edits.
+  - Evidence: this section records the analytics contract, durable ownership, authoritative event seams, derived projections, Settings presentation, regressions, and bounded validation lane.
+- [x] Trace existing lifecycle, navigation, Recents, Likes, Codex, sharing, search, Settings, and persistence ownership.
+  - Evidence: accepted searches are owned by `SearchCoordinator` and `ForYouCoordinator`; Viewer page changes are one-shot per canonical post/index and already flow through `ViewerRouteWorkflow`; successful Codex saves converge in the shell sheet; URL copies converge in `PostActionSheet` plus the Viewer workflow; active-profile Codex visibility is defined by `codexBelongsToProfile`; and Settings expansion already persists through `UiRestoreRepository`.
+- [x] Define the data model, counting semantics, error paths, UI states, and validation boundary in an HTML ExecPlan.
+  - Evidence: `.docs/exec/settings-statistics.html` fixes lifetime versus derived-current ownership, foreground/category timing, event meanings, source/tag percentage denominators, active-profile behavior, failure isolation, empty/loading states, implementation phases, and the bounded host/manual validation lanes. `git diff --check` passes; `xmllint --html` reports only its expected HTML4-era warnings for standard HTML5 elements.
+- [x] Add durable analytics storage and migration-safe repository contracts.
+  - Evidence: `statistics_store_v1.json` has a typed schema/version gate, atomic DataStore and in-memory owners, non-negative normalization, saturating additions, source-aware tag records, corruption preservation, and fail-closed newer-schema behavior. Five focused repository tests and the three app Gson/R8 wire-contract tests pass; container startup now awaits the statistics store before routes mount.
+- [x] Record app-session, browsing, watching, Codex-entry, share, search, and For You save events at their authoritative boundaries.
+  - Evidence: process lifecycle and monotonic route-category timing feed one serialized owner; accepted root Search/FYP work, Viewer visibility, successful URL copies, completed FYP-origin saves, and Codex route entries are outcome-adjacent and best-effort. Pagination, stale/failed work, tag copies, browser opens, and recomposition remain excluded.
+- [x] Derive post, source, tag, and Codex rankings without duplicating canonical collection data.
+  - Evidence: the platform-free projection unions active-profile visible Codices by canonical `Post.id`, preserves source-aware tags, uses explicit denominators, ranks deterministically, and combines persisted duration with the live foreground interval. Five focused projection tests pass.
+- [x] Add the persisted Settings Stats section with clear, compact hierarchy and empty states.
+  - Evidence: `SettingsSectionKey.STATS` uses the existing `UiRestoreRepository` expansion path; the section presents App, Post, Search, Tag, and Codex groups, live current-profile library composition, whole-number percentages, compact collapsed state, and explicit empty messages.
+- [x] Add focused behavioral, persistence, presentation, and architecture regressions.
+  - Evidence: the focused batch covers repository schema/round-trip/saturation, projection/deduplication/ranking, usage timing, Settings composition, expansion state, authoritative Search/FYP event ownership, architecture boundaries, and Gson/R8 contracts.
+- [x] Run one bounded host validation batch and update durable project guidance.
+  - Evidence: 31 focused tests passed with zero failures/errors/skips; `:app:compileDebugKotlin` and `:app-logic:detekt` pass. App Detekt remains red only on four inherited findings in `CodexListScreen`, `SaveToCodexSheet`, and `SearchEmptyStatePolicy`; core-data Detekt remains red only on five inherited migration/policy/test findings. `git diff --check` passes. No connected, install, device, package-mutation, or live-provider lane ran.
 
 ## Current Task: Add Automatic Tag Routing To Codex
 

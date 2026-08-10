@@ -1,6 +1,7 @@
 package com.theoriacodex.app.settings
 
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.app.statistics.StatisticsSummary
 import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
@@ -12,6 +13,7 @@ enum class SettingsSectionKey {
     RECOMMENDATION_PROFILES,
     UNIFIED_MODE,
     FOR_YOU_BLACKLIST,
+    STATS,
     SOURCE_ACCOUNTS,
     UPDATES,
     STORAGE_AND_CACHING,
@@ -65,6 +67,7 @@ data class SettingsUiState(
     val activeProfile: RecommendationProfile = settings.recommendationProfiles.first(),
     val activeProfileLikesCount: Int = 0,
     val activeProfileBlacklist: List<ForYouBlacklistEntry> = emptyList(),
+    val statistics: StatisticsSummary = StatisticsSummary(),
     val availableSources: List<SourceKey> = emptyList(),
     val cacheSnapshot: CacheSnapshot = CacheSnapshot(thumbnailCount = 0, fullImageCount = 0),
     val showDeveloperScenarios: Boolean = false,

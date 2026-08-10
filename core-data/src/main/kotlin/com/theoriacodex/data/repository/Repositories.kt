@@ -137,6 +137,48 @@ interface ExploreRepository {
     suspend fun trendingTags(limit: Int): List<TagSuggestion>
 }
 
+data class StatisticsTagKey(
+    val source: SourceKey,
+    val tag: String,
+)
+
+data class UsageDurationDelta(
+    val totalMs: Long = 0L,
+    val browsingMs: Long = 0L,
+    val watchingMs: Long = 0L,
+    val codexMs: Long = 0L,
+)
+
+data class LifetimeStatistics(
+    val appOpenCount: Long = 0L,
+    val totalForegroundMs: Long = 0L,
+    val browsingMs: Long = 0L,
+    val watchingMs: Long = 0L,
+    val codexMs: Long = 0L,
+    val watchedPostCount: Long = 0L,
+    val watchedBySource: Map<SourceKey, Long> = emptyMap(),
+    val watchedByTag: Map<StatisticsTagKey, Long> = emptyMap(),
+    val searchCount: Long = 0L,
+    val searchesBySource: Map<SourceKey, Long> = emptyMap(),
+    val forYouSearchCount: Long = 0L,
+    val forYouSaveCount: Long = 0L,
+    val postUrlCopyCount: Long = 0L,
+    val codexEntryCounts: Map<String, Long> = emptyMap(),
+)
+
+/** Local-only cumulative statistics. Feature data remains authoritative for current library composition. */
+interface StatisticsRepository {
+    fun observeStatistics(): Flow<LifetimeStatistics>
+    suspend fun recordAppOpen()
+    suspend fun addUsageDuration(delta: UsageDurationDelta)
+    suspend fun recordWatchedPost(source: SourceKey, tags: Set<String>)
+    suspend fun recordSearch(sources: Set<SourceKey>)
+    suspend fun recordForYouSearch()
+    suspend fun recordForYouSave()
+    suspend fun recordPostUrlCopy()
+    suspend fun recordCodexEntry(codexId: String)
+}
+
 data class LikedPost(
     val profileId: String,
     val postId: PostId,

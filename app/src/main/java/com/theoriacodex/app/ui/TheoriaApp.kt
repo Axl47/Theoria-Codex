@@ -70,6 +70,9 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -119,6 +122,7 @@ import com.theoriacodex.app.source.ExternalPostDeepLink
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsEffect
 import com.theoriacodex.app.settings.SettingsViewModel
+import com.theoriacodex.app.statistics.StatisticsUsageCategory
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.creatorBrowsingSources
 import com.theoriacodex.app.source.parseExternalCreatorDeepLink
@@ -198,8 +202,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 
 enum class TopLevelDestination(val route: String, val label: String) {
     Search("search", "Search"),
@@ -218,6 +220,24 @@ private object AppRoute {
     fun codexDetail(codexId: String): String {
         return "codex/detail/$codexId"
     }
+}
+
+internal fun statisticsUsageCategory(
+    currentRoute: String?,
+    homeTabRoute: String,
+): StatisticsUsageCategory? = when (currentRoute) {
+    AppRoute.Viewer -> StatisticsUsageCategory.WATCHING
+    AppRoute.CreatorProfile -> StatisticsUsageCategory.BROWSING
+    AppRoute.CodexDetail -> StatisticsUsageCategory.CODEX
+    AppRoute.Home -> when (homeTabRoute) {
+        TopLevelDestination.Search.route,
+        TopLevelDestination.Recents.route,
+        TopLevelDestination.ForYou.route,
+        -> StatisticsUsageCategory.BROWSING
+        TopLevelDestination.Codex.route -> StatisticsUsageCategory.CODEX
+        else -> null
+    }
+    else -> null
 }
 
 internal data class ReleaseChangelogEntry(
@@ -304,6 +324,19 @@ internal fun TheoriaAppContent(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val dataDependencies = appContainer.data
+    fun recordPostUrlCopy() {
+        scope.launch {
+            runCatchingPreservingCancellation {
+                dataDependencies.statisticsRepository.recordPostUrlCopy()
+            }
+        }
+    }
+    suspend fun recordForYouSaveIfNeeded(shouldRecord: Boolean) {
+        if (!shouldRecord) return
+        runCatchingPreservingCancellation {
+            dataDependencies.statisticsRepository.recordForYouSave()
+        }
+    }
     val snackbarHostState = remember { SnackbarHostState() }
     val recentsClearWorkflow = remember(dataDependencies.recentsRepository) {
         RecentsClearWorkflow(dataDependencies.recentsRepository)
@@ -323,6 +356,22 @@ internal fun TheoriaAppContent(
     val updateDependencies = appContainer.updates
     val featureDependencies = appContainer.features
     val workflowDependencies = appContainer.workflows
+    val appUsageTracker = featureDependencies.appUsageTracker
+    DisposableEffect(appUsageTracker) {
+        val processLifecycle = ProcessLifecycleOwner.get().lifecycle
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> appUsageTracker.onForeground()
+                Lifecycle.Event.ON_STOP -> appUsageTracker.onBackground()
+                else -> Unit
+            }
+        }
+        processLifecycle.addObserver(observer)
+        if (processLifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            appUsageTracker.onForeground()
+        }
+        onDispose { processLifecycle.removeObserver(observer) }
+    }
     val appShellState by appShellOwner.state.collectAsStateWithLifecycle()
     val settingsOwner = viewModel<SettingsViewModel>(
         key = "settings-route-owner",
@@ -387,6 +436,12 @@ internal fun TheoriaAppContent(
     }
     var showSaveSheet by remember { mutableStateOf(false) }
     var pendingSavePost by remember { mutableStateOf<Post?>(null) }
+    var pendingSaveFromForYou by remember { mutableStateOf(false) }
+    fun requestSaveToCodex(post: Post, fromForYou: Boolean = false) {
+        pendingSavePost = post
+        pendingSaveFromForYou = fromForYou
+        showSaveSheet = true
+    }
     var homeTabRoute by rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
     LaunchedEffect(homeTabRoute) {
         if (homeTabRoute == TopLevelDestination.Settings.route) {
@@ -1039,6 +1094,9 @@ internal fun TheoriaAppContent(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
     val currentRoute = currentDestination?.route
+    LaunchedEffect(appUsageTracker, currentRoute, homeTabRoute) {
+        appUsageTracker.onCategoryChanged(statisticsUsageCategory(currentRoute, homeTabRoute))
+    }
     val showBottomBar = currentRoute == AppRoute.Home
     val currentContext = LocalContext.current
     val configuration = LocalConfiguration.current
@@ -1433,10 +1491,10 @@ internal fun TheoriaAppContent(
                                                 scope.launch { openCreatorProfile(post) }
                                             },
                                             onRequestSaveToCodex = { post ->
-                                                pendingSavePost = post
-                                                showSaveSheet = true
+                                                requestSaveToCodex(post)
                                             },
                                             onSaveToDevice = ::requestSaveToDevice,
+                                            onPostUrlCopied = { recordPostUrlCopy() },
                                             onAddFavoriteTag = addFavoriteTag,
                                             onRemoveFavoriteTag = removeFavoriteTag,
                                         ),
@@ -1498,10 +1556,10 @@ internal fun TheoriaAppContent(
                                                 scope.launch { toggleLikeAndSyncCodex(post) }
                                             },
                                             onRequestSaveToCodex = { post ->
-                                                pendingSavePost = post
-                                                showSaveSheet = true
+                                                requestSaveToCodex(post, fromForYou = true)
                                             },
                                             onSaveToDevice = ::requestSaveToDevice,
+                                            onPostUrlCopied = { recordPostUrlCopy() },
                                             onOpenCreatorProfile = { creator ->
                                                 scope.launch { openCreatorProfile(creator) }
                                             },
@@ -1582,10 +1640,10 @@ internal fun TheoriaAppContent(
                                             }
                                         },
                                         onRequestSaveToCodex = { post ->
-                                            pendingSavePost = post
-                                            showSaveSheet = true
+                                            requestSaveToCodex(post)
                                         },
                                         onSaveToDevice = ::requestSaveToDevice,
+                                        onPostUrlCopied = { recordPostUrlCopy() },
                                         onOpenCreatorProfile = { creator ->
                                             scope.launch { openCreatorProfile(creator) }
                                         },
@@ -1766,6 +1824,11 @@ internal fun TheoriaAppContent(
                         arguments = listOf(navArgument("codexId") { type = NavType.StringType }),
                     ) { entry ->
                         val codexId = requireNotNull(entry.arguments?.getString("codexId"))
+                        LaunchedEffect(entry, codexId, dataDependencies.statisticsRepository) {
+                            runCatchingPreservingCancellation {
+                                dataDependencies.statisticsRepository.recordCodexEntry(codexId)
+                            }
+                        }
                         var sortMode by rememberSaveable(codexId) { mutableStateOf(CodexSortMode.NEWEST_SAVED) }
                         val durationOwner = viewModel<CodexDetailDurationViewModel>(
                             key = "codex-detail-duration-$codexId",
@@ -1849,6 +1912,7 @@ internal fun TheoriaAppContent(
                             onSavePostToDevice = { post ->
                                 requestSaveToDevice(post)
                             },
+                            onPostUrlCopied = { recordPostUrlCopy() },
                             onOpenCreatorProfile = { creator ->
                                 scope.launch { openCreatorProfile(creator) }
                             },
@@ -1925,10 +1989,10 @@ internal fun TheoriaAppContent(
                                     scope.launch { toggleLikeAndSyncCodex(post) }
                                 },
                                 onRequestSaveToCodex = { post ->
-                                    pendingSavePost = post
-                                    showSaveSheet = true
+                                    requestSaveToCodex(post)
                                 },
                                 onSaveToDevice = ::requestSaveToDevice,
+                                onPostUrlCopied = { recordPostUrlCopy() },
                                 onOpenUrl = { url -> openInBrowser(appContext, url) },
                                 onAddIncludeTerm = ::addSearchIncludeTerm,
                                 onAddExcludeTerm = ::addSearchExcludeTerm,
@@ -1999,11 +2063,16 @@ internal fun TheoriaAppContent(
                             ),
                             effectCallbacks = ViewerRouteEffectCallbacks(
                                 onSavePost = { post ->
-                                    pendingSavePost = post
-                                    showSaveSheet = true
+                                    requestSaveToCodex(
+                                        post = post,
+                                        fromForYou = viewerSessionOwner.session.value
+                                            ?.context?.streamSource == ViewerStreamSource.FOR_YOU,
+                                    )
                                 },
                                 onSharePost = { post ->
-                                    shareViewerPostMessage(appContext, post)?.let { message ->
+                                    shareViewerPostMessage(appContext, post) {
+                                        recordPostUrlCopy()
+                                    }?.let { message ->
                                         Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
                                     }
                                 },
@@ -2102,12 +2171,14 @@ internal fun TheoriaAppContent(
                 codexItemCounts = state.itemCounts,
                 codexCoverCandidates = state.coverCandidates,
                 onCreateCodex = { profileId, name ->
+                    val recordForYouSave = pendingSaveFromForYou
                     scope.launch {
                         val codex = dataDependencies.codexRepository.ensureCodex(
                             codexId = profileScopedCodexId(profileId),
                             name = name,
                         )
                         dataDependencies.codexRepository.addItem(codex.codexId, post)
+                        recordForYouSaveIfNeeded(recordForYouSave)
                         dataDependencies.cacheRepository.cacheThumbnail(post)
                         if (state.settings.cache.cacheFullImageOnSave) {
                             dataDependencies.cacheRepository.cacheFull(post)
@@ -2115,10 +2186,13 @@ internal fun TheoriaAppContent(
                     }
                     showSaveSheet = false
                     pendingSavePost = null
+                    pendingSaveFromForYou = false
                 },
                 onSelectCodex = { codexId ->
+                    val recordForYouSave = pendingSaveFromForYou
                     scope.launch {
                         dataDependencies.codexRepository.addItem(codexId, post)
+                        recordForYouSaveIfNeeded(recordForYouSave)
                         dataDependencies.cacheRepository.cacheThumbnail(post)
                         if (state.settings.cache.cacheFullImageOnSave) {
                             dataDependencies.cacheRepository.cacheFull(post)
@@ -2126,10 +2200,12 @@ internal fun TheoriaAppContent(
                     }
                     showSaveSheet = false
                     pendingSavePost = null
+                    pendingSaveFromForYou = false
                 },
                 onDismiss = {
                     showSaveSheet = false
                     pendingSavePost = null
+                    pendingSaveFromForYou = false
                 },
             )
             }

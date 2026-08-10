@@ -4,6 +4,7 @@ import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
+import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.AppSettings
@@ -180,7 +181,15 @@ class SearchCoordinatorTest {
         val hitomi = TestAdapter(SourceKey.HITOMI)
         val queryRepository = InMemoryQueryRepository()
         val recents = InMemoryRecentsRepository()
-        val coordinator = coordinator(queryRepository, InMemorySettingsRepository(), InMemoryUiRestoreRepository(), recents, pixiv, gelbooru, hitomi)
+        val statistics = InMemoryStatisticsRepository()
+        val coordinator = SearchCoordinator(
+            registry = TestRegistry(listOf(pixiv, gelbooru, hitomi)),
+            queryRepository = queryRepository,
+            settingsRepository = InMemorySettingsRepository(),
+            uiRestoreRepository = InMemoryUiRestoreRepository(),
+            recentsRepository = recents,
+            statisticsRepository = statistics,
+        )
         coordinator.initializeRoute()
         val query = unifiedQuery("temporary")
         val scope = SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV))
@@ -197,6 +206,10 @@ class SearchCoordinatorTest {
         assertEquals(listOf(SourceKey.GELBOORU, SourceKey.PIXIV), recentSearch.sources)
         assertEquals(result.executionKey, recentSearch.queryHash)
         assertEquals(null, queryRepository.observeAppliedQuery("unified").first())
+        val lifetime = statistics.observeStatistics().first()
+        assertEquals(1L, lifetime.searchCount)
+        assertEquals(1L, lifetime.searchesBySource.getValue(SourceKey.PIXIV))
+        assertEquals(1L, lifetime.searchesBySource.getValue(SourceKey.GELBOORU))
     }
 
     @Test

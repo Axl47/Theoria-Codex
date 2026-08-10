@@ -80,6 +80,7 @@ fun CreatorProfileScreen(
     onAction: (CreatorAction) -> Unit,
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
+    onPostUrlCopied: (Post) -> Unit = {},
     onOpenUrl: (String) -> Unit,
     onAddIncludeTerm: (Post, SearchTerm) -> Boolean = { _, _ -> false },
     onAddExcludeTerm: (Post, SearchTerm) -> Boolean = { _, _ -> false },
@@ -351,6 +352,7 @@ fun CreatorProfileScreen(
             onDismiss = { selectedActionPost = null },
             onSaveToDevice = { onSaveToDevice(post) },
             onSaveToCodex = { onRequestSaveToCodex(post) },
+            onPostUrlCopied = onPostUrlCopied,
             tagContent = {
                 PostTagActionSection(
                     post = post,

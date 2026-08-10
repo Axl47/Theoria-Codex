@@ -2,9 +2,12 @@ package com.theoriacodex.app.settings
 
 import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
 import com.theoriacodex.app.sourceauth.CredentialStoreUnavailableException
+import com.theoriacodex.app.statistics.AppUsageTracker
 import com.theoriacodex.data.repository.InMemoryCacheRepository
+import com.theoriacodex.data.repository.InMemoryCodexRepository
 import com.theoriacodex.data.repository.InMemoryLikesRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
+import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
@@ -218,12 +221,21 @@ class SettingsViewModelTest {
         legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>> = MutableStateFlow(emptyList()),
         availableSources: StateFlow<Set<SourceKey>> = MutableStateFlow(setOf(SourceKey.PIXIV)),
     ): SettingsViewModel {
+        val statisticsRepository = InMemoryStatisticsRepository()
         return SettingsViewModel(
             dependencies = SettingsOwnerDependencies(
                 settingsRepository = settingsRepository,
                 cacheRepository = InMemoryCacheRepository(),
                 uiRestoreRepository = uiRestoreRepository,
                 likesRepository = InMemoryLikesRepository(),
+                codexRepository = InMemoryCodexRepository(),
+                statisticsRepository = statisticsRepository,
+                appUsageTracker = AppUsageTracker(
+                    repository = statisticsRepository,
+                    scope = backgroundScope,
+                    elapsedRealtime = { 0L },
+                    tickIntervalMs = 0L,
+                ),
                 profileMutations = NoOpSettingsProfileMutations,
                 accounts = accounts,
                 availableSources = availableSources,

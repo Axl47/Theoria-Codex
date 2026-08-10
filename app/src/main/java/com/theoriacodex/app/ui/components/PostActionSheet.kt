@@ -55,6 +55,7 @@ fun PostActionSheet(
     onOpenCreatorProfile: ((CreatorProfile) -> Unit)? = null,
     onOpenLegacyCreatorProfile: (() -> Unit)? = null,
     onGoToSearch: (() -> Unit)? = null,
+    onPostUrlCopied: (Post) -> Unit = {},
     tagContent: @Composable () -> Unit,
 ) {
     require(onSaveToCodex == null || onRemoveFromCodex == null) {
@@ -120,7 +121,7 @@ fun PostActionSheet(
                 }
                 IconButton(
                     onClick = {
-                        copyPostUrlWithFeedback(context, post)
+                        copyPostUrlWithFeedback(context, post, onPostUrlCopied)
                         onDismiss()
                     },
                 ) {
@@ -174,8 +175,13 @@ private fun copyPostTagsWithFeedback(context: Context, post: Post) {
     }
 }
 
-private fun copyPostUrlWithFeedback(context: Context, post: Post) {
+private fun copyPostUrlWithFeedback(
+    context: Context,
+    post: Post,
+    onPostUrlCopied: (Post) -> Unit,
+) {
     if (copyPostUrlToClipboard(context, post)) {
+        onPostUrlCopied(post)
         showClipboardCopyConfirmation(context, "Post URL copied")
     } else {
         Toast.makeText(context, "No post URL available", Toast.LENGTH_SHORT).show()
