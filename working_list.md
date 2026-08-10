@@ -4,6 +4,31 @@ updated_at: 2026-08-03T00:03:12-04:00
 ---
 # Working List
 
+## Current Task: Make Recent Searches Source-Aware
+
+### In Progress
+
+None.
+
+### Pending
+
+- [ ] Manually confirm Recent Searches spacing and source-logo rendering in the isolated Debug app.
+
+### Done
+
+- [x] Trace Search execution, Recents persistence, historical reopening, and source-logo ownership.
+  - Evidence: `SearchCoordinator` records accepted searches but deliberately skips temporary scopes; `RecentSearchEntry` and Room store only a `Query`; `ApplyHistoricalQuery` restores only `QueryMode`; and `SourceLogo` is the shared post-metadata logo renderer. The smallest complete repair is a backward-compatible source-aware recent-search payload plus explicit historical source-scope handoff.
+- [x] Define the implementation boundary before runtime edits.
+  - Evidence: `.docs/exec/source-aware-recent-searches.html` fixes the data flow, legacy fallback, UI states, historical reopen behavior, error handling, and bounded validation lane.
+- [x] Implement durable source-aware search history and the revised Recents row.
+  - Evidence: accepted source, Unified, and temporary executions now record their search kind and participating sources; temporary executions remain excluded from applied-query/scroll persistence. Room uses a backward-compatible wrapper in the existing payload column. Recents uses `SourceLogo` for source searches, places relative time under the leading icon, renders comma-separated tags as the title, omits sort, and limits source context to Unified/Multi-Search rows.
+- [x] Restore historical Multi-Search scope through the Search owner.
+  - Evidence: a Recent Multi-Search now reopens with its explicit source set; unavailable sets fail with a targeted message instead of silently becoming global Unified.
+- [x] Add focused persistence, restoration, and presentation regression coverage.
+  - Evidence: 39 focused tests passed across the payload codec, Room repository, Recents presentation, Search coordinator, and Search ViewModel with zero failures/errors/skips.
+- [x] Run one bounded validation batch and close deterministic evidence.
+  - Evidence: focused tests, `:app:compileDebugKotlin`, `:app:detektDebug`, and `:core-data-android:detektDebug` passed; `git diff --check` passed. Broad `:core-data:detekt` remains red only on five inherited findings in untouched migration/policy and legacy test owners. No device, connected, install, package mutation, or live-provider lane ran.
+
 ## Current Task: Prepare v0.8.0 Release
 
 ### In Progress

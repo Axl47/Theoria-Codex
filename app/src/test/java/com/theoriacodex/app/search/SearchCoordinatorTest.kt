@@ -5,6 +5,7 @@ import com.theoriacodex.data.repository.InMemoryQueryRepository
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
+import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.UiRestoreRepository
@@ -173,7 +174,7 @@ class SearchCoordinatorTest {
     }
 
     @Test
-    fun `temporary execution uses exact sources and persistence remains disabled`() = runTest {
+    fun `temporary execution records Multi-Search while applied persistence remains disabled`() = runTest {
         val pixiv = TestAdapter(SourceKey.PIXIV)
         val gelbooru = TestAdapter(SourceKey.GELBOORU)
         val hitomi = TestAdapter(SourceKey.HITOMI)
@@ -191,7 +192,10 @@ class SearchCoordinatorTest {
         assertEquals(2, pixiv.searchedTags.size)
         assertEquals(2, gelbooru.searchedTags.size)
         assertTrue(hitomi.searchedTags.isEmpty())
-        assertTrue(recents.observeSearches().first().isEmpty())
+        val recentSearch = recents.observeSearches().first().single()
+        assertEquals(RecentSearchKind.MULTI_SEARCH, recentSearch.kind)
+        assertEquals(listOf(SourceKey.GELBOORU, SourceKey.PIXIV), recentSearch.sources)
+        assertEquals(result.executionKey, recentSearch.queryHash)
         assertEquals(null, queryRepository.observeAppliedQuery("unified").first())
     }
 

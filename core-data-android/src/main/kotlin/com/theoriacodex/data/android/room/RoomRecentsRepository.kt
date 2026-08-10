@@ -6,10 +6,13 @@ import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
+import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.ViewerStreamSource
-import com.theoriacodex.data.storage.QueryStorageCodec
+import com.theoriacodex.data.storage.RecentSearchPayloadCodec
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -47,10 +50,13 @@ class RoomRecentsRepository(
 
     override fun observeSearches(): Flow<List<RecentSearchEntry>> = dao.observeSearches().map { rows ->
         rows.map { row ->
+            val payload = RecentSearchPayloadCodec.decodeJson(row.queryPayloadJson, queryGson)
             RecentSearchEntry(
-                query = QueryStorageCodec.decodeJson(row.queryPayloadJson, queryGson),
+                query = payload.query,
                 queryHash = row.queryHash,
                 searchedAtEpochMs = row.searchedAtEpochMs,
+                kind = payload.kind,
+                sources = payload.sources,
             )
         }
     }
@@ -94,14 +100,19 @@ class RoomRecentsRepository(
         }
     }
 
-    override suspend fun recordSearch(query: com.theoriacodex.domain.model.Query, queryHash: String) {
+    override suspend fun recordSearch(
+        query: Query,
+        queryHash: String,
+        kind: RecentSearchKind,
+        sources: List<SourceKey>,
+    ) {
         val normalized = queryHash.trim()
         if (normalized.isBlank()) return
         database.withTransaction {
             dao.upsertSearch(
                 RecentSearchEntity(
                     normalized,
-                    QueryStorageCodec.encodeJson(query, queryGson),
+                    RecentSearchPayloadCodec.encodeJson(query, kind, sources, queryGson),
                     clock(),
                     dao.nextSearchSequence(),
                 )
@@ -143,7 +154,7 @@ class RoomRecentsRepository(
                     dao.upsertSearch(
                         RecentSearchEntity(
                             queryHash,
-                            QueryStorageCodec.encodeJson(entry.query, queryGson),
+                            RecentSearchPayloadCodec.encodeJson(entry, queryGson),
                             entry.searchedAtEpochMs,
                             dao.nextSearchSequence(),
                         )

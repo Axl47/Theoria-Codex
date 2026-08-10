@@ -6,6 +6,7 @@ import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
+import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 
@@ -62,7 +63,25 @@ data class RecentSearchEntry(
     val query: Query,
     val queryHash: String,
     val searchedAtEpochMs: Long,
+    val kind: RecentSearchKind = query.defaultRecentSearchKind(),
+    val sources: List<SourceKey> = query.defaultRecentSearchSources(),
 )
+
+enum class RecentSearchKind {
+    SOURCE,
+    UNIFIED,
+    MULTI_SEARCH,
+}
+
+fun Query.defaultRecentSearchKind(): RecentSearchKind = when (mode) {
+    QueryMode.Unified -> RecentSearchKind.UNIFIED
+    is QueryMode.Source -> RecentSearchKind.SOURCE
+}
+
+fun Query.defaultRecentSearchSources(): List<SourceKey> = when (val queryMode = mode) {
+    QueryMode.Unified -> emptyList()
+    is QueryMode.Source -> listOf(queryMode.source)
+}
 
 sealed interface RecentActivityEntry {
     val occurredAtEpochMs: Long
@@ -88,7 +107,12 @@ interface RecentsRepository {
         originQueryHash: String?,
         section: RecentPostSection = RecentPostSection.fromOrigin(origin),
     )
-    suspend fun recordSearch(query: Query, queryHash: String)
+    suspend fun recordSearch(
+        query: Query,
+        queryHash: String,
+        kind: RecentSearchKind = query.defaultRecentSearchKind(),
+        sources: List<SourceKey> = query.defaultRecentSearchSources(),
+    )
     suspend fun restoreEntries(
         watchedPosts: List<RecentPostEntry> = emptyList(),
         searches: List<RecentSearchEntry> = emptyList(),

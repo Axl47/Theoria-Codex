@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
@@ -33,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.source.SourceLogo
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
@@ -41,13 +44,12 @@ import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
+import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
-import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import java.util.Locale
 
@@ -382,6 +384,7 @@ private fun RecentSearchRow(
     now: Long,
     onClick: () -> Unit,
 ) {
+    val presentation = recentSearchPresentation(entry)
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -394,29 +397,58 @@ private fun RecentSearchRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.Default.Search,
-                contentDescription = null,
-            )
+            RecentSearchLeading(entry, now)
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = queryTitle(entry.query),
+                    text = presentation.title,
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = "${querySubtitle(entry.query)} / ${relativeTimeLabel(now, entry.searchedAtEpochMs)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                presentation.subtitle?.let { subtitle ->
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun RecentSearchLeading(entry: RecentSearchEntry, now: Long) {
+    Column(
+        modifier = Modifier.widthIn(min = 52.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        val source = (entry.query.mode as? QueryMode.Source)?.source
+        if (source != null && entry.kind == RecentSearchKind.SOURCE) {
+            SourceLogo(source = source, size = 24.dp)
+        } else {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = if (entry.kind == RecentSearchKind.MULTI_SEARCH) {
+                    "Multi-Search"
+                } else {
+                    "Unified search"
+                },
+                modifier = Modifier.size(24.dp),
+            )
+        }
+        Text(
+            text = relativeTimeLabel(now, entry.searchedAtEpochMs),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
     }
 }
 
@@ -456,27 +488,22 @@ private fun activityKey(entry: RecentActivityEntry): String {
     }
 }
 
-private fun queryTitle(query: Query): String {
-    return when (val mode = query.mode) {
-        QueryMode.Unified -> "Unified search"
-        is QueryMode.Source -> "${mode.source.displayName()} search"
-    }
-}
+internal data class RecentSearchPresentation(
+    val title: String,
+    val subtitle: String?,
+)
 
-private fun querySubtitle(query: Query): String {
-    val included = query.includeTags.joinToString(" ")
-    val excluded = query.excludeTags.joinToString(" ") { tag -> "-$tag" }
-    val tagText = listOf(included, excluded)
-        .filter(String::isNotBlank)
-        .joinToString(" ")
-        .ifBlank { "No tags" }
-    val sort = when (query.sort) {
-        SortMode.NEWEST -> "Newest"
-        SortMode.POPULAR -> "Popular"
-        SortMode.TOP -> "Top"
-        SortMode.RANDOM -> "Random"
+internal fun recentSearchPresentation(entry: RecentSearchEntry): RecentSearchPresentation {
+    val terms = entry.query.includeTags + entry.query.excludeTags.map { tag -> "-$tag" }
+    val title = terms.joinToString(", ").ifBlank { "No tags" }
+    val sourceList = entry.sources.joinToString(", ") { source -> source.displayName() }
+        .takeIf(String::isNotBlank)
+    val subtitle = when (entry.kind) {
+        RecentSearchKind.SOURCE -> null
+        RecentSearchKind.UNIFIED -> sourceList
+        RecentSearchKind.MULTI_SEARCH -> sourceList?.let { "Multi-Search · $it" } ?: "Multi-Search"
     }
-    return "$tagText / $sort"
+    return RecentSearchPresentation(title, subtitle)
 }
 
 private fun relativeTimeLabel(now: Long, eventAt: Long): String {

@@ -193,7 +193,7 @@ internal class SearchViewModel(
 
             SearchAction.ApplyDraft -> applyDraft()
 
-            is SearchAction.ApplyHistoricalQuery -> applyHistoricalQuery(action.query)
+            is SearchAction.ApplyHistoricalQuery -> applyHistoricalQuery(action.query, action.sourceScope)
 
             is SearchAction.ApplyTagSearch -> applyTagSearch(action)
 
@@ -361,7 +361,7 @@ internal class SearchViewModel(
         )
     }
 
-    private fun applyHistoricalQuery(query: Query) {
+    private fun applyHistoricalQuery(query: Query, sourceScope: SearchSourceScope) {
         val reduction = SearchDraftReducer.restoreDraft(
             state = mutableState.value,
             query = query,
@@ -372,7 +372,14 @@ internal class SearchViewModel(
             effectChannel.trySend(SearchEffect.ShowMessage("Search source is unavailable"))
             return
         }
-        mutableState.value = reduction.state
+        val restoredScope = sourceScope.reconciledWith(mutableState.value.query.availableSources.toSet())
+        if (sourceScope is SearchSourceScope.Temporary && restoredScope !is SearchSourceScope.Temporary) {
+            effectChannel.trySend(SearchEffect.ShowMessage("Multi-Search sources are unavailable"))
+            return
+        }
+        mutableState.value = reduction.state.copy(
+            query = reduction.state.query.copy(draftSourceScope = restoredScope),
+        )
         persistDraftQuery()
         val current = mutableState.value
         launchRootSearch(

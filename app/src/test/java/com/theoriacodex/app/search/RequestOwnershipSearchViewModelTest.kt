@@ -317,6 +317,35 @@ internal class RequestOwnershipSearchViewModelTest : SearchViewModelTestFixture(
         }
 
     @Test
+    fun `historical Multi-Search restores its explicit source scope`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val viewModel = viewModel(
+                adapter = ViewModelSearchAdapter(SourceKey.PIXIV),
+                additionalAdapters = listOf(ViewModelSearchAdapter(SourceKey.GELBOORU)),
+            )
+            restore(viewModel)
+            val scope = SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV))
+
+            viewModel.onAction(
+                SearchAction.ApplyHistoricalQuery(
+                    query = Query(
+                        mode = QueryMode.Unified,
+                        includeTerms = listOf(SearchTerm("history")),
+                        excludeTerms = emptyList(),
+                        sort = SortMode.NEWEST,
+                        dateRange = null,
+                        minScore = null,
+                    ),
+                    sourceScope = scope,
+                )
+            )
+            advanceUntilIdle()
+
+            assertEquals(scope, viewModel.state.value.query.appliedSourceScope)
+            assertEquals(2, viewModel.state.value.content.results.size)
+        }
+
+    @Test
     fun `environment reconciliation schedules retry through the owner`() =
         runTest(mainDispatcherRule.dispatcher) {
             val adapter = ViewModelSearchAdapter()

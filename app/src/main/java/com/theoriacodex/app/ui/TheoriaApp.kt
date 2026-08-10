@@ -110,6 +110,7 @@ import com.theoriacodex.app.recommend.trainingTagsFor
 import com.theoriacodex.app.recents.RecentsScreen
 import com.theoriacodex.app.recents.RecentsClearWorkflow
 import com.theoriacodex.app.search.state.SearchAction
+import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.source.ExternalCreatorDeepLink
 import com.theoriacodex.app.source.ExternalPostDeepLink
 import com.theoriacodex.app.settings.SettingsAction
@@ -176,6 +177,7 @@ import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.RecentPostSection
+import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.storage.ApplicationDataState
@@ -1610,8 +1612,19 @@ internal fun TheoriaAppContent(
                                         },
                                         onOpenSearch = { entry ->
                                             scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                                val historicalScope = when (entry.kind) {
+                                                    RecentSearchKind.MULTI_SEARCH -> {
+                                                        SearchSourceScope.fromSources(entry.sources)
+                                                    }
+                                                    RecentSearchKind.SOURCE,
+                                                    RecentSearchKind.UNIFIED,
+                                                    -> SearchSourceScope.fromQuery(entry.query)
+                                                }
                                                 dispatchOrQueueSearchAction(
-                                                    SearchAction.ApplyHistoricalQuery(entry.query),
+                                                    SearchAction.ApplyHistoricalQuery(
+                                                        query = entry.query,
+                                                        sourceScope = historicalScope,
+                                                    ),
                                                 )
                                                 val targetIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.Search)
                                                 homeTabRoute = TopLevelDestination.Search.route

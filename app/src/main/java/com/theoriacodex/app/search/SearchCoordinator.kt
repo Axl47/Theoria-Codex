@@ -12,6 +12,7 @@ import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.data.repository.QueryRepository
+import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.SettingsRepository
@@ -373,16 +374,25 @@ class SearchCoordinator(
         sourceScope: SearchSourceScope,
         executionKey: String,
     ) {
-        if (sourceScope is SearchSourceScope.Temporary) return
         appliedPersistenceMutex.withLock {
             currentCoroutineContext().ensureActive()
+            val searchKind = when (sourceScope) {
+                SearchSourceScope.GlobalUnified -> RecentSearchKind.UNIFIED
+                is SearchSourceScope.Single -> RecentSearchKind.SOURCE
+                is SearchSourceScope.Temporary -> RecentSearchKind.MULTI_SEARCH
+            }
+            val searchedSources = effectiveEnabledSources(sourceScope).inPresentationOrder()
+            if (sourceScope is SearchSourceScope.Temporary) {
+                recentsRepository.recordSearch(query, executionKey, searchKind, searchedSources)
+                return@withLock
+            }
             queryRepository.upsertAppliedQuery(modeKey(query.mode), query)
             currentCoroutineContext().ensureActive()
             queryRepository.upsertAppliedQuery(LAST_ACTIVE_QUERY_KEY, query)
             currentCoroutineContext().ensureActive()
             uiRestoreRepository.setSearchScrollState(executionKey, SearchScrollState(0, 0))
             currentCoroutineContext().ensureActive()
-            recentsRepository.recordSearch(query, executionKey)
+            recentsRepository.recordSearch(query, executionKey, searchKind, searchedSources)
         }
     }
 

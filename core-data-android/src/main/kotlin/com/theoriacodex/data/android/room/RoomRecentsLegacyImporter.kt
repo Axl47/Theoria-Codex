@@ -8,7 +8,7 @@ import com.theoriacodex.data.storage.AtomicJsonFileStore
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
 import com.theoriacodex.data.storage.LegacyRecentsStoreFile
-import com.theoriacodex.data.storage.QueryStorageCodec
+import com.theoriacodex.data.storage.RecentSearchPayloadCodec
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.AtomicMoveNotSupportedException
@@ -130,7 +130,7 @@ class RoomRecentsLegacyImporter(
             dao.upsertSearch(
                 RecentSearchEntity(
                     entry.queryHash,
-                    QueryStorageCodec.encodeJson(entry.query, gson),
+                    RecentSearchPayloadCodec.encodeJson(entry, gson),
                     entry.searchedAtEpochMs,
                     (prepared.searches.size - index).toLong(),
                 )

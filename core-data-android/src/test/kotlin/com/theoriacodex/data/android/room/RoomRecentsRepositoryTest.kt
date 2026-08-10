@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostSection
+import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -40,6 +41,23 @@ class RoomRecentsRepositoryTest {
     }
 
     @After fun tearDown() = database.close()
+
+    @Test fun `Multi-Search metadata round trips through the existing payload column`() = runTest {
+        val repository = RoomRecentsRepository(database, clock = { now++ })
+        val query = recentQuery("multi").copy(mode = QueryMode.Unified)
+
+        repository.recordSearch(
+            query = query,
+            queryHash = "multi-hash",
+            kind = RecentSearchKind.MULTI_SEARCH,
+            sources = listOf(SourceKey.GELBOORU, SourceKey.PIXIV),
+        )
+
+        val restored = repository.observeSearches().first().single()
+        assertEquals(query, restored.query)
+        assertEquals(RecentSearchKind.MULTI_SEARCH, restored.kind)
+        assertEquals(listOf(SourceKey.GELBOORU, SourceKey.PIXIV), restored.sources)
+    }
 
     @Test fun `dedupe caps deterministic ties and origin preservation match Recents contract`() = runTest {
         val repository = RoomRecentsRepository(database, watchedLimit = 2, searchLimit = 2, clock = { now })

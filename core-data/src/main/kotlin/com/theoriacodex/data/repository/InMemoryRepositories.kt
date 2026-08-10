@@ -267,7 +267,12 @@ class InMemoryRecentsRepository(
         }
     }
 
-    override suspend fun recordSearch(query: Query, queryHash: String) {
+    override suspend fun recordSearch(
+        query: Query,
+        queryHash: String,
+        kind: RecentSearchKind,
+        sources: List<SourceKey>,
+    ) {
         val normalizedHash = queryHash.trim()
         if (normalizedHash.isBlank()) return
         mutex.withLock {
@@ -277,6 +282,8 @@ class InMemoryRecentsRepository(
                     query = query,
                     queryHash = normalizedHash,
                     searchedAtEpochMs = clock(),
+                    kind = kind,
+                    sources = sources.distinct(),
                 ),
                 limit = searchLimit,
             )

@@ -170,7 +170,10 @@ sealed interface SearchAction {
     data class ExcludeSuggestion(val suggestion: FacetedTagSuggestion) : SearchAction
     data object ClearAutocomplete : SearchAction
     data object ApplyDraft : SearchAction
-    data class ApplyHistoricalQuery(val query: Query) : SearchAction
+    data class ApplyHistoricalQuery(
+        val query: Query,
+        val sourceScope: SearchSourceScope = SearchSourceScope.fromQuery(query),
+    ) : SearchAction
     data class ApplyTagSearch(
         val includeTags: List<String>,
         val mode: QueryMode = QueryMode.Unified,

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Source-Aware Recent Searches ExecPlan</title>
+</head>
+<body>
+  <main>
+    <h1>Source-Aware Recent Searches</h1>
+    <p>Status: implementation and deterministic host validation complete; manual isolated-Debug visual acceptance remains. Owner: current Codex task.</p>
+
+    <h2>Purpose</h2>
+    <p>Make Recent Searches describe the terms and sources that actually ran, including temporary multi-source searches, while preserving old search history and the existing Search persistence boundary.</p>
+
+    <h2>Runtime flow</h2>
+    <ol>
+      <li>Search executes a source, global Unified, or temporary multi-source request.</li>
+      <li>After an accepted result, Search records the query, execution identity, search kind, and participating source keys in Recents.</li>
+      <li>Room stores the new metadata in a versioned wrapper inside the existing query payload column. The decoder continues to accept the previous raw Query payload.</li>
+      <li>Recents renders tags as the title, source context only for Unified and Multi-Search rows, and time beneath the leading search/source icon.</li>
+      <li>Opening a Multi-Search restores its explicit source set. Opening ordinary Unified or source searches retains their existing behavior.</li>
+    </ol>
+
+    <h2>UI states</h2>
+    <ul>
+      <li>Source search: shared source logo, time below it, comma-separated terms, no subtitle.</li>
+      <li>Unified search: search icon, time below it, comma-separated terms, and the participating sources.</li>
+      <li>Multi-Search: search icon, time below it, comma-separated terms, and a Multi-Search source summary.</li>
+      <li>Legacy Unified record without source metadata: remains readable and omits an invented source list.</li>
+      <li>Query without terms: uses a stable No tags title.</li>
+    </ul>
+
+    <h2>Error and compatibility boundaries</h2>
+    <ul>
+      <li>No Room schema migration is introduced.</li>
+      <li>Malformed or unsupported new payloads continue to fail closed through the repository flow.</li>
+      <li>A historical Multi-Search whose explicit sources no longer form a valid multi-source set reports that its sources are unavailable instead of silently becoming Unified.</li>
+      <li>Temporary searches remain excluded from durable applied-query and scroll restoration; only their successful Recents event becomes durable.</li>
+    </ul>
+
+    <h2>Acceptance and validation</h2>
+    <ul>
+      <li>Repository tests prove new payload round-trip, old payload decoding, exact source metadata, and Undo restoration.</li>
+      <li>Search tests prove temporary searches are recorded and historical Multi-Search restores the explicit scope.</li>
+      <li>Presentation tests prove comma-separated tags, no sort label, source-only rows without subtitles, and Unified/Multi-Search source summaries.</li>
+      <li>Run focused JVM tests, Debug compilation, app/core-data checks relevant to edited owners, HTML validation, and diff checks once.</li>
+      <li>Leave visual spacing and real SVG/drawable rendering for manual isolated-Debug acceptance; no connected or package-mutating command is authorized.</li>
+    </ul>
+
+    <h2>Progress</h2>
+    <ul>
+      <li>Complete: traced current execution, persistence, reopen, and presentation ownership.</li>
+      <li>Complete: implemented a backward-compatible source-aware record, Multi-Search historical restoration, and the revised row.</li>
+      <li>Complete: 39 focused tests, app compilation, app Detekt, Room Detekt, and diff checks pass.</li>
+      <li>Known unrelated evidence: broad core-data Detekt reports five inherited findings in untouched migration/policy and legacy test files.</li>
+      <li>Pending: manual spacing and real source-logo rendering acceptance in the isolated Debug app.</li>
+    </ul>
+  </main>
+</body>
+</html>
