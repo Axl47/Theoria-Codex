@@ -46,7 +46,6 @@ class StatisticsArchitectureTest {
         listOf("App Stats", "Post Stats", "Search Stats", "Tag Stats", "Codex Stats").forEach { group ->
             assertTrue("Missing Stats group $group", "StatisticsGroupTitle(\"$group\")" in screen)
         }
-        assertTrue("The forward-only lifetime boundary must be visible", "Lifetime counters begin with this version" in screen)
     }
 
     private fun source(path: String): String = File(repositoryRoot, path).readText()

@@ -32,4 +32,10 @@ class SettingsSummaryPresentationTest {
         assertEquals("Empty results", scenarioLabel(ScenarioPreset.EMPTY_RESULTS))
         assertEquals("Slow network", scenarioLabel(ScenarioPreset.SLOW_NETWORK))
     }
+
+    @Test
+    fun `Codex entry count uses singular and plural labels`() {
+        assertEquals("Entered 1 Time", codexEntryCountLabel(1))
+        assertEquals("Entered 2 Times", codexEntryCountLabel(2))
+    }
 }

@@ -44,6 +44,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.displayName
+import com.theoriacodex.app.statistics.CodexUsageStatistic
 import com.theoriacodex.app.statistics.SourceStatistic
 import com.theoriacodex.app.statistics.StatisticsSummary
 import com.theoriacodex.app.statistics.TagStatistic
@@ -240,10 +241,7 @@ fun SettingsScreen(
                 )
             },
         ) {
-            StatisticsContent(
-                statistics = state.statistics,
-                activeProfileName = state.activeProfile.name,
-            )
+            StatisticsContent(statistics = state.statistics)
         }
 
         SettingsSection(
@@ -602,18 +600,12 @@ internal fun statsSummary(statistics: StatisticsSummary): String {
 @Composable
 private fun StatisticsContent(
     statistics: StatisticsSummary,
-    activeProfileName: String,
 ) {
-    Text(
-        text = "Lifetime counters begin with this version. Saved-library stats reflect current data.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
     AppStatisticsGroup(statistics)
-    PostStatisticsGroup(statistics, activeProfileName)
+    PostStatisticsGroup(statistics)
     SearchStatisticsGroup(statistics)
     TagStatisticsGroup(statistics)
-    CodexStatisticsGroup(statistics, activeProfileName)
+    CodexStatisticsGroup(statistics)
 }
 
 @Composable
@@ -627,10 +619,7 @@ private fun AppStatisticsGroup(statistics: StatisticsSummary) {
 }
 
 @Composable
-private fun PostStatisticsGroup(
-    statistics: StatisticsSummary,
-    activeProfileName: String,
-) {
+private fun PostStatisticsGroup(statistics: StatisticsSummary) {
     StatisticsGroupTitle("Post Stats")
     StatisticValueRow("Posts Watched", statistics.watchedPostCount.toString())
     SourceBreakdown(
@@ -639,18 +628,13 @@ private fun PostStatisticsGroup(
         emptyMessage = "No watched-source data yet.",
     )
     StatisticValueRow("Posts Liked/Saved", statistics.savedPostCount.toString())
-    Text(
-        text = "Current library · $activeProfileName",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
     SourceBreakdown(
         rows = statistics.savedSources,
         denominator = statistics.savedPostCount,
         emptyMessage = "No saved-source data yet.",
     )
     StatisticValueRow("Posts Saved from For You", statistics.forYouSaveCount.toString())
-    StatisticValueRow("Posts Shared (copied URL)", statistics.postUrlCopyCount.toString())
+    StatisticValueRow("Posts Shared", statistics.postUrlCopyCount.toString())
 }
 
 @Composable
@@ -663,11 +647,6 @@ private fun SearchStatisticsGroup(statistics: StatisticsSummary) {
         emptyMessage = "No search-source data yet.",
     )
     StatisticValueRow("For You Searches Done", statistics.forYouSearchCount.toString())
-    Text(
-        text = "Unified and Multi-Search can participate in more than one source.",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
 }
 
 @Composable
@@ -680,24 +659,10 @@ private fun TagStatisticsGroup(statistics: StatisticsSummary) {
 }
 
 @Composable
-private fun CodexStatisticsGroup(
-    statistics: StatisticsSummary,
-    activeProfileName: String,
-) {
+private fun CodexStatisticsGroup(statistics: StatisticsSummary) {
     StatisticsGroupTitle("Codex Stats")
-    Text(
-        text = "Current Codices · $activeProfileName",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    StatisticValueRow(
-        label = "Most Used Codex",
-        value = statistics.mostUsedCodex?.let { row -> "${row.name} · ${row.entryCount} entries" } ?: "None yet",
-    )
-    StatisticValueRow(
-        label = "Least Used Codex",
-        value = statistics.leastUsedCodex?.let { row -> "${row.name} · ${row.entryCount} entries" } ?: "None yet",
-    )
+    CodexUsageStat("Most Used Codex", statistics.mostUsedCodex)
+    CodexUsageStat("Least Used Codex", statistics.leastUsedCodex)
     Text("Top Sources in Codex", style = MaterialTheme.typography.bodyMedium)
     SourceBreakdown(
         rows = statistics.topCodexSources,
@@ -705,6 +670,19 @@ private fun CodexStatisticsGroup(
         emptyMessage = "No saved-source data yet.",
         showDenominator = true,
     )
+}
+
+@Composable
+private fun CodexUsageStat(title: String, row: CodexUsageStatistic?) {
+    Text(title, style = MaterialTheme.typography.bodyMedium)
+    StatisticValueRow(
+        label = row?.name ?: "None yet",
+        value = row?.entryCount?.let(::codexEntryCountLabel).orEmpty(),
+    )
+}
+
+internal fun codexEntryCountLabel(entryCount: Long): String {
+    return "Entered $entryCount ${if (entryCount == 1L) "Time" else "Times"}"
 }
 
 @Composable
