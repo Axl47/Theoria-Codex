@@ -145,6 +145,24 @@ fun animatedDurationMs(post: Post): Long? {
     return post.durationMs?.takeIf { it > 0L }
 }
 
+fun animatedDurationLabel(post: Post): String? {
+    if (!isAnimatedPost(post)) return null
+    val durationMs = animatedDurationMs(post) ?: return null
+    return formatCompactDuration(durationMs)
+}
+
+private fun formatCompactDuration(durationMs: Long): String {
+    val totalSeconds = (durationMs / 1_000L).coerceAtLeast(1L)
+    val hours = totalSeconds / 3_600L
+    val minutes = (totalSeconds % 3_600L) / 60L
+    val seconds = totalSeconds % 60L
+    return buildString {
+        if (hours > 0L) append("${hours}h")
+        if (minutes > 0L) append("${minutes}m")
+        if (seconds > 0L || isEmpty()) append("${seconds}s")
+    }
+}
+
 fun durationBucketFor(durationMs: Long): Int {
     if (durationMs < ANIMATED_DURATION_BUCKET_MS) return ANIMATED_DURATION_MIN_BUCKET
     if (durationMs > ANIMATED_DURATION_LAST_EXACT_BUCKET * ANIMATED_DURATION_BUCKET_MS) {

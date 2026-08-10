@@ -96,6 +96,7 @@ import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
 import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.animatedDurationBucketLabel
+import com.theoriacodex.app.media.animatedDurationLabel
 import com.theoriacodex.app.media.animatedDurationMs
 import com.theoriacodex.app.media.animatedDurationRangeLabel
 import com.theoriacodex.app.media.isAnimatedPost
@@ -935,6 +936,7 @@ fun SearchResultCard(
             ),
     ) {
         val title = effectivePost.displayTitleOrNull()
+        val durationLabel = animatedDurationLabel(effectivePost)
         val supportingContent = searchCardSupportingContent(
             title = title,
             metadataLabel = metadataLabel,
@@ -1153,6 +1155,15 @@ fun SearchResultCard(
                     if (showSourceBadge) {
                         SourceBadge(source = effectivePost.id.source)
                     }
+                }
+            }
+            if (durationLabel != null) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(8.dp),
+                ) {
+                    PreviewMetadataLabel(durationLabel)
                 }
             }
         }

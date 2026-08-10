@@ -45,6 +45,31 @@ class PostMediaPolicyTest {
         })
     }
 
+    @Test
+    fun `animated duration label uses compact hours minutes and seconds`() {
+        assertEquals("1s", animatedDurationLabel(animatedPost(durationMs = 999L)))
+        assertEquals("21s", animatedDurationLabel(animatedPost(durationMs = 21_900L)))
+        assertEquals("1m10s", animatedDurationLabel(animatedPost(durationMs = 70_000L)))
+        assertEquals("1h27m10s", animatedDurationLabel(animatedPost(durationMs = 5_230_000L)))
+        assertEquals("1h", animatedDurationLabel(animatedPost(durationMs = 3_600_000L)))
+    }
+
+    @Test
+    fun `duration label is absent for static or unresolved media`() {
+        val staticPost = post(
+            source = SourceKey.GELBOORU,
+            full = ref("file.jpg", "image/jpeg"),
+        )
+
+        assertEquals(null, animatedDurationLabel(staticPost))
+        assertEquals(null, animatedDurationLabel(animatedPost(durationMs = null)))
+    }
+
+    private fun animatedPost(durationMs: Long?): Post = post(
+        source = SourceKey.GELBOORU,
+        full = ref("file.mp4", "video/mp4"),
+    ).copy(durationMs = durationMs)
+
     private fun post(source: SourceKey, full: ImageRef?): Post = Post(
         id = PostId(source, "1"),
         preview = ref("preview.jpg", "image/jpeg"),
