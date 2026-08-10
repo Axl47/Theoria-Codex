@@ -53,12 +53,9 @@ class DurationDemandScheduler(
     }
 
     fun takeNext(gate: DurationExecutionGate): ScheduledDurationWork? {
-        if (!gate.lifecycleStarted) return null
+        if (!gate.lifecycleStarted || !gate.scrollIdle) return null
         val next = entries.values
             .asSequence()
-            .filter { entry ->
-                entry.effectivePriority() != DurationDemandPriority.BACKGROUND_IDLE || gate.scrollIdle
-            }
             .minWithOrNull(ENTRY_COMPARATOR)
             ?: return null
         entries.remove(next.key)

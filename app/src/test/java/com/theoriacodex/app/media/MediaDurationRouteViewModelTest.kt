@@ -54,7 +54,7 @@ class MediaDurationRouteViewModelTest {
 
         owner.synchronize("query", listOf(post), resolveInBackground = false)
         owner.onFilterChanged(true)
-        owner.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = false)
+        owner.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = true)
         runCurrent()
 
         assertEquals(listOf("filtered"), requested)
@@ -77,9 +77,74 @@ class MediaDurationRouteViewModelTest {
         owner.synchronize("query", listOf(post), resolveInBackground = true)
         owner.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = false)
         runCurrent()
+        assertTrue(requested.isEmpty())
+
+        owner.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = true)
+        runCurrent()
 
         assertEquals(listOf("visible"), requested)
         assertTrue(coordinator.states.value[mediaDurationKey(post)] is MediaDurationState.Known)
+        coordinator.close()
+    }
+
+    @Test
+    fun `cached viewport changes reuse the post snapshot and schedule no duration work`() = runTest {
+        val traces = DemandCountingTraceRecorder()
+        val coordinator = coordinator(traceRecorder = traces) {
+            MediaDurationState.Known(5_000L, MediaDurationProvenance.CONTAINER_PROBE)
+        }
+        var keyComputations = 0
+        val owner = MediaDurationRouteViewModel(
+            coordinator = coordinator,
+            routeName = "cached-scroll-test",
+            coroutineScope = backgroundScope,
+            keyFactory = { post ->
+                keyComputations += 1
+                mediaDurationKey(post)
+            },
+        )
+        val posts = List(120) { index -> animatedTestPost(sourcePostId = "post-$index") }
+
+        owner.synchronize("query", posts, resolveInBackground = false)
+        runCurrent()
+        assertEquals(120, keyComputations)
+
+        repeat(3) {
+            posts.forEach { post ->
+                owner.onPostVisibilityChanged(post, visible = true)
+                owner.onPostVisibilityChanged(post, visible = false)
+            }
+        }
+        owner.synchronize("query", posts, resolveInBackground = false)
+        runCurrent()
+
+        assertEquals(120, keyComputations)
+        assertEquals(0, traces.demands)
+        coordinator.close()
+    }
+
+    @Test
+    fun `known metadata ignores later player duration publication`() = runTest {
+        val traces = DemandCountingTraceRecorder()
+        val coordinator = coordinator(traceRecorder = traces) {
+            MediaDurationState.Known(5_000L, MediaDurationProvenance.CONTAINER_PROBE)
+        }
+        val owner = MediaDurationRouteViewModel(coordinator, "known-player-test", backgroundScope)
+        val post = animatedTestPost(sourcePostId = "known-player")
+        val key = mediaDurationKey(post)
+        coordinator.publishKnown(key, 5_000L, MediaDurationProvenance.CONTAINER_PROBE)
+        owner.synchronize("query", listOf(post), resolveInBackground = false)
+        runCurrent()
+        val publicationsBeforePlayer = traces.publications
+
+        owner.publishPlayerDuration(post, 5_100L)
+        runCurrent()
+
+        assertEquals(publicationsBeforePlayer, traces.publications)
+        assertEquals(
+            MediaDurationState.Known(5_000L, MediaDurationProvenance.CONTAINER_PROBE),
+            coordinator.states.value[key],
+        )
         coordinator.close()
     }
 
@@ -226,6 +291,7 @@ class MediaDurationRouteViewModelTest {
 
     private class DemandCountingTraceRecorder : MediaDurationTraceRecorder {
         var demands: Int = 0
+        var publications: Int = 0
 
         override fun demand() {
             demands += 1
@@ -235,7 +301,9 @@ class MediaDurationRouteViewModelTest {
         override fun probe() = Unit
         override fun workloadStarted(cookie: Int) = Unit
         override fun workloadFinished(cookie: Int) = Unit
-        override fun publication() = Unit
+        override fun publication() {
+            publications += 1
+        }
         override fun settled() = Unit
     }
 }

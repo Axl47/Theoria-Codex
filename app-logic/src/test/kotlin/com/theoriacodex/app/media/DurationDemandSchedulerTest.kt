@@ -38,7 +38,7 @@ class DurationDemandSchedulerTest {
         assertEquals(1, scheduler.queuedKeyCount())
         assertEquals(2, scheduler.queuedDemandCount())
         val work = requireNotNull(
-            scheduler.takeNext(DurationExecutionGate(lifecycleStarted = true, scrollIdle = false)),
+            scheduler.takeNext(DurationExecutionGate(lifecycleStarted = true, scrollIdle = true)),
         )
         assertEquals(DurationDemandPriority.ACTIVE_FILTER, work.priority)
         assertEquals(setOf("creator", "search"), work.demands.mapTo(linkedSetOf(), DurationDemand::identity))
@@ -84,7 +84,7 @@ class DurationDemandSchedulerTest {
     }
 
     @Test
-    fun `lifecycle pauses all work and scrolling pauses background only`() {
+    fun `lifecycle and active scrolling pause all acquisition work`() {
         val scheduler = DurationDemandScheduler()
         scheduler.submit(demand("background", "background", DurationDemandPriority.BACKGROUND_IDLE))
         assertNull(
@@ -94,12 +94,17 @@ class DurationDemandSchedulerTest {
             scheduler.takeNext(DurationExecutionGate(lifecycleStarted = true, scrollIdle = false)),
         )
         scheduler.submit(demand("visible", "visible", DurationDemandPriority.VISIBLE))
+        scheduler.submit(demand("filter", "filter", DurationDemandPriority.ACTIVE_FILTER))
+        assertNull(
+            scheduler.takeNext(DurationExecutionGate(lifecycleStarted = true, scrollIdle = false)),
+        )
         assertEquals(
-            key("visible"),
+            key("filter"),
             scheduler.takeNext(
-                DurationExecutionGate(lifecycleStarted = true, scrollIdle = false),
+                DurationExecutionGate(lifecycleStarted = true, scrollIdle = true),
             )?.key,
         )
+        assertTrue(scheduler.contains(key("visible")))
         assertTrue(scheduler.contains(key("background")))
     }
 

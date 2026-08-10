@@ -94,6 +94,10 @@ class MediaDurationStateTest {
         )
 
         assertEquals(first, second)
+        assertEquals(
+            "d024ade7f5590c6d32d0c70f063b7556ce88dbb1f08c88b546726b444e6c357c",
+            first,
+        )
         assertNotEquals(first, changed)
         assertEquals(64, first.length)
         assertTrue(first.all { character -> character in '0'..'9' || character in 'a'..'f' })

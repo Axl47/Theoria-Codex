@@ -48,6 +48,71 @@ class MediaDurationCoordinatorTest {
     }
 
     @Test
+    fun `active scrolling pauses visible work and idle resumes it`() = runTest {
+        var acquisitions = 0
+        val coordinator = coordinator(
+            scope = this,
+            acquirer = MediaDurationAcquirer {
+                acquisitions += 1
+                known(4_000L)
+            },
+        )
+        val post = post("visible-scroll")
+        val key = key(post)
+        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = false)
+
+        assertTrue(coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE)))
+        runCurrent()
+        assertEquals(0, acquisitions)
+        assertEquals(MediaDurationState.Pending, coordinator.states.value[key])
+
+        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        runCurrent()
+        assertEquals(1, acquisitions)
+        assertEquals(known(4_000L), coordinator.states.value[key])
+        coordinator.close()
+    }
+
+    @Test
+    fun `scroll start cancels active visible work and requeues it for idle`() = runTest {
+        val firstStarted = CompletableDeferred<Unit>()
+        val firstCancelled = CompletableDeferred<Unit>()
+        var attempts = 0
+        val coordinator = coordinator(
+            scope = this,
+            acquirer = MediaDurationAcquirer {
+                attempts += 1
+                if (attempts == 1) {
+                    firstStarted.complete(Unit)
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        firstCancelled.complete(Unit)
+                    }
+                }
+                known(4_000L)
+            },
+        )
+        val post = post("active-visible-scroll")
+        val key = key(post)
+        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE))
+        runCurrent()
+        firstStarted.await()
+
+        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = false)
+        runCurrent()
+        firstCancelled.await()
+        assertEquals(MediaDurationState.Pending, coordinator.states.value[key])
+
+        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        runCurrent()
+        assertEquals(2, attempts)
+        assertEquals(known(4_000L), coordinator.states.value[key])
+        coordinator.close()
+    }
+
+    @Test
     fun `same fingerprint shares one job and one remaining consumer keeps it alive`() = runTest {
         val started = CompletableDeferred<Unit>()
         val finish = CompletableDeferred<MediaDurationState>()
@@ -180,7 +245,7 @@ class MediaDurationCoordinatorTest {
     }
 
     @Test
-    fun `repeated identical player publication does not republish metadata`() = runTest {
+    fun `same duration with different provenance does not republish metadata`() = runTest {
         val traces = RecordingTraceRecorder()
         val coordinator = coordinator(
             scope = this,
@@ -189,12 +254,12 @@ class MediaDurationCoordinatorTest {
         )
         val key = key(post("player"))
 
-        coordinator.publishKnown(key, 6_000L, MediaDurationProvenance.ACTIVE_PLAYER)
+        coordinator.publishKnown(key, 6_000L, MediaDurationProvenance.PROVIDER)
         coordinator.publishKnown(key, 6_000L, MediaDurationProvenance.ACTIVE_PLAYER)
 
         assertEquals(1, traces.publications)
         assertEquals(
-            MediaDurationState.Known(6_000L, MediaDurationProvenance.ACTIVE_PLAYER),
+            MediaDurationState.Known(6_000L, MediaDurationProvenance.PROVIDER),
             coordinator.states.value[key],
         )
         coordinator.close()

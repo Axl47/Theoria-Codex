@@ -19,6 +19,7 @@ internal class MediaDurationRouteViewModel(
     private val coordinator: MediaDurationCoordinator,
     routeName: String,
     coroutineScope: CoroutineScope? = null,
+    private val keyFactory: (Post) -> MediaDurationKey = ::mediaDurationKey,
 ) : ViewModel() {
     private val ownerScope = coroutineScope ?: viewModelScope
     private val routeIdentity = routeName.trim().also {
@@ -27,14 +28,18 @@ internal class MediaDurationRouteViewModel(
     private val environmentIdentity = "$routeIdentity:environment"
     private val demandLock = Mutex()
     private var requestedContentIdentity: String? = null
-    private var requestedPostsById: Map<PostId, Post> = emptyMap()
+    private var requestedPostsReference: List<Post>? = null
+    private var requestedSnapshot = MediaDurationPostSnapshot.EMPTY
     private var requestedBackgroundEnabled = false
     private var contentIdentity: String? = null
     private var postsById: Map<PostId, Post> = emptyMap()
+    private var keysByPostId: Map<PostId, MediaDurationKey> = emptyMap()
+    private var candidatesByKey: Map<MediaDurationKey, Post> = emptyMap()
+    private var knownDurationsByKey: Map<MediaDurationKey, Long> = emptyMap()
     private var observedKeys: Set<MediaDurationKey> = emptySet()
     private var backgroundEnabled = false
     private var filterActive = false
-    private var visiblePostIds: Set<PostId> = emptySet()
+    private val visiblePostIds = mutableSetOf<PostId>()
     private var backgroundDemandKeys: Set<MediaDurationKey> = emptySet()
     private var filterDemandKeys: Set<MediaDurationKey> = emptySet()
     private var visibleDemandKeys: Set<MediaDurationKey> = emptySet()
@@ -56,22 +61,27 @@ internal class MediaDurationRouteViewModel(
         resolveInBackground: Boolean,
     ) {
         require(identity.isNotBlank()) { "Duration content identity must not be blank" }
-        val distinctPosts = posts.distinctBy(Post::id).associateBy(Post::id)
         if (
             requestedContentIdentity == identity &&
-            requestedPostsById == distinctPosts &&
+            requestedPostsReference === posts &&
             requestedBackgroundEnabled == resolveInBackground
         ) {
             return
         }
+        val snapshot = if (requestedPostsReference === posts) {
+            requestedSnapshot
+        } else {
+            mediaDurationPostSnapshot(posts, keyFactory)
+        }
         requestedContentIdentity = identity
-        requestedPostsById = distinctPosts
+        requestedPostsReference = posts
+        requestedSnapshot = snapshot
         requestedBackgroundEnabled = resolveInBackground
         ownerScope.launch {
             demandLock.withLock {
                 if (
                     contentIdentity == identity &&
-                    postsById == distinctPosts &&
+                    postsById == snapshot.postsById &&
                     backgroundEnabled == resolveInBackground
                 ) {
                     return@withLock
@@ -79,17 +89,15 @@ internal class MediaDurationRouteViewModel(
                 val identityChanged = contentIdentity != identity
                 if (identityChanged) releaseContentDemand()
                 contentIdentity = identity
-                postsById = distinctPosts
-                observedKeys = distinctPosts.values
-                    .asSequence()
-                    .filter(::isAnimatedPost)
-                    .map(::mediaDurationKey)
-                    .toSet()
+                postsById = snapshot.postsById
+                keysByPostId = snapshot.keysByPostId
+                candidatesByKey = snapshot.candidatesByKey
+                knownDurationsByKey = snapshot.knownDurationsByKey
+                observedKeys = snapshot.observedKeys
                 publishObservedStates(coordinator.states.value)
-                if (identityChanged) {
-                    visiblePostIds = visiblePostIds.intersect(distinctPosts.keys)
-                }
+                visiblePostIds.retainAll(snapshot.postsById.keys)
                 backgroundEnabled = resolveInBackground
+                publishSnapshotDurations()
                 synchronizeDemand()
             }
         }
@@ -102,8 +110,11 @@ internal class MediaDurationRouteViewModel(
     }
 
     fun onPostVisibilityChanged(post: Post, visible: Boolean) {
-        visiblePostIds = if (visible) visiblePostIds + post.id else visiblePostIds - post.id
-        ownerScope.launch { demandLock.withLock { synchronizeDemand() } }
+        val changed = if (visible) visiblePostIds.add(post.id) else visiblePostIds.remove(post.id)
+        if (!changed || (!requestedBackgroundEnabled && !filterActive)) return
+        ownerScope.launch {
+            demandLock.withLock { synchronizeVisibleDemand(post.id) }
+        }
     }
 
     fun onEnvironmentChanged(lifecycleStarted: Boolean, scrollIdle: Boolean) {
@@ -114,9 +125,11 @@ internal class MediaDurationRouteViewModel(
 
     fun publishPlayerDuration(post: Post, durationMs: Long) {
         if (durationMs <= 0L) return
+        val key = requestedSnapshot.keysByPostId[post.id] ?: keyFactory(post)
+        if (coordinator.states.value[key] is MediaDurationState.Known) return
         ownerScope.launch {
             coordinator.publishKnown(
-                key = mediaDurationKey(post),
+                key = key,
                 durationMs = durationMs,
                 provenance = MediaDurationProvenance.ACTIVE_PLAYER,
             )
@@ -130,33 +143,16 @@ internal class MediaDurationRouteViewModel(
 
     private suspend fun synchronizeDemand() {
         if (contentIdentity == null) return
-        val candidates = buildMap {
-            postsById.values.forEach { post ->
-                animatedDurationMs(post)?.let { durationMs ->
-                    coordinator.publishKnown(
-                        mediaDurationKey(post),
-                        durationMs,
-                        MediaDurationProvenance.PROVIDER,
-                    )
-                    return@forEach
-                }
-                if (!isAnimatedPost(post)) return@forEach
-                put(mediaDurationKey(post), post)
-            }
-        }
-
         backgroundDemandKeys = reconcileDemandLane(
             current = backgroundDemandKeys,
-            desired = if (backgroundEnabled) candidates.keys else emptySet(),
-            candidates = candidates,
+            desired = if (backgroundEnabled) candidatesByKey.keys else emptySet(),
             lane = DemandLane.BACKGROUND,
             priority = DurationDemandPriority.BACKGROUND_IDLE,
             reason = DurationDemandReason.APPEND,
         )
         filterDemandKeys = reconcileDemandLane(
             current = filterDemandKeys,
-            desired = if (filterActive) candidates.keys else emptySet(),
-            candidates = candidates,
+            desired = if (filterActive) candidatesByKey.keys else emptySet(),
             lane = DemandLane.FILTER,
             priority = DurationDemandPriority.ACTIVE_FILTER,
             reason = DurationDemandReason.FILTER,
@@ -164,11 +160,12 @@ internal class MediaDurationRouteViewModel(
         visibleDemandKeys = reconcileDemandLane(
             current = visibleDemandKeys,
             desired = if (backgroundEnabled || filterActive) {
-                candidates.filterValues { post -> post.id in visiblePostIds }.keys
+                visiblePostIds.mapNotNullTo(mutableSetOf()) { postId ->
+                    keysByPostId[postId]?.takeIf(candidatesByKey::containsKey)
+                }
             } else {
                 emptySet()
             },
-            candidates = candidates,
             lane = DemandLane.VISIBLE,
             priority = DurationDemandPriority.VISIBLE,
             reason = DurationDemandReason.VIEWPORT,
@@ -178,7 +175,6 @@ internal class MediaDurationRouteViewModel(
     private suspend fun reconcileDemandLane(
         current: Set<MediaDurationKey>,
         desired: Set<MediaDurationKey>,
-        candidates: Map<MediaDurationKey, Post>,
         lane: DemandLane,
         priority: DurationDemandPriority,
         reason: DurationDemandReason,
@@ -187,14 +183,50 @@ internal class MediaDurationRouteViewModel(
             .mapTo(mutableSetOf()) { key -> demandIdentity(lane, key) }
         if (removedIdentities.isNotEmpty()) coordinator.releaseIdentities(removedIdentities)
         (desired - current).forEach { key ->
-            val post = candidates[key] ?: return@forEach
-            submit(post, demandIdentity(lane, key), priority, reason)
+            val post = candidatesByKey[key] ?: return@forEach
+            submit(post, key, demandIdentity(lane, key), priority, reason)
         }
         return desired
     }
 
+    private suspend fun synchronizeVisibleDemand(postId: PostId) {
+        val key = keysByPostId[postId] ?: return
+        val desired = (backgroundEnabled || filterActive) &&
+            postId in visiblePostIds &&
+            key in candidatesByKey
+        val current = key in visibleDemandKeys
+        if (desired == current) return
+        if (!desired) {
+            coordinator.releaseIdentity(demandIdentity(DemandLane.VISIBLE, key))
+            visibleDemandKeys = visibleDemandKeys - key
+            return
+        }
+        val terminal = coordinator.states.value[key]
+        if (terminal is MediaDurationState.Known || terminal is MediaDurationState.Unsupported) return
+        val post = candidatesByKey[key] ?: return
+        submit(
+            post = post,
+            key = key,
+            identity = demandIdentity(DemandLane.VISIBLE, key),
+            priority = DurationDemandPriority.VISIBLE,
+            reason = DurationDemandReason.VIEWPORT,
+        )
+        visibleDemandKeys = visibleDemandKeys + key
+    }
+
+    private suspend fun publishSnapshotDurations() {
+        knownDurationsByKey.forEach { (key, durationMs) ->
+            coordinator.publishKnown(
+                key = key,
+                durationMs = durationMs,
+                provenance = MediaDurationProvenance.PROVIDER,
+            )
+        }
+    }
+
     private suspend fun submit(
         post: Post,
+        key: MediaDurationKey,
         identity: String,
         priority: DurationDemandPriority,
         reason: DurationDemandReason,
@@ -203,7 +235,7 @@ internal class MediaDurationRouteViewModel(
             post = post,
             demand = DurationDemand(
                 identity = identity,
-                key = mediaDurationKey(post),
+                key = key,
                 priority = priority,
                 reason = reason,
             ),
@@ -217,6 +249,9 @@ internal class MediaDurationRouteViewModel(
         filterDemandKeys = emptySet()
         visibleDemandKeys = emptySet()
         postsById = emptyMap()
+        keysByPostId = emptyMap()
+        candidatesByKey = emptyMap()
+        knownDurationsByKey = emptyMap()
     }
 
     private fun ownedDemandIdentities(): Set<String> {

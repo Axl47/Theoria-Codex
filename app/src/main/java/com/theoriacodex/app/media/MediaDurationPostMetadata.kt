@@ -4,6 +4,53 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
+internal data class MediaDurationPostSnapshot(
+    val postsById: Map<PostId, Post>,
+    val keysByPostId: Map<PostId, MediaDurationKey>,
+    val candidatesByKey: Map<MediaDurationKey, Post>,
+    val knownDurationsByKey: Map<MediaDurationKey, Long>,
+) {
+    val observedKeys: Set<MediaDurationKey> = keysByPostId.values.toSet()
+
+    companion object {
+        val EMPTY = MediaDurationPostSnapshot(
+            postsById = emptyMap(),
+            keysByPostId = emptyMap(),
+            candidatesByKey = emptyMap(),
+            knownDurationsByKey = emptyMap(),
+        )
+    }
+}
+
+internal fun mediaDurationPostSnapshot(
+    posts: List<Post>,
+    keyFactory: (Post) -> MediaDurationKey = ::mediaDurationKey,
+): MediaDurationPostSnapshot {
+    val postsById = linkedMapOf<PostId, Post>()
+    val keysByPostId = linkedMapOf<PostId, MediaDurationKey>()
+    val candidatesByKey = linkedMapOf<MediaDurationKey, Post>()
+    val knownDurationsByKey = linkedMapOf<MediaDurationKey, Long>()
+    posts.forEach { post ->
+        if (postsById.putIfAbsent(post.id, post) != null || !isAnimatedPost(post)) {
+            return@forEach
+        }
+        val key = keyFactory(post)
+        keysByPostId[post.id] = key
+        val durationMs = animatedDurationMs(post)
+        if (durationMs != null) {
+            knownDurationsByKey[key] = durationMs
+        } else {
+            candidatesByKey[key] = post
+        }
+    }
+    return MediaDurationPostSnapshot(
+        postsById = postsById,
+        keysByPostId = keysByPostId,
+        candidatesByKey = candidatesByKey,
+        knownDurationsByKey = knownDurationsByKey,
+    )
+}
+
 internal fun mediaDurationKey(post: Post): MediaDurationKey {
     val authoritative = authoritativeDurationIdentity(post)
     return MediaDurationKey(
@@ -44,7 +91,9 @@ internal fun durationStatesByPostId(
 }
 
 internal fun mediaDurationKeysByPostId(posts: List<Post>): Map<PostId, MediaDurationKey> {
-    return posts.associate { post -> post.id to mediaDurationKey(post) }
+    return posts.asSequence()
+        .filter(::isAnimatedPost)
+        .associate { post -> post.id to mediaDurationKey(post) }
 }
 
 internal fun isAuthoritativeDurationMedia(post: Post, ref: ImageRef): Boolean {

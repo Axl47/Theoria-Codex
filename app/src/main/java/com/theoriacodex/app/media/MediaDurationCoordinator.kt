@@ -223,8 +223,7 @@ class MediaDurationCoordinator(
         )
         gate = aggregateExecutionGate()
         active.values.toList().forEach { work ->
-            val mustPause = !gate.lifecycleStarted ||
-                (!gate.scrollIdle && work.priority == DurationDemandPriority.BACKGROUND_IDLE)
+            val mustPause = !gate.lifecycleStarted || !gate.scrollIdle
             if (mustPause) cancelActiveLocked(work, requeue = true)
         }
         pumpLocked()
@@ -269,7 +268,10 @@ class MediaDurationCoordinator(
         key: MediaDurationKey,
         state: MediaDurationState.Known,
     ): Boolean {
-        if (retainedStates[key] == state) return false
+        val current = retainedStates[key]
+        if (current is MediaDurationState.Known && current.durationMs == state.durationMs) {
+            return false
+        }
         scheduler.removeKey(key)
         active[key]?.let { work -> cancelActiveLocked(work, requeue = false) }
         posts.remove(key)

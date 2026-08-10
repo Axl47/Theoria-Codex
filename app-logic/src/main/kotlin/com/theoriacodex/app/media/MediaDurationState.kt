@@ -37,10 +37,18 @@ fun mediaDurationFingerprint(input: MediaDurationFingerprintInput): String {
         append('\u0000')
         append(input.mediaCount ?: -1)
     }
-    return MessageDigest.getInstance("SHA-256")
+    val digest = MessageDigest.getInstance("SHA-256")
         .digest(canonical.toByteArray(Charsets.UTF_8))
-        .joinToString(separator = "") { byte -> "%02x".format(byte) }
+    val encoded = CharArray(digest.size * 2)
+    digest.forEachIndexed { index, byte ->
+        val value = byte.toInt() and 0xff
+        encoded[index * 2] = HEX_DIGITS[value ushr 4]
+        encoded[index * 2 + 1] = HEX_DIGITS[value and 0x0f]
+    }
+    return encoded.concatToString()
 }
+
+private const val HEX_DIGITS = "0123456789abcdef"
 
 sealed interface MediaDurationState {
     data object Pending : MediaDurationState
@@ -143,4 +151,3 @@ fun planDurationAcquisition(facts: DurationAcquisitionFacts): DurationAcquisitio
     }
     return DurationAcquisitionPlan.Unsupported(MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA)
 }
-

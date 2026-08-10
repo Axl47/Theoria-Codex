@@ -299,6 +299,11 @@ class ArchitectureBoundarySourceTest {
                 "desired - current" in routeOwner &&
                 "current - desired" in routeOwner,
         )
+        assertTrue(
+            "Viewport events must reconcile one post and reuse an unchanged feed snapshot",
+            "synchronizeVisibleDemand(post.id)" in routeOwner &&
+                "requestedPostsReference === posts" in routeOwner,
+        )
         val viewer = File(
             repositoryRoot,
             "app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt",

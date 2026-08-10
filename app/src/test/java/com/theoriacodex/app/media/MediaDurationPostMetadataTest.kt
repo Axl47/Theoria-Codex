@@ -1,6 +1,7 @@
 package com.theoriacodex.app.media
 
 import com.theoriacodex.app.testing.animatedTestPost
+import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.model.ImageRef
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -9,6 +10,39 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MediaDurationPostMetadataTest {
+    @Test
+    fun `route key map excludes static posts that cannot have duration metadata`() {
+        val animated = animatedTestPost(sourcePostId = "animated")
+        val static = testPost(sourcePostId = "static")
+
+        assertEquals(
+            mapOf(animated.id to mediaDurationKey(animated)),
+            mediaDurationKeysByPostId(listOf(animated, static)),
+        )
+    }
+
+    @Test
+    fun `route snapshot computes animated keys once and separates known from candidates`() {
+        val unknown = animatedTestPost(sourcePostId = "unknown")
+        val known = animatedTestPost(sourcePostId = "known", durationMs = 7_000L)
+        val static = testPost(sourcePostId = "static")
+        var keyComputations = 0
+
+        val snapshot = mediaDurationPostSnapshot(
+            posts = listOf(unknown, known, static),
+            keyFactory = { post ->
+                keyComputations += 1
+                mediaDurationKey(post)
+            },
+        )
+
+        assertEquals(2, keyComputations)
+        assertEquals(setOf(unknown.id, known.id, static.id), snapshot.postsById.keys)
+        assertEquals(setOf(unknown.id, known.id), snapshot.keysByPostId.keys)
+        assertEquals(setOf(mediaDurationKey(unknown)), snapshot.candidatesByKey.keys)
+        assertEquals(mapOf(mediaDurationKey(known) to 7_000L), snapshot.knownDurationsByKey)
+    }
+
     @Test
     fun `fingerprint ignores signed URL rotation but changes with authoritative media`() {
         val post = animatedTestPost(sourcePostId = "fingerprint")

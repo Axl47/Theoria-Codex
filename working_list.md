@@ -4,6 +4,24 @@ updated_at: 2026-08-10T18:10:00-04:00
 ---
 # Working List
 
+## Current Task: Repair The Duration Metadata Scroll Regression
+
+### In Progress
+
+- [~] Repair the shared hot path without reducing simultaneous visible autoplay or weakening duration freshness/filter correctness.
+  - Current implementation: feed snapshots precompute animated keys/candidates once; viewport changes reconcile one key; cached Known players do not republish; all provider/probe work pauses during active scrolling; fingerprint hex encoding and static-post key selection remove avoidable allocations.
+
+### Pending
+
+- [ ] Add focused regressions and run one bounded host validation batch before asking for user/device acceptance.
+
+### Done
+
+- [x] Record the user-observed post-rebuild regression before making runtime edits.
+  - Evidence: scrolling back to posts whose durations were already calculated still feels laggier than the pre-rebuild app, so cached acquisition alone is not sufficient evidence of a performant presentation path.
+- [x] Trace why scrolling previously seen, already-known posts still causes visible lag.
+  - Evidence: every card enter/exit called `synchronizeDemand()` on the main-thread ViewModel scope; that rebuilt the entire candidate map, recalculated SHA-256 media keys, published provider-known values, and reconciled all three lanes even with background resolution and filtering off. The same list was also rebuilt from Compose `SideEffect`, and reconstructed players could republish an existing duration. Read-only logs from isolated Debug build `0.8.2-debug` on Samsung SM-S926U showed 32-, 45-, and 31-frame skips during the reported scroll, alongside rapid ExoPlayer init/release and 29/33 MiB garbage collections. Player lifecycle behavior predates this rebuild; whole-feed duration work amplified each viewport transition.
+
 ## Current Task: Implement The Duration Metadata Performance Rebuild
 
 ### In Progress
