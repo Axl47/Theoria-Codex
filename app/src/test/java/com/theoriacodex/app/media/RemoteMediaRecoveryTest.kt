@@ -47,6 +47,17 @@ class RemoteMediaRecoveryTest {
     }
 
     @Test
+    fun `falls back to ordinary resolution when source has no recovery capability`() = runTest {
+        val post = samplePost()
+        val recovered = post.copy(title = "resolved")
+        val adapter = PlainAdapter(recovered)
+
+        val result = recoverRemoteMedia(FakeRegistry(adapter), post, post.preview)
+
+        assertSame(recovered, result)
+    }
+
+    @Test
     fun `recovery cancellation propagates unchanged`() = runTest {
         val cancellation = CancellationException("cancel recovery")
         val adapter = RecoveryAdapter { _, _ -> throw cancellation }
@@ -123,5 +134,27 @@ class RemoteMediaRecoveryTest {
         )
 
         override suspend fun resolvePost(id: PostId): Post? = error("Not used")
+    }
+
+    private class PlainAdapter(
+        private val resolved: Post?,
+    ) : SourceAdapter {
+        override val sourceKey: SourceKey = SourceKey.HITOMI
+        override val capabilities = SourceCapabilities(
+            supportsSortNewest = true,
+            supportsSortPopular = false,
+            supportsSortTop = false,
+            supportsSortRandom = false,
+            supportsExcludeTagsServerSide = false,
+            supportsDateRangeServerSide = false,
+            supportsMinScoreServerSide = false,
+            requiresCredentials = false,
+        )
+
+        override suspend fun search(query: Query, pageToken: String?): Page<Post> = error("Not used")
+        override suspend fun trendingTags(limit: Int): List<TagSuggestion> = error("Not used")
+        override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = error("Not used")
+        override suspend fun quickQuery(kind: QuickQueryKind): Query = error("Not used")
+        override suspend fun resolvePost(id: PostId): Post? = resolved
     }
 }

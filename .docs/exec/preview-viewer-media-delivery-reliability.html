@@ -350,7 +350,7 @@
 
       <article>
         <h3>Phase 1: Make Retry truthful for every Viewer media kind</h3>
-        <p class="phase-status">Status: Proposed.</p>
+        <p class="phase-status done">Status: Completed 2026-08-10.</p>
         <table class="status-table">
           <tbody>
             <tr><td>Goal</td><td>Tapping Retry always starts a new local load immediately; stale provider URL recovery can update the post without blocking that retry.</td></tr>
@@ -366,6 +366,7 @@
           <li>Change route recovery to try specialized <code>MediaRecoverySourceAdapter</code> behavior first, then a normal adapter <code>resolvePost</code> for providers without specialized media recovery. Persist only a successfully resolved replacement through the existing stream-aware boundary.</li>
           <li>Keep automatic recovery bounded to one attempt per failed media identity/configuration. User Retry may start a new generation, but must not create an unbounded recovery loop.</li>
         </ol>
+        <p><strong>Result:</strong> each immutable Viewer media item now owns a nonnegative load generation. Retry clears the visible failure and increments only that media item's generation before emitting provider healing, which reconstructs Coil, Media3, GIF, animated WebP, and Ugoira work without changing the selected page, playback rate, or session. One shared error overlay gives every renderer the same compact Retry action. Providers without specialized recovery now fall back to ordinary post resolution; the existing session checks reject late replacements.</p>
       </article>
 
       <article>
@@ -561,7 +562,7 @@
         <li>[x] 2026-08-10 — Ran 85 focused host tests with zero failures/errors and separated this audit from the active duration/scroll work.</li>
         <li>[x] 2026-08-10 — Authored this standalone implementation plan without editing <code>working_list.md</code> or the active duration plan.</li>
         <li>[x] 2026-08-10 — Phase 0: reconciled against <code>91dd752</code> and froze 148 passing focused host contracts; recorded the disconnected-device evidence gap.</li>
-        <li>[ ] Phase 1 — Make Retry truthful across all Viewer media renderers.</li>
+        <li>[x] 2026-08-10 — Phase 1: added reducer-owned per-media reload generations, one shared renderer error/Retry surface, generic provider resolution fallback, and stale-session-safe healing. Thirty-one focused tests plus Debug compilation pass.</li>
         <li>[ ] Phase 2 — Centralize candidate intent and Preview fallback.</li>
         <li>[ ] Phase 3 — Replace first-six/manual video prefetch with adjacent, bounded, shared-cache preloading.</li>
         <li>[ ] Phase 4 — Remove provider resolution from viable Viewer launch paths.</li>

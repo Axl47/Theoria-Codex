@@ -326,7 +326,6 @@ internal fun ViewerRoute(
                         post = page.post,
                         failedMedia = failedMedia,
                         callbacks = callbacks,
-                        clearMediaError = true,
                     )
                 }
             }
@@ -392,7 +391,6 @@ internal fun ViewerRoute(
                     post = post,
                     failedMedia = failedMedia,
                     callbacks = latestEffectCallbacks.value,
-                    clearMediaError = false,
                 )
             }
         },
@@ -423,7 +421,6 @@ private suspend fun recoverAndApplyMedia(
     post: Post,
     failedMedia: ImageRef,
     callbacks: ViewerRouteEffectCallbacks,
-    clearMediaError: Boolean,
 ) {
     val session = viewerOwner.session.value ?: return
     if (session.posts.none { current -> current.id == post.id }) return
@@ -438,5 +435,4 @@ private suspend fun recoverAndApplyMedia(
     if (currentSession?.sessionId != session.sessionId) return
     if (currentSession.posts.none { current -> current.id == post.id }) return
     viewerOwner.applyResolvedPost(recovered)
-    if (clearMediaError) viewerOwner.onAction(ViewerAction.ClearMediaError)
 }

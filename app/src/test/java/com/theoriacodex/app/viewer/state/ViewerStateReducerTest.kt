@@ -210,7 +210,8 @@ class ViewerStateReducerTest {
         assertFalse(failed.controls.playback.playing)
         assertTrue(failed.mediaError is ViewerMediaError.Recoverable)
         assertEquals(ViewerEffect.RetryMedia(session, mediaKey), retry.effects.single())
-        assertEquals(1, (retry.state.mediaError as ViewerMediaError.Recoverable).retryCount)
+        assertNull(retry.state.mediaError)
+        assertEquals(1L, retry.state.currentMedia?.loadGeneration)
     }
 
     @Test

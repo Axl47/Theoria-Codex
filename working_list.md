@@ -8,11 +8,10 @@ updated_at: 2026-08-10T20:05:00-04:00
 
 ### In Progress
 
-- [~] Phase 1: make Retry restart image, video, GIF/WebP, and Ugoira loads.
+- [~] Phase 2: centralize Preview and Viewer candidate intent.
 
 ### Pending
 
-- [ ] Phase 2: centralize Preview and Viewer candidate intent.
 - [ ] Phase 3: prefetch the true Viewer neighborhood through the shared Media3 cache.
 - [ ] Phase 4: open Viewer before provider refresh when usable media already exists.
 - [ ] Phase 5: bound Pixiv Ugoira loading and share token refresh.
@@ -21,6 +20,8 @@ updated_at: 2026-08-10T20:05:00-04:00
 
 ### Done
 
+- [x] Phase 1: make Retry restart image, video, GIF/WebP, and Ugoira loads.
+  - Evidence: reducer-owned media generations reconstruct every renderer immediately, one shared overlay exposes Retry, generic provider resolution heals non-Hitomi sources, and late replacements retain session checks. Thirty-one focused tests and `:app:compileDebugKotlin` pass.
 - [x] Phase 0: reconcile ownership at `91dd752` and freeze baseline contracts/evidence.
   - Evidence: 148 focused Viewer/media/provider tests pass with zero failures, errors, or skips. The tree was clean at reconciliation; no Android device was connected, so physical timing/cache/heap evidence is explicitly pending rather than inferred.
 - [x] Audit current Pixiv, Gelbooru, NHentai, and Hitomi Preview/Viewer delivery.

@@ -530,6 +530,12 @@ internal fun ViewerScreen(
                 pageSpacing = if (isLandscape) 0.dp else 8.dp,
             ) { mediaPage ->
                 val media = postMedia[mediaPage]
+                val loadGeneration = uiState.pages
+                    .getOrNull(postPage)
+                    ?.media
+                    ?.getOrNull(mediaPage)
+                    ?.loadGeneration
+                    ?: 0L
                 val transformState = rememberTransformableState { _, zoomChange, panChange, _ ->
                     viewerState = viewerState.transform(
                         zoomChange = zoomChange,
@@ -567,7 +573,7 @@ internal fun ViewerScreen(
                         null
                     }
                 }
-                val gifLocations = remember(post, media) { viewerGifLocations(post, media) }
+                val gifLocations = remember(post, media, loadGeneration) { viewerGifLocations(post, media) }
                 val mediaGestureModifier = Modifier.pointerInput(postPage, mediaPage) {
                     detectTapGestures(
                         onDoubleTap = { offset ->
@@ -686,22 +692,26 @@ internal fun ViewerScreen(
                     modifier = Modifier
                         .fillMaxSize()
                 ) {
-                    val imageCandidates = remember(post, media, isVideoMedia) {
+                    val imageCandidates = remember(post, media, isVideoMedia, loadGeneration) {
                         if (isVideoMedia) emptyList() else viewerImageCandidates(post, media)
                     }
-                    var displayedCandidateIndex by remember(postPage, mediaPage) { mutableIntStateOf(0) }
-                    var maxPreparedCandidateIndex by remember(postPage, mediaPage) { mutableIntStateOf(0) }
-                    var imageLoading by remember(postPage, mediaPage) { mutableStateOf(false) }
-                    var imageLoadFailed by remember(postPage, mediaPage) { mutableStateOf(false) }
-                    var hasVisibleImage by remember(postPage, mediaPage) { mutableStateOf(false) }
+                    var displayedCandidateIndex by remember(postPage, mediaPage, loadGeneration) {
+                        mutableIntStateOf(0)
+                    }
+                    var maxPreparedCandidateIndex by remember(postPage, mediaPage, loadGeneration) {
+                        mutableIntStateOf(0)
+                    }
+                    var imageLoading by remember(postPage, mediaPage, loadGeneration) { mutableStateOf(false) }
+                    var hasVisibleImage by remember(postPage, mediaPage, loadGeneration) {
+                        mutableStateOf(false)
+                    }
                     val activeImageUrl = imageCandidates.getOrNull(displayedCandidateIndex)
-                    val imageModel = remember(context, activeImageUrl, post.id.source) {
+                    val imageModel = remember(context, activeImageUrl, post.id.source, loadGeneration) {
                         activeImageUrl?.let { buildViewerImageRequest(context, it, post.id.source) }
                     }
-                    LaunchedEffect(imageCandidates) {
+                    LaunchedEffect(imageCandidates, loadGeneration) {
                         displayedCandidateIndex = 0
                         maxPreparedCandidateIndex = 0
-                        imageLoadFailed = false
                     }
                     LaunchedEffect(
                         imageCandidates,
@@ -720,7 +730,6 @@ internal fun ViewerScreen(
                         if (loadedMediaUrls[nextUrl] == true) {
                             maxPreparedCandidateIndex = nextIndex
                             displayedCandidateIndex = nextIndex
-                            imageLoadFailed = false
                             return@LaunchedEffect
                         }
                         val result = runCatchingPreservingCancellation {
@@ -736,7 +745,6 @@ internal fun ViewerScreen(
                             loadedMediaUrls[nextUrl] = true
                             maxPreparedCandidateIndex = nextIndex
                             displayedCandidateIndex = nextIndex
-                            imageLoadFailed = false
                         }
                     }
                     Box(
@@ -763,6 +771,7 @@ internal fun ViewerScreen(
                                     seekJumpDeltaMs = seekJumpDeltaMs,
                                     playbackRate = playbackRate.speed,
                                     restartRequest = playbackRestartRequest,
+                                    loadGeneration = loadGeneration,
                                     onTimelineInteractionActiveChanged = ::onTimelineInteractionChanged,
                                     onTogglePlayback = { onAction(ViewerAction.TogglePlayback) },
                                     onProgressChanged = { positionMs, durationMs ->
@@ -770,6 +779,9 @@ internal fun ViewerScreen(
                                     },
                                     onDurationKnown = { durationMs ->
                                         onAuthoritativeDurationKnown(post, durationMs)
+                                    },
+                                    onError = { message ->
+                                        if (isCurrentMediaPage) reportRouteMediaFailure(message)
                                     },
                                 )
                             }
@@ -789,6 +801,7 @@ internal fun ViewerScreen(
                                 seekJumpDeltaMs = seekJumpDeltaMs,
                                 playbackRate = playbackRate.speed,
                                 restartRequest = playbackRestartRequest,
+                                loadGeneration = loadGeneration,
                                 onTimelineInteractionActiveChanged = ::onTimelineInteractionChanged,
                                 onTogglePlayback = { onAction(ViewerAction.TogglePlayback) },
                                 onProgressChanged = { positionMs, durationMs ->
@@ -798,6 +811,9 @@ internal fun ViewerScreen(
                                     if (isAuthoritativeDurationMedia(post, media)) {
                                         onAuthoritativeDurationKnown(post, durationMs)
                                     }
+                                },
+                                onError = { message ->
+                                    if (isCurrentMediaPage) reportRouteMediaFailure(message)
                                 },
                             )
                         } else if (isGifMedia && gifLocations.isNotEmpty()) {
@@ -813,6 +829,7 @@ internal fun ViewerScreen(
                                 seekJumpDeltaMs = seekJumpDeltaMs,
                                 playbackRate = playbackRate.speed,
                                 restartRequest = playbackRestartRequest,
+                                loadGeneration = loadGeneration,
                                 onTimelineInteractionActiveChanged = ::onTimelineInteractionChanged,
                                 onTogglePlayback = { onAction(ViewerAction.TogglePlayback) },
                                 onProgressChanged = { positionMs, durationMs ->
@@ -822,6 +839,9 @@ internal fun ViewerScreen(
                                     if (isAuthoritativeDurationMedia(post, media)) {
                                         onAuthoritativeDurationKnown(post, durationMs)
                                     }
+                                },
+                                onError = { message ->
+                                    if (isCurrentMediaPage) reportRouteMediaFailure(message)
                                 },
                             )
                         } else if (isControlledAnimatedWebP && activeImageUrl != null) {
@@ -835,6 +855,7 @@ internal fun ViewerScreen(
                                 isActive = isCurrentMediaPage,
                                 isPlaying = mediaPlaybackEnabled,
                                 restartRequest = playbackRestartRequest,
+                                loadGeneration = loadGeneration,
                                 onTogglePlayback = { onAction(ViewerAction.TogglePlayback) },
                                 onRestartPlayback = { onAction(ViewerAction.RestartPlayback) },
                                 onFrameProgressChanged = { frameIndex, frameCount ->
@@ -842,11 +863,9 @@ internal fun ViewerScreen(
                                 },
                                 onLoading = {
                                     imageLoading = true
-                                    imageLoadFailed = false
                                 },
                                 onSuccess = {
                                     imageLoading = false
-                                    imageLoadFailed = false
                                     hasVisibleImage = true
                                     loadedMediaUrls[activeImageUrl] = true
                                     if (isCurrentMediaPage) {
@@ -869,10 +888,8 @@ internal fun ViewerScreen(
                                         displayedCandidateIndex = nextIndex
                                         maxPreparedCandidateIndex = nextIndex
                                         imageLoading = false
-                                        imageLoadFailed = false
                                     } else {
                                         imageLoading = false
-                                        imageLoadFailed = !hasVisibleImage
                                         if (!hasVisibleImage && isCurrentMediaPage) {
                                             reportRouteMediaFailure(throwable.message ?: "Could not load media")
                                         }
@@ -889,11 +906,9 @@ internal fun ViewerScreen(
                                 contentScale = ContentScale.Fit,
                                 onLoading = {
                                     imageLoading = true
-                                    imageLoadFailed = false
                                 },
                                 onSuccess = {
                                     imageLoading = false
-                                    imageLoadFailed = false
                                     hasVisibleImage = true
                                     activeImageUrl?.let { loadedMediaUrls[it] = true }
                                     if (isCurrentMediaPage) {
@@ -918,10 +933,8 @@ internal fun ViewerScreen(
                                         displayedCandidateIndex = nextIndex
                                         maxPreparedCandidateIndex = nextIndex
                                         imageLoading = false
-                                        imageLoadFailed = false
                                     } else {
                                         imageLoading = false
-                                        imageLoadFailed = !hasVisibleImage
                                         if (!hasVisibleImage && isCurrentMediaPage) {
                                             reportRouteMediaFailure(
                                                 state.result.throwable.message ?: "Could not load image"
@@ -932,24 +945,6 @@ internal fun ViewerScreen(
                             )
                             if (imageLoading && !hasVisibleImage) {
                                 CircularProgressIndicator()
-                            }
-                            if (imageLoadFailed) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    Text(
-                                        text = "Could not load image",
-                                        color = MaterialTheme.colorScheme.onBackground,
-                                    )
-                                    TextButton(
-                                        onClick = {
-                                            onAction(ViewerAction.RetryMedia)
-                                        },
-                                    ) {
-                                        Text("Retry")
-                                    }
-                                }
                             }
                         } else {
                             Column(
@@ -983,6 +978,20 @@ internal fun ViewerScreen(
                             },
                             modifier = Modifier.matchParentSize(),
                         )
+                        val visibleError = uiState.mediaError
+                            ?.takeIf { error ->
+                                isCurrentMediaPage && error.mediaKey == uiState.pages
+                                    .getOrNull(postPage)
+                                    ?.media
+                                    ?.getOrNull(mediaPage)
+                                    ?.key
+                            }
+                        if (visibleError != null) {
+                            ViewerMediaErrorOverlay(
+                                error = visibleError,
+                                onRetry = { onAction(ViewerAction.RetryMedia) },
+                            )
+                        }
                     }
                     Box(
                         modifier = Modifier
@@ -1459,10 +1468,12 @@ private fun ViewerVideoPlayer(
     seekJumpDeltaMs: Long = 0L,
     playbackRate: Float = 1f,
     restartRequest: Long = 0L,
+    loadGeneration: Long = 0L,
     onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
     onTogglePlayback: (() -> Unit)? = null,
     onProgressChanged: (Long, Long?) -> Unit = { _, _ -> },
     onDurationKnown: (Long) -> Unit = {},
+    onError: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -1479,6 +1490,9 @@ private fun ViewerVideoPlayer(
         resolveViewerVideoPlaybackLocation(context, media)
     }
     if (playbackLocation.isNullOrBlank()) {
+        LaunchedEffect(media, loadGeneration) {
+            onError("Video unavailable")
+        }
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
             Text(
                 text = "Video unavailable",
@@ -1492,17 +1506,17 @@ private fun ViewerVideoPlayer(
         return
     }
 
-    var loading by remember(playbackLocation) { mutableStateOf(true) }
-    var loadFailed by remember(playbackLocation) { mutableStateOf(false) }
-    var playerRef by remember(playbackLocation, sourceKey) { mutableStateOf<ExoPlayer?>(null) }
-    var playerViewRef by remember(playbackLocation, sourceKey) { mutableStateOf<PlayerView?>(null) }
-    var durationMs by remember(playbackLocation) { mutableLongStateOf(0L) }
-    var positionMs by remember(playbackLocation) { mutableLongStateOf(0L) }
-    var isScrubbing by remember(playbackLocation) { mutableStateOf(false) }
-    var playbackPaused by remember(playbackLocation) { mutableStateOf(false) }
-    var isActuallyPlaying by remember(playbackLocation) { mutableStateOf(false) }
-    var lastSeekDispatchAtMs by remember(playbackLocation) { mutableLongStateOf(0L) }
-    var lastSeekDispatchTargetMs by remember(playbackLocation) { mutableLongStateOf(0L) }
+    var loading by remember(playbackLocation, loadGeneration) { mutableStateOf(true) }
+    var loadFailed by remember(playbackLocation, loadGeneration) { mutableStateOf(false) }
+    var playerRef by remember(playbackLocation, sourceKey, loadGeneration) { mutableStateOf<ExoPlayer?>(null) }
+    var playerViewRef by remember(playbackLocation, sourceKey, loadGeneration) { mutableStateOf<PlayerView?>(null) }
+    var durationMs by remember(playbackLocation, loadGeneration) { mutableLongStateOf(0L) }
+    var positionMs by remember(playbackLocation, loadGeneration) { mutableLongStateOf(0L) }
+    var isScrubbing by remember(playbackLocation, loadGeneration) { mutableStateOf(false) }
+    var playbackPaused by remember(playbackLocation, loadGeneration) { mutableStateOf(false) }
+    var isActuallyPlaying by remember(playbackLocation, loadGeneration) { mutableStateOf(false) }
+    var lastSeekDispatchAtMs by remember(playbackLocation, loadGeneration) { mutableLongStateOf(0L) }
+    var lastSeekDispatchTargetMs by remember(playbackLocation, loadGeneration) { mutableLongStateOf(0L) }
     val effectivePlaybackRate = playbackRate.coerceAtLeast(MIN_PLAYBACK_RATE)
     val effectivePlaybackPaused = isPlaying?.not() ?: playbackPaused
 
@@ -1510,7 +1524,7 @@ private fun ViewerVideoPlayer(
         if (durationMs > 0L) onDurationKnown(durationMs)
     }
 
-    DisposableEffect(playbackLocation, sourceKey) {
+    DisposableEffect(playbackLocation, sourceKey, loadGeneration) {
         loading = true
         loadFailed = false
         durationMs = 0L
@@ -1546,6 +1560,7 @@ private fun ViewerVideoPlayer(
                 if (playerRef !== player) return
                 loading = false
                 loadFailed = true
+                onError(error.message ?: "Could not play video")
             }
 
             override fun onRenderedFirstFrame() {
@@ -1810,6 +1825,36 @@ internal fun viewerVideoTestTag(postId: PostId): String {
 }
 
 @Composable
+private fun ViewerMediaErrorOverlay(
+    error: ViewerMediaError,
+    onRetry: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        shape = MaterialTheme.shapes.medium,
+        tonalElevation = 4.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = error.message,
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+            )
+            if (error is ViewerMediaError.Recoverable) {
+                TextButton(onClick = onRetry) {
+                    Text("Retry")
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ViewerAnimatedWebPPlayer(
     sourceKey: SourceKey,
     location: String,
@@ -1820,6 +1865,7 @@ private fun ViewerAnimatedWebPPlayer(
     isActive: Boolean = true,
     isPlaying: Boolean? = null,
     restartRequest: Long = 0L,
+    loadGeneration: Long = 0L,
     onTogglePlayback: (() -> Unit)? = null,
     onRestartPlayback: (() -> Unit)? = null,
     onFrameProgressChanged: (Int, Int) -> Unit = { _, _ -> },
@@ -1829,7 +1875,7 @@ private fun ViewerAnimatedWebPPlayer(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val request = remember(context, location, sourceKey) {
+    val request = remember(context, location, sourceKey, loadGeneration) {
         MediaRequestFactory.imageRequest(
             context = context,
             url = location,
@@ -1838,10 +1884,10 @@ private fun ViewerAnimatedWebPPlayer(
             controllableAnimatedWebP = true,
         )
     }
-    var drawable by remember(location) { mutableStateOf<WebPDrawable?>(null) }
-    var paused by remember(location) { mutableStateOf(false) }
-    var frameIndex by remember(location) { mutableIntStateOf(0) }
-    var frameCount by remember(location) { mutableIntStateOf(0) }
+    var drawable by remember(location, loadGeneration) { mutableStateOf<WebPDrawable?>(null) }
+    var paused by remember(location, loadGeneration) { mutableStateOf(false) }
+    var frameIndex by remember(location, loadGeneration) { mutableIntStateOf(0) }
+    var frameCount by remember(location, loadGeneration) { mutableIntStateOf(0) }
     val effectivePaused = isPlaying?.not() ?: paused
 
     DisposableEffect(drawable, lifecycleOwner, isActive, effectivePaused) {
@@ -1961,23 +2007,25 @@ private fun ViewerGifPlayer(
     seekJumpDeltaMs: Long = 0L,
     playbackRate: Float = 1f,
     restartRequest: Long = 0L,
+    loadGeneration: Long = 0L,
     onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
     onTogglePlayback: (() -> Unit)? = null,
     onProgressChanged: (Long, Long?) -> Unit = { _, _ -> },
     onDurationKnown: (Long) -> Unit = {},
+    onError: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
-    var movie by remember(locations) { mutableStateOf<Movie?>(null) }
-    var loading by remember(locations) { mutableStateOf(true) }
-    var fallbackCandidateIndex by remember(locations) { mutableIntStateOf(0) }
-    var fallbackFailed by remember(locations) { mutableStateOf(false) }
-    var positionMs by remember(locations) { mutableLongStateOf(0L) }
-    var isScrubbing by remember(locations) { mutableStateOf(false) }
-    var playbackPaused by remember(locations) { mutableStateOf(false) }
+    var movie by remember(locations, loadGeneration) { mutableStateOf<Movie?>(null) }
+    var loading by remember(locations, loadGeneration) { mutableStateOf(true) }
+    var fallbackCandidateIndex by remember(locations, loadGeneration) { mutableIntStateOf(0) }
+    var fallbackFailed by remember(locations, loadGeneration) { mutableStateOf(false) }
+    var positionMs by remember(locations, loadGeneration) { mutableLongStateOf(0L) }
+    var isScrubbing by remember(locations, loadGeneration) { mutableStateOf(false) }
+    var playbackPaused by remember(locations, loadGeneration) { mutableStateOf(false) }
     val effectivePlaybackRate = playbackRate.coerceAtLeast(MIN_PLAYBACK_RATE)
     val effectivePlaybackPaused = isPlaying?.not() ?: playbackPaused
 
-    LaunchedEffect(locations, sourceKey) {
+    LaunchedEffect(locations, sourceKey, loadGeneration) {
         loading = true
         fallbackCandidateIndex = 0
         fallbackFailed = false
@@ -2027,6 +2075,7 @@ private fun ViewerGifPlayer(
                             fallbackCandidateIndex += 1
                         } else {
                             fallbackFailed = true
+                            onError("Could not play GIF")
                         }
                     },
                 )

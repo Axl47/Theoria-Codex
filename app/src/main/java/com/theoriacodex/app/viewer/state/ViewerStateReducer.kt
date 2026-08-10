@@ -474,9 +474,22 @@ private fun ViewerUiState.queuePrefetch(
 
 private fun ViewerUiState.retryMedia(session: ViewerSessionIdentity): ViewerReduction {
     val recoverable = mediaError as? ViewerMediaError.Recoverable ?: return ViewerReduction(this)
+    val pageIndex = pages.indexOfFirst { page -> page.post.id == recoverable.mediaKey.postId }
+    if (pageIndex < 0) return ViewerReduction(this)
+    val page = pages[pageIndex]
+    val mediaIndex = page.media.indexOfFirst { media -> media.key == recoverable.mediaKey }
+    if (mediaIndex < 0) return ViewerReduction(this)
+    val retriedMedia = page.media[mediaIndex].copy(
+        loadGeneration = page.media[mediaIndex].loadGeneration + 1L,
+    )
+    val updatedMedia = page.media.toMutableList().also { media -> media[mediaIndex] = retriedMedia }
+    val updatedPages = pages.toMutableList().also { currentPages ->
+        currentPages[pageIndex] = page.copy(media = updatedMedia)
+    }
     return ViewerReduction(
         state = copy(
-            mediaError = recoverable.copy(retryCount = recoverable.retryCount + 1),
+            pages = updatedPages,
+            mediaError = null,
         ),
         effects = listOf(ViewerEffect.RetryMedia(session, recoverable.mediaKey)),
     )

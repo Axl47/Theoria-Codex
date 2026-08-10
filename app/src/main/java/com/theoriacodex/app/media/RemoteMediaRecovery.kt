@@ -21,6 +21,10 @@ internal suspend fun recoverRemoteMedia(
     post: Post,
     failedMedia: ImageRef,
 ): Post? {
-    val adapter = registry.adapterFor(post.id.source) as? MediaRecoverySourceAdapter ?: return null
-    return adapter.recoverPostMedia(post, failedMedia)
+    val adapter = registry.adapterFor(post.id.source) ?: return null
+    return if (adapter is MediaRecoverySourceAdapter) {
+        adapter.recoverPostMedia(post, failedMedia)
+    } else {
+        adapter.resolvePost(post.id)
+    }
 }

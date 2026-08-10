@@ -43,7 +43,12 @@ internal data class ViewerMediaState(
     val displayLocation: String?,
     val downloadable: Boolean,
     val shareable: Boolean,
-)
+    val loadGeneration: Long = 0L,
+) {
+    init {
+        require(loadGeneration >= 0L) { "Viewer media load generation must not be negative" }
+    }
+}
 
 internal enum class ViewerResolutionStatus {
     NOT_REQUIRED,

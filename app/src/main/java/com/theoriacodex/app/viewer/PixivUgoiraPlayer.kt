@@ -648,21 +648,23 @@ fun PixivUgoiraPlayer(
     seekJumpDeltaMs: Long = 0L,
     playbackRate: Float = 1f,
     restartRequest: Long = 0L,
+    loadGeneration: Long = 0L,
     onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
     onTogglePlayback: (() -> Unit)? = null,
     onProgressChanged: (Long, Long?) -> Unit = { _, _ -> },
     onDurationKnown: (Long) -> Unit = {},
+    onError: (String) -> Unit = {},
 ) {
-    var playback by remember(postId, client) { mutableStateOf(client.cached(postId)) }
-    var errorMessage by remember(postId) { mutableStateOf<String?>(null) }
-    var frameIndex by remember(postId) { mutableIntStateOf(0) }
-    var elapsedInLoopMs by remember(postId) { mutableLongStateOf(0L) }
-    var isScrubbing by remember(postId) { mutableStateOf(false) }
-    var playbackPaused by remember(postId) { mutableStateOf(false) }
+    var playback by remember(postId, client, loadGeneration) { mutableStateOf(client.cached(postId)) }
+    var errorMessage by remember(postId, loadGeneration) { mutableStateOf<String?>(null) }
+    var frameIndex by remember(postId, loadGeneration) { mutableIntStateOf(0) }
+    var elapsedInLoopMs by remember(postId, loadGeneration) { mutableLongStateOf(0L) }
+    var isScrubbing by remember(postId, loadGeneration) { mutableStateOf(false) }
+    var playbackPaused by remember(postId, loadGeneration) { mutableStateOf(false) }
     val effectivePlaybackRate = playbackRate.coerceAtLeast(0.1f)
     val effectivePlaybackPaused = isPlaying?.not() ?: playbackPaused
 
-    LaunchedEffect(postId, client, isActive) {
+    LaunchedEffect(postId, client, isActive, loadGeneration) {
         frameIndex = 0
         elapsedInLoopMs = 0L
         isScrubbing = false
@@ -675,6 +677,7 @@ fun PixivUgoiraPlayer(
             playback = loaded
         }.onFailure { error ->
             errorMessage = error.message ?: "Could not load animation"
+            onError(errorMessage.orEmpty())
         }
     }
 
