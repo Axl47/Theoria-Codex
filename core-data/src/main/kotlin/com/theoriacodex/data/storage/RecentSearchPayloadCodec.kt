@@ -97,6 +97,10 @@ object RecentSearchPayloadCodec {
                 require(query.mode == QueryMode.Unified) { "Multi-Search requires a Unified query" }
                 require(sources.size >= 2) { "Multi-Search requires at least two sources" }
             }
+            RecentSearchKind.FYP -> {
+                require(query.mode == QueryMode.Unified) { "FYP requires a Unified query" }
+                require(sources.isNotEmpty()) { "FYP requires at least one source" }
+            }
         }
     }
 }

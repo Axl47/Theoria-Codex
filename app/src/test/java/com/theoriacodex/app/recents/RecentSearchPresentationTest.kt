@@ -39,6 +39,10 @@ class RecentSearchPresentationTest {
             "Multi-Search · Gelbooru, Pixiv",
             recentSearchPresentation(entry(query(), RecentSearchKind.MULTI_SEARCH, sources)).subtitle,
         )
+        assertEquals(
+            "Gelbooru, Pixiv",
+            recentSearchPresentation(entry(query(), RecentSearchKind.FYP, sources)).subtitle,
+        )
     }
 
     private fun entry(

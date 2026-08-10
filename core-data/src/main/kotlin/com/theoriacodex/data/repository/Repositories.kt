@@ -42,6 +42,7 @@ interface QueryRepository {
 enum class RecentPostSection {
     WATCHED,
     CODEX,
+    /** Read compatibility for builds that briefly persisted recommendation result posts. */
     FYP,
     ;
 
@@ -49,7 +50,6 @@ enum class RecentPostSection {
         fun fromOrigin(origin: ViewerStreamSource): RecentPostSection {
             return when (origin) {
                 ViewerStreamSource.CODEX -> CODEX
-                ViewerStreamSource.FOR_YOU -> FYP
                 else -> WATCHED
             }
         }
@@ -76,6 +76,7 @@ enum class RecentSearchKind {
     SOURCE,
     UNIFIED,
     MULTI_SEARCH,
+    FYP,
 }
 
 fun Query.defaultRecentSearchKind(): RecentSearchKind = when (mode) {
@@ -112,12 +113,6 @@ interface RecentsRepository {
         originQueryHash: String?,
         section: RecentPostSection = RecentPostSection.fromOrigin(origin),
     )
-    suspend fun recordRecentPosts(
-        posts: List<Post>,
-        origin: ViewerStreamSource,
-        originQueryHash: String?,
-        section: RecentPostSection = RecentPostSection.fromOrigin(origin),
-    )
     suspend fun recordSearch(
         query: Query,
         queryHash: String,
@@ -130,7 +125,7 @@ interface RecentsRepository {
     )
     suspend fun clearWatchedPosts()
     suspend fun clearWatchedPosts(section: RecentPostSection)
-    suspend fun clearSearches()
+    suspend fun clearSearches(queryHashPrefix: String? = null)
     suspend fun clearAll()
 }
 

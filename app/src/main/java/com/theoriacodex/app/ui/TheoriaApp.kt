@@ -1555,8 +1555,8 @@ internal fun TheoriaAppContent(
                                         RecentsScreen(
                                         watchedPosts = state.watchedPosts,
                                         codexPosts = state.codexPosts,
-                                        fypPosts = state.fypPosts,
                                         searches = state.searches,
+                                        fypSearches = state.fypSearches,
                                         activity = state.activity,
                                         pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                         likedPostIds = state.likedPostIds,
@@ -1606,13 +1606,6 @@ internal fun TheoriaAppContent(
                                                 RecentPostSection.CODEX,
                                             )
                                         },
-                                        onOpenFypPost = { index ->
-                                            openRecentSection(
-                                                state.fypPosts,
-                                                index,
-                                                RecentPostSection.FYP,
-                                            )
-                                        },
                                         onOpenSearch = { entry ->
                                             scope.launch(start = CoroutineStart.UNDISPATCHED) {
                                                 val historicalScope = when (entry.kind) {
@@ -1621,6 +1614,7 @@ internal fun TheoriaAppContent(
                                                     }
                                                     RecentSearchKind.SOURCE,
                                                     RecentSearchKind.UNIFIED,
+                                                    RecentSearchKind.FYP,
                                                     -> SearchSourceScope.fromQuery(entry.query)
                                                 }
                                                 dispatchOrQueueSearchAction(
@@ -1650,8 +1644,8 @@ internal fun TheoriaAppContent(
                                                     target = target,
                                                     watchedPosts = state.watchedPosts,
                                                     codexPosts = state.codexPosts,
-                                                    fypPosts = state.fypPosts,
                                                     searches = state.searches,
+                                                    fypSearches = state.fypSearches,
                                                     showActionableFeedback = ::showActionableFeedback,
                                                 )
                                             }

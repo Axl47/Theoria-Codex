@@ -24,8 +24,8 @@ internal class RecentsClearWorkflow(
         target: RecentsClearTarget,
         watchedPosts: List<RecentPostEntry>,
         codexPosts: List<RecentPostEntry>,
-        fypPosts: List<RecentPostEntry>,
         searches: List<RecentSearchEntry>,
+        fypSearches: List<RecentSearchEntry>,
         showActionableFeedback: suspend (message: String, actionLabel: String) -> Boolean,
     ) {
         while (true) {
@@ -38,14 +38,14 @@ internal class RecentsClearWorkflow(
         val watchedSnapshot = when (target) {
             RecentsClearTarget.WATCHED -> watchedPosts
             RecentsClearTarget.CODEX -> codexPosts
-            RecentsClearTarget.FYP -> fypPosts
+            RecentsClearTarget.FYP,
             RecentsClearTarget.SEARCHES -> emptyList()
-            RecentsClearTarget.ALL -> watchedPosts + codexPosts + fypPosts
+            RecentsClearTarget.ALL -> watchedPosts + codexPosts
         }
         val searchSnapshot = when (target) {
-            RecentsClearTarget.SEARCHES,
-            RecentsClearTarget.ALL,
-            -> searches
+            RecentsClearTarget.FYP -> fypSearches
+            RecentsClearTarget.SEARCHES -> searches
+            RecentsClearTarget.ALL -> searches + fypSearches
             else -> emptyList()
         }
         while (true) {
@@ -61,9 +61,13 @@ internal class RecentsClearWorkflow(
         when (target) {
             RecentsClearTarget.WATCHED -> repository.clearWatchedPosts(RecentPostSection.WATCHED)
             RecentsClearTarget.CODEX -> repository.clearWatchedPosts(RecentPostSection.CODEX)
-            RecentsClearTarget.FYP -> repository.clearWatchedPosts(RecentPostSection.FYP)
+            RecentsClearTarget.FYP -> repository.clearSearches(FYP_QUERY_HASH_PREFIX)
             RecentsClearTarget.SEARCHES -> repository.clearSearches()
             RecentsClearTarget.ALL -> repository.clearAll()
         }
+    }
+
+    private companion object {
+        const val FYP_QUERY_HASH_PREFIX = "for_you:"
     }
 }

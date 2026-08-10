@@ -35,6 +35,7 @@ public interface RecentsDao {
     @Query("DELETE FROM recent_searches WHERE query_hash IN (SELECT query_hash FROM recent_searches ORDER BY searched_at_epoch_ms DESC, sort_sequence DESC, query_hash ASC LIMIT -1 OFFSET :limit)")
     int trimSearches(int limit);
     @Query("DELETE FROM recent_searches") int deleteSearches();
+    @Query("DELETE FROM recent_searches WHERE query_hash LIKE :prefix || '%'") int deleteSearchesWithPrefix(String prefix);
 
     @Query("SELECT * FROM recents_migration_metadata WHERE migration_key = :key LIMIT 1")
     RecentsMigrationEntity migration(String key);

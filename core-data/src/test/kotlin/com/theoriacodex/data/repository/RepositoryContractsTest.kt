@@ -215,26 +215,37 @@ class RepositoryContractTest(
     }
 
     @Test
-    fun `recents batch records generated FYP posts as independent memberships`() = runTest {
+    fun `FYP searches are activity entries and clear independently from applied searches`() = runTest {
         assumeTrue("Room owns the second durable Recents contract lane", backend == Backend.IN_MEMORY)
         val repository = createRecentsRepository(clock = { 100L })
-        val shared = repositoryTestPost(id = "shared-fyp")
-        val generated = repositoryTestPost(id = "generated-fyp")
-        repository.recordWatchedPost(shared, ViewerStreamSource.SEARCH, "search:seed")
+        val fypQuery = Query(
+            mode = QueryMode.Unified,
+            includeTags = listOf("favorite"),
+            excludeTags = emptyList(),
+            sort = SortMode.NEWEST,
+            dateRange = null,
+            minScore = null,
+        )
+        repository.recordSearch(fypQuery.copy(mode = QueryMode.Source(SourceKey.PIXIV)), "search:manual")
+        repository.recordSearch(fypQuery, "for_you:seed", RecentSearchKind.FYP, listOf(SourceKey.PIXIV))
 
-        repository.recordRecentPosts(
-            posts = listOf(shared, generated, generated),
-            origin = ViewerStreamSource.FOR_YOU,
-            originQueryHash = "for_you:seed",
+        assertEquals(2, repository.observeActivity().first().size)
+        repository.clearSearches("for_you:")
+        assertEquals(listOf("search:manual"), repository.observeSearches().first().map { it.queryHash })
+    }
+
+    @Test
+    fun `legacy FYP result posts stay out of combined activity`() = runTest {
+        assumeTrue("Room owns the second durable Recents contract lane", backend == Backend.IN_MEMORY)
+        val repository = createRecentsRepository(clock = { 100L })
+        repository.recordWatchedPost(
+            repositoryTestPost(id = "legacy-fyp"),
+            ViewerStreamSource.FOR_YOU,
+            "for_you:legacy",
+            RecentPostSection.FYP,
         )
 
-        val entries = repository.observeWatchedPosts().first()
-        assertEquals(3, entries.size)
-        assertEquals(2, entries.count { it.section == RecentPostSection.FYP })
-        assertTrue(entries.filter { it.section == RecentPostSection.FYP }.all {
-            it.origin == ViewerStreamSource.FOR_YOU && it.originQueryHash == "for_you:seed"
-        })
-        assertEquals(2, entries.count { it.post.id == shared.id })
+        assertTrue(repository.observeActivity().first().isEmpty())
     }
 
     @Test
@@ -246,10 +257,6 @@ class RepositoryContractTest(
         assertEquals(
             RecentPostSection.WATCHED,
             decodeRestoredRecentsSection(null, ViewerStreamSource.RECENTS, "recents:watched"),
-        )
-        assertEquals(
-            RecentPostSection.FYP,
-            decodeRestoredRecentsSection(null, ViewerStreamSource.RECENTS, "recents:fyp"),
         )
         assertNull(decodeRestoredRecentsSection(null, ViewerStreamSource.SEARCH, "recents:codex"))
     }

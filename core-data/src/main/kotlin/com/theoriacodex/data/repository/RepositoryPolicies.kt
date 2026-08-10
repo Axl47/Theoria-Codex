@@ -130,6 +130,7 @@ internal object RepositoryPolicies {
     ): List<RecentActivityEntry> {
         return buildList {
             watched
+                .filterNot { entry -> entry.section == RecentPostSection.FYP }
                 .sortedByDescending { entry -> entry.viewedAtEpochMs }
                 .distinctBy { entry -> entry.post.id }
                 .forEach { entry -> add(RecentActivityEntry.Watched(entry)) }

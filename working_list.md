@@ -12,22 +12,20 @@ None.
 
 ### Pending
 
-- [ ] Manually confirm the FYP grid, filter-row layout, and All navigation in the isolated Debug app.
+- [ ] Manually confirm FYP search rows, full tag wrapping, and filter-row scrolling in the isolated Debug app.
 
 ### Done
 
-- [x] Trace authoritative FYP generation, Recents membership, All merging, clear/Undo, and Viewer reopening.
-  - Evidence: `ForYouCoordinator` owns accepted root/page results; `recent_watched` already supports independent section identity; `observeActivity` merges all stored post memberships; and Recents/Viewer routing currently branches only between Watched and Codex. The smallest complete repair is a bulk FYP membership write at accepted coordinator results plus one new section through the existing Recents boundaries.
+- [x] Correct the feature boundary to FYP searches rather than result posts.
+  - Evidence: `ForYouCoordinator` owns the accepted root generation and exact seed/source context. It now records one typed recent search after root acceptance; pagination and result posts do not write FYP history, while direct Viewer activity continues through Watched.
 - [x] Define the implementation boundary before runtime edits.
   - Evidence: `.docs/exec/fyp-recents-history.html` fixes generation/page recording, membership identity, FYP/All UI behavior, clear/Undo, failure isolation, and bounded validation.
-- [x] Implement accepted FYP generation recording as an independent Recents membership.
-  - Evidence: `ForYouCoordinator` records accepted root pages and appended pages through one deduplicated repository batch with `FOR_YOU` origin, seed identity, and `FYP` section. Local Recents failures do not discard a valid feed, while cancellation still propagates; direct For You Viewer activity resolves to the same FYP membership.
-- [x] Add the FYP section through Recents, All, Viewer navigation, and clear/Undo.
-  - Evidence: the destination boundary projects FYP independently; the horizontally scrollable filter row exposes FYP; FYP uses the shared post grid; All receives FYP from the existing activity merge and routes by exact section; FYP and All clear snapshots restore exact memberships.
-- [x] Add focused repository, coordinator, clear/Undo, and route regression coverage.
-  - Evidence: 56 focused tests passed with zero failures/errors; six unrelated file-backed contract cases remained intentionally skipped. Coverage includes in-memory/Room batch identity, accepted root/page recording, stale request exclusion, FYP clear/Undo, and Viewer section derivation.
-- [x] Run one bounded host validation batch and close deterministic evidence.
-  - Evidence: focused tests, `:app:compileDebugKotlin`, `:app:detektDebug`, `:core-data-android:detektDebug`, `html-validate`, and `git diff --check` passed. No device, connected, install, package mutation, or live-provider lane ran.
+- [x] Add FYP search projection, All inclusion, and independent clear/Undo.
+  - Evidence: normal Searches exclude FYP, the FYP filter renders the generated search rows, All receives them through the existing activity merge, and prefix-scoped clearing preserves normal search history.
+- [x] Remove title truncation from recent-search rows.
+  - Evidence: tag titles retain comma-separated presentation and no longer set a single-line maximum or ellipsis overflow.
+- [x] Complete the corrected bounded host validation batch.
+  - Evidence: 68 focused tests ran with zero failures/errors and seven intentional file-backed skips; Debug compilation, app/Room Detekt, HTML validation, and diff checks passed. The broader core-data Detekt lane remains red only on five pre-existing unrelated complexity/length findings. No device, connected, install, package mutation, or live-provider lane ran.
 
 ## Current Task: Make Recent Searches Source-Aware
 

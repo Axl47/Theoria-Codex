@@ -59,8 +59,8 @@ import java.util.Locale
 fun RecentsScreen(
     watchedPosts: List<RecentPostEntry>,
     codexPosts: List<RecentPostEntry>,
-    fypPosts: List<RecentPostEntry>,
     searches: List<RecentSearchEntry>,
+    fypSearches: List<RecentSearchEntry>,
     activity: List<RecentActivityEntry>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
     likedPostIds: Set<PostId> = emptySet(),
@@ -80,17 +80,16 @@ fun RecentsScreen(
     onGoToSearch: () -> Unit,
     onOpenWatchedPost: (Int) -> Unit,
     onOpenCodexPost: (Int) -> Unit,
-    onOpenFypPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
     onClear: (RecentsClearTarget) -> Unit,
 ) {
     var filter by rememberSaveable { mutableStateOf(RecentsFilter.WATCHED) }
-    val now = remember(watchedPosts, codexPosts, fypPosts, searches, activity) { System.currentTimeMillis() }
+    val now = remember(watchedPosts, codexPosts, searches, fypSearches, activity) { System.currentTimeMillis() }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     val hasContent = when (filter) {
         RecentsFilter.WATCHED -> watchedPosts.isNotEmpty()
         RecentsFilter.CODEX -> codexPosts.isNotEmpty()
-        RecentsFilter.FYP -> fypPosts.isNotEmpty()
+        RecentsFilter.FYP -> fypSearches.isNotEmpty()
         RecentsFilter.SEARCHES -> searches.isNotEmpty()
         RecentsFilter.ALL -> activity.isNotEmpty()
     }
@@ -155,15 +154,11 @@ fun RecentsScreen(
                 emptyMessage = "Posts appear here after you open them from Codex.",
             )
 
-            RecentsFilter.FYP -> WatchedGrid(
-                watchedPosts = fypPosts,
+            RecentsFilter.FYP -> SearchHistoryList(
+                searches = fypSearches,
                 now = now,
-                pixivUgoiraClient = pixivUgoiraClient,
-                likedPostIds = likedPostIds,
-                onToggleLike = onToggleLike,
-                onOpenWatchedPost = onOpenFypPost,
-                onLongPress = { selectedActionPost = it },
-                emptyMessage = "Recommendations appear here after For You generates them.",
+                onOpenSearch = null,
+                emptyMessage = "Recommendation searches appear here after For You generates them.",
             )
 
             RecentsFilter.SEARCHES -> SearchHistoryList(
@@ -176,11 +171,9 @@ fun RecentsScreen(
                 activity = activity,
                 watchedPosts = watchedPosts,
                 codexPosts = codexPosts,
-                fypPosts = fypPosts,
                 now = now,
                 onOpenWatchedPost = onOpenWatchedPost,
                 onOpenCodexPost = onOpenCodexPost,
-                onOpenFypPost = onOpenFypPost,
                 onOpenSearch = onOpenSearch,
             )
         }
@@ -252,10 +245,11 @@ private fun WatchedGrid(
 private fun SearchHistoryList(
     searches: List<RecentSearchEntry>,
     now: Long,
-    onOpenSearch: (RecentSearchEntry) -> Unit,
+    onOpenSearch: ((RecentSearchEntry) -> Unit)?,
+    emptyMessage: String = "Searches appear here after you press Apply in Search.",
 ) {
     if (searches.isEmpty()) {
-        EmptyRecentState("Searches appear here after you press Apply in Search.")
+        EmptyRecentState(emptyMessage)
         return
     }
 
@@ -267,7 +261,7 @@ private fun SearchHistoryList(
             RecentSearchRow(
                 entry = entry,
                 now = now,
-                onClick = { onOpenSearch(entry) },
+                onClick = onOpenSearch?.let { open -> { open(entry) } },
             )
         }
     }
@@ -278,11 +272,9 @@ private fun ActivityList(
     activity: List<RecentActivityEntry>,
     watchedPosts: List<RecentPostEntry>,
     codexPosts: List<RecentPostEntry>,
-    fypPosts: List<RecentPostEntry>,
     now: Long,
     onOpenWatchedPost: (Int) -> Unit,
     onOpenCodexPost: (Int) -> Unit,
-    onOpenFypPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
 ) {
     if (activity.isEmpty()) {
@@ -299,11 +291,9 @@ private fun ActivityList(
                 entry = entry,
                 watchedPosts = watchedPosts,
                 codexPosts = codexPosts,
-                fypPosts = fypPosts,
                 now = now,
                 onOpenWatchedPost = onOpenWatchedPost,
                 onOpenCodexPost = onOpenCodexPost,
-                onOpenFypPost = onOpenFypPost,
                 onOpenSearch = onOpenSearch,
             )
         }
@@ -315,11 +305,9 @@ private fun RecentActivityRow(
     entry: RecentActivityEntry,
     watchedPosts: List<RecentPostEntry>,
     codexPosts: List<RecentPostEntry>,
-    fypPosts: List<RecentPostEntry>,
     now: Long,
     onOpenWatchedPost: (Int) -> Unit,
     onOpenCodexPost: (Int) -> Unit,
-    onOpenFypPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
 ) {
     when (entry) {
@@ -331,10 +319,8 @@ private fun RecentActivityRow(
                     postEntry = entry.entry,
                     watchedPosts = watchedPosts,
                     codexPosts = codexPosts,
-                    fypPosts = fypPosts,
                     onOpenWatchedPost = onOpenWatchedPost,
                     onOpenCodexPost = onOpenCodexPost,
-                    onOpenFypPost = onOpenFypPost,
                 )
             },
         )
@@ -342,7 +328,9 @@ private fun RecentActivityRow(
         is RecentActivityEntry.Search -> RecentSearchRow(
             entry = entry.entry,
             now = now,
-            onClick = { onOpenSearch(entry.entry) },
+            onClick = if (entry.entry.kind == RecentSearchKind.FYP) null else {
+                { onOpenSearch(entry.entry) }
+            },
         )
     }
 }
@@ -351,22 +339,20 @@ private fun openRecentPost(
     postEntry: RecentPostEntry,
     watchedPosts: List<RecentPostEntry>,
     codexPosts: List<RecentPostEntry>,
-    fypPosts: List<RecentPostEntry>,
     onOpenWatchedPost: (Int) -> Unit,
     onOpenCodexPost: (Int) -> Unit,
-    onOpenFypPost: (Int) -> Unit,
 ) {
     val sourcePosts = when (postEntry.section) {
         RecentPostSection.WATCHED -> watchedPosts
         RecentPostSection.CODEX -> codexPosts
-        RecentPostSection.FYP -> fypPosts
+        RecentPostSection.FYP -> return
     }
     val index = sourcePosts.indexOfFirst { candidate -> candidate.post.id == postEntry.post.id }
     if (index < 0) return
     when (postEntry.section) {
         RecentPostSection.WATCHED -> onOpenWatchedPost(index)
         RecentPostSection.CODEX -> onOpenCodexPost(index)
-        RecentPostSection.FYP -> onOpenFypPost(index)
+        RecentPostSection.FYP -> Unit
     }
 }
 
@@ -420,13 +406,13 @@ private fun RecentWatchedRow(
 private fun RecentSearchRow(
     entry: RecentSearchEntry,
     now: Long,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
 ) {
     val presentation = recentSearchPresentation(entry)
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
     ) {
         Row(
             modifier = Modifier
@@ -443,8 +429,6 @@ private fun RecentSearchRow(
                 Text(
                     text = presentation.title,
                     style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
                 presentation.subtitle?.let { subtitle ->
                     Text(
@@ -467,16 +451,20 @@ private fun RecentSearchLeading(entry: RecentSearchEntry, now: Long) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        val source = (entry.query.mode as? QueryMode.Source)?.source
-        if (source != null && entry.kind == RecentSearchKind.SOURCE) {
+        val source = when (entry.kind) {
+            RecentSearchKind.SOURCE -> (entry.query.mode as? QueryMode.Source)?.source
+            RecentSearchKind.FYP -> entry.sources.singleOrNull()
+            else -> null
+        }
+        if (source != null) {
             SourceLogo(source = source, size = 24.dp)
         } else {
             Icon(
                 imageVector = Icons.Default.Search,
-                contentDescription = if (entry.kind == RecentSearchKind.MULTI_SEARCH) {
-                    "Multi-Search"
-                } else {
-                    "Unified search"
+                contentDescription = when (entry.kind) {
+                    RecentSearchKind.MULTI_SEARCH -> "Multi-Search"
+                    RecentSearchKind.FYP -> "FYP search"
+                    else -> "Unified search"
                 },
                 modifier = Modifier.size(24.dp),
             )
@@ -541,6 +529,7 @@ internal fun recentSearchPresentation(entry: RecentSearchEntry): RecentSearchPre
         RecentSearchKind.SOURCE -> null
         RecentSearchKind.UNIFIED -> sourceList
         RecentSearchKind.MULTI_SEARCH -> sourceList?.let { "Multi-Search · $it" } ?: "Multi-Search"
+        RecentSearchKind.FYP -> sourceList
     }
     return RecentSearchPresentation(title, subtitle)
 }

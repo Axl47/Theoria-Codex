@@ -59,25 +59,29 @@ class RoomRecentsRepositoryTest {
         assertEquals(listOf(SourceKey.GELBOORU, SourceKey.PIXIV), restored.sources)
     }
 
-    @Test fun `generated FYP batch is deduplicated and remains independent from watched`() = runTest {
+    @Test fun `FYP search persists and clears independently from applied searches`() = runTest {
         val repository = RoomRecentsRepository(database, clock = { now++ })
-        val shared = recentPost("shared-fyp")
-        val generated = recentPost("generated-fyp")
-        repository.recordWatchedPost(shared, ViewerStreamSource.SEARCH, "search:seed")
-
-        repository.recordRecentPosts(
-            posts = listOf(shared, generated, generated),
-            origin = ViewerStreamSource.FOR_YOU,
-            originQueryHash = "for_you:seed",
+        val fypQuery = recentQuery("favorite").copy(mode = QueryMode.Unified)
+        repository.recordSearch(recentQuery("manual"), "search:manual")
+        repository.recordSearch(
+            query = fypQuery,
+            queryHash = "for_you:seed",
+            kind = RecentSearchKind.FYP,
+            sources = listOf(SourceKey.PIXIV),
+        )
+        repository.recordWatchedPost(
+            recentPost("legacy-fyp"),
+            ViewerStreamSource.FOR_YOU,
+            "for_you:legacy",
+            RecentPostSection.FYP,
         )
 
-        val entries = repository.observeWatchedPosts().first()
-        assertEquals(3, entries.size)
-        assertEquals(2, entries.count { it.section == RecentPostSection.FYP })
-        assertTrue(entries.filter { it.section == RecentPostSection.FYP }.all {
-            it.origin == ViewerStreamSource.FOR_YOU && it.originQueryHash == "for_you:seed"
-        })
-        assertEquals(2, entries.count { it.post.id == shared.id })
+        val restored = repository.observeSearches().first().first { it.kind == RecentSearchKind.FYP }
+        assertEquals(fypQuery, restored.query)
+        assertEquals(listOf(SourceKey.PIXIV), restored.sources)
+        assertTrue(repository.observeActivity().first().none { it is RecentActivityEntry.Watched })
+        repository.clearSearches("for_you:")
+        assertEquals(listOf("search:manual"), repository.observeSearches().first().map { it.queryHash })
     }
 
     @Test fun `dedupe caps deterministic ties and origin preservation match Recents contract`() = runTest {

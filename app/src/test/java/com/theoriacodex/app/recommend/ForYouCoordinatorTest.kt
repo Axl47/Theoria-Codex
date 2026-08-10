@@ -6,8 +6,7 @@ import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.SourceRuntimeSettings
-import com.theoriacodex.data.repository.RecentPostSection
-import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.defaultRecommendationProfiles
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
@@ -38,7 +37,7 @@ import org.junit.Test
 
 class ForYouCoordinatorTest {
     @Test
-    fun `accepted recommendation root and page are recorded in FYP Recents`() = runTest {
+    fun `accepted recommendation root records one FYP search and pagination records none`() = runTest {
         val recents = InMemoryRecentsRepository(clock = { 100L })
         val likes = InMemoryLikesRepository()
         likes.toggleLike(
@@ -55,14 +54,17 @@ class ForYouCoordinatorTest {
 
         coordinator.initialize()
         coordinator.refresh(shuffle = false)
+        val rootEntries = recents.observeSearches().first()
         coordinator.loadNextPage()
 
-        val entries = recents.observeWatchedPosts().first()
-        assertEquals(setOf("pixiv-post", "pixiv-post-next"), entries.map { it.post.id.sourcePostId }.toSet())
-        assertTrue(entries.all { it.section == RecentPostSection.FYP })
-        assertTrue(entries.all { it.origin == ViewerStreamSource.FOR_YOU })
-        assertTrue(entries.all { it.originQueryHash == "for_you:${coordinator.seedId}" })
-        assertEquals(2, recents.observeActivity().first().size)
+        val entry = rootEntries.single()
+        assertEquals(RecentSearchKind.FYP, entry.kind)
+        assertEquals(listOf(SourceKey.PIXIV), entry.sources)
+        assertEquals(listOf("favorite"), entry.query.includeTags)
+        assertEquals("for_you:${coordinator.seedId}", entry.queryHash)
+        assertEquals(rootEntries, recents.observeSearches().first())
+        assertTrue(recents.observeWatchedPosts().first().isEmpty())
+        assertEquals(1, recents.observeActivity().first().size)
     }
 
     @Test
@@ -269,7 +271,7 @@ class ForYouCoordinatorTest {
         assertEquals("pixiv-current", coordinator.results.single().id.sourcePostId)
         assertEquals(
             listOf(SourceKey.PIXIV),
-            recentsRepository.observeWatchedPosts().first().map { it.post.id.source }.distinct(),
+            recentsRepository.observeSearches().first().flatMap { it.sources }.distinct(),
         )
         assertFalse(coordinator.loading)
         assertNull(coordinator.errorMessage)

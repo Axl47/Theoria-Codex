@@ -65,6 +65,7 @@ class RoomRecentsRepository(
         combine(observeWatchedPosts(), observeSearches()) { watched, searches ->
             buildList<RecentActivityEntry> {
                 watched
+                    .filterNot { entry -> entry.section == RecentPostSection.FYP }
                     .distinctBy { entry -> entry.post.id }
                     .forEach { add(RecentActivityEntry.Watched(it)) }
                 searches.forEach { add(RecentActivityEntry.Search(it)) }
@@ -79,34 +80,23 @@ class RoomRecentsRepository(
         origin: ViewerStreamSource,
         originQueryHash: String?,
         section: RecentPostSection,
-    ) = recordRecentPosts(listOf(post), origin, originQueryHash, section)
-
-    override suspend fun recordRecentPosts(
-        posts: List<Post>,
-        origin: ViewerStreamSource,
-        originQueryHash: String?,
-        section: RecentPostSection,
     ) {
-        val canonicalPosts = posts.distinctBy(Post::id)
-        if (canonicalPosts.isEmpty()) return
         database.withTransaction {
             val recordedAt = clock()
-            canonicalPosts.asReversed().forEach { post ->
-                val previous = dao.watched(post.id.source.name, post.id.sourcePostId, section.name)
-                val preserve = origin == ViewerStreamSource.RECENTS && previous != null
-                sharedPostPayloads.upsert(post)
-                dao.upsertWatched(
-                    RecentWatchedEntity(
-                        post.id.source.name,
-                        post.id.sourcePostId,
-                        section.name,
-                        recordedAt,
-                        dao.nextWatchedSequence(),
-                        if (preserve) previous.origin else origin.name,
-                        if (preserve) previous.originQueryHash else originQueryHash,
-                    )
+            val previous = dao.watched(post.id.source.name, post.id.sourcePostId, section.name)
+            val preserve = origin == ViewerStreamSource.RECENTS && previous != null
+            sharedPostPayloads.upsert(post)
+            dao.upsertWatched(
+                RecentWatchedEntity(
+                    post.id.source.name,
+                    post.id.sourcePostId,
+                    section.name,
+                    recordedAt,
+                    dao.nextWatchedSequence(),
+                    if (preserve) previous.origin else origin.name,
+                    if (preserve) previous.originQueryHash else originQueryHash,
                 )
-            }
+            )
             dao.trimWatched(watchedLimit)
             contentDao.deleteOrphanPosts()
         }
@@ -193,8 +183,10 @@ class RoomRecentsRepository(
         }
     }
 
-    override suspend fun clearSearches() {
-        database.withTransaction { dao.deleteSearches() }
+    override suspend fun clearSearches(queryHashPrefix: String?) {
+        database.withTransaction {
+            if (queryHashPrefix == null) dao.deleteSearches() else dao.deleteSearchesWithPrefix(queryHashPrefix)
+        }
     }
 
     override suspend fun clearAll() {

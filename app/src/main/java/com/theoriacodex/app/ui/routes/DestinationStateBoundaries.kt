@@ -34,6 +34,7 @@ import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
+import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -69,8 +70,8 @@ internal data class BrowsingDestinationState(
 internal data class RecentsDestinationState(
     val watchedPosts: List<RecentPostEntry>,
     val codexPosts: List<RecentPostEntry>,
-    val fypPosts: List<RecentPostEntry>,
     val searches: List<RecentSearchEntry>,
+    val fypSearches: List<RecentSearchEntry>,
     val activity: List<RecentActivityEntry>,
     val likedPostIds: Set<PostId>,
 )
@@ -185,12 +186,13 @@ internal fun RecentsDestinationStateBoundary(
         val likedState = data.likesRepository.observeLikedPostIds(profile.profileId)
             .collectAsStateWithLifecycle(initialValue = emptySet())
         val watched = watchedState.value
+        val searches = searchesState.value
         content(
             RecentsDestinationState(
                 watchedPosts = watched.filter { it.section == RecentPostSection.WATCHED },
                 codexPosts = watched.filter { it.section == RecentPostSection.CODEX },
-                fypPosts = watched.filter { it.section == RecentPostSection.FYP },
-                searches = searchesState.value,
+                searches = searches.filterNot { it.kind == RecentSearchKind.FYP },
+                fypSearches = searches.filter { it.kind == RecentSearchKind.FYP },
                 activity = activityState.value,
                 likedPostIds = likedState.value,
             ),

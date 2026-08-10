@@ -10,7 +10,7 @@ import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.LikedPost
 import com.theoriacodex.data.repository.LikesRepository
-import com.theoriacodex.data.repository.RecentPostSection
+import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.defaultRecommendationProfiles
@@ -23,6 +23,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunStatus
@@ -243,7 +244,6 @@ class ForYouCoordinator(
                 putAll(pageResult.nextPageTokens)
             }
             canLoadMore = nextPageTokens.values.any { token -> !token.isNullOrBlank() }
-            recordRecommendations(pageResult.items)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Throwable) {
@@ -466,17 +466,21 @@ class ForYouCoordinator(
         canLoadMore = nextPageTokens.values.any { token -> !token.isNullOrBlank() }
         seedSummaryBySource = seed
         seedId = buildSeedId(seed)
-        recordRecommendations(result.items)
+        recordRecommendationSearch(seed)
     }
 
-    private suspend fun recordRecommendations(posts: List<Post>) {
-        if (posts.isEmpty()) return
+    private suspend fun recordRecommendationSearch(seed: Map<SourceKey, List<String>>) {
         runCatchingPreservingCancellation {
-            recentsRepository.recordRecentPosts(
-                posts = posts,
-                origin = ViewerStreamSource.FOR_YOU,
-                originQueryHash = "for_you:$seedId",
-                section = RecentPostSection.FYP,
+            recentsRepository.recordSearch(
+                query = baseQuery().copy(
+                    includeTerms = seed.values
+                        .flatten()
+                        .distinct()
+                        .map(::SearchTerm),
+                ),
+                queryHash = "for_you:$seedId",
+                kind = RecentSearchKind.FYP,
+                sources = seed.keys.inPresentationOrder(),
             )
         }
     }
