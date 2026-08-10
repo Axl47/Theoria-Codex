@@ -1,8 +1,25 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-10T04:30:00-04:00
+updated_at: 2026-08-10T05:22:55-04:00
 ---
 # Working List
+
+## Current Task: Plan The Duration Metadata Performance Rebuild
+
+### In Progress
+
+None.
+
+### Pending
+
+- [ ] Implement the approved ExecPlan in independently verified phases.
+
+### Done
+
+- [x] Audit the current duration path and agree on the repair direction.
+  - Evidence: the current path eagerly scans all unknown animated posts, resolves provider detail before checking existing authoritative media, probes outside shared playback infrastructure, feeds unresolved filtering into pagination, reschedules from result-list publication, and cannot be measured by the existing known-duration benchmark fixture.
+- [x] Write and validate the baseline-first HTML ExecPlan.
+  - Evidence: `.docs/exec/duration-metadata-performance-rebuild.html` freezes the autoplay-only control and unknown-duration benchmark journey, requires preserved physical baseline artifacts before behavior changes, defines capability-aware acquisition and a prioritized application coordinator, adds bounded Room metadata and remote parsing contracts, moves every route/player/filter to separate metadata state, and repeats the identical benchmark with normalized acceptance thresholds. `git diff --check` passes; `xmllint --html` reports only its expected HTML4-era warnings for standard HTML5 structural elements.
 
 ## Current Task: Repair Animated Duration Metadata And Filtering
 

@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Rebuild Duration Metadata Without Slowing Autoplay</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f7f5;
+      --surface: #ffffff;
+      --text: #202421;
+      --muted: #616862;
+      --border: #d8ddd8;
+      --accent: #0f766e;
+      --accent-soft: #def3ef;
+      --risk: #a34116;
+      --risk-soft: #ffedd5;
+      --decision: #1d4ed8;
+      --decision-soft: #dbeafe;
+      --code: #111827;
+      --done: #166534;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #141715;
+        --surface: #202421;
+        --text: #f1f4f1;
+        --muted: #b7bdb8;
+        --border: #3a413c;
+        --accent: #5eead4;
+        --accent-soft: #123b37;
+        --risk: #fdba74;
+        --risk-soft: #43230f;
+        --decision: #93c5fd;
+        --decision-soft: #172554;
+        --code: #0b0f0d;
+        --done: #86efac;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header, main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+    header { padding-top: 36px; }
+    h1, h2, h3, h4 { line-height: 1.17; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.2rem); }
+    h2 { margin-top: 34px; font-size: 1.55rem; }
+    h3 { margin-top: 26px; font-size: 1.18rem; }
+    h4 { margin-top: 18px; font-size: 1rem; }
+    p { margin: 0 0 14px; }
+    a { color: var(--accent); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+    pre { overflow-x: auto; padding: 14px; border-radius: 8px; background: var(--code); color: #f8fafc; }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-block: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(10px);
+    }
+    nav ul {
+      display: flex;
+      gap: 6px;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 8px 24px;
+      list-style: none;
+      overflow-x: auto;
+    }
+    nav a { display: block; padding: 6px 10px; border-radius: 6px; text-decoration: none; white-space: nowrap; }
+    nav a:hover { background: var(--accent-soft); }
+    section {
+      padding: 22px;
+      margin: 18px 0;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: var(--surface);
+    }
+    article { padding-top: 4px; }
+    article + article { margin-top: 28px; padding-top: 28px; border-top: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.94rem; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 700; }
+    ul, ol { margin: 8px 0 16px; padding-left: 22px; }
+    li + li { margin-top: 6px; }
+    details { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; }
+    summary { cursor: pointer; font-weight: 700; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; color: var(--muted); }
+    .pill { padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); }
+    .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-top: 18px; }
+    .card { padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    .card strong { display: block; margin-bottom: 4px; color: var(--muted); font-size: 0.82rem; text-transform: uppercase; }
+    .callout { margin: 14px 0; padding: 12px 14px; border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 6px; }
+    .risk { border-left-color: var(--risk); background: var(--risk-soft); }
+    .decision { border-left-color: var(--decision); background: var(--decision-soft); }
+    .status-table td:first-child { width: 180px; color: var(--muted); font-weight: 700; }
+    .phase-status { color: var(--muted); font-weight: 700; }
+    .done { color: var(--done); }
+    .diagram { white-space: pre; line-height: 1.35; }
+    @media print {
+      nav { position: static; }
+      section, .card { break-inside: avoid; }
+      body { background: #fff; color: #000; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Rebuild duration metadata without slowing autoplay</h1>
+    <p>This plan first measures the current duration-enrichment penalty on physical hardware, then replaces eager route-local enrichment with one capability-aware, prioritized, persistent metadata system. The same frozen benchmark is run again at completion so the result is comparative evidence, not an impression.</p>
+    <div class="meta" aria-label="Plan metadata">
+      <span class="pill">Status: Proposed</span>
+      <span class="pill">Owner: Codex</span>
+      <span class="pill">Created: 2026-08-10</span>
+      <span class="pill">Updated: 2026-08-10</span>
+      <span class="pill">Baseline: main at e380bc5 plus benchmark-only instrumentation</span>
+      <span class="pill">Plan: .docs/exec/duration-metadata-performance-rebuild.html</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next action</strong>Implement the duration-on benchmark journey and capture its first physical-device baseline before changing duration behavior.</div>
+      <div class="card"><strong>Primary risk</strong>Background duration work currently competes with visible playback and can cause pagination to create more work.</div>
+      <div class="card"><strong>Final proof</strong>Same device, asset, workload, gestures, iterations, metrics, and artifact-retention procedure before and after.</div>
+      <div class="card"><strong>Protected behavior</strong>Every visibly presented animated or video card continues autoplaying simultaneously.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#status">Status</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#work-plan">Work Plan</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#living-log">Living Log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+      <li><a href="#appendix">Appendix</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>Duration badges and duration filtering should become progressively useful without making scrolling, preview startup, or simultaneous autoplay feel slower. A Hitomi post with directly available authoritative video must not need a Viewer round trip before its duration appears. Static posts and unresolved animated posts must not leak into a narrowed duration range. Opening and closing Viewer must not make duration metadata disappear and then reappear.</p>
+      <p>When this plan is complete, duration information comes from the cheapest authoritative source available: provider metadata, a player that is already decoding the full media, a bounded persistent cache, or a low-priority bounded container parser. Unsupported media settles once instead of repeatedly triggering full provider hydration. Routes request metadata; they do not own independent resolution loops or rewrite their complete post lists whenever one badge changes.</p>
+      <div class="callout decision"><strong>Scope:</strong> rebuild the duration metadata subsystem, not the feed, navigation, source registry, or autoplay policy. Existing shared cards, stable player ownership, viewport/lifecycle activation, protected request headers, and concurrent visible-card autoplay remain.</div>
+    </section>
+
+    <section id="status">
+      <h2>Current Status</h2>
+      <table class="status-table"><tbody>
+        <tr><td>Plan state</td><td>Proposed. Audit is complete; implementation and performance evidence have not begun.</td></tr>
+        <tr><td>Repository baseline</td><td><code>main</code> at <code>e380bc5</code> when authored. Record the actual Phase 0 benchmark commit SHA before the first run.</td></tr>
+        <tr><td>Working tree</td><td>The plan and <code>working_list.md</code> are the only intended planning changes for this task.</td></tr>
+        <tr><td>Current live evidence</td><td>No current frame sample. The connected Debug process was not running during the audit. Existing code-path evidence is sufficient to plan; Phase 0 supplies numeric proof.</td></tr>
+        <tr><td>Next action</td><td>Add benchmark-only observability and the unknown-duration Search scenario. Do not implement acquisition, scheduler, persistence, filtering, or route changes until the baseline artifacts are preserved.</td></tr>
+      </tbody></table>
+      <div class="callout risk"><strong>Baseline gate:</strong> only benchmark harness, trace instrumentation, tests, and documentation may change before the first physical run. If any user-visible or duration-selection behavior changes first, reset the measurement sequence by capturing a new baseline from the last pre-fix commit.</div>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <p>An <em>authoritative media reference</em> points at the complete post media whose duration is being described; a looping preview clip is not authoritative. A <em>duration decision</em> is one of Pending, Known, Unsupported, or Retryable Failure. A <em>media fingerprint</em> is a stable non-secret identity derived from the post ID plus normalized authoritative media identity; it prevents an old duration from being reused when a provider changes the media. A <em>demand ticket</em> says which route wants a duration, why, and at what priority. A <em>single-flight</em> job lets multiple routes share one acquisition for the same fingerprint.</p>
+      <table>
+        <thead><tr><th>Boundary</th><th>Current role</th><th>Target role</th></tr></thead>
+        <tbody>
+          <tr><td><code>app-logic/.../media/AnimatedDurationEnrichmentPolicy.kt</code></td><td>Selects every animated post with no duration, drains the whole list in batches of eight, and keeps route-local negative decisions.</td><td>Split into pure acquisition planning, priority scheduling, state reduction, and filter-readiness policies. No Android, provider, or player types enter <code>app-logic</code>.</td></tr>
+          <tr><td><code>app/.../media/AnimatedDurationEnrichmentService.kt</code></td><td>Application-wide memory cache and single-flight, but always calls <code>resolvePost</code> before checking whether existing full media is already probeable.</td><td>Replaced by <code>MediaDurationCoordinator</code>, which consults durable state, plans capability-aware work, owns demand/cancellation, and publishes one observable metadata state.</td></tr>
+          <tr><td><code>app/.../media/MediaDurationProbe.kt</code></td><td>Creates a remote <code>MediaMetadataRetriever</code> for each video independently of the Media3 cache and without an explicit operation timeout.</td><td>Local/player metadata remains opportunistic. Remote fallback uses request-scoped headers, strict byte and time budgets, container-specific parsing, one low-priority worker, and no hidden ExoPlayer.</td></tr>
+          <tr><td><code>SearchScreen.kt</code>, <code>ForYouScreen.kt</code>, <code>CreatorProfileScreen.kt</code>, <code>CodexDetailScreen.kt</code></td><td>Composable effects key off complete result lists and request route-local drains; duration publication changes those lists and wakes scheduling again.</td><td>Route owners submit append, viewport, filter, and lifecycle demand deltas. Composables emit typed viewport/filter events only. Duration publication never becomes a new acquisition input.</td></tr>
+          <tr><td><code>SearchVisibilityFilters.kt</code> and feed pagination</td><td>Unknowns are hidden, making the filtered list small enough to request more pages while the current page is unresolved.</td><td>Pending current-page decisions block duration-driven refill. Known matching posts appear; Unsupported, Retryable, static, and nonmatching posts do not. Paging resumes only after the loaded decision set settles.</td></tr>
+          <tr><td><code>FeedMediaComponents.kt</code>, <code>ViewerScreen.kt</code>, <code>PixivUgoiraPlayer.kt</code></td><td>Players learn durations locally but do not publish them to feed metadata.</td><td>Players publish a duration only when their candidate is authoritative full media. Preview-only clips remain ineligible.</td></tr>
+          <tr><td><code>core-data-android/.../room/TheoriaRoomDatabase.java</code></td><td>No durable duration cache; process restart repeats work.</td><td>Schema version 5 adds an independent bounded metadata table keyed by post and media fingerprint with a tested 4-to-5 migration.</td></tr>
+          <tr><td><code>macrobenchmark/.../TheoriaMacrobenchmark.kt</code></td><td>Autoplay benchmark uses posts whose duration is already known, so duration work never runs.</td><td>Keeps the existing control and adds a frozen unknown-duration journey that scrolls while enrichment is active and verifies all decisions settle.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Current failure chain</h3>
+      <pre class="diagram"><code>unknown animated results
+  -> composable requests enrichment
+  -> route scans the complete feed
+  -> up to 8 child jobs / 3 application workers
+  -> each worker resolves full provider detail first
+  -> separate remote MediaMetadataRetriever work
+  -> route copies/publishes posts with durations
+  -> result-list effect requests enrichment again
+  -> active filter hides unresolved rows
+  -> small visible result count loads another page
+  -> more unknown results enter the same loop</code></pre>
+
+      <h3>Product and safety constraints</h3>
+      <ul>
+        <li>Every visibly presented animated or video card continues autoplaying simultaneously. Do not introduce a single-active-card policy.</li>
+        <li>Never measure a preview-only clip and call it the post duration.</li>
+        <li>Do not rewrite durable Codex post snapshots with acquired duration metadata. Duration storage is independent.</li>
+        <li>Preserve source-specific headers and URL normalization at the Android/application boundary.</li>
+        <li>Provider metadata and raw provider pagination remain authoritative; duration visibility never decides whether a provider page is exhausted.</li>
+        <li><code>app-logic</code> remains platform-free and owns pure classification, acquisition planning, demand scheduling, and filter-readiness policy.</li>
+        <li>Physical benchmark work targets only <code>com.theoriacodex.benchmark</code>. Debug acceptance targets only <code>com.theoriacodex.debug</code>. The production package <code>com.theoriacodex</code> is never installed over, cleared, downgraded, uninstalled, or benchmarked.</li>
+        <li>The Macrobenchmark runner must not configure <code>SideEffectRunListener</code> or mutate unrelated packages.</li>
+      </ul>
+    </section>
+
+    <section id="architecture">
+      <h2>Target Architecture</h2>
+      <pre class="diagram"><code>Provider/Search Post shells             Existing full-media players
+          |                                        |
+          | append/filter/viewport demand          | authoritative duration event
+          v                                        v
+  +----------------------------------------------------------------+
+  | MediaDurationCoordinator (application scoped)                  |
+  |                                                                |
+  |  durable lookup -> acquisition planner -> prioritized queue    |
+  |       ^                |                    |                   |
+  |       |                |                    +-- active filter   |
+  |       |                |                    +-- visible/nearby  |
+  |       |                |                    +-- idle background |
+  |       |                v                                        |
+  |       |       provider duration resolver                        |
+  |       |           or bounded container probe                    |
+  |       +---------------------------------------------------------|
+  |              single-flight result publication                  |
+  +----------------------------------------------------------------+
+             | state keyed by PostId + media fingerprint
+             v
+      Search / For You / Creator / Recents / Codex / Viewer
+      badges and filters observe metadata; base Post lists stay stable</code></pre>
+
+      <h3>State contract</h3>
+      <p>Add platform-free types under <code>app-logic/src/main/kotlin/com/theoriacodex/app/media/</code>:</p>
+      <ul>
+        <li><code>MediaDurationKey(postId, mediaFingerprint)</code>.</li>
+        <li><code>MediaDurationState.Pending</code>, <code>Known(durationMs, provenance)</code>, <code>Unsupported(reason)</code>, and <code>RetryableFailure(retryAtEpochMs, reason)</code>.</li>
+        <li><code>MediaDurationProvenance.PROVIDER</code>, <code>ACTIVE_PLAYER</code>, and <code>CONTAINER_PROBE</code>.</li>
+        <li><code>DurationDemand(identity, key, priority, reason)</code>, where priorities are Active Filter, Visible, Near Viewport, and Background Idle.</li>
+        <li><code>DurationAcquisitionPlan.AlreadyKnown</code>, <code>UsePersisted</code>, <code>AskProvider</code>, <code>ProbeAuthoritativeMedia</code>, or <code>Unsupported</code>.</li>
+      </ul>
+      <p>Pending is process state, not a durable record. Known and Unsupported decisions persist by fingerprint. Retryable failures may persist only until their bounded retry time. A fingerprint change makes the old row irrelevant without destructive migration.</p>
+
+      <h3>Acquisition order</h3>
+      <ol>
+        <li>Use valid <code>Post.durationMs</code> and record provider provenance.</li>
+        <li>Use a matching durable Known or Unsupported record.</li>
+        <li>Accept an authoritative duration already reported by the visible feed player, Viewer, Ugoira player, GIF decoder, or animated-WebP decoder.</li>
+        <li>If the sparse post already contains authoritative full video, probe it directly; never call full <code>resolvePost</code> first.</li>
+        <li>Ask a source that implements the optional <code>DurationMetadataSourceAdapter</code> for Known, Authoritative Media, Unsupported, or Retryable Failure. The generic coordinator must not hydrate an entire post as a duration fallback.</li>
+        <li>Probe only authoritative full media using the bounded container parser. Unknown or preview-only media settles Unsupported rather than invoking a broad resolver.</li>
+      </ol>
+
+      <h3>Background setting semantics</h3>
+      <p><code>resolveUnknownAnimatedDurations</code> becomes the permission to perform speculative background provider/probe work while browsing. Provider durations already present on posts, durable hits, and authoritative active-player events are always accepted because they add no extra fetch. An explicitly narrowed duration filter is direct user demand and may resolve the currently loaded page even when speculative background resolution is disabled.</p>
+      <p>New or missing settings records default speculative background resolution to <code>false</code>; explicit stored <code>true</code> or <code>false</code> values remain authoritative. When enabled, routes enqueue unknowns as soon as they arrive, but Background Idle work yields to visible playback, active filtering, lifecycle stop, and active scrolling.</p>
+
+      <h3>Durable cache contract</h3>
+      <p>Add an independent Room table rather than a foreign key to <code>posts</code>, because ordinary Search results may never become Codex or Recents rows. Use a composite primary key of source, source post ID, and media fingerprint. Store status, positive duration when Known, provenance, observed time, and optional retry time. Cap the table at 4,096 records and prune least-recently-observed rows in the same serialized repository write path. Never store credential-bearing URLs or request headers.</p>
+
+      <h3>Probe contract</h3>
+      <p>Retire remote <code>MediaMetadataRetriever.setDataSource(url, headers)</code>. Add pure parsers with fixture tests for MP4/ISO-BMFF and WebM metadata, and use <code>SourceHttpClient.getBytes</code> with request-scoped headers. Read at most 256 KiB from the head and, only when required and supported by Content-Range metadata, 256 KiB from the tail. One probe worker may run at a time. Wrap the complete operation in a 12-second timeout; the HTTP client retains its lower-level cancellation/disconnect behavior. Do not create a hidden ExoPlayer solely to obtain duration.</p>
+      <p>GIF and animated-WebP duration may be published from an already completed authoritative full-media decode. Do not add a second full download solely for an image duration in this plan. A source whose only animated reference is a preview or gallery cover settles Unsupported.</p>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+
+      <article id="phase-0">
+        <h3>Phase 0: Add the benchmark journey and capture the pre-fix baseline</h3>
+        <p class="phase-status">Status: Not started. This phase must complete before behavior changes.</p>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Measure the current duration penalty against the existing autoplay-only control on the same physical device and preserve the full evidence set.</td></tr>
+          <tr><td>Primary files</td><td><code>macrobenchmark/src/main/.../TheoriaMacrobenchmark.kt</code>, <code>app/src/benchmarkRelease/.../BenchmarkFixtureActivity.kt</code>, <code>app/src/main/.../viewer/ExoVideoComponents.kt</code>, <code>app/src/test/.../PerformanceBenchmarkArchitectureTest.kt</code>, <code>macrobenchmark/README.md</code>.</td></tr>
+          <tr><td>Commit</td><td><code>test(performance): baseline duration enrichment during autoplay</code></td></tr>
+        </tbody></table>
+        <ol>
+          <li>Keep <code>searchConcurrentAutoplayScroll</code> unchanged as the autoplay-only control.</li>
+          <li>Add <code>searchDurationEnrichmentConcurrentAutoplayScroll</code>. It uses the same 24 cards, bundled <code>benchmark_loop.mp4</code>, two-column grid, three down/up flings, five iterations, and simultaneous visible-player assertions. Its posts begin with <code>durationMs = null</code>.</li>
+          <li>Keep the fixture offline and storage-independent. A benchmark-only probe reads the bundled raw resource through <code>AssetFileDescriptor</code> and <code>MediaMetadataRetriever</code>; it does not add Internet permission, provider access, repositories, credentials, <code>filesDir</code>, or <code>cacheDir</code>.</li>
+          <li>Add a benchmark-only start signal so setup waits for at least two visible playing previews before the measured block starts duration work. The measured block sends the signal, performs the fixed flings, verifies every visible preview throughout, and waits for all 24 decisions to settle.</li>
+          <li>Add stable trace names for demand, provider resolution, probe, publication, settled outcome, and a single asynchronous workload interval. Trace calls must not change scheduling and remain enabled for both baseline and final runs.</li>
+          <li>Freeze the workload contract in architecture tests: scenario name, post count, asset presence/checksum, iteration count, gesture count, metric labels, offline manifest, isolated process, target application ID, no network permission, and no SideEffect listener.</li>
+          <li>Run host tests and packaged-artifact verification. Then perform the device preflight and one full physical Macrobenchmark run.</li>
+          <li>Preserve the complete connected-output directory under <code>build/reports/duration-metadata-performance/baseline-&lt;commit&gt;/connected-output/</code>. Add a manifest containing commit SHA, device serial/model/API, benchmark JSON SHA-256, every trace SHA-256, asset SHA-256, test count, timestamps, battery/thermal snapshot, and the exact command.</li>
+          <li>Record control and duration-on p50/p90 frame CPU, frame overrun, memory, preview prepare/first-frame/load counts, duration resolve/probe/publication counts, and workload latency in this ExecPlan before Phase 1.</li>
+        </ol>
+        <p><strong>Acceptance:</strong> packaged target is <code>com.theoriacodex.benchmark</code>; all benchmark tests pass; the duration journey begins only after visible autoplay readiness; every visible preview remains playing; 24 decisions settle per iteration; JSON and all traces are preserved and hashed; no duration behavior fix has landed.</p>
+      </article>
+
+      <article id="phase-1">
+        <h3>Phase 1: Make acquisition capability-aware and bounded</h3>
+        <p class="phase-status">Status: Blocked on Phase 0 baseline.</p>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Stop full provider hydration and native probing when the post is already known, directly probeable, or unsupported.</td></tr>
+          <tr><td>Primary files</td><td><code>app-logic/.../media/</code>, <code>core-domain/.../adapter/SourceAdapter.kt</code>, <code>app/.../media/AnimatedDurationEnrichmentService.kt</code>, source adapter tests.</td></tr>
+          <tr><td>Commit</td><td><code>perf(media): skip unnecessary duration acquisition work</code></td></tr>
+        </tbody></table>
+        <ol>
+          <li>Add the pure state, key, fingerprint-input, and acquisition-plan contracts to <code>app-logic</code>.</li>
+          <li>Add optional <code>DurationMetadataSourceAdapter</code> and its sealed provider result to <code>core-domain</code>. Existing adapters need no implementation unless they can supply authoritative metadata more cheaply than <code>resolvePost</code>.</li>
+          <li>Teach the temporary current service to execute the shared plan: accept known duration, directly probe existing authoritative full video, call only the optional duration resolver, and settle unsupported media. Remove generic <code>resolvePost</code> fallback from duration acquisition.</li>
+          <li>Implement Hitomi behavior explicitly: sparse anime MP4 is directly probeable; animated gallery WebP/cover media is Unsupported unless the adapter can identify one authoritative full animation. Do not fetch and hydrate every gallery file for duration.</li>
+          <li>Set the temporary probe worker count to one and apply the 12-second operation timeout. The final bounded parser arrives in Phase 3.</li>
+        </ol>
+        <p><strong>Acceptance:</strong> tests prove known posts do zero provider/probe work; existing full video skips provider detail; unsupported Hitomi animated image posts do zero full-gallery hydration; duplicate route requests remain single-flight; cancellation and retry decisions remain isolated.</p>
+      </article>
+
+      <article id="phase-2">
+        <h3>Phase 2: Introduce the application-wide prioritized coordinator</h3>
+        <p class="phase-status">Status: Not started.</p>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Replace equal-priority route drains with one scheduler that protects visible playback and rejects stale demand.</td></tr>
+          <tr><td>Primary files</td><td>New <code>app-logic/.../media/DurationDemandScheduler.kt</code>; new <code>app/.../media/MediaDurationCoordinator.kt</code>; <code>TheoriaAppContainer.kt</code>; coordinator and scheduler tests.</td></tr>
+          <tr><td>Commit</td><td><code>refactor(media): centralize prioritized duration metadata</code></td></tr>
+        </tbody></table>
+        <ol>
+          <li>Implement the pure priority scheduler with per-key deduplication, route demand tickets, priority promotion, bounded queue size, and deterministic ordering.</li>
+          <li>Create one application-scoped <code>MediaDurationCoordinator</code> in <code>DefaultTheoriaAppContainer</code>. It owns in-memory state, cross-route single-flight, one probe permit, bounded provider permits, trace events, and the observable state map.</li>
+          <li>Demand priority is Active Filter, Visible, Near Viewport, then Background Idle. Enqueue enabled background demand immediately when results arrive, but execute it only when lifecycle is started, scrolling is idle, and no higher priority work waits.</li>
+          <li>When a route identity is replaced or leaves the started lifecycle, release its ticket immediately. Shared work continues only if another active ticket still needs it.</li>
+          <li>Do not make an unchanged result publication a demand event. Scheduler inputs are post append/delta, route identity, viewport IDs, filter state, setting state, scroll-idle state, and lifecycle.</li>
+        </ol>
+        <p><strong>Acceptance:</strong> scheduler tests prove priority promotion, fair deterministic ordering, one job per fingerprint, immediate stale-ticket removal, shared-consumer isolation, bounded queues, and no restart from metadata publication. Coordinator tests prove at most one probe and the configured bounded provider work while visible demand preempts background work.</p>
+      </article>
+
+      <article id="phase-3">
+        <h3>Phase 3: Persist decisions and replace remote retriever probing</h3>
+        <p class="phase-status">Status: Not started.</p>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Make successful/unsupported decisions survive relaunch and make fallback probing bounded, cancellable, and transport-aware.</td></tr>
+          <tr><td>Primary files</td><td><code>core-data/.../repository/</code>, <code>core-data-android/.../room/</code>, <code>TheoriaRoomDatabase.java</code>, new container parser/probe files, fixtures and migration tests.</td></tr>
+          <tr><td>Commits</td><td><code>feat(storage): persist bounded duration metadata</code><br><code>perf(media): bound remote duration parsing</code></td></tr>
+        </tbody></table>
+        <ol>
+          <li>Add <code>MediaDurationRepository</code> and in-memory implementation to <code>core-data</code>.</li>
+          <li>Add Room entity, DAO, repository, schema export, and explicit migration 4-to-5. The table is independent from saved <code>posts</code>, stores no URLs/headers, and prunes to 4,096 rows.</li>
+          <li>Make coordinator startup consult durable state before queuing work. Persist Known and Unsupported decisions by fingerprint; persist Retryable Failure only until its retry deadline.</li>
+          <li>Add pure MP4 and WebM duration parsers with valid, truncated, malformed, missing-duration, overflow, head-contained, and tail-contained fixtures.</li>
+          <li>Implement the application probe using <code>SourceHttpClient.getBytes</code>, request-scoped headers, 256 KiB head/tail budgets, one worker, and a 12-second overall timeout. Reject full-body fallback when range behavior or content length cannot keep the request inside the budget.</li>
+          <li>Remove the remote <code>MediaMetadataRetriever</code> path. Retain local retriever use only in the benchmark-only baseline subject and any existing local-only Viewer behavior that is outside remote acquisition.</li>
+        </ol>
+        <p><strong>Acceptance:</strong> 4-to-5 migration preserves every existing table; process recreation returns cached durations without provider/probe calls; fingerprint change causes fresh acquisition; pruning is deterministic; protected headers remain request-scoped; cancellation disconnects transport; no probe exceeds byte/time limits; malformed media becomes Unsupported or Retryable without failing the feed.</p>
+      </article>
+
+      <article id="phase-4">
+        <h3>Phase 4: Switch routes, players, badges, filters, and pagination</h3>
+        <p class="phase-status">Status: Not started.</p>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Remove route-local drains and make metadata publication independent from base post lists while preserving exact browsing behavior.</td></tr>
+          <tr><td>Primary files</td><td>Search, For You, Creator Profile, Recents, Codex detail, shared card/media components, Viewer/Ugoira/GIF/WebP players, route ViewModels, filtering policy, and architecture tests.</td></tr>
+          <tr><td>Commit</td><td><code>fix(media): publish durations without feed churn</code></td></tr>
+        </tbody></table>
+        <ol>
+          <li>Remove result-list-keyed duration <code>LaunchedEffect</code> blocks and route-local <code>AnimatedDurationEnrichmentLane</code> owners. Delete the old service after all consumers move.</li>
+          <li>Route owners submit appended post IDs and identity changes directly. Composables emit typed visible/near-visible IDs, scroll-idle state, and active-filter changes; they never start provider/probe work.</li>
+          <li>Expose metadata separately from <code>Post</code>. Shared card badges read effective duration from provider Post data plus coordinator state without copying the complete feed list. Stable player keys remain media location/source, so a badge change cannot recreate a player.</li>
+          <li>Publish authoritative durations from existing feed/Viewer video players, Pixiv Ugoira, full GIF, and full animated-WebP playback. Carry <code>PostMediaSelectionReason</code> far enough to reject PREVIEW_MEDIA events.</li>
+          <li>Change filtering to consume the metadata snapshot. Static, Unsupported, Retryable, and Pending posts never match a narrowed duration range. Ordinary range handles remain inclusive; endpoint buckets retain under-5-second and over-2-minute meanings.</li>
+          <li>When a duration filter is active, block duration-driven page refill while the currently loaded animated candidates are Pending. Show one compact grid/footer progress state such as “Checking durations…” rather than empty-state churn or permanent per-card placeholders. Once the page settles, normal threshold pagination may resume.</li>
+          <li>Apply the shared metadata path to Search, For You, Creator Profile, Recents, and Codex detail. Viewer receives the same duration state without requiring a route round trip. Do not rewrite Codex snapshots.</li>
+          <li>Update the Settings label to clarify speculative background behavior. Default missing/new values to off while preserving stored choices.</li>
+        </ol>
+        <p><strong>Acceptance:</strong> Hitomi anime duration can appear without opening Viewer; opening/exiting Viewer causes no one-second badge disappearance; narrowed filters contain only known matching animated posts; pending work does not trigger page cascades; metadata publication triggers no new demand; all visible cards still autoplay; player prepare counts do not increase from badge updates.</p>
+      </article>
+
+      <article id="phase-5">
+        <h3>Phase 5: Run bounded host acceptance, then repeat the frozen physical benchmark</h3>
+        <p class="phase-status">Status: Not started.</p>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Prove correctness first, then measure the final system against the preserved baseline and control.</td></tr>
+          <tr><td>Primary files</td><td>This ExecPlan, <code>working_list.md</code>, benchmark README/tests, and any durable project rule discovered during validation.</td></tr>
+          <tr><td>Commit</td><td><code>test(performance): verify duration metadata rebuild gains</code></td></tr>
+        </tbody></table>
+        <ol>
+          <li>Run the focused unit, Room migration, architecture, Detekt, Kover changed-line, Debug compilation, and benchmark artifact batch. Repair common causes in one patch and rerun only affected lanes.</li>
+          <li>Confirm the benchmark workload contract is unchanged: same bundled bytes, post count, starting unknown state, control scenario, gestures, iterations, readiness/settled assertions, trace names, target package/process, and runner configuration. Only the implementation adapter behind the fixture may differ.</li>
+          <li>Repeat the same host/device preflight and one full Macrobenchmark run on the same physical device and OS when available.</li>
+          <li>Preserve final artifacts under <code>build/reports/duration-metadata-performance/final-&lt;commit&gt;/connected-output/</code> with the same manifest and hashing procedure.</li>
+          <li>Compare raw and normalized metrics. The normalized duration penalty is duration-on Search p90 minus autoplay-control Search p90 from the same run.</li>
+          <li>Perform isolated Debug acceptance against real sources only after verifying the packaged Debug application ID. Observe Hitomi badge arrival/filtering, scroll smoothness, relaunch cache reuse, Viewer round trip, and GIF playback. Never clear or uninstall either package.</li>
+          <li>Update Progress, Discoveries, Decisions, Outcomes, exact metrics, artifact paths, and any remaining evidence gap before closing.</li>
+        </ol>
+        <p><strong>Acceptance:</strong> all deterministic correctness lanes pass; the final benchmark completes every duration decision and simultaneous-autoplay assertion; the normalized p90 frame penalty shrinks materially as defined below; workload/probe counts do not regress; artifacts are preserved; real-source Debug behavior matches the user-visible contract.</p>
+      </article>
+    </section>
+
+    <section id="work-plan">
+      <h2>Work Plan</h2>
+      <ol>
+        <li>Implement and commit Phase 0 benchmark instrumentation only. Capture and preserve baseline evidence. Record actual numbers in this file.</li>
+        <li>Introduce pure duration state/planning contracts in <code>app-logic</code> and the optional provider duration interface in <code>core-domain</code>. Adapt the existing service without building a second planner.</li>
+        <li>Add the tested priority scheduler and application coordinator. Keep it behind the existing route path until its standalone tests pass.</li>
+        <li>Add durable repository contracts and Room schema 5. Wire storage into the coordinator. Then add bounded parsers and remove remote retriever probing.</li>
+        <li>Move one route at a time to the coordinator in this order: Search, For You, Creator Profile, Codex detail, Recents/Viewer publication. After each route, run its focused owner/filter tests. Delete old lanes only after the final consumer moves.</li>
+        <li>Repair duration-filter pagination and add the compact resolving state. Verify filter thresholds and static/unsupported exclusion in <code>app-logic</code>.</li>
+        <li>Run the one bounded host batch. Update durable architecture gates so route-local provider/probe loops cannot return.</li>
+        <li>Verify the frozen benchmark contract, capture the final physical run once, compare it to baseline, and perform isolated live-source Debug acceptance.</li>
+      </ol>
+
+      <h3>Files expected to be added</h3>
+      <table>
+        <thead><tr><th>Proposed path</th><th>Responsibility</th></tr></thead>
+        <tbody>
+          <tr><td><code>app-logic/src/main/kotlin/com/theoriacodex/app/media/MediaDurationState.kt</code></td><td>Key, state, provenance, demand, and acquisition-plan contracts.</td></tr>
+          <tr><td><code>app-logic/src/main/kotlin/com/theoriacodex/app/media/DurationDemandScheduler.kt</code></td><td>Pure bounded priority and ticket policy.</td></tr>
+          <tr><td><code>core-data/src/main/kotlin/com/theoriacodex/data/repository/MediaDurationRepository.kt</code></td><td>Durable interface and in-memory implementation.</td></tr>
+          <tr><td><code>core-data-android/src/main/java/com/theoriacodex/data/android/room/MediaDurationEntity.java</code></td><td>Schema 5 row.</td></tr>
+          <tr><td><code>core-data-android/src/main/java/com/theoriacodex/data/android/room/MediaDurationDao.java</code></td><td>Lookup/upsert/prune queries.</td></tr>
+          <tr><td><code>core-data-android/src/main/kotlin/com/theoriacodex/data/android/room/RoomMediaDurationRepository.kt</code></td><td>Serialized durable owner.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/media/MediaDurationCoordinator.kt</code></td><td>Application-scoped integration, single-flight, lifecycle, and publication.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/media/BoundedMediaDurationProbe.kt</code></td><td>Request headers, ranges, timeout, and parser selection.</td></tr>
+          <tr><td><code>app-logic/src/main/kotlin/com/theoriacodex/app/media/Mp4DurationParser.kt</code></td><td>Pure bounded ISO-BMFF metadata parsing.</td></tr>
+          <tr><td><code>app-logic/src/main/kotlin/com/theoriacodex/app/media/WebmDurationParser.kt</code></td><td>Pure bounded EBML duration parsing.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Explicit removals after migration</h3>
+      <ul>
+        <li><code>AnimatedDurationEnrichmentLane</code> and route-specific duration owner files.</li>
+        <li>Composable result-list effects whose only purpose is requesting duration enrichment.</li>
+        <li>Generic <code>resolvePost</code> fallback from duration acquisition.</li>
+        <li>Remote <code>MediaMetadataRetriever</code> duration probing.</li>
+        <li>Duration-only rewriting of Search/For You/Creator/Codex post lists.</li>
+      </ul>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <p>Run commands from <code>/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex</code>. Host-only commands do not prove device behavior. Connected commands are allowed only after packaged application ID, signing lane, task graph, runner configuration, and physical target are verified.</p>
+
+      <h3>Focused deterministic checks</h3>
+      <table>
+        <thead><tr><th>Check</th><th>Command</th><th>Expected result</th></tr></thead>
+        <tbody>
+          <tr><td>Duration logic</td><td><code>./gradlew :app-logic:test</code></td><td>Planner, scheduler, filter readiness, thresholds, parser, and state tests pass.</td></tr>
+          <tr><td>Application integration</td><td><code>./gradlew :app:testDebugUnitTest</code></td><td>Coordinator, route owner, player publication, architecture, and benchmark-contract tests pass.</td></tr>
+          <tr><td>Provider behavior</td><td><code>./gradlew :core-sources:test</code></td><td>Duration resolver results and Hitomi no-full-gallery behavior pass.</td></tr>
+          <tr><td>Persistence</td><td><code>./gradlew :core-data:test :core-data-android:testDebugUnitTest :core-data-android:compileDebugAndroidTestKotlin</code></td><td>Repository semantics and schema 4-to-5 migration compile/pass; exported schema is current.</td></tr>
+          <tr><td>Compilation/static policy</td><td><code>./gradlew :app:compileDebugKotlin :app-logic:detekt :app:detektDebug :core-data-android:detektDebug</code></td><td>No changed-file finding; inherited unrelated findings are reported separately if still present.</td></tr>
+          <tr><td>Benchmark packaging</td><td><code>./gradlew :app:assembleBenchmarkRelease :macrobenchmark:assembleBenchmarkRelease</code></td><td>Target and runner artifact verifiers pass; package is <code>com.theoriacodex.benchmark</code>; fixture stays offline and isolated.</td></tr>
+          <tr><td>Plan/file quality</td><td><code>git diff --check</code> and <code>xmllint --html --noout .docs/exec/duration-metadata-performance-rebuild.html</code></td><td>No whitespace errors; only expected HTML5-vs-HTML4 parser warnings, if any.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Physical benchmark preflight</h3>
+      <ol>
+        <li>Run a host-only dry run of <code>:macrobenchmark:connectedBenchmarkReleaseAndroidTest</code> and inspect its task graph. It must depend on <code>:app:verifyBenchmarkReleaseInstallableApplicationId</code>.</li>
+        <li>Build and inspect both APK manifests. Target must be <code>com.theoriacodex.benchmark</code>; runner must be AndroidJUnitRunner with no configured listener; benchmark target must have no Internet/install permission, deep links, browsable links, or FileProvider.</li>
+        <li>Use read-only device discovery. Require exactly one authorized, unlocked, non-emulator physical device. Record serial, model, OS/API, battery, thermal state, and available storage.</li>
+        <li>Move any prior connected output into a timestamped preservation directory rather than deleting or mixing artifacts.</li>
+        <li>Run exactly one full connected benchmark command for the baseline and one for the final phase. Preserve the entire output tree after each.</li>
+      </ol>
+      <pre><code>ANDROID_HOME=/Users/axel/Library/Android/sdk \
+ANDROID_SDK_ROOT=/Users/axel/Library/Android/sdk \
+./gradlew :macrobenchmark:connectedBenchmarkReleaseAndroidTest</code></pre>
+
+      <h3>Metric comparison contract</h3>
+      <p>Use the same device and OS whenever possible. If either changes, report the run but do not claim a direct speed comparison. For each run compute:</p>
+      <pre><code>CPU penalty p90 = duration-on Search frameDurationCpuMs p90
+                  - autoplay-control Search frameDurationCpuMs p90
+
+Overrun penalty p90 = duration-on Search frameOverrunMs p90
+                      - autoplay-control Search frameOverrunMs p90</code></pre>
+      <p>The final run is accepted when all correctness invariants pass and:</p>
+      <ul>
+        <li>If the baseline CPU penalty exceeds 1.0 ms, the final penalty is at least 30% smaller. If the baseline penalty is 1.0 ms or less, the final penalty does not regress by more than 0.5 ms.</li>
+        <li>Final duration-on p90 frame CPU and p90 frame overrun are both no worse than their baseline duration-on values.</li>
+        <li>Preview prepare and media-load counts do not increase due to duration publication; first-frame counts do not decrease.</li>
+        <li>Every iteration settles all 24 duration decisions and keeps at least two simultaneously visible previews playing.</li>
+        <li>Provider resolve/probe counts are no higher than baseline, and Unsupported decisions do not perform provider hydration or probe work.</li>
+        <li>If a threshold misses, inspect the preserved traces, identify the common cause, patch once, and rerun the affected host checks. A second physical run requires recording why the first final run was invalid or insufficient; do not silently cherry-pick a favorable sample.</li>
+      </ul>
+
+      <h3>Manual Debug acceptance</h3>
+      <ul>
+        <li>Hitomi anime duration appears progressively without opening and exiting Viewer.</li>
+        <li>A badge that appears remains present across Viewer round trip, navigation, and app relaunch when the fingerprint is unchanged.</li>
+        <li>Narrowed duration results contain only animated posts with Known matching durations. Static, Pending, Unsupported, and Retryable rows do not appear at the end.</li>
+        <li>While current-page durations are Pending, the feed shows compact resolving feedback and does not cascade through provider pages.</li>
+        <li>Visible preview autoplay remains concurrent while scrolling, filtering, and duration publication occur.</li>
+        <li>GIF playback continues to fall back/retry correctly and no new duration path causes “Could not play GIF.”</li>
+        <li>With speculative background resolution off, provider metadata/cache/player durations still appear but offscreen provider/probe work does not run. With it on, work is queued immediately and executes only at safe priority.</li>
+      </ul>
+    </section>
+
+    <section id="living-log">
+      <h2>Living Log</h2>
+
+      <h3>Progress</h3>
+      <ul>
+        <li class="done">[x] 2026-08-10 — Audited duration acquisition, route publication, filtering/pagination, playback integration, Hitomi behavior, and benchmark coverage.</li>
+        <li class="done">[x] 2026-08-10 — Agreed to put the physical baseline before all behavior changes and repeat the same benchmark after the rebuild.</li>
+        <li class="done">[x] 2026-08-10 — Authored this standalone implementation and evidence plan.</li>
+        <li>[ ] Phase 0 — Implement/freeze the benchmark and preserve the pre-fix physical baseline.</li>
+        <li>[ ] Phase 1 — Make acquisition capability-aware and bounded.</li>
+        <li>[ ] Phase 2 — Introduce the prioritized application coordinator.</li>
+        <li>[ ] Phase 3 — Persist decisions and replace remote retriever probing.</li>
+        <li>[ ] Phase 4 — Switch every route/player/filter and remove the old lanes.</li>
+        <li>[ ] Phase 5 — Complete host acceptance, repeat the physical benchmark, compare, and close out.</li>
+      </ul>
+
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li><strong>Observation:</strong> the existing Macrobenchmark cannot see this regression because every fixture post starts with a known duration. <strong>Evidence:</strong> <code>BenchmarkFixtureActivity.benchmarkPosts</code> assigns <code>BENCHMARK_MEDIA_DURATION_MS</code>.</li>
+        <li><strong>Observation:</strong> player instances are remembered by media location/source, so duration-only Post replacement does not directly recreate ExoPlayer. <strong>Evidence:</strong> <code>rememberFeedPreviewPlayerState</code> uses <code>remember(location, sourceKey)</code>. Contention and feed-state churn are the primary suspects.</li>
+        <li><strong>Observation:</strong> the current lane collects the full unknown candidate set with <code>Int.MAX_VALUE</code>, launches batches of eight, and the application service permits three concurrent workers.</li>
+        <li><strong>Observation:</strong> <code>AnimatedDurationEnrichmentService.compute</code> resolves provider detail before inspecting directly available full media.</li>
+        <li><strong>Observation:</strong> Hitomi non-anime full resolution can resolve every gallery file, while the current duration probe accepts video only. Animated WebP work may therefore end in a negative decision after substantial useless work.</li>
+        <li><strong>Observation:</strong> Search, For You, and Creator duration filtering can load another provider page because unresolved posts are hidden and the visible result count looks too small.</li>
+        <li><strong>Observation:</strong> Viewer already reads ExoPlayer duration, and Ugoira/GIF/WebP players have local timing knowledge, but none publishes authoritative duration to shared feed metadata.</li>
+      </ul>
+
+      <h3>Decision Log</h3>
+      <ul>
+        <li><strong>Decision:</strong> measure before fixing, using autoplay-only and duration-on journeys in the same suite. <strong>Rationale:</strong> within-run control normalization distinguishes duration penalty from ordinary device variance. <strong>Date/Author:</strong> 2026-08-10 / User and Codex.</li>
+        <li><strong>Decision:</strong> rebuild the duration subsystem, not autoplay or navigation. <strong>Rationale:</strong> stable player keys and viewport/lifecycle ownership are already correct; work selection, transport, persistence, and publication are not. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
+        <li><strong>Decision:</strong> retain one application-wide coordinator with platform-free policy in <code>app-logic</code>. <strong>Rationale:</strong> this preserves cross-route single-flight and makes priority, lifecycle, and stale-demand behavior testable without Android. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
+        <li><strong>Decision:</strong> persist duration decisions separately from Posts and Codex snapshots. <strong>Rationale:</strong> ordinary feed posts may not exist in the content database, and duration enrichment must not rewrite user collections. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
+        <li><strong>Decision:</strong> remove remote MediaMetadataRetriever and do not introduce hidden ExoPlayers. <strong>Rationale:</strong> either would compete with visible playback without a reliable byte budget; bounded parsers and active-player publication are cheaper and observable. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
+        <li><strong>Decision:</strong> speculative background resolution defaults off, while explicit filtering can resolve the loaded page. <strong>Rationale:</strong> ordinary browsing should not pay provider/probe cost by default, but choosing a duration range is direct user intent. Free provider/cache/player metadata is always accepted. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
+      </ul>
+
+      <h3>Outcomes And Retrospective</h3>
+      <p>Planning outcome: the work is bounded to benchmark evidence, acquisition planning, one coordinator, durable metadata, bounded probing, route/player publication, filter readiness, and final physical comparison. Update this section after every phase with commits, exact commands, result counts, remaining gaps, and user-visible observations.</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <ul>
+        <li>Host tests, compilation, static analysis, and packaged-artifact verification are safe to rerun.</li>
+        <li>Never delete a connected benchmark output directory before preserving and hashing it. Move it into a uniquely named <code>build/reports/duration-metadata-performance/</code> directory.</li>
+        <li>If Phase 0 instrumentation fails before producing iterations, repair only benchmark code and rerun. If it produces partial artifacts, preserve them as failed-run evidence before retrying.</li>
+        <li>If any duration behavior changes before the baseline, capture a new baseline at the last pre-fix commit or revert only this task's uncommitted behavior changes with a reviewed patch. Do not use <code>git reset --hard</code> or discard unrelated user work.</li>
+        <li>Room migration is forward-only. Test 4-to-5 with exported schemas before any device install. Do not use destructive migration fallback, clear app data, or uninstall as a repair.</li>
+        <li>The coordinator rollout is reversible route by route while the old service still exists. Do not delete the old lane/service until every production consumer and architecture test has moved.</li>
+        <li>Parser failures return typed Unsupported or Retryable results and must never fail feed loading. A parser can be disabled independently while provider/cache/player acquisition continues.</li>
+        <li>If the same physical device or OS is unavailable for the final run, preserve the final artifacts but label the numeric comparison non-equivalent. Do not normalize across different devices and claim improvement.</li>
+        <li>No phase authorizes push, tag, release, production-package install, production data mutation, or unrelated device cleanup.</li>
+      </ul>
+    </section>
+
+    <section id="appendix">
+      <h2>Appendix: Evidence And Notes</h2>
+      <details open>
+        <summary>Baseline and final evidence template</summary>
+        <pre><code>Run label:
+Commit SHA:
+Device serial / model:
+Android version / API:
+Benchmark asset SHA-256:
+Benchmark JSON path / SHA-256:
+Trace count and manifest SHA-256:
+Control Search frame CPU p50 / p90:
+Control Search frame overrun p50 / p90:
+Duration Search frame CPU p50 / p90:
+Duration Search frame overrun p50 / p90:
+Normalized CPU / overrun penalty p90:
+Peak memory:
+Preview prepare / first-frame / media-load counts:
+Duration demand / resolve / probe / publish / settled counts:
+Duration workload latency p50 / p90:
+Autoplay assertion:
+Duration decisions settled:
+Command:
+Notes / thermal or validity concerns:</code></pre>
+      </details>
+
+      <details>
+        <summary>Primary current code references</summary>
+        <ul>
+          <li><code>app-logic/src/main/kotlin/com/theoriacodex/app/media/AnimatedDurationEnrichmentPolicy.kt</code></li>
+          <li><code>app/src/main/java/com/theoriacodex/app/media/AnimatedDurationEnrichmentService.kt</code></li>
+          <li><code>app/src/main/java/com/theoriacodex/app/media/MediaDurationProbe.kt</code></li>
+          <li><code>app/src/main/java/com/theoriacodex/app/search/SearchAnimatedDurationEnrichmentOwner.kt</code></li>
+          <li><code>app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt</code></li>
+          <li><code>app/src/main/java/com/theoriacodex/app/recommend/ForYouScreen.kt</code></li>
+          <li><code>app/src/main/java/com/theoriacodex/app/creator/CreatorProfileScreen.kt</code></li>
+          <li><code>app/src/main/java/com/theoriacodex/app/codex/CodexDetailDurationViewModel.kt</code></li>
+          <li><code>app/src/main/java/com/theoriacodex/app/search/FeedMediaComponents.kt</code></li>
+          <li><code>app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt</code></li>
+          <li><code>core-sources/src/main/kotlin/com/theoriacodex/sources/hitomi/HitomiSourceAdapter.kt</code></li>
+          <li><code>macrobenchmark/src/main/java/com/theoriacodex/macrobenchmark/TheoriaMacrobenchmark.kt</code></li>
+          <li><code>app/src/benchmarkRelease/java/com/theoriacodex/app/benchmark/BenchmarkFixtureActivity.kt</code></li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>Suggested implementation commit sequence</summary>
+        <pre><code>docs(execplan): plan duration metadata performance rebuild
+test(performance): baseline duration enrichment during autoplay
+perf(media): skip unnecessary duration acquisition work
+refactor(media): centralize prioritized duration metadata
+feat(storage): persist bounded duration metadata
+perf(media): bound remote duration parsing
+fix(media): publish durations without feed churn
+test(performance): verify duration metadata rebuild gains</code></pre>
+      </details>
+    </section>
+  </main>
+</body>
+</html>
