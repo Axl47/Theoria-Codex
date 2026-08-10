@@ -915,7 +915,7 @@ fun SearchResultCard(
             ),
     ) {
         val title = effectivePost.displayTitleOrNull()
-        val supportingContentPlacement = searchCardSupportingContentPlacement(
+        val supportingContent = searchCardSupportingContent(
             title = title,
             metadataLabel = metadataLabel,
             showSourceBadge = showSourceBadge,
@@ -1119,7 +1119,7 @@ fun SearchResultCard(
                     }
                 }
             }
-            if (supportingContentPlacement == SearchCardSupportingContentPlacement.PREVIEW_OVERLAY) {
+            if (supportingContent.showPreviewContext) {
                 Row(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
@@ -1137,7 +1137,7 @@ fun SearchResultCard(
             }
         }
 
-        if (supportingContentPlacement == SearchCardSupportingContentPlacement.FOOTER) {
+        if (supportingContent.showTitleFooter) {
             Column(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -1148,50 +1148,25 @@ fun SearchResultCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (metadataLabel != null || showSourceBadge) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Spacer(modifier = Modifier.weight(1f))
-                        if (metadataLabel != null) {
-                            Text(
-                                text = metadataLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        if (showSourceBadge) {
-                            SourceBadge(
-                                source = effectivePost.id.source,
-                                modifier = Modifier.padding(start = 6.dp),
-                            )
-                        }
-                    }
-                }
             }
         }
     }
 }
 
-internal enum class SearchCardSupportingContentPlacement {
-    NONE,
-    FOOTER,
-    PREVIEW_OVERLAY,
-}
+internal data class SearchCardSupportingContent(
+    val showTitleFooter: Boolean,
+    val showPreviewContext: Boolean,
+)
 
-internal fun searchCardSupportingContentPlacement(
+internal fun searchCardSupportingContent(
     title: String?,
     metadataLabel: String?,
     showSourceBadge: Boolean,
-): SearchCardSupportingContentPlacement {
-    return when {
-        title != null -> SearchCardSupportingContentPlacement.FOOTER
-        metadataLabel != null || showSourceBadge -> SearchCardSupportingContentPlacement.PREVIEW_OVERLAY
-        else -> SearchCardSupportingContentPlacement.NONE
-    }
+): SearchCardSupportingContent {
+    return SearchCardSupportingContent(
+        showTitleFooter = title != null,
+        showPreviewContext = metadataLabel != null || showSourceBadge,
+    )
 }
 
 @Composable
