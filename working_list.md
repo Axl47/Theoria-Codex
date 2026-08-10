@@ -8,11 +8,10 @@ updated_at: 2026-08-10T20:05:00-04:00
 
 ### In Progress
 
-- [~] Phase 2: centralize Preview and Viewer candidate intent.
+- [~] Phase 3: prefetch the true Viewer neighborhood through the shared Media3 cache.
 
 ### Pending
 
-- [ ] Phase 3: prefetch the true Viewer neighborhood through the shared Media3 cache.
 - [ ] Phase 4: open Viewer before provider refresh when usable media already exists.
 - [ ] Phase 5: bound Pixiv Ugoira loading and share token refresh.
 - [ ] Phase 6: reuse bounded Hitomi gallery manifests.
@@ -20,6 +19,8 @@ updated_at: 2026-08-10T20:05:00-04:00
 
 ### Done
 
+- [x] Phase 2: centralize Preview and Viewer candidate intent.
+  - Evidence: one application-only planner distinguishes primary, quality-upgrade, and failure-fallback locations across Preview, Viewer, GIF fallback, and Codex covers without changing persisted `ImageRef`. Thirty-three focused tests and `:app:compileDebugKotlin` pass.
 - [x] Phase 1: make Retry restart image, video, GIF/WebP, and Ugoira loads.
   - Evidence: reducer-owned media generations reconstruct every renderer immediately, one shared overlay exposes Retry, generic provider resolution heals non-Hitomi sources, and late replacements retain session checks. Thirty-one focused tests and `:app:compileDebugKotlin` pass.
 - [x] Phase 0: reconcile ownership at `91dd752` and freeze baseline contracts/evidence.

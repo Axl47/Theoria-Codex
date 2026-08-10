@@ -11,11 +11,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import com.theoriacodex.app.media.MediaRequestFactory
-import com.theoriacodex.app.media.PostMediaKind
-import com.theoriacodex.app.media.mediaKind
 import com.theoriacodex.app.media.normalizeMediaUrl
-import com.theoriacodex.app.media.postPreviewImageCandidate
-import com.theoriacodex.app.media.progressiveImageCandidates
+import com.theoriacodex.app.media.previewMediaDeliveryPlan
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
@@ -76,16 +73,9 @@ private fun MutableList<CodexCoverCandidate>.addPostCoverCandidates(
         ?.takeIf(File::exists)
         ?.let { add(CodexCoverCandidate.LocalFile(it)) }
 
-    buildList {
-        postPreviewImageCandidate(post)?.ref?.let(::add)
-        add(post.preview)
-        post.full?.let(::add)
-        addAll(post.media)
+    previewMediaDeliveryPlan(post).candidates.forEach { candidate ->
+        addLocationCandidate(post.id.source, candidate.location)
     }
-        .distinct()
-        .filterNot { ref -> mediaKind(ref) == PostMediaKind.VIDEO }
-        .flatMap { ref -> progressiveImageCandidates(post, ref) }
-        .forEach { location -> addLocationCandidate(post.id.source, location) }
 }
 
 private fun MutableList<CodexCoverCandidate>.addLocationCandidate(

@@ -128,13 +128,12 @@ import com.theoriacodex.app.media.isGifMediaRef
 import com.theoriacodex.app.media.isHttpNotFound
 import com.theoriacodex.app.media.isPixivUgoiraMedia
 import com.theoriacodex.app.media.isVideoMediaRef
+import com.theoriacodex.app.media.MediaDeliveryActivation
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.media.PostMediaKind
 import com.theoriacodex.app.media.mediaKind
-import com.theoriacodex.app.media.normalizeMediaUrl
 import com.theoriacodex.app.media.postMediaItems
-import com.theoriacodex.app.media.progressiveImageCandidates
-import com.theoriacodex.app.media.supportsProgressiveImageCandidates
+import com.theoriacodex.app.media.viewerMediaDeliveryPlan
 import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.requestHeaders
@@ -692,9 +691,10 @@ internal fun ViewerScreen(
                     modifier = Modifier
                         .fillMaxSize()
                 ) {
-                    val imageCandidates = remember(post, media, isVideoMedia, loadGeneration) {
-                        if (isVideoMedia) emptyList() else viewerImageCandidates(post, media)
+                    val imageDeliveryPlan = remember(post, media, isVideoMedia, loadGeneration) {
+                        if (isVideoMedia) null else viewerMediaDeliveryPlan(post, media)
                     }
+                    val imageCandidates = imageDeliveryPlan?.candidates.orEmpty()
                     var displayedCandidateIndex by remember(postPage, mediaPage, loadGeneration) {
                         mutableIntStateOf(0)
                     }
@@ -705,7 +705,8 @@ internal fun ViewerScreen(
                     var hasVisibleImage by remember(postPage, mediaPage, loadGeneration) {
                         mutableStateOf(false)
                     }
-                    val activeImageUrl = imageCandidates.getOrNull(displayedCandidateIndex)
+                    val activeImageCandidate = imageCandidates.getOrNull(displayedCandidateIndex)
+                    val activeImageUrl = activeImageCandidate?.location
                     val imageModel = remember(context, activeImageUrl, post.id.source, loadGeneration) {
                         activeImageUrl?.let { buildViewerImageRequest(context, it, post.id.source) }
                     }
@@ -721,12 +722,15 @@ internal fun ViewerScreen(
                         post.id.source,
                         media.progressiveUrls,
                     ) {
-                        if (!supportsProgressiveImageUpgrade(post, media)) return@LaunchedEffect
                         if (!hasVisibleImage) return@LaunchedEffect
                         if (displayedCandidateIndex != maxPreparedCandidateIndex) return@LaunchedEffect
                         val nextIndex = displayedCandidateIndex + 1
                         if (nextIndex > imageCandidates.lastIndex) return@LaunchedEffect
-                        val nextUrl = imageCandidates[nextIndex]
+                        val nextCandidate = imageCandidates[nextIndex]
+                        if (nextCandidate.activation != MediaDeliveryActivation.QUALITY_UPGRADE) {
+                            return@LaunchedEffect
+                        }
+                        val nextUrl = nextCandidate.location
                         if (loadedMediaUrls[nextUrl] == true) {
                             maxPreparedCandidateIndex = nextIndex
                             displayedCandidateIndex = nextIndex
@@ -880,9 +884,13 @@ internal fun ViewerScreen(
                                         isHttpNotFound(throwable) &&
                                         mediaRecoveryRequestedKeys.add(recoveryKey)
                                     ) {
-                                        onRequestMediaRecovery(post, media.copy(url = activeImageUrl))
+                                        onRequestMediaRecovery(
+                                            post,
+                                            activeImageCandidate.ref.copy(url = activeImageUrl),
+                                        )
                                     }
-                                    val canAdvance = displayedCandidateIndex < imageCandidates.lastIndex
+                                    val canAdvance = displayedCandidateIndex < imageCandidates.lastIndex &&
+                                        !hasVisibleImage
                                     if (canAdvance) {
                                         val nextIndex = displayedCandidateIndex + 1
                                         displayedCandidateIndex = nextIndex
@@ -924,10 +932,13 @@ internal fun ViewerScreen(
                                         isHttpNotFound(state.result.throwable) &&
                                         mediaRecoveryRequestedKeys.add(recoveryKey)
                                     ) {
-                                        onRequestMediaRecovery(post, media.copy(url = activeImageUrl))
+                                        onRequestMediaRecovery(
+                                            post,
+                                            activeImageCandidate.ref.copy(url = activeImageUrl),
+                                        )
                                     }
                                     val canAdvance = displayedCandidateIndex < imageCandidates.lastIndex &&
-                                        (!hasVisibleImage || !supportsProgressiveImageUpgrade(post, media))
+                                        !hasVisibleImage
                                     if (canAdvance) {
                                         val nextIndex = displayedCandidateIndex + 1
                                         displayedCandidateIndex = nextIndex
@@ -2552,37 +2563,14 @@ private fun isStaticOverviewImageLocation(location: String): Boolean {
     return extension in STATIC_OVERVIEW_IMAGE_EXTENSIONS
 }
 
-internal fun viewerImageCandidates(post: Post, media: ImageRef): List<String> {
-    return progressiveImageCandidates(post, media)
-}
-
 internal fun viewerPrefetchImageLocation(post: Post, media: ImageRef): String? {
-    return viewerImageCandidates(post, media).firstOrNull()
-}
-
-private fun supportsProgressiveImageUpgrade(post: Post, media: ImageRef): Boolean {
-    return post.id.source != SourceKey.HITOMI &&
-        supportsProgressiveImageCandidates(post, media) &&
-        media.progressiveUrls.isNotEmpty()
+    return viewerMediaDeliveryPlan(post, media).primary?.location
 }
 
 internal fun viewerGifLocations(post: Post, media: ImageRef): List<String> {
-    val refs = buildList {
-        add(media)
-        post.full?.let { add(it) }
-        add(post.preview)
-    }
-    return refs
-        .filter(::isGifMediaRef)
-        .flatMap { ref ->
-            buildList {
-                ref.localPath?.takeIf(String::isNotBlank)?.let(::add)
-                addAll(ref.progressiveUrls.filter(String::isNotBlank))
-                ref.url?.takeIf(String::isNotBlank)?.let(::add)
-            }
-        }
-        .map { location -> normalizeMediaUrl(post.id.source, location) ?: location }
-        .distinct()
+    return viewerMediaDeliveryPlan(post, media).candidates
+        .filter { candidate -> isGifMediaRef(candidate.ref) }
+        .map { candidate -> candidate.location }
 }
 
 private fun isPixivUgoira(post: Post, media: ImageRef): Boolean {

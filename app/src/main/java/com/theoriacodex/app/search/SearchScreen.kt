@@ -92,6 +92,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import coil.imageLoader
+import coil.request.SuccessResult
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
 import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
@@ -109,9 +111,10 @@ import com.theoriacodex.app.media.animatedDurationRangeLabel
 import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.media.isHttpNotFound
 import com.theoriacodex.app.media.isPixivUgoiraPost
+import com.theoriacodex.app.media.MediaDeliveryActivation
 import com.theoriacodex.app.media.mergeResolvedPostForPresentation
 import com.theoriacodex.app.media.postPlaybackMediaCandidate
-import com.theoriacodex.app.media.postPreviewImageCandidate
+import com.theoriacodex.app.media.previewMediaDeliveryPlan
 import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.app.R
 import com.theoriacodex.app.source.SourceLogo
@@ -1040,20 +1043,20 @@ fun SearchResultCard(
         ) {
             mutableStateOf(false)
         }
-        val previewRef = remember(effectivePost) {
-            postPreviewImageCandidate(effectivePost)?.ref
-        }
-        val imageCandidates = remember(previewRef?.url, previewRef?.progressiveUrls) {
-            searchCardImageCandidates(previewRef)
-        }
+        val imageDeliveryPlan = remember(effectivePost) { previewMediaDeliveryPlan(effectivePost) }
+        val imageCandidates = imageDeliveryPlan.candidates
         var displayedImageCandidateIndex by remember(
             effectivePost.id,
-            previewRef?.url,
-            previewRef?.progressiveUrls,
+            imageDeliveryPlan,
         ) {
             mutableIntStateOf(0)
         }
-        val previewUrl = imageCandidates.getOrNull(displayedImageCandidateIndex)
+        var maxPreparedImageCandidateIndex by remember(effectivePost.id, imageDeliveryPlan) {
+            mutableIntStateOf(0)
+        }
+        var hasVisibleImage by remember(effectivePost.id, imageDeliveryPlan) { mutableStateOf(false) }
+        val previewCandidate = imageCandidates.getOrNull(displayedImageCandidateIndex)
+        val previewUrl = previewCandidate?.location
         val ratio = remember(post.id) {
             previewAspectRatio(post)
         }
@@ -1080,6 +1083,37 @@ fun SearchResultCard(
             }
         }
         val mediaCount = postMediaCount(effectivePost)
+
+        LaunchedEffect(
+            imageDeliveryPlan,
+            displayedImageCandidateIndex,
+            maxPreparedImageCandidateIndex,
+            hasVisibleImage,
+            decodeSize,
+        ) {
+            if (!hasVisibleImage || displayedImageCandidateIndex != maxPreparedImageCandidateIndex) {
+                return@LaunchedEffect
+            }
+            val nextIndex = displayedImageCandidateIndex + 1
+            val nextCandidate = imageCandidates.getOrNull(nextIndex) ?: return@LaunchedEffect
+            if (nextCandidate.activation != MediaDeliveryActivation.QUALITY_UPGRADE) {
+                return@LaunchedEffect
+            }
+            val result = runCatchingPreservingCancellation {
+                context.imageLoader.execute(
+                    buildFeedImageRequest(
+                        context = context,
+                        url = nextCandidate.location,
+                        sourceKey = effectivePost.id.source,
+                        decodeSize = decodeSize,
+                    )
+                )
+            }.getOrNull()
+            if (result is SuccessResult) {
+                maxPreparedImageCandidateIndex = nextIndex
+                displayedImageCandidateIndex = nextIndex
+            }
+        }
 
         LaunchedEffect(effectivePost.id, videoRef?.url, videoRef?.localPath, resolvePostById) {
             if (videoRef == null && resolvedPostOverride == null) {
@@ -1131,9 +1165,14 @@ fun SearchResultCard(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                     isActive = playbackActive,
+                    onSuccess = {
+                        hasVisibleImage = true
+                        maxPreparedImageCandidateIndex = displayedImageCandidateIndex
+                    },
                     onError = { state ->
-                        val canAdvance = displayedImageCandidateIndex < imageCandidates.lastIndex
-                        val failedRef = previewRef?.copy(url = previewUrl)
+                        val canAdvance = !hasVisibleImage &&
+                            displayedImageCandidateIndex < imageCandidates.lastIndex
+                        val failedRef = previewCandidate?.ref?.copy(url = previewUrl)
                         if (
                             failedRef != null &&
                             recoverPostMedia != null &&
@@ -1339,13 +1378,6 @@ internal fun postMediaCount(post: Post): Int {
         post.full != null -> 1
         else -> 1
     }
-}
-
-internal fun searchCardImageCandidates(previewRef: ImageRef?): List<String> {
-    return buildList {
-        previewRef?.url?.takeIf(String::isNotBlank)?.let(::add)
-        addAll(previewRef?.progressiveUrls.orEmpty().filter(String::isNotBlank))
-    }.distinct()
 }
 
 private fun resolveCardVideoRef(post: Post): ImageRef? {

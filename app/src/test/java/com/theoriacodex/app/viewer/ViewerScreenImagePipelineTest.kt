@@ -1,6 +1,7 @@
 package com.theoriacodex.app.viewer
 
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.app.media.viewerMediaDeliveryPlan
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -68,8 +69,9 @@ class ViewerScreenImagePipelineTest {
                 "https://i.pximg.net/medium.jpg",
                 "https://i.pximg.net/large.jpg",
                 "https://i.pximg.net/original.jpg",
+                "https://i.pximg.net/square_medium.jpg",
             ),
-            viewerImageCandidates(post, media),
+            viewerMediaDeliveryPlan(post, media).candidates.map { it.location },
         )
         assertEquals(
             "https://i.pximg.net/medium.jpg",
@@ -94,7 +96,10 @@ class ViewerScreenImagePipelineTest {
             media = listOf(media),
         )
 
-        assertEquals(listOf(primary, alternate), viewerImageCandidates(post, media))
+        assertEquals(
+            listOf(primary, alternate),
+            viewerMediaDeliveryPlan(post, media).candidates.map { it.location },
+        )
     }
 
     @Test
@@ -127,7 +132,7 @@ class ViewerScreenImagePipelineTest {
                 "https://example.com/full.jpg",
                 "https://example.com/preview.jpg",
             ),
-            viewerImageCandidates(post, media),
+            viewerMediaDeliveryPlan(post, media).candidates.map { it.location },
         )
         assertEquals(
             "https://example.com/media.jpg",
@@ -158,8 +163,9 @@ class ViewerScreenImagePipelineTest {
             listOf(
                 "https://gelbooru.com/sample.jpg",
                 "https://gelbooru.com/full.jpg",
+                "https://gelbooru.com/preview.jpg",
             ),
-            viewerImageCandidates(post, media),
+            viewerMediaDeliveryPlan(post, media).candidates.map { it.location },
         )
         assertEquals(
             "https://gelbooru.com/sample.jpg",
@@ -229,8 +235,9 @@ class ViewerScreenImagePipelineTest {
                 "https://i.nhentai.net/galleries/3821534/1.webp",
                 "https://i.nhentai.net/galleries/3821534/1.jpg",
                 "https://i.nhentai.net/galleries/3821534/1.png",
+                "https://t.nhentai.net/galleries/3821534/thumb.webp",
             ),
-            viewerImageCandidates(post, media),
+            viewerMediaDeliveryPlan(post, media).candidates.map { it.location },
         )
         assertEquals(
             "https://i.nhentai.net/galleries/3821534/1.webp",

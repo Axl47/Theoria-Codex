@@ -24,6 +24,26 @@ data class PostMediaCandidate(
     val reason: PostMediaSelectionReason,
 )
 
+enum class MediaDeliveryActivation {
+    PRIMARY,
+    QUALITY_UPGRADE,
+    FAILURE_FALLBACK,
+}
+
+data class MediaDeliveryCandidate(
+    val location: String,
+    val ref: ImageRef,
+    val activation: MediaDeliveryActivation,
+    val requestHeaders: Map<String, String>,
+)
+
+data class MediaDeliveryPlan(
+    val candidates: List<MediaDeliveryCandidate>,
+) {
+    val primary: MediaDeliveryCandidate?
+        get() = candidates.firstOrNull()
+}
+
 fun postPreviewImageCandidate(post: Post): PostMediaCandidate? {
     val full = post.full
     if (full != null && isAnimatedImageMediaRef(full)) {
@@ -80,29 +100,93 @@ fun postMediaItems(post: Post): List<ImageRef> {
         .ifEmpty { listOf(normalizedMediaRef(post, post.preview)) }
 }
 
-fun progressiveImageCandidates(post: Post, media: ImageRef): List<String> {
-    if (supportsProgressiveImageCandidates(post, media)) {
-        val progressiveCandidates = buildList {
-            media.localPath?.takeIf(String::isNotBlank)?.let(::add)
-            addAll(media.progressiveUrls.filter(String::isNotBlank))
-            media.url?.takeIf(String::isNotBlank)?.let(::add)
-        }.distinct()
-        if (progressiveCandidates.isNotEmpty()) return progressiveCandidates
-    }
+fun previewMediaDeliveryPlan(post: Post): MediaDeliveryPlan {
+    val preferred = postPreviewImageCandidate(post)?.ref
     val refs = buildList {
-        add(media)
-        post.full?.let(::add)
+        preferred?.let(::add)
         add(post.preview)
-    }
-    val preferred = refs.mapNotNull { ref ->
-        ref.bestLocation()?.takeIf { location -> isLikelyImageLocation(ref.mime, location) }
+        post.full?.let(::add)
+        post.media.firstOrNull()?.let(::add)
     }.distinct()
-    return preferred.ifEmpty { refs.mapNotNull(ImageRef::bestLocation).distinct() }
+    return mediaDeliveryPlan(
+        post = post,
+        refs = refs,
+        qualityUpgradeRefs = if (post.id.source in QUALITY_UPGRADE_IMAGE_SOURCES) {
+            refs.filterTo(linkedSetOf()) { ref -> ref != post.preview || ref == preferred }
+        } else {
+            emptySet()
+        },
+        preferredUrlFirst = preferred,
+    )
 }
 
-fun supportsProgressiveImageCandidates(post: Post, media: ImageRef): Boolean {
-    return post.id.source in PROGRESSIVE_IMAGE_SOURCES &&
-        (media.progressiveUrls.isNotEmpty() || !media.localPath.isNullOrBlank())
+fun viewerMediaDeliveryPlan(post: Post, media: ImageRef): MediaDeliveryPlan {
+    val mediaIndex = post.media.indexOf(media)
+    val samePageFallbacks = if (mediaIndex <= 0) {
+        listOfNotNull(post.full, post.preview)
+    } else {
+        emptyList()
+    }
+    return mediaDeliveryPlan(
+        post = post,
+        refs = listOf(media) + samePageFallbacks,
+        qualityUpgradeRefs = if (post.id.source in QUALITY_UPGRADE_IMAGE_SOURCES) setOf(media) else emptySet(),
+        preferredUrlFirst = null,
+    )
+}
+
+private fun mediaDeliveryPlan(
+    post: Post,
+    refs: List<ImageRef>,
+    qualityUpgradeRefs: Set<ImageRef>,
+    preferredUrlFirst: ImageRef?,
+): MediaDeliveryPlan {
+    val seen = linkedSetOf<String>()
+    val candidates = buildList {
+        refs.forEach refsLoop@ { ref ->
+            if (mediaKind(ref) == PostMediaKind.VIDEO) return@refsLoop
+            val normalizedRef = normalizedMediaRef(post, ref)
+            val locations = orderedImageLocations(
+                ref = normalizedRef,
+                urlFirst = ref == preferredUrlFirst,
+            )
+            locations.forEach locationsLoop@ { rawLocation ->
+                val location = normalizeMediaUrl(post.id.source, rawLocation)
+                    ?.takeIf(String::isNotBlank)
+                    ?: return@locationsLoop
+                if (!isLikelyImageLocation(normalizedRef.mime, location) || !seen.add(location)) {
+                    return@locationsLoop
+                }
+                val activation = when {
+                    isEmpty() -> MediaDeliveryActivation.PRIMARY
+                    ref in qualityUpgradeRefs && normalizedRef.localPath.isNullOrBlank() -> {
+                        MediaDeliveryActivation.QUALITY_UPGRADE
+                    }
+                    else -> MediaDeliveryActivation.FAILURE_FALLBACK
+                }
+                add(
+                    MediaDeliveryCandidate(
+                        location = location,
+                        ref = normalizedRef,
+                        activation = activation,
+                        requestHeaders = post.id.source.requestHeaders(),
+                    )
+                )
+            }
+        }
+    }
+    return MediaDeliveryPlan(candidates)
+}
+
+private fun orderedImageLocations(ref: ImageRef, urlFirst: Boolean): List<String> = buildList {
+    ref.localPath?.takeIf(String::isNotBlank)?.let(::add)
+    if (urlFirst) {
+        ref.url?.takeIf(String::isNotBlank)?.let(::add)
+        addAll(ref.progressiveUrls.filter(String::isNotBlank))
+    } else {
+        addAll(ref.progressiveUrls.filter(String::isNotBlank))
+        ref.url?.takeIf(String::isNotBlank)?.let(::add)
+    }
 }
 
 fun isLikelyImageLocation(mime: String?, location: String): Boolean {
@@ -153,9 +237,7 @@ private fun ImageRef.bestLocation(): String? =
     localPath?.takeIf(String::isNotBlank) ?: url?.takeIf(String::isNotBlank)
 
 private val IMAGE_EXTENSIONS = setOf("gif", "png", "webp", "jpg", "jpeg", "bmp", "heic", "heif", "avif")
-private val PROGRESSIVE_IMAGE_SOURCES = setOf(
+private val QUALITY_UPGRADE_IMAGE_SOURCES = setOf(
     SourceKey.PIXIV,
     SourceKey.GELBOORU,
-    SourceKey.NHENTAI,
-    SourceKey.HITOMI,
 )

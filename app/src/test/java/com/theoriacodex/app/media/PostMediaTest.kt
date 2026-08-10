@@ -52,6 +52,86 @@ class PostMediaTest {
             ),
             preview.ref.progressiveUrls,
         )
+
+        val plan = previewMediaDeliveryPlan(pixivPost)
+        assertEquals(
+            listOf(
+                "https://example.test/medium.jpg",
+                "https://example.test/large.jpg",
+                "https://example.test/original.jpg",
+                "https://example.test/preview.jpg",
+            ),
+            plan.candidates.map { it.location },
+        )
+        assertEquals(
+            listOf(
+                MediaDeliveryActivation.PRIMARY,
+                MediaDeliveryActivation.QUALITY_UPGRADE,
+                MediaDeliveryActivation.QUALITY_UPGRADE,
+                MediaDeliveryActivation.FAILURE_FALLBACK,
+            ),
+            plan.candidates.map { it.activation },
+        )
+    }
+
+    @Test
+    fun `nhentai extension mirrors are failure fallbacks and higher pages never use the cover`() {
+        val first = ref("1.webp", "image/webp").copy(
+            progressiveUrls = listOf(
+                "https://example.test/1.webp",
+                "https://example.test/1.jpg",
+            ),
+        )
+        val second = ref("2.webp", "image/webp").copy(
+            progressiveUrls = listOf(
+                "https://example.test/2.webp",
+                "https://example.test/2.jpg",
+            ),
+        )
+        val gallery = post(SourceKey.NHENTAI, first).copy(media = listOf(first, second))
+
+        val firstPlan = viewerMediaDeliveryPlan(gallery, first)
+        val secondPlan = viewerMediaDeliveryPlan(gallery, second)
+
+        assertEquals(
+            listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.FAILURE_FALLBACK),
+            firstPlan.candidates.take(2).map { it.activation },
+        )
+        assertEquals(
+            listOf("https://example.test/2.webp", "https://example.test/2.jpg"),
+            secondPlan.candidates.map { it.location },
+        )
+        assertEquals(
+            listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.FAILURE_FALLBACK),
+            secondPlan.candidates.map { it.activation },
+        )
+    }
+
+    @Test
+    fun `gelbooru preview can upgrade through known sample and full media`() {
+        val full = ref("full.jpg", "image/jpeg").copy(
+            progressiveUrls = listOf("https://example.test/sample.jpg"),
+        )
+        val post = post(SourceKey.GELBOORU, full)
+
+        val plan = previewMediaDeliveryPlan(post)
+
+        assertEquals(
+            listOf(
+                "https://example.test/preview.jpg",
+                "https://example.test/sample.jpg",
+                "https://example.test/full.jpg",
+            ),
+            plan.candidates.map { it.location },
+        )
+        assertEquals(
+            listOf(
+                MediaDeliveryActivation.PRIMARY,
+                MediaDeliveryActivation.QUALITY_UPGRADE,
+                MediaDeliveryActivation.QUALITY_UPGRADE,
+            ),
+            plan.candidates.map { it.activation },
+        )
     }
 
     @Test

@@ -32,6 +32,7 @@ import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.request.ImageRequest
+import coil.request.SuccessResult
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.viewer.FirstFrameTraceGate
@@ -348,6 +349,7 @@ internal fun FeedAsyncImage(
     contentScale: ContentScale,
     isActive: Boolean,
     modifier: Modifier = Modifier,
+    onSuccess: ((SuccessResult) -> Unit)? = null,
     onError: ((AsyncImagePainter.State.Error) -> Unit)? = null,
 ) {
     var animatable by remember(model) { mutableStateOf<Animatable?>(null) }
@@ -360,7 +362,10 @@ internal fun FeedAsyncImage(
         contentDescription = contentDescription,
         contentScale = contentScale,
         modifier = modifier,
-        onSuccess = { state -> animatable = state.result.drawable as? Animatable },
+        onSuccess = { state ->
+            animatable = state.result.drawable as? Animatable
+            onSuccess?.invoke(state.result)
+        },
         onError = { state ->
             animatable = null
             onError?.invoke(state)

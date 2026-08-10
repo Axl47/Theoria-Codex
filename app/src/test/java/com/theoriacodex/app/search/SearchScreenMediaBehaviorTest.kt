@@ -1,6 +1,8 @@
 package com.theoriacodex.app.search
 
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.app.media.MediaDeliveryActivation
+import com.theoriacodex.app.media.previewMediaDeliveryPlan
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -54,7 +56,13 @@ class SearchScreenMediaBehaviorTest {
             progressiveUrls = listOf(primary, alternate),
         )
 
-        assertEquals(listOf(primary, alternate), searchCardImageCandidates(ref))
+        val plan = previewMediaDeliveryPlan(samplePost(SourceKey.HITOMI).copy(preview = ref))
+
+        assertEquals(listOf(primary, alternate), plan.candidates.map { it.location })
+        assertEquals(
+            listOf(MediaDeliveryActivation.PRIMARY, MediaDeliveryActivation.FAILURE_FALLBACK),
+            plan.candidates.map { it.activation },
+        )
     }
 
     @Test

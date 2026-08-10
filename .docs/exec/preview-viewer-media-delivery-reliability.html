@@ -371,7 +371,7 @@
 
       <article>
         <h3>Phase 2: Centralize Preview and Viewer candidate intent</h3>
-        <p class="phase-status">Status: Proposed.</p>
+        <p class="phase-status done">Status: Completed 2026-08-10.</p>
         <table class="status-table">
           <tbody>
             <tr><td>Goal</td><td>Preview and Viewer share one ordered media delivery plan while preserving provider-specific quality and failover behavior.</td></tr>
@@ -387,6 +387,7 @@
           <li>For Viewer, keep the selected media authoritative. Only use full/preview as failure fallback when they still represent the same post/media page; never replace a gallery page with an unrelated cover after a visible higher page fails.</li>
           <li>Preserve current GIF fallback ordering and Hitomi configuration-refresh behavior. A successful lower-quality image remains visible while a proactive upgrade is attempted.</li>
         </ol>
+        <p><strong>Result:</strong> one application-only delivery plan now labels every location as primary, quality upgrade, or failure fallback and carries its source headers without changing <code>ImageRef</code>. Preview, Viewer, GIF fallback, and Codex covers consume the same ordering. Pixiv and Gelbooru can upgrade only after a visible image succeeds; NHentai extensions and Hitomi formats/shards remain failure-only. Preview now tries known sample/full/page-one media before provider resolution, while Viewer excludes cover fallback for gallery pages above page one.</p>
       </article>
 
       <article>
@@ -563,7 +564,7 @@
         <li>[x] 2026-08-10 — Authored this standalone implementation plan without editing <code>working_list.md</code> or the active duration plan.</li>
         <li>[x] 2026-08-10 — Phase 0: reconciled against <code>91dd752</code> and froze 148 passing focused host contracts; recorded the disconnected-device evidence gap.</li>
         <li>[x] 2026-08-10 — Phase 1: added reducer-owned per-media reload generations, one shared renderer error/Retry surface, generic provider resolution fallback, and stale-session-safe healing. Thirty-one focused tests plus Debug compilation pass.</li>
-        <li>[ ] Phase 2 — Centralize candidate intent and Preview fallback.</li>
+        <li>[x] 2026-08-10 — Phase 2: centralized typed candidate intent, proactive Pixiv/Gelbooru upgrades, failure-only NHentai/Hitomi alternatives, Preview page-one fallback, and higher-page Viewer isolation. Thirty-three focused tests plus Debug compilation pass.</li>
         <li>[ ] Phase 3 — Replace first-six/manual video prefetch with adjacent, bounded, shared-cache preloading.</li>
         <li>[ ] Phase 4 — Remove provider resolution from viable Viewer launch paths.</li>
         <li>[ ] Phase 5 — Bound Pixiv Ugoira and unify token refresh.</li>

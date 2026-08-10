@@ -15,7 +15,7 @@ class CodexCoverTest {
     val tempFolder = TemporaryFolder()
 
     @Test
-    fun `cover candidates include alternate media and later posts in display order`() {
+    fun `cover candidates include page one fallback and later posts in display order`() {
         val newest = post(
             source = SourceKey.PIXIV,
             id = "newest",
@@ -36,7 +36,8 @@ class CodexCoverTest {
             .map(CodexCoverCandidate.RemoteImage::url)
 
         assertEquals("https://example.test/broken-preview.jpg", urls.first())
-        assertTrue(urls.indexOf("https://example.test/page-2.jpg") in 1 until urls.lastIndex)
+        assertTrue(urls.indexOf("https://example.test/page-1.jpg") in 1 until urls.lastIndex)
+        assertTrue("https://example.test/page-2.jpg" !in urls)
         assertEquals("https://example.test/older-preview.jpg", urls.last())
     }
 
