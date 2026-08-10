@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -56,7 +57,11 @@ internal fun CodexTileMetadata(
             )
         }
         IconButton(onClick = onOpenActions) {
-            Icon(Icons.Default.MoreVert, contentDescription = "Actions for ${codex.name}")
+            Icon(
+                imageVector = Icons.Default.MoreVert,
+                contentDescription = "Actions for ${codex.name}",
+                modifier = Modifier.offset(x = 12.dp),
+            )
         }
     }
 }
