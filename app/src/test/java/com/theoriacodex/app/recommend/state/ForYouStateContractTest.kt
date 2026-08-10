@@ -132,6 +132,17 @@ class ForYouStateContractTest {
     }
 
     @Test
+    fun `historical seed without likes reports no results instead of training prompt`() {
+        val historical = snapshot(
+            likesCount = 0,
+            seedId = "PIXIV:saved seed",
+            results = emptyList(),
+        ).toUiState()
+
+        assertEquals(ForYouEmptyReason.NO_RESULTS, historical.emptyReason)
+    }
+
+    @Test
     fun `seed blacklist undo carries the exact profile and entries into refresh`() {
         val entry = ForYouBlacklistEntry(SourceKey.PIXIV, listOf("sky", "night"))
         val state = snapshot(likesCount = 2, seedId = "PIXIV:sky+night").toUiState()

@@ -73,6 +73,30 @@ class ForYouViewModelTest {
     }
 
     @Test
+    fun `cold Recents replay waits for environment sync and runs without likes`() = runTest {
+        val result = testPost(sourcePostId = "historical")
+        val engine = FakeForYouRouteEngine().apply {
+            replayResult = listOf(result)
+            settingsChangedResult = true
+        }
+        val viewModel = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        val seed = mapOf(SourceKey.PIXIV to listOf("saved seed"))
+        advanceUntilIdle()
+
+        viewModel.onAction(ForYouAction.ReplaySearch(seed, SortMode.TOP))
+        runCurrent()
+        assertNull(engine.replayedSearch)
+
+        viewModel.synchronizeEnvironment(AppSettings(), activeProfileLikesCount = 0)
+        advanceUntilIdle()
+
+        assertEquals(seed to SortMode.TOP, engine.replayedSearch)
+        assertEquals(listOf(result), viewModel.state.value.results)
+        assertEquals(seed, viewModel.state.value.seedSummaryBySource)
+        assertNull(viewModel.state.value.emptyReason)
+    }
+
+    @Test
     fun `sort and source actions are owned by route and persisted`() = runTest {
         val engine = FakeForYouRouteEngine(
             availableSources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU),
@@ -370,6 +394,8 @@ private class FakeForYouRouteEngine(
     var restoredSource: SourceKey? = null
     var restoredSort: SortMode? = null
     var refreshResult: List<Post> = emptyList()
+    var replayResult: List<Post> = emptyList()
+    var replayedSearch: Pair<Map<SourceKey, List<String>>, SortMode>? = null
     var refreshCanLoadMore = false
     var pageResults: List<Post> = emptyList()
     var pageError: String? = null
@@ -456,11 +482,14 @@ private class FakeForYouRouteEngine(
     }
 
     override suspend fun replaySearch(seedBySource: Map<SourceKey, List<String>>, sort: SortMode) {
+        replayedSearch = seedBySource to sort
         current = current.copy(
+            activeProfileLikesCount = 0,
             selectedSource = seedBySource.keys.singleOrNull(),
             sortMode = sort,
             seedSummaryBySource = seedBySource,
             seedId = "historical",
+            results = replayResult,
         )
     }
 

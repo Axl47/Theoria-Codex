@@ -16,6 +16,14 @@ None.
 
 ### Done
 
+- [x] Make cold-start environment synchronization preserve a queued FYP replay.
+  - Evidence: `ForYouViewModel` buffers a Recents replay until the first authoritative environment synchronization, then lets it supersede initialization refresh/clear behavior.
+- [x] Ensure a replayed seed without likes reports search results or no results, never the training CTA.
+  - Evidence: explicit saved seed state now takes precedence over the no-likes training empty reason; a cold replay with zero likes publishes its historical results.
+- [x] Add cold-start ordering regressions.
+  - Evidence: focused ViewModel coverage reproduces pre-sync replay with settings drift and zero likes, then proves the exact seed/sort and results survive synchronization; state coverage locks the no-results fallback.
+- [x] Run one bounded host validation batch and close the cold-start evidence.
+  - Evidence: 30 focused cold-start/state/architecture tests passed with zero failures/errors/skips; app compilation, app Detekt, HTML validation, and diff checks passed. No device, connected, install, package mutation, or live-provider lane ran.
 - [x] Persist and replay the exact source-by-source FYP seed through the For You route owner.
   - Evidence: the versioned recent-search payload now carries source-specific seed tags; `ReplaySearch` supersedes current For You work and executes those exact per-source queries and sort through `ForYouCoordinator`.
 - [x] Make FYP rows navigate to For You and reorder Searches before FYP.

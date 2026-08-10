@@ -256,6 +256,7 @@ fun ForYouCoordinatorSnapshot.toUiState(): ForYouUiState {
         errorMessage = copiedError,
         emptyReason = inferForYouEmptyReason(
             seedId = seedId,
+            hasSeed = copiedSeeds.isNotEmpty(),
             likesCount = activeProfileLikesCount,
             results = copiedResults,
             isRefreshing = loading,
@@ -474,6 +475,7 @@ fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
                     cancelled.copy(
                         emptyReason = inferForYouEmptyReason(
                             seedId = cancelled.seedId,
+                            hasSeed = cancelled.seedSummaryBySource.isNotEmpty(),
                             likesCount = cancelled.activeProfileLikesCount,
                             results = cancelled.results,
                             isRefreshing = false,
@@ -525,6 +527,7 @@ private fun ForYouUiState.unchanged(): ForYouTransition = ForYouTransition(this)
 
 private fun inferForYouEmptyReason(
     seedId: String,
+    hasSeed: Boolean,
     likesCount: Int,
     results: List<Post>,
     isRefreshing: Boolean,
@@ -534,6 +537,7 @@ private fun inferForYouEmptyReason(
     return when {
         seedId == "empty-enabled" -> ForYouEmptyReason.NO_ENABLED_SOURCES
         seedId == "empty-seed" -> ForYouEmptyReason.SEEDS_EXHAUSTED
+        hasSeed -> ForYouEmptyReason.NO_RESULTS
         likesCount <= 0 -> ForYouEmptyReason.NO_LIKES
         else -> ForYouEmptyReason.NO_RESULTS
     }

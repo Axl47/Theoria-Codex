@@ -160,6 +160,8 @@ internal class ForYouViewModel(
     private var rootJob: Job? = null
     private var pageJob: Job? = null
     private var seedMutationJob: Job? = null
+    private var environmentSynchronized = false
+    private var pendingReplaySearch: ForYouAction.ReplaySearch? = null
 
     private val mutableState = MutableStateFlow(
         engine.snapshot(initialProfiles, emptyList()).toUiState().copy(
@@ -196,6 +198,10 @@ internal class ForYouViewModel(
             requestAnimatedDurationEnrichment(action.seedId)
             return
         }
+        if (action is ForYouAction.ReplaySearch && !environmentSynchronized) {
+            pendingReplaySearch = action
+            return
+        }
         val transition = mutableState.value.reduce(action)
         mutableState.value = transition.state
         persistRouteInputs(transition.state)
@@ -220,10 +226,14 @@ internal class ForYouViewModel(
             cancelActiveReduction()
             engine.clear()
             publishSnapshot(activeLikesOverride = 0)
+            environmentSynchronized = true
+            replayPendingSearch()
             return
         }
 
         publishSnapshot(activeLikesOverride = activeProfileLikesCount)
+        environmentSynchronized = true
+        if (replayPendingSearch()) return
         val current = mutableState.value
         val shouldRefresh = engineChanged ||
             current.results.isEmpty() ||
@@ -232,6 +242,13 @@ internal class ForYouViewModel(
         if (shouldRefresh && !current.isRefreshing && !current.isPaging) {
             onAction(ForYouAction.Refresh(shuffle = false))
         }
+    }
+
+    private fun replayPendingSearch(): Boolean {
+        val pending = pendingReplaySearch ?: return false
+        pendingReplaySearch = null
+        onAction(pending)
+        return true
     }
 
     /** Reconciles a stable engine after credential/source capability changes. */
