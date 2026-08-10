@@ -93,7 +93,9 @@ internal data class CodexDetailDestinationState(
     val items: List<CodexItem>,
     val posts: List<Post>,
     val activeProfile: RecommendationProfile,
+    val availableSources: Set<SourceKey>,
     val creatorBrowsingSources: Set<SourceKey>,
+    val resolveUnknownAnimatedDurations: Boolean,
 )
 
 internal data class SaveToCodexDestinationState(
@@ -275,9 +277,12 @@ internal fun CodexDetailDestinationStateBoundary(
                 items = itemsState.value,
                 posts = postsState.value,
                 activeProfile = settings.activeRecommendationProfile(),
+                availableSources = availableState.value,
                 creatorBrowsingSources = remember(sources.registry, availableState.value) {
                     sources.registry.creatorBrowsingSources().intersect(availableState.value)
                 },
+                resolveUnknownAnimatedDurations =
+                    settings.contentFilters.resolveUnknownAnimatedDurations,
             ),
         )
     }

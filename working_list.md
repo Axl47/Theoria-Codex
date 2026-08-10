@@ -4,6 +4,39 @@ updated_at: 2026-08-10T01:03:53-04:00
 ---
 # Working List
 
+## Current Task: Add Codex Collection Filtering And Unified Sort Controls
+
+### In Progress
+
+None.
+
+### Pending
+
+- [ ] Manually confirm the Codex FAB sheet, conditional controls, count changes, and Viewer order in the isolated Debug app.
+
+### Done
+
+- [x] Create the task checklist before runtime edits.
+  - Evidence: this section records the requested controls, state flow, Viewer continuity, regression coverage, and bounded validation lane.
+- [x] Trace Codex detail state, source capabilities, shared feed filters, and Viewer handoff.
+  - Evidence: repository observation owns `CodexSortMode`; `CodexDetailScreen` currently renders those controls above the grid; the shared `FeedFilterFab`/`FeedFilterSheet` and animated-duration policy are reusable; Viewer currently receives the unfiltered `state.posts`; and saved NHentai/Hitomi taxonomy supports local Language and Full Color matching.
+- [x] Define the implementation boundary in an HTML ExecPlan.
+  - Evidence: `.docs/exec/codex-collection-filtering-and-sort-controls.html` fixes filter semantics, source capabilities, route-local ownership, repository sorting, exact Viewer handoff, error/empty states, and the bounded host validation lane. `git diff --check` passes for both planning artifacts; `xmllint --html` recognizes the document but reports its expected HTML4-era warnings for standard HTML5 structural elements.
+- [x] Implement and verify the platform-free Codex filter contract.
+  - Evidence: `CodexCollectionFilters` composes Animated only, duration, one source, Language, and Full Color without reordering posts; capability filters are limited to represented NHentai/Hitomi sources and support typed taxonomy plus legacy canonical tags. All 4 focused policy tests pass.
+- [x] Add and verify the navigation-scoped Codex duration-enrichment owner.
+  - Evidence: `CodexDetailDurationViewModel` drains the shared bounded lane for the active Codex identity, publishes immutable duration-only copies, preserves those values across same-collection repository refreshes, and drops them on identity replacement. All 3 focused owner tests pass.
+- [x] Add route-owned Codex filter state for Animated, Duration, Source, Language, and Full Color.
+  - Evidence: `CodexDetailScreen` now derives one immutable filter state, conditionally offers NHentai/Hitomi capability controls, reports visible versus total counts, distinguishes filtered-empty from collection-empty, and requests unknown durations only through its typed owner callback. `:app:compileDebugKotlin` passes.
+- [x] Move sorting into the shared filter FAB sheet and remove the top sorting row.
+  - Evidence: the header now contains only shared secondary chrome and edit/delete actions; Newest, Oldest, and By source live in `FeedFilterSheet`, while repository observation remains the sorting authority. The FAB reports both visibility and non-default sort state. Debug compilation passes.
+- [x] Preserve the filtered and sorted collection when opening Viewer.
+  - Evidence: the screen callback now carries `visiblePosts` plus its index, and `TheoriaAppContent` prepares that exact ordered list instead of closing over the unfiltered repository snapshot. Debug compilation passes.
+- [x] Add focused behavior and architecture regressions.
+  - Evidence: 4 platform-free filter tests, 3 duration-owner tests, 1 count-presentation test, and 3 shared-navigation/filter architecture tests cover the requested behavior and ownership boundaries.
+- [x] Run one bounded host validation batch and update planning evidence.
+  - Evidence: 11 focused tests and `:app:compileDebugKotlin` pass; `:app-logic:detekt` passes; HTML parsing and `git diff --check` pass. `:app:detektDebug` no longer reports either new Codex owner, but remains red on four inherited findings in untouched `CodexListScreen`, `SaveToCodexSheet`, and `SearchEmptyStatePolicy`. No connected, device, install, package mutation, release, or live-provider lane ran.
+
 ## Current Task: Add FYP Recommendation History to Recents
 
 ### In Progress

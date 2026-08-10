@@ -4,10 +4,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -16,23 +19,35 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
+import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
+import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
+import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
+import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.FeedEmptyTile
+import com.theoriacodex.app.ui.components.FeedFilterFab
+import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
@@ -50,10 +65,13 @@ fun CodexDetailScreen(
     codexName: String?,
     posts: List<Post>,
     sortMode: CodexSortMode,
+    availableSources: Set<SourceKey>,
     creatorBrowsingSources: Set<SourceKey>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
+    resolveUnknownAnimatedDurations: Boolean = false,
     onSortChange: (CodexSortMode) -> Unit,
-    onOpenViewer: (Int) -> Unit,
+    onRequestAnimatedDurationEnrichment: () -> Unit,
+    onOpenViewer: (List<Post>, Int) -> Unit,
     resolvePostById: suspend (PostId) -> Post? = { null },
     onRemovePosts: (List<Post>) -> Unit,
     onSavePostToDevice: (Post) -> Unit,
@@ -73,11 +91,77 @@ fun CodexDetailScreen(
 ) {
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showFilterSheet by remember { mutableStateOf(false) }
     var editSelection by remember { mutableStateOf(CodexEditSelection()) }
+    var animatedOnly by rememberSaveable { mutableStateOf(false) }
+    var durationMinBucket by rememberSaveable { mutableIntStateOf(ANIMATED_DURATION_MIN_BUCKET) }
+    var durationMaxBucket by rememberSaveable { mutableIntStateOf(ANIMATED_DURATION_MAX_BUCKET) }
+    var selectedSource by rememberSaveable { mutableStateOf<SourceKey?>(null) }
+    var language by rememberSaveable { mutableStateOf(CodexLanguageFilter.ANY) }
+    var fullColorOnly by rememberSaveable { mutableStateOf(false) }
+    val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
+        AnimatedDurationRange(durationMinBucket, durationMaxBucket)
+    }
+    val sourceOptions = remember(posts, availableSources) {
+        codexSearchSourceOptions(posts, availableSources).map(CodexSearchSourceOption::source)
+    }
+    val representedSources = remember(sourceOptions) { sourceOptions.toSet() }
+    val supportsLanguage = remember(representedSources) {
+        supportsCodexLanguageFilter(representedSources)
+    }
+    val supportsFullColor = remember(representedSources) {
+        supportsCodexFullColorFilter(representedSources)
+    }
+    val filters = remember(
+        animatedOnly,
+        animatedDurationRange,
+        selectedSource,
+        language,
+        fullColorOnly,
+    ) {
+        CodexCollectionFilters(
+            animatedOnly = animatedOnly,
+            animatedDurationRange = animatedDurationRange,
+            source = selectedSource,
+            language = language,
+            fullColorOnly = fullColorOnly,
+        )
+    }
+    val unknownDurationPolicy = remember(resolveUnknownAnimatedDurations) {
+        if (resolveUnknownAnimatedDurations) {
+            UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
+        } else {
+            UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
+        }
+    }
+    val visiblePosts = remember(posts, filters, unknownDurationPolicy) {
+        filterCodexCollectionPosts(posts, filters, unknownDurationPolicy)
+    }
+    val applyFilters: (CodexCollectionFilters) -> Unit = { updated ->
+        animatedOnly = updated.animatedOnly
+        durationMinBucket = updated.animatedDurationRange.normalizedMinBucket
+        durationMaxBucket = updated.animatedDurationRange.normalizedMaxBucket
+        selectedSource = updated.source
+        language = updated.language
+        fullColorOnly = updated.fullColorOnly
+    }
 
     LaunchedEffect(posts.map(Post::id)) {
         editSelection = editSelection.retainAvailable(posts.mapTo(mutableSetOf(), Post::id))
     }
+    CodexFilterReconciliationEffect(
+        filters = filters,
+        sourceOptions = sourceOptions,
+        supportsLanguage = supportsLanguage,
+        supportsFullColor = supportsFullColor,
+        onFiltersChange = applyFilters,
+    )
+    CodexDurationEnrichmentEffect(
+        range = animatedDurationRange,
+        postIds = posts.map(Post::id),
+        unknownDurationPolicy = unknownDurationPolicy,
+        onRequest = onRequestAnimatedDurationEnrichment,
+    )
 
     if (codexName == null) {
         Column(
@@ -92,37 +176,72 @@ fun CodexDetailScreen(
         return
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        CodexDetailHeader(
-            codexName = codexName,
-            itemCount = posts.size,
+    Scaffold(
+        contentWindowInsets = WindowInsets(0),
+        floatingActionButton = {
+            FeedFilterFab(
+                modifier = Modifier.padding(bottom = 8.dp),
+                active = filters.isActive || sortMode != CodexSortMode.NEWEST_SAVED,
+                contentDescription = "Filter Codex collection",
+                onClick = { showFilterSheet = true },
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            CodexDetailHeader(
+                codexName = codexName,
+                itemSummary = codexItemSummary(visiblePosts.size, posts.size, filters.isActive),
+                itemCount = posts.size,
+                editSelection = editSelection,
+                onBack = onBack,
+                onBeginEdit = { editSelection = editSelection.begin() },
+                onCancelEdit = { editSelection = editSelection.exit() },
+                onRemoveSelected = {
+                    val selected = posts.filter { it.id in editSelection.selectedPostIds }
+                    editSelection = editSelection.exit()
+                    onRemovePosts(selected)
+                },
+                onDeleteCodex = { showDeleteConfirm = true },
+                isLikesCodex = isLikesCodex,
+            )
+            CodexDetailGrid(
+                posts = visiblePosts,
+                collectionIsEmpty = posts.isEmpty(),
+                editSelection = editSelection,
+                pixivUgoiraClient = pixivUgoiraClient,
+                resolvePostById = resolvePostById,
+                onOpenViewer = { index -> onOpenViewer(visiblePosts, index) },
+                onToggleSelection = { postId -> editSelection = editSelection.toggle(postId) },
+                onOpenPostActions = { post -> selectedActionPost = post },
+            )
+        }
+    }
+
+    if (showFilterSheet) {
+        CodexFilterSheet(
+            filters = filters,
+            sourceOptions = sourceOptions,
+            supportsLanguage = supportsLanguage,
+            supportsFullColor = supportsFullColor,
             sortMode = sortMode,
-            editSelection = editSelection,
+            onFiltersChange = applyFilters,
             onSortChange = onSortChange,
-            onBack = onBack,
-            onBeginEdit = { editSelection = editSelection.begin() },
-            onCancelEdit = { editSelection = editSelection.exit() },
-            onRemoveSelected = {
-                val selected = posts.filter { it.id in editSelection.selectedPostIds }
-                editSelection = editSelection.exit()
-                onRemovePosts(selected)
+            onReset = {
+                animatedOnly = false
+                durationMinBucket = ANIMATED_DURATION_MIN_BUCKET
+                durationMaxBucket = ANIMATED_DURATION_MAX_BUCKET
+                selectedSource = null
+                language = CodexLanguageFilter.ANY
+                fullColorOnly = false
+                onSortChange(CodexSortMode.NEWEST_SAVED)
             },
-            onDeleteCodex = { showDeleteConfirm = true },
-            isLikesCodex = isLikesCodex,
-        )
-        CodexDetailGrid(
-            posts = posts,
-            editSelection = editSelection,
-            pixivUgoiraClient = pixivUgoiraClient,
-            resolvePostById = resolvePostById,
-            onOpenViewer = onOpenViewer,
-            onToggleSelection = { postId -> editSelection = editSelection.toggle(postId) },
-            onOpenPostActions = { post -> selectedActionPost = post },
+            onDismiss = { showFilterSheet = false },
         )
     }
 
@@ -166,6 +285,40 @@ fun CodexDetailScreen(
 }
 
 @Composable
+private fun CodexFilterReconciliationEffect(
+    filters: CodexCollectionFilters,
+    sourceOptions: List<SourceKey>,
+    supportsLanguage: Boolean,
+    supportsFullColor: Boolean,
+    onFiltersChange: (CodexCollectionFilters) -> Unit,
+) {
+    LaunchedEffect(sourceOptions, supportsLanguage, supportsFullColor) {
+        val reconciled = filters.copy(
+            source = filters.source?.takeIf(sourceOptions::contains),
+            language = filters.language.takeIf { supportsLanguage } ?: CodexLanguageFilter.ANY,
+            fullColorOnly = filters.fullColorOnly && supportsFullColor,
+        )
+        if (reconciled != filters) onFiltersChange(reconciled)
+    }
+}
+
+@Composable
+private fun CodexDurationEnrichmentEffect(
+    range: AnimatedDurationRange,
+    postIds: List<PostId>,
+    unknownDurationPolicy: UnknownAnimatedDurationPolicy,
+    onRequest: () -> Unit,
+) {
+    LaunchedEffect(range, postIds, unknownDurationPolicy) {
+        if (!range.isFullRange &&
+            unknownDurationPolicy == UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
+        ) {
+            onRequest()
+        }
+    }
+}
+
+@Composable
 private fun CodexDeleteConfirmationDialog(
     codexName: String,
     isLikesCodex: Boolean,
@@ -198,10 +351,9 @@ private fun CodexDeleteConfirmationDialog(
 @Composable
 private fun CodexDetailHeader(
     codexName: String,
+    itemSummary: String,
     itemCount: Int,
-    sortMode: CodexSortMode,
     editSelection: CodexEditSelection,
-    onSortChange: (CodexSortMode) -> Unit,
     onBack: () -> Unit,
     onBeginEdit: () -> Unit,
     onCancelEdit: () -> Unit,
@@ -211,7 +363,7 @@ private fun CodexDetailHeader(
 ) {
     SecondaryScreenAppBar(
         title = codexName,
-        subtitle = "$itemCount items",
+        subtitle = itemSummary,
         onBack = onBack,
     ) {
         CodexDetailHeaderActions(
@@ -223,17 +375,6 @@ private fun CodexDetailHeader(
             onDeleteCodex = onDeleteCodex,
             isLikesCodex = isLikesCodex,
         )
-    }
-    if (!editSelection.active) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CodexSortMode.entries.forEach { mode ->
-                FilterChip(
-                    selected = mode == sortMode,
-                    onClick = { onSortChange(mode) },
-                    label = { Text(mode.displayLabel()) },
-                )
-            }
-        }
     }
 }
 
@@ -266,6 +407,7 @@ private fun CodexDetailHeaderActions(
 @Composable
 private fun CodexDetailGrid(
     posts: List<Post>,
+    collectionIsEmpty: Boolean,
     editSelection: CodexEditSelection,
     pixivUgoiraClient: PixivUgoiraClient?,
     resolvePostById: suspend (PostId) -> Post?,
@@ -275,8 +417,8 @@ private fun CodexDetailGrid(
 ) {
     if (posts.isEmpty()) {
         FeedEmptyTile(
-            title = "This codex is empty",
-            message = "Browse and save posts",
+            title = if (collectionIsEmpty) "This codex is empty" else "No matching posts",
+            message = if (collectionIsEmpty) "Browse and save posts" else "Adjust your filters",
             contentPadding = 24.dp,
         )
         return
@@ -349,6 +491,147 @@ private fun androidx.compose.foundation.layout.BoxScope.CodexSelectionMarker(sel
             )
         }
     }
+}
+
+@Composable
+private fun CodexFilterSheet(
+    filters: CodexCollectionFilters,
+    sourceOptions: List<SourceKey>,
+    supportsLanguage: Boolean,
+    supportsFullColor: Boolean,
+    sortMode: CodexSortMode,
+    onFiltersChange: (CodexCollectionFilters) -> Unit,
+    onSortChange: (CodexSortMode) -> Unit,
+    onReset: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    FeedFilterSheet(onDismiss = onDismiss, title = "Codex filters") {
+        CodexVisibilityFilters(filters, supportsFullColor, onFiltersChange)
+        CodexSourceFilters(filters.source, sourceOptions) { source ->
+            onFiltersChange(filters.copy(source = source))
+        }
+        if (supportsLanguage) {
+            CodexLanguageFilters(filters.language) { language ->
+                onFiltersChange(filters.copy(language = language))
+            }
+        }
+        CodexSortFilters(sortMode, onSortChange)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            TextButton(onClick = onReset) { Text("Reset") }
+            TextButton(onClick = onDismiss) { Text("Done") }
+        }
+    }
+}
+
+@Composable
+private fun CodexVisibilityFilters(
+    filters: CodexCollectionFilters,
+    supportsFullColor: Boolean,
+    onFiltersChange: (CodexCollectionFilters) -> Unit,
+) {
+    Text("Visibility", style = MaterialTheme.typography.titleMedium)
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        item {
+            FilterChip(
+                selected = filters.animatedOnly,
+                onClick = { onFiltersChange(filters.copy(animatedOnly = !filters.animatedOnly)) },
+                label = { Text("Animated only") },
+            )
+        }
+        if (supportsFullColor) {
+            item {
+                FilterChip(
+                    selected = filters.fullColorOnly,
+                    onClick = {
+                        onFiltersChange(filters.copy(fullColorOnly = !filters.fullColorOnly))
+                    },
+                    label = { Text("Full Color") },
+                )
+            }
+        }
+    }
+    AnimatedDurationRangeControl(
+        range = filters.animatedDurationRange,
+        onRangeChange = { range ->
+            onFiltersChange(filters.copy(animatedDurationRange = range))
+        },
+    )
+}
+
+@Composable
+private fun CodexSourceFilters(
+    selectedSource: SourceKey?,
+    sourceOptions: List<SourceKey>,
+    onSourceChange: (SourceKey?) -> Unit,
+) {
+    HorizontalDivider()
+    Text("Source", style = MaterialTheme.typography.titleMedium)
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        item {
+            FilterChip(
+                selected = selectedSource == null,
+                onClick = { onSourceChange(null) },
+                label = { Text("All") },
+            )
+        }
+        items(sourceOptions, key = SourceKey::name) { source ->
+            FilterChip(
+                selected = selectedSource == source,
+                onClick = { onSourceChange(source) },
+                label = { Text(source.displayName()) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun CodexLanguageFilters(
+    selectedLanguage: CodexLanguageFilter,
+    onLanguageChange: (CodexLanguageFilter) -> Unit,
+) {
+    HorizontalDivider()
+    Text("Language", style = MaterialTheme.typography.titleMedium)
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(CodexLanguageFilter.entries, key = CodexLanguageFilter::name) { option ->
+            FilterChip(
+                selected = selectedLanguage == option,
+                onClick = { onLanguageChange(option) },
+                label = { Text(option.displayLabel()) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun CodexSortFilters(
+    sortMode: CodexSortMode,
+    onSortChange: (CodexSortMode) -> Unit,
+) {
+    HorizontalDivider()
+    Text("Sort", style = MaterialTheme.typography.titleMedium)
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(CodexSortMode.entries, key = CodexSortMode::name) { mode ->
+            FilterChip(
+                selected = sortMode == mode,
+                onClick = { onSortChange(mode) },
+                label = { Text(mode.displayLabel()) },
+            )
+        }
+    }
+}
+
+internal fun codexItemSummary(visibleCount: Int, totalCount: Int, filtersActive: Boolean): String {
+    return if (filtersActive) "$visibleCount of $totalCount items" else "$totalCount items"
+}
+
+private fun CodexLanguageFilter.displayLabel(): String = when (this) {
+    CodexLanguageFilter.ANY -> "Any"
+    CodexLanguageFilter.ENGLISH -> "English"
+    CodexLanguageFilter.CHINESE -> "Chinese"
+    CodexLanguageFilter.JAPANESE -> "Japanese"
 }
 
 private fun CodexSortMode.displayLabel(): String = when (this) {

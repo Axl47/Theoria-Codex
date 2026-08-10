@@ -90,6 +90,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.PostDownloadService
 import com.theoriacodex.app.codex.CodexDetailScreen
+import com.theoriacodex.app.codex.CodexDetailDurationViewModel
 import com.theoriacodex.app.codex.CodexListScreen
 import com.theoriacodex.app.codex.CodexRemovalWorkflow
 import com.theoriacodex.app.codex.SaveToCodexSheet
@@ -1757,18 +1758,38 @@ internal fun TheoriaAppContent(
                     ) { entry ->
                         val codexId = requireNotNull(entry.arguments?.getString("codexId"))
                         var sortMode by rememberSaveable(codexId) { mutableStateOf(CodexSortMode.NEWEST_SAVED) }
+                        val durationOwner = viewModel<CodexDetailDurationViewModel>(
+                            key = "codex-detail-duration-$codexId",
+                            factory = CodexDetailDurationViewModel.factory(
+                                featureDependencies.animatedDurationEnricher,
+                            ),
+                        )
+                        val durationState by durationOwner.state.collectAsStateWithLifecycle()
                         CodexDetailDestinationStateBoundary(
                             codexId = codexId,
                             sortMode = sortMode,
                             data = dataDependencies,
                             sources = sourceDependencies,
                         ) { state ->
+                            LaunchedEffect(durationOwner, codexId, state.posts) {
+                                durationOwner.synchronize(codexId, state.posts)
+                            }
+                            val displayPosts = if (
+                                durationState.codexId == codexId &&
+                                durationState.posts.map(Post::id) == state.posts.map(Post::id)
+                            ) {
+                                durationState.posts
+                            } else {
+                                state.posts
+                            }
                             CodexDetailScreen(
                             codexName = state.codex?.name,
-                            posts = state.posts,
+                            posts = displayPosts,
                             sortMode = sortMode,
+                            availableSources = state.availableSources,
                             creatorBrowsingSources = state.creatorBrowsingSources,
                             pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
+                            resolveUnknownAnimatedDurations = state.resolveUnknownAnimatedDurations,
                             tagVideoCountProvider = { source, tag ->
                                 featureDependencies.search.tagVideoCount(source, tag)
                             },
@@ -1776,10 +1797,14 @@ internal fun TheoriaAppContent(
                                 featureDependencies.search.fetchTagVideoCounts(source, tags)
                             },
                             onSortChange = { sortMode = it },
+                            onRequestAnimatedDurationEnrichment = {
+                                durationOwner.synchronize(codexId, state.posts)
+                                durationOwner.requestEnrichment(codexId)
+                            },
                             resolvePostById = { postId ->
                                 viewerRouteWorkflow.resolvePost(postId, ViewerStreamSource.CODEX)
                             },
-                            onOpenViewer = { index ->
+                            onOpenViewer = { visiblePosts, index ->
                                 val context = ViewerLaunchContext(
                                     queryHash = "codex:$codexId",
                                     startIndex = index,
@@ -1787,7 +1812,10 @@ internal fun TheoriaAppContent(
                                     scrollOffsetHint = 0,
                                 )
                                 scope.launch {
-                                    val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(state.posts, context)
+                                    val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
+                                        visiblePosts,
+                                        context,
+                                    )
                                     viewerSessionOwner.retain(
                                         ViewerSession(
                                             posts = preparedPosts,
