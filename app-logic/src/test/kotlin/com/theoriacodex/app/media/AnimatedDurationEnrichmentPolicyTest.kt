@@ -9,11 +9,27 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AnimatedDurationEnrichmentPolicyTest {
+    @Test
+    fun `proactive request requires enabled resolution and an unknown animated post`() {
+        val unknownAnimated = post(1)
+        val knownAnimated = unknownAnimated.copy(durationMs = 2_000L)
+        val static = unknownAnimated.copy(
+            id = PostId(SourceKey.GELBOORU, "static"),
+            full = ImageRef("https://example.test/static.jpg", null, "image/jpeg"),
+            media = emptyList(),
+        )
+
+        assertTrue(shouldRequestAnimatedDurationEnrichment(listOf(unknownAnimated), true))
+        assertFalse(shouldRequestAnimatedDurationEnrichment(listOf(unknownAnimated), false))
+        assertFalse(shouldRequestAnimatedDurationEnrichment(listOf(knownAnimated, static), true))
+    }
+
     @Test
     fun `candidate policy deduplicates excludes and bounds each batch`() {
         val posts = (1..10).map(::post) + post(1)

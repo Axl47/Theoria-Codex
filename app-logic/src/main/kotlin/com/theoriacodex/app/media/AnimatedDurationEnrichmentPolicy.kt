@@ -38,6 +38,16 @@ fun animatedDurationEnrichmentCandidates(
         .toList()
 }
 
+fun shouldRequestAnimatedDurationEnrichment(
+    posts: List<Post>,
+    resolveUnknownAnimatedDurations: Boolean,
+): Boolean {
+    return resolveUnknownAnimatedDurations && animatedDurationEnrichmentCandidates(
+        posts = posts,
+        limit = 1,
+    ).isNotEmpty()
+}
+
 /** Route-owned drain lane; the application supplies identity and immutable publication hooks. */
 class AnimatedDurationEnrichmentLane<SessionIdentity>(
     private val scope: CoroutineScope,

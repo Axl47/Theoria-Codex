@@ -39,10 +39,16 @@ class PostMediaPolicyTest {
         assertEquals(24, durationBucketFor(120_000L))
         assertEquals(25, durationBucketFor(120_001L))
         assertTrue(AnimatedDurationRange(1, 2).contains(7_500L))
-        assertFalse(AnimatedDurationRange(1, 2).contains(15_000L))
+        assertTrue(AnimatedDurationRange(1, 2).contains(10_000L))
+        assertFalse(AnimatedDurationRange(1, 2).contains(10_001L))
+        assertTrue(AnimatedDurationRange(0, 0).contains(4_999L))
+        assertFalse(AnimatedDurationRange(0, 0).contains(5_000L))
+        assertTrue(AnimatedDurationRange(25, 25).contains(120_001L))
+        assertFalse(AnimatedDurationRange(25, 25).contains(120_000L))
         assertEquals(AnimatedDurationRange.Full, AnimatedDurationRange(-4, 99).let {
             AnimatedDurationRange(it.normalizedMinBucket, it.normalizedMaxBucket)
         })
+        assertEquals("5s - 10s", animatedDurationRangeLabel(AnimatedDurationRange(2, 1)))
     }
 
     @Test
@@ -63,6 +69,35 @@ class PostMediaPolicyTest {
 
         assertEquals(null, animatedDurationLabel(staticPost))
         assertEquals(null, animatedDurationLabel(animatedPost(durationMs = null)))
+    }
+
+    @Test
+    fun `resolved presentation keeps a duration acquired after card media resolution`() {
+        val original = animatedPost(durationMs = 42_000L)
+        val resolvedWithoutDuration = original.copy(
+            full = ref("resolved.mp4", "video/mp4"),
+            media = listOf(ref("resolved.mp4", "video/mp4")),
+            durationMs = null,
+        )
+
+        assertEquals(
+            resolvedWithoutDuration.copy(durationMs = 42_000L),
+            mergeResolvedPostForPresentation(original, resolvedWithoutDuration),
+        )
+        assertEquals(
+            resolvedWithoutDuration.copy(durationMs = 21_000L),
+            mergeResolvedPostForPresentation(
+                original,
+                resolvedWithoutDuration.copy(durationMs = 21_000L),
+            ),
+        )
+        assertEquals(
+            original,
+            mergeResolvedPostForPresentation(
+                original,
+                resolvedWithoutDuration.copy(id = PostId(SourceKey.GELBOORU, "other")),
+            ),
+        )
     }
 
     private fun animatedPost(durationMs: Long?): Post = post(

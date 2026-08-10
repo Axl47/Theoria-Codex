@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
 import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.media.shouldRequestAnimatedDurationEnrichment
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
@@ -133,10 +134,8 @@ fun ForYouScreen(
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
         )
     }
-    LaunchedEffect(state.results, animatedDurationFilterActive, unknownAnimatedDurationPolicy, state.seedId) {
-        if (animatedDurationFilterActive &&
-            unknownAnimatedDurationPolicy == UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
-        ) {
+    LaunchedEffect(state.results, resolveUnknownAnimatedDurations, state.seedId) {
+        if (shouldRequestAnimatedDurationEnrichment(state.results, resolveUnknownAnimatedDurations)) {
             onAction(ForYouAction.RequestAnimatedDurationEnrichment(state.seedId))
         }
     }

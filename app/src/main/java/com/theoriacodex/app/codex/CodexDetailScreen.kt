@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
 import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.media.shouldRequestAnimatedDurationEnrichment
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
@@ -158,9 +159,8 @@ fun CodexDetailScreen(
         onFiltersChange = applyFilters,
     )
     CodexDurationEnrichmentEffect(
-        range = animatedDurationRange,
-        postIds = posts.map(Post::id),
-        unknownDurationPolicy = unknownDurationPolicy,
+        posts = posts,
+        resolveUnknownAnimatedDurations = resolveUnknownAnimatedDurations,
         onRequest = onRequestAnimatedDurationEnrichment,
     )
 
@@ -306,15 +306,12 @@ private fun CodexFilterReconciliationEffect(
 
 @Composable
 private fun CodexDurationEnrichmentEffect(
-    range: AnimatedDurationRange,
-    postIds: List<PostId>,
-    unknownDurationPolicy: UnknownAnimatedDurationPolicy,
+    posts: List<Post>,
+    resolveUnknownAnimatedDurations: Boolean,
     onRequest: () -> Unit,
 ) {
-    LaunchedEffect(range, postIds, unknownDurationPolicy) {
-        if (!range.isFullRange &&
-            unknownDurationPolicy == UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
-        ) {
+    LaunchedEffect(posts, resolveUnknownAnimatedDurations) {
+        if (shouldRequestAnimatedDurationEnrichment(posts, resolveUnknownAnimatedDurations)) {
             onRequest()
         }
     }

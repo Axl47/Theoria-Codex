@@ -29,7 +29,17 @@ data class AnimatedDurationRange(
     fun contains(durationMs: Long): Boolean {
         val lower = minOf(normalizedMinBucket, normalizedMaxBucket)
         val upper = maxOf(normalizedMinBucket, normalizedMaxBucket)
-        return durationBucketFor(durationMs) in lower..upper
+        val matchesLower = when (lower) {
+            ANIMATED_DURATION_MIN_BUCKET -> true
+            ANIMATED_DURATION_MAX_BUCKET -> durationMs > ANIMATED_DURATION_MAX_THRESHOLD_MS
+            else -> durationMs >= lower * ANIMATED_DURATION_BUCKET_MS
+        }
+        val matchesUpper = when (upper) {
+            ANIMATED_DURATION_MIN_BUCKET -> durationMs < ANIMATED_DURATION_BUCKET_MS
+            ANIMATED_DURATION_MAX_BUCKET -> true
+            else -> durationMs <= upper * ANIMATED_DURATION_BUCKET_MS
+        }
+        return matchesLower && matchesUpper
     }
 
     companion object {
@@ -41,6 +51,8 @@ const val ANIMATED_DURATION_MIN_BUCKET = 0
 const val ANIMATED_DURATION_MAX_BUCKET = 25
 private const val ANIMATED_DURATION_BUCKET_MS = 5_000L
 private const val ANIMATED_DURATION_LAST_EXACT_BUCKET = 24
+private const val ANIMATED_DURATION_MAX_THRESHOLD_MS =
+    ANIMATED_DURATION_LAST_EXACT_BUCKET * ANIMATED_DURATION_BUCKET_MS
 
 private val IMAGE_EXTENSIONS = setOf(
     "gif",
@@ -151,6 +163,16 @@ fun animatedDurationLabel(post: Post): String? {
     return formatCompactDuration(durationMs)
 }
 
+fun mergeResolvedPostForPresentation(original: Post, resolved: Post): Post {
+    if (resolved.id != original.id) return original
+    val originalDuration = animatedDurationMs(original)
+    return if (animatedDurationMs(resolved) == null && originalDuration != null) {
+        resolved.copy(durationMs = originalDuration)
+    } else {
+        resolved
+    }
+}
+
 private fun formatCompactDuration(durationMs: Long): String {
     val totalSeconds = (durationMs / 1_000L).coerceAtLeast(1L)
     val hours = totalSeconds / 3_600L
@@ -165,7 +187,7 @@ private fun formatCompactDuration(durationMs: Long): String {
 
 fun durationBucketFor(durationMs: Long): Int {
     if (durationMs < ANIMATED_DURATION_BUCKET_MS) return ANIMATED_DURATION_MIN_BUCKET
-    if (durationMs > ANIMATED_DURATION_LAST_EXACT_BUCKET * ANIMATED_DURATION_BUCKET_MS) {
+    if (durationMs > ANIMATED_DURATION_MAX_THRESHOLD_MS) {
         return ANIMATED_DURATION_MAX_BUCKET
     }
     return (durationMs / ANIMATED_DURATION_BUCKET_MS)
@@ -183,7 +205,9 @@ fun animatedDurationBucketLabel(bucket: Int): String {
 }
 
 fun animatedDurationRangeLabel(range: AnimatedDurationRange): String {
-    return "${animatedDurationBucketLabel(range.normalizedMinBucket)} - ${animatedDurationBucketLabel(range.normalizedMaxBucket)}"
+    val lower = minOf(range.normalizedMinBucket, range.normalizedMaxBucket)
+    val upper = maxOf(range.normalizedMinBucket, range.normalizedMaxBucket)
+    return "${animatedDurationBucketLabel(lower)} - ${animatedDurationBucketLabel(upper)}"
 }
 
 private fun formatDurationSeconds(totalSeconds: Int): String {

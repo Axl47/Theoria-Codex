@@ -9,7 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 suspend fun probeRemoteVideoDurationMs(post: Post): Long? = withContext(Dispatchers.IO) {
-    val ref = bestDurationProbeRef(post) ?: return@withContext null
+    val ref = authoritativeDurationProbeRef(post) ?: return@withContext null
     val location = ref.url?.trim()?.takeIf(String::isNotBlank) ?: return@withContext null
     runCatchingPreservingCancellation {
         val retriever = MediaMetadataRetriever()
@@ -24,11 +24,11 @@ suspend fun probeRemoteVideoDurationMs(post: Post): Long? = withContext(Dispatch
     }.getOrNull()
 }
 
-private fun bestDurationProbeRef(post: Post): ImageRef? {
-    val refs = buildList {
-        post.full?.let { add(it) }
-        addAll(post.media)
-    }
-    return refs.firstOrNull(::isVideoMediaRef)
-        ?: refs.firstOrNull { ref -> mediaKind(ref) == PostMediaKind.UNKNOWN && ref.url?.endsWith(".mp4", ignoreCase = true) == true }
+internal fun authoritativeDurationProbeRef(post: Post): ImageRef? {
+    val full = post.full ?: return null
+    return full.takeIf(::isVideoMediaRef)
+        ?: full.takeIf { ref ->
+            mediaKind(ref) == PostMediaKind.UNKNOWN &&
+                ref.url?.substringBefore('?')?.endsWith(".mp4", ignoreCase = true) == true
+        }
 }

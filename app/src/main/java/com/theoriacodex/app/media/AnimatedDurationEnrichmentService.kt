@@ -113,7 +113,9 @@ internal class AnimatedDurationEnrichmentService(
         val result = workPermits.withPermit {
             val resolved = runCatchingPreservingCancellation { resolvePost(post.id) }.getOrNull() ?: post
             val duration = animatedDurationMs(resolved)
-                ?: runCatchingPreservingCancellation { probeDurationMs(resolved) }.getOrNull()
+                ?: authoritativeDurationProbeRef(resolved)?.let {
+                    runCatchingPreservingCancellation { probeDurationMs(resolved) }.getOrNull()
+                }
             duration?.takeIf { value -> value > 0L }?.let { value ->
                 AnimatedDurationEnrichment(post.id, value)
             }

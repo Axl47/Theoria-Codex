@@ -1,8 +1,33 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-10T02:58:58-04:00
+updated_at: 2026-08-10T04:17:47-04:00
 ---
 # Working List
+
+## Current Task: Repair Animated Duration Metadata And Filtering
+
+### In Progress
+
+None.
+
+### Pending
+
+- [ ] Manually confirm progressive duration badges and exact threshold filtering in the isolated Debug app.
+
+### Done
+
+- [x] Create the task checklist before runtime edits.
+  - Evidence: this section tracks the shared enrichment trigger, immutable feed publication, card refresh merge, range contract, and focused host-only validation lane.
+- [x] Trace duration acquisition, publication, card rendering, and range semantics across all browsing feeds.
+  - Evidence: Search, For You, Creator, and Codex only requested unknown durations after a non-default duration range was active; unresolved posts were therefore hidden while cold network work began. `SearchResultCard` also preferred a separately resolved payload even when it lacked the duration newly published by its route owner. The fallback probe could measure preview-only Rule34 autoplay clips, and the range contract treated slider thresholds as whole buckets.
+- [x] Make enabled duration enrichment proactive so metadata and later filtering share already-acquired values.
+  - Evidence: one platform-free candidate predicate now drives all four browsing routes as unknown animated posts arrive; the existing route-scoped lane, bounded batches, cross-route single-flight, negative cache, and immutable publication boundaries remain unchanged.
+- [x] Preserve acquired durations and reject false preview-clip measurements.
+  - Evidence: resolved card presentation retains a newer duration from its parent post, while the shared service only invokes the remote probe for authoritative full video media. Preview-only autoplay payloads stay unresolved for a later provider-detail retry instead of caching the clip length as post metadata.
+- [x] Correct duration-range boundary semantics and labels.
+  - Evidence: ordinary slider handles now represent literal inclusive thresholds, with exact under-5-second and over-2-minute endpoint behavior; reversed programmatic ranges also render a normalized label.
+- [x] Add focused regressions and run one bounded host validation batch.
+  - Evidence: 82 focused policy, filtering, owner, probe, publication, and architecture tests pass; `:app:compileDebugKotlin` and `:app-logic:detekt` pass. `:app:detektDebug` reports only the four inherited findings in untouched `CodexListScreen`, `SaveToCodexSheet`, and `SearchEmptyStatePolicy`; no changed-file finding was reported. `git diff --check` passes. No connected, device, install, package mutation, or live-provider lane ran.
 
 ## Current Task: Add Durable App, Post, Search, Tag, And Codex Stats
 

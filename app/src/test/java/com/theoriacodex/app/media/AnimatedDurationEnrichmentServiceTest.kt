@@ -239,6 +239,32 @@ class AnimatedDurationEnrichmentServiceTest {
     }
 
     @Test
+    fun `failed detail resolution never measures a preview-only autoplay clip`() = runTest {
+        var probes = 0
+        val previewOnly = animatedPost("preview-only").copy(
+            full = null,
+            media = listOf(
+                ImageRef(
+                    url = "https://example.test/preview-only-clip.mp4",
+                    localPath = null,
+                    mime = "video/mp4",
+                )
+            ),
+        )
+        val service = service(
+            resolvePost = { null },
+            probeDuration = {
+                probes += 1
+                3_000L
+            },
+        )
+
+        assertNull(enrich(service, previewOnly))
+        assertEquals(0, probes)
+        service.close()
+    }
+
+    @Test
     fun `same identity refresh reapplies cached duration without another probe`() = runTest {
         var probes = 0
         var posts = listOf(animatedPost("refreshed"))

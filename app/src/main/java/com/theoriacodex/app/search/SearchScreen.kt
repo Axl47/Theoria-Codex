@@ -102,8 +102,10 @@ import com.theoriacodex.app.media.animatedDurationRangeLabel
 import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.media.isHttpNotFound
 import com.theoriacodex.app.media.isPixivUgoiraPost
+import com.theoriacodex.app.media.mergeResolvedPostForPresentation
 import com.theoriacodex.app.media.postPlaybackMediaCandidate
 import com.theoriacodex.app.media.postPreviewImageCandidate
+import com.theoriacodex.app.media.shouldRequestAnimatedDurationEnrichment
 import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.app.R
 import com.theoriacodex.app.source.SourceLogo
@@ -278,10 +280,8 @@ fun SearchScreen(
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
         )
     }
-    LaunchedEffect(displayResults, animatedDurationFilterActive, unknownAnimatedDurationPolicy, queryHash) {
-        if (animatedDurationFilterActive &&
-            unknownAnimatedDurationPolicy == UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
-        ) {
+    LaunchedEffect(displayResults, resolveUnknownAnimatedDurations, queryHash) {
+        if (shouldRequestAnimatedDurationEnrichment(displayResults, resolveUnknownAnimatedDurations)) {
             onAction(SearchAction.RequestAnimatedDurationEnrichment(queryHash))
         }
     }
@@ -901,7 +901,9 @@ fun SearchResultCard(
     var resolvedPostOverride by remember(post.id) { mutableStateOf<Post?>(null) }
     var resolutionAttempted by remember(post.id) { mutableStateOf(false) }
     val mediaRecoveryAttemptedUrls = remember(post.id) { mutableSetOf<String>() }
-    val effectivePost = resolvedPostOverride ?: post
+    val effectivePost = resolvedPostOverride?.let { resolved ->
+        mergeResolvedPostForPresentation(original = post, resolved = resolved)
+    } ?: post
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, _ ->

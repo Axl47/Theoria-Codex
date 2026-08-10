@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
 import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.media.shouldRequestAnimatedDurationEnrichment
 import com.theoriacodex.app.media.copyTextToClipboard
 import com.theoriacodex.app.media.showClipboardCopyConfirmation
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
@@ -135,10 +136,12 @@ fun CreatorProfileScreen(
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
         )
     }
-    LaunchedEffect(state.results, animatedDurationFilterActive, unknownAnimatedDurationPolicy, state.queryHash) {
+    LaunchedEffect(state.results, resolveUnknownAnimatedDurations, state.queryHash) {
         val queryHash = state.queryHash
-        if (queryHash != null && animatedDurationFilterActive &&
-            unknownAnimatedDurationPolicy == UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
+        if (queryHash != null && shouldRequestAnimatedDurationEnrichment(
+                posts = state.results,
+                resolveUnknownAnimatedDurations = resolveUnknownAnimatedDurations,
+            )
         ) {
             onAction(CreatorAction.RequestAnimatedDurationEnrichment(queryHash))
         }

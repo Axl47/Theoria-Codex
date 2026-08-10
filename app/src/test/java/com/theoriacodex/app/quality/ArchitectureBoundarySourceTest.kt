@@ -194,6 +194,7 @@ class ArchitectureBoundarySourceTest {
             "app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt",
             "app/src/main/java/com/theoriacodex/app/recommend/ForYouScreen.kt",
             "app/src/main/java/com/theoriacodex/app/creator/CreatorProfileScreen.kt",
+            "app/src/main/java/com/theoriacodex/app/codex/CodexDetailScreen.kt",
         )
         val forbiddenFragments = listOf(
             "probeRemoteVideoDurationMs(",
@@ -215,6 +216,10 @@ class ArchitectureBoundarySourceTest {
             assertTrue(
                 "$path must retain its typed duration-enrichment action",
                 "RequestAnimatedDurationEnrichment" in File(repositoryRoot, path).readText(),
+            )
+            assertTrue(
+                "$path must proactively request enabled unknown durations",
+                "shouldRequestAnimatedDurationEnrichment" in File(repositoryRoot, path).readText(),
             )
         }
         listOf(
