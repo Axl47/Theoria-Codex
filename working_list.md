@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-03T00:03:12-04:00
+updated_at: 2026-08-10T01:03:53-04:00
 ---
 # Working List
 
@@ -16,6 +16,12 @@ None.
 
 ### Done
 
+- [x] Make cold FYP replay wait for both route-readiness inputs.
+  - Evidence: the first source-availability reconciliation could run after environment synchronization and cancel the replay. The route owner now releases a queued replay only after both inputs settle, regardless of arrival order.
+- [x] Add regressions for both cold-start readiness orderings.
+  - Evidence: environment-first and source-first tests each hold the replay until the second input, then prove the saved seed, sort, and results become authoritative with zero likes.
+- [x] Run one focused host validation batch and update the FYP ExecPlan evidence.
+  - Evidence: 24 focused ViewModel/state/architecture tests passed with zero failures/errors/skips; Debug compilation, app Detekt, HTML validation, and diff checks passed. No device, connected, install, package mutation, or live-provider lane ran.
 - [x] Make cold-start environment synchronization preserve a queued FYP replay.
   - Evidence: `ForYouViewModel` buffers a Recents replay until the first authoritative environment synchronization, then lets it supersede initialization refresh/clear behavior.
 - [x] Ensure a replayed seed without likes reports search results or no results, never the training CTA.

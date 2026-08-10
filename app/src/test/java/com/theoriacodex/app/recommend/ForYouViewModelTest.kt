@@ -73,11 +73,12 @@ class ForYouViewModelTest {
     }
 
     @Test
-    fun `cold Recents replay waits for environment sync and runs without likes`() = runTest {
+    fun `cold Recents replay waits for environment and source sync and runs without likes`() = runTest {
         val result = testPost(sourcePostId = "historical")
         val engine = FakeForYouRouteEngine().apply {
             replayResult = listOf(result)
             settingsChangedResult = true
+            availabilityChangedResult = true
         }
         val viewModel = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
         val seed = mapOf(SourceKey.PIXIV to listOf("saved seed"))
@@ -88,12 +89,39 @@ class ForYouViewModelTest {
         assertNull(engine.replayedSearch)
 
         viewModel.synchronizeEnvironment(AppSettings(), activeProfileLikesCount = 0)
+        runCurrent()
+        assertNull(engine.replayedSearch)
+
+        viewModel.onSourceAvailabilityChanged()
         advanceUntilIdle()
 
         assertEquals(seed to SortMode.TOP, engine.replayedSearch)
         assertEquals(listOf(result), viewModel.state.value.results)
         assertEquals(seed, viewModel.state.value.seedSummaryBySource)
         assertNull(viewModel.state.value.emptyReason)
+    }
+
+    @Test
+    fun `cold Recents replay also waits when source sync arrives before environment`() = runTest {
+        val result = testPost(sourcePostId = "historical")
+        val engine = FakeForYouRouteEngine().apply {
+            replayResult = listOf(result)
+            availabilityChangedResult = true
+        }
+        val viewModel = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        val seed = mapOf(SourceKey.GELBOORU to listOf("saved seed"))
+        advanceUntilIdle()
+
+        viewModel.onAction(ForYouAction.ReplaySearch(seed, SortMode.POPULAR))
+        viewModel.onSourceAvailabilityChanged()
+        runCurrent()
+        assertNull(engine.replayedSearch)
+
+        viewModel.synchronizeEnvironment(AppSettings(), activeProfileLikesCount = 0)
+        advanceUntilIdle()
+
+        assertEquals(seed to SortMode.POPULAR, engine.replayedSearch)
+        assertEquals(listOf(result), viewModel.state.value.results)
     }
 
     @Test
@@ -404,6 +432,7 @@ private class FakeForYouRouteEngine(
     )
     var undoneBlacklist: Pair<String, List<ForYouBlacklistEntry>>? = null
     var settingsChangedResult = false
+    var availabilityChangedResult = false
     var firstRefreshStarted: CompletableDeferred<Unit>? = null
     var firstRefreshRelease: CompletableDeferred<Unit>? = null
     var firstRefreshResult: List<Post> = emptyList()
@@ -437,7 +466,7 @@ private class FakeForYouRouteEngine(
         return settingsChangedResult
     }
 
-    override fun onAvailableSourcesChanged(): Boolean = false
+    override fun onAvailableSourcesChanged(): Boolean = availabilityChangedResult
 
     override suspend fun refresh(shuffle: Boolean) {
         refreshCalls += 1

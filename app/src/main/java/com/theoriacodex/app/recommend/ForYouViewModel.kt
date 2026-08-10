@@ -161,6 +161,7 @@ internal class ForYouViewModel(
     private var pageJob: Job? = null
     private var seedMutationJob: Job? = null
     private var environmentSynchronized = false
+    private var sourceAvailabilitySynchronized = false
     private var pendingReplaySearch: ForYouAction.ReplaySearch? = null
 
     private val mutableState = MutableStateFlow(
@@ -198,7 +199,7 @@ internal class ForYouViewModel(
             requestAnimatedDurationEnrichment(action.seedId)
             return
         }
-        if (action is ForYouAction.ReplaySearch && !environmentSynchronized) {
+        if (action is ForYouAction.ReplaySearch && !isReplayReady()) {
             pendingReplaySearch = action
             return
         }
@@ -227,13 +228,16 @@ internal class ForYouViewModel(
             engine.clear()
             publishSnapshot(activeLikesOverride = 0)
             environmentSynchronized = true
-            replayPendingSearch()
+            replayPendingSearchIfReady()
             return
         }
 
         publishSnapshot(activeLikesOverride = activeProfileLikesCount)
         environmentSynchronized = true
-        if (replayPendingSearch()) return
+        if (pendingReplaySearch != null) {
+            replayPendingSearchIfReady()
+            return
+        }
         val current = mutableState.value
         val shouldRefresh = engineChanged ||
             current.results.isEmpty() ||
@@ -244,7 +248,10 @@ internal class ForYouViewModel(
         }
     }
 
-    private fun replayPendingSearch(): Boolean {
+    private fun isReplayReady(): Boolean = environmentSynchronized && sourceAvailabilitySynchronized
+
+    private fun replayPendingSearchIfReady(): Boolean {
+        if (!isReplayReady()) return false
         val pending = pendingReplaySearch ?: return false
         pendingReplaySearch = null
         onAction(pending)
@@ -258,6 +265,11 @@ internal class ForYouViewModel(
             cancelActiveReduction()
         }
         publishSnapshot(activeLikesOverride = mutableState.value.activeProfileLikesCount)
+        sourceAvailabilitySynchronized = true
+        if (pendingReplaySearch != null) {
+            replayPendingSearchIfReady()
+            return
+        }
         if (shouldRefresh && mutableState.value.activeProfileLikesCount > 0) {
             onAction(ForYouAction.Refresh(shuffle = false))
         }

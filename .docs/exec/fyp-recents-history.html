@@ -29,7 +29,7 @@
       <li>FYP clear has exact Undo without clearing normal Searches. All clear/Undo includes both.</li>
       <li>A Recents write failure must not discard an otherwise valid recommendation feed; cancellation still propagates.</li>
       <li>An FYP replay supersedes automatic/current refresh work. If a saved source is unavailable, For You shows the existing refresh error instead of silently changing the search.</li>
-      <li>A fresh For You route owner buffers the replay until settings, profile, and likes synchronize, preventing initial settings drift or the zero-likes clear path from erasing the historical request.</li>
+      <li>A fresh For You route owner buffers the replay until both settings/profile/likes and source availability synchronize. This prevents either the zero-likes clear path or the first capability reconciliation from erasing or cancelling the historical request.</li>
       <li>Once an explicit historical seed exists, an empty provider result reports no recommendations rather than asking the user to train For You.</li>
       <li>Legacy FYP rows without source-specific metadata remain clickable by applying their saved aggregate tags to each participating source.</li>
       <li>Search titles show every tag and wrap instead of truncating with an ellipsis.</li>
@@ -43,7 +43,7 @@
       <li>Clear workflow tests prove FYP and All snapshots restore exactly.</li>
       <li>Presentation coverage proves FYP source context and full tag-title construction.</li>
       <li>Replay coverage proves payload/Room round trips, exact coordinator queries, typed route-owner dispatch, compatibility fallback, and tab order.</li>
-      <li>Cold-start coverage dispatches replay before environment synchronization with settings drift and zero likes, then proves the saved seed, sort, and results win.</li>
+      <li>Cold-start coverage dispatches replay before both readiness inputs, exercises environment-first and source-first ordering, and proves the saved seed, sort, and results win after the second input settles.</li>
       <li>Run focused JVM tests, Debug compilation, relevant Detekt owners, HTML validation, and diff checks once.</li>
       <li>Leave row wrapping and filter scrolling for manual isolated-Debug acceptance; run no connected or package-mutating command.</li>
     </ul>
@@ -55,8 +55,8 @@
       <li>Complete: search tag titles no longer impose a one-line ellipsis.</li>
       <li>Complete: exact FYP source tags and sort now replay through For You from both FYP and All.</li>
       <li>Complete: Searches now appears before FYP in the Recents filter row.</li>
-      <li>Complete: cold-start route synchronization no longer erases a queued historical replay or replaces it with the training prompt.</li>
-      <li>Complete: 30 focused cold-start/state/architecture tests passed with zero failures/errors/skips; app compilation, app Detekt, HTML validation, and diff checks passed.</li>
+      <li>Complete: cold-start route synchronization waits for both authoritative environment and source-availability readiness, so neither startup pass can erase or cancel a queued historical replay.</li>
+      <li>Complete: 24 focused cold-start/state/architecture tests passed with zero failures/errors/skips; app compilation, app Detekt, HTML validation, and diff checks passed for the dual-readiness repair.</li>
       <li>Pending: manual FYP row wrapping and filter-row scrolling acceptance in the isolated Debug app.</li>
     </ul>
   </main>
