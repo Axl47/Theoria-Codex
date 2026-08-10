@@ -4,6 +4,12 @@ data class Codex(
     val codexId: String,
     val name: String,
     val createdAtEpochMs: Long,
+    val automaticTags: List<CodexAutomaticTag> = emptyList(),
+)
+
+data class CodexAutomaticTag(
+    val source: SourceKey,
+    val tag: String,
 )
 
 data class CodexItem(

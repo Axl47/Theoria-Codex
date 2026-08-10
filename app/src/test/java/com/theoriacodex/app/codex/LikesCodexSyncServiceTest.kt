@@ -4,6 +4,8 @@ import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.testing.InMemoryCodexLikesTransactions
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecommendationProfile
+import com.theoriacodex.domain.model.CodexAutomaticTag
+import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -65,5 +67,49 @@ class LikesCodexSyncServiceTest {
         service.removeProfileCodex(profile.profileId)
         service.removeProfileCodex(profile.profileId)
         assertNull(codices.observeCodex(likesCodexIdForProfile(profile.profileId)).first())
+    }
+
+    @Test
+    fun `like routes matching post only into current profile automatic Codices`() = runTest {
+        val transactions = InMemoryCodexLikesTransactions()
+        val codices = transactions.codices
+        val service = LikesCodexSyncService(transactions, codices)
+        val profile = RecommendationProfile("profile-main", "Main")
+        val matching = codices.ensureCodex(
+            profileScopedCodexId(profile.profileId, "matching"),
+            "Matching",
+        )
+        val otherProfile = codices.ensureCodex(
+            profileScopedCodexId("profile-alt", "other"),
+            "Other profile",
+        )
+        val nonmatching = codices.ensureCodex(
+            profileScopedCodexId(profile.profileId, "nonmatching"),
+            "Nonmatching",
+        )
+        codices.setAutomaticTag(
+            matching.codexId,
+            CodexAutomaticTag(SourceKey.PIXIV, "landscape"),
+            enabled = true,
+        )
+        codices.setAutomaticTag(
+            otherProfile.codexId,
+            CodexAutomaticTag(SourceKey.PIXIV, "landscape"),
+            enabled = true,
+        )
+        codices.setAutomaticTag(
+            nonmatching.codexId,
+            CodexAutomaticTag(SourceKey.PIXIV, "portrait"),
+            enabled = true,
+        )
+        val post = testPost(sourcePostId = "automatic", canonicalTags = listOf("landscape"))
+
+        assertTrue(service.toggle(profile, post, post.canonicalTags))
+        assertEquals(listOf(post.id), codices.observeCodexItems(matching.codexId).first().map { it.postId })
+        assertTrue(codices.observeCodexItems(otherProfile.codexId).first().isEmpty())
+        assertTrue(codices.observeCodexItems(nonmatching.codexId).first().isEmpty())
+
+        assertFalse(service.toggle(profile, post, post.canonicalTags))
+        assertEquals(listOf(post.id), codices.observeCodexItems(matching.codexId).first().map { it.postId })
     }
 }

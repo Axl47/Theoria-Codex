@@ -1,6 +1,7 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.Codex
+import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -100,6 +101,24 @@ class InMemoryCodexRepository : CodexRepository {
             if (existing.name == resolvedName) return@withLock
             codices.value = codices.value.map {
                 if (it.codexId == codexId) it.copy(name = resolvedName) else it
+            }
+        }
+    }
+
+    override suspend fun setAutomaticTag(codexId: String, tag: CodexAutomaticTag, enabled: Boolean) {
+        mutex.withLock {
+            codices.value = codices.value.map { codex ->
+                if (codex.codexId == codexId) {
+                    codex.copy(
+                        automaticTags = CodexLikesPolicy.setAutomaticTag(
+                            current = codex.automaticTags,
+                            requested = tag,
+                            enabled = enabled,
+                        ),
+                    )
+                } else {
+                    codex
+                }
             }
         }
     }

@@ -11,6 +11,7 @@ import com.theoriacodex.data.storage.QueryStorageCodec
 import com.theoriacodex.data.storage.QueryStorageRecord
 import com.theoriacodex.data.storage.mutateAndPersistWithRollback
 import com.theoriacodex.domain.model.Codex
+import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.Post
@@ -144,6 +145,20 @@ class FileBackedCodexRepository(
             commitMutation {
                 codicesFlow.value = codicesFlow.value.map { codex ->
                     if (codex.codexId == codexId) codex.copy(name = resolvedName) else codex
+                }
+            }
+        }
+    }
+
+    override suspend fun setAutomaticTag(codexId: String, tag: CodexAutomaticTag, enabled: Boolean) {
+        mutex.withLock {
+            val current = codicesFlow.value
+            val existing = current.firstOrNull { codex -> codex.codexId == codexId } ?: return@withLock
+            val automaticTags = CodexLikesPolicy.setAutomaticTag(existing.automaticTags, tag, enabled)
+            if (automaticTags == existing.automaticTags) return@withLock
+            commitMutation {
+                codicesFlow.value = current.map { codex ->
+                    if (codex.codexId == codexId) codex.copy(automaticTags = automaticTags) else codex
                 }
             }
         }
@@ -830,14 +845,46 @@ private data class CodexRecord(
     val name: String = "",
     @field:SerializedName("createdAtEpochMs")
     val createdAtEpochMs: Long = 0L,
+    @field:SerializedName("automaticTags")
+    val automaticTags: List<CodexAutomaticTagRecord> = emptyList(),
 ) {
     fun toDomain(): Codex {
-        return Codex(codexId = codexId, name = name, createdAtEpochMs = createdAtEpochMs)
+        return Codex(
+            codexId = codexId,
+            name = name,
+            createdAtEpochMs = createdAtEpochMs,
+            automaticTags = CodexLikesPolicy.normalizeAutomaticTags(
+                automaticTags.mapNotNull(CodexAutomaticTagRecord::toDomainOrNull),
+            ),
+        )
     }
 
     companion object {
         fun fromDomain(codex: Codex): CodexRecord {
-            return CodexRecord(codexId = codex.codexId, name = codex.name, createdAtEpochMs = codex.createdAtEpochMs)
+            return CodexRecord(
+                codexId = codex.codexId,
+                name = codex.name,
+                createdAtEpochMs = codex.createdAtEpochMs,
+                automaticTags = codex.automaticTags.map(CodexAutomaticTagRecord::fromDomain),
+            )
+        }
+    }
+}
+
+private data class CodexAutomaticTagRecord(
+    @field:SerializedName("source")
+    val source: String = "",
+    @field:SerializedName("tag")
+    val tag: String = "",
+) {
+    fun toDomainOrNull(): CodexAutomaticTag? {
+        val sourceKey = source.toSourceKeyOrNull() ?: return null
+        return CodexAutomaticTag(source = sourceKey, tag = tag)
+    }
+
+    companion object {
+        fun fromDomain(tag: CodexAutomaticTag): CodexAutomaticTagRecord {
+            return CodexAutomaticTagRecord(source = tag.source.name, tag = tag.tag)
         }
     }
 }

@@ -36,6 +36,23 @@ public interface CodexLikesDao {
     @Query("DELETE FROM codices")
     int deleteAllCodices();
 
+    @Query("SELECT * FROM codex_automatic_tags ORDER BY codex_id ASC, source ASC, tag_key ASC")
+    Flow<List<CodexAutomaticTagEntity>> observeAutomaticTags();
+
+    @Query("SELECT * FROM codex_automatic_tags WHERE codex_id = :codexId "
+            + "ORDER BY source ASC, tag_key ASC")
+    List<CodexAutomaticTagEntity> automaticTagsForCodex(String codexId);
+
+    @Query("SELECT * FROM codex_automatic_tags WHERE codex_id IN (:codexIds) "
+            + "ORDER BY codex_id ASC, source ASC, tag_key ASC")
+    List<CodexAutomaticTagEntity> automaticTagsForCodices(List<String> codexIds);
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    void insertAutomaticTags(List<CodexAutomaticTagEntity> entities);
+
+    @Query("DELETE FROM codex_automatic_tags WHERE codex_id = :codexId")
+    int deleteAutomaticTags(String codexId);
+
     @Query("SELECT codex_id, source, source_post_id, saved_at_epoch_ms FROM codex_items "
             + "WHERE codex_id = :codexId "
             + "ORDER BY saved_at_epoch_ms DESC, source ASC, source_post_id ASC")

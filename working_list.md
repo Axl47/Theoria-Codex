@@ -1,8 +1,33 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-10T01:03:53-04:00
+updated_at: 2026-08-10T02:32:39-04:00
 ---
 # Working List
+
+## Current Task: Add Automatic Tag Routing To Codex
+
+### In Progress
+
+None.
+
+### Pending
+
+- [ ] Manually confirm tag counts, Automatic add/remove controls, and like-time routing in the isolated Debug app.
+
+### Done
+
+- [x] Trace Codex overflow, collection persistence, tag normalization, profile scoping, and all like entry paths.
+  - Evidence: `CodexListScreen` owns the shared tile overflow sheet; `CodexDestinationStateBoundary` already observes each collection's hydrated posts; `sourceTagKey` is the canonical source-aware comparison; `CodexRepository` spans memory/file/Room owners; and `TheoriaAppContent.toggleLikeAndSyncCodex` sends Search, For You, Creator, Recents, and Viewer likes through one service.
+- [x] Define the implementation boundary in an HTML ExecPlan.
+  - Evidence: `.docs/exec/codex-automatic-tag-routing.html` fixes persistence, source-aware matching, OR semantics, profile isolation, unlike behavior, UI states, migration, deferrals, and bounded validation before runtime edits.
+- [x] Persist source-aware Automatic rules across repository owners.
+  - Evidence: `CodexAutomaticTag` is part of the Codex aggregate; memory and legacy JSON owners preserve normalized rules; Room schema 4 adds a foreign-keyed `codex_automatic_tags` child table with cascade deletion and a tested 3-to-4 migration.
+- [x] Route newly liked matching posts through one profile-isolated transaction.
+  - Evidence: `LikesCodexSyncService` supplies only the active profile's Codex IDs; Room evaluates current source-aware rules and inserts the Likes plus all matching memberships atomically. Unlike removes only the system Likes membership. Focused service and Room tests cover matching, nonmatching, other-profile, source-aware, and unlike cases.
+- [x] Add source-grouped tag counts and reversible Automatic controls to the shared overflow sheet.
+  - Evidence: the existing tile overflow and long-press sheet now renders Automatic rules first, then represented tags grouped by provider with post counts and + actions; adding/removing a rule keeps the sheet open against live Codex state. The system Likes Codex explains that every like is already automatic.
+- [x] Run one bounded host validation batch and update durable guidance.
+  - Evidence: 75 focused tests passed with zero failures/errors and seven intentional backend skips; Debug compilation, Room Detekt, Android migration-test compilation, schema 4 generation, HTML parsing, and diff checks passed. App Detekt remains red only on four inherited findings in `CodexListScreen`, `SaveToCodexSheet`, and `SearchEmptyStatePolicy`; core-data Detekt remains red only on five inherited migration/policy/test findings. No connected, install, device, package-mutation, or live-provider lane ran.
 
 ## Current Task: Add Codex Collection Filtering And Unified Sort Controls
 

@@ -15,12 +15,15 @@ import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.LikedPost
 import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.domain.model.Codex
+import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.sourceTagKey
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 
 /**
@@ -39,11 +42,16 @@ class RoomCodexLikesRepository(
     private val codec = RoomPayloadCodec(gson)
 
     override fun observeCodices(): Flow<List<Codex>> {
-        return dao.observeCodices().map { entities -> entities.map(CodexEntity::toDomain) }
+        return combine(dao.observeCodices(), dao.observeAutomaticTags()) { codices, automaticTags ->
+            val tagsByCodex = automaticTags.groupBy(CodexAutomaticTagEntity::getCodexId)
+            codices.map { entity -> entity.toDomain(tagsByCodex[entity.codexId].orEmpty()) }
+        }
     }
 
     override fun observeCodex(codexId: String): Flow<Codex?> {
-        return dao.observeCodex(codexId).map { entity -> entity?.toDomain() }
+        return combine(dao.observeCodex(codexId), dao.observeAutomaticTags()) { entity, automaticTags ->
+            entity?.toDomain(automaticTags.filter { tag -> tag.codexId == codexId })
+        }
     }
 
     override suspend fun ensureCodex(codexId: String, name: String): Codex {
@@ -55,7 +63,7 @@ class RoomCodexLikesRepository(
             val codices = dao.codices()
             val resolvedName = CodexLikesPolicy.resolveUniqueCodexName(
                 name,
-                codices.map(CodexEntity::toDomain),
+                codices.map { entity -> entity.toDomain() },
             )
             var codexId = newId()
             while (dao.codex(codexId) != null) codexId = newId()
@@ -93,10 +101,27 @@ class RoomCodexLikesRepository(
                 ?: return@withTransaction
             val resolved = CodexLikesPolicy.resolveUniqueCodexName(
                 name,
-                current.map(CodexEntity::toDomain),
+                current.map { entity -> entity.toDomain() },
                 excludeCodexId = codexId,
             )
             if (existing.name != resolved) dao.updateCodexName(codexId, resolved)
+        }
+    }
+
+    override suspend fun setAutomaticTag(codexId: String, tag: CodexAutomaticTag, enabled: Boolean) {
+        database.withTransaction {
+            if (dao.codex(codexId) == null) return@withTransaction
+            val current = dao.automaticTagsForCodex(codexId).mapNotNull { entity ->
+                entity.toDomainOrNull()
+            }
+            val updated = CodexLikesPolicy.setAutomaticTag(current, tag, enabled)
+            if (updated == current) return@withTransaction
+            dao.deleteAutomaticTags(codexId)
+            if (updated.isNotEmpty()) {
+                dao.insertAutomaticTags(updated.map { automaticTag ->
+                    automaticTag.toEntity(codexId)
+                })
+            }
         }
     }
 
@@ -261,7 +286,7 @@ class RoomCodexLikesRepository(
         return database.withTransaction {
             val current = dao.codices()
             val resolved = CodexLikesPolicy.resolveCompleteCodexOrder(
-                currentCodices = current.map(CodexEntity::toDomain),
+                currentCodices = current.map { entity -> entity.toDomain() },
                 codexIdsInOrder = codexIdsInOrder,
             ) ?: return@withTransaction CodexBulkReorderResult(
                 applied = false,
@@ -286,6 +311,7 @@ class RoomCodexLikesRepository(
         systemCodexName: String,
         post: Post,
         tags: List<String>,
+        eligibleAutomaticCodexIds: Set<String>,
     ): CodexLikeSyncResult {
         val normalized = CodexLikesPolicy.normalizeProfileId(profileId)
         if (normalized.isBlank()) {
@@ -293,10 +319,11 @@ class RoomCodexLikesRepository(
         }
         return database.withTransaction {
             val nowLiked = toggleLikeInside(normalized, post.id, tags)
+            var automaticMembershipsAdded = 0
             val membershipChanged = if (nowLiked) {
                 val codex = ensureCodexInside(systemCodexId, systemCodexName)
                 upsertPostInside(post)
-                dao.insertCodexItem(
+                val systemMembershipChanged = dao.insertCodexItem(
                     CodexItemEntity(
                         codex.codexId,
                         post.id.source.name,
@@ -304,6 +331,30 @@ class RoomCodexLikesRepository(
                         clock(),
                     )
                 ) != -1L
+                val candidateIds = (eligibleAutomaticCodexIds - systemCodexId).sorted()
+                if (candidateIds.isNotEmpty()) {
+                    dao.automaticTagsForCodices(candidateIds)
+                        .groupBy(CodexAutomaticTagEntity::getCodexId)
+                        .filterValues { values ->
+                            CodexLikesPolicy.postMatchesAnyAutomaticTag(
+                                post = post,
+                                automaticTags = values.mapNotNull(CodexAutomaticTagEntity::toDomainOrNull),
+                            )
+                        }
+                        .keys
+                        .forEach { codexId ->
+                            val inserted = dao.insertCodexItem(
+                                CodexItemEntity(
+                                    codexId,
+                                    post.id.source.name,
+                                    post.id.sourcePostId,
+                                    clock(),
+                                ),
+                            )
+                            if (inserted != -1L) automaticMembershipsAdded += 1
+                        }
+                }
+                systemMembershipChanged
             } else {
                 val removed = dao.deleteCodexItem(
                     systemCodexId,
@@ -313,7 +364,11 @@ class RoomCodexLikesRepository(
                 cleanupOrphanPostsInside()
                 removed
             }
-            CodexLikeSyncResult(nowLiked = nowLiked, membershipChanged = membershipChanged)
+            CodexLikeSyncResult(
+                nowLiked = nowLiked,
+                membershipChanged = membershipChanged,
+                automaticMembershipsAdded = automaticMembershipsAdded,
+            )
         }
     }
 
@@ -367,7 +422,7 @@ class RoomCodexLikesRepository(
         val existing = current.firstOrNull { entity -> entity.codexId == codexId }
         val resolvedName = CodexLikesPolicy.resolveUniqueCodexName(
             name,
-            current.map(CodexEntity::toDomain),
+            current.map { entity -> entity.toDomain() },
             excludeCodexId = codexId,
         )
         if (existing != null) {
@@ -377,7 +432,7 @@ class RoomCodexLikesRepository(
                 resolvedName,
                 existing.createdAtEpochMs,
                 existing.displayOrder,
-            ).toDomain()
+            ).toDomain(dao.automaticTagsForCodex(existing.codexId))
         }
         val created = CodexEntity(
             codexId,
@@ -463,8 +518,29 @@ private class RoomPayloadCodec(
     }
 }
 
-private fun CodexEntity.toDomain(): Codex {
-    return Codex(codexId = codexId, name = name, createdAtEpochMs = createdAtEpochMs)
+private fun CodexEntity.toDomain(automaticTagEntities: List<CodexAutomaticTagEntity> = emptyList()): Codex {
+    return Codex(
+        codexId = codexId,
+        name = name,
+        createdAtEpochMs = createdAtEpochMs,
+        automaticTags = CodexLikesPolicy.normalizeAutomaticTags(
+            automaticTagEntities.mapNotNull(CodexAutomaticTagEntity::toDomainOrNull),
+        ),
+    )
+}
+
+private fun CodexAutomaticTagEntity.toDomainOrNull(): CodexAutomaticTag? {
+    val sourceKey = source.toSourceKeyOrNull() ?: return null
+    return CodexAutomaticTag(source = sourceKey, tag = tagDisplay)
+}
+
+private fun CodexAutomaticTag.toEntity(codexId: String): CodexAutomaticTagEntity {
+    return CodexAutomaticTagEntity(
+        codexId,
+        source.name,
+        sourceTagKey(source, tag),
+        tag,
+    )
 }
 
 private fun CodexItemEntity.toDomainOrNull(): CodexItem? {

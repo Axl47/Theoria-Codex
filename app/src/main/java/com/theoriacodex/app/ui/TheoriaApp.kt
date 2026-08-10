@@ -1732,6 +1732,15 @@ internal fun TheoriaAppContent(
                                         onRenameCodex = { codexId, name ->
                                             scope.launch { dataDependencies.codexRepository.renameCodex(codexId, name) }
                                         },
+                                        onSetAutomaticTag = { codexId, tag, enabled ->
+                                            scope.launch {
+                                                dataDependencies.codexRepository.setAutomaticTag(
+                                                    codexId = codexId,
+                                                    tag = tag,
+                                                    enabled = enabled,
+                                                )
+                                            }
+                                        },
                                         onDeleteCodex = { codexId ->
                                             scope.launch {
                                                 if (codexId == likesCodexIdForProfile(state.activeProfile.profileId)) {

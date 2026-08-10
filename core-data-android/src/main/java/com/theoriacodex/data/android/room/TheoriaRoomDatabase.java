@@ -11,6 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
 @Database(
         entities = {
                 CodexEntity.class,
+                CodexAutomaticTagEntity.class,
                 PostEntity.class,
                 CodexItemEntity.class,
                 LikedPostEntity.class,
@@ -19,7 +20,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
                 RecentSearchEntity.class,
                 RecentsMigrationEntity.class
         },
-        version = 3,
+        version = 4,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -47,7 +48,17 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             database.execSQL("CREATE INDEX IF NOT EXISTS `index_recent_watched_viewed_at_epoch_ms_sort_sequence_source_source_post_id_section` ON `recent_watched` (`viewed_at_epoch_ms`, `sort_sequence`, `source`, `source_post_id`, `section`)");
         }
     };
-    public static final Migration[] MIGRATIONS = new Migration[] { MIGRATION_1_2, MIGRATION_2_3 };
+    public static final Migration MIGRATION_3_4 = new Migration(3, 4) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("CREATE TABLE IF NOT EXISTS `codex_automatic_tags` (`codex_id` TEXT NOT NULL, `source` TEXT NOT NULL, `tag_key` TEXT NOT NULL, `tag_display` TEXT NOT NULL, PRIMARY KEY(`codex_id`, `source`, `tag_key`), FOREIGN KEY(`codex_id`) REFERENCES `codices`(`codex_id`) ON UPDATE NO ACTION ON DELETE CASCADE )");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_codex_automatic_tags_codex_id` ON `codex_automatic_tags` (`codex_id`)");
+        }
+    };
+    public static final Migration[] MIGRATIONS = new Migration[] {
+            MIGRATION_1_2,
+            MIGRATION_2_3,
+            MIGRATION_3_4
+    };
 
     public abstract CodexLikesDao codexLikesDao();
     public abstract RecentsDao recentsDao();

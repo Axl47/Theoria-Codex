@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.TagSelectionSurface
 import com.theoriacodex.domain.model.Codex
+import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.SourceKey
 import kotlin.math.roundToInt
 
@@ -84,6 +85,7 @@ internal fun CodexListScreen(
     onCommitReorder: (List<String>) -> Unit,
     onCreateCodex: (String) -> Unit,
     onRenameCodex: (String, String) -> Unit,
+    onSetAutomaticTag: (String, CodexAutomaticTag, Boolean) -> Unit,
     onDeleteCodex: (String) -> Unit,
     likesCodexId: String,
 ) {
@@ -365,7 +367,9 @@ internal fun CodexListScreen(
         )
     }
 
-    val actionCodex = actionTarget
+    val actionCodex = actionTarget?.let { target ->
+        codices.firstOrNull { codex -> codex.codexId == target.codexId } ?: target
+    }
     if (actionCodex != null) {
         val clearsLikes = actionCodex.codexId == likesCodexId
         val searchOptions = codexSearchSourceOptions[actionCodex.codexId].orEmpty()
@@ -447,6 +451,14 @@ internal fun CodexListScreen(
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
+                )
+                CodexAutomaticTagContent(
+                    isLikesCodex = clearsLikes,
+                    automaticTags = actionCodex.automaticTags,
+                    tagOptionsBySource = codexSearchTagOptions[actionCodex.codexId].orEmpty(),
+                    onSetAutomaticTag = { tag, enabled ->
+                        onSetAutomaticTag(actionCodex.codexId, tag, enabled)
+                    },
                 )
                 TextButton(
                     modifier = Modifier.fillMaxWidth(),

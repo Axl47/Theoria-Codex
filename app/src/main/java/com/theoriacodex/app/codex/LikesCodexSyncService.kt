@@ -5,6 +5,7 @@ import com.theoriacodex.data.repository.CodexLikesTransactions
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.domain.model.Post
 import java.util.UUID
+import kotlinx.coroutines.flow.first
 
 /** Keeps the system Likes Codex and the profile's LikesRepository membership in one transaction flow. */
 class LikesCodexSyncService internal constructor(
@@ -16,12 +17,21 @@ class LikesCodexSyncService internal constructor(
         post: Post,
         trainingTags: List<String>,
     ): Boolean {
+        val systemCodexId = likesCodexIdForProfile(profile.profileId)
+        val automaticCodexIds = codexRepository.observeCodices().first()
+            .asSequence()
+            .filter { codex ->
+                codex.codexId != systemCodexId &&
+                    codexBelongsToProfile(codex.codexId, profile.profileId)
+            }
+            .mapTo(linkedSetOf()) { codex -> codex.codexId }
         return transactions.toggleLikeAndSyncSystemCodex(
             profileId = profile.profileId,
-            systemCodexId = likesCodexIdForProfile(profile.profileId),
+            systemCodexId = systemCodexId,
             systemCodexName = likesCodexNameForProfile(profile),
             post = post,
             tags = trainingTags,
+            eligibleAutomaticCodexIds = automaticCodexIds,
         ).nowLiked
     }
 

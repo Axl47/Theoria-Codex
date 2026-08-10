@@ -1,6 +1,9 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.Codex
+import com.theoriacodex.domain.model.CodexAutomaticTag
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.tags.sourceTagKey
 
 /** Canonical storage-independent policy shared by JSON, memory, and database repositories. */
 object CodexLikesPolicy {
@@ -34,6 +37,52 @@ object CodexLikesPolicy {
             .filter(String::isNotBlank)
             .distinctBy(String::lowercase)
             .toList()
+    }
+
+    fun normalizeAutomaticTags(tags: List<CodexAutomaticTag>): List<CodexAutomaticTag> {
+        return tags
+            .asSequence()
+            .map { tag -> tag.copy(tag = tag.tag.trim()) }
+            .filter { tag -> tag.tag.isNotBlank() && !tag.tag.startsWith("-") }
+            .distinctBy { tag -> tag.source to sourceTagKey(tag.source, tag.tag) }
+            .sortedWith(
+                compareBy<CodexAutomaticTag> { tag -> tag.source.ordinal }
+                    .thenBy { tag -> sourceTagKey(tag.source, tag.tag) },
+            )
+            .toList()
+    }
+
+    fun setAutomaticTag(
+        current: List<CodexAutomaticTag>,
+        requested: CodexAutomaticTag,
+        enabled: Boolean,
+    ): List<CodexAutomaticTag> {
+        val normalizedRequest = normalizeAutomaticTags(listOf(requested)).singleOrNull()
+            ?: return normalizeAutomaticTags(current)
+        val requestedKey = sourceTagKey(normalizedRequest.source, normalizedRequest.tag)
+        val normalizedCurrent = normalizeAutomaticTags(current)
+        val containsRequested = normalizedCurrent.any { tag ->
+            tag.source == normalizedRequest.source && sourceTagKey(tag.source, tag.tag) == requestedKey
+        }
+        if (enabled && containsRequested) return normalizedCurrent
+        val withoutRequested = normalizedCurrent.filterNot { tag ->
+            tag.source == normalizedRequest.source && sourceTagKey(tag.source, tag.tag) == requestedKey
+        }
+        return normalizeAutomaticTags(
+            if (enabled) withoutRequested + normalizedRequest else withoutRequested,
+        )
+    }
+
+    fun postMatchesAnyAutomaticTag(post: Post, automaticTags: List<CodexAutomaticTag>): Boolean {
+        val postTagKeys = post.canonicalTags
+            .asSequence()
+            .map { tag -> sourceTagKey(post.id.source, tag) }
+            .filter(String::isNotBlank)
+            .toSet()
+        return automaticTags.any { automaticTag ->
+            automaticTag.source == post.id.source &&
+                sourceTagKey(automaticTag.source, automaticTag.tag) in postTagKeys
+        }
     }
 
     /**

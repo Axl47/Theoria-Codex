@@ -4,6 +4,7 @@ import com.theoriacodex.data.testing.RecordingIoDispatcher
 import com.theoriacodex.data.testing.ControllableIoDispatcher
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
 import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.DateRange
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -520,6 +521,37 @@ internal class FileBackedCodexRepositoryTest : FileBackedRepositoryTestFixture()
         val orderedIds = second.observeCodices().first().map { codex -> codex.codexId }
 
         assertEquals(listOf(gamma.codexId, alpha.codexId, beta.codexId), orderedIds)
+    }
+
+    @Test
+    fun `codex repository persists automatic tags across restarts`() = runTest {
+        val dir = tempDir("codex-automatic-tags-")
+        val first = FileBackedCodexRepository(dir)
+        val codex = first.createCodex("Automatic")
+
+        first.setAutomaticTag(
+            codex.codexId,
+            CodexAutomaticTag(SourceKey.GELBOORU, "blue sky"),
+            enabled = true,
+        )
+        first.setAutomaticTag(
+            codex.codexId,
+            CodexAutomaticTag(SourceKey.GELBOORU, "blue_sky"),
+            enabled = true,
+        )
+
+        val reloaded = FileBackedCodexRepository(dir)
+        assertEquals(
+            listOf(CodexAutomaticTag(SourceKey.GELBOORU, "blue sky")),
+            reloaded.observeCodex(codex.codexId).first()?.automaticTags,
+        )
+
+        reloaded.setAutomaticTag(
+            codex.codexId,
+            CodexAutomaticTag(SourceKey.GELBOORU, "blue_sky"),
+            enabled = false,
+        )
+        assertTrue(FileBackedCodexRepository(dir).observeCodex(codex.codexId).first()?.automaticTags.isNullOrEmpty())
     }
 
 }

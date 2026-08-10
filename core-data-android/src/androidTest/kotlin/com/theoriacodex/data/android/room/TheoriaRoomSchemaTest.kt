@@ -95,6 +95,32 @@ class TheoriaRoomSchemaTest {
         assertEquals(mapOf("codex" to "CODEX", "watched" to "WATCHED"), memberships)
     }
 
+    @Test
+    fun migrationThreeToFourPreservesCodicesAndAddsAutomaticTagOwnership() {
+        migrationHelper.createDatabase(TEST_DATABASE_NAME, 3).apply {
+            execSQL("INSERT INTO codices(codex_id,name,created_at_epoch_ms,display_order) VALUES('saved','Saved',1,0)")
+            close()
+        }
+
+        val database = migrationHelper.runMigrationsAndValidate(
+            TEST_DATABASE_NAME,
+            4,
+            true,
+            TheoriaRoomDatabase.MIGRATION_3_4,
+        )
+        database.execSQL("INSERT INTO codex_automatic_tags(codex_id,source,tag_key,tag_display) VALUES('saved','PIXIV','landscape','landscape')")
+        database.query("SELECT name FROM codices WHERE codex_id='saved'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("Saved", cursor.getString(0))
+        }
+        database.execSQL("DELETE FROM codices WHERE codex_id='saved'")
+        database.query("SELECT COUNT(*) FROM codex_automatic_tags").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+        database.close()
+    }
+
     companion object {
         private const val TEST_DATABASE_NAME = "theoria-room-schema-test"
     }

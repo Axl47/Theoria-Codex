@@ -53,17 +53,42 @@ class InMemoryCodexLikesTransactions(
         systemCodexName: String,
         post: Post,
         tags: List<String>,
+        eligibleAutomaticCodexIds: Set<String>,
     ): CodexLikeSyncResult {
         val codex = codices.ensureCodex(systemCodexId, systemCodexName)
         val before = codices.observeCodexItems(codex.codexId).first().any { it.postId == post.id }
+        val automaticMembershipsBefore = eligibleAutomaticCodexIds.associateWith { automaticCodexId ->
+            codices.observeCodexItems(automaticCodexId).first().any { item -> item.postId == post.id }
+        }
         val nowLiked = likes.toggleLike(profileId, post.id, tags)
         if (nowLiked) {
             codices.addItem(codex.codexId, post)
+            eligibleAutomaticCodexIds.forEach { automaticCodexId ->
+                val automaticCodex = codices.observeCodex(automaticCodexId).first()
+                if (
+                    automaticCodex != null &&
+                    CodexLikesPolicy.postMatchesAnyAutomaticTag(post, automaticCodex.automaticTags)
+                ) {
+                    codices.addItem(automaticCodexId, post)
+                }
+            }
         } else {
             codices.removeItem(codex.codexId, post.id.source, post.id.sourcePostId)
         }
         val after = codices.observeCodexItems(codex.codexId).first().any { it.postId == post.id }
-        return CodexLikeSyncResult(nowLiked = nowLiked, membershipChanged = before != after)
+        val automaticMembershipsAdded = if (nowLiked) {
+            eligibleAutomaticCodexIds.count { automaticCodexId ->
+                automaticMembershipsBefore[automaticCodexId] == false &&
+                    codices.observeCodexItems(automaticCodexId).first().any { item -> item.postId == post.id }
+            }
+        } else {
+            0
+        }
+        return CodexLikeSyncResult(
+            nowLiked = nowLiked,
+            membershipChanged = before != after,
+            automaticMembershipsAdded = automaticMembershipsAdded,
+        )
     }
 
     override suspend fun clearLikesAndLikedMemberships(

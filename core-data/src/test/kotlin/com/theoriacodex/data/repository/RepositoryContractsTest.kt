@@ -1,6 +1,7 @@
 package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
@@ -78,6 +79,46 @@ class RepositoryContractTest(
             repository.observeCodexPosts(first.codexId, CodexSortMode.BY_SOURCE)
                 .first()
                 .map { post -> post.id.source },
+        )
+    }
+
+    @Test
+    fun `codex automatic tags are source aware idempotent and reversible`() = runTest {
+        val repository = createCodexRepository()
+        val codex = repository.createCodex("Automatic")
+
+        repository.setAutomaticTag(
+            codex.codexId,
+            CodexAutomaticTag(SourceKey.GELBOORU, "blue sky"),
+            enabled = true,
+        )
+        repository.setAutomaticTag(
+            codex.codexId,
+            CodexAutomaticTag(SourceKey.GELBOORU, "blue_sky"),
+            enabled = true,
+        )
+        repository.setAutomaticTag(
+            codex.codexId,
+            CodexAutomaticTag(SourceKey.PIXIV, "blue sky"),
+            enabled = true,
+        )
+
+        assertEquals(
+            listOf(
+                CodexAutomaticTag(SourceKey.PIXIV, "blue sky"),
+                CodexAutomaticTag(SourceKey.GELBOORU, "blue sky"),
+            ),
+            repository.observeCodex(codex.codexId).first()?.automaticTags,
+        )
+
+        repository.setAutomaticTag(
+            codex.codexId,
+            CodexAutomaticTag(SourceKey.GELBOORU, "blue_sky"),
+            enabled = false,
+        )
+        assertEquals(
+            listOf(CodexAutomaticTag(SourceKey.PIXIV, "blue sky")),
+            repository.observeCodex(codex.codexId).first()?.automaticTags,
         )
     }
 

@@ -2,6 +2,7 @@ package com.theoriacodex.data.repository
 
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Codex
+import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -17,6 +18,7 @@ interface CodexRepository {
     suspend fun createCodex(name: String): Codex
     suspend fun reorderCodex(codexId: String, targetIndex: Int)
     suspend fun renameCodex(codexId: String, name: String)
+    suspend fun setAutomaticTag(codexId: String, tag: CodexAutomaticTag, enabled: Boolean)
     suspend fun deleteCodex(codexId: String)
     fun observeCodexItems(codexId: String): Flow<List<CodexItem>>
     fun observeCodexPosts(codexId: String, sort: CodexSortMode): Flow<List<Post>>
@@ -167,6 +169,8 @@ data class CodexLikeSyncResult(
     val nowLiked: Boolean,
     /** Whether system-Codex membership changed along with the like. */
     val membershipChanged: Boolean,
+    /** Number of profile-owned automatic Codices that received a new membership. */
+    val automaticMembershipsAdded: Int = 0,
 )
 
 data class CodexLikesClearResult(
@@ -204,6 +208,7 @@ interface CodexLikesTransactions {
         systemCodexName: String,
         post: Post,
         tags: List<String>,
+        eligibleAutomaticCodexIds: Set<String> = emptySet(),
     ): CodexLikeSyncResult
 
     /**

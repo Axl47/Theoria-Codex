@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -195,6 +196,87 @@ class RoomCodexLikesRepositoryTest {
         assertTrue(repository.observeCodexItems("system_likes_codex").first().isEmpty())
         assertEquals(1, cleared.clearedLikes)
         assertEquals(1, cleared.removedMemberships)
+    }
+
+    @Test
+    fun `matching like adds profile eligible automatic memberships and unlike preserves them`() = runTest {
+        val repository = repository()
+        val matching = repository.createCodex("Matching")
+        val nonmatching = repository.createCodex("Nonmatching")
+        val excludedProfile = repository.createCodex("Other profile")
+        repository.setAutomaticTag(
+            matching.codexId,
+            CodexAutomaticTag(SourceKey.PIXIV, "landscape"),
+            enabled = true,
+        )
+        repository.setAutomaticTag(
+            nonmatching.codexId,
+            CodexAutomaticTag(SourceKey.PIXIV, "portrait"),
+            enabled = true,
+        )
+        repository.setAutomaticTag(
+            excludedProfile.codexId,
+            CodexAutomaticTag(SourceKey.PIXIV, "landscape"),
+            enabled = true,
+        )
+        val likedPost = post("automatic")
+
+        val liked = repository.toggleLikeAndSyncSystemCodex(
+            profileId = "profile-main",
+            systemCodexId = "system_likes_codex",
+            systemCodexName = "Likes",
+            post = likedPost,
+            tags = likedPost.canonicalTags,
+            eligibleAutomaticCodexIds = setOf(matching.codexId, nonmatching.codexId),
+        )
+
+        assertTrue(liked.nowLiked)
+        assertEquals(1, liked.automaticMembershipsAdded)
+        assertEquals(listOf(likedPost.id), repository.observeCodexItems(matching.codexId).first().map { it.postId })
+        assertTrue(repository.observeCodexItems(nonmatching.codexId).first().isEmpty())
+        assertTrue(repository.observeCodexItems(excludedProfile.codexId).first().isEmpty())
+
+        val unliked = repository.toggleLikeAndSyncSystemCodex(
+            profileId = "profile-main",
+            systemCodexId = "system_likes_codex",
+            systemCodexName = "Likes",
+            post = likedPost,
+            tags = emptyList(),
+            eligibleAutomaticCodexIds = setOf(matching.codexId),
+        )
+
+        assertFalse(unliked.nowLiked)
+        assertEquals(0, unliked.automaticMembershipsAdded)
+        assertEquals(listOf(likedPost.id), repository.observeCodexItems(matching.codexId).first().map { it.postId })
+        assertTrue(repository.observeCodexItems("system_likes_codex").first().isEmpty())
+    }
+
+    @Test
+    fun `automatic tags round trip with source aware identity`() = runTest {
+        val repository = repository()
+        val codex = repository.createCodex("Automatic")
+
+        repository.setAutomaticTag(
+            codex.codexId,
+            CodexAutomaticTag(SourceKey.GELBOORU, "blue sky"),
+            enabled = true,
+        )
+        repository.setAutomaticTag(
+            codex.codexId,
+            CodexAutomaticTag(SourceKey.GELBOORU, "blue_sky"),
+            enabled = true,
+        )
+
+        assertEquals(
+            listOf(CodexAutomaticTag(SourceKey.GELBOORU, "blue sky")),
+            repository.observeCodex(codex.codexId).first()?.automaticTags,
+        )
+        repository.setAutomaticTag(
+            codex.codexId,
+            CodexAutomaticTag(SourceKey.GELBOORU, "blue_sky"),
+            enabled = false,
+        )
+        assertTrue(repository.observeCodex(codex.codexId).first()?.automaticTags.isNullOrEmpty())
     }
 
     @Test
