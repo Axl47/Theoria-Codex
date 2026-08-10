@@ -687,7 +687,11 @@ internal fun codexEntryCountLabel(entryCount: Long): String {
 
 @Composable
 private fun StatisticsGroupTitle(title: String) {
-    Text(text = title, style = MaterialTheme.typography.titleSmall)
+    Text(
+        text = title,
+        modifier = Modifier.padding(top = 16.dp),
+        style = MaterialTheme.typography.titleMedium,
+    )
 }
 
 @Composable
