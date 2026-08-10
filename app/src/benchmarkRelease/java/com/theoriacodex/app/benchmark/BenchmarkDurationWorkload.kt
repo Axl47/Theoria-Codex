@@ -11,6 +11,7 @@ import com.theoriacodex.app.R
 import com.theoriacodex.app.media.AnimatedDurationEnrichment
 import com.theoriacodex.app.media.AnimatedDurationEnrichmentLane
 import com.theoriacodex.app.media.AnimatedDurationEnrichmentService
+import com.theoriacodex.app.media.NoOpMediaDurationTraceRecorder
 import com.theoriacodex.domain.adapter.DurationMetadataSourceResult
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CoroutineScope
@@ -66,6 +67,7 @@ internal class BenchmarkDurationWorkload(
                 probeBundledDurationMs(resources)
             }
         },
+        traceRecorder = NoOpMediaDurationTraceRecorder,
     )
     private val lane = AnimatedDurationEnrichmentLane(
         scope = scope,

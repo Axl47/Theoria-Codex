@@ -275,6 +275,8 @@ class ArchitectureBoundarySourceTest {
         )
         listOf(
             "TheoriaDurationDemand",
+            "TheoriaDurationResolve",
+            "TheoriaDurationProbe",
             "TheoriaDurationPublish",
             "TheoriaDurationSettled",
             "TheoriaDurationWorkload",
@@ -311,6 +313,14 @@ class ArchitectureBoundarySourceTest {
                 "persistState(work.key, state)" in coordinator,
         )
         val service = File(repositoryRoot, servicePath).readText()
+        val acquisitionEngine = File(
+            repositoryRoot,
+            "app/src/main/java/com/theoriacodex/app/media/MediaDurationAcquisitionEngine.kt",
+        ).readText()
+        val boundedProbe = File(
+            repositoryRoot,
+            "app/src/main/java/com/theoriacodex/app/media/BoundedMediaDurationProbe.kt",
+        ).readText()
         val sourceAdapter = File(
             repositoryRoot,
             "core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceAdapter.kt",
@@ -322,13 +332,29 @@ class ArchitectureBoundarySourceTest {
         )
         assertTrue(
             "Duration acquisition must not hydrate complete posts through the generic source API",
-            "resolvePost(" !in service && "DurationMetadataSourceAdapter" in service,
+            "resolvePost(" !in acquisitionEngine &&
+                "DurationMetadataSourceAdapter" in acquisitionEngine,
         )
         assertTrue(
-            "Temporary duration acquisition must retain one worker and a 12-second timeout",
+            "Duration acquisition must retain one worker and a 12-second timeout",
             "DEFAULT_MAX_CONCURRENT_WORK = 1" in service &&
-                "DEFAULT_OPERATION_TIMEOUT_MS = 12_000L" in service &&
-                "withTimeoutOrNull(operationTimeoutMs)" in service,
+                "DEFAULT_DURATION_ACQUISITION_TIMEOUT_MS = 12_000L" in acquisitionEngine &&
+                "withTimeoutOrNull(operationTimeoutMs)" in acquisitionEngine,
+        )
+        assertTrue(
+            "Remote duration parsing must retain strict byte and time budgets",
+            "DEFAULT_DURATION_PROBE_WINDOW_BYTES = 256 * 1024" in boundedProbe &&
+                "DEFAULT_DURATION_PROBE_TIMEOUT_MS = 12_000L" in boundedProbe &&
+                "SourceByteRange" in boundedProbe &&
+                "maxBodyBytes = byteWindowLimit" in boundedProbe &&
+                "requestHeaders()" in boundedProbe,
+        )
+        val productionMediaSources = kotlinSourcesUnder(
+            "app/src/main/java/com/theoriacodex/app/media",
+        ).joinToString("\n") { source -> source.readText() }
+        assertTrue(
+            "Production duration acquisition must not use MediaMetadataRetriever",
+            "MediaMetadataRetriever" !in productionMediaSources,
         )
     }
 

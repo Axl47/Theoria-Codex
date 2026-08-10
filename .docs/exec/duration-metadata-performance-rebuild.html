@@ -124,7 +124,7 @@
       <span class="pill">Plan: .docs/exec/duration-metadata-performance-rebuild.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next action</strong>Introduce the application-wide prioritized coordinator and prove its scheduling independently before migrating routes.</div>
+      <div class="card"><strong>Next action</strong>Migrate every browsing route, player publication seam, badge, filter, and pagination owner onto the application coordinator.</div>
       <div class="card"><strong>Primary risk</strong>Background duration work currently competes with visible playback and can cause pagination to create more work.</div>
       <div class="card"><strong>Final proof</strong>Same device, asset, workload, gestures, iterations, metrics, and artifact-retention procedure before and after.</div>
       <div class="card"><strong>Protected behavior</strong>Every visibly presented animated or video card continues autoplaying simultaneously.</div>
@@ -159,9 +159,9 @@
       <table class="status-table"><tbody>
         <tr><td>Plan state</td><td>In progress. The immutable physical baseline, capability-aware acquisition, application-wide scheduling, and durable decision store are complete.</td></tr>
         <tr><td>Repository baseline</td><td><code>main</code> at <code>6bd7536</code> (<code>fix(performance): reset benchmark fixture between iterations</code>), after benchmark-only instrumentation and before any duration behavior repair.</td></tr>
-        <tr><td>Working tree</td><td>Phase 0 evidence is preserved under <code>build/reports/duration-metadata-performance/baseline-6bd7536/</code>. The active tracked changes are this living-plan evidence and the next implementation phase.</td></tr>
+        <tr><td>Working tree</td><td>Phase 0 evidence is preserved under <code>build/reports/duration-metadata-performance/baseline-6bd7536/</code>. Phases 1 through 3 have rebuilt acquisition, scheduling, persistence, and bounded parsing; route migration is next.</td></tr>
         <tr><td>Current live evidence</td><td>All five physical benchmark methods passed on Samsung SM-S926U / Android 16. The duration journey settled 24/24 decisions in every iteration while every visible preview continued playing.</td></tr>
-        <tr><td>Next action</td><td>Implement Phase 3b's bounded MP4/WebM parsers and replace remote <code>MediaMetadataRetriever</code>.</td></tr>
+        <tr><td>Next action</td><td>Implement Phase 4's route/player/filter migration, then delete the transitional duration lanes and service.</td></tr>
       </tbody></table>
       <div class="callout risk"><strong>Baseline gate:</strong> only benchmark harness, trace instrumentation, tests, and documentation may change before the first physical run. If any user-visible or duration-selection behavior changes first, reset the measurement sequence by capturing a new baseline from the last pre-fix commit.</div>
     </section>
@@ -347,7 +347,7 @@
 
       <article id="phase-3">
         <h3>Phase 3: Persist decisions and replace remote retriever probing</h3>
-        <p class="phase-status">Status: In progress. Durable Room ownership completed 2026-08-10; bounded parsing is next.</p>
+        <p class="phase-status done">Status: Completed 2026-08-10.</p>
         <table class="status-table"><tbody>
           <tr><td>Goal</td><td>Make successful/unsupported decisions survive relaunch and make fallback probing bounded, cancellable, and transport-aware.</td></tr>
           <tr><td>Primary files</td><td><code>core-data/.../repository/</code>, <code>core-data-android/.../room/</code>, <code>TheoriaRoomDatabase.java</code>, new container parser/probe files, fixtures and migration tests.</td></tr>
@@ -363,6 +363,8 @@
         </ol>
         <p><strong>Persistence result:</strong> schema 5 adds an independent <code>media_durations</code> table keyed by source, source post ID, and opaque media fingerprint. It stores only the typed decision payload and update time, caps itself at 4,096 rows, expires Retryable Failure rows on lookup, and contains no media URL, request header, full Post, or Pending state. The coordinator checks this store before scheduling and writes terminal decisions after publication without holding its state lock.</p>
         <p><strong>Persistence evidence:</strong> 3 platform-free repository tests, 4 Room repository/migration tests, 3 wire-mapping tests, 8 coordinator tests, and 8 architecture tests pass. The host migration test upgrades exported schema 4 to schema 5, preserves existing Codex content, and validates the generated schema. Android migration-test compilation and Debug/benchmark compilation pass. Changed persistence owners are clean under Detekt; the broad core-data and app lanes remain red only on their previously documented five and four inherited findings.</p>
+        <p><strong>Bounded parsing result:</strong> pure MP4 and WebM parsers consume bounded byte windows and return typed Known, Need More Data, or Unsupported outcomes across valid, truncated, malformed, missing-duration, head/tail, and overflow inputs. <code>BoundedMediaDurationProbe</code> uses request-scoped source headers, validates exact partial-content ranges, caps each response at 256 KiB, applies a 12-second timeout, and never interprets a preview clip as authoritative media. Provider metadata and container probing now pass through one shared acquisition engine; production remote <code>MediaMetadataRetriever</code> has been removed while the immutable benchmark-only baseline implementation remains.</p>
+        <p><strong>Bounded parsing evidence:</strong> all app-logic tests and Detekt pass; the focused service, probe, acquisition-engine, coordinator, architecture-boundary, and HTTP transport tests pass; Debug and benchmarkRelease Kotlin compile. App Detekt reports only the four inherited findings in untouched <code>CodexListScreen</code>, <code>SaveToCodexSheet</code>, and <code>SearchEmptyStatePolicy</code>.</p>
         <p><strong>Acceptance:</strong> 4-to-5 migration preserves every existing table; process recreation returns cached durations without provider/probe calls; fingerprint change causes fresh acquisition; pruning is deterministic; protected headers remain request-scoped; cancellation disconnects transport; no probe exceeds byte/time limits; malformed media becomes Unsupported or Retryable without failing the feed.</p>
       </article>
 
@@ -518,7 +520,7 @@ Overrun penalty p90 = duration-on Search frameOverrunMs p90
         <li class="done">[x] 2026-08-10 — Phase 0: froze the benchmark, repaired iteration reset after preserving the invalid attempt, passed five physical methods, and preserved/hashes the JSON plus 35 traces under <code>baseline-6bd7536</code>.</li>
         <li class="done">[x] 2026-08-10 — Phase 1: added pure state/fingerprint/planning contracts, optional provider metadata capability, direct-full-video acquisition, unsupported short-circuiting, one worker, and the 12-second timeout.</li>
         <li class="done">[x] 2026-08-10 — Phase 2: added the pure bounded priority scheduler and one application-scoped coordinator with observable metadata state, cross-route single-flight, scroll/lifecycle gates, consumer-isolated cancellation, background preemption, trace events, and no publication restart.</li>
-        <li>[ ] Phase 3 — Persist decisions and replace remote retriever probing. Durable schema 5 ownership is complete; bounded parsing is next.</li>
+        <li class="done">[x] 2026-08-10 — Phase 3: added the bounded schema 5 decision store, pure MP4/WebM parsers, strict range transport, and one shared provider/probe acquisition engine; removed production remote <code>MediaMetadataRetriever</code>.</li>
         <li>[ ] Phase 4 — Switch every route/player/filter and remove the old lanes.</li>
         <li>[ ] Phase 5 — Complete host acceptance, repeat the physical benchmark, compare, and close out.</li>
       </ul>
@@ -537,6 +539,7 @@ Overrun penalty p90 = duration-on Search frameOverrunMs p90
         <li><strong>Observation:</strong> Hitomi's sparse anime result already carries its canonical MP4, while a sparse animated-WebP gallery carries only a cover and media count. The shared planner can therefore probe anime directly and settle galleries unsupported without any Hitomi-specific full-post hydration.</li>
         <li><strong>Observation:</strong> a single total acquisition permit is a safe strict bound for the transitional coordinator adapter: it implies at most one probe and one provider request while route migration is incomplete. Phase 3 will move provider/probe classification behind the durable acquisition engine without loosening the probe bound.</li>
         <li><strong>Observation:</strong> the repository module cannot import the application-owned duration state without creating a dependency cycle. The durable contract therefore owns a smaller Pending-free stored state and the app owns the exhaustive typed mapping at the coordinator boundary.</li>
+        <li><strong>Observation:</strong> a range response is safe for metadata parsing only when its <code>Content-Range</code>, body length, and known total length agree with the requested window. Treating a server's silent full-body fallback as success would defeat the memory/network budget.</li>
       </ul>
 
       <h3>Decision Log</h3>
@@ -550,7 +553,7 @@ Overrun penalty p90 = duration-on Search frameOverrunMs p90
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>Phase 0 froze and preserved the benchmark contract. Phase 1 bounded capability-aware acquisition. Phase 2 added one application coordinator. Phase 3a now preserves terminal decisions independently from posts through a tested schema 4-to-5 migration and bounded Room repository. Continue with pure bounded container parsing and the transport-aware remote probe; route owners remain deliberately unchanged until Phase 4.</p>
+      <p>Phase 0 froze and preserved the benchmark contract. Phase 1 bounded capability-aware acquisition. Phase 2 added one application coordinator. Phase 3 now preserves terminal decisions independently from posts and replaces open-ended native remote probing with strict MP4/WebM range parsing through one shared acquisition engine. Continue with Phase 4: move route demand, badge reads, authoritative player publication, duration-filter readiness, and pagination onto this coordinator, then remove the transitional lanes.</p>
     </section>
 
     <section id="recovery">

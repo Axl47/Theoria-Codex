@@ -26,6 +26,10 @@ fun interface MediaDurationAcquirer {
 interface MediaDurationTraceRecorder {
     fun demand()
 
+    fun providerResolve()
+
+    fun probe()
+
     fun workloadStarted(cookie: Int)
 
     fun workloadFinished(cookie: Int)
@@ -37,6 +41,10 @@ interface MediaDurationTraceRecorder {
 
 object AndroidMediaDurationTraceRecorder : MediaDurationTraceRecorder {
     override fun demand() = recordEvent(TRACE_DURATION_DEMAND)
+
+    override fun providerResolve() = recordEvent(TRACE_DURATION_RESOLVE)
+
+    override fun probe() = recordEvent(TRACE_DURATION_PROBE)
 
     override fun workloadStarted(cookie: Int) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -62,6 +70,10 @@ object AndroidMediaDurationTraceRecorder : MediaDurationTraceRecorder {
 
 object NoOpMediaDurationTraceRecorder : MediaDurationTraceRecorder {
     override fun demand() = Unit
+
+    override fun providerResolve() = Unit
+
+    override fun probe() = Unit
 
     override fun workloadStarted(cookie: Int) = Unit
 
@@ -416,6 +428,8 @@ class MediaDurationCoordinator(
 }
 
 internal const val TRACE_DURATION_DEMAND = "TheoriaDurationDemand"
+internal const val TRACE_DURATION_RESOLVE = "TheoriaDurationResolve"
+internal const val TRACE_DURATION_PROBE = "TheoriaDurationProbe"
 internal const val TRACE_DURATION_PUBLISH = "TheoriaDurationPublish"
 internal const val TRACE_DURATION_SETTLED = "TheoriaDurationSettled"
 internal const val TRACE_DURATION_WORKLOAD = "TheoriaDurationWorkload"

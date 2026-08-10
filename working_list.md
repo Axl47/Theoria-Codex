@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-10T06:40:00-04:00
+updated_at: 2026-08-10T18:10:00-04:00
 ---
 # Working List
 
@@ -8,12 +8,11 @@ updated_at: 2026-08-10T06:40:00-04:00
 
 ### In Progress
 
-- [~] Phase 3b: replace remote retriever probing with bounded MP4/WebM parsing.
-  - Required evidence: pure valid/truncated/malformed/overflow parser fixtures; 256 KiB head/tail request bounds; 12-second overall timeout; request-scoped headers; cancellation closes response bodies; one probe worker; remote `MediaMetadataRetriever` removed; local benchmark-only retriever retained.
+- [~] Phase 4: migrate routes, players, badges, filters, and pagination to separate metadata state.
+  - Required evidence: route identity/demand deltas rather than list-keyed drains; separate badge metadata without post-list rewrites; authoritative full-player publication; pending-aware duration pagination; speculative background setting defaults off; old lanes/service removed after the final consumer moves.
 
 ### Pending
 
-- [ ] Phase 4: migrate routes, players, badges, filters, and pagination to separate metadata state.
 - [ ] Run the final host acceptance batch and stop before the post-fix physical benchmark.
 
 ### Done
@@ -32,6 +31,8 @@ updated_at: 2026-08-10T06:40:00-04:00
   - Evidence: the pure scheduler bounds and deterministically orders per-fingerprint tickets with priority promotion and safe eviction. The container owns one coordinator with an immutable metadata map, cross-route single-flight, serialized default acquisition, scroll/lifecycle gating, stale identity removal, shared-consumer isolation, visible/filter preemption of background work, retry/terminal decisions, and stable traces. Five scheduler, six coordinator, and eight architecture tests pass; Debug compilation and app-logic Detekt pass. App Detekt reports only four inherited findings in untouched UI owners.
 - [x] Phase 3a: persist bounded duration decisions through Room schema 5.
   - Evidence: the Pending-free repository contract and in-memory owner preserve typed terminal decisions. Room schema 5 adds an independent post/fingerprint-keyed table with no URLs or headers, deterministic 4,096-row pruning, expired-retry deletion, and an explicit host-tested 4-to-5 migration that preserves existing content. The coordinator consults it before queueing and persists results after releasing its state lock. Three repository, four Room/migration, three mapping, eight coordinator, and eight architecture tests pass; Android migration-test and Debug/benchmark compilation pass. Changed persistence files are absent from broad Detekt findings; only the documented inherited core-data and app findings remain.
+- [x] Phase 3b: replace remote retriever probing with bounded MP4/WebM parsing.
+  - Evidence: pure MP4 and WebM parsers cover valid, truncated, malformed, missing-duration, head/tail, and overflow inputs. The application probe uses source headers, validates exact 256 KiB head/tail range responses, enforces body and 12-second time bounds, and maps transport/parser outcomes into typed coordinator state. Provider resolution and probing now share one acquisition engine; production remote `MediaMetadataRetriever` is removed while the frozen benchmark-only baseline subject remains. The focused parser, probe, acquisition, coordinator, architecture, HTTP transport, app-logic, Debug, and benchmark compilation batch passes. App Detekt reports only its four inherited untouched UI findings.
 
 ## Current Task: Repair Animated Duration Metadata And Filtering
 

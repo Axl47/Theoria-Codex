@@ -346,6 +346,10 @@ class MediaDurationCoordinatorTest {
 
         override fun demand() = Unit
 
+        override fun providerResolve() = Unit
+
+        override fun probe() = Unit
+
         override fun workloadStarted(cookie: Int) {
             workloadStarts += 1
         }

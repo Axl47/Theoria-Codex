@@ -511,6 +511,7 @@ class AnimatedDurationEnrichmentServiceTest {
             negativeTtlMs = negativeTtlMs,
             maxConcurrentWork = maxConcurrentWork,
             operationTimeoutMs = operationTimeoutMs,
+            traceRecorder = NoOpMediaDurationTraceRecorder,
             scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler)),
         )
     }

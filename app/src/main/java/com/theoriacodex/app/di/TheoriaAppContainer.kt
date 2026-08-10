@@ -5,11 +5,9 @@ import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.media.AnimatedDurationEnricher
 import com.theoriacodex.app.media.AnimatedDurationEnrichmentService
-import com.theoriacodex.app.media.MediaDurationAcquirer
+import com.theoriacodex.app.media.BoundedMediaDurationProbe
+import com.theoriacodex.app.media.MediaDurationAcquisitionEngine
 import com.theoriacodex.app.media.MediaDurationCoordinator
-import com.theoriacodex.app.media.MediaDurationProvenance
-import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.MediaDurationUnsupportedReason
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.app.recommend.ForYouCoordinator
@@ -172,20 +170,16 @@ internal class DefaultTheoriaAppContainer(
     )
     private val contentDatabase = TheoriaRoomDatabase.create(appContext)
     private val mediaDurationRepository = RoomMediaDurationRepository(contentDatabase)
-    private val animatedDurationEnricher = AnimatedDurationEnrichmentService(
+    private val boundedMediaDurationProbe = BoundedMediaDurationProbe(sourceHttpClient)
+    private val mediaDurationAcquisitionEngine = MediaDurationAcquisitionEngine(
         registry = sourceRegistry,
+        probe = boundedMediaDurationProbe,
+    )
+    private val animatedDurationEnricher = AnimatedDurationEnrichmentService(
+        acquisitionEngine = mediaDurationAcquisitionEngine,
     )
     private val mediaDurationCoordinator = MediaDurationCoordinator(
-        acquirer = MediaDurationAcquirer { post ->
-            animatedDurationEnricher.enrich(post)?.let { enrichment ->
-                MediaDurationState.Known(
-                    durationMs = enrichment.durationMs,
-                    provenance = MediaDurationProvenance.CONTAINER_PROBE,
-                )
-            } ?: MediaDurationState.Unsupported(
-                reason = MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA,
-            )
-        },
+        acquirer = mediaDurationAcquisitionEngine,
         durationRepository = mediaDurationRepository,
         parentScope = durableStoreScope,
     )
