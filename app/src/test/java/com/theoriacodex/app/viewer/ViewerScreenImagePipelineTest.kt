@@ -168,6 +168,40 @@ class ViewerScreenImagePipelineTest {
     }
 
     @Test
+    fun `GIF viewer retains local remote and progressive fallbacks`() {
+        val media = ImageRef(
+            url = "https://gelbooru.com/images/full.gif",
+            localPath = "/missing/cache.gif",
+            mime = "image/gif",
+            progressiveUrls = listOf(
+                "https://gelbooru.com/images/sample.gif",
+                "https://gelbooru.com/images/full.gif",
+            ),
+        )
+        val preview = ImageRef(
+            url = "https://gelbooru.com/images/preview.gif",
+            localPath = null,
+            mime = "image/gif",
+        )
+        val post = samplePost(
+            sourceKey = SourceKey.GELBOORU,
+            preview = preview,
+            full = media,
+            media = listOf(media),
+        )
+
+        assertEquals(
+            listOf(
+                "/missing/cache.gif",
+                "https://gelbooru.com/images/sample.gif",
+                "https://gelbooru.com/images/full.gif",
+                "https://gelbooru.com/images/preview.gif",
+            ),
+            viewerGifLocations(post, media),
+        )
+    }
+
+    @Test
     fun `nhentai viewer candidates try mirrored extension fallbacks`() {
         val media = ImageRef(
             url = "https://i.nhentai.net/galleries/3821534/1.webp",

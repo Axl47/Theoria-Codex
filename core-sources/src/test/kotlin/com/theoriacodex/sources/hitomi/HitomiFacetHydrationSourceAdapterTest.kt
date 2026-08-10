@@ -269,9 +269,7 @@ internal class HitomiFacetHydrationSourceAdapterTest : HitomiSourceAdapterTestFi
             OffsetDateTime.parse("2026-07-09T23:41:00-05:00").toInstant().toEpochMilli(),
             animatedCard.createdAtEpochMs,
         )
-        assertEquals(1, cards.last().mediaCount)
-        assertNull(cards.last().creatorProfile)
-        assertTrue(cards.last().creatorProfiles.isEmpty())
+        assertSparseAnimeCard(cards.last())
         assertEquals(2, mediaCalls.get())
 
         val resolved = requireNotNull(adapter.resolvePost(PostId(SourceKey.HITOMI, "4042375")))
@@ -290,14 +288,26 @@ internal class HitomiFacetHydrationSourceAdapterTest : HitomiSourceAdapterTestFi
         assertEquals(46, mediaCalls.get())
 
         val anime = requireNotNull(adapter.resolvePost(PostId(SourceKey.HITOMI, "7231")))
-        assertEquals(1, anime.media.size)
-        assertEquals("video/mp4", anime.media.single().mime)
-        assertTrue(anime.media.single().url?.contains("/videos/") == true)
-        assertEquals(1, anime.mediaCount)
+        assertResolvedAnime(anime)
         assertEquals(47, mediaCalls.get())
-        assertNull(anime.creatorProfile)
-        assertTrue(anime.creatorProfiles.isEmpty())
-        assertNull(anime.authorName)
     }
 
+    private fun assertSparseAnimeCard(post: Post) {
+        assertEquals(1, post.mediaCount)
+        assertEquals(1, post.media.size)
+        assertEquals("video/mp4", post.full?.mime)
+        assertTrue(post.full?.url?.contains("/videos/") == true)
+        assertNull(post.creatorProfile)
+        assertTrue(post.creatorProfiles.isEmpty())
+    }
+
+    private fun assertResolvedAnime(post: Post) {
+        assertEquals(1, post.media.size)
+        assertEquals("video/mp4", post.media.single().mime)
+        assertTrue(post.media.single().url?.contains("/videos/") == true)
+        assertEquals(1, post.mediaCount)
+        assertNull(post.creatorProfile)
+        assertTrue(post.creatorProfiles.isEmpty())
+        assertNull(post.authorName)
+    }
 }

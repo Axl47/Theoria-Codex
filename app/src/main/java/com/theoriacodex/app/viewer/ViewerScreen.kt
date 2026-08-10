@@ -4,6 +4,7 @@ import android.content.res.Configuration
 import android.content.Context
 import android.graphics.Movie
 import android.os.SystemClock
+import android.util.Log
 import androidx.core.graphics.withTranslation
 import androidx.core.net.toUri
 import androidx.activity.compose.BackHandler
@@ -130,6 +131,7 @@ import com.theoriacodex.app.media.isVideoMediaRef
 import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.media.PostMediaKind
 import com.theoriacodex.app.media.mediaKind
+import com.theoriacodex.app.media.normalizeMediaUrl
 import com.theoriacodex.app.media.postMediaItems
 import com.theoriacodex.app.media.progressiveImageCandidates
 import com.theoriacodex.app.media.supportsProgressiveImageCandidates
@@ -148,7 +150,10 @@ import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.delay
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
@@ -560,7 +565,7 @@ internal fun ViewerScreen(
                         null
                     }
                 }
-                val gifLocation = remember(post, media) { viewerGifLocation(post, media) }
+                val gifLocations = remember(post, media) { viewerGifLocations(post, media) }
                 val mediaGestureModifier = Modifier.pointerInput(postPage, mediaPage) {
                     detectTapGestures(
                         onDoubleTap = { offset ->
@@ -785,10 +790,10 @@ internal fun ViewerScreen(
                                     onAction(ViewerAction.TimelineProgressChanged(positionMs, durationMs))
                                 },
                             )
-                        } else if (isGifMedia && !gifLocation.isNullOrBlank()) {
+                        } else if (isGifMedia && gifLocations.isNotEmpty()) {
                             ViewerGifPlayer(
                                 sourceKey = post.id.source,
-                                location = gifLocation,
+                                locations = gifLocations,
                                 modifier = Modifier.fillMaxSize(),
                                 mediaModifier = mediaTransformModifier,
                                 showTimeline = chromeVisible && isCurrentMediaPage,
@@ -1926,7 +1931,7 @@ private tailrec fun android.graphics.drawable.Drawable.unwrapWebPDrawable(): Web
 @Composable
 private fun ViewerGifPlayer(
     sourceKey: SourceKey,
-    location: String,
+    locations: List<String>,
     modifier: Modifier = Modifier,
     mediaModifier: Modifier = Modifier,
     showTimeline: Boolean = true,
@@ -1941,36 +1946,69 @@ private fun ViewerGifPlayer(
     onProgressChanged: (Long, Long?) -> Unit = { _, _ -> },
 ) {
     val context = LocalContext.current
-    var movie by remember(location) { mutableStateOf<Movie?>(null) }
-    var loading by remember(location) { mutableStateOf(true) }
-    var loadFailed by remember(location) { mutableStateOf(false) }
-    var positionMs by remember(location) { mutableLongStateOf(0L) }
-    var isScrubbing by remember(location) { mutableStateOf(false) }
-    var playbackPaused by remember(location) { mutableStateOf(false) }
+    var movie by remember(locations) { mutableStateOf<Movie?>(null) }
+    var loading by remember(locations) { mutableStateOf(true) }
+    var fallbackCandidateIndex by remember(locations) { mutableIntStateOf(0) }
+    var fallbackFailed by remember(locations) { mutableStateOf(false) }
+    var positionMs by remember(locations) { mutableLongStateOf(0L) }
+    var isScrubbing by remember(locations) { mutableStateOf(false) }
+    var playbackPaused by remember(locations) { mutableStateOf(false) }
     val effectivePlaybackRate = playbackRate.coerceAtLeast(MIN_PLAYBACK_RATE)
     val effectivePlaybackPaused = isPlaying?.not() ?: playbackPaused
 
-    LaunchedEffect(location, sourceKey) {
+    LaunchedEffect(locations, sourceKey) {
         loading = true
-        loadFailed = false
+        fallbackCandidateIndex = 0
+        fallbackFailed = false
         positionMs = 0L
         playbackPaused = false
-        movie = loadGifMovie(
-            context = context,
-            location = location,
-            headers = sourceKey.requestHeaders(),
-        )
-        loading = false
-        if (movie == null) {
-            loadFailed = true
+        var loadedMovie: Movie? = null
+        for (attempt in 1..GIF_MOVIE_LOAD_ATTEMPTS) {
+            loadedMovie = loadFirstGifMovie(
+                context = context,
+                sourceKey = sourceKey,
+                locations = locations,
+                attempt = attempt,
+            )
+            if (loadedMovie != null) break
+            if (attempt < GIF_MOVIE_LOAD_ATTEMPTS) delay(GIF_MOVIE_RETRY_DELAY_MS)
         }
+        movie = loadedMovie
+        loading = false
     }
 
     val activeMovie = movie
     if (activeMovie == null) {
+        val fallbackLocation = locations.getOrNull(fallbackCandidateIndex)
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
             if (loading) {
                 CircularProgressIndicator()
+            } else if (!fallbackFailed && fallbackLocation != null) {
+                AsyncImage(
+                    model = MediaRequestFactory.imageRequest(
+                        context = context,
+                        url = fallbackLocation,
+                        sourceKey = sourceKey,
+                        crossfade = false,
+                    ),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().then(mediaModifier),
+                    contentScale = ContentScale.Fit,
+                    onError = { state ->
+                        Log.w(
+                            GIF_LOG_TAG,
+                            "Coil GIF fallback failed for source=$sourceKey " +
+                                "candidate=${fallbackCandidateIndex + 1}/${locations.size} " +
+                                "at ${gifLocationLabel(fallbackLocation)}",
+                            state.result.throwable,
+                        )
+                        if (fallbackCandidateIndex < locations.lastIndex) {
+                            fallbackCandidateIndex += 1
+                        } else {
+                            fallbackFailed = true
+                        }
+                    },
+                )
             } else {
                 Text(
                     text = "Could not play GIF",
@@ -2101,44 +2139,131 @@ private fun ViewerPlaybackFooter(
 }
 
 @Suppress("DEPRECATION") // Paired with ViewerGifPlayer until the minimum API has a seekable decoder.
+private suspend fun loadFirstGifMovie(
+    context: Context,
+    sourceKey: SourceKey,
+    locations: List<String>,
+    attempt: Int,
+): Movie? {
+    locations.forEachIndexed { index, location ->
+        val result = runCatchingPreservingCancellation {
+            loadGifMovie(
+                context = context,
+                location = location,
+                headers = sourceKey.requestHeaders(),
+            )
+        }
+        val outcome = result.getOrNull()
+        if (outcome?.movie != null) return outcome.movie
+        val reason = outcome?.failure ?: result.exceptionOrNull()?.javaClass?.simpleName ?: "unknown"
+        Log.w(
+            GIF_LOG_TAG,
+            "GIF movie load failed for source=$sourceKey attempt=$attempt " +
+                "candidate=${index + 1}/${locations.size} at ${gifLocationLabel(location)}: $reason",
+            result.exceptionOrNull(),
+        )
+    }
+    return null
+}
+
+@Suppress("DEPRECATION") // Paired with ViewerGifPlayer until the minimum API has a seekable decoder.
 private suspend fun loadGifMovie(
     context: Context,
     location: String,
     headers: Map<String, String>,
-): Movie? = withContext(Dispatchers.IO) {
-    val bytes = when {
-        location.startsWith("http://", ignoreCase = true) || location.startsWith("https://", ignoreCase = true) -> {
-            val connection = URL(location).openConnection() as? HttpURLConnection ?: return@withContext null
-            try {
-                connection.instanceFollowRedirects = true
-                connection.connectTimeout = 12_000
-                connection.readTimeout = 18_000
-                headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
-                val statusCode = connection.responseCode
-                if (statusCode !in 200..299) {
-                    null
-                } else {
-                    connection.inputStream.use { input -> input.readBytes() }
-                }
-            } finally {
-                connection.disconnect()
-            }
-        }
+): GifMovieLoadResult = withContext(Dispatchers.IO) {
+    val bytesResult = loadGifBytes(context, location, headers)
+    val bytes = bytesResult.bytes
+        ?: return@withContext GifMovieLoadResult(failure = bytesResult.failure ?: "media unavailable")
 
-        location.startsWith("content://", ignoreCase = true) -> {
-            context.contentResolver.openInputStream(location.toUri())?.use { input ->
-                input.readBytes()
-            }
-        }
-
-        else -> {
-            val file = File(location)
-            if (file.exists()) file.readBytes() else null
-        }
-    } ?: return@withContext null
-
-    Movie.decodeByteArray(bytes, 0, bytes.size)
+    val decoded = Movie.decodeByteArray(bytes, 0, bytes.size)
+    GifMovieLoadResult(
+        movie = decoded,
+        failure = if (decoded == null) "Movie decoder rejected ${bytes.size} bytes" else null,
+    )
 }
+
+private fun loadGifBytes(
+    context: Context,
+    location: String,
+    headers: Map<String, String>,
+): GifBytesLoadResult = when {
+    location.startsWith("http://", ignoreCase = true) ||
+        location.startsWith("https://", ignoreCase = true) -> loadRemoteGifBytes(location, headers)
+    location.startsWith("content://", ignoreCase = true) -> {
+        val bytes = context.contentResolver.openInputStream(location.toUri())?.use { input ->
+            input.readBoundedGifBytes()
+        }
+        GifBytesLoadResult(bytes = bytes, failure = if (bytes == null) "content unavailable" else null)
+    }
+    else -> loadLocalGifBytes(location)
+}
+
+private fun loadRemoteGifBytes(
+    location: String,
+    headers: Map<String, String>,
+): GifBytesLoadResult {
+    val connection = URL(location).openConnection() as? HttpURLConnection
+        ?: return GifBytesLoadResult(failure = "unsupported connection")
+    return try {
+        connection.instanceFollowRedirects = true
+        connection.connectTimeout = 12_000
+        connection.readTimeout = 18_000
+        headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
+        val statusCode = connection.responseCode
+        if (statusCode in 200..299) {
+            GifBytesLoadResult(bytes = connection.inputStream.use(InputStream::readBoundedGifBytes))
+        } else {
+            GifBytesLoadResult(failure = "HTTP $statusCode")
+        }
+    } finally {
+        connection.disconnect()
+    }
+}
+
+private fun loadLocalGifBytes(location: String): GifBytesLoadResult {
+    val file = File(location)
+    return if (file.exists()) {
+        GifBytesLoadResult(bytes = file.inputStream().use(InputStream::readBoundedGifBytes))
+    } else {
+        GifBytesLoadResult(failure = "local file unavailable")
+    }
+}
+
+private fun InputStream.readBoundedGifBytes(): ByteArray {
+    val output = ByteArrayOutputStream()
+    val chunk = ByteArray(GIF_READ_CHUNK_BYTES)
+    var totalBytes = 0L
+    while (true) {
+        val read = read(chunk)
+        if (read == -1) return output.toByteArray()
+        totalBytes += read
+        if (totalBytes > MAX_GIF_BYTES) {
+            throw IOException("GIF exceeded the $MAX_GIF_BYTES-byte playback limit")
+        }
+        output.write(chunk, 0, read)
+    }
+}
+
+private fun gifLocationLabel(location: String): String {
+    val uri = location.toUri()
+    return if (uri.scheme.equals("http", ignoreCase = true) || uri.scheme.equals("https", ignoreCase = true)) {
+        "${uri.scheme}://${uri.host ?: "unknown-host"}"
+    } else {
+        uri.scheme ?: "local-file"
+    }
+}
+
+@Suppress("DEPRECATION") // Holds the API 26-compatible seekable GIF result.
+private data class GifMovieLoadResult(
+    val movie: Movie? = null,
+    val failure: String? = null,
+)
+
+private data class GifBytesLoadResult(
+    val bytes: ByteArray? = null,
+    val failure: String? = null,
+)
 
 private fun buildViewerImageRequest(
     context: Context,
@@ -2369,15 +2494,23 @@ private fun supportsProgressiveImageUpgrade(post: Post, media: ImageRef): Boolea
         media.progressiveUrls.isNotEmpty()
 }
 
-private fun viewerGifLocation(post: Post, media: ImageRef): String? {
+internal fun viewerGifLocations(post: Post, media: ImageRef): List<String> {
     val refs = buildList {
         add(media)
         post.full?.let { add(it) }
         add(post.preview)
     }
-    return refs.firstOrNull(::isGifMediaRef)?.let { ref ->
-        ref.localPath ?: ref.url
-    }
+    return refs
+        .filter(::isGifMediaRef)
+        .flatMap { ref ->
+            buildList {
+                ref.localPath?.takeIf(String::isNotBlank)?.let(::add)
+                addAll(ref.progressiveUrls.filter(String::isNotBlank))
+                ref.url?.takeIf(String::isNotBlank)?.let(::add)
+            }
+        }
+        .map { location -> normalizeMediaUrl(post.id.source, location) ?: location }
+        .distinct()
 }
 
 private fun isPixivUgoira(post: Post, media: ImageRef): Boolean {
@@ -2403,6 +2536,11 @@ private const val VIEWER_HORIZONTAL_SWIPE_WIDTH_RATIO = 0.12f
 private const val VIEWER_HORIZONTAL_SWIPE_SLOP_FRACTION = 0.35f
 private const val VIEWER_HORIZONTAL_SWIPE_AXIS_RATIO = 1.25f
 private const val GIF_FALLBACK_DURATION_MS = 1000L
+private const val GIF_MOVIE_LOAD_ATTEMPTS = 2
+private const val GIF_MOVIE_RETRY_DELAY_MS = 750L
+private const val GIF_READ_CHUNK_BYTES = 8 * 1024
+private const val MAX_GIF_BYTES = 64L * 1024L * 1024L
+private const val GIF_LOG_TAG = "TheoriaGifPlayer"
 private const val MIN_PLAYBACK_RATE = 0.1f
 
 private enum class ViewerPlaybackRate(

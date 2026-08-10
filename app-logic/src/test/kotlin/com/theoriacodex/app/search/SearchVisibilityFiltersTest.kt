@@ -86,7 +86,7 @@ class SearchVisibilityFiltersTest {
     }
 
     @Test
-    fun `filterSearchResults applies duration range to animated posts only`() {
+    fun `filterSearchResults excludes static posts from an active duration range`() {
         val static = samplePost(id = "static", source = SourceKey.GELBOORU)
         val shortAnimated = samplePost(
             id = "short",
@@ -112,7 +112,7 @@ class SearchVisibilityFiltersTest {
             savedPostIds = emptySet(),
         )
 
-        assertEquals(listOf(static.id, shortAnimated.id), visible.map { it.id })
+        assertEquals(listOf(shortAnimated.id), visible.map { it.id })
     }
 
     @Test

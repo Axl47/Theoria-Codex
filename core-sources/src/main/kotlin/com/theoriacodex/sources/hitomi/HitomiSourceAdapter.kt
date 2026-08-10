@@ -899,7 +899,7 @@ class HitomiSourceAdapter(
         } else {
             emptyList()
         }
-        val media = if (sparse) emptyList() else videoMedia.ifEmpty { imageMedia }
+        val media = publishedMedia(sparse, hasPlayableVideo, videoMedia, imageMedia)
         val declaredMediaCount = if (type == HITOMI_ANIME_TYPE && videoFilename != null) {
             1
         } else {
@@ -935,6 +935,16 @@ class HitomiSourceAdapter(
             taxonomy = taxonomy,
             creatorProfiles = creatorProfiles,
         )
+    }
+
+    private fun publishedMedia(
+        sparse: Boolean,
+        hasPlayableVideo: Boolean,
+        videoMedia: List<ImageRef>,
+        imageMedia: List<ImageRef>,
+    ): List<ImageRef> {
+        if (!sparse) return videoMedia.ifEmpty { imageMedia }
+        return videoMedia.takeIf { hasPlayableVideo }.orEmpty()
     }
 
     private fun JsonObject.parseCreatorProfiles(): List<CreatorProfile> {

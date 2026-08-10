@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-10T04:17:47-04:00
+updated_at: 2026-08-10T04:30:00-04:00
 ---
 # Working List
 
@@ -12,7 +12,7 @@ None.
 
 ### Pending
 
-- [ ] Manually confirm progressive duration badges and exact threshold filtering in the isolated Debug app.
+- [ ] Manually confirm progressive duration badges, exact filtering, and GIF playback in the isolated Debug app.
 
 ### Done
 
@@ -28,6 +28,16 @@ None.
   - Evidence: ordinary slider handles now represent literal inclusive thresholds, with exact under-5-second and over-2-minute endpoint behavior; reversed programmatic ranges also render a normalized label.
 - [x] Add focused regressions and run one bounded host validation batch.
   - Evidence: 82 focused policy, filtering, owner, probe, publication, and architecture tests pass; `:app:compileDebugKotlin` and `:app-logic:detekt` pass. `:app:detektDebug` reports only the four inherited findings in untouched `CodexListScreen`, `SaveToCodexSheet`, and `SearchEmptyStatePolicy`; no changed-file finding was reported. `git diff --check` passes. No connected, device, install, package mutation, or live-provider lane ran.
+- [x] Trace Hitomi duration hydration, static-result leakage, and the connected-device GIF failure.
+  - Evidence: Hitomi sparse hydration discarded directly known MP4 media, so the feed classified anime posts as static until Viewer resolution; active duration filtering explicitly retained static posts; GIF Viewer selected only one location, used only the legacy `Movie` decoder, swallowed every failure reason, and device logs showed repeated Debug-UID DNS/media retrieval failures.
+- [x] Make feed enrichment acquire authoritative Hitomi media duration without requiring a Viewer round trip.
+  - Evidence: sparse Hitomi anime cards now retain their directly known canonical MP4 while multi-image gallery expansion remains deferred, allowing the shared feed enrichment lane to classify and probe them immediately.
+- [x] Exclude static and unresolved non-duration content from active duration-filter results.
+  - Evidence: non-default duration ranges now admit only animated posts whose acquired durations match the literal range; static and unresolved animated records remain outside the results.
+- [x] Repair the reproduced GIF playback failure at its shared media boundary.
+  - Evidence: Viewer now retains local, progressive, and canonical GIF candidates, normalizes provider URLs, retries transient failures once, bounds downloads, emits source/host-safe diagnostics, and uses Coil's modern animated decoder when the seekable legacy decoder cannot load a valid candidate.
+- [x] Add focused regressions and run one bounded host/device-safe validation batch.
+  - Evidence: focused visibility-filter, Hitomi hydration, and Viewer image-pipeline tests pass; host-only `:app:compileDebugKotlin` passes. `:app-logic:detekt` passes. App Detekt reports only its four inherited findings in untouched files; core-sources Detekt reports only existing provider size/complexity findings and its pre-existing unrelated long tests, with no new test or GIF-loader finding. `git diff --check` passes. Device work was read-only: no APK was installed, launched, cleared, or replaced.
 
 ## Current Task: Add Durable App, Post, Search, Tag, And Codex Stats
 

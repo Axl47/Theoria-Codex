@@ -51,7 +51,7 @@ private fun matchesAnimatedDurationFilter(
 ): Boolean {
     val range = filters.animatedDurationRange
     if (range.isFullRange) return true
-    if (!isAnimatedPost(post)) return true
+    if (!isAnimatedPost(post)) return false
     val durationMs = animatedDurationMs(post) ?: return when (unknownAnimatedDurationPolicy) {
         UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
         UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND,
