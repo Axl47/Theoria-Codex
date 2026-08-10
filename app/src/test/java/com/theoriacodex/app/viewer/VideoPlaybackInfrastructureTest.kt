@@ -77,4 +77,80 @@ class VideoPlaybackInfrastructureTest {
 
         assertNotSame(first, second)
     }
+
+    @Test
+    fun `visible leases remain concurrent while returned slots are reused by identity`() {
+        var nextResource = 0
+        var nowMs = 1_000L
+        val pool = ReusableVideoSlotPool<PreviewResource, String>(
+            maxIdleResources = 2,
+            idleTimeoutMs = 30_000L,
+            clock = { nowMs },
+            createResource = { PreviewResource(nextResource++) },
+        )
+
+        val first = pool.acquire("first")
+        val second = pool.acquire("second")
+
+        assertNotSame(first.resource, second.resource)
+        assertEquals(2, pool.activeResourceCount)
+        assertTrue(pool.recycle(first))
+
+        val firstAgain = pool.acquire("first")
+        assertSame(first.resource, firstAgain.resource)
+        assertFalse(firstAgain.requiresBinding)
+        assertEquals(2, pool.activeResourceCount)
+        assertEquals(null, pool.pollExpired())
+    }
+
+    @Test
+    fun `idle retention bound never caps simultaneous visible players`() {
+        var nextResource = 0
+        val pool = ReusableVideoSlotPool<PreviewResource, String>(
+            maxIdleResources = 2,
+            idleTimeoutMs = 30_000L,
+            clock = { 0L },
+            createResource = { PreviewResource(nextResource++) },
+        )
+
+        val visible = List(10) { index -> pool.acquire("visible-$index") }
+
+        assertEquals(10, visible.map { lease -> lease.resource }.distinct().size)
+        assertEquals(10, pool.activeResourceCount)
+        assertEquals(null, pool.nextCleanupDelayMs())
+    }
+
+    @Test
+    fun `invalidated slots rebind and idle cleanup releases one resource per poll`() {
+        var nextResource = 0
+        var nowMs = 0L
+        val pool = ReusableVideoSlotPool<PreviewResource, String>(
+            maxIdleResources = 1,
+            idleTimeoutMs = 30_000L,
+            clock = { nowMs },
+            createResource = { PreviewResource(nextResource++) },
+        )
+        val first = pool.acquire("first")
+        val second = pool.acquire("second")
+        val third = pool.acquire("third")
+
+        assertTrue(pool.recycle(first, retainBinding = false))
+        assertTrue(pool.recycle(second))
+        assertTrue(pool.recycle(third))
+        assertEquals(3, pool.idleResourceCount)
+
+        val releasedFirst = pool.pollExpired()
+        assertSame(first.resource, releasedFirst)
+        assertEquals(2, pool.idleResourceCount)
+        val rebound = pool.acquire("first")
+        assertTrue(rebound.requiresBinding)
+        assertNotSame(first.resource, rebound.resource)
+
+        assertTrue(pool.recycle(rebound))
+        nowMs = 30_000L
+        assertTrue(pool.pollExpired() != null)
+        assertEquals(1, pool.idleResourceCount)
+    }
+
+    private data class PreviewResource(val id: Int)
 }

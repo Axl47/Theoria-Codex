@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 fun interface MediaDurationAcquirer {
     suspend fun acquire(post: Post): MediaDurationState
@@ -101,6 +102,7 @@ class MediaDurationCoordinator(
 ) : AutoCloseable {
     private val coordinatorJob = SupervisorJob(parentScope.coroutineContext[Job])
     private val scope = CoroutineScope(parentScope.coroutineContext + coordinatorJob)
+    private val coordinationContext = parentScope.coroutineContext.minusKey(Job)
     private val lock = Mutex()
     private val scheduler = DurationDemandScheduler(maxQueuedKeys)
     private val posts = mutableMapOf<MediaDurationKey, Post>()
@@ -120,7 +122,11 @@ class MediaDurationCoordinator(
         require(maxRetainedStates > 0) { "Retained duration-state bound must be positive" }
     }
 
-    suspend fun submit(post: Post, demand: DurationDemand): Boolean {
+    suspend fun submit(post: Post, demand: DurationDemand): Boolean = withContext(coordinationContext) {
+        submitInContext(post, demand)
+    }
+
+    private suspend fun submitInContext(post: Post, demand: DurationDemand): Boolean {
         require(demand.key.postId == post.id) { "Duration demand key must match its post" }
         traceRecorder.demand()
 
@@ -191,62 +197,68 @@ class MediaDurationCoordinator(
 
     suspend fun releaseIdentity(identity: String) = releaseIdentities(setOf(identity))
 
-    suspend fun releaseIdentities(identities: Set<String>) = lock.withLock {
-        identities.forEach { identity ->
-            require(identity.isNotBlank()) { "Duration demand identity must not be blank" }
-            val queuedAffected = scheduler.removeIdentity(identity)
-            queuedAffected.forEach(::discardUnownedPendingKeyLocked)
+    suspend fun releaseIdentities(identities: Set<String>) = withContext(coordinationContext) {
+        lock.withLock {
+            identities.forEach { identity ->
+                require(identity.isNotBlank()) { "Duration demand identity must not be blank" }
+                val queuedAffected = scheduler.removeIdentity(identity)
+                queuedAffected.forEach(::discardUnownedPendingKeyLocked)
 
-            active.values.toList().forEach { work ->
-                if (work.demands.remove(identity) == null) return@forEach
-                if (work.demands.isEmpty()) {
-                    cancelActiveLocked(work, requeue = false)
-                    discardUnownedPendingKeyLocked(work.key)
-                } else {
-                    work.priority = work.demands.values.minOf(DurationDemand::priority)
+                active.values.toList().forEach { work ->
+                    if (work.demands.remove(identity) == null) return@forEach
+                    if (work.demands.isEmpty()) {
+                        cancelActiveLocked(work, requeue = false)
+                        discardUnownedPendingKeyLocked(work.key)
+                    } else {
+                        work.priority = work.demands.values.minOf(DurationDemand::priority)
+                    }
                 }
             }
+            pumpLocked()
+            recordSettledIfNeededLocked()
         }
-        pumpLocked()
-        recordSettledIfNeededLocked()
     }
 
     suspend fun updateEnvironment(
         identity: String,
         lifecycleStarted: Boolean,
         scrollIdle: Boolean,
-    ) = lock.withLock {
-        require(identity.isNotBlank()) { "Duration environment identity must not be blank" }
-        executionEnvironments[identity] = DurationExecutionGate(
-            lifecycleStarted = lifecycleStarted,
-            scrollIdle = scrollIdle,
-        )
-        gate = aggregateExecutionGate()
-        active.values.toList().forEach { work ->
-            val mustPause = !gate.lifecycleStarted || !gate.scrollIdle
-            if (mustPause) cancelActiveLocked(work, requeue = true)
+    ) = withContext(coordinationContext) {
+        lock.withLock {
+            require(identity.isNotBlank()) { "Duration environment identity must not be blank" }
+            executionEnvironments[identity] = DurationExecutionGate(
+                lifecycleStarted = lifecycleStarted,
+                scrollIdle = scrollIdle,
+            )
+            gate = aggregateExecutionGate()
+            active.values.toList().forEach { work ->
+                val mustPause = !gate.lifecycleStarted || !gate.scrollIdle
+                if (mustPause) cancelActiveLocked(work, requeue = true)
+            }
+            pumpLocked()
         }
-        pumpLocked()
     }
 
     suspend fun updateEnvironment(lifecycleStarted: Boolean, scrollIdle: Boolean) {
         updateEnvironment(LEGACY_ENVIRONMENT_IDENTITY, lifecycleStarted, scrollIdle)
     }
 
-    suspend fun releaseEnvironment(identity: String) = lock.withLock {
-        executionEnvironments.remove(identity)
-        gate = aggregateExecutionGate()
-        if (!gate.lifecycleStarted) {
-            active.values.toList().forEach { work -> cancelActiveLocked(work, requeue = true) }
+    suspend fun releaseEnvironment(identity: String) = withContext(coordinationContext) {
+        lock.withLock {
+            executionEnvironments.remove(identity)
+            gate = aggregateExecutionGate()
+            if (!gate.lifecycleStarted) {
+                active.values.toList().forEach { work -> cancelActiveLocked(work, requeue = true) }
+            }
+            pumpLocked()
         }
-        pumpLocked()
     }
 
     suspend fun publishKnown(
         key: MediaDurationKey,
         durationMs: Long,
         provenance: MediaDurationProvenance,
-    ) {
+    ) = withContext(coordinationContext) {
         require(durationMs > 0L) { "Published duration must be positive" }
         val state = MediaDurationState.Known(durationMs, provenance)
         val changed = lock.withLock { publishKnownLocked(key, state) }

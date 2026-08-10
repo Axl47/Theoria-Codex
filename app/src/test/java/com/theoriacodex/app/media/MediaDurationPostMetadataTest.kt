@@ -44,6 +44,30 @@ class MediaDurationPostMetadataTest {
     }
 
     @Test
+    fun `append snapshot verifies the prefix but hashes only appended media`() {
+        val first = animatedTestPost(sourcePostId = "first")
+        val second = animatedTestPost(sourcePostId = "second")
+        var keyComputations = 0
+        val keyFactory: (com.theoriacodex.domain.model.Post) -> MediaDurationKey = { post ->
+            keyComputations += 1
+            mediaDurationKey(post)
+        }
+        val initialPosts = listOf(first)
+        val initial = mediaDurationPostSnapshot(initialPosts, keyFactory)
+        val appendedPosts = listOf(first, second)
+
+        val appended = mediaDurationPostSnapshot(
+            posts = appendedPosts,
+            keyFactory = keyFactory,
+            previousPosts = initialPosts,
+            previousSnapshot = initial,
+        )
+
+        assertEquals(2, keyComputations)
+        assertEquals(setOf(first.id, second.id), appended.keysByPostId.keys)
+    }
+
+    @Test
     fun `fingerprint ignores signed URL rotation but changes with authoritative media`() {
         val post = animatedTestPost(sourcePostId = "fingerprint")
         val signedRotation = post.copy(

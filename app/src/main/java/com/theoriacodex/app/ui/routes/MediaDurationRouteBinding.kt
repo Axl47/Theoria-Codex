@@ -10,10 +10,12 @@ import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.domain.model.Post
+import kotlinx.coroutines.flow.Flow
 
 internal data class MediaDurationRouteBinding(
     val owner: MediaDurationRouteViewModel,
     val states: Map<MediaDurationKey, MediaDurationState>,
+    val stateForPost: (Post) -> Flow<MediaDurationState?>,
 )
 
 @Composable
@@ -33,5 +35,5 @@ internal fun rememberMediaDurationRouteBinding(
     SideEffect {
         owner.synchronize(contentIdentity, posts, resolveInBackground)
     }
-    return MediaDurationRouteBinding(owner, states)
+    return MediaDurationRouteBinding(owner, states, owner::observeState)
 }

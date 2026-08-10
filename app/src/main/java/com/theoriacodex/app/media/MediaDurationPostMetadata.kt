@@ -25,12 +25,16 @@ internal data class MediaDurationPostSnapshot(
 internal fun mediaDurationPostSnapshot(
     posts: List<Post>,
     keyFactory: (Post) -> MediaDurationKey = ::mediaDurationKey,
+    previousPosts: List<Post>? = null,
+    previousSnapshot: MediaDurationPostSnapshot? = null,
 ): MediaDurationPostSnapshot {
-    val postsById = linkedMapOf<PostId, Post>()
-    val keysByPostId = linkedMapOf<PostId, MediaDurationKey>()
-    val candidatesByKey = linkedMapOf<MediaDurationKey, Post>()
-    val knownDurationsByKey = linkedMapOf<MediaDurationKey, Long>()
-    posts.forEach { post ->
+    val appendSeed = appendSeed(posts, previousPosts, previousSnapshot)
+    val postsById = LinkedHashMap(appendSeed?.snapshot?.postsById.orEmpty())
+    val keysByPostId = LinkedHashMap(appendSeed?.snapshot?.keysByPostId.orEmpty())
+    val candidatesByKey = LinkedHashMap(appendSeed?.snapshot?.candidatesByKey.orEmpty())
+    val knownDurationsByKey = LinkedHashMap(appendSeed?.snapshot?.knownDurationsByKey.orEmpty())
+    val newPosts = posts.subList(appendSeed?.newPostsStart ?: 0, posts.size)
+    newPosts.forEach { post ->
         if (postsById.putIfAbsent(post.id, post) != null || !isAnimatedPost(post)) {
             return@forEach
         }
@@ -49,6 +53,44 @@ internal fun mediaDurationPostSnapshot(
         candidatesByKey = candidatesByKey,
         knownDurationsByKey = knownDurationsByKey,
     )
+}
+
+internal data class DurationFilterMetadata(
+    val knownDurationMsByPostId: Map<PostId, Long>,
+    val stateByPostId: Map<PostId, MediaDurationState>,
+) {
+    companion object {
+        val EMPTY = DurationFilterMetadata(emptyMap(), emptyMap())
+    }
+}
+
+internal fun durationFilterMetadata(
+    posts: List<Post>,
+    states: Map<MediaDurationKey, MediaDurationState>,
+    active: Boolean,
+): DurationFilterMetadata {
+    if (!active) return DurationFilterMetadata.EMPTY
+    val keysByPostId = mediaDurationKeysByPostId(posts)
+    return DurationFilterMetadata(
+        knownDurationMsByPostId = knownMediaDurations(posts, states, keysByPostId),
+        stateByPostId = durationStatesByPostId(posts, states, keysByPostId),
+    )
+}
+
+private data class MediaDurationAppendSeed(
+    val newPostsStart: Int,
+    val snapshot: MediaDurationPostSnapshot,
+)
+
+private fun appendSeed(
+    posts: List<Post>,
+    previousPosts: List<Post>?,
+    previousSnapshot: MediaDurationPostSnapshot?,
+): MediaDurationAppendSeed? {
+    if (previousPosts == null || previousSnapshot == null) return null
+    if (posts.size < previousPosts.size) return null
+    if (posts.subList(0, previousPosts.size) != previousPosts) return null
+    return MediaDurationAppendSeed(previousPosts.size, previousSnapshot)
 }
 
 internal fun mediaDurationKey(post: Post): MediaDurationKey {

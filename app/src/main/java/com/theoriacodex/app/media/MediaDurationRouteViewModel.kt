@@ -6,13 +6,21 @@ import androidx.lifecycle.viewModelScope
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.ContinuationInterceptor
 
 /** Navigation-scoped demand adapter. It never copies duration values into route post lists. */
 internal class MediaDurationRouteViewModel(
@@ -20,8 +28,16 @@ internal class MediaDurationRouteViewModel(
     routeName: String,
     coroutineScope: CoroutineScope? = null,
     private val keyFactory: (Post) -> MediaDurationKey = ::mediaDurationKey,
+    snapshotDispatcher: CoroutineDispatcher? = null,
 ) : ViewModel() {
     private val ownerScope = coroutineScope ?: viewModelScope
+    private val snapshotDispatcher = snapshotDispatcher
+        ?: if (coroutineScope == null) {
+            Dispatchers.Default
+        } else {
+            coroutineScope.coroutineContext[ContinuationInterceptor] as? CoroutineDispatcher
+                ?: Dispatchers.Default
+        }
     private val routeIdentity = routeName.trim().also {
         require(it.isNotBlank()) { "Duration route name must not be blank" }
     }
@@ -30,6 +46,8 @@ internal class MediaDurationRouteViewModel(
     private var requestedContentIdentity: String? = null
     private var requestedPostsReference: List<Post>? = null
     private var requestedSnapshot = MediaDurationPostSnapshot.EMPTY
+    private var requestedSnapshotIdentity: String? = null
+    private var requestGeneration = 0L
     private var requestedBackgroundEnabled = false
     private var contentIdentity: String? = null
     private var postsById: Map<PostId, Post> = emptyMap()
@@ -50,7 +68,7 @@ internal class MediaDurationRouteViewModel(
     init {
         ownerScope.launch {
             coordinator.states.collect { allStates ->
-                demandLock.withLock { publishObservedStates(allStates) }
+                if (filterActive) demandLock.withLock { publishObservedStates(allStates) }
             }
         }
     }
@@ -68,52 +86,101 @@ internal class MediaDurationRouteViewModel(
         ) {
             return
         }
-        val snapshot = if (requestedPostsReference === posts) {
-            requestedSnapshot
-        } else {
-            mediaDurationPostSnapshot(posts, keyFactory)
-        }
+        val request = DurationSnapshotRequest(
+            generation = ++requestGeneration,
+            identity = identity,
+            posts = posts,
+            resolveInBackground = resolveInBackground,
+            previousIdentity = requestedContentIdentity,
+            previousPosts = requestedPostsReference,
+            previousSnapshot = requestedSnapshot.takeIf {
+                requestedSnapshotIdentity == requestedContentIdentity
+            },
+        )
         requestedContentIdentity = identity
         requestedPostsReference = posts
-        requestedSnapshot = snapshot
         requestedBackgroundEnabled = resolveInBackground
-        ownerScope.launch {
-            demandLock.withLock {
-                if (
-                    requestedContentIdentity != identity ||
-                    requestedSnapshot !== snapshot ||
-                    requestedBackgroundEnabled != resolveInBackground
-                ) {
-                    return@withLock
-                }
-                if (
-                    contentIdentity == identity &&
-                    postsById == snapshot.postsById &&
-                    backgroundEnabled == resolveInBackground
-                ) {
-                    return@withLock
-                }
-                val identityChanged = contentIdentity != identity
-                if (identityChanged) releaseContentDemand()
-                contentIdentity = identity
-                postsById = snapshot.postsById
-                keysByPostId = snapshot.keysByPostId
-                candidatesByKey = snapshot.candidatesByKey
-                knownDurationsByKey = snapshot.knownDurationsByKey
-                observedKeys = snapshot.observedKeys
-                publishObservedStates(coordinator.states.value)
-                visiblePostIds.retainAll(snapshot.postsById.keys)
-                backgroundEnabled = resolveInBackground
-                publishSnapshotDurations()
-                synchronizeDemand()
-            }
+        ownerScope.launch { synchronize(request) }
+    }
+
+    private suspend fun synchronize(request: DurationSnapshotRequest) {
+        val snapshot = buildSnapshot(request)
+        demandLock.withLock {
+            if (!isCurrent(request)) return@withLock
+            applySnapshot(request, snapshot)
         }
+    }
+
+    private suspend fun buildSnapshot(request: DurationSnapshotRequest): MediaDurationPostSnapshot {
+        val unchangedSnapshot = request.previousSnapshot
+            ?.takeIf { request.previousIdentity == request.identity && request.previousPosts === request.posts }
+        return unchangedSnapshot ?: withContext(snapshotDispatcher) {
+            val canExtend = request.previousIdentity == request.identity
+            mediaDurationPostSnapshot(
+                posts = request.posts,
+                keyFactory = keyFactory,
+                previousPosts = request.previousPosts.takeIf { canExtend },
+                previousSnapshot = request.previousSnapshot.takeIf { canExtend },
+            )
+        }
+    }
+
+    private fun isCurrent(request: DurationSnapshotRequest): Boolean {
+        return requestGeneration == request.generation &&
+            requestedContentIdentity == request.identity &&
+            requestedPostsReference === request.posts &&
+            requestedBackgroundEnabled == request.resolveInBackground
+    }
+
+    private suspend fun applySnapshot(
+        request: DurationSnapshotRequest,
+        snapshot: MediaDurationPostSnapshot,
+    ) {
+        requestedSnapshot = snapshot
+        requestedSnapshotIdentity = request.identity
+        if (
+            contentIdentity == request.identity &&
+            postsById == snapshot.postsById &&
+            backgroundEnabled == request.resolveInBackground
+        ) {
+            return
+        }
+        if (contentIdentity != request.identity) releaseContentDemand()
+        val previouslyPublishedDurations = knownDurationsByKey
+        contentIdentity = request.identity
+        postsById = snapshot.postsById
+        keysByPostId = snapshot.keysByPostId
+        candidatesByKey = snapshot.candidatesByKey
+        knownDurationsByKey = snapshot.knownDurationsByKey
+        observedKeys = snapshot.observedKeys
+        publishObservedStates(coordinator.states.value)
+        visiblePostIds.retainAll(snapshot.postsById.keys)
+        backgroundEnabled = request.resolveInBackground
+        publishSnapshotDurations(previouslyPublishedDurations)
+        synchronizeDemand()
     }
 
     fun onFilterChanged(active: Boolean) {
         if (filterActive == active) return
         filterActive = active
-        ownerScope.launch { demandLock.withLock { synchronizeDemand() } }
+        ownerScope.launch {
+            demandLock.withLock {
+                if (active) publishObservedStates(coordinator.states.value) else mutableStates.value = emptyMap()
+                synchronizeDemand()
+            }
+        }
+    }
+
+    fun observeState(post: Post): Flow<MediaDurationState?> {
+        if (!isAnimatedPost(post)) return flowOf(null)
+        val key = if (requestedSnapshotIdentity == requestedContentIdentity) {
+            requestedSnapshot.keysByPostId[post.id]
+        } else {
+            null
+        } ?: keyFactory(post)
+        return coordinator.states
+            .map { states -> states[key] }
+            .distinctUntilChanged()
     }
 
     fun onPostVisibilityChanged(post: Post, visible: Boolean) {
@@ -132,7 +199,11 @@ internal class MediaDurationRouteViewModel(
 
     fun publishPlayerDuration(post: Post, durationMs: Long) {
         if (durationMs <= 0L) return
-        val key = requestedSnapshot.keysByPostId[post.id] ?: keyFactory(post)
+        val key = requestedSnapshot
+            .takeIf { requestedSnapshotIdentity == requestedContentIdentity }
+            ?.keysByPostId
+            ?.get(post.id)
+            ?: keyFactory(post)
         if (coordinator.states.value[key] is MediaDurationState.Known) return
         ownerScope.launch {
             coordinator.publishKnown(
@@ -221,8 +292,9 @@ internal class MediaDurationRouteViewModel(
         visibleDemandKeys = visibleDemandKeys + key
     }
 
-    private suspend fun publishSnapshotDurations() {
+    private suspend fun publishSnapshotDurations(previouslyPublished: Map<MediaDurationKey, Long>) {
         knownDurationsByKey.forEach { (key, durationMs) ->
+            if (previouslyPublished[key] == durationMs) return@forEach
             coordinator.publishKnown(
                 key = key,
                 durationMs = durationMs,
@@ -278,6 +350,7 @@ internal class MediaDurationRouteViewModel(
     }
 
     private fun publishObservedStates(allStates: Map<MediaDurationKey, MediaDurationState>) {
+        if (!filterActive) return
         val observed = buildMap {
             observedKeys.forEach { key -> allStates[key]?.let { state -> put(key, state) } }
         }
@@ -289,6 +362,16 @@ internal class MediaDurationRouteViewModel(
         FILTER,
         VISIBLE,
     }
+
+    private data class DurationSnapshotRequest(
+        val generation: Long,
+        val identity: String,
+        val posts: List<Post>,
+        val resolveInBackground: Boolean,
+        val previousIdentity: String?,
+        val previousPosts: List<Post>?,
+        val previousSnapshot: MediaDurationPostSnapshot?,
+    )
 
     companion object {
         fun factory(

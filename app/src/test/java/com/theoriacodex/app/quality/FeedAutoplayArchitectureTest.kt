@@ -37,6 +37,9 @@ class FeedAutoplayArchitectureTest {
         val feedMedia = file(
             "app/src/main/java/com/theoriacodex/app/search/FeedMediaComponents.kt",
         ).readText()
+        val feedPool = file(
+            "app/src/main/java/com/theoriacodex/app/viewer/FeedPreviewPlayerPool.kt",
+        ).readText()
         assertTrue("Viewport must be clipped through actual layout coordinates", "boundsInWindow(clipBounds = true)" in search)
         assertTrue("Never-visible videos must return before player state is created", "if (!shouldOwnPlayer)" in feedMedia)
         assertTrue("Activation must be retained per media identity", "FeedPlayerActivationState()" in feedMedia)
@@ -45,7 +48,7 @@ class FeedAutoplayArchitectureTest {
             "Lifecycle identity changes must not recreate a key-stable player",
             "DisposableEffect(location, sourceKey, lifecycleOwner)" in feedMedia,
         )
-        assertTrue("Video playback must use the bounded feed profile", "VideoPlaybackProfile.FEED_PREVIEW" in feedMedia)
+        assertTrue("Video playback must use the bounded feed profile", "VideoPlaybackProfile.FEED_PREVIEW" in feedPool)
         assertTrue("Ugoira playback must follow the same viewport/lifecycle gate", "isActive = playbackActive" in search)
         assertTrue("Animated images must stop outside the active viewport", "animatable?.stop()" in feedMedia)
 
@@ -69,6 +72,12 @@ class FeedAutoplayArchitectureTest {
         val exo = file(
             "app/src/main/java/com/theoriacodex/app/viewer/ExoVideoComponents.kt",
         ).readText()
+        val feedPool = file(
+            "app/src/main/java/com/theoriacodex/app/viewer/FeedPreviewPlayerPool.kt",
+        ).readText()
+        val feedMedia = file(
+            "app/src/main/java/com/theoriacodex/app/search/FeedMediaComponents.kt",
+        ).readText()
 
         assertTrue("Application must own one lazy playback infrastructure", "videoPlaybackInfrastructure" in application && "by lazy" in application)
         assertTrue("Media3 cache must use a byte evictor", "LeastRecentlyUsedCacheEvictor(VIDEO_PLAYBACK_CACHE_MAX_BYTES)" in infrastructure)
@@ -83,6 +92,11 @@ class FeedAutoplayArchitectureTest {
         assertTrue("Duplicate cache writes must wait for the shared span", "CacheDataSource.FLAG_BLOCK_ON_CACHE" in infrastructure)
         assertTrue("ExoPlayer must resolve process-owned infrastructure", "videoPlaybackInfrastructure()" in exo)
         assertTrue("Each constructed player has exactly one prepare call", exo.split("prepare()").size - 1 == 1)
+        assertTrue("Feed players must be application-owned reusable leases", "feedPreviewPlayerPool" in infrastructure)
+        assertTrue("Muted previews must not select audio decoders", "setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)" in feedPool)
+        assertTrue("Lazy-grid media views must opt into reuse", "onReset =" in feedMedia)
+        assertFalse("Card disposal must not synchronously release players", "player.release()" in feedMedia)
+        assertTrue("Slow release must be paced outside route disposal", "FEED_PREVIEW_RELEASE_SPACING_MS" in feedPool)
     }
 
     private fun file(path: String): File = File(repositoryRoot, path)

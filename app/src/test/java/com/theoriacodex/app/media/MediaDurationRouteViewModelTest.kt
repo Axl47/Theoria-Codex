@@ -4,6 +4,7 @@ import com.theoriacodex.app.testing.animatedTestPost
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -106,6 +107,7 @@ class MediaDurationRouteViewModelTest {
         val posts = List(120) { index -> animatedTestPost(sourcePostId = "post-$index") }
 
         owner.synchronize("query", posts, resolveInBackground = false)
+        assertEquals(0, keyComputations)
         runCurrent()
         assertEquals(120, keyComputations)
 
@@ -154,7 +156,16 @@ class MediaDurationRouteViewModelTest {
         val coordinator = coordinator(
             traceRecorder = traces,
         ) { MediaDurationState.Known(5_000L, MediaDurationProvenance.CONTAINER_PROBE) }
-        val owner = MediaDurationRouteViewModel(coordinator, "append-test", backgroundScope)
+        var keyComputations = 0
+        val owner = MediaDurationRouteViewModel(
+            coordinator = coordinator,
+            routeName = "append-test",
+            coroutineScope = backgroundScope,
+            keyFactory = { post ->
+                keyComputations += 1
+                mediaDurationKey(post)
+            },
+        )
         val first = animatedTestPost(sourcePostId = "first")
         val second = animatedTestPost(sourcePostId = "second")
 
@@ -165,6 +176,7 @@ class MediaDurationRouteViewModelTest {
         runCurrent()
 
         assertEquals(2, traces.demands)
+        assertEquals(2, keyComputations)
         coordinator.close()
     }
 
@@ -191,7 +203,7 @@ class MediaDurationRouteViewModelTest {
     }
 
     @Test
-    fun `route state ignores metadata published for another feed`() = runTest {
+    fun `routine badge state stays per post while inactive route maps remain empty`() = runTest {
         val coordinator = coordinator {
             MediaDurationState.Known(5_000L, MediaDurationProvenance.CONTAINER_PROBE)
         }
@@ -207,9 +219,11 @@ class MediaDurationRouteViewModelTest {
         runCurrent()
 
         assertTrue(searchOwner.states.value.isEmpty())
+        assertTrue(creatorOwner.states.value.isEmpty())
+        assertEquals(null, searchOwner.observeState(searchPost).first())
         assertEquals(
             MediaDurationState.Known(5_000L, MediaDurationProvenance.ACTIVE_PLAYER),
-            creatorOwner.states.value[mediaDurationKey(creatorPost)],
+            creatorOwner.observeState(creatorPost).first(),
         )
         coordinator.close()
     }

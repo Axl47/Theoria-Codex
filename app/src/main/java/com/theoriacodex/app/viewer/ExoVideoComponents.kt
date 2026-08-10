@@ -52,6 +52,8 @@ internal fun createLoopingExoPlayer(
 internal object MediaTraceSections {
     const val PREVIEW_PREPARE = "TheoriaPreviewPrepare"
     const val PREVIEW_FIRST_FRAME = "TheoriaPreviewFirstFrame"
+    const val PREVIEW_PLAYER_CREATE = "TheoriaPreviewPlayerCreate"
+    const val PREVIEW_PLAYER_RELEASE = "TheoriaPreviewPlayerRelease"
     const val VIEWER_PREPARE = "TheoriaViewerPrepare"
     const val VIEWER_FIRST_FRAME = "TheoriaViewerFirstFrame"
     const val MEDIA_LOAD = "TheoriaMediaLoad"
@@ -112,7 +114,7 @@ internal fun PostId.mediaTestTagPart(): String {
     return "${sourcePart}_$postPart"
 }
 
-private object MediaLoadTraceListener : AnalyticsListener {
+internal object MediaLoadTraceListener : AnalyticsListener {
     override fun onLoadStarted(
         eventTime: AnalyticsListener.EventTime,
         loadEventInfo: LoadEventInfo,

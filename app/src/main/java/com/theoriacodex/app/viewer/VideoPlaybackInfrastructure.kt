@@ -87,6 +87,9 @@ internal class VideoPlaybackInfrastructure(
     context: Context,
 ) {
     private val appContext = context.applicationContext
+    internal val feedPreviewPlayerPool: FeedPreviewPlayerPool by lazy {
+        FeedPreviewPlayerPool(appContext, this)
+    }
     private val sharedFactories = SharedVideoFactories(
         http = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)

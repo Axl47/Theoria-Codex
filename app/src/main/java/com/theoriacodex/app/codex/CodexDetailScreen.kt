@@ -43,9 +43,9 @@ import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.durationFilterReadiness
-import com.theoriacodex.app.media.durationStatesByPostId
-import com.theoriacodex.app.media.knownMediaDurations
-import com.theoriacodex.app.media.mediaDurationKeysByPostId
+import com.theoriacodex.app.media.durationFilterMetadata
+import com.theoriacodex.app.media.noMediaDurationStateForPost
+import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
@@ -65,6 +65,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
+import kotlinx.coroutines.flow.Flow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,6 +78,7 @@ fun CodexDetailScreen(
     pixivUgoiraClient: PixivUgoiraClient? = null,
     resolveUnknownAnimatedDurations: Boolean = false,
     durationStates: Map<MediaDurationKey, MediaDurationState> = emptyMap(),
+    durationStateForPost: (Post) -> Flow<MediaDurationState?> = noMediaDurationStateForPost,
     onSortChange: (CodexSortMode) -> Unit,
     onDurationFilterChanged: (Boolean) -> Unit = {},
     onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
@@ -147,14 +149,12 @@ fun CodexDetailScreen(
             UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
         }
     }
-    val durationKeysByPostId = remember(posts) { mediaDurationKeysByPostId(posts) }
-    val acquiredDurations = remember(posts, durationStates, durationKeysByPostId) {
-        knownMediaDurations(posts, durationStates, durationKeysByPostId)
-    }
-    val durationDecisionStates = remember(posts, durationStates, durationKeysByPostId) {
-        durationStatesByPostId(posts, durationStates, durationKeysByPostId)
-    }
     val durationFilterActive = !animatedDurationRange.isFullRange
+    val durationMetadata = remember(posts, durationStates, durationFilterActive) {
+        durationFilterMetadata(posts, durationStates, durationFilterActive)
+    }
+    val acquiredDurations = durationMetadata.knownDurationMsByPostId
+    val durationDecisionStates = durationMetadata.stateByPostId
     val durationReadiness = remember(posts, durationFilterActive, durationDecisionStates) {
         durationFilterReadiness(posts, durationFilterActive, durationDecisionStates)
     }
@@ -244,6 +244,7 @@ fun CodexDetailScreen(
                 pixivUgoiraClient = pixivUgoiraClient,
                 resolvePostById = resolvePostById,
                 acquiredDurations = acquiredDurations,
+                durationStateForPost = durationStateForPost,
                 onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
                 onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
                 onOpenViewer = { index -> onOpenViewer(visiblePosts, index) },
@@ -429,6 +430,7 @@ private fun CodexDetailGrid(
     pixivUgoiraClient: PixivUgoiraClient?,
     resolvePostById: suspend (PostId) -> Post?,
     acquiredDurations: Map<PostId, Long>,
+    durationStateForPost: (Post) -> Flow<MediaDurationState?>,
     onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
     onAuthoritativeDurationKnown: (Post, Long) -> Unit,
     onOpenViewer: (Int) -> Unit,
@@ -453,13 +455,14 @@ private fun CodexDetailGrid(
         modifier = Modifier.fillMaxSize(),
         footerMessage = if (resolvingDurations) "Resolving durations…" else null,
     ) { index, post ->
+        val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
         CodexSelectablePostCard(
             post = post,
             index = index,
             editSelection = editSelection,
             pixivUgoiraClient = pixivUgoiraClient,
             resolvePostById = resolvePostById,
-            acquiredDurationMs = acquiredDurations[post.id],
+            acquiredDurationMs = observedDurationMs ?: acquiredDurations[post.id],
             onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
             onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
             onOpenViewer = onOpenViewer,

@@ -35,10 +35,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.post.displayTitleOrNull
-import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.knownMediaDurations
-import com.theoriacodex.app.media.mediaDurationKeysByPostId
+import com.theoriacodex.app.media.noMediaDurationStateForPost
+import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.SourceLogo
@@ -59,6 +58,7 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import java.util.Locale
+import kotlinx.coroutines.flow.Flow
 
 @Composable
 fun RecentsScreen(
@@ -68,7 +68,7 @@ fun RecentsScreen(
     fypSearches: List<RecentSearchEntry>,
     activity: List<RecentActivityEntry>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
-    durationStates: Map<MediaDurationKey, MediaDurationState> = emptyMap(),
+    durationStateForPost: (Post) -> Flow<MediaDurationState?> = noMediaDurationStateForPost,
     onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
     onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
     onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
@@ -97,15 +97,6 @@ fun RecentsScreen(
     var filter by rememberSaveable { mutableStateOf(RecentsFilter.WATCHED) }
     val now = remember(watchedPosts, codexPosts, searches, fypSearches, activity) { System.currentTimeMillis() }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
-    val durationPosts = remember(watchedPosts, codexPosts) {
-        (watchedPosts + codexPosts).map(RecentPostEntry::post).distinctBy(Post::id)
-    }
-    val durationKeysByPostId = remember(durationPosts) {
-        mediaDurationKeysByPostId(durationPosts)
-    }
-    val acquiredDurations = remember(durationPosts, durationStates, durationKeysByPostId) {
-        knownMediaDurations(durationPosts, durationStates, durationKeysByPostId)
-    }
     val hasContent = when (filter) {
         RecentsFilter.WATCHED -> watchedPosts.isNotEmpty()
         RecentsFilter.CODEX -> codexPosts.isNotEmpty()
@@ -158,7 +149,7 @@ fun RecentsScreen(
                 now = now,
                 pixivUgoiraClient = pixivUgoiraClient,
                 likedPostIds = likedPostIds,
-                acquiredDurations = acquiredDurations,
+                durationStateForPost = durationStateForPost,
                 onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
                 onDurationEnvironmentChanged = onDurationEnvironmentChanged,
                 onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
@@ -172,7 +163,7 @@ fun RecentsScreen(
                 now = now,
                 pixivUgoiraClient = pixivUgoiraClient,
                 likedPostIds = likedPostIds,
-                acquiredDurations = acquiredDurations,
+                durationStateForPost = durationStateForPost,
                 onDurationPostVisibilityChanged = onDurationPostVisibilityChanged,
                 onDurationEnvironmentChanged = onDurationEnvironmentChanged,
                 onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
@@ -241,7 +232,7 @@ private fun WatchedGrid(
     now: Long,
     pixivUgoiraClient: PixivUgoiraClient?,
     likedPostIds: Set<PostId>,
-    acquiredDurations: Map<PostId, Long>,
+    durationStateForPost: (Post) -> Flow<MediaDurationState?>,
     onDurationPostVisibilityChanged: (Post, Boolean) -> Unit,
     onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit,
     onAuthoritativeDurationKnown: (Post, Long) -> Unit,
@@ -264,10 +255,11 @@ private fun WatchedGrid(
         modifier = Modifier.fillMaxSize(),
     ) { index, post ->
         val entry = watchedPosts[index]
+        val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
         SearchResultCard(
             post = post,
             pixivUgoiraClient = pixivUgoiraClient,
-            acquiredDurationMs = acquiredDurations[post.id],
+            acquiredDurationMs = observedDurationMs,
             showSourceBadge = true,
             metadataLabel = relativeTimeLabel(now, entry.viewedAtEpochMs),
             liked = post.id in likedPostIds,

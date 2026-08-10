@@ -45,9 +45,9 @@ import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.durationFilterReadiness
-import com.theoriacodex.app.media.durationStatesByPostId
-import com.theoriacodex.app.media.knownMediaDurations
-import com.theoriacodex.app.media.mediaDurationKeysByPostId
+import com.theoriacodex.app.media.durationFilterMetadata
+import com.theoriacodex.app.media.noMediaDurationStateForPost
+import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.media.copyTextToClipboard
 import com.theoriacodex.app.media.showClipboardCopyConfirmation
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
@@ -74,6 +74,7 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.Flow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,6 +85,7 @@ fun CreatorProfileScreen(
     pixivUgoiraClient: PixivUgoiraClient? = null,
     resolveUnknownAnimatedDurations: Boolean = false,
     durationStates: Map<MediaDurationKey, MediaDurationState> = emptyMap(),
+    durationStateForPost: (Post) -> Flow<MediaDurationState?> = noMediaDurationStateForPost,
     onDurationFilterChanged: (Boolean) -> Unit = {},
     onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
     onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
@@ -132,15 +134,15 @@ fun CreatorProfileScreen(
             UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
         }
     }
-    val durationKeysByPostId = remember(state.results) {
-        mediaDurationKeysByPostId(state.results)
+    val durationMetadata = remember(
+        state.results,
+        durationStates,
+        animatedDurationFilterActive,
+    ) {
+        durationFilterMetadata(state.results, durationStates, animatedDurationFilterActive)
     }
-    val acquiredDurations = remember(state.results, durationStates, durationKeysByPostId) {
-        knownMediaDurations(state.results, durationStates, durationKeysByPostId)
-    }
-    val durationDecisionStates = remember(state.results, durationStates, durationKeysByPostId) {
-        durationStatesByPostId(state.results, durationStates, durationKeysByPostId)
-    }
+    val acquiredDurations = durationMetadata.knownDurationMsByPostId
+    val durationDecisionStates = durationMetadata.stateByPostId
     val durationReadiness = remember(
         state.results,
         animatedDurationFilterActive,
@@ -322,10 +324,11 @@ fun CreatorProfileScreen(
                             null
                         },
                     ) { index, post ->
+                        val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
                         SearchResultCard(
                             post = post,
                             pixivUgoiraClient = pixivUgoiraClient,
-                            acquiredDurationMs = acquiredDurations[post.id],
+                            acquiredDurationMs = observedDurationMs ?: acquiredDurations[post.id],
                             liked = post.id in likedPostIds,
                             onToggleLike = { onToggleLike(post) },
                             onClick = {

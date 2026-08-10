@@ -36,11 +36,12 @@ import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.viewer.FirstFrameTraceGate
 import com.theoriacodex.app.viewer.MediaTraceSections
-import com.theoriacodex.app.viewer.VideoPlaybackProfile
-import com.theoriacodex.app.viewer.createLoopingExoPlayer
+import com.theoriacodex.app.viewer.FeedPreviewPlayerLease
+import com.theoriacodex.app.viewer.FeedPreviewPlayerPool
 import com.theoriacodex.app.viewer.createTexturePlayerView
 import com.theoriacodex.app.viewer.playbackDiagnosticsSemantics
 import com.theoriacodex.app.viewer.traceMediaSection
+import com.theoriacodex.app.viewer.videoPlaybackInfrastructure
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -132,15 +133,14 @@ private fun rememberFeedPreviewPlayerState(
 
     DisposableEffect(location, sourceKey) {
         state.reset()
-        val player = traceMediaSection(MediaTraceSections.PREVIEW_PREPARE) {
-            createLoopingExoPlayer(
-                context = context,
+        val pool = context.videoPlaybackInfrastructure().feedPreviewPlayerPool
+        val lease = traceMediaSection(MediaTraceSections.PREVIEW_PREPARE) {
+            pool.acquire(
                 location = location,
                 headers = sourceKey.requestHeaders(),
-                muted = true,
-                profile = VideoPlaybackProfile.FEED_PREVIEW,
             )
         }
+        val player = lease.player
         val listener = feedPreviewPlayerListener(
             state = state,
             player = player,
@@ -149,9 +149,11 @@ private fun rememberFeedPreviewPlayerState(
             onDurationKnown = { durationMs -> latestOnDurationKnown(durationMs) },
         )
         player.addListener(listener)
+        state.lease = lease
         state.player = player
+        publishReadyFeedDuration(state, player) { durationMs -> latestOnDurationKnown(durationMs) }
         onDispose {
-            releaseFeedPreviewPlayer(state, player, listener)
+            recycleFeedPreviewPlayer(state, lease, listener, pool)
         }
     }
 
@@ -176,11 +178,7 @@ private fun feedPreviewPlayerListener(
     return object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (state.player !== player || playbackState != Player.STATE_READY) return
-            val durationMs = player.duration
-            if (!state.didPublishDuration && durationMs > 0L && durationMs != C.TIME_UNSET) {
-                state.didPublishDuration = true
-                onDurationKnown(durationMs)
-            }
+            publishReadyFeedDuration(state, player, onDurationKnown)
             if (!isActive()) return
             runCatching {
                 player.playWhenReady = true
@@ -206,19 +204,33 @@ private fun feedPreviewPlayerListener(
     }
 }
 
-private fun releaseFeedPreviewPlayer(
+private fun publishReadyFeedDuration(
     state: FeedPreviewPlayerState,
     player: ExoPlayer,
-    listener: Player.Listener,
+    onDurationKnown: (Long) -> Unit,
 ) {
-    player.removeListener(listener)
+    val durationMs = player.duration
+    if (!state.didPublishDuration && durationMs > 0L && durationMs != C.TIME_UNSET) {
+        state.didPublishDuration = true
+        onDurationKnown(durationMs)
+    }
+}
+
+private fun recycleFeedPreviewPlayer(
+    state: FeedPreviewPlayerState,
+    lease: FeedPreviewPlayerLease,
+    listener: Player.Listener,
+    pool: FeedPreviewPlayerPool,
+) {
+    lease.player.removeListener(listener)
     runCatching {
-        player.playWhenReady = false
-        player.pause()
+        lease.player.playWhenReady = false
+        lease.player.pause()
     }
     runCatching { state.playerView?.player = null }
-    runCatching { player.release() }
-    if (state.player === player) state.player = null
+    pool.recycle(lease, retainBinding = !state.didNotifyError)
+    if (state.player === lease.player) state.player = null
+    if (state.lease === lease) state.lease = null
     state.isActuallyPlaying = false
     state.playerView = null
 }
@@ -268,6 +280,14 @@ private fun PreparedSearchVideoPreview(
                 playerView.isClickable = false
                 playerView.isFocusable = false
             },
+            onReset = { playerView ->
+                if (state.playerView === playerView) state.playerView = null
+                playerView.player = null
+            },
+            onRelease = { playerView ->
+                if (state.playerView === playerView) state.playerView = null
+                playerView.player = null
+            },
         )
         if (!state.hasRenderedFirstFrame && previewModel != null) {
             FeedAsyncImage(
@@ -282,6 +302,7 @@ private fun PreparedSearchVideoPreview(
 }
 
 private class FeedPreviewPlayerState {
+    var lease: FeedPreviewPlayerLease? = null
     var player by mutableStateOf<ExoPlayer?>(null)
     var playerView: PlayerView? = null
     var didNotifyError = false

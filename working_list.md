@@ -1,10 +1,10 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-10T18:59:00-04:00
+updated_at: 2026-08-10T19:00:00-04:00
 ---
 # Working List
 
-## Current Task: Repair The Duration Metadata Scroll Regression
+## Current Task: Eliminate The Remaining Multi-Second Feed Scroll Stalls
 
 ### In Progress
 
@@ -12,11 +12,25 @@ None.
 
 ### Pending
 
-- [ ] When the same phone reconnects, verify the installed Debug signature, update only isolated package `com.theoriacodex.debug` without uninstalling or clearing it, then compare cached upward scrolling with background duration resolution both on and off.
+- [ ] On the isolated Debug package, reproduce both the original long-scroll journey and animated Search-to-tab transitions; collect frame/player evidence before claiming the freeze resolved.
 - [ ] Keep the separate frozen post-fix physical benchmark unrun until the user is ready for that planned evidence gate.
 
 ### Done
 
+- [x] Trace every feed hot-path owner and rank confirmed costs rather than stopping at the first plausible cause.
+  - Result: synchronous per-card player disposal and replacement dominated; PlayerView inflation/preparation, caller-context duration bookkeeping, route-wide duration publication/recomposition, full-feed key rebuilding on appends, cache contention, audio decoding, and large-object collection were additional scaling costs.
+- [x] Move feed preview lifetime above cards and route disposal without reducing simultaneous autoplay.
+  - Result: one application-owned reusable slot pool gives every visible card a distinct lease, prefers same-media reuse, pauses/detaches immediately on card or route disposal, and delays/paces actual player release until no preview lease is active. Lazy-grid PlayerViews opt into reuse, muted previews disable audio tracks, and create/release trace sections make later device comparison numeric. The idle bound applies only to returned players and never caps concurrent visible playback.
+- [x] Remove ordinary duration presentation and scheduling work from the UI hot path.
+  - Result: badges collect only their own media key; route-wide maps and full-feed filtering metadata exist only while a duration range is active; snapshot hashing runs off the UI dispatcher and extends verified append prefixes; unchanged provider durations are not republished; coordinator queue/state bookkeeping runs on its application-owned context rather than the caller's UI context.
+- [x] Add regressions and complete one bounded host acceptance batch.
+  - Evidence: 495 app tests and 98 app-logic tests pass with zero failures/errors; app has three intentional live skips. Android-test compilation, Debug assembly, app-logic Detekt, aggregate Kover XML, and the 55% coverage floor pass. App Detekt reports only the same four inherited findings in untouched owners. The assembled APK is isolated `com.theoriacodex.debug`, version `0.8.2-debug`, SHA-256 `5262bfd9c9ac3d0bd541ca89c09403789dc4e94bf673e27d8d307f8fe6950677`. The phone remained disconnected, so no APK was installed and no post-repair device performance claim is made.
+- [x] Capture and correlate the long-scroll freeze across device frame logs, player/media churn, paging, duration scheduling, recomposition, allocation, and garbage collection.
+  - Evidence: isolated Debug `0.8.2-debug` installed at 17:09 on Samsung SM-S926U reproduced the freeze with no duration acquisition publications. Accumulated graphics data reports 16.83% jank, 117 ms p95, 400 ms p99, and frames above two seconds while GPU p95 remained 4 ms. Logs recorded 87 player creations, 86 releases, eight large collections, and 38/124/235/128/77/63 skipped-frame events. A controlled 64 MiB Perfetto trace found 4,346.7 ms in `Compose:onForgotten`, 4,309.4 ms in `Compose:deactivate`, 4,289.3 ms in the out-of-frame executor, 1,129.0 ms recomposing, 892.2 ms measuring/layout, 683.5 ms inflating, 393.1 ms in 67 PlayerViews, and 226.0 ms in 67 preview prepares. Muted previews still created audio codecs, and concurrent loaders showed shared-cache lock contention.
+- [x] Record that the first cached-duration hot-path repair reduced but did not resolve the user-visible regression.
+  - Evidence: longer scrolling still becomes unbearably slow and can freeze completely for multiple seconds while additional content/media loads, so the next pass must cover the complete feed pipeline rather than duration scheduling alone.
+- [x] Add route teardown and tab switching to the diagnosed failure boundary.
+  - Evidence: switching away from an animated feed visibly dismounts previews one by one and delays navigation. This matches the trace's serial `Compose:onForgotten` work and proves lazy-item view reuse alone is insufficient; player lifetime and deferred cleanup must be shared above individual card/route composition.
 - [x] Record the user-observed post-rebuild regression before making runtime edits.
   - Evidence: scrolling back to posts whose durations were already calculated still feels laggier than the pre-rebuild app, so cached acquisition alone is not sufficient evidence of a performant presentation path.
 - [x] Trace why scrolling previously seen, already-known posts still causes visible lag.

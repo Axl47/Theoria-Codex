@@ -1631,8 +1631,6 @@ internal fun TheoriaAppContent(
                                                 "recents",
                                             ),
                                         )
-                                        val recentsDurationStates by recentsDurationOwner.states
-                                            .collectAsStateWithLifecycle()
                                         SideEffect {
                                             recentsDurationOwner.synchronize(
                                                 identity = "recents",
@@ -1648,7 +1646,7 @@ internal fun TheoriaAppContent(
                                         fypSearches = state.fypSearches,
                                         activity = state.activity,
                                         pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
-                                        durationStates = recentsDurationStates,
+                                        durationStateForPost = recentsDurationOwner::observeState,
                                         onDurationPostVisibilityChanged =
                                             recentsDurationOwner::onPostVisibilityChanged,
                                         onDurationEnvironmentChanged =
@@ -1885,6 +1883,7 @@ internal fun TheoriaAppContent(
                             pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                             resolveUnknownAnimatedDurations = state.resolveUnknownAnimatedDurations,
                             durationStates = durationStates,
+                            durationStateForPost = durationOwner::observeState,
                             tagVideoCountProvider = { source, tag ->
                                 featureDependencies.search.tagVideoCount(source, tag)
                             },

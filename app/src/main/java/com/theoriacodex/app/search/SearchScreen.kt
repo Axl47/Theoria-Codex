@@ -99,9 +99,9 @@ import com.theoriacodex.app.media.isAuthoritativeDurationMedia
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.durationFilterReadiness
-import com.theoriacodex.app.media.durationStatesByPostId
-import com.theoriacodex.app.media.knownMediaDurations
-import com.theoriacodex.app.media.mediaDurationKeysByPostId
+import com.theoriacodex.app.media.durationFilterMetadata
+import com.theoriacodex.app.media.noMediaDurationStateForPost
+import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.media.animatedDurationBucketLabel
 import com.theoriacodex.app.media.animatedDurationLabel
 import com.theoriacodex.app.media.animatedDurationMs
@@ -179,6 +179,7 @@ fun SearchScreen(
     favoriteTags: Map<SourceKey, List<String>> = emptyMap(),
     resolveUnknownAnimatedDurations: Boolean = false,
     durationStates: Map<MediaDurationKey, MediaDurationState> = emptyMap(),
+    durationStateForPost: (Post) -> Flow<MediaDurationState?> = noMediaDurationStateForPost,
     onDurationFilterChanged: (Boolean) -> Unit = {},
     onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
     onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
@@ -275,15 +276,15 @@ fun SearchScreen(
     val displayResults = remember(state.content.results, state.content.displayVersion, queryHash) {
         state.content.results
     }
-    val durationKeysByPostId = remember(displayResults) {
-        mediaDurationKeysByPostId(displayResults)
+    val durationMetadata = remember(
+        displayResults,
+        durationStates,
+        animatedDurationFilterActive,
+    ) {
+        durationFilterMetadata(displayResults, durationStates, animatedDurationFilterActive)
     }
-    val acquiredDurations = remember(displayResults, durationStates, durationKeysByPostId) {
-        knownMediaDurations(displayResults, durationStates, durationKeysByPostId)
-    }
-    val durationDecisionStates = remember(displayResults, durationStates, durationKeysByPostId) {
-        durationStatesByPostId(displayResults, durationStates, durationKeysByPostId)
-    }
+    val acquiredDurations = durationMetadata.knownDurationMsByPostId
+    val durationDecisionStates = durationMetadata.stateByPostId
     val durationReadiness = remember(
         displayResults,
         animatedDurationFilterActive,
@@ -766,10 +767,11 @@ fun SearchScreen(
                                 null
                             },
                         ) { _, post ->
+                            val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
                             SearchResultCard(
                                 post = post,
                                 pixivUgoiraClient = pixivUgoiraClient,
-                                acquiredDurationMs = acquiredDurations[post.id],
+                                acquiredDurationMs = observedDurationMs ?: acquiredDurations[post.id],
                                 showSourceBadge = state.query.appliedSourceScope !is SearchSourceScope.Single,
                                 liked = post.id in likedPostIds,
                                 onToggleLike = onToggleLike?.let { toggle ->

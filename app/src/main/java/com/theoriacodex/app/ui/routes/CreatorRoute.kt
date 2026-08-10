@@ -135,6 +135,7 @@ internal fun CreatorRoute(
         pixivUgoiraClient = pixivUgoiraClient,
         resolveUnknownAnimatedDurations = config.resolveUnknownAnimatedDurations,
         durationStates = duration.states,
+        durationStateForPost = duration.stateForPost,
         onDurationFilterChanged = duration.owner::onFilterChanged,
         onDurationPostVisibilityChanged = duration.owner::onPostVisibilityChanged,
         onDurationEnvironmentChanged = duration.owner::onEnvironmentChanged,

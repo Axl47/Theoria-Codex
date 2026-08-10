@@ -304,6 +304,21 @@ class ArchitectureBoundarySourceTest {
             "synchronizeVisibleDemand(post.id)" in routeOwner &&
                 "requestedPostsReference === posts" in routeOwner,
         )
+        assertTrue(
+            "Feed snapshots must be built away from the UI dispatcher",
+            "withContext(snapshotDispatcher)" in routeOwner,
+        )
+        assertTrue(
+            "Routine badges must observe one key while route maps stay filter-only",
+            "fun observeState(post: Post)" in routeOwner &&
+                "if (filterActive) demandLock.withLock" in routeOwner &&
+                "if (!filterActive) return" in routeOwner,
+        )
+        assertTrue(
+            "Coordinator bookkeeping must run on its application-owned context",
+            "coordinationContext" in coordinator &&
+                "withContext(coordinationContext)" in coordinator,
+        )
         val viewer = File(
             repositoryRoot,
             "app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt",
