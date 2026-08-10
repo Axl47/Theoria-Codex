@@ -389,7 +389,7 @@ internal fun ViewerScreen(
     LaunchedEffect(chromeVisible, interactionSerial, timelineInteractionActive, mediaOverviewVisible) {
         if (chromeVisible && !timelineInteractionActive && !mediaOverviewVisible) {
             val serial = interactionSerial
-            delay(1500)
+            delay(VIEWER_CHROME_AUTO_HIDE_DELAY_MS)
             if (serial == interactionSerial && !timelineInteractionActive && !mediaOverviewVisible) {
                 onAction(ViewerAction.ToggleChrome)
             }
@@ -2397,6 +2397,7 @@ private val STATIC_OVERVIEW_IMAGE_EXTENSIONS = setOf(
 private const val VIEWER_PREFETCH_LEFT_COUNT = 3
 private const val VIEWER_PREFETCH_RIGHT_COUNT = 3
 private const val VIEWER_PAGINATION_PREFETCH_RATIO = 0.8f
+private const val VIEWER_CHROME_AUTO_HIDE_DELAY_MS = 5_000L
 private const val VIEWER_HORIZONTAL_SWIPE_MIN_DISTANCE_PX = 48f
 private const val VIEWER_HORIZONTAL_SWIPE_WIDTH_RATIO = 0.12f
 private const val VIEWER_HORIZONTAL_SWIPE_SLOP_FRACTION = 0.35f
