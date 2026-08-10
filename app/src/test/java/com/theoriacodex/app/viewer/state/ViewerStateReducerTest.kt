@@ -69,7 +69,7 @@ class ViewerStateReducerTest {
         assertEquals(1, replaced.currentPageIndex)
         assertEquals("new-2", replaced.currentPage?.post?.id?.sourcePostId)
         assertNull(replaced.mediaError)
-        assertTrue(replaced.prefetch.ready.isEmpty())
+        assertTrue(replaced.prefetch.warmed.isEmpty())
         assertEquals(replaced, afterLateCompletion)
     }
 
@@ -293,13 +293,67 @@ class ViewerStateReducerTest {
         ).state
         val staleCompletion = reduceViewerState(
             replaced,
-            ViewerAction.PrefetchCompleted(oldSession, mediaKey, available = true),
+            ViewerAction.PrefetchCompleted(
+                oldSession,
+                mediaKey,
+                ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED, bytesCached = 4_096L),
+            ),
         ).state
 
         assertEquals(ViewerEffect.PrefetchMedia(oldSession, listOf(mediaKey)), queued.effects.single())
         assertTrue(mediaKey in started.prefetch.inFlight)
-        assertTrue(staleCompletion.prefetch.ready.isEmpty())
+        assertTrue(staleCompletion.prefetch.warmed.isEmpty())
         assertTrue(staleCompletion.prefetch.inFlight.isEmpty())
+    }
+
+    @Test
+    fun `prefetch terminal outcomes remain truthful and cannot be queued again`() {
+        val session = session("prefetch-outcomes")
+        val state = createViewerUiState(
+            session,
+            listOf(
+                samplePost(
+                    "gallery",
+                    media = listOf(
+                        media("image/jpeg", "warm.jpg"),
+                        media("image/jpeg", "skip.jpg"),
+                        media("image/jpeg", "fail.jpg"),
+                    ),
+                ),
+            ),
+        )
+        val keys = state.currentPage?.media.orEmpty().map { media -> media.key }
+        val warmed = reduceViewerState(
+            state,
+            ViewerAction.PrefetchCompleted(
+                session,
+                keys[0],
+                ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED, bytesCached = 8_192L),
+            ),
+        ).state
+        val skipped = reduceViewerState(
+            warmed,
+            ViewerAction.PrefetchCompleted(
+                session,
+                keys[1],
+                ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED),
+            ),
+        ).state
+        val failed = reduceViewerState(
+            skipped,
+            ViewerAction.PrefetchCompleted(
+                session,
+                keys[2],
+                ViewerPrefetchResult(ViewerPrefetchOutcome.FAILED),
+            ),
+        ).state
+        val requeued = reduceViewerState(failed, ViewerAction.QueuePrefetch(keys))
+
+        assertEquals(8_192L, failed.prefetch.warmed[keys[0]])
+        assertEquals(setOf(keys[1]), failed.prefetch.skipped)
+        assertEquals(setOf(keys[2]), failed.prefetch.failed)
+        assertTrue(requeued.state.prefetch.queued.isEmpty())
+        assertEquals(ViewerEffect.PrefetchMedia(session, emptyList()), requeued.effects.single())
     }
 
     @Test

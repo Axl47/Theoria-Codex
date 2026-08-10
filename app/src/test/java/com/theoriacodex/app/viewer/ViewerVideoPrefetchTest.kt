@@ -1,154 +1,57 @@
 package com.theoriacodex.app.viewer
 
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
-import java.net.SocketException
-import javax.net.ssl.SSLPeerUnverifiedException
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.test.runTest
+import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
+import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ViewerVideoPrefetchTest {
     @Test
-    fun `large or partial range responses are skipped without reading a body`() {
-        val maxBytes = 1_024L
-
+    fun `warmed bytes are explicit and skipped or failed work cannot claim cache data`() {
         assertEquals(
-            ViewerVideoPrefetchAction.SKIP,
-            planViewerVideoPrefetch(
-                statusCode = 206,
-                contentLength = maxBytes,
-                contentRange = "bytes 0-1023/196139272",
-                maxBytes = maxBytes,
-            ).action,
+            ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED, bytesCached = 4_096L),
+            ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED, bytesCached = 4_096L),
         )
-        assertEquals(
-            ViewerVideoPrefetchAction.SKIP,
-            planViewerVideoPrefetch(
-                statusCode = 206,
-                contentLength = 512L,
-                contentRange = "bytes 0-511/1024",
-                maxBytes = maxBytes,
-            ).action,
-        )
-        assertEquals(
-            ViewerVideoPrefetchAction.SKIP,
-            planViewerVideoPrefetch(
-                statusCode = 200,
-                contentLength = maxBytes + 1L,
-                contentRange = null,
-                maxBytes = maxBytes,
-            ).action,
-        )
-    }
-
-    @Test
-    fun `only complete small responses are eligible for the local cache`() {
-        val completeRange = planViewerVideoPrefetch(
-            statusCode = 206,
-            contentLength = 1_024L,
-            contentRange = "bytes 0-1023/1024",
-            maxBytes = 2_048L,
-        )
-        val completeFull = planViewerVideoPrefetch(
-            statusCode = 200,
-            contentLength = 1_024L,
-            contentRange = null,
-            maxBytes = 2_048L,
-        )
-        val boundedUnknown = planViewerVideoPrefetch(
-            statusCode = 200,
-            contentLength = null,
-            contentRange = null,
-            maxBytes = 2_048L,
-        )
-
-        assertEquals(ViewerVideoPrefetchAction.DOWNLOAD_BOUNDED, completeRange.action)
-        assertEquals(1_024L, completeRange.expectedBytes)
-        assertEquals(ViewerVideoPrefetchAction.DOWNLOAD_BOUNDED, completeFull.action)
-        assertEquals(1_024L, completeFull.expectedBytes)
-        assertEquals(ViewerVideoPrefetchAction.DOWNLOAD_BOUNDED, boundedUnknown.action)
-        assertEquals(null, boundedUnknown.expectedBytes)
-    }
-
-    @Test
-    fun `bounded copy stops at the limit and never promotes a partial body`() = runTest {
-        val output = ByteArrayOutputStream()
-        val result = copyViewerVideoBodyBounded(
-            input = ByteArrayInputStream(ByteArray(1_025) { 7 }),
-            output = output,
-            maxBytes = 1_024L,
-        )
-
-        assertEquals(ViewerVideoCopyState.LIMIT_EXCEEDED, result.state)
-        assertEquals(1_024L, result.bytesWritten)
-        assertEquals(1_024, output.size())
-
-        val completeOutput = ByteArrayOutputStream()
-        val complete = copyViewerVideoBodyBounded(
-            input = ByteArrayInputStream(ByteArray(1_024) { 3 }),
-            output = completeOutput,
-            maxBytes = 1_024L,
-        )
-        assertEquals(ViewerVideoCopyState.COMPLETE, complete.state)
-        assertEquals(1_024L, complete.bytesWritten)
-    }
-
-    @Test
-    fun `prefetch provider failures are nonfatal while cancellation propagates`() = runTest {
-        assertFalse(
-            runNonFatalViewerVideoPrefetch {
-                throw SSLPeerUnverifiedException("provider certificate mismatch")
-            },
-        )
-        assertFalse(
-            runNonFatalViewerVideoPrefetch {
-                throw SocketException("stream reset")
-            },
-        )
-
-        var cancelled = false
-        try {
-            runNonFatalViewerVideoPrefetch { throw CancellationException("viewer changed") }
-        } catch (_: CancellationException) {
-            cancelled = true
+        assertThrows(IllegalArgumentException::class.java) {
+            ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED, bytesCached = 1L)
         }
-        assertTrue(cancelled)
+        assertThrows(IllegalArgumentException::class.java) {
+            ViewerPrefetchResult(ViewerPrefetchOutcome.FAILED, bytesCached = 1L)
+        }
     }
 
     @Test
-    fun `completed local cache wins while absent cache keeps remote streaming`() {
-        val remote = "https://streaming.gold-usergeneratedcontent.net/videos/anime.mp4"
+    fun `video warm target supports media larger than the retired manual limit`() {
+        assertEquals(24L * 1024L * 1024L, VIEWER_VIDEO_PREFETCH_BYTES)
+        assertTrue(VIEWER_VIDEO_PREFETCH_BYTES > 16L * 1024L * 1024L)
+        assertTrue(VIEWER_VIDEO_PREFETCH_BYTES < VIDEO_PLAYBACK_CACHE_MAX_BYTES)
+    }
 
-        assertEquals(
-            "/cache/anime.mp4",
-            selectViewerVideoPlaybackLocation(
-                localPath = null,
-                remoteUrl = remote,
-                cachedPath = "/cache/anime.mp4",
-                cachedBytes = 1_024L,
-            ),
-        )
-        assertEquals(
-            remote,
-            selectViewerVideoPlaybackLocation(
-                localPath = null,
-                remoteUrl = remote,
-                cachedPath = "/cache/anime.mp4",
-                cachedBytes = 0L,
-            ),
-        )
-        assertEquals(
-            "/saved/anime.mp4",
-            selectViewerVideoPlaybackLocation(
-                localPath = "/saved/anime.mp4",
-                remoteUrl = remote,
-                cachedPath = "/cache/anime.mp4",
-                cachedBytes = 1_024L,
-            ),
-        )
+    @Test
+    fun `prefetch and playback share CacheWriter identity without a legacy cache owner`() {
+        val source = repositoryFile(
+            "app/src/main/java/com/theoriacodex/app/viewer/VideoPlaybackInfrastructure.kt",
+        ).readText()
+        val platform = repositoryFile(
+            "app/src/main/java/com/theoriacodex/app/viewer/ViewerPlatformPrefetcher.kt",
+        ).readText()
+
+        assertTrue("CacheWriter" in source)
+        assertTrue("cacheDataSourceFactory(bound, headers)" in source)
+        assertTrue("setKey(cacheKey)" in source)
+        assertTrue("videoPlaybackInfrastructure().prefetch(location, headers)" in platform)
+        assertFalse("theoria_codex/viewer/videos" in source + platform)
+    }
+
+    private fun repositoryFile(path: String): File {
+        var current = File(requireNotNull(System.getProperty("user.dir"))).absoluteFile
+        while (!File(current, "settings.gradle.kts").exists()) {
+            current = current.parentFile ?: error("Could not locate repository root")
+        }
+        return File(current, path)
     }
 }

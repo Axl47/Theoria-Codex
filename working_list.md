@@ -8,17 +8,18 @@ updated_at: 2026-08-10T20:05:00-04:00
 
 ### In Progress
 
-- [~] Phase 3: prefetch the true Viewer neighborhood through the shared Media3 cache.
+- [~] Phase 4: open Viewer before provider refresh when usable media already exists.
 
 ### Pending
 
-- [ ] Phase 4: open Viewer before provider refresh when usable media already exists.
 - [ ] Phase 5: bound Pixiv Ugoira loading and share token refresh.
 - [ ] Phase 6: reuse bounded Hitomi gallery manifests.
 - [ ] Phase 7: run integrated validation and close the living ExecPlan.
 
 ### Done
 
+- [x] Phase 3: prefetch the true Viewer neighborhood through the shared Media3 cache.
+  - Evidence: the pure planner selects the nearest three media per side across post boundaries; the route owner caps cancellable work at two and reports warmed/skipped/failed truthfully; video warming uses a cancellable 24 MiB CacheWriter request through the exact 256 MiB playback LRU, cache key, headers, and data-source factory. The parallel 750 MiB manual cache owner is retired without destructive cleanup. Fifty focused tests and `:app:compileDebugKotlin` pass.
 - [x] Phase 2: centralize Preview and Viewer candidate intent.
   - Evidence: one application-only planner distinguishes primary, quality-upgrade, and failure-fallback locations across Preview, Viewer, GIF fallback, and Codex covers without changing persisted `ImageRef`. Thirty-three focused tests and `:app:compileDebugKotlin` pass.
 - [x] Phase 1: make Retry restart image, video, GIF/WebP, and Ugoira loads.

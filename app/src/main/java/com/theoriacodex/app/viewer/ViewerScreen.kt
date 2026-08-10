@@ -350,14 +350,10 @@ internal fun ViewerScreen(
     }
 
     LaunchedEffect(posts, currentPostIndex, selectedMediaIndex) {
-        val currentKey = uiState.currentMedia?.key
-        val keys = uiState.pages
-            .asSequence()
-            .flatMap { page -> page.media.asSequence() }
-            .map { media -> media.key }
-            .filter { key -> key != currentKey }
-            .take(VIEWER_PREFETCH_LEFT_COUNT + VIEWER_PREFETCH_RIGHT_COUNT)
-            .toList()
+        val keys = planAdjacentViewerPrefetch(
+            pages = uiState.pages,
+            current = uiState.currentMedia?.key,
+        )
         onAction(ViewerAction.QueuePrefetch(keys))
     }
 
@@ -1498,7 +1494,7 @@ private fun ViewerVideoPlayer(
         return
     }
     val playbackLocation = remember(media.localPath, media.url, media.mime) {
-        resolveViewerVideoPlaybackLocation(context, media)
+        resolveViewerVideoPlaybackLocation(media)
     }
     if (playbackLocation.isNullOrBlank()) {
         LaunchedEffect(media, loadGeneration) {
@@ -2587,8 +2583,6 @@ private val STATIC_OVERVIEW_IMAGE_EXTENSIONS = setOf(
     "png",
 )
 
-private const val VIEWER_PREFETCH_LEFT_COUNT = 3
-private const val VIEWER_PREFETCH_RIGHT_COUNT = 3
 private const val VIEWER_PAGINATION_PREFETCH_RATIO = 0.8f
 private const val VIEWER_CHROME_AUTO_HIDE_DELAY_MS = 5_000L
 private const val VIEWER_HORIZONTAL_SWIPE_MIN_DISTANCE_PX = 48f

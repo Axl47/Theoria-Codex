@@ -13,6 +13,8 @@ import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerEffect
 import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerMediaState
+import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
+import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.app.viewer.state.reduceViewerState
@@ -30,6 +32,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 /** Resolves a post without exposing a provider, repository, or Android handle to Viewer state. */
 internal fun interface ViewerPostResolver {
@@ -38,7 +42,7 @@ internal fun interface ViewerPostResolver {
 
 /** Performs bounded media prefetch outside immutable state and platform playback ownership. */
 internal fun interface ViewerMediaPrefetcher {
-    suspend fun prefetch(session: ViewerSessionIdentity, media: ViewerMediaState): Boolean
+    suspend fun prefetch(session: ViewerSessionIdentity, media: ViewerMediaState): ViewerPrefetchResult
 }
 
 /**
@@ -58,6 +62,8 @@ internal class ViewerViewModel(
     private val workScope = scopeOverride ?: viewModelScope
     private val effectChannel = Channel<ViewerEffect>(capacity = Channel.BUFFERED)
     private val sessionJobs = mutableMapOf<ViewerWorkKey, Job>()
+    private val prefetchSemaphore = Semaphore(VIEWER_PREFETCH_MAX_CONCURRENCY)
+    private var desiredPrefetchKeys = emptySet<ViewerMediaKey>()
     private var restoredPageIndex = savedStateHandle[ViewerSavedStateKeys.PAGE_INDEX] ?: 0
     private var restoredMediaIndex = savedStateHandle[ViewerSavedStateKeys.MEDIA_INDEX] ?: 0
 
@@ -159,7 +165,7 @@ internal class ViewerViewModel(
                 if (prefetcher == null) {
                     effectChannel.trySend(effect)
                 } else {
-                    effect.mediaKeys.forEach { key -> launchPrefetch(effect.session, key, prefetcher) }
+                    reconcilePrefetch(effect.session, effect.mediaKeys, prefetcher)
                 }
             }
 
@@ -211,15 +217,42 @@ internal class ViewerViewModel(
             .firstOrNull { candidate -> candidate.key == mediaKey }
             ?: return
         launchSessionJob(ViewerWorkKey.Prefetch(mediaKey)) {
-            onAction(ViewerAction.PrefetchStarted(session, mediaKey))
-            val available = try {
-                prefetcher.prefetch(session, media).also { coroutineContext.ensureActive() }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Throwable) {
-                false
+            prefetchSemaphore.withPermit {
+                coroutineContext.ensureActive()
+                synchronized(lock) {
+                    if (mediaKey !in desiredPrefetchKeys) throw CancellationException("Prefetch superseded")
+                }
+                onAction(ViewerAction.PrefetchStarted(session, mediaKey))
+                val result = try {
+                    prefetcher.prefetch(session, media).also { coroutineContext.ensureActive() }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Throwable) {
+                    ViewerPrefetchResult(ViewerPrefetchOutcome.FAILED)
+                }
+                onAction(ViewerAction.PrefetchCompleted(session, mediaKey, result))
             }
-            onAction(ViewerAction.PrefetchCompleted(session, mediaKey, available))
+        }
+    }
+
+    private fun reconcilePrefetch(
+        session: ViewerSessionIdentity,
+        requested: List<ViewerMediaKey>,
+        prefetcher: ViewerMediaPrefetcher,
+    ) {
+        val desired = requested.toSet()
+        synchronized(lock) {
+            desiredPrefetchKeys = desired
+            sessionJobs.keys
+                .filterIsInstance<ViewerWorkKey.Prefetch>()
+                .filterNot { key -> key.mediaKey in desired }
+                .forEach { key -> sessionJobs.remove(key)?.cancel() }
+            requested.forEach { mediaKey ->
+                val workKey = ViewerWorkKey.Prefetch(mediaKey)
+                if (workKey !in sessionJobs) {
+                    launchPrefetch(session, mediaKey, prefetcher)
+                }
+            }
         }
     }
 
@@ -238,6 +271,7 @@ internal class ViewerViewModel(
     }
 
     private fun cancelSessionJobs() {
+        desiredPrefetchKeys = emptySet()
         sessionJobs.values.toList().forEach(Job::cancel)
         sessionJobs.clear()
     }
@@ -292,6 +326,8 @@ internal class ViewerViewModel(
         data class Prefetch(val mediaKey: ViewerMediaKey) : ViewerWorkKey
     }
 }
+
+internal const val VIEWER_PREFETCH_MAX_CONCURRENCY = 2
 
 internal object ViewerSavedStateKeys {
     const val QUERY_HASH = "viewer_query_hash"

@@ -152,9 +152,28 @@ internal data class ViewerOverviewState(
 internal data class ViewerPrefetchState(
     val queued: Set<ViewerMediaKey> = emptySet(),
     val inFlight: Set<ViewerMediaKey> = emptySet(),
-    val ready: Set<ViewerMediaKey> = emptySet(),
-    val unavailable: Set<ViewerMediaKey> = emptySet(),
+    val warmed: Map<ViewerMediaKey, Long> = emptyMap(),
+    val skipped: Set<ViewerMediaKey> = emptySet(),
+    val failed: Set<ViewerMediaKey> = emptySet(),
 )
+
+internal enum class ViewerPrefetchOutcome {
+    WARMED,
+    SKIPPED,
+    FAILED,
+}
+
+internal data class ViewerPrefetchResult(
+    val outcome: ViewerPrefetchOutcome,
+    val bytesCached: Long = 0L,
+) {
+    init {
+        require(bytesCached >= 0L) { "Viewer prefetch cached bytes must not be negative" }
+        require(outcome == ViewerPrefetchOutcome.WARMED || bytesCached == 0L) {
+            "Only warmed Viewer media may report cached bytes"
+        }
+    }
+}
 
 internal sealed interface ViewerMediaError {
     val mediaKey: ViewerMediaKey?

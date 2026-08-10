@@ -60,7 +60,7 @@ internal sealed interface ViewerAction {
     data class PrefetchCompleted(
         val session: ViewerSessionIdentity,
         val mediaKey: ViewerMediaKey,
-        val available: Boolean,
+        val result: ViewerPrefetchResult,
     ) : ViewerAction
 
     data class MediaFailed(

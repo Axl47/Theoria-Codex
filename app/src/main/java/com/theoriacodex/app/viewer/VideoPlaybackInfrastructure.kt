@@ -5,10 +5,12 @@ package com.theoriacodex.app.viewer
 import android.content.Context
 import androidx.media3.common.MediaItem
 import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.CacheWriter
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.database.StandaloneDatabaseProvider
@@ -17,11 +19,19 @@ import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import com.theoriacodex.app.TheoriaApplication
+import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
+import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import java.io.File
 import java.nio.ByteBuffer
 import java.security.MessageDigest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 
 internal const val VIDEO_PLAYBACK_CACHE_MAX_BYTES = 256L * 1024L * 1024L
+internal const val VIEWER_VIDEO_PREFETCH_BYTES = 24L * 1024L * 1024L
 internal const val FEED_PREVIEW_TARGET_BUFFER_BYTES = 2 * 1024 * 1024
 internal const val FEED_PREVIEW_MIN_BUFFER_MS = 6_000
 internal const val FEED_PREVIEW_MAX_BUFFER_MS = 12_000
@@ -112,18 +122,7 @@ internal class VideoPlaybackInfrastructure(
     ): BoundVideoPlaybackRequest {
         val bound = resourcePool.bind(location, headers)
         val mediaSourceFactory = if (isHttpVideoLocation(location)) {
-            val immutableHeaders = headers.toMap()
-            val requestScopedUpstream = ResolvingDataSource.Factory(bound.sharedResource.http) { dataSpec ->
-                dataSpec.withAdditionalHeaders(immutableHeaders)
-            }
-            val cacheDataSource = CacheDataSource.Factory()
-                .setCache(bound.sharedResource.cache)
-                .setUpstreamDataSourceFactory(requestScopedUpstream)
-                .setFlags(
-                    CacheDataSource.FLAG_BLOCK_ON_CACHE or
-                        CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR,
-                )
-            DefaultMediaSourceFactory(cacheDataSource)
+            DefaultMediaSourceFactory(cacheDataSourceFactory(bound, headers))
         } else {
             localMediaSourceFactory
         }
@@ -140,6 +139,71 @@ internal class VideoPlaybackInfrastructure(
 
     internal fun loadControl(profile: VideoPlaybackProfile): LoadControl {
         return VideoLoadControlFactory.create(profile)
+    }
+
+    internal suspend fun prefetch(
+        location: String,
+        headers: Map<String, String>,
+    ): ViewerPrefetchResult {
+        if (!isHttpVideoLocation(location)) {
+            return ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED)
+        }
+        return withContext(Dispatchers.IO) {
+            val bound = resourcePool.bind(location, headers)
+            val cacheKey = bound.identity.cacheKey
+            val dataSpec = DataSpec.Builder()
+                .setUri(videoLocationToUri(location))
+                .setKey(cacheKey)
+                .setLength(VIEWER_VIDEO_PREFETCH_BYTES)
+                .setFlags(DataSpec.FLAG_ALLOW_CACHE_FRAGMENTATION)
+                .build()
+            val dataSource = cacheDataSourceFactory(bound, headers).createDataSource()
+            val writer = CacheWriter(dataSource, dataSpec, null, null)
+            writer.cacheCancellable()
+            currentCoroutineContext().ensureActive()
+            val cachedBytes = bound.sharedResource.cache.getCachedBytes(
+                cacheKey,
+                0L,
+                VIEWER_VIDEO_PREFETCH_BYTES,
+            )
+            if (cachedBytes > 0L) {
+                ViewerPrefetchResult(
+                    outcome = ViewerPrefetchOutcome.WARMED,
+                    bytesCached = cachedBytes,
+                )
+            } else {
+                ViewerPrefetchResult(ViewerPrefetchOutcome.FAILED)
+            }
+        }
+    }
+
+    private fun cacheDataSourceFactory(
+        bound: BoundVideoResource<SharedVideoFactories>,
+        headers: Map<String, String>,
+    ): CacheDataSource.Factory {
+        val immutableHeaders = headers.toMap()
+        val requestScopedUpstream = ResolvingDataSource.Factory(bound.sharedResource.http) { dataSpec ->
+            dataSpec.withAdditionalHeaders(immutableHeaders)
+        }
+        return CacheDataSource.Factory()
+            .setCache(bound.sharedResource.cache)
+            .setUpstreamDataSourceFactory(requestScopedUpstream)
+            .setFlags(
+                CacheDataSource.FLAG_BLOCK_ON_CACHE or
+                    CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR,
+            )
+    }
+}
+
+private suspend fun CacheWriter.cacheCancellable() {
+    suspendCancellableCoroutine<Unit> { continuation ->
+        continuation.invokeOnCancellation { cancel() }
+        try {
+            cache()
+            if (continuation.isActive) continuation.resumeWith(Result.success(Unit))
+        } catch (error: Throwable) {
+            if (continuation.isActive) continuation.resumeWith(Result.failure(error))
+        }
     }
 }
 

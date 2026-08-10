@@ -191,12 +191,15 @@ internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): View
                 prefetch = prefetch.copy(
                     queued = prefetch.queued - action.mediaKey,
                     inFlight = prefetch.inFlight - action.mediaKey,
-                    ready = if (action.available) prefetch.ready + action.mediaKey else prefetch.ready,
-                    unavailable = if (action.available) {
-                        prefetch.unavailable - action.mediaKey
-                    } else {
-                        prefetch.unavailable + action.mediaKey
-                    },
+                    warmed = if (action.result.outcome == ViewerPrefetchOutcome.WARMED) {
+                        prefetch.warmed + (action.mediaKey to action.result.bytesCached)
+                    } else prefetch.warmed,
+                    skipped = if (action.result.outcome == ViewerPrefetchOutcome.SKIPPED) {
+                        prefetch.skipped + action.mediaKey
+                    } else prefetch.skipped,
+                    failed = if (action.result.outcome == ViewerPrefetchOutcome.FAILED) {
+                        prefetch.failed + action.mediaKey
+                    } else prefetch.failed,
                 ),
             )
         }
@@ -460,15 +463,20 @@ private fun ViewerUiState.queuePrefetch(
     requested: List<ViewerMediaKey>,
 ): ViewerReduction {
     val known = pages.flatMap { page -> page.media.map(ViewerMediaState::key) }.toSet()
-    val pending = requested.asSequence()
+    val terminal = prefetch.warmed.keys + prefetch.skipped + prefetch.failed
+    val desired = requested.asSequence()
         .filter { key -> key in known }
-        .filterNot { key -> key in prefetch.queued || key in prefetch.inFlight || key in prefetch.ready }
+        .filterNot { key -> key in terminal }
         .distinct()
         .toList()
-    if (pending.isEmpty()) return ViewerReduction(this)
     return ViewerReduction(
-        state = copy(prefetch = prefetch.copy(queued = prefetch.queued + pending)),
-        effects = listOf(ViewerEffect.PrefetchMedia(session, pending)),
+        state = copy(
+            prefetch = prefetch.copy(
+                queued = desired.toSet() - prefetch.inFlight,
+                inFlight = prefetch.inFlight.intersect(desired.toSet()),
+            ),
+        ),
+        effects = listOf(ViewerEffect.PrefetchMedia(session, desired)),
     )
 }
 

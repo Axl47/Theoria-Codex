@@ -5,6 +5,8 @@ import com.theoriacodex.app.ui.state.AppRouteSavedStateKeys
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerEffect
 import com.theoriacodex.app.viewer.state.ViewerMediaError
+import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
+import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import com.theoriacodex.app.viewer.state.ViewerResolutionStatus
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -20,6 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -41,7 +44,7 @@ class ViewerViewModelTest {
         assertEquals(replacement.toViewerSessionIdentity(), owner.state.value.session)
         assertEquals("new", owner.state.value.currentPage?.post?.id?.sourcePostId)
         assertNull(owner.state.value.mediaError)
-        assertTrue(owner.state.value.prefetch.ready.isEmpty())
+        assertTrue(owner.state.value.prefetch.warmed.isEmpty())
         assertEquals("new", handle[AppRouteSavedStateKeys.VIEWER_SESSION_ID])
     }
 
@@ -145,7 +148,9 @@ class ViewerViewModelTest {
         val owner = ViewerViewModel(
             savedStateHandle = SavedStateHandle(),
             postResolver = ViewerPostResolver { _, _ -> resolved },
-            mediaPrefetcher = ViewerMediaPrefetcher { _, _ -> true },
+            mediaPrefetcher = ViewerMediaPrefetcher { _, _ ->
+                ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED)
+            },
             scopeOverride = this,
         )
         owner.replaceSession(
@@ -164,7 +169,7 @@ class ViewerViewModelTest {
         val mediaKey = requireNotNull(owner.state.value.currentMedia?.key)
         owner.onAction(ViewerAction.QueuePrefetch(listOf(mediaKey)))
         advanceUntilIdle()
-        assertTrue(mediaKey in owner.state.value.prefetch.ready)
+        assertTrue(mediaKey in owner.state.value.prefetch.warmed)
 
         owner.onAction(ViewerAction.Save)
         val effect = owner.effects.first()
@@ -264,6 +269,58 @@ class ViewerViewModelTest {
         assertEquals("replacement", owner.state.value.currentPage?.post?.id?.sourcePostId)
         assertNull(owner.state.value.mediaError)
         assertFalse(owner.state.value.pages.any { page -> page.resolution.status == ViewerResolutionStatus.FAILED })
+    }
+
+    @Test
+    fun `prefetch limits active work and cancels neighbors that are no longer desired`() = runTest {
+        val active = AtomicInteger()
+        val peak = AtomicInteger()
+        val startedKeys = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
+        val cancelledKeys = mutableListOf<com.theoriacodex.app.viewer.state.ViewerMediaKey>()
+        val owner = ViewerViewModel(
+            savedStateHandle = SavedStateHandle(),
+            mediaPrefetcher = ViewerMediaPrefetcher { _, media ->
+                val current = active.incrementAndGet()
+                peak.updateAndGet { previous -> maxOf(previous, current) }
+                synchronized(startedKeys) { startedKeys += media.key }
+                try {
+                    awaitCancellation()
+                } finally {
+                    active.decrementAndGet()
+                    synchronized(cancelledKeys) { cancelledKeys += media.key }
+                }
+            },
+            scopeOverride = this,
+        )
+        owner.replaceSession(
+            session(
+                "prefetch-window",
+                listOf(post("gallery", media = (0..5).map { index -> image("$index.jpg") })),
+            ),
+        )
+        val keys = owner.state.value.currentPage?.media.orEmpty().map { media -> media.key }
+
+        owner.onAction(ViewerAction.QueuePrefetch(keys))
+        runCurrent()
+
+        assertEquals(VIEWER_PREFETCH_MAX_CONCURRENCY, active.get())
+        assertEquals(VIEWER_PREFETCH_MAX_CONCURRENCY, peak.get())
+        assertEquals(keys.take(2).toSet(), synchronized(startedKeys) { startedKeys.toSet() })
+
+        val replacementNeighbor = keys.last()
+        owner.onAction(ViewerAction.QueuePrefetch(listOf(replacementNeighbor)))
+        runCurrent()
+
+        assertEquals(1, active.get())
+        assertEquals(setOf(replacementNeighbor), owner.state.value.prefetch.inFlight)
+        assertTrue(keys.take(2).all { key -> key in synchronized(cancelledKeys) { cancelledKeys.toSet() } })
+        assertTrue(owner.state.value.prefetch.warmed.isEmpty())
+        assertTrue(owner.state.value.prefetch.failed.isEmpty())
+
+        owner.onAction(ViewerAction.QueuePrefetch(emptyList()))
+        runCurrent()
+        assertEquals(0, active.get())
+        assertTrue(owner.state.value.prefetch.inFlight.isEmpty())
     }
 
     private fun session(id: String, posts: List<Post>): ViewerSession {
