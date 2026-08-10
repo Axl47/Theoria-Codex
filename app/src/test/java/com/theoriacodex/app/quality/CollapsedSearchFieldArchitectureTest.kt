@@ -26,6 +26,11 @@ class CollapsedSearchFieldArchitectureTest {
         )
         assertTrue("Summary must remain in the existing placeholder", "collapsedSearchContext ?:" in screen)
         assertTrue("Focusing must remove placeholder presentation", "placeholder = if (!searchFieldFocused)" in screen)
+        assertTrue(
+            "Add must only appear for non-empty expanded input",
+            "showAddInputAction = searchFieldFocused && input.isNotBlank()" in screen,
+        )
+        assertTrue("Add visibility must use the field-state boundary", "if (showAddInputAction)" in screen)
         assertFalse("Formatter must not depend on draft state", ".draft" in formatter)
         assertFalse("The feature must not add a persistent summary row", "Applied search:" in screen)
     }

@@ -424,6 +424,7 @@ fun SearchScreen(
         autocompleteSuggestions.isNotEmpty() ||
         facetedAutocompleteSuggestions.isNotEmpty() ||
         state.hasPendingChanges
+    val showAddInputAction = searchFieldFocused && input.isNotBlank()
 
     fun commitTagInput() {
         val typed = input.trim()
@@ -509,18 +510,23 @@ fun SearchScreen(
                     onDone = { commitTagInput() },
                 ),
                 trailingIcon = {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.padding(end = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
                         TextButton(onClick = {
                             focusManager.clearFocus()
                             showFavoriteTagSheet = true
                         }) {
                             Text("List")
                         }
-                        TextButton(
-                            onClick = { commitTagInput() },
-                            enabled = state.suggestions.canCommitInput,
-                        ) {
-                            Text("Add")
+                        if (showAddInputAction) {
+                            TextButton(
+                                onClick = { commitTagInput() },
+                                enabled = state.suggestions.canCommitInput,
+                            ) {
+                                Text("Add")
+                            }
                         }
                     }
                 }
