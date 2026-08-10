@@ -13,6 +13,7 @@ data class SearchVisibilityFilters(
     val animatedOnly: Boolean = false,
     val hideLiked: Boolean = false,
     val hideSaved: Boolean = false,
+    val hideWatched: Boolean = false,
     val animatedDurationRange: AnimatedDurationRange = AnimatedDurationRange.Full,
 )
 
@@ -31,13 +32,15 @@ fun filterSearchResults(
     filters: SearchVisibilityFilters,
     likedPostIds: Set<PostId>,
     savedPostIds: Set<PostId>,
+    watchedPostIds: Set<PostId> = emptySet(),
     unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy = UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
 ): List<Post> {
     return results.filter { post ->
         (!filters.animatedOnly || isAnimatedPost(post)) &&
             matchesAnimatedDurationFilter(post, filters, unknownAnimatedDurationPolicy) &&
             (!filters.hideLiked || post.id !in likedPostIds) &&
-            (!filters.hideSaved || post.id !in savedPostIds)
+            (!filters.hideSaved || post.id !in savedPostIds) &&
+            (!filters.hideWatched || post.id !in watchedPostIds)
     }
 }
 

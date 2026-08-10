@@ -165,6 +165,7 @@ fun SearchScreen(
     pixivUgoiraClient: PixivUgoiraClient? = null,
     likedPostIds: Set<PostId> = emptySet(),
     savedPostIds: Set<PostId> = emptySet(),
+    watchedPostIds: Set<PostId> = emptySet(),
     favoriteTags: Map<SourceKey, List<String>> = emptyMap(),
     resolveUnknownAnimatedDurations: Boolean = false,
     onToggleLike: ((Post) -> Unit)? = null,
@@ -179,6 +180,7 @@ fun SearchScreen(
     var animatedOnly by rememberSaveable { mutableStateOf(false) }
     var hideLiked by rememberSaveable { mutableStateOf(false) }
     var hideSaved by rememberSaveable { mutableStateOf(false) }
+    var hideWatched by rememberSaveable { mutableStateOf(false) }
     var durationMinBucket by rememberSaveable { mutableIntStateOf(ANIMATED_DURATION_MIN_BUCKET) }
     var durationMaxBucket by rememberSaveable { mutableIntStateOf(ANIMATED_DURATION_MAX_BUCKET) }
     var searchFieldFocused by remember { mutableStateOf(false) }
@@ -200,7 +202,7 @@ fun SearchScreen(
     }
     val animatedDurationFilterActive = !animatedDurationRange.isFullRange && !isNhentaiSourceMode
     val searchFiltersActive = animatedFilterActive || animatedDurationFilterActive ||
-        hideLiked || hideSaved || state.query.draft.sort != SortMode.NEWEST ||
+        hideLiked || hideSaved || hideWatched || state.query.draft.sort != SortMode.NEWEST ||
         state.query.draft.dateRange != null || state.query.draft.minScore != null ||
         state.query.nhentaiFullColorFilter ||
         state.query.nhentaiLanguageFilter != NhentaiLanguageFilter.ANY
@@ -210,6 +212,7 @@ fun SearchScreen(
         animatedDurationActive = animatedDurationFilterActive,
         hideLiked = hideLiked,
         hideSaved = hideSaved,
+        hideWatched = hideWatched,
         fullColor = state.query.nhentaiFullColorFilter,
         language = state.query.nhentaiLanguageFilter,
     )
@@ -231,11 +234,18 @@ fun SearchScreen(
             durationMaxBucket = ANIMATED_DURATION_MAX_BUCKET
         }
     }
-    val visibilityFilters = remember(animatedFilterActive, hideLiked, hideSaved, animatedDurationRange) {
+    val visibilityFilters = remember(
+        animatedFilterActive,
+        hideLiked,
+        hideSaved,
+        hideWatched,
+        animatedDurationRange,
+    ) {
         SearchVisibilityFilters(
             animatedOnly = animatedFilterActive,
             hideLiked = hideLiked,
             hideSaved = hideSaved,
+            hideWatched = hideWatched,
             animatedDurationRange = animatedDurationRange,
         )
     }
@@ -249,12 +259,20 @@ fun SearchScreen(
     val displayResults = remember(state.content.results, state.content.displayVersion, queryHash) {
         state.content.results
     }
-    val visibleResults = remember(displayResults, visibilityFilters, likedPostIds, savedPostIds, unknownAnimatedDurationPolicy) {
+    val visibleResults = remember(
+        displayResults,
+        visibilityFilters,
+        likedPostIds,
+        savedPostIds,
+        watchedPostIds,
+        unknownAnimatedDurationPolicy,
+    ) {
         filterSearchResults(
             results = displayResults,
             filters = visibilityFilters,
             likedPostIds = likedPostIds,
             savedPostIds = savedPostIds,
+            watchedPostIds = watchedPostIds,
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
         )
     }
@@ -799,6 +817,8 @@ fun SearchScreen(
             onHideLikedChange = { hideLiked = it },
             hideSaved = hideSaved,
             onHideSavedChange = { hideSaved = it },
+            hideWatched = hideWatched,
+            onHideWatchedChange = { hideWatched = it },
             nhentaiFullColorFilter = state.query.nhentaiFullColorFilter,
             onNhentaiFullColorFilterChange = { enabled ->
                 onAction(SearchAction.SetNhentaiFullColor(enabled))
@@ -1261,6 +1281,8 @@ private fun FilterSheet(
     onHideLikedChange: (Boolean) -> Unit,
     hideSaved: Boolean,
     onHideSavedChange: (Boolean) -> Unit,
+    hideWatched: Boolean,
+    onHideWatchedChange: (Boolean) -> Unit,
     nhentaiFullColorFilter: Boolean,
     onNhentaiFullColorFilterChange: (Boolean) -> Unit,
     nhentaiLanguageFilter: NhentaiLanguageFilter,
@@ -1300,6 +1322,13 @@ private fun FilterSheet(
                         selected = hideSaved,
                         onClick = { onHideSavedChange(!hideSaved) },
                         label = { Text("Hide saved") },
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = hideWatched,
+                        onClick = { onHideWatchedChange(!hideWatched) },
+                        label = { Text("Hide Watched") },
                     )
                 }
                 if (!showAnimatedOnlyFilter) {

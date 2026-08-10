@@ -54,6 +54,7 @@ class ViewerRoutePolicyTest {
     fun `live source requires exact query identity and reapplies search visibility`() {
         val liked = post("liked")
         val saved = post("saved")
+        val watched = post("watched")
         val visible = post("visible")
         val session = session(
             queryHash = "search:active",
@@ -61,16 +62,18 @@ class ViewerRoutePolicyTest {
             filters = SearchVisibilityFilters(
                 hideLiked = true,
                 hideSaved = true,
+                hideWatched = true,
                 animatedDurationRange = AnimatedDurationRange.Full,
             ),
         )
         val state = ViewerRouteLiveSourceState(
             search = ViewerRouteLiveSourceSnapshot(
                 queryHash = "search:active",
-                results = listOf(liked, saved, visible),
+                results = listOf(liked, saved, watched, visible),
             ),
             likedPostIds = setOf(liked.id),
             savedPostIds = setOf(saved.id),
+            watchedPostIds = setOf(watched.id),
         )
 
         assertEquals(listOf(visible), state.visiblePostsFor(session))

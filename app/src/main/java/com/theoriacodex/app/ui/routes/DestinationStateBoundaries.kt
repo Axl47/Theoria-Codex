@@ -59,6 +59,7 @@ internal data class BrowsingDestinationState(
     val activeProfileLikesCount: Int,
     val favoriteTags: Map<SourceKey, List<String>>,
     val savedPostIds: Set<PostId>,
+    val watchedPostIds: Set<PostId>,
 ) {
     val unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy
         get() = if (settings.contentFilters.resolveUnknownAnimatedDurations) {
@@ -143,9 +144,12 @@ internal fun BrowsingDestinationStateBoundary(
             .collectAsStateWithLifecycle(initialValue = null)
         val activeProfileLikesState = data.likesRepository.observeLikes(activeProfile.profileId)
             .collectAsStateWithLifecycle(initialValue = null)
+        val watchedPostsState = data.recentsRepository.observeWatchedPosts()
+            .collectAsStateWithLifecycle(initialValue = null)
         val savedPostIds = rememberSavedPostIds(data)
         val likedPostIds = likedPostIdsState.value ?: return@DestinationStateBoundary
         val activeProfileLikes = activeProfileLikesState.value ?: return@DestinationStateBoundary
+        val watchedPosts = watchedPostsState.value ?: return@DestinationStateBoundary
         val availableSources = availableSourcesState.value
         content(
             BrowsingDestinationState(
@@ -164,6 +168,12 @@ internal fun BrowsingDestinationStateBoundary(
                         .mapValues { (_, entries) -> entries.map { it.tag } }
                 },
                 savedPostIds = savedPostIds,
+                watchedPostIds = remember(watchedPosts) {
+                    watchedPosts
+                        .asSequence()
+                        .filter { entry -> entry.section == RecentPostSection.WATCHED }
+                        .mapTo(linkedSetOf()) { entry -> entry.post.id }
+                },
             ),
         )
     }

@@ -38,6 +38,7 @@ internal data class SearchRouteConfig(
     val creatorBrowsingSources: Set<SourceKey>,
     val likedPostIds: Set<PostId>,
     val savedPostIds: Set<PostId>,
+    val watchedPostIds: Set<PostId>,
     val favoriteTags: Map<SourceKey, List<String>>,
     val resolveUnknownAnimatedDurations: Boolean,
 )
@@ -313,6 +314,7 @@ internal fun SearchRoute(
         pixivUgoiraClient = pixivUgoiraClient,
         likedPostIds = config.likedPostIds,
         savedPostIds = config.savedPostIds,
+        watchedPostIds = config.watchedPostIds,
         favoriteTags = config.favoriteTags,
         resolveUnknownAnimatedDurations = config.resolveUnknownAnimatedDurations,
         onToggleLike = callbacks.onToggleLike,

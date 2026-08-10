@@ -35,6 +35,7 @@ internal fun activeSearchFilterCount(
     animatedDurationActive: Boolean,
     hideLiked: Boolean,
     hideSaved: Boolean,
+    hideWatched: Boolean,
     fullColor: Boolean,
     language: NhentaiLanguageFilter,
 ): Int = listOf(
@@ -42,6 +43,7 @@ internal fun activeSearchFilterCount(
     animatedDurationActive,
     hideLiked,
     hideSaved,
+    hideWatched,
     appliedQuery.sort != SortMode.NEWEST,
     appliedQuery.dateRange != null,
     appliedQuery.minScore != null,

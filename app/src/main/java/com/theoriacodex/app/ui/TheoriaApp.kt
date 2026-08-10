@@ -1396,6 +1396,7 @@ internal fun TheoriaAppContent(
                                             creatorBrowsingSources = state.creatorBrowsingSources,
                                             likedPostIds = state.likedPostIds,
                                             savedPostIds = state.savedPostIds,
+                                            watchedPostIds = state.watchedPostIds,
                                             favoriteTags = state.favoriteTags,
                                             resolveUnknownAnimatedDurations =
                                                 state.settings.contentFilters.resolveUnknownAnimatedDurations,
@@ -1956,6 +1957,7 @@ internal fun TheoriaAppContent(
                                 ),
                                 likedPostIds = state.browsing.likedPostIds,
                                 savedPostIds = state.browsing.savedPostIds,
+                                watchedPostIds = state.browsing.watchedPostIds,
                                 unknownAnimatedDurationPolicy = state.browsing.unknownAnimatedDurationPolicy,
                             ),
                             effectCallbacks = ViewerRouteEffectCallbacks(

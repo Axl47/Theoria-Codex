@@ -18,15 +18,26 @@ internal fun buildEmptySearchMessage(
     if (visibilityFilters.animatedOnly && sourceResults.isNotEmpty() && (loadingMore || canLoadMore)) {
         return "No animated media yet. Retrying with more pages..."
     }
-    if (!visibilityFilters.animatedOnly && !visibilityFilters.hideLiked && !visibilityFilters.hideSaved) {
+    if (!visibilityFilters.animatedOnly &&
+        !visibilityFilters.hideLiked &&
+        !visibilityFilters.hideSaved &&
+        !visibilityFilters.hideWatched
+    ) {
         return null
     }
     if (sourceResults.isEmpty()) return null
     return when {
-        visibilityFilters.animatedOnly && !visibilityFilters.hideLiked && !visibilityFilters.hideSaved ->
+        visibilityFilters.animatedOnly &&
+            !visibilityFilters.hideLiked &&
+            !visibilityFilters.hideSaved &&
+            !visibilityFilters.hideWatched ->
             "No animated media found for the current results."
+        visibilityFilters.hideLiked && visibilityFilters.hideSaved && visibilityFilters.hideWatched ->
+            "No results remain after hiding liked, saved, and watched posts."
         visibilityFilters.hideLiked && visibilityFilters.hideSaved ->
             "No results remain after hiding liked and saved posts."
+        visibilityFilters.hideWatched && !visibilityFilters.hideLiked && !visibilityFilters.hideSaved ->
+            "No results remain after hiding watched posts."
         visibilityFilters.hideLiked -> "No results remain after hiding liked posts."
         visibilityFilters.hideSaved -> "No results remain after hiding saved posts."
         else -> "No results remain after applying the current visibility filters."

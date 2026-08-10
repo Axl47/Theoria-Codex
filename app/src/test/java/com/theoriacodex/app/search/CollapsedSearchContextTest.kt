@@ -47,13 +47,14 @@ class CollapsedSearchContextTest {
         val query = emptySearchQuery().copy(sort = SortMode.POPULAR, minScore = 10)
 
         assertEquals(
-            5,
+            6,
             activeSearchFilterCount(
                 appliedQuery = query,
                 animatedOnly = true,
                 animatedDurationActive = false,
                 hideLiked = true,
                 hideSaved = false,
+                hideWatched = true,
                 fullColor = false,
                 language = NhentaiLanguageFilter.ENGLISH,
             ),

@@ -81,6 +81,7 @@ internal data class ViewerRouteLiveSourceState(
     val creatorProfile: ViewerRouteLiveSourceSnapshot = ViewerRouteLiveSourceSnapshot(),
     val likedPostIds: Set<PostId> = emptySet(),
     val savedPostIds: Set<PostId> = emptySet(),
+    val watchedPostIds: Set<PostId> = emptySet(),
     val unknownAnimatedDurationPolicy: UnknownAnimatedDurationPolicy =
         UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS,
 ) {
@@ -104,6 +105,7 @@ internal data class ViewerRouteLiveSourceState(
             filters = session.searchVisibilityFilters,
             likedPostIds = if (appliesSavedAndLikedPolicy) likedPostIds else emptySet(),
             savedPostIds = if (appliesSavedAndLikedPolicy) savedPostIds else emptySet(),
+            watchedPostIds = if (appliesSavedAndLikedPolicy) watchedPostIds else emptySet(),
             unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
         )
     }
@@ -239,6 +241,7 @@ internal fun ViewerRoute(
         activeLiveSource,
         liveSourceState.likedPostIds,
         liveSourceState.savedPostIds,
+        liveSourceState.watchedPostIds,
         liveSourceState.unknownAnimatedDurationPolicy,
     ) {
         val currentSession = viewerOwner.session.value ?: return@LaunchedEffect

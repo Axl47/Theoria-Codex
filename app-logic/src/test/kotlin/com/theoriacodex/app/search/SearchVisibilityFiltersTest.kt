@@ -43,6 +43,22 @@ class SearchVisibilityFiltersTest {
     }
 
     @Test
+    fun `filterSearchResults hides only posts in watched recents`() {
+        val keep = samplePost(id = "keep", source = SourceKey.PIXIV)
+        val watched = samplePost(id = "watched", source = SourceKey.GELBOORU)
+
+        val visible = filterSearchResults(
+            results = listOf(keep, watched),
+            filters = SearchVisibilityFilters(hideWatched = true),
+            likedPostIds = emptySet(),
+            savedPostIds = emptySet(),
+            watchedPostIds = setOf(watched.id),
+        )
+
+        assertEquals(listOf(keep.id), visible.map { it.id })
+    }
+
+    @Test
     fun `filterSearchResults combines animated liked and saved visibility rules`() {
         val animatedSaved = samplePost(
             id = "animated-saved",
