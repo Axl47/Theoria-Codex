@@ -45,6 +45,7 @@ import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -316,6 +317,7 @@ internal fun TheoriaAppContent(
             message = message,
             actionLabel = actionLabel,
             withDismissAction = false,
+            duration = SnackbarDuration.Long,
         ) == SnackbarResult.ActionPerformed
     }
     val sourceDependencies = appContainer.sources

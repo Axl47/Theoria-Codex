@@ -23,6 +23,10 @@ class ActionableFeedbackArchitectureTest {
 
         assertEquals("The app must have exactly one rendered snackbar host", 1, production.count("SnackbarHost("))
         assertTrue("The outer Scaffold must render the snackbar host", "snackbarHost = { SnackbarHost(snackbarHostState) }" in shell)
+        assertTrue(
+            "Actionable feedback must expire instead of inheriting the indefinite action duration",
+            "duration = SnackbarDuration.Long" in shell,
+        )
         assertTrue("Passive confirmations must remain on Toast", "Toast.makeText" in shell)
         assertFalse(
             "Recents must request feedback from the shell instead of rendering a host",
