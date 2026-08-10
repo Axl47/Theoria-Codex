@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-10T18:10:00-04:00
+updated_at: 2026-08-10T18:59:00-04:00
 ---
 # Working List
 
@@ -8,12 +8,12 @@ updated_at: 2026-08-10T18:10:00-04:00
 
 ### In Progress
 
-- [~] Repair the shared hot path without reducing simultaneous visible autoplay or weakening duration freshness/filter correctness.
-  - Current implementation: feed snapshots precompute animated keys/candidates once; viewport changes reconcile one key; cached Known players do not republish; all provider/probe work pauses during active scrolling; fingerprint hex encoding and static-post key selection remove avoidable allocations.
+None.
 
 ### Pending
 
-- [ ] Add focused regressions and run one bounded host validation batch before asking for user/device acceptance.
+- [ ] When the same phone reconnects, verify the installed Debug signature, update only isolated package `com.theoriacodex.debug` without uninstalling or clearing it, then compare cached upward scrolling with background duration resolution both on and off.
+- [ ] Keep the separate frozen post-fix physical benchmark unrun until the user is ready for that planned evidence gate.
 
 ### Done
 
@@ -21,6 +21,10 @@ updated_at: 2026-08-10T18:10:00-04:00
   - Evidence: scrolling back to posts whose durations were already calculated still feels laggier than the pre-rebuild app, so cached acquisition alone is not sufficient evidence of a performant presentation path.
 - [x] Trace why scrolling previously seen, already-known posts still causes visible lag.
   - Evidence: every card enter/exit called `synchronizeDemand()` on the main-thread ViewModel scope; that rebuilt the entire candidate map, recalculated SHA-256 media keys, published provider-known values, and reconciled all three lanes even with background resolution and filtering off. The same list was also rebuilt from Compose `SideEffect`, and reconstructed players could republish an existing duration. Read-only logs from isolated Debug build `0.8.2-debug` on Samsung SM-S926U showed 32-, 45-, and 31-frame skips during the reported scroll, alongside rapid ExoPlayer init/release and 29/33 MiB garbage collections. Player lifecycle behavior predates this rebuild; whole-feed duration work amplified each viewport transition.
+- [x] Remove duration work from the cached-scroll hot path without reducing simultaneous visible autoplay.
+  - Evidence: feed snapshots now precompute animated keys and candidates once per changed feed; same-list Compose synchronization is constant-time; a viewport event reconciles only its precomputed key; cached Known values schedule no demand and reconstructed players do not republish them; static posts are not hashed; all provider/probe priorities pause during active scrolling; superseded queued feed snapshots cannot publish stale work.
+- [x] Add focused regressions and run one bounded host validation batch.
+  - Evidence: focused scheduler, fingerprint, route-owner, coordinator, metadata, and architecture tests pass, including 11 route-owner tests after the stale-snapshot guard. The complete app JVM suite reports 490 tests with zero failures/errors and three intentional live skips; app-logic reports 98 tests with zero failures/errors/skips. Debug Android-test and benchmarkRelease compilation, aggregate Kover, installable application-ID/artifact guards, and a host-only `installDebug` dry run pass. All 9 eligible changed app-logic executable lines are covered. App Detekt remains red only on four inherited findings in untouched UI owners. No fixed APK was installed or launched because the device disconnected before signing comparison and acceptance.
 
 ## Current Task: Implement The Duration Metadata Performance Rebuild
 

@@ -80,6 +80,13 @@ internal class MediaDurationRouteViewModel(
         ownerScope.launch {
             demandLock.withLock {
                 if (
+                    requestedContentIdentity != identity ||
+                    requestedSnapshot !== snapshot ||
+                    requestedBackgroundEnabled != resolveInBackground
+                ) {
+                    return@withLock
+                }
+                if (
                     contentIdentity == identity &&
                     postsById == snapshot.postsById &&
                     backgroundEnabled == resolveInBackground

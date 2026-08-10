@@ -169,6 +169,28 @@ class MediaDurationRouteViewModelTest {
     }
 
     @Test
+    fun `superseded feed snapshot never publishes stale demand`() = runTest {
+        val requested = mutableListOf<String>()
+        val coordinator = coordinator { post ->
+            requested += post.id.sourcePostId
+            MediaDurationState.Known(5_000L, MediaDurationProvenance.CONTAINER_PROBE)
+        }
+        val owner = MediaDurationRouteViewModel(coordinator, "superseded-test", backgroundScope)
+        val stale = animatedTestPost(sourcePostId = "stale")
+        val current = animatedTestPost(sourcePostId = "current")
+
+        owner.onEnvironmentChanged(lifecycleStarted = true, scrollIdle = true)
+        owner.synchronize("stale-query", listOf(stale), resolveInBackground = true)
+        owner.synchronize("current-query", listOf(current), resolveInBackground = true)
+        runCurrent()
+
+        assertEquals(listOf("current"), requested)
+        assertFalse(coordinator.states.value.containsKey(mediaDurationKey(stale)))
+        assertTrue(coordinator.states.value.containsKey(mediaDurationKey(current)))
+        coordinator.close()
+    }
+
+    @Test
     fun `route state ignores metadata published for another feed`() = runTest {
         val coordinator = coordinator {
             MediaDurationState.Known(5_000L, MediaDurationProvenance.CONTAINER_PROBE)
