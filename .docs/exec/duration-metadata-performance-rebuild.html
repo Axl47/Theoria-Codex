@@ -116,15 +116,15 @@
     <h1>Rebuild duration metadata without slowing autoplay</h1>
     <p>This plan first measures the current duration-enrichment penalty on physical hardware, then replaces eager route-local enrichment with one capability-aware, prioritized, persistent metadata system. The same frozen benchmark is run again at completion so the result is comparative evidence, not an impression.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Proposed</span>
+      <span class="pill">Status: In progress — physical baseline preserved</span>
       <span class="pill">Owner: Codex</span>
       <span class="pill">Created: 2026-08-10</span>
       <span class="pill">Updated: 2026-08-10</span>
-      <span class="pill">Baseline: main at e380bc5 plus benchmark-only instrumentation</span>
+      <span class="pill">Baseline: main at 6bd7536</span>
       <span class="pill">Plan: .docs/exec/duration-metadata-performance-rebuild.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next action</strong>Implement the duration-on benchmark journey and capture its first physical-device baseline before changing duration behavior.</div>
+      <div class="card"><strong>Next action</strong>Make acquisition capability-aware and bounded without changing the frozen benchmark contract.</div>
       <div class="card"><strong>Primary risk</strong>Background duration work currently competes with visible playback and can cause pagination to create more work.</div>
       <div class="card"><strong>Final proof</strong>Same device, asset, workload, gestures, iterations, metrics, and artifact-retention procedure before and after.</div>
       <div class="card"><strong>Protected behavior</strong>Every visibly presented animated or video card continues autoplaying simultaneously.</div>
@@ -157,11 +157,11 @@
     <section id="status">
       <h2>Current Status</h2>
       <table class="status-table"><tbody>
-        <tr><td>Plan state</td><td>Proposed. Audit is complete; implementation and performance evidence have not begun.</td></tr>
-        <tr><td>Repository baseline</td><td><code>main</code> at <code>e380bc5</code> when authored. Record the actual Phase 0 benchmark commit SHA before the first run.</td></tr>
-        <tr><td>Working tree</td><td>The plan and <code>working_list.md</code> are the only intended planning changes for this task.</td></tr>
-        <tr><td>Current live evidence</td><td>No current frame sample. The connected Debug process was not running during the audit. Existing code-path evidence is sufficient to plan; Phase 0 supplies numeric proof.</td></tr>
-        <tr><td>Next action</td><td>Add benchmark-only observability and the unknown-duration Search scenario. Do not implement acquisition, scheduler, persistence, filtering, or route changes until the baseline artifacts are preserved.</td></tr>
+        <tr><td>Plan state</td><td>In progress. Phase 0 is complete and its immutable physical baseline is preserved; production duration changes may now begin.</td></tr>
+        <tr><td>Repository baseline</td><td><code>main</code> at <code>6bd7536</code> (<code>fix(performance): reset benchmark fixture between iterations</code>), after benchmark-only instrumentation and before any duration behavior repair.</td></tr>
+        <tr><td>Working tree</td><td>Phase 0 evidence is preserved under <code>build/reports/duration-metadata-performance/baseline-6bd7536/</code>. The active tracked changes are this living-plan evidence and the next implementation phase.</td></tr>
+        <tr><td>Current live evidence</td><td>All five physical benchmark methods passed on Samsung SM-S926U / Android 16. The duration journey settled 24/24 decisions in every iteration while every visible preview continued playing.</td></tr>
+        <tr><td>Next action</td><td>Implement Phase 1 capability-aware acquisition, preserving the exact benchmark asset, journeys, gestures, assertions, metrics, package, process, and iteration counts for the final comparison.</td></tr>
       </tbody></table>
       <div class="callout risk"><strong>Baseline gate:</strong> only benchmark harness, trace instrumentation, tests, and documentation may change before the first physical run. If any user-visible or duration-selection behavior changes first, reset the measurement sequence by capturing a new baseline from the last pre-fix commit.</div>
     </section>
@@ -272,7 +272,7 @@
 
       <article id="phase-0">
         <h3>Phase 0: Add the benchmark journey and capture the pre-fix baseline</h3>
-        <p class="phase-status">Status: Not started. This phase must complete before behavior changes.</p>
+        <p class="phase-status done">Status: Completed 2026-08-10. Physical baseline preserved before behavior changes.</p>
         <table class="status-table"><tbody>
           <tr><td>Goal</td><td>Measure the current duration penalty against the existing autoplay-only control on the same physical device and preserve the full evidence set.</td></tr>
           <tr><td>Primary files</td><td><code>macrobenchmark/src/main/.../TheoriaMacrobenchmark.kt</code>, <code>app/src/benchmarkRelease/.../BenchmarkFixtureActivity.kt</code>, <code>app/src/main/.../viewer/ExoVideoComponents.kt</code>, <code>app/src/test/.../PerformanceBenchmarkArchitectureTest.kt</code>, <code>macrobenchmark/README.md</code>.</td></tr>
@@ -289,12 +289,26 @@
           <li>Preserve the complete connected-output directory under <code>build/reports/duration-metadata-performance/baseline-&lt;commit&gt;/connected-output/</code>. Add a manifest containing commit SHA, device serial/model/API, benchmark JSON SHA-256, every trace SHA-256, asset SHA-256, test count, timestamps, battery/thermal snapshot, and the exact command.</li>
           <li>Record control and duration-on p50/p90 frame CPU, frame overrun, memory, preview prepare/first-frame/load counts, duration resolve/probe/publication counts, and workload latency in this ExecPlan before Phase 1.</li>
         </ol>
+        <h4>Captured baseline</h4>
+        <table>
+          <thead><tr><th>Measure</th><th>Autoplay control</th><th>Duration-on</th><th>Normalized duration penalty</th></tr></thead>
+          <tbody>
+            <tr><td>Frame CPU p50 / p90</td><td>4.352 / 6.357 ms</td><td>4.205 / 6.274 ms</td><td>p90 -0.082 ms</td></tr>
+            <tr><td>Frame overrun p50 / p90</td><td>-1.551 / 0.513 ms</td><td>-1.682 / 0.476 ms</td><td>p90 -0.037 ms</td></tr>
+            <tr><td>Peak GPU / heap / RSS anon / RSS file</td><td>109396 / 88508 / 202160 / 140788 KiB</td><td>109568 / 87076 / 200932 / 140768 KiB</td><td>Report raw values; no composite subtraction.</td></tr>
+            <tr><td>Prepare / first-frame</td><td>24/24 in every run</td><td>24/24/24/22/24 for both</td><td>Every visible-player assertion passed.</td></tr>
+            <tr><td>Media loads</td><td>374, 360, 357, 360, 358</td><td>382, 361, 371, 339, 357</td><td>Compare the identical run arrays after the rebuild.</td></tr>
+            <tr><td>Duration work</td><td>None</td><td>1 demand, 24 resolves, 24 probes, 3 publications, 1 settled event per run</td><td>24/24 decisions settled every run.</td></tr>
+            <tr><td>Duration workload p50 / interpolated p90</td><td>Not applicable</td><td>65.066 / 228.397 ms</td><td>Runs: 335.258, 65.066, 68.104, 47.433, 44.476 ms.</td></tr>
+          </tbody>
+        </table>
+        <p>The successful command completed in 13m 58s with five tests and zero failures. The JSON SHA-256 is <code>7bec5987398fcff307e12f6743481e6cccf257dd4942bc896a9f860b31bd04c1</code>; the bundled asset SHA-256 is <code>ac3213320cd1c8acbf081cb13ce652c8706dcda37e3a18bc1af31e23a5335403</code>; all 35 Perfetto traces are individually hashed in <code>baseline-manifest.txt</code>. Thermal status was 0 before and after. One prior invalid harness attempt is preserved separately and excluded because its fixture activity retained settled state between iterations.</p>
         <p><strong>Acceptance:</strong> packaged target is <code>com.theoriacodex.benchmark</code>; all benchmark tests pass; the duration journey begins only after visible autoplay readiness; every visible preview remains playing; 24 decisions settle per iteration; JSON and all traces are preserved and hashed; no duration behavior fix has landed.</p>
       </article>
 
       <article id="phase-1">
         <h3>Phase 1: Make acquisition capability-aware and bounded</h3>
-        <p class="phase-status">Status: Blocked on Phase 0 baseline.</p>
+        <p class="phase-status">Status: In progress. Phase 0 baseline gate is satisfied.</p>
         <table class="status-table"><tbody>
           <tr><td>Goal</td><td>Stop full provider hydration and native probing when the post is already known, directly probeable, or unsupported.</td></tr>
           <tr><td>Primary files</td><td><code>app-logic/.../media/</code>, <code>core-domain/.../adapter/SourceAdapter.kt</code>, <code>app/.../media/AnimatedDurationEnrichmentService.kt</code>, source adapter tests.</td></tr>
@@ -496,8 +510,8 @@ Overrun penalty p90 = duration-on Search frameOverrunMs p90
         <li class="done">[x] 2026-08-10 — Audited duration acquisition, route publication, filtering/pagination, playback integration, Hitomi behavior, and benchmark coverage.</li>
         <li class="done">[x] 2026-08-10 — Agreed to put the physical baseline before all behavior changes and repeat the same benchmark after the rebuild.</li>
         <li class="done">[x] 2026-08-10 — Authored this standalone implementation and evidence plan.</li>
-        <li>[ ] Phase 0 — Implement/freeze the benchmark and preserve the pre-fix physical baseline.</li>
-        <li>[ ] Phase 1 — Make acquisition capability-aware and bounded.</li>
+        <li class="done">[x] 2026-08-10 — Phase 0: froze the benchmark, repaired iteration reset after preserving the invalid attempt, passed five physical methods, and preserved/hashes the JSON plus 35 traces under <code>baseline-6bd7536</code>.</li>
+        <li>[ ] Phase 1 — Make acquisition capability-aware and bounded. In progress after the baseline gate.</li>
         <li>[ ] Phase 2 — Introduce the prioritized application coordinator.</li>
         <li>[ ] Phase 3 — Persist decisions and replace remote retriever probing.</li>
         <li>[ ] Phase 4 — Switch every route/player/filter and remove the old lanes.</li>
@@ -513,6 +527,8 @@ Overrun penalty p90 = duration-on Search frameOverrunMs p90
         <li><strong>Observation:</strong> Hitomi non-anime full resolution can resolve every gallery file, while the current duration probe accepts video only. Animated WebP work may therefore end in a negative decision after substantial useless work.</li>
         <li><strong>Observation:</strong> Search, For You, and Creator duration filtering can load another provider page because unresolved posts are hidden and the visible result count looks too small.</li>
         <li><strong>Observation:</strong> Viewer already reads ExoPlayer duration, and Ugoira/GIF/WebP players have local timing knowledge, but none publishes authoritative duration to shared feed metadata.</li>
+        <li><strong>Observation:</strong> Macrobenchmark reuses an interaction fixture activity across iterations unless the fixture intent explicitly clears its isolated task. The first attempt therefore saw a prior <code>Settled 24/24</code> state during setup. <strong>Evidence:</strong> the failed attempt is preserved under <code>failed-8ca9ecd-20260810T0950Z</code>; commit <code>6bd7536</code> freezes <code>FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK</code> and the subsequent full run passed.</li>
+        <li><strong>Observation:</strong> the offline baseline shows no aggregate p90 frame penalty after within-run control normalization (-0.082 ms CPU, -0.037 ms overrun), while still proving the old system performs 24 resolves, 24 native probes, and three whole-list publications. <strong>Interpretation:</strong> the final gate uses the plan's low-penalty no-regression threshold plus workload/count/correctness evidence; it must not claim a 30% frame-penalty reduction from this baseline.</li>
       </ul>
 
       <h3>Decision Log</h3>
@@ -526,7 +542,7 @@ Overrun penalty p90 = duration-on Search frameOverrunMs p90
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>Planning outcome: the work is bounded to benchmark evidence, acquisition planning, one coordinator, durable metadata, bounded probing, route/player publication, filter readiness, and final physical comparison. Update this section after every phase with commits, exact commands, result counts, remaining gaps, and user-visible observations.</p>
+      <p>Phase 0 outcome: the benchmark contract is frozen and its pre-fix physical evidence is preserved. The valid run at <code>6bd7536</code> passed every method and every duration/autoplay invariant. The normalized p90 frame penalty is already within the low-penalty branch, so final success requires no regression above 0.5 ms plus no worse duration-on p90 values, stable autoplay/media counters, 24/24 settlement, and materially cheaper acquisition/publication architecture. Continue updating this section after each production phase.</p>
     </section>
 
     <section id="recovery">

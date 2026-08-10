@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-10T06:08:00-04:00
+updated_at: 2026-08-10T06:12:00-04:00
 ---
 # Working List
 
@@ -8,12 +8,11 @@ updated_at: 2026-08-10T06:08:00-04:00
 
 ### In Progress
 
-- [~] Phase 0: freeze and run the isolated physical-device duration-enrichment baseline.
-  - Required evidence: unchanged autoplay control, 24-post unknown-duration journey, benchmark-only start/settled signals, stable duration trace/counter labels, offline/package architecture guards, host dry run, packaged manifest proof, one physical run, preserved JSON/traces/hashes/device state, and recorded metrics.
+- [~] Phase 1: make duration acquisition capability-aware and bounded.
+  - Required evidence: known values perform no work; existing authoritative full video skips provider hydration; optional provider duration capability replaces generic post resolution; unsupported Hitomi animated images avoid full-gallery work; one temporary probe worker and a 12-second timeout; focused policy/service/source tests.
 
 ### Pending
 
-- [ ] Phase 1: make duration acquisition capability-aware and bounded.
 - [ ] Phase 2: replace route drains with one prioritized application coordinator.
 - [ ] Phase 3a: persist bounded duration decisions through Room schema 5.
 - [ ] Phase 3b: replace remote retriever probing with bounded MP4/WebM parsing.
@@ -28,6 +27,8 @@ updated_at: 2026-08-10T06:08:00-04:00
   - Evidence: `.docs/exec/duration-metadata-performance-rebuild.html` freezes the autoplay-only control and unknown-duration benchmark journey, requires preserved physical baseline artifacts before behavior changes, defines capability-aware acquisition and a prioritized application coordinator, adds bounded Room metadata and remote parsing contracts, moves every route/player/filter to separate metadata state, and repeats the identical benchmark with normalized acceptance thresholds. `git diff --check` passes; `xmllint --html` reports only its expected HTML4-era warnings for standard HTML5 structural elements.
 - [x] Commit the standalone plan before implementation.
   - Evidence: commit `6f4902d` (`docs(execplan): plan duration metadata performance rebuild`) contains only the plan and working-list handoff.
+- [x] Phase 0: freeze and run the isolated physical-device duration-enrichment baseline.
+  - Evidence: commits `8ca9ecd` and `6bd7536` add the offline unknown-duration journey, current-lane local probe, explicit measured start/settled signals, stable metrics, fresh fixture state per iteration, artifact/package guards, and documentation. Host contract tests, benchmark compilation, task-graph dry run, target/runner packaged verifiers, and one valid full physical suite pass. Samsung SM-S926U / Android 16 completed five methods with zero failures; 24/24 duration decisions and every visible autoplay assertion passed. JSON plus 35 traces and individual hashes are preserved under `build/reports/duration-metadata-performance/baseline-6bd7536/`; the earlier invalid harness attempt is preserved separately rather than overwritten.
 
 ## Current Task: Repair Animated Duration Metadata And Filtering
 
