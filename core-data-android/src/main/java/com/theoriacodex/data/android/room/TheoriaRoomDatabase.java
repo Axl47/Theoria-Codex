@@ -18,9 +18,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
                 MigrationMetadataEntity.class,
                 RecentWatchedEntity.class,
                 RecentSearchEntity.class,
-                RecentsMigrationEntity.class
+                RecentsMigrationEntity.class,
+                MediaDurationEntity.class
         },
-        version = 4,
+        version = 5,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -54,14 +55,22 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             database.execSQL("CREATE INDEX IF NOT EXISTS `index_codex_automatic_tags_codex_id` ON `codex_automatic_tags` (`codex_id`)");
         }
     };
+    public static final Migration MIGRATION_4_5 = new Migration(4, 5) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("CREATE TABLE IF NOT EXISTS `media_durations` (`source` TEXT NOT NULL, `source_post_id` TEXT NOT NULL, `media_fingerprint` TEXT NOT NULL, `decision` TEXT NOT NULL, `duration_ms` INTEGER, `provenance` TEXT, `reason` TEXT, `retry_at_epoch_ms` INTEGER, `updated_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`source`, `source_post_id`, `media_fingerprint`))");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_media_durations_updated_at_epoch_ms_source_source_post_id_media_fingerprint` ON `media_durations` (`updated_at_epoch_ms`, `source`, `source_post_id`, `media_fingerprint`)");
+        }
+    };
     public static final Migration[] MIGRATIONS = new Migration[] {
             MIGRATION_1_2,
             MIGRATION_2_3,
-            MIGRATION_3_4
+            MIGRATION_3_4,
+            MIGRATION_4_5
     };
 
     public abstract CodexLikesDao codexLikesDao();
     public abstract RecentsDao recentsDao();
+    public abstract MediaDurationDao mediaDurationDao();
 
     @NonNull
     public static TheoriaRoomDatabase create(@NonNull Context context) {

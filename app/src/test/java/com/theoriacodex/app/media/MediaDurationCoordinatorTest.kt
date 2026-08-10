@@ -1,6 +1,9 @@
 package com.theoriacodex.app.media
 
 import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.data.repository.InMemoryMediaDurationRepository
+import com.theoriacodex.data.repository.MediaDurationRepository
+import com.theoriacodex.data.repository.StoredMediaDurationState
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
@@ -209,13 +212,79 @@ class MediaDurationCoordinatorTest {
         coordinator.close()
     }
 
+    @Test
+    fun `durable known state bypasses acquisition and publishes into memory`() = runTest {
+        val repository = InMemoryMediaDurationRepository()
+        val post = post("persisted")
+        val key = key(post)
+        repository.put(
+            key.toStoredKey(),
+            StoredMediaDurationState.Known(11_000L, MediaDurationProvenance.PROVIDER.name),
+        )
+        var acquisitions = 0
+        val coordinator = coordinator(
+            scope = this,
+            acquirer = MediaDurationAcquirer {
+                acquisitions += 1
+                known(1_000L)
+            },
+            durationRepository = repository,
+        )
+        coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+
+        assertFalse(coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE)))
+        runCurrent()
+
+        assertEquals(0, acquisitions)
+        assertEquals(
+            MediaDurationState.Known(11_000L, MediaDurationProvenance.PROVIDER),
+            coordinator.states.value[key],
+        )
+        coordinator.close()
+    }
+
+    @Test
+    fun `acquired state persists and a new coordinator reuses it`() = runTest {
+        val repository = InMemoryMediaDurationRepository()
+        val post = post("relaunch")
+        val key = key(post)
+        val first = coordinator(
+            scope = this,
+            acquirer = MediaDurationAcquirer { known(13_000L) },
+            durationRepository = repository,
+        )
+        first.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        first.submit(post, demand("search", key, DurationDemandPriority.VISIBLE))
+        runCurrent()
+        first.close()
+
+        var reacquisitions = 0
+        val second = coordinator(
+            scope = this,
+            acquirer = MediaDurationAcquirer {
+                reacquisitions += 1
+                known(1_000L)
+            },
+            durationRepository = repository,
+        )
+        second.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
+        second.submit(post, demand("creator", key, DurationDemandPriority.VISIBLE))
+        runCurrent()
+
+        assertEquals(0, reacquisitions)
+        assertEquals(known(13_000L), second.states.value[key])
+        second.close()
+    }
+
     private fun coordinator(
         scope: CoroutineScope,
         acquirer: MediaDurationAcquirer,
+        durationRepository: MediaDurationRepository? = null,
         traceRecorder: MediaDurationTraceRecorder = NoOpMediaDurationTraceRecorder,
     ): MediaDurationCoordinator {
         return MediaDurationCoordinator(
             acquirer = acquirer,
+            durationRepository = durationRepository,
             parentScope = scope,
             traceRecorder = traceRecorder,
         )

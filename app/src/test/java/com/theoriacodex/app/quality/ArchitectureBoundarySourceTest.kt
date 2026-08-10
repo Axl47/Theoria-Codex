@@ -281,6 +281,35 @@ class ArchitectureBoundarySourceTest {
         ).forEach { traceName ->
             assertTrue("The duration coordinator must retain $traceName", traceName in coordinator)
         }
+        val durationEntity = File(
+            repositoryRoot,
+            "core-data-android/src/main/java/com/theoriacodex/data/android/room/" +
+                "MediaDurationEntity.java",
+        ).readText()
+        val roomDatabase = File(
+            repositoryRoot,
+            "core-data-android/src/main/java/com/theoriacodex/data/android/room/" +
+                "TheoriaRoomDatabase.java",
+        ).readText()
+        assertTrue(
+            "Duration persistence must remain independent, bounded metadata without request data",
+            "tableName = \"media_durations\"" in durationEntity &&
+                "url" !in durationEntity.lowercase() &&
+                "header" !in durationEntity.lowercase() &&
+                "version = 5" in roomDatabase &&
+                "MIGRATION_4_5" in roomDatabase &&
+                "DEFAULT_MEDIA_DURATION_ENTRY_LIMIT = 4_096" in File(
+                    repositoryRoot,
+                    "core-data/src/main/kotlin/com/theoriacodex/data/repository/" +
+                        "MediaDurationRepository.kt",
+                ).readText(),
+        )
+        assertTrue(
+            "The application coordinator must consult and persist the independent duration store",
+            "durationRepository: MediaDurationRepository?" in coordinator &&
+                "loadStoredState(demand.key)" in coordinator &&
+                "persistState(work.key, state)" in coordinator,
+        )
         val service = File(repositoryRoot, servicePath).readText()
         val sourceAdapter = File(
             repositoryRoot,

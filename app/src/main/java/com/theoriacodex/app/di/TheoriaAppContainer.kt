@@ -41,6 +41,7 @@ import com.theoriacodex.data.repository.DataStoreSettingsRepository
 import com.theoriacodex.data.repository.DataStoreStatisticsRepository
 import com.theoriacodex.data.repository.DataStoreUiRestoreRepository
 import com.theoriacodex.data.repository.LikesRepository
+import com.theoriacodex.data.repository.MediaDurationRepository
 import com.theoriacodex.data.repository.QueryRepository
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SettingsRepository
@@ -53,6 +54,7 @@ import com.theoriacodex.data.android.room.LegacyJsonImportResult
 import com.theoriacodex.data.android.room.LegacyJsonMigrationException
 import com.theoriacodex.data.android.room.RoomCodexLikesRepository
 import com.theoriacodex.data.android.room.RoomLegacyJsonImporter
+import com.theoriacodex.data.android.room.RoomMediaDurationRepository
 import com.theoriacodex.data.android.room.RecentsImportResult
 import com.theoriacodex.data.android.room.RoomRecentsLegacyImporter
 import com.theoriacodex.data.android.room.RoomRecentsRepository
@@ -81,6 +83,7 @@ data class DataDependencies(
     val statisticsRepository: StatisticsRepository,
     val cacheRepository: CacheRepository,
     val uiRestoreRepository: UiRestoreRepository,
+    val mediaDurationRepository: MediaDurationRepository,
     val legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>>,
 )
 
@@ -167,6 +170,8 @@ internal class DefaultTheoriaAppContainer(
         delegate = allPotentialSourceRegistry,
         availableSourceState = accountStore.availableSources,
     )
+    private val contentDatabase = TheoriaRoomDatabase.create(appContext)
+    private val mediaDurationRepository = RoomMediaDurationRepository(contentDatabase)
     private val animatedDurationEnricher = AnimatedDurationEnrichmentService(
         registry = sourceRegistry,
     )
@@ -181,10 +186,10 @@ internal class DefaultTheoriaAppContainer(
                 reason = MediaDurationUnsupportedReason.NO_AUTHORITATIVE_MEDIA,
             )
         },
+        durationRepository = mediaDurationRepository,
         parentScope = durableStoreScope,
     )
 
-    private val contentDatabase = TheoriaRoomDatabase.create(appContext)
     private val contentRepository = RoomCodexLikesRepository(contentDatabase)
     private val contentImporter = RoomLegacyJsonImporter(contentDatabase)
     private val recentsImporter = RoomRecentsLegacyImporter(
@@ -250,6 +255,7 @@ internal class DefaultTheoriaAppContainer(
         statisticsRepository = statisticsRepository,
         cacheRepository = cacheRepository,
         uiRestoreRepository = uiRestoreRepository,
+        mediaDurationRepository = mediaDurationRepository,
         legacyJsonRecoveries = legacyJsonRecoveryRegistry.recoveries,
     )
 

@@ -27,6 +27,9 @@ android {
     sourceSets.named("androidTest") {
         assets.srcDir("$projectDir/schemas")
     }
+    sourceSets.named("test") {
+        assets.srcDir("$projectDir/schemas")
+    }
 }
 
 room {

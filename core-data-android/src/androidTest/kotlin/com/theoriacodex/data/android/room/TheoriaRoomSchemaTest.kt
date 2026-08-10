@@ -121,6 +121,34 @@ class TheoriaRoomSchemaTest {
         database.close()
     }
 
+    @Test
+    fun migrationFourToFivePreservesContentAndAddsIndependentDurationOwnership() {
+        migrationHelper.createDatabase(TEST_DATABASE_NAME, 4).apply {
+            execSQL("INSERT INTO codices(codex_id,name,created_at_epoch_ms,display_order) VALUES('saved','Saved',1,0)")
+            close()
+        }
+
+        val database = migrationHelper.runMigrationsAndValidate(
+            TEST_DATABASE_NAME,
+            5,
+            true,
+            TheoriaRoomDatabase.MIGRATION_4_5,
+        )
+        database.execSQL(
+            "INSERT INTO media_durations(source,source_post_id,media_fingerprint,decision,duration_ms,provenance,updated_at_epoch_ms) " +
+                "VALUES('HITOMI','anime','fingerprint','KNOWN',12000,'PROVIDER',1)",
+        )
+        database.query("SELECT name FROM codices WHERE codex_id='saved'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("Saved", cursor.getString(0))
+        }
+        database.query("SELECT duration_ms FROM media_durations WHERE source_post_id='anime'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(12_000L, cursor.getLong(0))
+        }
+        database.close()
+    }
+
     companion object {
         private const val TEST_DATABASE_NAME = "theoria-room-schema-test"
     }

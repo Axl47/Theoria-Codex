@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-10T06:30:00-04:00
+updated_at: 2026-08-10T06:40:00-04:00
 ---
 # Working List
 
@@ -8,12 +8,11 @@ updated_at: 2026-08-10T06:30:00-04:00
 
 ### In Progress
 
-- [~] Phase 3a: persist bounded duration decisions through Room schema 5.
-  - Required evidence: platform-free repository contract and in-memory behavior; independent Room table keyed by post/fingerprint; explicit 4-to-5 migration; 4,096-row pruning; no URLs or headers; Known/Unsupported and bounded Retryable round trips; coordinator durable lookup/write without blocking the UI.
+- [~] Phase 3b: replace remote retriever probing with bounded MP4/WebM parsing.
+  - Required evidence: pure valid/truncated/malformed/overflow parser fixtures; 256 KiB head/tail request bounds; 12-second overall timeout; request-scoped headers; cancellation closes response bodies; one probe worker; remote `MediaMetadataRetriever` removed; local benchmark-only retriever retained.
 
 ### Pending
 
-- [ ] Phase 3b: replace remote retriever probing with bounded MP4/WebM parsing.
 - [ ] Phase 4: migrate routes, players, badges, filters, and pagination to separate metadata state.
 - [ ] Run the final host acceptance batch and stop before the post-fix physical benchmark.
 
@@ -31,6 +30,8 @@ updated_at: 2026-08-10T06:30:00-04:00
   - Evidence: platform-free contracts now own opaque media keys/fingerprints, typed decisions/demand, and acquisition order; core-domain exposes only an optional duration metadata capability. The shared service checks known values and existing full video first, never calls generic `resolvePost`, rejects preview-only and sparse Hitomi animated-image work without provider/probe calls, limits default work to one, and applies a 12-second timeout. Full `app-logic` and core-domain tests, 24 focused service/architecture tests, Debug/benchmark compilation, and `app-logic:detekt` pass. `core-domain:detekt` remains red only on its three inherited untouched complexity/length findings.
 - [x] Phase 2: centralize prioritized duration metadata work.
   - Evidence: the pure scheduler bounds and deterministically orders per-fingerprint tickets with priority promotion and safe eviction. The container owns one coordinator with an immutable metadata map, cross-route single-flight, serialized default acquisition, scroll/lifecycle gating, stale identity removal, shared-consumer isolation, visible/filter preemption of background work, retry/terminal decisions, and stable traces. Five scheduler, six coordinator, and eight architecture tests pass; Debug compilation and app-logic Detekt pass. App Detekt reports only four inherited findings in untouched UI owners.
+- [x] Phase 3a: persist bounded duration decisions through Room schema 5.
+  - Evidence: the Pending-free repository contract and in-memory owner preserve typed terminal decisions. Room schema 5 adds an independent post/fingerprint-keyed table with no URLs or headers, deterministic 4,096-row pruning, expired-retry deletion, and an explicit host-tested 4-to-5 migration that preserves existing content. The coordinator consults it before queueing and persists results after releasing its state lock. Three repository, four Room/migration, three mapping, eight coordinator, and eight architecture tests pass; Android migration-test and Debug/benchmark compilation pass. Changed persistence files are absent from broad Detekt findings; only the documented inherited core-data and app findings remain.
 
 ## Current Task: Repair Animated Duration Metadata And Filtering
 

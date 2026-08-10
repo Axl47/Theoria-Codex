@@ -2,6 +2,7 @@ package com.theoriacodex.app.media
 
 import android.os.Build
 import android.os.Trace
+import com.theoriacodex.data.repository.MediaDurationRepository
 import com.theoriacodex.domain.model.Post
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
@@ -77,6 +78,7 @@ object NoOpMediaDurationTraceRecorder : MediaDurationTraceRecorder {
  */
 class MediaDurationCoordinator(
     private val acquirer: MediaDurationAcquirer,
+    private val durationRepository: MediaDurationRepository? = null,
     parentScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val clock: () -> Long = System::currentTimeMillis,
     private val retryDelayMs: Long = DEFAULT_RETRY_DELAY_MS,
@@ -105,26 +107,40 @@ class MediaDurationCoordinator(
         require(maxRetainedStates > 0) { "Retained duration-state bound must be positive" }
     }
 
-    suspend fun submit(post: Post, demand: DurationDemand): Boolean = lock.withLock {
+    suspend fun submit(post: Post, demand: DurationDemand): Boolean {
         require(demand.key.postId == post.id) { "Duration demand key must match its post" }
         traceRecorder.demand()
 
         post.durationMs?.takeIf { durationMs -> durationMs > 0L }?.let { durationMs ->
-            publishKnownLocked(
+            publishKnown(
                 key = demand.key,
                 durationMs = durationMs,
                 provenance = MediaDurationProvenance.PROVIDER,
             )
-            return@withLock true
+            return true
         }
 
+        val shouldLoadStoredState = lock.withLock {
+            demand.key !in retainedStates &&
+                demand.key !in active &&
+                !scheduler.contains(demand.key)
+        }
+        val storedState = if (shouldLoadStoredState) loadStoredState(demand.key) else null
+        return lock.withLock { submitLocked(post, demand, storedState) }
+    }
+
+    private fun submitLocked(
+        post: Post,
+        demand: DurationDemand,
+        storedState: MediaDurationState?,
+    ): Boolean {
         when (val current = retainedStates[demand.key]) {
             is MediaDurationState.Known,
             is MediaDurationState.Unsupported,
-            -> return@withLock false
+            -> return false
 
             is MediaDurationState.RetryableFailure -> {
-                if (clock() < current.retryAtEpochMs) return@withLock false
+                if (clock() < current.retryAtEpochMs) return false
                 removeStateLocked(demand.key)
             }
 
@@ -136,14 +152,20 @@ class MediaDurationCoordinator(
         active[demand.key]?.let { work ->
             work.demands[demand.identity] = demand
             work.priority = work.demands.values.minOf(DurationDemand::priority)
-            return@withLock true
+            return true
+        }
+
+        if (storedState != null) {
+            putStateLocked(demand.key, storedState)
+            traceRecorder.publication()
+            return false
         }
 
         posts[demand.key] = post
         val submission = scheduler.submit(demand)
         if (submission == DurationDemandSubmission.Rejected) {
             if (!scheduler.contains(demand.key)) posts.remove(demand.key)
-            return@withLock false
+            return false
         }
         val accepted = submission as DurationDemandSubmission.Accepted
         accepted.evictedKey?.let(::discardEvictedKeyLocked)
@@ -151,7 +173,7 @@ class MediaDurationCoordinator(
         hadOutstandingWork = true
         preemptBackgroundForLocked(demand.priority)
         pumpLocked()
-        true
+        return true
     }
 
     suspend fun releaseIdentity(identity: String) = lock.withLock {
@@ -189,9 +211,11 @@ class MediaDurationCoordinator(
         key: MediaDurationKey,
         durationMs: Long,
         provenance: MediaDurationProvenance,
-    ) = lock.withLock {
+    ) {
         require(durationMs > 0L) { "Published duration must be positive" }
-        publishKnownLocked(key, durationMs, provenance)
+        val state = MediaDurationState.Known(durationMs, provenance)
+        lock.withLock { publishKnownLocked(key, state) }
+        persistState(key, state)
     }
 
     override fun close() {
@@ -200,13 +224,12 @@ class MediaDurationCoordinator(
 
     private fun publishKnownLocked(
         key: MediaDurationKey,
-        durationMs: Long,
-        provenance: MediaDurationProvenance,
+        state: MediaDurationState.Known,
     ) {
         scheduler.removeKey(key)
         active[key]?.let { work -> cancelActiveLocked(work, requeue = false) }
         posts.remove(key)
-        putStateLocked(key, MediaDurationState.Known(durationMs, provenance))
+        putStateLocked(key, state)
         traceRecorder.publication()
         pumpLocked()
         recordSettledIfNeededLocked()
@@ -266,14 +289,18 @@ class MediaDurationCoordinator(
         job.start()
     }
 
-    private suspend fun completeWork(work: ActiveWork, result: MediaDurationState) = lock.withLock {
-        if (active[work.key] !== work) return@withLock
-        active.remove(work.key)
-        traceRecorder.workloadFinished(work.traceCookie)
-        posts.remove(work.key)
-        putStateLocked(work.key, result)
-        traceRecorder.publication()
-        pumpLocked()
+    private suspend fun completeWork(work: ActiveWork, result: MediaDurationState) {
+        val completedState = lock.withLock {
+            if (active[work.key] !== work) return@withLock null
+            active.remove(work.key)
+            traceRecorder.workloadFinished(work.traceCookie)
+            posts.remove(work.key)
+            putStateLocked(work.key, result)
+            traceRecorder.publication()
+            pumpLocked()
+            result
+        }
+        completedState?.let { state -> persistState(work.key, state) }
     }
 
     private fun normalizeResult(result: MediaDurationState): MediaDurationState {
@@ -284,6 +311,29 @@ class MediaDurationCoordinator(
             )
         } else {
             result
+        }
+    }
+
+    private suspend fun loadStoredState(key: MediaDurationKey): MediaDurationState? {
+        val repository = durationRepository ?: return null
+        return try {
+            repository.get(key.toStoredKey())?.toMediaDurationState()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private suspend fun persistState(key: MediaDurationKey, state: MediaDurationState) {
+        val repository = durationRepository ?: return
+        val storedState = state.toStoredState() ?: return
+        try {
+            repository.put(key.toStoredKey(), storedState)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Duration persistence is a cache optimization and never changes a successful outcome.
         }
     }
 
