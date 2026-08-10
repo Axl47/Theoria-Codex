@@ -13,6 +13,7 @@ import androidx.benchmark.macro.StartupTimingMetric
 import androidx.benchmark.macro.TraceSectionMetric
 import androidx.benchmark.macro.junit4.MacrobenchmarkRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.UiDevice
@@ -26,11 +27,18 @@ import java.util.regex.Pattern
 private const val TARGET_PACKAGE = "com.theoriacodex.benchmark"
 private const val FIXTURE_ACTIVITY = "com.theoriacodex.app.benchmark.BenchmarkFixtureActivity"
 private const val ACTION_BENCHMARK_FIXTURE = "com.theoriacodex.action.BENCHMARK_FIXTURE"
+private const val ACTION_BENCHMARK_DURATION_START =
+    "com.theoriacodex.action.BENCHMARK_DURATION_START"
+private const val DURATION_START_RECEIVER =
+    "com.theoriacodex.app.benchmark.BenchmarkDurationStartReceiver"
 private const val EXTRA_SCENARIO = "benchmark_scenario"
 private const val FIXTURE_PROCESS_SUFFIX = ":benchmarkFixture"
 private const val SCENARIO_SEARCH = "search"
+private const val SCENARIO_SEARCH_DURATION = "search_duration"
 private const val SCENARIO_VIEWER = "viewer"
 private const val SEARCH_GRID_TAG = "benchmark_search_grid"
+private const val DURATION_STATUS_TAG = "benchmark_duration_status"
+private const val DURATION_SETTLED_DESCRIPTION = "Settled 24/24"
 private const val SEARCH_VIDEO_TAG_PREFIX = "search_video_rule34video_benchmark_search_"
 private const val VIEWER_VIDEO_TAG_PREFIX = "viewer_video_rule34video_benchmark_viewer_"
 private const val STARTUP_ITERATIONS = 10
@@ -44,6 +52,12 @@ private const val TRACE_PREVIEW_FIRST_FRAME = "TheoriaPreviewFirstFrame"
 private const val TRACE_VIEWER_PREPARE = "TheoriaViewerPrepare"
 private const val TRACE_VIEWER_FIRST_FRAME = "TheoriaViewerFirstFrame"
 private const val TRACE_MEDIA_LOAD = "TheoriaMediaLoad"
+private const val TRACE_DURATION_DEMAND = "TheoriaDurationDemand"
+private const val TRACE_DURATION_RESOLVE = "TheoriaDurationResolve"
+private const val TRACE_DURATION_PROBE = "TheoriaDurationProbe"
+private const val TRACE_DURATION_PUBLISH = "TheoriaDurationPublish"
+private const val TRACE_DURATION_SETTLED = "TheoriaDurationSettled"
+private const val TRACE_DURATION_WORKLOAD = "TheoriaDurationWorkload"
 
 private val COMPILATION_MODE = CompilationMode.Partial(
     baselineProfileMode = BaselineProfileMode.Require,
@@ -112,6 +126,48 @@ class TheoriaMacrobenchmark {
     }
 
     @Test
+    fun searchDurationEnrichmentConcurrentAutoplayScroll() = benchmarkRule.measureRepeated(
+        packageName = TARGET_PACKAGE,
+        metrics = listOf(
+            fixtureFrameTimingMetric(),
+            fixtureMemoryUsageMetric(),
+            countMetric(TRACE_PREVIEW_PREPARE, "previewPrepare"),
+            countMetric(TRACE_PREVIEW_FIRST_FRAME, "previewFirstFrame"),
+            countMetric(TRACE_MEDIA_LOAD, "mediaLoad"),
+            countMetric(TRACE_DURATION_DEMAND, "durationDemand"),
+            countMetric(TRACE_DURATION_RESOLVE, "durationResolve"),
+            countMetric(TRACE_DURATION_PROBE, "durationProbe"),
+            countMetric(TRACE_DURATION_PUBLISH, "durationPublish"),
+            countMetric(TRACE_DURATION_SETTLED, "durationSettled"),
+            durationWorkloadMetric(),
+        ),
+        compilationMode = COMPILATION_MODE,
+        startupMode = null,
+        iterations = INTERACTION_ITERATIONS,
+        setupBlock = {
+            pressHome()
+            startActivityAndWait(fixtureIntent(SCENARIO_SEARCH_DURATION))
+            device.requireObject(SEARCH_GRID_TAG, "Duration Search fixture grid")
+            device.requireDurationWaiting()
+            device.requireAllVisibleSearchVideosPlaying()
+        },
+    ) {
+        sendDurationStartSignal()
+        val grid = device.requireObject(SEARCH_GRID_TAG, "Duration Search fixture grid")
+        grid.setGestureMargin(device.displayWidth / 6)
+        repeat(SEARCH_SCROLL_STEPS) {
+            grid.fling(Direction.DOWN)
+            device.requireAllVisibleSearchVideosPlaying()
+        }
+        repeat(SEARCH_SCROLL_STEPS) {
+            grid.fling(Direction.UP)
+            device.requireAllVisibleSearchVideosPlaying()
+        }
+        device.requireDurationSettled()
+        device.requireAllVisibleSearchVideosPlaying()
+    }
+
+    @Test
     fun viewerRepeatedSwipes() = benchmarkRule.measureRepeated(
         packageName = TARGET_PACKAGE,
         metrics = listOf(
@@ -155,6 +211,15 @@ class TheoriaMacrobenchmark {
         )
     }
 
+    private fun durationWorkloadMetric(): TraceSectionMetric {
+        return TraceSectionMetric(
+            sectionName = TRACE_DURATION_WORKLOAD,
+            mode = TraceSectionMetric.Mode.Sum,
+            label = "durationWorkload",
+            targetPackageOnly = false,
+        )
+    }
+
     private fun fixtureFrameTimingMetric(): FrameTimingMetric {
         return FrameTimingMetric(
             processNameSuffix = FIXTURE_PROCESS_SUFFIX,
@@ -170,6 +235,13 @@ class TheoriaMacrobenchmark {
         )
     }
 
+}
+
+private fun sendDurationStartSignal() {
+    val signal = Intent(ACTION_BENCHMARK_DURATION_START).setComponent(
+        ComponentName(TARGET_PACKAGE, DURATION_START_RECEIVER),
+    )
+    InstrumentationRegistry.getInstrumentation().context.sendBroadcast(signal)
 }
 
 private fun UiDevice.requireObject(resourceId: String, label: String): UiObject2 {
@@ -191,6 +263,23 @@ private fun UiDevice.requireAllVisibleSearchVideosPlaying() {
     )
     check(visible.all(UiObject2::reportsPlaying)) {
         "A visible Search fixture video stopped autoplaying"
+    }
+}
+
+private fun UiDevice.requireDurationWaiting() {
+    val status = requireObject(DURATION_STATUS_TAG, "Duration benchmark status")
+    check(status.contentDescription == "Waiting 0/24") {
+        "Duration benchmark began before the measured start signal: ${status.contentDescription}"
+    }
+}
+
+private fun UiDevice.requireDurationSettled() {
+    val status = waitUntil(UI_TIMEOUT_MS) {
+        findObject(By.res(DURATION_STATUS_TAG))
+            ?.takeIf { node -> node.contentDescription == DURATION_SETTLED_DESCRIPTION }
+    }
+    checkNotNull(status) {
+        "Duration benchmark did not settle all 24 decisions within ${UI_TIMEOUT_MS}ms"
     }
 }
 

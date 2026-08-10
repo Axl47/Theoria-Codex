@@ -18,6 +18,11 @@ ANDROID_HOME="$HOME/Library/Android/sdk" \
 The suite records ten cold and ten warm startup iterations with
 `CompilationMode.Partial(BaselineProfileMode.Require)`. Search and Viewer run five iterations
 against a benchmark-only secondary process, with frame timing and peak RSS/heap/GPU memory.
+Search has two frozen journeys: the autoplay-only control starts with 24 known-duration cards,
+while the duration-on journey starts the same 24 cards with unknown durations, waits for two
+visible previews to be playing, signals the measured enrichment workload, performs the same three
+down/up flings, and requires all 24 duration decisions to settle without interrupting visible
+autoplay. The duration workload reads only the bundled MP4 through `AssetFileDescriptor`.
 The fixture is an offline APK resource and never opens normal repositories or providers.
 The target uses the `.benchmark` application ID suffix, so neither startup nor fixture runs can
 overwrite the installed production app or enter its storage sandbox.
@@ -42,6 +47,12 @@ Trace count meanings:
 - `viewerFirstFrameCount`: Viewer players that render their first frame; loop callbacks after that
   first transition are excluded.
 - `mediaLoadCount`: Media3 load-start callbacks, including retries or subsequent loads.
+- `durationDemandCount`: measured duration-workload requests (one per iteration).
+- `durationResolveCount`: current-service resolution attempts against the offline post shell.
+- `durationProbeCount`: bundled MP4 metadata probes.
+- `durationPublishCount`: immutable duration-only post-list publications.
+- `durationSettledCount`: iterations that settled all 24 decisions.
+- `durationWorkloadMs`: elapsed async interval from the measured signal to the final decision.
 
 Gradle copies the benchmark JSON and one Perfetto trace per measured iteration under:
 

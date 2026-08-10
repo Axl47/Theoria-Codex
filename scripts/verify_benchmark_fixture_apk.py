@@ -13,6 +13,8 @@ from pathlib import Path
 EXPECTED_APPLICATION_ID = "com.theoriacodex.benchmark"
 EXPECTED_ACTIVITY = "com.theoriacodex.app.benchmark.BenchmarkFixtureActivity"
 EXPECTED_ACTION = "com.theoriacodex.action.BENCHMARK_FIXTURE"
+EXPECTED_DURATION_RECEIVER = "com.theoriacodex.app.benchmark.BenchmarkDurationStartReceiver"
+EXPECTED_DURATION_ACTION = "com.theoriacodex.action.BENCHMARK_DURATION_START"
 EXPECTED_PROCESS = ":benchmarkFixture"
 EXPECTED_LAUNCHER = "com.theoriacodex.app.MainActivity"
 FORBIDDEN_MANIFEST_SURFACES = (
@@ -56,7 +58,13 @@ def main() -> None:
     require(application_id == EXPECTED_APPLICATION_ID, f"unexpected application ID: {application_id}")
 
     manifest = run(analyzer, "manifest", "print", str(apk))
-    for expected in (EXPECTED_ACTIVITY, EXPECTED_ACTION, EXPECTED_PROCESS):
+    for expected in (
+        EXPECTED_ACTIVITY,
+        EXPECTED_ACTION,
+        EXPECTED_DURATION_RECEIVER,
+        EXPECTED_DURATION_ACTION,
+        EXPECTED_PROCESS,
+    ):
         require(expected in manifest, f"benchmark manifest is missing {expected}")
     for forbidden in FORBIDDEN_MANIFEST_SURFACES:
         require(forbidden not in manifest, f"benchmark manifest retains forbidden surface {forbidden}")
@@ -69,9 +77,14 @@ def main() -> None:
     activity_offset = manifest.index(EXPECTED_ACTIVITY)
     activity_block = manifest[activity_offset : activity_offset + 800]
     require('android:exported="true"' in activity_block, "benchmark fixture is not exported")
+    receiver_offset = manifest.index(EXPECTED_DURATION_RECEIVER)
+    receiver_block = manifest[receiver_offset : receiver_offset + 600]
+    require('android:exported="true"' in receiver_block, "duration signal receiver is not exported")
+    require(EXPECTED_PROCESS in receiver_block, "duration signal receiver is outside fixture process")
 
     dex_packages = run(analyzer, "dex", "packages", str(apk))
     require(EXPECTED_ACTIVITY in dex_packages, "benchmark fixture activity was removed from dex")
+    require(EXPECTED_DURATION_RECEIVER in dex_packages, "duration signal receiver was removed from dex")
 
     packaged_video_path = run(
         analyzer,

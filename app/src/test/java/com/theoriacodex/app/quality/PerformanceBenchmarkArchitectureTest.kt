@@ -1,6 +1,7 @@
 package com.theoriacodex.app.quality
 
 import java.io.File
+import java.security.MessageDigest
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -81,6 +82,14 @@ class PerformanceBenchmarkArchitectureTest {
             "Benchmark fixture must retain an explicit benchmark-only action",
             "com.theoriacodex.action.BENCHMARK_FIXTURE" in benchmarkManifest,
         )
+        assertTrue(
+            "Duration workload must start only through its explicit benchmark receiver",
+            "BenchmarkDurationStartReceiver" in benchmarkManifest &&
+                "com.theoriacodex.action.BENCHMARK_DURATION_START" in benchmarkManifest &&
+                Regex("android:process=\\\":benchmarkFixture\\\"")
+                    .findAll(benchmarkManifest)
+                    .count() == 2,
+        )
         listOf(
             "android.permission.INTERNET",
             "android.permission.REQUEST_INSTALL_PACKAGES",
@@ -104,7 +113,10 @@ class PerformanceBenchmarkArchitectureTest {
         )
         assertFalse("Production Kotlin must not contain fixture implementation", "benchmarkPosts(" in productionSources)
 
-        val fixtureText = fixture.readText()
+        val fixtureText = requireNotNull(fixture.parentFile).walkTopDown()
+            .filter(File::isFile)
+            .filter { source -> source.extension == "kt" }
+            .joinToString("\n") { source -> source.readText() }
         listOf(
             "Repository",
             "SourceAdapter",
@@ -118,8 +130,22 @@ class PerformanceBenchmarkArchitectureTest {
         }
         assertTrue("Fixture media must be APK-local", "android.resource://" in fixtureText)
         assertTrue(
+            "Duration and control Search journeys must retain exactly 24 cards",
+            "SEARCH_POST_COUNT = 24" in fixtureText,
+        )
+        assertTrue(
+            "Duration Search posts must begin unknown while control posts remain known",
+            "durationMs = if (durationEnrichmentEnabled) null else BENCHMARK_MEDIA_DURATION_MS" in
+                fixtureText,
+        )
+        assertTrue(
             "Offline fixture video must be bundled only with benchmarkRelease",
             file("app/src/benchmarkRelease/res/raw/benchmark_loop.mp4").length() > 1_024L,
+        )
+        assertTrue(
+            "Benchmark video bytes must remain frozen between baseline and final runs",
+            file("app/src/benchmarkRelease/res/raw/benchmark_loop.mp4").sha256() ==
+                "ac3213320cd1c8acbf081cb13ce652c8706dcda37e3a18bc1af31e23a5335403",
         )
     }
 
@@ -152,6 +178,8 @@ class PerformanceBenchmarkArchitectureTest {
             "EXPECTED_APPLICATION_ID",
             "EXPECTED_ACTIVITY",
             "EXPECTED_ACTION",
+            "EXPECTED_DURATION_RECEIVER",
+            "EXPECTED_DURATION_ACTION",
             "EXPECTED_PROCESS",
             "benchmark_loop",
             "packaged benchmark video bytes differ",
@@ -218,6 +246,24 @@ class PerformanceBenchmarkArchitectureTest {
         )
         assertTrue("Search must require every visible player", "videos.all(UiObject2::reportsPlaying)" in benchmark)
         assertTrue("Search must recheck autoplay during scrolling", "repeat(SEARCH_SCROLL_STEPS)" in benchmark)
+        assertTrue(
+            "Duration benchmark must retain its frozen unknown-duration Search journey",
+            "fun searchDurationEnrichmentConcurrentAutoplayScroll()" in benchmark &&
+                "SCENARIO_SEARCH_DURATION = \"search_duration\"" in benchmark &&
+                "DURATION_SETTLED_DESCRIPTION = \"Settled 24/24\"" in benchmark,
+        )
+        assertTrue(
+            "Duration benchmark must signal only after autoplay setup and settle every decision",
+            "device.requireDurationWaiting()" in benchmark &&
+                "device.requireAllVisibleSearchVideosPlaying()" in benchmark &&
+                "sendDurationStartSignal()" in benchmark &&
+                "device.requireDurationSettled()" in benchmark,
+        )
+        assertTrue(
+            "Duration benchmark contract must retain five iterations and three down/up flings",
+            "INTERACTION_ITERATIONS = 5" in benchmark &&
+                "SEARCH_SCROLL_STEPS = 3" in benchmark,
+        )
         assertFalse("Macrobenchmark must not tap videos to start playback", ".click()" in benchmark)
         assertTrue("Viewer must exercise forward and reverse swipes", "device.swipeViewer(next = true)" in benchmark)
         assertTrue("Fixture waits must be bounded", "UI_TIMEOUT_MS = 15_000L" in benchmark)
@@ -226,7 +272,7 @@ class PerformanceBenchmarkArchitectureTest {
             benchmark.lines().windowed(size = 2).count { lines ->
                 lines[0].contains("compilationMode = COMPILATION_MODE") &&
                     lines[1].contains("startupMode = null")
-            } == 2,
+            } == 3,
         )
         listOf(
             "previewPrepare",
@@ -239,6 +285,16 @@ class PerformanceBenchmarkArchitectureTest {
                 "Count metric labels must not duplicate the Count suffix",
                 "\"${metricLabel}Count\"" in benchmark,
             )
+        }
+        listOf(
+            "durationDemand",
+            "durationResolve",
+            "durationProbe",
+            "durationPublish",
+            "durationSettled",
+            "durationWorkload",
+        ).forEach { metricLabel ->
+            assertTrue("Duration benchmark must retain $metricLabel", "\"$metricLabel\"" in benchmark)
         }
     }
 
@@ -255,6 +311,9 @@ class PerformanceBenchmarkArchitectureTest {
         ).readText()
         val viewer = file(
             "app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt",
+        ).readText()
+        val durationWorkload = file(
+            "app/src/benchmarkRelease/java/com/theoriacodex/app/benchmark/BenchmarkDurationWorkload.kt",
         ).readText()
 
         assertTrue("Interaction benchmarks must record frames", "FrameTimingMetric(" in benchmark)
@@ -300,7 +359,32 @@ class PerformanceBenchmarkArchitectureTest {
             "Normal Search/Viewer routes must not enable playback diagnostics",
             "playbackDiagnosticsEnabled = true" in normalCallSites,
         )
+        listOf(
+            "TheoriaDurationDemand",
+            "TheoriaDurationResolve",
+            "TheoriaDurationProbe",
+            "TheoriaDurationPublish",
+            "TheoriaDurationSettled",
+            "TheoriaDurationWorkload",
+        ).forEach { traceName ->
+            assertTrue("Macrobenchmark must retain $traceName", traceName in benchmark)
+            assertTrue("Offline duration workload must retain $traceName", traceName in durationWorkload)
+        }
+        assertTrue(
+            "Duration fixture must begin unknown and keep the autoplay control known",
+            "durationMs = if (durationEnrichmentEnabled) null else BENCHMARK_MEDIA_DURATION_MS" in
+                file(
+                    "app/src/benchmarkRelease/java/com/theoriacodex/app/benchmark/" +
+                        "BenchmarkFixtureActivity.kt",
+                ).readText(),
+        )
     }
 
     private fun file(relativePath: String): File = File(repositoryRoot, relativePath)
+
+    private fun File.sha256(): String {
+        return MessageDigest.getInstance("SHA-256")
+            .digest(readBytes())
+            .joinToString("") { byte -> "%02x".format(byte) }
+    }
 }

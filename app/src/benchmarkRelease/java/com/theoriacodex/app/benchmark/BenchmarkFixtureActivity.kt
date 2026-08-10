@@ -11,12 +11,17 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
@@ -39,11 +44,19 @@ class BenchmarkFixtureActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val scenario = intent?.getStringExtra(EXTRA_SCENARIO)
+        if (scenario == SCENARIO_SEARCH_DURATION) BenchmarkDurationStartSignal.reset()
         val mediaUri = "android.resource://$packageName/${R.raw.benchmark_loop}".toUri().toString()
         setContent {
             TheoriaNightTheme {
                 when (scenario) {
-                    SCENARIO_SEARCH -> BenchmarkSearchFixture(mediaUri)
+                    SCENARIO_SEARCH -> BenchmarkSearchFixture(
+                        mediaUri = mediaUri,
+                        durationEnrichmentEnabled = false,
+                    )
+                    SCENARIO_SEARCH_DURATION -> BenchmarkSearchFixture(
+                        mediaUri = mediaUri,
+                        durationEnrichmentEnabled = true,
+                    )
                     SCENARIO_VIEWER -> BenchmarkViewerFixture(mediaUri)
                     else -> error("Unknown benchmark fixture scenario: $scenario")
                 }
@@ -54,32 +67,87 @@ class BenchmarkFixtureActivity : ComponentActivity() {
     private companion object {
         const val EXTRA_SCENARIO = "benchmark_scenario"
         const val SCENARIO_SEARCH = "search"
+        const val SCENARIO_SEARCH_DURATION = "search_duration"
         const val SCENARIO_VIEWER = "viewer"
     }
 }
 
 @Composable
-private fun BenchmarkSearchFixture(mediaUri: String) {
-    val posts = remember(mediaUri) {
-        benchmarkPosts(prefix = "benchmark_search", count = SEARCH_POST_COUNT, mediaUri = mediaUri)
+private fun BenchmarkSearchFixture(
+    mediaUri: String,
+    durationEnrichmentEnabled: Boolean,
+) {
+    var posts by remember(mediaUri, durationEnrichmentEnabled) {
+        mutableStateOf(
+            benchmarkPosts(
+                prefix = "benchmark_search",
+                count = SEARCH_POST_COUNT,
+                mediaUri = mediaUri,
+                durationMs = if (durationEnrichmentEnabled) null else BENCHMARK_MEDIA_DURATION_MS,
+            ),
+        )
     }
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+    if (durationEnrichmentEnabled) {
+        val scope = rememberCoroutineScope()
+        val resources = LocalContext.current.resources
+        val workload = remember(mediaUri) {
+            BenchmarkDurationWorkload(
+                scope = scope,
+                resources = resources,
+                initialPosts = posts,
+                currentPosts = { posts },
+                publishPosts = { updated -> posts = updated },
+            )
+        }
+        DisposableEffect(workload) {
+            onDispose(workload::close)
+        }
+        LaunchedEffect(workload) {
+            BenchmarkDurationStartSignal.generation.collect { generation ->
+                if (generation > 0L) workload.start()
+            }
+        }
+    }
+    val resolvedCount = posts.count { post -> post.durationMs != null }
+    val statusDescription = when {
+        resolvedCount == SEARCH_POST_COUNT -> DURATION_SETTLED_DESCRIPTION
+        resolvedCount == 0 -> "Waiting 0/$SEARCH_POST_COUNT"
+        else -> "Resolving $resolvedCount/$SEARCH_POST_COUNT"
+    }
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .semantics { testTagsAsResourceId = true }
-            .testTag(SEARCH_GRID_TAG),
-        contentPadding = PaddingValues(8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .then(
+                if (durationEnrichmentEnabled) {
+                    Modifier
+                        .semantics {
+                            testTagsAsResourceId = true
+                            contentDescription = statusDescription
+                        }
+                        .testTag(DURATION_STATUS_TAG)
+                } else {
+                    Modifier
+                },
+            ),
     ) {
-        items(posts, key = { post -> post.id.sourcePostId }) { post ->
-            SearchResultCard(
-                post = post,
-                pixivUgoiraClient = null,
-                playbackDiagnosticsEnabled = true,
-                onClick = {},
-            )
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            modifier = Modifier
+                .fillMaxSize()
+                .semantics { testTagsAsResourceId = true }
+                .testTag(SEARCH_GRID_TAG),
+            contentPadding = PaddingValues(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(posts, key = { post -> post.id.sourcePostId }) { post ->
+                SearchResultCard(
+                    post = post,
+                    pixivUgoiraClient = null,
+                    playbackDiagnosticsEnabled = true,
+                    onClick = {},
+                )
+            }
         }
     }
 }
@@ -87,7 +155,12 @@ private fun BenchmarkSearchFixture(mediaUri: String) {
 @Composable
 private fun BenchmarkViewerFixture(mediaUri: String) {
     val posts = remember(mediaUri) {
-        benchmarkPosts(prefix = "benchmark_viewer", count = VIEWER_POST_COUNT, mediaUri = mediaUri)
+        benchmarkPosts(
+            prefix = "benchmark_viewer",
+            count = VIEWER_POST_COUNT,
+            mediaUri = mediaUri,
+            durationMs = BENCHMARK_MEDIA_DURATION_MS,
+        )
     }
     var viewerState by remember(posts) {
         mutableStateOf(
@@ -117,7 +190,12 @@ private fun BenchmarkViewerFixture(mediaUri: String) {
     }
 }
 
-private fun benchmarkPosts(prefix: String, count: Int, mediaUri: String): List<Post> {
+private fun benchmarkPosts(
+    prefix: String,
+    count: Int,
+    mediaUri: String,
+    durationMs: Long?,
+): List<Post> {
     return List(count) { index ->
         val media = ImageRef(
             url = mediaUri,
@@ -138,13 +216,13 @@ private fun benchmarkPosts(prefix: String, count: Int, mediaUri: String): List<P
             authorName = "Offline fixture",
             createdAtEpochMs = index.toLong(),
             title = "Benchmark video ${index + 1}",
-            durationMs = BENCHMARK_MEDIA_DURATION_MS,
+            durationMs = durationMs,
             mediaCount = 1,
         )
     }
 }
 
 private const val SEARCH_GRID_TAG = "benchmark_search_grid"
-private const val SEARCH_POST_COUNT = 24
+internal const val SEARCH_POST_COUNT = 24
 private const val VIEWER_POST_COUNT = 6
 private const val BENCHMARK_MEDIA_DURATION_MS = 2_000L

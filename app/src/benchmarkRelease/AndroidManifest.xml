@@ -41,5 +41,14 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".benchmark.BenchmarkDurationStartReceiver"
+            android:exported="true"
+            android:process=":benchmarkFixture">
+            <intent-filter>
+                <action android:name="com.theoriacodex.action.BENCHMARK_DURATION_START" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
