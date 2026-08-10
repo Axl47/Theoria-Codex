@@ -1,8 +1,10 @@
 package com.theoriacodex.app.media
 
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.domain.adapter.DurationMetadataSourceResult
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.SourceKey
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -12,6 +14,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -27,12 +30,13 @@ class AnimatedDurationEnrichmentServiceTest {
     fun `same post shares one cross-route flight`() = runTest {
         val probeStarted = CompletableDeferred<Unit>()
         val releaseProbe = CompletableDeferred<Unit>()
-        val resolveCalls = AtomicInteger()
+        val providerCalls = AtomicInteger()
         val probeCalls = AtomicInteger()
         val service = service(
-            resolvePost = { post ->
-                resolveCalls.incrementAndGet()
-                animatedPost(post.sourcePostId)
+            hasProviderDurationResolver = { true },
+            resolveProviderDuration = { post ->
+                providerCalls.incrementAndGet()
+                DurationMetadataSourceResult.AuthoritativeMedia(requireNotNull(post.full))
             },
             probeDuration = {
                 probeCalls.incrementAndGet()
@@ -47,7 +51,7 @@ class AnimatedDurationEnrichmentServiceTest {
         runCurrent()
         probeStarted.await()
 
-        assertEquals(1, resolveCalls.get())
+        assertEquals(0, providerCalls.get())
         assertEquals(1, probeCalls.get())
         releaseProbe.complete(Unit)
         advanceUntilIdle()
@@ -88,6 +92,44 @@ class AnimatedDurationEnrichmentServiceTest {
         advanceUntilIdle()
         assertTrue(jobs.all { job -> job.await()?.durationMs == 1_000L })
         assertEquals(2, maximum.get())
+        service.close()
+    }
+
+    @Test
+    fun `default acquisition permits only one probe worker`() = runTest {
+        val active = AtomicInteger()
+        val maximum = AtomicInteger()
+        val started = Channel<Unit>(Channel.UNLIMITED)
+        val release = Channel<Unit>(Channel.UNLIMITED)
+        val service = service(
+            probeDuration = {
+                val count = active.incrementAndGet()
+                maximum.updateAndGet { previous -> maxOf(previous, count) }
+                started.send(Unit)
+                try {
+                    release.receive()
+                    1_000L
+                } finally {
+                    active.decrementAndGet()
+                }
+            },
+        )
+
+        val first = async { service.enrich(animatedPost("default-one")) }
+        val second = async { service.enrich(animatedPost("default-two")) }
+        runCurrent()
+        started.receive()
+        assertFalse(started.tryReceive().isSuccess)
+
+        release.send(Unit)
+        runCurrent()
+        started.receive()
+        release.send(Unit)
+        advanceUntilIdle()
+
+        assertEquals(1_000L, first.await()?.durationMs)
+        assertEquals(1_000L, second.await()?.durationMs)
+        assertEquals(1, maximum.get())
         service.close()
     }
 
@@ -216,13 +258,18 @@ class AnimatedDurationEnrichmentServiceTest {
     }
 
     @Test
-    fun `known duration bypasses resolve and probe`() = runTest {
-        var resolves = 0
+    fun `known duration bypasses provider and probe`() = runTest {
+        var providerChecks = 0
+        var providerCalls = 0
         var probes = 0
         val service = service(
-            resolvePost = {
-                resolves += 1
-                null
+            hasProviderDurationResolver = {
+                providerChecks += 1
+                true
+            },
+            resolveProviderDuration = {
+                providerCalls += 1
+                DurationMetadataSourceResult.Unsupported
             },
             probeDuration = {
                 probes += 1
@@ -233,13 +280,15 @@ class AnimatedDurationEnrichmentServiceTest {
         val result = service.enrich(animatedPost("known").copy(durationMs = 7_500L))
 
         assertEquals(7_500L, result?.durationMs)
-        assertEquals(0, resolves)
+        assertEquals(0, providerChecks)
+        assertEquals(0, providerCalls)
         assertEquals(0, probes)
         service.close()
     }
 
     @Test
-    fun `failed detail resolution never measures a preview-only autoplay clip`() = runTest {
+    fun `preview-only autoplay clip settles without provider hydration or probe`() = runTest {
+        var providerCalls = 0
         var probes = 0
         val previewOnly = animatedPost("preview-only").copy(
             full = null,
@@ -252,7 +301,11 @@ class AnimatedDurationEnrichmentServiceTest {
             ),
         )
         val service = service(
-            resolvePost = { null },
+            hasProviderDurationResolver = { false },
+            resolveProviderDuration = {
+                providerCalls += 1
+                DurationMetadataSourceResult.Unsupported
+            },
             probeDuration = {
                 probes += 1
                 3_000L
@@ -260,7 +313,142 @@ class AnimatedDurationEnrichmentServiceTest {
         )
 
         assertNull(enrich(service, previewOnly))
+        assertEquals(0, providerCalls)
         assertEquals(0, probes)
+        service.close()
+    }
+
+    @Test
+    fun `existing authoritative full video skips optional provider resolution`() = runTest {
+        var providerCalls = 0
+        var probes = 0
+        val service = service(
+            hasProviderDurationResolver = { true },
+            resolveProviderDuration = {
+                providerCalls += 1
+                DurationMetadataSourceResult.Known(9_000L)
+            },
+            probeDuration = {
+                probes += 1
+                4_800L
+            },
+        )
+
+        assertEquals(4_800L, enrich(service, animatedPost("direct-video"))?.durationMs)
+        assertEquals(0, providerCalls)
+        assertEquals(1, probes)
+        service.close()
+    }
+
+    @Test
+    fun `provider known duration skips native probe`() = runTest {
+        var providerCalls = 0
+        var probes = 0
+        val post = animatedPost("provider-known").copy(full = null)
+        val service = service(
+            hasProviderDurationResolver = { true },
+            resolveProviderDuration = {
+                providerCalls += 1
+                DurationMetadataSourceResult.Known(8_100L)
+            },
+            probeDuration = {
+                probes += 1
+                null
+            },
+        )
+
+        assertEquals(8_100L, enrich(service, post)?.durationMs)
+        assertEquals(1, providerCalls)
+        assertEquals(0, probes)
+        service.close()
+    }
+
+    @Test
+    fun `provider authoritative video is the only provider media sent to probe`() = runTest {
+        val authoritative = ImageRef(
+            url = "https://example.test/provider-full.mp4",
+            localPath = null,
+            mime = "video/mp4",
+        )
+        var probedPost: Post? = null
+        val service = service(
+            hasProviderDurationResolver = { true },
+            resolveProviderDuration = {
+                DurationMetadataSourceResult.AuthoritativeMedia(authoritative)
+            },
+            probeDuration = { post ->
+                probedPost = post
+                6_400L
+            },
+        )
+
+        val result = enrich(service, animatedPost("provider-media").copy(full = null))
+
+        assertEquals(6_400L, result?.durationMs)
+        assertEquals(authoritative, probedPost?.full)
+        service.close()
+    }
+
+    @Test
+    fun `unsupported Hitomi animated gallery does no full-gallery provider or probe work`() = runTest {
+        var providerCalls = 0
+        var probes = 0
+        val animatedWebpCover = ImageRef(
+            url = "https://a.hitomi.la/webp/gallery-cover.webp",
+            localPath = null,
+            mime = "image/webp",
+            isAnimated = true,
+        )
+        val post = testPost(
+            source = SourceKey.HITOMI,
+            sourcePostId = "4042375",
+            preview = animatedWebpCover,
+            full = null,
+            media = emptyList(),
+            mediaCount = 44,
+        )
+        val service = service(
+            hasProviderDurationResolver = { false },
+            resolveProviderDuration = {
+                providerCalls += 1
+                DurationMetadataSourceResult.Unsupported
+            },
+            probeDuration = {
+                probes += 1
+                null
+            },
+        )
+
+        assertNull(enrich(service, post))
+        assertEquals(0, providerCalls)
+        assertEquals(0, probes)
+        service.close()
+    }
+
+    @Test
+    fun `complete acquisition is cancelled at its operation timeout`() = runTest {
+        val probeStarted = CompletableDeferred<Unit>()
+        val probeCancelled = CompletableDeferred<Unit>()
+        val service = service(
+            operationTimeoutMs = 100L,
+            probeDuration = {
+                probeStarted.complete(Unit)
+                try {
+                    awaitCancellation()
+                } finally {
+                    probeCancelled.complete(Unit)
+                }
+            },
+        )
+        val result = async { service.enrich(animatedPost("timeout")) }
+        runCurrent()
+        probeStarted.await()
+
+        advanceTimeBy(101L)
+        advanceUntilIdle()
+
+        assertNull(result.await())
+        assertTrue(probeCancelled.isCompleted)
         service.close()
     }
 
@@ -301,22 +489,28 @@ class AnimatedDurationEnrichmentServiceTest {
     }
 
     private fun kotlinx.coroutines.test.TestScope.service(
-        resolvePost: suspend (com.theoriacodex.domain.model.PostId) -> Post? = { null },
+        hasProviderDurationResolver: (Post) -> Boolean = { false },
+        resolveProviderDuration: suspend (Post) -> DurationMetadataSourceResult = {
+            DurationMetadataSourceResult.Unsupported
+        },
         probeDuration: suspend (Post) -> Long?,
         clock: () -> Long = { 0L },
         successCacheSize: Int = 128,
         negativeCacheSize: Int = 128,
         negativeTtlMs: Long = 300_000L,
-        maxConcurrentWork: Int = 3,
+        maxConcurrentWork: Int = 1,
+        operationTimeoutMs: Long = 12_000L,
     ): AnimatedDurationEnrichmentService {
         return AnimatedDurationEnrichmentService(
-            resolvePost = resolvePost,
+            hasProviderDurationResolver = hasProviderDurationResolver,
+            resolveProviderDuration = resolveProviderDuration,
             probeDurationMs = probeDuration,
             clock = clock,
             successCacheSize = successCacheSize,
             negativeCacheSize = negativeCacheSize,
             negativeTtlMs = negativeTtlMs,
             maxConcurrentWork = maxConcurrentWork,
+            operationTimeoutMs = operationTimeoutMs,
             scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler)),
         )
     }

@@ -11,6 +11,7 @@ import com.theoriacodex.app.R
 import com.theoriacodex.app.media.AnimatedDurationEnrichment
 import com.theoriacodex.app.media.AnimatedDurationEnrichmentLane
 import com.theoriacodex.app.media.AnimatedDurationEnrichmentService
+import com.theoriacodex.domain.adapter.DurationMetadataSourceResult
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -52,8 +53,13 @@ internal class BenchmarkDurationWorkload(
 ) : AutoCloseable {
     private val initialPostsById = initialPosts.associateBy(Post::id)
     private val service = AnimatedDurationEnrichmentService(
-        resolvePost = { postId ->
-            traceDurationSuspend(TRACE_DURATION_RESOLVE) { initialPostsById[postId] }
+        hasProviderDurationResolver = { true },
+        resolveProviderDuration = { post ->
+            traceDurationSuspend(TRACE_DURATION_RESOLVE) {
+                initialPostsById[post.id]?.full
+                    ?.let(DurationMetadataSourceResult::AuthoritativeMedia)
+                    ?: DurationMetadataSourceResult.Unsupported
+            }
         },
         probeDurationMs = {
             traceDurationSuspend(TRACE_DURATION_PROBE) {

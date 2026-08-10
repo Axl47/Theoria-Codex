@@ -1,6 +1,6 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-10T06:12:00-04:00
+updated_at: 2026-08-10T06:26:00-04:00
 ---
 # Working List
 
@@ -8,12 +8,11 @@ updated_at: 2026-08-10T06:12:00-04:00
 
 ### In Progress
 
-- [~] Phase 1: make duration acquisition capability-aware and bounded.
-  - Required evidence: known values perform no work; existing authoritative full video skips provider hydration; optional provider duration capability replaces generic post resolution; unsupported Hitomi animated images avoid full-gallery work; one temporary probe worker and a 12-second timeout; focused policy/service/source tests.
+- [~] Phase 2: replace route drains with one prioritized application coordinator.
+  - Required evidence: pure bounded priority scheduler; per-fingerprint deduplication and promotion; deterministic ordering; stale ticket removal and shared-consumer isolation; application-wide observable state/single-flight; one probe and bounded provider work; active-filter/visible demand preempts background; no metadata-publication restart.
 
 ### Pending
 
-- [ ] Phase 2: replace route drains with one prioritized application coordinator.
 - [ ] Phase 3a: persist bounded duration decisions through Room schema 5.
 - [ ] Phase 3b: replace remote retriever probing with bounded MP4/WebM parsing.
 - [ ] Phase 4: migrate routes, players, badges, filters, and pagination to separate metadata state.
@@ -29,6 +28,8 @@ updated_at: 2026-08-10T06:12:00-04:00
   - Evidence: commit `6f4902d` (`docs(execplan): plan duration metadata performance rebuild`) contains only the plan and working-list handoff.
 - [x] Phase 0: freeze and run the isolated physical-device duration-enrichment baseline.
   - Evidence: commits `8ca9ecd` and `6bd7536` add the offline unknown-duration journey, current-lane local probe, explicit measured start/settled signals, stable metrics, fresh fixture state per iteration, artifact/package guards, and documentation. Host contract tests, benchmark compilation, task-graph dry run, target/runner packaged verifiers, and one valid full physical suite pass. Samsung SM-S926U / Android 16 completed five methods with zero failures; 24/24 duration decisions and every visible autoplay assertion passed. JSON plus 35 traces and individual hashes are preserved under `build/reports/duration-metadata-performance/baseline-6bd7536/`; the earlier invalid harness attempt is preserved separately rather than overwritten.
+- [x] Phase 1: make duration acquisition capability-aware and bounded.
+  - Evidence: platform-free contracts now own opaque media keys/fingerprints, typed decisions/demand, and acquisition order; core-domain exposes only an optional duration metadata capability. The shared service checks known values and existing full video first, never calls generic `resolvePost`, rejects preview-only and sparse Hitomi animated-image work without provider/probe calls, limits default work to one, and applies a 12-second timeout. Full `app-logic` and core-domain tests, 24 focused service/architecture tests, Debug/benchmark compilation, and `app-logic:detekt` pass. `core-domain:detekt` remains red only on its three inherited untouched complexity/length findings.
 
 ## Current Task: Repair Animated Duration Metadata And Filtering
 

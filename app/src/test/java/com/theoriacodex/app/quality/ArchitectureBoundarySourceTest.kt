@@ -247,6 +247,26 @@ class ArchitectureBoundarySourceTest {
             "The application-owned service guard became vacuous",
             serviceConstruction.containsMatchIn(File(repositoryRoot, containerPath).readText()),
         )
+        val service = File(repositoryRoot, servicePath).readText()
+        val sourceAdapter = File(
+            repositoryRoot,
+            "core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceAdapter.kt",
+        ).readText()
+        assertTrue(
+            "Duration metadata must be an optional narrow source capability",
+            "interface DurationMetadataSourceAdapter" in sourceAdapter &&
+                "resolveDurationMetadata(post: Post)" in sourceAdapter,
+        )
+        assertTrue(
+            "Duration acquisition must not hydrate complete posts through the generic source API",
+            "resolvePost(" !in service && "DurationMetadataSourceAdapter" in service,
+        )
+        assertTrue(
+            "Temporary duration acquisition must retain one worker and a 12-second timeout",
+            "DEFAULT_MAX_CONCURRENT_WORK = 1" in service &&
+                "DEFAULT_OPERATION_TIMEOUT_MS = 12_000L" in service &&
+                "withTimeoutOrNull(operationTimeoutMs)" in service,
+        )
     }
 
     private fun appProductionSources(): Sequence<File> = kotlinSourcesUnder("app/src/main")

@@ -124,7 +124,7 @@
       <span class="pill">Plan: .docs/exec/duration-metadata-performance-rebuild.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next action</strong>Make acquisition capability-aware and bounded without changing the frozen benchmark contract.</div>
+      <div class="card"><strong>Next action</strong>Introduce the application-wide prioritized coordinator and prove its scheduling independently before migrating routes.</div>
       <div class="card"><strong>Primary risk</strong>Background duration work currently competes with visible playback and can cause pagination to create more work.</div>
       <div class="card"><strong>Final proof</strong>Same device, asset, workload, gestures, iterations, metrics, and artifact-retention procedure before and after.</div>
       <div class="card"><strong>Protected behavior</strong>Every visibly presented animated or video card continues autoplaying simultaneously.</div>
@@ -161,7 +161,7 @@
         <tr><td>Repository baseline</td><td><code>main</code> at <code>6bd7536</code> (<code>fix(performance): reset benchmark fixture between iterations</code>), after benchmark-only instrumentation and before any duration behavior repair.</td></tr>
         <tr><td>Working tree</td><td>Phase 0 evidence is preserved under <code>build/reports/duration-metadata-performance/baseline-6bd7536/</code>. The active tracked changes are this living-plan evidence and the next implementation phase.</td></tr>
         <tr><td>Current live evidence</td><td>All five physical benchmark methods passed on Samsung SM-S926U / Android 16. The duration journey settled 24/24 decisions in every iteration while every visible preview continued playing.</td></tr>
-        <tr><td>Next action</td><td>Implement Phase 1 capability-aware acquisition, preserving the exact benchmark asset, journeys, gestures, assertions, metrics, package, process, and iteration counts for the final comparison.</td></tr>
+        <tr><td>Next action</td><td>Implement Phase 2's pure priority scheduler and application-scoped coordinator, preserving the exact benchmark contract for the final comparison.</td></tr>
       </tbody></table>
       <div class="callout risk"><strong>Baseline gate:</strong> only benchmark harness, trace instrumentation, tests, and documentation may change before the first physical run. If any user-visible or duration-selection behavior changes first, reset the measurement sequence by capturing a new baseline from the last pre-fix commit.</div>
     </section>
@@ -308,7 +308,7 @@
 
       <article id="phase-1">
         <h3>Phase 1: Make acquisition capability-aware and bounded</h3>
-        <p class="phase-status">Status: In progress. Phase 0 baseline gate is satisfied.</p>
+        <p class="phase-status done">Status: Completed 2026-08-10. Phase 0 baseline gate was satisfied first.</p>
         <table class="status-table"><tbody>
           <tr><td>Goal</td><td>Stop full provider hydration and native probing when the post is already known, directly probeable, or unsupported.</td></tr>
           <tr><td>Primary files</td><td><code>app-logic/.../media/</code>, <code>core-domain/.../adapter/SourceAdapter.kt</code>, <code>app/.../media/AnimatedDurationEnrichmentService.kt</code>, source adapter tests.</td></tr>
@@ -321,12 +321,13 @@
           <li>Implement Hitomi behavior explicitly: sparse anime MP4 is directly probeable; animated gallery WebP/cover media is Unsupported unless the adapter can identify one authoritative full animation. Do not fetch and hydrate every gallery file for duration.</li>
           <li>Set the temporary probe worker count to one and apply the 12-second operation timeout. The final bounded parser arrives in Phase 3.</li>
         </ol>
+        <p><strong>Result:</strong> <code>MediaDurationState.kt</code> now owns the platform-free key, SHA-256 media fingerprint, typed state/provenance/failure decisions, demand priority/reason, and acquisition planner. <code>DurationMetadataSourceAdapter</code> is an optional narrow source capability. The temporary service probes an already-present authoritative full video before considering a provider, never calls generic <code>resolvePost</code>, settles unsupported/preview-only media without hydration, uses one default worker, and cancels the whole acquisition after 12 seconds. Hitomi anime MP4 remains directly probeable; sparse animated-WebP galleries perform neither full-gallery hydration nor probing.</p>
         <p><strong>Acceptance:</strong> tests prove known posts do zero provider/probe work; existing full video skips provider detail; unsupported Hitomi animated image posts do zero full-gallery hydration; duplicate route requests remain single-flight; cancellation and retry decisions remain isolated.</p>
       </article>
 
       <article id="phase-2">
         <h3>Phase 2: Introduce the application-wide prioritized coordinator</h3>
-        <p class="phase-status">Status: Not started.</p>
+        <p class="phase-status">Status: In progress after verified Phase 1.</p>
         <table class="status-table"><tbody>
           <tr><td>Goal</td><td>Replace equal-priority route drains with one scheduler that protects visible playback and rejects stale demand.</td></tr>
           <tr><td>Primary files</td><td>New <code>app-logic/.../media/DurationDemandScheduler.kt</code>; new <code>app/.../media/MediaDurationCoordinator.kt</code>; <code>TheoriaAppContainer.kt</code>; coordinator and scheduler tests.</td></tr>
@@ -511,8 +512,8 @@ Overrun penalty p90 = duration-on Search frameOverrunMs p90
         <li class="done">[x] 2026-08-10 — Agreed to put the physical baseline before all behavior changes and repeat the same benchmark after the rebuild.</li>
         <li class="done">[x] 2026-08-10 — Authored this standalone implementation and evidence plan.</li>
         <li class="done">[x] 2026-08-10 — Phase 0: froze the benchmark, repaired iteration reset after preserving the invalid attempt, passed five physical methods, and preserved/hashes the JSON plus 35 traces under <code>baseline-6bd7536</code>.</li>
-        <li>[ ] Phase 1 — Make acquisition capability-aware and bounded. In progress after the baseline gate.</li>
-        <li>[ ] Phase 2 — Introduce the prioritized application coordinator.</li>
+        <li class="done">[x] 2026-08-10 — Phase 1: added pure state/fingerprint/planning contracts, optional provider metadata capability, direct-full-video acquisition, unsupported short-circuiting, one worker, and the 12-second timeout.</li>
+        <li>[ ] Phase 2 — Introduce the prioritized application coordinator. In progress after focused Phase 1 validation.</li>
         <li>[ ] Phase 3 — Persist decisions and replace remote retriever probing.</li>
         <li>[ ] Phase 4 — Switch every route/player/filter and remove the old lanes.</li>
         <li>[ ] Phase 5 — Complete host acceptance, repeat the physical benchmark, compare, and close out.</li>
@@ -529,6 +530,7 @@ Overrun penalty p90 = duration-on Search frameOverrunMs p90
         <li><strong>Observation:</strong> Viewer already reads ExoPlayer duration, and Ugoira/GIF/WebP players have local timing knowledge, but none publishes authoritative duration to shared feed metadata.</li>
         <li><strong>Observation:</strong> Macrobenchmark reuses an interaction fixture activity across iterations unless the fixture intent explicitly clears its isolated task. The first attempt therefore saw a prior <code>Settled 24/24</code> state during setup. <strong>Evidence:</strong> the failed attempt is preserved under <code>failed-8ca9ecd-20260810T0950Z</code>; commit <code>6bd7536</code> freezes <code>FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK</code> and the subsequent full run passed.</li>
         <li><strong>Observation:</strong> the offline baseline shows no aggregate p90 frame penalty after within-run control normalization (-0.082 ms CPU, -0.037 ms overrun), while still proving the old system performs 24 resolves, 24 native probes, and three whole-list publications. <strong>Interpretation:</strong> the final gate uses the plan's low-penalty no-regression threshold plus workload/count/correctness evidence; it must not claim a 30% frame-penalty reduction from this baseline.</li>
+        <li><strong>Observation:</strong> Hitomi's sparse anime result already carries its canonical MP4, while a sparse animated-WebP gallery carries only a cover and media count. The shared planner can therefore probe anime directly and settle galleries unsupported without any Hitomi-specific full-post hydration.</li>
       </ul>
 
       <h3>Decision Log</h3>
@@ -542,7 +544,7 @@ Overrun penalty p90 = duration-on Search frameOverrunMs p90
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>Phase 0 outcome: the benchmark contract is frozen and its pre-fix physical evidence is preserved. The valid run at <code>6bd7536</code> passed every method and every duration/autoplay invariant. The normalized p90 frame penalty is already within the low-penalty branch, so final success requires no regression above 0.5 ms plus no worse duration-on p90 values, stable autoplay/media counters, 24/24 settlement, and materially cheaper acquisition/publication architecture. Continue updating this section after each production phase.</p>
+      <p>Phase 0 froze and preserved the benchmark contract. Phase 1 removed the generic full-post hydration fallback and bounded the remaining temporary acquisition path before a second scheduling system was introduced. Platform-free and domain tests, focused service/architecture tests, Debug and benchmark compilation, and <code>app-logic</code> Detekt pass. <code>core-domain</code> Detekt still reports only three inherited findings in untouched <code>UnifiedSearchOrchestrator</code> and <code>ForYouTagSetGenerator</code>. Continue with one coordinator rather than extending the old lanes.</p>
     </section>
 
     <section id="recovery">

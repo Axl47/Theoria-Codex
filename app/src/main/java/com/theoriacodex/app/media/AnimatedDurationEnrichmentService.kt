@@ -1,5 +1,7 @@
 package com.theoriacodex.app.media
 
+import com.theoriacodex.domain.adapter.DurationMetadataSourceAdapter
+import com.theoriacodex.domain.adapter.DurationMetadataSourceResult
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
@@ -16,23 +18,32 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Application-owned duration resolver shared by every feed route. */
 internal class AnimatedDurationEnrichmentService(
-    private val resolvePost: suspend (PostId) -> Post?,
+    private val hasProviderDurationResolver: (Post) -> Boolean,
+    private val resolveProviderDuration: suspend (Post) -> DurationMetadataSourceResult,
     private val probeDurationMs: suspend (Post) -> Long?,
     private val clock: () -> Long = System::currentTimeMillis,
     private val successCacheSize: Int = DEFAULT_SUCCESS_CACHE_SIZE,
     private val negativeCacheSize: Int = ANIMATED_DURATION_ENRICHMENT_NEGATIVE_DECISION_LIMIT,
     private val negativeTtlMs: Long = ANIMATED_DURATION_ENRICHMENT_NEGATIVE_TTL_MS,
     maxConcurrentWork: Int = DEFAULT_MAX_CONCURRENT_WORK,
+    private val operationTimeoutMs: Long = DEFAULT_OPERATION_TIMEOUT_MS,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) : AnimatedDurationEnricher, AutoCloseable {
     constructor(
         registry: SourceAdapterRegistry,
         scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     ) : this(
-        resolvePost = { postId -> registry.adapterFor(postId.source)?.resolvePost(postId) },
+        hasProviderDurationResolver = { post ->
+            registry.adapterFor(post.id.source) is DurationMetadataSourceAdapter
+        },
+        resolveProviderDuration = { post ->
+            val adapter = registry.adapterFor(post.id.source) as? DurationMetadataSourceAdapter
+            adapter?.resolveDurationMetadata(post) ?: DurationMetadataSourceResult.Unsupported
+        },
         probeDurationMs = ::probeRemoteVideoDurationMs,
         scope = scope,
     )
@@ -47,6 +58,7 @@ internal class AnimatedDurationEnrichmentService(
         require(successCacheSize > 0) { "Success cache size must be positive" }
         require(negativeCacheSize > 0) { "Negative cache size must be positive" }
         require(negativeTtlMs > 0L) { "Negative cache TTL must be positive" }
+        require(operationTimeoutMs > 0L) { "Duration acquisition timeout must be positive" }
     }
 
     override suspend fun enrich(post: Post): AnimatedDurationEnrichment? {
@@ -111,13 +123,10 @@ internal class AnimatedDurationEnrichmentService(
 
     private suspend fun compute(post: Post): AnimatedDurationEnrichment? {
         val result = workPermits.withPermit {
-            val resolved = runCatchingPreservingCancellation { resolvePost(post.id) }.getOrNull() ?: post
-            val duration = animatedDurationMs(resolved)
-                ?: authoritativeDurationProbeRef(resolved)?.let {
-                    runCatchingPreservingCancellation { probeDurationMs(resolved) }.getOrNull()
+            withTimeoutOrNull(operationTimeoutMs) {
+                acquireDuration(post)?.takeIf { durationMs -> durationMs > 0L }?.let { durationMs ->
+                    AnimatedDurationEnrichment(post.id, durationMs)
                 }
-            duration?.takeIf { value -> value > 0L }?.let { value ->
-                AnimatedDurationEnrichment(post.id, value)
             }
         }
         lock.withLock {
@@ -129,6 +138,51 @@ internal class AnimatedDurationEnrichmentService(
             }
         }
         return result
+    }
+
+    private suspend fun acquireDuration(post: Post): Long? {
+        return when (
+            planDurationAcquisition(
+                DurationAcquisitionFacts(
+                    knownDurationMs = animatedDurationMs(post),
+                    persistedState = null,
+                    hasAuthoritativeFullVideo = authoritativeDurationProbeRef(post) != null,
+                    hasProviderDurationResolver = hasProviderDurationResolver(post),
+                ),
+            )
+        ) {
+            is DurationAcquisitionPlan.AlreadyKnown -> animatedDurationMs(post)
+            is DurationAcquisitionPlan.UsePersisted -> null
+            DurationAcquisitionPlan.ProbeAuthoritativeMedia -> probe(post)
+            DurationAcquisitionPlan.AskProvider -> acquireFromProvider(post)
+            is DurationAcquisitionPlan.Unsupported -> null
+        }
+    }
+
+    private suspend fun acquireFromProvider(post: Post): Long? {
+        return when (
+            val providerResult = runCatchingPreservingCancellation {
+                resolveProviderDuration(post)
+            }.getOrNull() ?: return null
+        ) {
+            is DurationMetadataSourceResult.Known -> providerResult.durationMs
+            is DurationMetadataSourceResult.AuthoritativeMedia -> {
+                val probePost = post.copy(
+                    full = providerResult.media,
+                    media = listOf(providerResult.media),
+                )
+                if (authoritativeDurationProbeRef(probePost) == null) null else probe(probePost)
+            }
+            DurationMetadataSourceResult.Unsupported,
+            DurationMetadataSourceResult.RetryableFailure,
+            -> null
+        }
+    }
+
+    private suspend fun probe(post: Post): Long? {
+        return runCatchingPreservingCancellation { probeDurationMs(post) }
+            .getOrNull()
+            ?.takeIf { durationMs -> durationMs > 0L }
     }
 
     private data class SharedWork(
@@ -156,7 +210,8 @@ internal class AnimatedDurationEnrichmentService(
     }
 
     private companion object {
-        const val DEFAULT_MAX_CONCURRENT_WORK = 3
+        const val DEFAULT_MAX_CONCURRENT_WORK = 1
         const val DEFAULT_SUCCESS_CACHE_SIZE = 128
+        const val DEFAULT_OPERATION_TIMEOUT_MS = 12_000L
     }
 }

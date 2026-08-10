@@ -39,6 +39,23 @@ interface MediaRecoverySourceAdapter {
     ): Post?
 }
 
+/** Optional, narrow metadata capability that avoids hydrating a complete post for one duration. */
+interface DurationMetadataSourceAdapter {
+    suspend fun resolveDurationMetadata(post: Post): DurationMetadataSourceResult
+}
+
+sealed interface DurationMetadataSourceResult {
+    data class Known(val durationMs: Long) : DurationMetadataSourceResult {
+        init {
+            require(durationMs > 0L) { "Provider duration must be positive" }
+        }
+    }
+
+    data class AuthoritativeMedia(val media: ImageRef) : DurationMetadataSourceResult
+    data object Unsupported : DurationMetadataSourceResult
+    data object RetryableFailure : DurationMetadataSourceResult
+}
+
 data class FacetedSearchScope(
     val facet: SearchFacet? = null,
     val sourceNamespace: String? = null,
