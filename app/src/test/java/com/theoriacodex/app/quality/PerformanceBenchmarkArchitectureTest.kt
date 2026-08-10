@@ -260,6 +260,10 @@ class PerformanceBenchmarkArchitectureTest {
                 "device.requireDurationSettled()" in benchmark,
         )
         assertTrue(
+            "Every fixture iteration must start from fresh activity-owned state",
+            "Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK" in benchmark,
+        )
+        assertTrue(
             "Duration benchmark contract must retain five iterations and three down/up flings",
             "INTERACTION_ITERATIONS = 5" in benchmark &&
                 "SEARCH_SCROLL_STEPS = 3" in benchmark,

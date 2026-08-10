@@ -200,6 +200,7 @@ class TheoriaMacrobenchmark {
         return Intent(ACTION_BENCHMARK_FIXTURE)
             .setComponent(ComponentName(TARGET_PACKAGE, FIXTURE_ACTIVITY))
             .putExtra(EXTRA_SCENARIO, scenario)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
     }
 
     private fun countMetric(section: String, label: String): TraceSectionMetric {
