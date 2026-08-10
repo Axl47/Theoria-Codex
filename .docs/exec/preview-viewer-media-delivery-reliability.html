@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Improve Preview and Viewer Media Delivery</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f4;
+      --surface: #ffffff;
+      --text: #202124;
+      --muted: #5f6368;
+      --border: #d7d7d0;
+      --accent: #0f766e;
+      --accent-soft: #dff3ef;
+      --risk: #9a3412;
+      --risk-soft: #ffedd5;
+      --code: #111827;
+      --done: #166534;
+      --done-soft: #dcfce7;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151716;
+        --surface: #202321;
+        --text: #f0f2ef;
+        --muted: #b8beb7;
+        --border: #3a403c;
+        --accent: #5eead4;
+        --accent-soft: #123b37;
+        --risk: #fdba74;
+        --risk-soft: #43230f;
+        --code: #0b0f0d;
+        --done: #86efac;
+        --done-soft: #14351f;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header, main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    header { padding-top: 36px; }
+    h1, h2, h3, h4 { line-height: 1.15; margin: 0 0 12px; }
+    h1 { font-size: clamp(2rem, 4vw, 3.2rem); }
+    h2 { margin-top: 36px; font-size: 1.55rem; }
+    h3 { margin-top: 24px; font-size: 1.12rem; }
+    h4 { margin-top: 18px; font-size: 1rem; }
+    p { margin: 0 0 14px; }
+    ul, ol { margin-top: 8px; }
+    li + li { margin-top: 6px; }
+    a { color: var(--accent); }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-block: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(10px);
+    }
+    nav ul {
+      display: flex;
+      gap: 6px;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 8px 24px;
+      list-style: none;
+      overflow-x: auto;
+    }
+    nav li { margin: 0; }
+    nav a {
+      display: block;
+      padding: 6px 10px;
+      border-radius: 6px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    nav a:hover { background: var(--accent-soft); }
+    section {
+      padding: 22px;
+      margin: 18px 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    article + article {
+      margin-top: 30px;
+      padding-top: 22px;
+      border-top: 1px solid var(--border);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 0.94rem;
+    }
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 650; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      overflow-x: auto;
+      padding: 14px;
+      border-radius: 8px;
+      background: var(--code);
+      color: #f8fafc;
+    }
+    details {
+      margin: 12px 0;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+    }
+    summary { cursor: pointer; font-weight: 700; }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0;
+      color: var(--muted);
+    }
+    .pill {
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+    }
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin: 18px 0 0;
+    }
+    .card {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    .card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .callout {
+      margin: 14px 0;
+      padding: 12px 14px;
+      border-left: 4px solid var(--accent);
+      background: var(--accent-soft);
+      border-radius: 6px;
+    }
+    .risk {
+      border-left-color: var(--risk);
+      background: var(--risk-soft);
+    }
+    .done {
+      border-left-color: var(--done);
+      background: var(--done-soft);
+    }
+    .status-table td:first-child {
+      width: 190px;
+      color: var(--muted);
+      font-weight: 650;
+    }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin: 14px 0;
+    }
+    .flow div {
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+    }
+    .flow strong { display: block; margin-bottom: 4px; }
+    .phase-status { color: var(--muted); font-weight: 650; }
+
+    @media print {
+      nav { position: static; }
+      section, .card { break-inside: avoid; }
+      body { background: #fff; color: #000; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Make Preview and Viewer media delivery faster and more reliable</h1>
+    <p>This plan makes existing Pixiv, Gelbooru, NHentai, and Hitomi media appear with less avoidable waiting and recover cleanly when a request fails. It repairs generic retry, chooses the media nearest to the current Viewer position for prefetch, reuses one playback cache, distinguishes quality upgrades from failure fallbacks, bounds Pixiv Ugoira memory, and removes duplicate provider work without changing the app's simultaneous-autoplay contract.</p>
+    <div class="meta" role="group" aria-label="Plan metadata">
+      <span class="pill">Status: Proposed — wait for duration/scroll acceptance</span>
+      <span class="pill">Owner: Codex</span>
+      <span class="pill">Created: 2026-08-10</span>
+      <span class="pill">Updated: 2026-08-10</span>
+      <span class="pill">Plan: .docs/exec/preview-viewer-media-delivery-reliability.html</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next action</strong>After the current duration/scroll work reaches an accepted commit, rerun Phase 0 against that exact HEAD and freeze the media-delivery baseline before changing behavior.</div>
+      <div class="card"><strong>Main risk</strong>Viewer, player ownership, and Pixiv Ugoira overlap the active performance work. Starting early could invalidate both baselines or reintroduce lifecycle churn.</div>
+      <div class="card"><strong>Validation</strong>Deterministic retry/candidate/prefetch tests, provider adapter tests, isolated Debug behavior, request-count traces, same-device cold/warm timings, and bounded-memory evidence.</div>
+      <div class="card"><strong>Affected areas</strong>Shared media policy, Search cards, Viewer reducer/route/prefetch, Media3 infrastructure, Pixiv auth/Ugoira, and Hitomi gallery hydration.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#status">Status</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#findings">Findings</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#work-plan">Work Plan</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#living-log">Living Log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+      <li><a href="#appendix">Appendix</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>After this plan is complete, Preview cards use every already-known safe image candidate before giving up or contacting the provider again. Viewer opens immediately when the selected post already has usable media. Swiping warms the nearest media instead of unrelated entries at the beginning of the session. A failed image, video, animated WebP, GIF, or Pixiv Ugoira always offers a real retry that starts a new load, while provider-specific recovery can replace stale URLs in parallel.</p>
+      <p>Pixiv Ugoira no longer keeps an unbounded ZIP, duplicate archive entries, and every decoded frame in memory at once. Gelbooru retains its certificate-safe media normalization and uses the preview/sample/full data already returned by search. NHentai treats alternate extensions as failure fallbacks rather than quality upgrades. Hitomi retains its live <code>gg.js</code> CDN recovery while reusing the gallery manifest already fetched for Search when Viewer needs the full post.</p>
+      <div class="callout">
+        <strong>Observable completion:</strong> on the isolated Debug app, open one representative result from each source, retry an induced first request failure, and swipe through adjacent media. The Viewer mounts without an unnecessary provider wait when media is already present; Retry visibly restarts every media kind; only adjacent media is prefetched; warm swipes reuse cached bytes; and Pixiv Ugoira remains within the configured archive and decoded-memory budgets.
+      </div>
+      <div class="callout risk">
+        <strong>Hard boundary:</strong> this plan does not repair duration enrichment, duration filtering, feed scrolling, reusable feed-player ownership, card viewport callbacks, or the active duration performance ExecPlan. Do not edit <code>.docs/exec/duration-metadata-performance-rebuild.html</code> as part of this work. Preserve concurrent autoplay for every visibly presented animated or video card.
+      </div>
+    </section>
+
+    <section id="status">
+      <h2>Current Status</h2>
+      <table class="status-table">
+        <tbody>
+          <tr><td>Plan state</td><td>Proposed. The repository audit is complete; implementation has not begun.</td></tr>
+          <tr><td>Audit evidence</td><td>On 2026-08-10, 85 focused JVM tests across Viewer, media recovery, video prefetch, Pixiv Ugoira, and the four provider adapters passed with zero failures or errors. This proves the current contracts, not live performance or device reliability.</td></tr>
+          <tr><td>Implementation gate</td><td>Wait until the duration/scroll owner records an accepted stopping commit. Re-read affected files and update this plan if player or Viewer ownership changed. Do not build on stale line numbers or restore pre-repair player behavior.</td></tr>
+          <tr><td>Current checkout rule</td><td>Do not change <code>working_list.md</code> while authoring and committing this plan. When implementation is explicitly started, use the then-current project workflow without rewriting existing checklist history.</td></tr>
+          <tr><td>Out of scope</td><td>New providers, provider scraping rewrites, source search semantics, duration acquisition, single-active-card playback, reducing visible autoplay, database changes to saved posts, production-package installation, and speculative CDN host rewrites.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <p><em>Preview</em> means the shared card media rendered by <code>SearchResultCard</code> across Search, For You, Creator Profile, Recents, and Codex browsing. <em>Viewer</em> means the full-screen nested post/media pager. A <em>media delivery candidate</em> is one local path or remote URL that can represent the current image. A candidate may be a quality upgrade that should load after a lower-resolution image succeeds, or a failure fallback that should be tried only when the current candidate fails. <em>Prefetch</em> means warming bytes for media near the current Viewer item before the user swipes to it. <em>Single-flight</em> means concurrent requests for the same resource share one job rather than downloading or refreshing twice.</p>
+
+      <div class="flow" role="group" aria-label="Current media flow">
+        <div><strong>Provider adapter</strong>Builds <code>Post</code>, preview, full, explicit media, and source-specific URL candidates.</div>
+        <div><strong>Shared media policy</strong>Selects one Preview reference or the ordered Viewer media list.</div>
+        <div><strong>Preview or Viewer</strong>Builds Coil, Media3, GIF, WebP, or Ugoira work and reports local success/failure.</div>
+        <div><strong>Recovery and caches</strong>May refresh provider URLs, persist a resolved post, or reuse image/video/Ugoira data.</div>
+      </div>
+
+      <table>
+        <thead>
+          <tr><th>File or module</th><th>Current responsibility</th><th>Planned responsibility</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/media/PostMedia.kt</code></td><td>Selects Preview/full/media references and flattens <code>progressiveUrls</code>.</td><td>Own one typed, non-durable delivery plan that distinguishes proactive quality upgrades from failure-only fallbacks.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt</code></td><td>Renders the selected Preview reference and retries only its local candidate list.</td><td>Consume the shared delivery plan and fall back through already-known post media without duplicating selection rules.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt</code></td><td>Owns media rendering, local load state, proactive image upgrades, and the current flattened first-six prefetch request.</td><td>Render a reducer-owned reload generation, consume typed candidates, and submit a pure adjacent prefetch window.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/state/ViewerUiState.kt</code> and <code>ViewerStateReducer.kt</code></td><td>Own session-safe media errors and boolean-style prefetch readiness.</td><td>Make reload generation and truthful prefetch outcomes part of immutable Viewer state.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRoute.kt</code> and <code>ViewerRouteWorkflow.kt</code></td><td>Delegate Retry to optional source recovery and sometimes resolve before navigation.</td><td>Start a generic local reload immediately, refresh stale provider media independently, and block launch only when no usable media exists.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/ViewerViewModel.kt</code></td><td>Launches one independent prefetch job per requested media key.</td><td>Own a small prioritized queue, cancel stale work, and cap concurrency.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/ViewerVideoPrefetch.kt</code></td><td>Downloads complete videos up to 16 MiB into a separate 750 MiB cache and reports skipped large/partial media as available.</td><td>Retire after Media3-owned preloading is proven and migrated.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/VideoPlaybackInfrastructure.kt</code></td><td>Owns the process Media3 factories, request-scoped headers, cache identity, and 64 MiB playback cache.</td><td>Expose one cancellable preload seam using the same cache/data source identity as playback.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/PixivUgoiraPlayer.kt</code></td><td>Fetches metadata/ZIP, decodes all frames, retains eight playbacks, renders them, and exports MP4.</td><td>Use shared auth, bounded disk/archive handling, weighted decoded memory, request single-flight, sized decoding, and real retry.</td></tr>
+          <tr><td><code>core-sources/src/main/kotlin/com/theoriacodex/sources/pixiv/PixivSourceAdapter.kt</code></td><td>Refreshes Pixiv credentials independently for ordinary API requests.</td><td>Share one token-refresh coordinator with Ugoira without coupling source parsing to Android rendering.</td></tr>
+          <tr><td><code>core-sources/src/main/kotlin/com/theoriacodex/sources/hitomi/HitomiSourceAdapter.kt</code></td><td>Fetches and parses gallery JavaScript separately for sparse Search and full Viewer resolution.</td><td>Reuse a bounded, success-only, short-lived gallery manifest with per-gallery single-flight.</td></tr>
+          <tr><td><code>core-sources/src/main/kotlin/com/theoriacodex/sources/hitomi/HitomiMediaUrlResolver.kt</code></td><td>Owns mutable CDN configuration, candidate shards/formats, and one refresh per failed configuration version.</td><td>Remain the only CDN URL authority; the manifest cache must not freeze derived CDN URLs.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Provider boundaries that must remain</h3>
+      <ul>
+        <li><strong>Pixiv:</strong> retain source-scoped authorization and Referer headers. Static search results already contain medium/large/original image information; do not add a detail request merely to open a static illustration.</li>
+        <li><strong>Gelbooru:</strong> preserve <code>normalizeGelbooruMediaUrl</code> and certificate verification. Search already returns preview, sample, and full URLs; use them before resolving the post again.</li>
+        <li><strong>NHentai:</strong> preserve the primary API plus bounded mirror recovery. Alternate <code>webp</code>/<code>jpg</code>/<code>png</code>/<code>gif</code> locations are equivalent-format fallbacks, not progressively better images.</li>
+        <li><strong>Hitomi:</strong> preserve Nozomi pagination, bounded hydration concurrency, live <code>gg.js</code> configuration, alternate shards/formats, and 404-driven configuration refresh.</li>
+      </ul>
+    </section>
+
+    <section id="findings">
+      <h2>Audit Findings And Required Outcomes</h2>
+      <table>
+        <thead>
+          <tr><th>ID</th><th>Finding</th><th>Required outcome</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>F01</td><td>Image Retry delegates to <code>MediaRecoverySourceAdapter</code>; only Hitomi implements it. Pixiv, Gelbooru, and NHentai can leave the same failed request on screen. Video and Ugoira failures expose no equivalent Retry.</td><td>Every media kind restarts locally from a new reducer-owned generation. Provider refresh is optional parallel recovery, never the only retry.</td></tr>
+          <tr><td>F02</td><td>Viewer flattens the session, removes the current key, and prefetches the first six remaining items rather than media adjacent to the current position.</td><td>One pure planner returns only the configured left/right neighborhood in nearest-first order and rejects stale session work.</td></tr>
+          <tr><td>F03</td><td>Video prefetch reports skipped large/partial media as ready and uses a separate transport/cache from Media3 playback.</td><td>Prefetch states distinguish warmed, skipped, failed, and cancelled. Video warming uses the playback cache and request identity.</td></tr>
+          <tr><td>F04</td><td><code>progressiveUrls</code> represents quality ladders for Pixiv/Gelbooru but extension/shard fallbacks for NHentai/Hitomi. NHentai can request a nonexistent extension after a successful image as though it were an upgrade.</td><td>One application-owned delivery plan assigns proactive-upgrade or failure-only intent without changing the persisted <code>ImageRef</code> wire shape.</td></tr>
+          <tr><td>F05</td><td>Some Viewer launches await provider resolution even when the selected post already has usable media.</td><td>Navigate first with viable media; resolve in Viewer or after failure. Block only when no displayable media exists.</td></tr>
+          <tr><td>F06</td><td>Pixiv Ugoira reads the full ZIP, duplicates every entry in memory, decodes every bitmap, caches eight playbacks by count, and does not single-flight cache misses.</td><td>Spool and validate archives under hard limits, decode for the presentation size, retain decoded frames by byte weight, and share concurrent loads.</td></tr>
+          <tr><td>F07</td><td>Pixiv source requests and Ugoira own independent token refresh paths over the same credential store.</td><td>One refresh coordinator double-checks credentials under a mutex and shares the winning token with both paths.</td></tr>
+          <tr><td>F08</td><td>Hitomi sparse Search hydration and full Viewer resolution fetch the same gallery JavaScript separately.</td><td>Cache only the successful provider manifest for a short bounded interval; derive fresh CDN candidates through the existing resolver each time.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+
+      <article>
+        <h3>Phase 0: Reconcile ownership and freeze a media-delivery baseline</h3>
+        <p class="phase-status">Status: Proposed. Must start only after duration/scroll acceptance has a stable commit.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>Prove the implementation target still matches this audit and capture comparable correctness, request, timing, cache, and memory evidence before behavior changes.</td></tr>
+            <tr><td>Primary files</td><td>This ExecPlan, current Viewer/media files, focused test reports, and a new ignored report directory under <code>build/reports/preview-viewer-media-delivery/baseline-&lt;sha&gt;/</code>.</td></tr>
+            <tr><td>Commit</td><td><code>test(media): baseline preview and viewer delivery</code>, only if durable instrumentation or fixtures are added. Do not commit generated reports.</td></tr>
+            <tr><td>Acceptance</td><td>The exact HEAD, device/app identity, source sample class, commands, request counts, timings, cache sizes, and Ugoira memory are recorded. No user-visible behavior changes precede the baseline.</td></tr>
+          </tbody>
+        </table>
+        <ol>
+          <li>Read <code>AGENTS.md</code>, this plan, the completed/stable state of <code>duration-metadata-performance-rebuild.html</code>, <code>git status</code>, and the current versions of every file named in Context.</li>
+          <li>Run the focused audit tests from the Appendix. Add missing deterministic tests that only characterize current behavior: retry effects, prefetch key selection, skipped-video readiness, NHentai candidate activation, prelaunch resolution, Ugoira cache accounting, shared token refresh, and Hitomi duplicate manifest fetches.</li>
+          <li>Add or reuse trace/test hooks that record Preview request start/success/failure, Viewer mount/first image/first video frame/Ugoira first frame, prefetch key/outcome/bytes, provider resolve count, and Ugoira compressed/decoded bytes. Do not add frame-cadence logging.</li>
+          <li>On isolated Debug only, measure repeated cold and warm opens for one representative post per source plus one multi-page and one video/animated case where available. Record p50 and p90 separately; do not average unlike sources together.</li>
+        </ol>
+      </article>
+
+      <article>
+        <h3>Phase 1: Make Retry truthful for every Viewer media kind</h3>
+        <p class="phase-status">Status: Proposed.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>Tapping Retry always starts a new local load immediately; stale provider URL recovery can update the post without blocking that retry.</td></tr>
+            <tr><td>Primary files</td><td><code>app/src/main/java/com/theoriacodex/app/viewer/state/ViewerUiState.kt</code>, <code>app/src/main/java/com/theoriacodex/app/viewer/state/ViewerAction.kt</code>, <code>app/src/main/java/com/theoriacodex/app/viewer/state/ViewerStateReducer.kt</code>, <code>app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt</code>, <code>app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRoute.kt</code>, <code>app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRouteWorkflow.kt</code>, and <code>app/src/main/java/com/theoriacodex/app/media/RemoteMediaRecovery.kt</code>.</td></tr>
+            <tr><td>Commit</td><td><code>fix(viewer): make media retry restart every media kind</code></td></tr>
+            <tr><td>Acceptance</td><td>One induced first failure followed by Retry succeeds for image, video, GIF/WebP, and Ugoira fakes. A replaced session rejects late recovery. Hitomi stale URLs still refresh, and Pixiv/Gelbooru/NHentai can fall back to ordinary <code>resolvePost</code> when specialized recovery is unavailable.</td></tr>
+          </tbody>
+        </table>
+        <ol>
+          <li>Add a nonnegative <code>loadGeneration</code> to <code>ViewerMediaState</code> or an equivalent key-scoped immutable state. <code>ViewerAction.RetryMedia</code> clears the visible error, increments only the failed key, and emits a refresh effect without waiting for it.</li>
+          <li>Key Coil, Media3, GIF/WebP, and Ugoira construction/loading from the current media key plus <code>loadGeneration</code>. Preserve playback settings and the current page/media index.</li>
+          <li>Give video and Ugoira terminal states the same compact Retry action as images. Ugoira must report failure through the route state rather than retaining an isolated text-only error.</li>
+          <li>Change route recovery to try specialized <code>MediaRecoverySourceAdapter</code> behavior first, then a normal adapter <code>resolvePost</code> for providers without specialized media recovery. Persist only a successfully resolved replacement through the existing stream-aware boundary.</li>
+          <li>Keep automatic recovery bounded to one attempt per failed media identity/configuration. User Retry may start a new generation, but must not create an unbounded recovery loop.</li>
+        </ol>
+      </article>
+
+      <article>
+        <h3>Phase 2: Centralize Preview and Viewer candidate intent</h3>
+        <p class="phase-status">Status: Proposed.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>Preview and Viewer share one ordered media delivery plan while preserving provider-specific quality and failover behavior.</td></tr>
+            <tr><td>Primary files</td><td><code>app/src/main/java/com/theoriacodex/app/media/PostMedia.kt</code>, <code>app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt</code>, <code>app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt</code>, <code>app/src/test/java/com/theoriacodex/app/media/PostMediaTest.kt</code>, <code>app/src/test/java/com/theoriacodex/app/search/SearchScreenMediaBehaviorTest.kt</code>, and <code>app/src/test/java/com/theoriacodex/app/viewer/ViewerScreenImagePipelineTest.kt</code>.</td></tr>
+            <tr><td>Commit</td><td><code>refactor(media): type preview and viewer candidate intent</code></td></tr>
+            <tr><td>Acceptance</td><td>Pixiv/Gelbooru may upgrade after success; NHentai/Hitomi alternatives activate only after failure. Preview falls back to known sample/full/page-one media before re-resolving. No persisted <code>Post</code> or <code>ImageRef</code> schema changes.</td></tr>
+          </tbody>
+        </table>
+        <ol>
+          <li>Introduce an application-only <code>MediaDeliveryCandidate</code> with location and activation intent such as <code>PRIMARY</code>, <code>QUALITY_UPGRADE</code>, or <code>FAILURE_FALLBACK</code>. Keep it out of Room/Gson/provider wire models.</li>
+          <li>Replace <code>searchCardImageCandidates</code>, <code>viewerImageCandidates</code>, and <code>supportsProgressiveImageUpgrade</code> with one planner in <code>PostMedia.kt</code>. Composables consume the plan; they do not infer provider semantics.</li>
+          <li>For Preview, append safe non-video candidates from preview, sample/full, and explicit media in provider-appropriate order. Deduplicate normalized locations while retaining the strongest request headers from the source.</li>
+          <li>For Viewer, keep the selected media authoritative. Only use full/preview as failure fallback when they still represent the same post/media page; never replace a gallery page with an unrelated cover after a visible higher page fails.</li>
+          <li>Preserve current GIF fallback ordering and Hitomi configuration-refresh behavior. A successful lower-quality image remains visible while a proactive upgrade is attempted.</li>
+        </ol>
+      </article>
+
+      <article>
+        <h3>Phase 3: Prefetch the true neighborhood through one Media3 cache</h3>
+        <p class="phase-status">Status: Proposed. Includes a bounded Media3 prototype gate.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>Warm only media near the current Viewer item, bound concurrency, and make prefetch state describe actual warmed bytes.</td></tr>
+            <tr><td>Primary files</td><td><code>app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt</code>, <code>app/src/main/java/com/theoriacodex/app/viewer/ViewerViewModel.kt</code>, <code>app/src/main/java/com/theoriacodex/app/viewer/ViewerVideoPrefetch.kt</code>, <code>app/src/main/java/com/theoriacodex/app/viewer/VideoPlaybackInfrastructure.kt</code>, <code>app/src/main/java/com/theoriacodex/app/viewer/state/ViewerUiState.kt</code>, <code>app/src/main/java/com/theoriacodex/app/viewer/state/ViewerStateReducer.kt</code>, and the matching tests under <code>app/src/test/java/com/theoriacodex/app/viewer/</code>.</td></tr>
+            <tr><td>Commit</td><td><code>perf(viewer): prefetch adjacent media through shared playback cache</code></td></tr>
+            <tr><td>Acceptance</td><td>At every current index, the requested keys equal the configured nearest left/right window; at most two jobs run; stale jobs cancel; large video is never labeled warmed with zero cached bytes; playback reuses the same cache identity and request headers.</td></tr>
+          </tbody>
+        </table>
+        <ol>
+          <li>Extract a pure planner that flattens post/media order, finds the exact current <code>ViewerMediaKey</code>, and returns nearest right then left candidates within the existing three-per-side bound. Define start, middle, end, multi-media-post, missing-current, duplicate, and session-replacement tests.</li>
+          <li>Replace one-job-per-key launching with a ViewModel-owned prioritized queue capped at two concurrent jobs. Reconcile desired keys on every current-position change and cancel queued/in-flight work that is no longer useful.</li>
+          <li>Replace boolean availability with explicit <code>WARMED</code>, <code>SKIPPED</code>, <code>FAILED</code>, and cancellation behavior. Record bytes or cache span when the platform can report them.</li>
+          <li>Prototype Media3 <code>DefaultPreloadManager</code> against the existing 1.10.1 dependency. Promote it only if it can share <code>VideoPlaybackInfrastructure</code> cache/data-source identity, preserve request-scoped headers, cancel by Viewer session, warm a video above 16 MiB, and avoid a second player/cache owner.</li>
+          <li>If that promotion gate fails, use Media3 <code>CacheWriter</code> or the smallest cache-data-source seam that satisfies the same requirements. Record the rejected option and evidence in Decision Log. Do not retain the 750 MiB manual cache as a silent parallel owner.</li>
+          <li>Migrate/ignore old manual cache files without deleting user content. Normal cache eviction may remove obsolete files later; no destructive startup sweep is required.</li>
+        </ol>
+      </article>
+
+      <article>
+        <h3>Phase 4: Remove provider resolution from viable Viewer launch paths</h3>
+        <p class="phase-status">Status: Proposed.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>Viewer navigation no longer waits for a provider when the selected post already has media that can be attempted.</td></tr>
+            <tr><td>Primary files</td><td><code>app/src/main/java/com/theoriacodex/app/viewer/ViewerSessionCoordinator.kt</code>, <code>app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRouteWorkflow.kt</code>, <code>app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt</code>, <code>app/src/test/java/com/theoriacodex/app/viewer/ViewerSessionCoordinatorTest.kt</code>, and <code>app/src/test/java/com/theoriacodex/app/ui/routes/ViewerRoutePolicyTest.kt</code>.</td></tr>
+            <tr><td>Commit</td><td><code>perf(viewer): open known media before provider refresh</code></td></tr>
+            <tr><td>Acceptance</td><td>A fake adapter delayed by several seconds cannot delay navigation for a Gelbooru video or durable post with a viable URL. A post with no usable media still resolves before or immediately within Viewer and presents honest failure if missing.</td></tr>
+          </tbody>
+        </table>
+        <ol>
+          <li>Define one tested <code>hasUsableViewerMedia</code> policy over local paths and normalized remote locations. A preview-only lazy provider may still require resolution when the preview cannot represent the selected Viewer content.</li>
+          <li>Make <code>requiresPrelaunchViewerPostResolution</code> true only when the selected post lacks usable Viewer media. Preserve route-owned background resolution for lazy or refreshable posts after Viewer mounts.</li>
+          <li>Keep durable healing in <code>ViewerRouteWorkflow.persistResolvedPost</code>. Optimistic opening must not stop a later successful refresh from updating Codex/Recents/cache data.</li>
+          <li>Verify Gelbooru search video, Gelbooru Codex media, NHentai gallery, Hitomi sparse Search, Pixiv static illustration, and a genuinely unresolved post separately.</li>
+        </ol>
+      </article>
+
+      <article>
+        <h3>Phase 5: Bound Pixiv Ugoira and unify token refresh</h3>
+        <p class="phase-status">Status: Proposed.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>Ugoira loading is cancellation-safe, retryable, single-flight, disk-backed, and bounded by compressed bytes, expanded bytes, dimensions, frame count, and decoded-memory weight.</td></tr>
+            <tr><td>Primary files</td><td><code>app/src/main/java/com/theoriacodex/app/viewer/PixivUgoiraPlayer.kt</code>, <code>app/src/main/java/com/theoriacodex/app/di/TheoriaAppContainer.kt</code>, <code>core-sources/src/main/kotlin/com/theoriacodex/sources/RealAdapterRegistry.kt</code>, <code>core-sources/src/main/kotlin/com/theoriacodex/sources/pixiv/PixivSourceAdapter.kt</code>, Pixiv auth classes under <code>core-sources/src/main/kotlin/com/theoriacodex/sources/pixiv/</code>, and their matching tests.</td></tr>
+            <tr><td>Commit</td><td><code>perf(pixiv): bound ugoira loading and share auth refresh</code></td></tr>
+            <tr><td>Acceptance</td><td>Concurrent loads for one post perform one metadata request, one ZIP request, and at most one token refresh. Archive limits reject malformed/oversized input safely. Preview uses card-sized frames, Viewer can request a larger bucket, export reuses compressed data, and decoded cache weight never exceeds its configured bound.</td></tr>
+          </tbody>
+        </table>
+        <ol>
+          <li>Create a core-sources <code>PixivTokenCoordinator</code> owned by <code>TheoriaAppContainer</code> and passed to both <code>RealAdapterRegistry</code>/<code>PixivSourceAdapter</code> and <code>PixivUgoiraClient</code>. Under one mutex, re-read durable credentials before refreshing so a concurrent winner is reused.</li>
+          <li>Keep Ugoira binary transport app-owned but make every connection cancellation-aware, disconnected in <code>finally</code>, and retried for I/O plus existing retryable statuses under a bounded attempt policy.</li>
+          <li>Stream the ZIP to an atomic temporary cache file with a hard compressed-byte limit. Validate frame count, entry names, duplicate names, per-entry expanded bytes, total expanded bytes, image dimensions/pixels, and metadata-to-entry correspondence before publishing the cache record.</li>
+          <li>Decode from the disk-backed archive for an explicit size bucket. Preview/card requests must not decode full-resolution frames when the display target is much smaller. Viewer and MP4 export may request full data without keeping both compressed and every decoded representation live unnecessarily.</li>
+          <li>Replace the eight-entry cache with a weighted LRU that accounts for bitmap allocation bytes. Active playback leases cannot be recycled underneath a visible consumer; inactive entries are evictable. Record the chosen byte budget and its relationship to Android memory class in Decision Log.</li>
+          <li>Use a per-post-and-size single-flight map with consumer-isolated cancellation. Cancel the underlying job only after the last consumer leaves; never let one offscreen card cancel a visible Viewer load.</li>
+        </ol>
+      </article>
+
+      <article>
+        <h3>Phase 6: Reuse bounded Hitomi gallery manifests</h3>
+        <p class="phase-status">Status: Proposed.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>Sparse Search hydration and full Viewer resolution share recent successful gallery metadata while CDN candidates remain live and recoverable.</td></tr>
+            <tr><td>Primary files</td><td><code>core-sources/src/main/kotlin/com/theoriacodex/sources/hitomi/HitomiSourceAdapter.kt</code>, the existing <code>core-sources/src/main/kotlin/com/theoriacodex/sources/hitomi/HitomiByteBudgetCache.kt</code>, fixtures under <code>core-sources/src/test/kotlin/com/theoriacodex/sources/hitomi/</code>, and focused adapter tests.</td></tr>
+            <tr><td>Commit</td><td><code>perf(hitomi): reuse bounded gallery manifests</code></td></tr>
+            <tr><td>Acceptance</td><td>Search followed immediately by Viewer fetches one gallery manifest for the selected ID within the cache TTL. Concurrent sparse/full requests single-flight. Failures are not cached as success. CDN candidate generation still consults the current <code>HitomiMediaUrlResolver</code>.</td></tr>
+          </tbody>
+        </table>
+        <ol>
+          <li>Split <code>fetchGallery</code> into manifest acquisition and sparse/full <code>Post</code> derivation. Cache the successful JavaScript body or parsed provider manifest, not final CDN URLs or request headers.</li>
+          <li>Use a byte-budgeted cache with a short initial TTL such as five minutes and an explicit maximum such as 8 MiB. Confirm or revise those values from Phase 0 response-size evidence and record the final decision.</li>
+          <li>Single-flight acquisition by gallery ID. Cancellation by one caller must not cancel a still-needed request; failed/404/410/malformed responses must not poison the success cache.</li>
+          <li>On every sparse/full derivation, continue through <code>HitomiMediaUrlResolver</code> so its 30-minute <code>gg.js</code> configuration cache and one-refresh-per-failed-version policy remain authoritative.</li>
+        </ol>
+      </article>
+
+      <article>
+        <h3>Phase 7: Integrated device and live-provider acceptance</h3>
+        <p class="phase-status">Status: Proposed.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Goal</td><td>Prove the completed system is more reliable and does less unnecessary work without regressing first render, swipe readiness, memory, or simultaneous autoplay.</td></tr>
+            <tr><td>Primary files</td><td>Tests, trace/report helpers, this living plan, and durable documentation only when a new project-wide rule is discovered.</td></tr>
+            <tr><td>Commit</td><td><code>test(media): verify preview and viewer delivery gains</code></td></tr>
+            <tr><td>Acceptance</td><td>All deterministic gates pass; isolated Debug source journeys pass; the same-device comparison meets the quantitative gates in Validation; no duration/scroll or production-data claim is inferred from host tests.</td></tr>
+          </tbody>
+        </table>
+        <ol>
+          <li>Run focused tests after each phase, then the full bounded host batch once. Do not repeatedly rerun equivalent suites when no relevant code changed.</li>
+          <li>Before any connected command, run <code>:app:verifyDebugInstallableApplicationId</code>, inspect <code>output-metadata.json</code> for <code>com.theoriacodex.debug</code>, and dry-run the intended task. Never install or clear <code>com.theoriacodex</code>.</li>
+          <li>Repeat the exact Phase 0 samples and action sequence on the same device/network class. Report per-source cold/warm p50 and p90, request count/bytes, adjacent warm-hit result, cache occupancy, Ugoira peak Java/native heap, and retry outcomes.</li>
+          <li>Update Progress, Surprises, Decision Log, and Outcomes with exact commands and evidence. Add an <code>AGENTS.md</code> note only if implementation discovers a durable non-obvious rule not already encoded there.</li>
+        </ol>
+      </article>
+    </section>
+
+    <section id="work-plan">
+      <h2>Work Plan</h2>
+      <ol>
+        <li><strong>Respect the active performance owner.</strong> Do not start behavior work until duration/scroll acceptance is stable. Rebase this inventory onto the accepted HEAD and update only this plan's stale facts.</li>
+        <li><strong>Characterize before repairing.</strong> Preserve deterministic failing tests for F01-F08 and a comparable device baseline. Tests that currently pass because they encode false-ready or first-six behavior must be changed only in the phase that changes the contract.</li>
+        <li><strong>Repair correctness before optimization.</strong> Make Retry and candidate fallback truthful before making launch or prefetch faster. A faster path that cannot recover is not accepted.</li>
+        <li><strong>Keep state ownership explicit.</strong> Reducers own media generation/error/prefetch status; ViewModel owns jobs and bounded queues; composables render immutable state and emit typed events; provider adapters own provider parsing and refresh.</li>
+        <li><strong>Unify caches without cross-contaminating identities.</strong> Image requests continue through Coil. Video preload/playback share Media3 cache identity including request headers. Ugoira owns a separate compressed-archive/decoded-frame cache because it is not ordinary video playback.</li>
+        <li><strong>Optimize provider calls last.</strong> Once shared retry/candidate/prefetch behavior is stable, add Pixiv token/Ugoira single-flight and Hitomi manifest reuse. Keep Gelbooru/NHentai changes limited to consuming already-known media and normal resolution recovery.</li>
+        <li><strong>Validate once at system level.</strong> Run the complete host/device matrix after the last relevant patch, compare against the frozen baseline, update this living plan, and stop when acceptance is sufficient.</li>
+      </ol>
+
+      <h3>Expected file additions</h3>
+      <ul>
+        <li>A small application media delivery-plan type/helper near <code>app/media/PostMedia.kt</code>.</li>
+        <li>A pure Viewer adjacent-prefetch planner and its JVM tests.</li>
+        <li>A shared Pixiv token coordinator in <code>core-sources</code> and tests.</li>
+        <li>Bounded Ugoira cache/fetch helpers only if splitting them from <code>PixivUgoiraPlayer.kt</code> makes ownership and testing clearer.</li>
+        <li>A bounded Hitomi gallery-manifest cache/single-flight helper or a narrow extension of the existing byte-budget cache.</li>
+      </ul>
+
+      <h3>Expected removals or retirements</h3>
+      <ul>
+        <li><code>searchCardImageCandidates</code> and source inference inside composables after the shared delivery plan replaces them.</li>
+        <li>The flattened first-six prefetch effect after the adjacent planner owns selection.</li>
+        <li>The boolean meaning of prefetch availability.</li>
+        <li>The separate <code>theoria_codex/viewer/videos</code> manual video prefetch owner after Media3 migration is proven.</li>
+        <li>Independent Pixiv token-refresh implementations after the shared coordinator is wired.</li>
+      </ul>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <p>Run commands from the repository root. Focused filters may be adjusted if test classes are renamed by the planned refactor, but preserve the same behavioral coverage.</p>
+      <table>
+        <thead>
+          <tr><th>Check</th><th>Command or action</th><th>Expected result</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Viewer/media focused JVM</td><td><code>./gradlew :app:testDebugUnitTest --tests '*ViewerStateReducerTest' --tests '*ViewerViewModelTest' --tests '*ViewerSessionCoordinatorTest' --tests '*ViewerScreenImagePipelineTest' --tests '*ViewerVideoPrefetchTest' --tests '*PixivUgoiraClientTest' --tests '*PostMediaTest' --tests '*SearchScreenMediaBehaviorTest' --tests '*RemoteMediaRecoveryTest'</code></td><td>Retry generation, session rejection, typed candidates, adjacent planning, truthful prefetch, optimistic launch, and bounded Ugoira contracts pass.</td></tr>
+          <tr><td>Provider focused JVM</td><td><code>./gradlew :core-sources:test --tests '*PixivSourceAdapterTest' --tests '*PixivAuthApiTest' --tests '*GelbooruSourceAdapterTest' --tests '*NhentaiResolutionSourceAdapterTest' --tests '*HitomiMediaUrlResolverTest' --tests '*Hitomi*SourceAdapterTest'</code></td><td>Provider parsing/recovery remains correct; Pixiv refresh is single-flight; Hitomi manifest reuse does not freeze CDN candidates.</td></tr>
+          <tr><td>Complete host gate</td><td><code>./gradlew :app-logic:test :core-domain:test :core-data:test :core-sources:test :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:assembleDebug :app:detektDebug :core-sources:detekt --no-configuration-cache</code></td><td>All relevant modules compile and pass; inherited static-analysis findings are separated from changed-line findings.</td></tr>
+          <tr><td>Coverage</td><td><code>./gradlew koverXmlReport koverVerify</code> using the repository's configured aggregate tasks.</td><td>Changed platform-free logic satisfies the current changed-line gate; report exact eligible and covered lines.</td></tr>
+          <tr><td>Plan/diff quality</td><td><code>npx --yes html-validate .docs/exec/preview-viewer-media-delivery-reliability.html</code> and <code>git diff --check</code></td><td>The living plan is valid standalone HTML and the owned diff contains no whitespace errors.</td></tr>
+          <tr><td>Device safety</td><td><code>./gradlew :app:verifyDebugInstallableApplicationId</code>, inspect <code>app/build/outputs/apk/debug/output-metadata.json</code>, then <code>./gradlew :app:installDebug --dry-run</code>.</td><td>The only installable app ID is <code>com.theoriacodex.debug</code>; the dry-run includes the guard; no device state changes.</td></tr>
+          <tr><td>Isolated Debug behavior</td><td>After explicit connected-lane authorization, open representative Pixiv, Gelbooru, NHentai, and Hitomi results; induce one retryable failure; swipe adjacent media; revisit warm media.</td><td>Every Retry restarts, no viable open waits on provider resolution, only adjacent items warm, and all media retains source-scoped headers.</td></tr>
+          <tr><td>Autoplay contract</td><td>Show at least two visible animated/video cards before, during, and after the relevant Preview journey.</td><td>Every visibly presented animated/video card continues autoplaying; no single-active policy or tap-to-play fallback appears.</td></tr>
+          <tr><td>Live-provider boundary</td><td>Run opt-in live checks only after deterministic tests pass and record source/date/status without credentials or signed URLs.</td><td>Current endpoints and headers work for all four sources. A live skip is recorded as unproven, not passed.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Quantitative acceptance gates</h3>
+      <ul>
+        <li><strong>Retry:</strong> deterministic first-failure/second-success coverage passes for every media renderer; device Retry visibly starts one new attempt without leaving duplicate jobs.</li>
+        <li><strong>Prefetch selection:</strong> zero requested keys fall outside the configured adjacent window; at most two prefetch jobs run concurrently; superseded session jobs publish no state.</li>
+        <li><strong>Video truthfulness:</strong> a large or partial video cannot enter <code>WARMED</code> with zero cached bytes. A warmed video uses the same Media3 cache key during playback.</li>
+        <li><strong>Provider critical path:</strong> a delayed fake provider cannot delay Viewer navigation when usable media is already present. Device traces show provider refresh begins after Viewer mount for those cases.</li>
+        <li><strong>Requests:</strong> Gelbooru opening does not add a detail request when search media is viable; NHentai does not request a second extension after successful display; Hitomi Search-to-Viewer uses one manifest request within TTL; concurrent Pixiv requests perform at most one token refresh.</li>
+        <li><strong>Timing:</strong> no source's same-device p90 tap-to-first-render or adjacent-swipe-first-render regresses by more than 10%. Paths that remove a baseline provider round trip or convert a cold adjacent load to a warm hit must improve median time; report the absolute milliseconds and percentage rather than claiming a blanket speedup.</li>
+        <li><strong>Ugoira memory:</strong> compressed, expanded, frame-count, pixel, and decoded-cache limits are enforced by tests. Same-device peak Java/native heap for the frozen Ugoira journey is no worse than baseline and the decoded cache never exceeds its recorded byte budget.</li>
+        <li><strong>Storage:</strong> the retired manual video cache no longer grows. Media3 and Ugoira cache sizes remain within their configured eviction limits after the fixed journey.</li>
+      </ul>
+    </section>
+
+    <section id="living-log">
+      <h2>Living Log</h2>
+
+      <h3>Progress</h3>
+      <ul>
+        <li>[x] 2026-08-10 — Audited Preview/Viewer media selection, retry, resolution, prefetch, transport, and cache ownership for Pixiv, Gelbooru, NHentai, and Hitomi.</li>
+        <li>[x] 2026-08-10 — Ran 85 focused host tests with zero failures/errors and separated this audit from the active duration/scroll work.</li>
+        <li>[x] 2026-08-10 — Authored this standalone implementation plan without editing <code>working_list.md</code> or the active duration plan.</li>
+        <li>[ ] Phase 0 — Reconcile against the accepted duration/scroll HEAD and freeze baseline evidence.</li>
+        <li>[ ] Phase 1 — Make Retry truthful across all Viewer media renderers.</li>
+        <li>[ ] Phase 2 — Centralize candidate intent and Preview fallback.</li>
+        <li>[ ] Phase 3 — Replace first-six/manual video prefetch with adjacent, bounded, shared-cache preloading.</li>
+        <li>[ ] Phase 4 — Remove provider resolution from viable Viewer launch paths.</li>
+        <li>[ ] Phase 5 — Bound Pixiv Ugoira and unify token refresh.</li>
+        <li>[ ] Phase 6 — Reuse bounded Hitomi gallery manifests.</li>
+        <li>[ ] Phase 7 — Complete integrated host/device/live-provider acceptance and retrospective.</li>
+      </ul>
+
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li><strong>Observation:</strong> the visible image Retry control is not a generic reload. It only requests optional provider recovery, and only Hitomi implements that interface. <strong>Evidence:</strong> <code>ViewerRoute.recoverAndApplyMedia</code> returns when <code>recoverRemoteMedia</code> returns null.</li>
+        <li><strong>Observation:</strong> the current prefetch window contains six items but is unrelated to the current flattened position after the beginning of a session. <strong>Evidence:</strong> <code>ViewerScreen</code> filters the current key and then calls <code>take(left + right)</code> from the start.</li>
+        <li><strong>Observation:</strong> video prefetch treats unsupported work as success. <strong>Evidence:</strong> <code>ViewerVideoPrefetchAction.SKIP</code> returns <code>true</code>, after which reducer state adds the key to <code>ready</code>.</li>
+        <li><strong>Observation:</strong> NHentai mirror extension fallbacks share the same <code>progressiveUrls</code> field used for Pixiv/Gelbooru quality ladders. <strong>Evidence:</strong> <code>imageUrlCandidates</code> appends WebP/JPG/PNG/GIF alternatives while Viewer proactively prepares the next candidate after success.</li>
+        <li><strong>Observation:</strong> Hitomi's CDN resolver is already bounded, mutex-protected, version-aware, and refreshes once per failed configuration. The repeated work is gallery-manifest acquisition, not CDN derivation.</li>
+        <li><strong>Observation:</strong> the shared <code>DefaultSourceHttpClient</code> already retries I/O and retryable statuses with cancellation-safe connection teardown. Pixiv Ugoira bypasses that behavior for binary work and must reproduce equivalent bounded guarantees if it remains app-owned.</li>
+      </ul>
+
+      <h3>Decision Log</h3>
+      <ul>
+        <li><strong>Decision:</strong> do not begin implementation until duration/scroll acceptance stabilizes. <strong>Rationale:</strong> both plans touch Viewer, player/cache ownership, and Ugoira; sequential ownership preserves a trustworthy baseline. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
+        <li><strong>Decision:</strong> make Retry a local renderer generation change before provider recovery. <strong>Rationale:</strong> retry must work for every source and transient failure even when no specialized adapter exists. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
+        <li><strong>Decision:</strong> type media candidate intent in application logic without changing durable <code>ImageRef</code>. <strong>Rationale:</strong> this fixes quality/failover semantics without a Room/Gson compatibility migration. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
+        <li><strong>Decision:</strong> prefer one Media3 preload/playback cache and keep Coil and Ugoira as separate format-appropriate owners. <strong>Rationale:</strong> one cache per transport identity makes warm state and eviction truthful without forcing images/archives into video infrastructure. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
+        <li><strong>Decision:</strong> cache Hitomi provider manifests, not derived CDN URLs. <strong>Rationale:</strong> Search-to-Viewer avoids a duplicate request while live <code>gg.js</code> configuration and recovery stay authoritative. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
+        <li><strong>Decision:</strong> preserve all-visible autoplay. <strong>Rationale:</strong> lower player count is not an acceptable substitute for better selection, caching, scheduling, and bounded decoding. <strong>Date/Author:</strong> 2026-08-10 / User and Codex.</li>
+      </ul>
+
+      <h3>Outcomes And Retrospective</h3>
+      <p>The planning audit is complete. The current implementation remains functional and its focused tests pass, but the saved contract contains false retry and prefetch success states, unnecessary provider work, and an unbounded Ugoira path. Update this section after every phase with the exact behavior changed, evidence obtained, remaining acceptance gaps, and any measured regression. At completion, state per-source gains rather than claiming one universal speedup.</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <ul>
+        <li>All JVM, build, static-analysis, HTML, and host dry-run commands are safe to rerun. Generated evidence belongs under ignored <code>build/reports/preview-viewer-media-delivery/</code> paths with unique baseline/final SHA names.</li>
+        <li>Each implementation phase has a focused Conventional Commit. If interrupted, inspect <code>git status</code>, the phase progress item, and the cached diff before continuing. Never discard unrelated work or use <code>git reset --hard</code>.</li>
+        <li>Candidate/retry/prefetch migrations are code-only and require no user-data rewrite. Old posts remain readable because <code>ImageRef</code> persistence is unchanged.</li>
+        <li>The video cache migration must not delete production data. Obsolete files live under app cache and may age out through bounded eviction; a cleanup action is optional and must target only the exact legacy cache directory.</li>
+        <li>Ugoira cache publication must be atomic: write a uniquely named temporary file, validate and sync it, then rename. On cancellation/failure, remove only that verified temporary file. A prior valid cache entry remains usable.</li>
+        <li>Hitomi and Pixiv single-flight maps remove terminal jobs in <code>finally</code>. A failed job must not remain as a poisoned reusable entry.</li>
+        <li>If the Media3 preload prototype cannot share the existing cache/header identity, document the failure and use the planned CacheWriter fallback. Do not land both architectures.</li>
+        <li>If device identity/signing proof is incomplete, stop before any connected command. Never uninstall, clear, downgrade, or replace <code>com.theoriacodex</code>.</li>
+      </ul>
+    </section>
+
+    <section id="appendix">
+      <h2>Appendix: Evidence, Commands, And Commit Sequence</h2>
+
+      <details open>
+        <summary>Audit validation completed before plan authoring</summary>
+        <pre><code>./gradlew :app:testDebugUnitTest \
+  --tests 'com.theoriacodex.app.viewer.ViewerVideoPrefetchTest' \
+  --tests 'com.theoriacodex.app.viewer.ViewerViewModelTest' \
+  --tests 'com.theoriacodex.app.viewer.ViewerScreenImagePipelineTest' \
+  --tests 'com.theoriacodex.app.viewer.ViewerSessionCoordinatorTest' \
+  --tests 'com.theoriacodex.app.viewer.PixivUgoiraClientTest' \
+  --tests 'com.theoriacodex.app.media.RemoteMediaRecoveryTest'
+
+./gradlew :core-sources:test \
+  --tests 'com.theoriacodex.sources.pixiv.PixivSourceAdapterTest' \
+  --tests 'com.theoriacodex.sources.gelbooru.GelbooruSourceAdapterTest' \
+  --tests 'com.theoriacodex.sources.nhentai.NhentaiResolutionSourceAdapterTest' \
+  --tests 'com.theoriacodex.sources.hitomi.HitomiMediaUrlResolverTest'
+
+Result: 85 tests, 0 failures, 0 errors, 0 skips.</code></pre>
+      </details>
+
+      <details>
+        <summary>Planned implementation commits</summary>
+        <pre><code>docs(execplan): plan faster and more reliable media delivery
+test(media): baseline preview and viewer delivery
+fix(viewer): make media retry restart every media kind
+refactor(media): type preview and viewer candidate intent
+perf(viewer): prefetch adjacent media through shared playback cache
+perf(viewer): open known media before provider refresh
+perf(pixiv): bound ugoira loading and share auth refresh
+perf(hitomi): reuse bounded gallery manifests
+test(media): verify preview and viewer delivery gains</code></pre>
+      </details>
+
+      <details>
+        <summary>Key source observations from the 2026-08-10 audit</summary>
+        <ul>
+          <li><code>ViewerScreen.kt</code>: prefetch selection at the current implementation's lines 353-362; proactive image upgrade near lines 706-741; image Retry near lines 936-950; video failure text near lines 1723-1731.</li>
+          <li><code>ViewerRoute.kt</code>: Retry effect handling near lines 316-331; provider recovery early return near lines 421-441.</li>
+          <li><code>ViewerVideoPrefetch.kt</code>: 16 MiB complete-download cap; <code>SKIP -&gt; true</code> near lines 213-226; 750 MiB/80-file cache constants near lines 319-321.</li>
+          <li><code>PostMedia.kt</code>: provider candidate flattening near lines 83-106; Pixiv/Gelbooru/NHentai/Hitomi all share the progressive-candidate source set.</li>
+          <li><code>PixivUgoiraPlayer.kt</code>: full ZIP read near lines 541-546; duplicate entry buffers and all-frame decode near lines 589-614; eight-entry cache near lines 617-624.</li>
+          <li><code>HitomiSourceAdapter.kt</code>: sparse hydration concurrency near lines 785-802; gallery manifest acquisition near lines 804-832; full resolution calls the same path near lines 523-535.</li>
+        </ul>
+      </details>
+    </section>
+  </main>
+</body>
+</html>
