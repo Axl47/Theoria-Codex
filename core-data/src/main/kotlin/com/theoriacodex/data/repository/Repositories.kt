@@ -1,5 +1,6 @@
 package com.theoriacodex.data.repository
 
+import com.google.gson.annotations.SerializedName
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
@@ -449,6 +450,19 @@ data class SearchScrollState(
     val firstVisibleItemOffsetPx: Int,
 )
 
+data class FeedFabRestoreState(
+    @field:SerializedName("animatedOnly") val animatedOnly: Boolean = false,
+    @field:SerializedName("hideLiked") val hideLiked: Boolean = false,
+    @field:SerializedName("hideSaved") val hideSaved: Boolean = false,
+    @field:SerializedName("hideWatched") val hideWatched: Boolean = false,
+    @field:SerializedName("durationMinBucket") val durationMinBucket: Int = 0,
+    @field:SerializedName("durationMaxBucket") val durationMaxBucket: Int = 25,
+    @field:SerializedName("sortMode") val sortMode: String? = null,
+    @field:SerializedName("source") val source: String? = null,
+    @field:SerializedName("language") val language: String? = null,
+    @field:SerializedName("fullColorOnly") val fullColorOnly: Boolean = false,
+)
+
 interface UiRestoreRepository {
     suspend fun setLastTab(route: String)
     suspend fun getLastTab(): String?
@@ -457,6 +471,8 @@ interface UiRestoreRepository {
     suspend fun getSearchScrollState(queryHash: String): SearchScrollState?
     suspend fun setSettingsSectionExpansion(expansion: Map<String, Boolean>)
     suspend fun getSettingsSectionExpansion(): Map<String, Boolean>
+    suspend fun setFeedFabRestoreState(contextKey: String, state: FeedFabRestoreState)
+    suspend fun getFeedFabRestoreStates(): Map<String, FeedFabRestoreState>
     fun observeViewerLaunchContext(): Flow<ViewerLaunchContext?>
     suspend fun setViewerLaunchContext(context: ViewerLaunchContext?)
 }

@@ -21,6 +21,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.data.repository.FeedFabRestoreState
 import java.io.Closeable
 import kotlinx.coroutines.flow.StateFlow
 
@@ -86,6 +87,8 @@ internal fun CreatorRoute(
     mediaDurationCoordinator: MediaDurationCoordinator,
     pixivUgoiraClient: PixivUgoiraClient?,
     config: CreatorRouteConfig,
+    fabRestoreState: FeedFabRestoreState,
+    onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     callbacks: CreatorRouteCallbacks,
     onOwnerAvailable: (CreatorRouteOwnerHandle) -> Unit = {},
 ) {
@@ -128,6 +131,20 @@ internal fun CreatorRoute(
         }
     }
 
+    CreatorRouteContent(state, owner, duration, pixivUgoiraClient, config, fabRestoreState, onFabRestoreStateChange, callbacks)
+}
+
+@Composable
+private fun CreatorRouteContent(
+    state: CreatorUiState,
+    owner: CreatorProfileViewModel,
+    duration: MediaDurationRouteBinding,
+    pixivUgoiraClient: PixivUgoiraClient?,
+    config: CreatorRouteConfig,
+    fabRestoreState: FeedFabRestoreState,
+    onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
+    callbacks: CreatorRouteCallbacks,
+) {
     CreatorProfileScreen(
         state = state,
         likedPostIds = config.likedPostIds,
@@ -150,6 +167,8 @@ internal fun CreatorRoute(
         onAddExcludeTerm = callbacks.onAddExcludeTerm,
         onRemoveIncludeTerm = callbacks.onRemoveIncludeTerm,
         onRemoveExcludeTerm = callbacks.onRemoveExcludeTerm,
+        fabRestoreState = fabRestoreState,
+        onFabRestoreStateChange = onFabRestoreStateChange,
     )
 }
 

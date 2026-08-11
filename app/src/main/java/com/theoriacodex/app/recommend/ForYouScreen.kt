@@ -32,10 +32,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,8 +44,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
-import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
@@ -72,6 +68,7 @@ import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.ui.components.expandableControlSemantics
 import com.theoriacodex.app.viewer.PixivUgoiraClient
+import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -108,14 +105,16 @@ fun ForYouScreen(
     onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     onGoToSearch: () -> Unit,
+    fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
+    onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
 ) {
     val gridState = rememberLazyStaggeredGridState()
     var showSortSheet by remember { mutableStateOf(false) }
     var showSourceMenu by remember { mutableStateOf(false) }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
-    var animatedOnly by rememberSaveable { mutableStateOf(false) }
-    var durationMinBucket by rememberSaveable { mutableIntStateOf(ANIMATED_DURATION_MIN_BUCKET) }
-    var durationMaxBucket by rememberSaveable { mutableIntStateOf(ANIMATED_DURATION_MAX_BUCKET) }
+    val animatedOnly = fabRestoreState.animatedOnly
+    val durationMinBucket = fabRestoreState.durationMinBucket
+    val durationMaxBucket = fabRestoreState.durationMaxBucket
     val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
         AnimatedDurationRange(
             minBucket = durationMinBucket,
@@ -404,14 +403,19 @@ fun ForYouScreen(
             animatedOnly = animatedOnly,
             animatedDurationRange = animatedDurationRange,
             onSelectSort = { sort ->
+                onFabRestoreStateChange(fabRestoreState.copy(sortMode = sort.name))
                 onAction(ForYouAction.SelectSort(sort))
             },
             onAnimatedOnlyChange = { enabled ->
-                animatedOnly = enabled
+                onFabRestoreStateChange(fabRestoreState.copy(animatedOnly = enabled))
             },
             onAnimatedDurationRangeChange = { range ->
-                durationMinBucket = range.normalizedMinBucket
-                durationMaxBucket = range.normalizedMaxBucket
+                onFabRestoreStateChange(
+                    fabRestoreState.copy(
+                        durationMinBucket = range.normalizedMinBucket,
+                        durationMaxBucket = range.normalizedMaxBucket,
+                    ),
+                )
             },
             onDismiss = { showSortSheet = false },
         )

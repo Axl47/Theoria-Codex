@@ -23,6 +23,7 @@ import com.theoriacodex.app.search.state.SearchEffect
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -264,6 +265,8 @@ internal fun SearchRoute(
     mediaDurationCoordinator: MediaDurationCoordinator,
     pixivUgoiraClient: PixivUgoiraClient?,
     config: SearchRouteConfig,
+    fabRestoreState: FeedFabRestoreState,
+    onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     callbacks: SearchRouteCallbacks,
     onOwnerAvailable: (SearchRouteOwnerHandle) -> Unit = {},
 ) {
@@ -315,6 +318,8 @@ internal fun SearchRoute(
         duration = duration,
         pixivUgoiraClient = pixivUgoiraClient,
         config = config,
+        fabRestoreState = fabRestoreState,
+        onFabRestoreStateChange = onFabRestoreStateChange,
         callbacks = callbacks,
     )
 }
@@ -327,6 +332,8 @@ private fun SearchRouteContent(
     duration: MediaDurationRouteBinding,
     pixivUgoiraClient: PixivUgoiraClient?,
     config: SearchRouteConfig,
+    fabRestoreState: FeedFabRestoreState,
+    onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     callbacks: SearchRouteCallbacks,
 ) {
     SearchScreen(
@@ -365,6 +372,8 @@ private fun SearchRouteContent(
         onPostUrlCopied = callbacks.onPostUrlCopied,
         onAddFavoriteTag = callbacks.onAddFavoriteTag,
         onRemoveFavoriteTag = callbacks.onRemoveFavoriteTag,
+        fabRestoreState = fabRestoreState,
+        onFabRestoreStateChange = onFabRestoreStateChange,
     )
 }
 

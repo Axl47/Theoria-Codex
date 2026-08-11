@@ -18,6 +18,7 @@ import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
+import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -94,6 +95,8 @@ internal fun ForYouRoute(
     mediaDurationCoordinator: MediaDurationCoordinator,
     pixivUgoiraClient: PixivUgoiraClient?,
     config: ForYouRouteConfig,
+    fabRestoreState: FeedFabRestoreState,
+    onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
     callbacks: ForYouRouteCallbacks,
     onOwnerAvailable: (ForYouRouteOwnerHandle) -> Unit = {},
 ) {
@@ -102,6 +105,9 @@ internal fun ForYouRoute(
         factory = ForYouViewModel.factory(
             coordinator = coordinator,
             initialProfiles = config.settings.recommendationProfiles,
+            initialSort = fabRestoreState.sortMode?.let { encoded ->
+                com.theoriacodex.domain.model.SortMode.entries.firstOrNull { it.name == encoded }
+            },
         ),
     )
     val state by owner.state.collectAsStateWithLifecycle()
@@ -132,6 +138,20 @@ internal fun ForYouRoute(
         handleForYouRouteEffect(effect, callbacks, owner)
     }
 
+    ForYouRouteContent(state, owner, duration, pixivUgoiraClient, config, fabRestoreState, onFabRestoreStateChange, callbacks)
+}
+
+@Composable
+private fun ForYouRouteContent(
+    state: ForYouUiState,
+    owner: ForYouViewModel,
+    duration: MediaDurationRouteBinding,
+    pixivUgoiraClient: PixivUgoiraClient?,
+    config: ForYouRouteConfig,
+    fabRestoreState: FeedFabRestoreState,
+    onFabRestoreStateChange: (FeedFabRestoreState) -> Unit,
+    callbacks: ForYouRouteCallbacks,
+) {
     ForYouScreen(
         state = state,
         likedPostIds = config.likedPostIds,
@@ -157,6 +177,8 @@ internal fun ForYouRoute(
         onRemoveExcludeTerm = callbacks.onRemoveExcludeTerm,
         onFavoriteTagLongPress = callbacks.onFavoriteTagLongPress,
         onGoToSearch = callbacks.onGoToSearch,
+        fabRestoreState = fabRestoreState,
+        onFabRestoreStateChange = onFabRestoreStateChange,
     )
 }
 

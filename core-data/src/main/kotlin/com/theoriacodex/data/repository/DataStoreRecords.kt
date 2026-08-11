@@ -126,6 +126,22 @@ internal fun normalizeUiRestoreState(state: PersistedUiRestoreState): PersistedU
             boundedScrollStates.remove(boundedScrollStates.keys.first())
         }
     }
+    val boundedFabStates = LinkedHashMap<String, FeedFabRestoreState>()
+    state.feedFabRestoreStates.forEach { (contextKey, restoreState) ->
+        val normalizedKey = contextKey.trim()
+        if (normalizedKey.isBlank()) return@forEach
+        boundedFabStates.remove(normalizedKey)
+        boundedFabStates[normalizedKey] = restoreState.copy(
+            durationMinBucket = restoreState.durationMinBucket.coerceIn(0, 25),
+            durationMaxBucket = restoreState.durationMaxBucket.coerceIn(0, 25),
+            sortMode = restoreState.sortMode?.trim()?.takeIf(String::isNotBlank),
+            source = restoreState.source?.trim()?.takeIf(String::isNotBlank),
+            language = restoreState.language?.trim()?.takeIf(String::isNotBlank),
+        )
+        while (boundedFabStates.size > MAX_PERSISTED_FEED_FAB_STATES) {
+            boundedFabStates.remove(boundedFabStates.keys.first())
+        }
+    }
     return PersistedUiRestoreState(
         lastTab = state.lastTab?.trim()?.takeIf(String::isNotBlank),
         scrollStates = boundedScrollStates,
@@ -134,6 +150,9 @@ internal fun normalizeUiRestoreState(state: PersistedUiRestoreState): PersistedU
                 key.trim().takeIf(String::isNotBlank)?.let { normalizedKey -> normalizedKey to expanded }
             }
             .toMap(),
+        feedFabRestoreStates = boundedFabStates,
         viewerLaunchContext = state.viewerLaunchContext,
     )
 }
+
+private const val MAX_PERSISTED_FEED_FAB_STATES = 128

@@ -29,16 +29,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
-import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
@@ -60,6 +56,7 @@ import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -79,7 +76,6 @@ fun CodexDetailScreen(
     resolveUnknownAnimatedDurations: Boolean = false,
     durationStates: Map<MediaDurationKey, MediaDurationState> = emptyMap(),
     durationStateForPost: (Post) -> Flow<MediaDurationState?> = noMediaDurationStateForPost,
-    onSortChange: (CodexSortMode) -> Unit,
     onDurationFilterChanged: (Boolean) -> Unit = {},
     onDurationPostVisibilityChanged: (Post, Boolean) -> Unit = { _, _ -> },
     onDurationEnvironmentChanged: (Boolean, Boolean) -> Unit = { _, _ -> },
@@ -102,17 +98,23 @@ fun CodexDetailScreen(
     onBack: () -> Unit,
     onDeleteCodex: () -> Unit,
     isLikesCodex: Boolean,
+    fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
+    onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
 ) {
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var editSelection by remember { mutableStateOf(CodexEditSelection()) }
-    var animatedOnly by rememberSaveable { mutableStateOf(false) }
-    var durationMinBucket by rememberSaveable { mutableIntStateOf(ANIMATED_DURATION_MIN_BUCKET) }
-    var durationMaxBucket by rememberSaveable { mutableIntStateOf(ANIMATED_DURATION_MAX_BUCKET) }
-    var selectedSource by rememberSaveable { mutableStateOf<SourceKey?>(null) }
-    var language by rememberSaveable { mutableStateOf(CodexLanguageFilter.ANY) }
-    var fullColorOnly by rememberSaveable { mutableStateOf(false) }
+    val animatedOnly = fabRestoreState.animatedOnly
+    val durationMinBucket = fabRestoreState.durationMinBucket
+    val durationMaxBucket = fabRestoreState.durationMaxBucket
+    val selectedSource = fabRestoreState.source?.let { encoded ->
+        SourceKey.entries.firstOrNull { source -> source.name == encoded }
+    }
+    val language = fabRestoreState.language?.let { encoded ->
+        CodexLanguageFilter.entries.firstOrNull { filter -> filter.name == encoded }
+    } ?: CodexLanguageFilter.ANY
+    val fullColorOnly = fabRestoreState.fullColorOnly
     val gridState = rememberLazyStaggeredGridState()
     val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
         AnimatedDurationRange(durationMinBucket, durationMaxBucket)
@@ -167,12 +169,16 @@ fun CodexDetailScreen(
         )
     }
     val applyFilters: (CodexCollectionFilters) -> Unit = { updated ->
-        animatedOnly = updated.animatedOnly
-        durationMinBucket = updated.animatedDurationRange.normalizedMinBucket
-        durationMaxBucket = updated.animatedDurationRange.normalizedMaxBucket
-        selectedSource = updated.source
-        language = updated.language
-        fullColorOnly = updated.fullColorOnly
+        onFabRestoreStateChange(
+            fabRestoreState.copy(
+                animatedOnly = updated.animatedOnly,
+                durationMinBucket = updated.animatedDurationRange.normalizedMinBucket,
+                durationMaxBucket = updated.animatedDurationRange.normalizedMaxBucket,
+                source = updated.source?.name,
+                language = updated.language.name,
+                fullColorOnly = updated.fullColorOnly,
+            ),
+        )
     }
 
     LaunchedEffect(posts.map(Post::id)) {
@@ -262,15 +268,11 @@ fun CodexDetailScreen(
             supportsFullColor = supportsFullColor,
             sortMode = sortMode,
             onFiltersChange = applyFilters,
-            onSortChange = onSortChange,
+            onSortChange = { updatedSort ->
+                onFabRestoreStateChange(fabRestoreState.copy(sortMode = updatedSort.name))
+            },
             onReset = {
-                animatedOnly = false
-                durationMinBucket = ANIMATED_DURATION_MIN_BUCKET
-                durationMaxBucket = ANIMATED_DURATION_MAX_BUCKET
-                selectedSource = null
-                language = CodexLanguageFilter.ANY
-                fullColorOnly = false
-                onSortChange(CodexSortMode.NEWEST_SAVED)
+                onFabRestoreStateChange(FeedFabRestoreState(sortMode = CodexSortMode.NEWEST_SAVED.name))
             },
             onDismiss = { showFilterSheet = false },
         )

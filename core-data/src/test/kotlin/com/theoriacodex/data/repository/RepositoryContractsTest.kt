@@ -471,6 +471,18 @@ class RepositoryContractTest(
         assertEquals(expansion, repository.getSettingsSectionExpansion())
     }
 
+    @Test
+    fun `ui restore keeps feed FAB contexts independent`() = runTest {
+        val repository = createUiRestoreRepository()
+        val search = FeedFabRestoreState(animatedOnly = true, hideWatched = true)
+        val forYou = FeedFabRestoreState(sortMode = SortMode.RANDOM.name, durationMinBucket = 2)
+
+        repository.setFeedFabRestoreState("search", search)
+        repository.setFeedFabRestoreState("for-you", forYou)
+
+        assertEquals(mapOf("search" to search, "for-you" to forYou), repository.getFeedFabRestoreStates())
+    }
+
     private fun createCodexRepository(): CodexRepository {
         return when (backend) {
             Backend.IN_MEMORY -> InMemoryCodexRepository()

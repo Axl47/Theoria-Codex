@@ -374,6 +374,21 @@ class DataStoreUiRestoreRepository(
         return records.first().toMemoryState().settingsSectionExpansion
     }
 
+    override suspend fun setFeedFabRestoreState(contextKey: String, state: FeedFabRestoreState) {
+        val normalizedKey = contextKey.trim()
+        if (normalizedKey.isBlank()) return
+        mutateState { current ->
+            val updated = LinkedHashMap(current.feedFabRestoreStates)
+            updated.remove(normalizedKey)
+            updated[normalizedKey] = state
+            current.copy(feedFabRestoreStates = updated)
+        }
+    }
+
+    override suspend fun getFeedFabRestoreStates(): Map<String, FeedFabRestoreState> {
+        return records.first().toMemoryState().feedFabRestoreStates
+    }
+
     override fun observeViewerLaunchContext(): Flow<ViewerLaunchContext?> {
         return records
             .map { stored -> stored.toMemoryState().viewerLaunchContext }

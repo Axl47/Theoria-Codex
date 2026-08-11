@@ -122,6 +122,8 @@ Foreground timing uses process lifecycle plus monotonic elapsed time. Total app 
 
 Codex detail, Creator Profile, Viewer, and future secondary routes use `SecondaryScreenAppBar` for the shared left Back, center title/context, and right action geometry. Search, For You, and Creator Profile use `FeedFilterSheet` and `FeedFilterFab`; filter values and refresh behavior remain route-owned, while the shared FAB shows active state through tint and accessibility state rather than a persistent summary row.
 
+FAB filter/sort restore state lives in `UiRestoreRepository` and is loaded by the app-shell `FeedFabRestoreRegistry` before a feed route renders. Search and For You use separate top-level keys; Creator Profile keys include source plus creator identity; Codex detail keys include the Codex ID. Keep query-owned Search sort/date/score state in the Search query owner rather than duplicating it in FAB restore storage. New FAB contexts must receive their own stable key so switching tabs or relaunching never leaks controls between feeds.
+
 ## Codex Collection Actions
 
 `CodexListScreen` owns one collection-action sheet reached by both the compact tile overflow affordance and tile long-press; keep export/share, search, rename, and delete behavior in that shared surface rather than creating divergent entry-point logic. `CodexDetailScreen` owns explicit multi-post edit selection through `CodexEditSelection`, while long-press retains the full single-post action sheet. Do not add permanent overflow controls to individual feed or Codex post cards to expose these actions.

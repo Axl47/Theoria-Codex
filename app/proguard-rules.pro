@@ -68,6 +68,10 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
+-keepclassmembers class com.theoriacodex.data.repository.FeedFabRestoreState {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}
 -keepclassmembers class com.theoriacodex.data.repository.LegacySearchScrollStateRecord {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;

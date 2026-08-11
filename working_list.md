@@ -4,6 +4,29 @@ updated_at: 2026-08-11T00:04:54-04:00
 ---
 # Working List
 
+## Current Task: Persist Every Feed FAB Context
+
+### In Progress
+
+None.
+
+### Pending
+
+None.
+
+### Done
+
+- [x] Freeze the route-keyed filter/sort ownership, restore ordering, error behavior, and validation boundary.
+  - Evidence: Search retains its existing query owner for sort/date/score while FAB-local visibility state moves to UI restore; For You owns a separate top-level record; Creator and Codex records are keyed by their concrete identities; routes do not render controls until restore loading completes.
+- [x] Add bounded durable UI-restore storage for independent FAB contexts.
+  - Evidence: in-memory, file-backed, and DataStore repositories now store typed FAB state; DataStore normalizes values and retains at most 128 recently updated contexts; Gson/R8 contracts include the new record.
+- [x] Restore and save Search, For You, Creator Profile, and Codex detail FAB state through their route owners.
+  - Evidence: the app-shell registry publishes updates synchronously across tab disposal and persists them in the shell scope; each screen is controlled by its own record; For You reconstructs its saved sort before provider work; Codex sorting is restored before repository ordering is observed.
+- [x] Add repository, route, and UI regressions for tab switching and process relaunch.
+  - Evidence: repository contracts cover independent contexts, DataStore and file-backed tests cover reconstruction, the registry test covers immediate cross-tab memory plus persistence, and the For You owner test covers pre-provider sort restoration.
+- [x] Run one focused host-only validation batch and record the result.
+  - Evidence: the complete app and core-data JVM suites report 674 tests with zero failures/errors and 10 intentional skips; Debug compilation, app Detekt, Gson/R8 wire contracts, and `git diff --check` pass. App Detekt still reports its existing compiler-analysis warning, so Kotlin compilation/tests remain the authoritative host proof. Core-data Detekt remains red only on its five inherited findings, including the pre-existing migration complexity finding and four untouched long methods. No connected, install, launch, device, or live-provider command ran.
+
 ## Current Task: Show Highest Watched Media Progress In Recents
 
 ### In Progress

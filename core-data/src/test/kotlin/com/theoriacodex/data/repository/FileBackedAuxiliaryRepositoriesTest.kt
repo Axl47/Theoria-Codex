@@ -119,12 +119,20 @@ internal class FileBackedAuxiliaryRepositoriesTest : FileBackedRepositoryTestFix
 
         first.setLastTab("settings")
         first.setSearchScrollState("qhash", SearchScrollState(firstVisibleItemIndex = 3, firstVisibleItemOffsetPx = 28))
+        first.setFeedFabRestoreState(
+            "creator:PIXIV:42",
+            FeedFabRestoreState(animatedOnly = true, hideSaved = true),
+        )
         first.setViewerLaunchContext(context)
 
         val second = FileBackedUiRestoreRepository(dir)
 
         assertEquals("settings", second.getLastTab())
         assertEquals(3, second.getSearchScrollState("qhash")?.firstVisibleItemIndex)
+        assertEquals(
+            FeedFabRestoreState(animatedOnly = true, hideSaved = true),
+            second.getFeedFabRestoreStates()["creator:PIXIV:42"],
+        )
         assertEquals(context, second.observeViewerLaunchContext().first())
     }
 

@@ -62,7 +62,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -94,8 +93,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.imageLoader
 import coil.request.SuccessResult
-import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
-import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.isAuthoritativeDurationMedia
 import com.theoriacodex.app.media.MediaDurationKey
@@ -136,6 +133,7 @@ import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.tags.FavoriteTagActionGrid
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
+import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
 import com.theoriacodex.app.viewer.UgoiraSizeBucket
 import com.theoriacodex.app.viewer.mediaTestTagPart
@@ -196,14 +194,16 @@ fun SearchScreen(
     onPostUrlCopied: (Post) -> Unit = {},
     onAddFavoriteTag: (SourceKey, String) -> Unit = { _, _ -> },
     onRemoveFavoriteTag: (SourceKey, String) -> Unit = { _, _ -> },
+    fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
+    onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
 ) {
     val input = state.suggestions.input
-    var animatedOnly by rememberSaveable { mutableStateOf(false) }
-    var hideLiked by rememberSaveable { mutableStateOf(false) }
-    var hideSaved by rememberSaveable { mutableStateOf(false) }
-    var hideWatched by rememberSaveable { mutableStateOf(false) }
-    var durationMinBucket by rememberSaveable { mutableIntStateOf(ANIMATED_DURATION_MIN_BUCKET) }
-    var durationMaxBucket by rememberSaveable { mutableIntStateOf(ANIMATED_DURATION_MAX_BUCKET) }
+    val animatedOnly = fabRestoreState.animatedOnly
+    val hideLiked = fabRestoreState.hideLiked
+    val hideSaved = fabRestoreState.hideSaved
+    val hideWatched = fabRestoreState.hideWatched
+    val durationMinBucket = fabRestoreState.durationMinBucket
+    val durationMaxBucket = fabRestoreState.durationMaxBucket
     var searchFieldFocused by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var showFavoriteTagSheet by remember { mutableStateOf(false) }
@@ -247,13 +247,6 @@ fun SearchScreen(
         )
     } else {
         null
-    }
-    LaunchedEffect(isNhentaiSourceMode) {
-        if (isNhentaiSourceMode) {
-            animatedOnly = false
-            durationMinBucket = ANIMATED_DURATION_MIN_BUCKET
-            durationMaxBucket = ANIMATED_DURATION_MAX_BUCKET
-        }
     }
     val visibilityFilters = remember(
         animatedFilterActive,
@@ -873,19 +866,31 @@ fun SearchScreen(
             query = state.query.draft,
             onAction = onAction,
             animatedOnly = animatedOnly,
-            onAnimatedOnlyChange = { animatedOnly = it },
+            onAnimatedOnlyChange = { enabled ->
+                onFabRestoreStateChange(fabRestoreState.copy(animatedOnly = enabled))
+            },
             animatedDurationRange = animatedDurationRange,
             onAnimatedDurationRangeChange = { range ->
-                durationMinBucket = range.normalizedMinBucket
-                durationMaxBucket = range.normalizedMaxBucket
+                onFabRestoreStateChange(
+                    fabRestoreState.copy(
+                        durationMinBucket = range.normalizedMinBucket,
+                        durationMaxBucket = range.normalizedMaxBucket,
+                    ),
+                )
             },
             showAnimatedOnlyFilter = !isNhentaiSourceMode,
             hideLiked = hideLiked,
-            onHideLikedChange = { hideLiked = it },
+            onHideLikedChange = { enabled ->
+                onFabRestoreStateChange(fabRestoreState.copy(hideLiked = enabled))
+            },
             hideSaved = hideSaved,
-            onHideSavedChange = { hideSaved = it },
+            onHideSavedChange = { enabled ->
+                onFabRestoreStateChange(fabRestoreState.copy(hideSaved = enabled))
+            },
             hideWatched = hideWatched,
-            onHideWatchedChange = { hideWatched = it },
+            onHideWatchedChange = { enabled ->
+                onFabRestoreStateChange(fabRestoreState.copy(hideWatched = enabled))
+            },
             nhentaiFullColorFilter = state.query.nhentaiFullColorFilter,
             onNhentaiFullColorFilterChange = { enabled ->
                 onAction(SearchAction.SetNhentaiFullColor(enabled))

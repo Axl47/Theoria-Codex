@@ -52,6 +52,22 @@ class ForYouViewModelTest {
     }
 
     @Test
+    fun `durable FAB sort reconstructs before provider work when saved state is absent`() = runTest {
+        val engine = FakeForYouRouteEngine()
+
+        val viewModel = ForYouViewModel(
+            engine = engine,
+            savedStateHandle = SavedStateHandle(),
+            initialSort = SortMode.RANDOM,
+            coroutineScope = this,
+        )
+        advanceUntilIdle()
+
+        assertEquals(SortMode.RANDOM, engine.restoredSort)
+        assertEquals(SortMode.RANDOM, viewModel.state.value.sortMode)
+    }
+
+    @Test
     fun `environment refresh publishes results and viewer launch as buffered effect`() = runTest {
         val engine = FakeForYouRouteEngine().apply {
             refreshResult = listOf(testPost(sourcePostId = "recommended"))

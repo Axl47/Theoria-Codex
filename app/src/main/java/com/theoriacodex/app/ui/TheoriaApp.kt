@@ -167,6 +167,11 @@ import com.theoriacodex.app.ui.routes.SettingsDestinationStateBoundary
 import com.theoriacodex.app.ui.routes.ViewerDestinationStateBoundary
 import com.theoriacodex.app.ui.routes.ActiveProfileCoordinationEffect
 import com.theoriacodex.app.ui.routes.activeRecommendationProfile
+import com.theoriacodex.app.ui.components.FOR_YOU_FEED_FAB_CONTEXT
+import com.theoriacodex.app.ui.components.SEARCH_FEED_FAB_CONTEXT
+import com.theoriacodex.app.ui.components.codexFeedFabContext
+import com.theoriacodex.app.ui.components.creatorFeedFabContext
+import com.theoriacodex.app.ui.components.rememberFeedFabRestoreRegistry
 import com.theoriacodex.app.update.ChangelogSection
 import com.theoriacodex.app.update.RemoteUpdate
 import com.theoriacodex.app.update.PendingPostInstallChangelog
@@ -315,6 +320,8 @@ internal fun TheoriaAppContent(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val dataDependencies = appContainer.data
+    val feedFabRestoreRegistry = rememberFeedFabRestoreRegistry(dataDependencies.uiRestoreRepository)
+    LaunchedEffect(feedFabRestoreRegistry) { feedFabRestoreRegistry.load() }
     fun recordPostUrlCopy() {
         scope.launch {
             runCatchingPreservingCancellation {
@@ -1436,6 +1443,9 @@ internal fun TheoriaAppContent(
                             when (TopLevelDestination.entries[page]) {
                                 TopLevelDestination.Search -> {
                                     BrowsingDestinationStateBoundary(dataDependencies, sourceDependencies) { state ->
+                                        val fabRestoreState = feedFabRestoreRegistry
+                                            .state(SEARCH_FEED_FAB_CONTEXT)
+                                            ?: return@BrowsingDestinationStateBoundary
                                         SearchRoute(
                                         coordinator = featureDependencies.search,
                                         mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
@@ -1451,6 +1461,10 @@ internal fun TheoriaAppContent(
                                             resolveUnknownAnimatedDurations =
                                                 state.settings.contentFilters.resolveUnknownAnimatedDurations,
                                         ),
+                                        fabRestoreState = fabRestoreState,
+                                        onFabRestoreStateChange = { updated ->
+                                            feedFabRestoreRegistry.update(SEARCH_FEED_FAB_CONTEXT, updated)
+                                        },
                                         callbacks = SearchRouteCallbacks(
                                             onOpenViewer = { effect ->
                                                 val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
@@ -1499,6 +1513,9 @@ internal fun TheoriaAppContent(
 
                                 TopLevelDestination.ForYou -> {
                                     BrowsingDestinationStateBoundary(dataDependencies, sourceDependencies) { state ->
+                                        val fabRestoreState = feedFabRestoreRegistry
+                                            .state(FOR_YOU_FEED_FAB_CONTEXT)
+                                            ?: return@BrowsingDestinationStateBoundary
                                         ForYouRoute(
                                         coordinator = featureDependencies.forYou,
                                         mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
@@ -1512,6 +1529,10 @@ internal fun TheoriaAppContent(
                                             resolveUnknownAnimatedDurations =
                                                 state.settings.contentFilters.resolveUnknownAnimatedDurations,
                                         ),
+                                        fabRestoreState = fabRestoreState,
+                                        onFabRestoreStateChange = { updated ->
+                                            feedFabRestoreRegistry.update(FOR_YOU_FEED_FAB_CONTEXT, updated)
+                                        },
                                         callbacks = ForYouRouteCallbacks(
                                             onOpenViewer = { effect ->
                                                 val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
@@ -1842,7 +1863,12 @@ internal fun TheoriaAppContent(
                                 dataDependencies.statisticsRepository.recordCodexEntry(codexId)
                             }
                         }
-                        var sortMode by rememberSaveable(codexId) { mutableStateOf(CodexSortMode.NEWEST_SAVED) }
+                        val fabContext = codexFeedFabContext(codexId)
+                        val fabRestoreState = feedFabRestoreRegistry.state(fabContext)
+                            ?: return@composable
+                        val sortMode = fabRestoreState.sortMode?.let { encoded ->
+                            CodexSortMode.entries.firstOrNull { mode -> mode.name == encoded }
+                        } ?: CodexSortMode.NEWEST_SAVED
                         val durationOwner = viewModel<MediaDurationRouteViewModel>(
                             key = "codex-detail-duration-$codexId",
                             factory = MediaDurationRouteViewModel.factory(
@@ -1880,7 +1906,6 @@ internal fun TheoriaAppContent(
                             fetchTagVideoCounts = { source, tags ->
                                 featureDependencies.search.fetchTagVideoCounts(source, tags)
                             },
-                            onSortChange = { sortMode = it },
                             onDurationFilterChanged = durationOwner::onFilterChanged,
                             onDurationPostVisibilityChanged = durationOwner::onPostVisibilityChanged,
                             onDurationEnvironmentChanged = durationOwner::onEnvironmentChanged,
@@ -1963,23 +1988,39 @@ internal fun TheoriaAppContent(
                                 }
                             },
                             isLikesCodex = codexId == likesCodexIdForProfile(state.activeProfile.profileId),
+                            fabRestoreState = fabRestoreState,
+                            onFabRestoreStateChange = { updated ->
+                                feedFabRestoreRegistry.update(fabContext, updated)
+                            },
                         )
                         }
                     }
                     composable(AppRoute.CreatorProfile) {
                         BrowsingDestinationStateBoundary(dataDependencies, sourceDependencies) { state ->
+                            val creator = pendingCreatorProfile
+                                ?: return@BrowsingDestinationStateBoundary
+                            val creatorIdentity = creator.profileId
+                                ?: creator.uploadsQuery
+                                ?: creator.displayName
+                            val fabContext = creatorFeedFabContext(creator.source.name, creatorIdentity)
+                            val fabRestoreState = feedFabRestoreRegistry.state(fabContext)
+                                ?: return@BrowsingDestinationStateBoundary
                             CreatorRoute(
                             coordinator = featureDependencies.creatorProfile,
                             mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
                             pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                             config = CreatorRouteConfig(
-                                activeCreator = pendingCreatorProfile,
+                                activeCreator = creator,
                                 availableSources = state.availableSources,
                                 likedPostIds = state.likedPostIds,
                                 savedPostIds = state.savedPostIds,
                                 resolveUnknownAnimatedDurations =
                                     state.settings.contentFilters.resolveUnknownAnimatedDurations,
                             ),
+                            fabRestoreState = fabRestoreState,
+                            onFabRestoreStateChange = { updated ->
+                                feedFabRestoreRegistry.update(fabContext, updated)
+                            },
                             callbacks = CreatorRouteCallbacks(
                                 onOpenViewer = { effect ->
                                     val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(

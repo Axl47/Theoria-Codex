@@ -622,6 +622,7 @@ class FileBackedUiRestoreRepository(
     private val viewerContextFlow = MutableStateFlow<ViewerLaunchContext?>(null)
     private val scrollStates = mutableMapOf<String, SearchScrollState>()
     private var settingsSectionExpansion: Map<String, Boolean> = emptyMap()
+    private val feedFabRestoreStates = mutableMapOf<String, FeedFabRestoreState>()
     private var lastTab: String? = null
 
     init {
@@ -636,6 +637,7 @@ class FileBackedUiRestoreRepository(
             }
         )
         settingsSectionExpansion = stored.settingsSectionExpansion
+        feedFabRestoreStates.putAll(stored.feedFabRestoreStates)
         viewerContextFlow.value = stored.viewerLaunchContext?.toDomain()
     }
 
@@ -681,6 +683,18 @@ class FileBackedUiRestoreRepository(
         return settingsSectionExpansion
     }
 
+    override suspend fun setFeedFabRestoreState(contextKey: String, state: FeedFabRestoreState) {
+        val normalizedKey = contextKey.trim()
+        if (normalizedKey.isBlank()) return
+        mutex.withLock {
+            commitMutation { feedFabRestoreStates[normalizedKey] = state }
+        }
+    }
+
+    override suspend fun getFeedFabRestoreStates(): Map<String, FeedFabRestoreState> {
+        return mutex.withLock { feedFabRestoreStates.toMap() }
+    }
+
     override fun observeViewerLaunchContext(): Flow<ViewerLaunchContext?> {
         return viewerContextFlow
     }
@@ -698,6 +712,7 @@ class FileBackedUiRestoreRepository(
                     lastTab = lastTab,
                     scrollStates = scrollStates.toMap(),
                     settingsSectionExpansion = settingsSectionExpansion,
+                    feedFabRestoreStates = feedFabRestoreStates.toMap(),
                     viewerLaunchContext = viewerContextFlow.value,
                 )
             },
@@ -706,6 +721,8 @@ class FileBackedUiRestoreRepository(
                 scrollStates.clear()
                 scrollStates.putAll(state.scrollStates)
                 settingsSectionExpansion = state.settingsSectionExpansion
+                feedFabRestoreStates.clear()
+                feedFabRestoreStates.putAll(state.feedFabRestoreStates)
                 viewerContextFlow.value = state.viewerLaunchContext
             },
             mutate = mutate,
@@ -725,6 +742,7 @@ class FileBackedUiRestoreRepository(
                     )
                 },
                 settingsSectionExpansion = settingsSectionExpansion,
+                feedFabRestoreStates = feedFabRestoreStates.toMap(),
                 viewerLaunchContext = viewerContextFlow.value?.let(ViewerLaunchContextRecord::fromDomain),
             ),
         )

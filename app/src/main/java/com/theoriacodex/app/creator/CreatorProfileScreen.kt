@@ -29,10 +29,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -41,8 +39,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.creator.state.CreatorUiState
-import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
-import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
@@ -67,6 +63,7 @@ import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.viewer.PixivUgoiraClient
+import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
@@ -98,17 +95,19 @@ fun CreatorProfileScreen(
     onAddExcludeTerm: (Post, SearchTerm) -> Boolean = { _, _ -> false },
     onRemoveIncludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
     onRemoveExcludeTerm: (Post, SearchTerm) -> Unit = { _, _ -> },
+    fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
+    onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
 ) {
     val creator = state.creator
     val context = LocalContext.current
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var showProfileShareMenu by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
-    var animatedOnly by rememberSaveable { mutableStateOf(false) }
-    var hideLiked by rememberSaveable { mutableStateOf(false) }
-    var hideSaved by rememberSaveable { mutableStateOf(false) }
-    var durationMinBucket by rememberSaveable { mutableIntStateOf(ANIMATED_DURATION_MIN_BUCKET) }
-    var durationMaxBucket by rememberSaveable { mutableIntStateOf(ANIMATED_DURATION_MAX_BUCKET) }
+    val animatedOnly = fabRestoreState.animatedOnly
+    val hideLiked = fabRestoreState.hideLiked
+    val hideSaved = fabRestoreState.hideSaved
+    val durationMinBucket = fabRestoreState.durationMinBucket
+    val durationMaxBucket = fabRestoreState.durationMaxBucket
     val gridState = rememberLazyStaggeredGridState()
     val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
         AnimatedDurationRange(
@@ -342,25 +341,35 @@ fun CreatorProfileScreen(
                 ) {
                     FilterChip(
                         selected = animatedOnly,
-                        onClick = { animatedOnly = !animatedOnly },
+                        onClick = {
+                            onFabRestoreStateChange(fabRestoreState.copy(animatedOnly = !animatedOnly))
+                        },
                         label = { Text("Animated only") },
                     )
                     FilterChip(
                         selected = hideLiked,
-                        onClick = { hideLiked = !hideLiked },
+                        onClick = {
+                            onFabRestoreStateChange(fabRestoreState.copy(hideLiked = !hideLiked))
+                        },
                         label = { Text("Hide liked") },
                     )
                     FilterChip(
                         selected = hideSaved,
-                        onClick = { hideSaved = !hideSaved },
+                        onClick = {
+                            onFabRestoreStateChange(fabRestoreState.copy(hideSaved = !hideSaved))
+                        },
                         label = { Text("Hide saved") },
                     )
                 }
                 AnimatedDurationRangeControl(
                     range = animatedDurationRange,
                     onRangeChange = { range ->
-                        durationMinBucket = range.normalizedMinBucket
-                        durationMaxBucket = range.normalizedMaxBucket
+                        onFabRestoreStateChange(
+                            fabRestoreState.copy(
+                                durationMinBucket = range.normalizedMinBucket,
+                                durationMaxBucket = range.normalizedMaxBucket,
+                            ),
+                        )
                     },
                 )
                 TextButton(

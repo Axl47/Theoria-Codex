@@ -15,7 +15,8 @@ com.theoriacodex.data.repository.LegacyProviderHealthSnapshotRecord|source,statu
 com.theoriacodex.data.repository.LegacyFavoriteTagEntryRecord|source,tag
 com.theoriacodex.data.repository.LegacyForYouBlacklistEntryRecord|source,tags
 com.theoriacodex.data.repository.LegacyRecommendationProfileRecord|profileId,name
-com.theoriacodex.data.repository.LegacyUiRestoreStoreRecord|lastTab,searchScrollStates,viewerLaunchContext,settingsSectionExpansion
+com.theoriacodex.data.repository.LegacyUiRestoreStoreRecord|lastTab,searchScrollStates,settingsSectionExpansion,feedFabRestoreStates,viewerLaunchContext
+com.theoriacodex.data.repository.FeedFabRestoreState|animatedOnly,hideLiked,hideSaved,hideWatched,durationMinBucket,durationMaxBucket,sortMode,source,language,fullColorOnly
 com.theoriacodex.data.repository.LegacySearchScrollStateRecord|firstVisibleItemIndex,firstVisibleItemOffsetPx
 com.theoriacodex.data.repository.LegacyViewerLaunchContextRecord|queryHash,startIndex,streamSource,scrollOffsetHint,recentsSection
 com.theoriacodex.data.repository.CodexStoreFile|codices,items,posts
@@ -33,7 +34,7 @@ com.theoriacodex.data.repository.ProviderHealthSnapshotRecord|source,status,chec
 com.theoriacodex.data.repository.FavoriteTagEntryRecord|source,tag
 com.theoriacodex.data.repository.ForYouBlacklistEntryRecord|source,tags
 com.theoriacodex.data.repository.RecommendationProfileRecord|profileId,name
-com.theoriacodex.data.repository.UiRestoreStoreFile|lastTab,searchScrollStates,viewerLaunchContext,settingsSectionExpansion
+com.theoriacodex.data.repository.UiRestoreStoreFile|lastTab,searchScrollStates,settingsSectionExpansion,feedFabRestoreStates,viewerLaunchContext
 com.theoriacodex.data.repository.SearchScrollStateRecord|firstVisibleItemIndex,firstVisibleItemOffsetPx
 com.theoriacodex.data.repository.ViewerLaunchContextRecord|queryHash,startIndex,streamSource,scrollOffsetHint,recentsSection
 com.theoriacodex.data.repository.LikesStoreFile|likes

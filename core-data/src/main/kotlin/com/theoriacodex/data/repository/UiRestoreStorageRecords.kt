@@ -9,6 +9,8 @@ internal data class UiRestoreStoreFile(
     val searchScrollStates: Map<String, SearchScrollStateRecord> = emptyMap(),
     @field:SerializedName("settingsSectionExpansion")
     val settingsSectionExpansion: Map<String, Boolean> = emptyMap(),
+    @field:SerializedName("feedFabRestoreStates")
+    val feedFabRestoreStates: Map<String, FeedFabRestoreState> = emptyMap(),
     @field:SerializedName("viewerLaunchContext")
     val viewerLaunchContext: ViewerLaunchContextRecord? = null,
 )
@@ -17,6 +19,7 @@ internal data class UiRestoreMemoryState(
     val lastTab: String?,
     val scrollStates: Map<String, SearchScrollState>,
     val settingsSectionExpansion: Map<String, Boolean>,
+    val feedFabRestoreStates: Map<String, FeedFabRestoreState>,
     val viewerLaunchContext: ViewerLaunchContext?,
 )
 

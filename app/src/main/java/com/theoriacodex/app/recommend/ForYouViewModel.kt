@@ -127,16 +127,19 @@ internal class ForYouViewModel(
     private val engine: ForYouRouteEngine,
     private val savedStateHandle: SavedStateHandle,
     initialProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
+    initialSort: SortMode? = null,
     coroutineScope: CoroutineScope? = null,
 ) : ViewModel(), RouteStateOwner<ForYouUiState, ForYouAction, ForYouEffect> {
     constructor(
         coordinator: ForYouCoordinator,
         savedStateHandle: SavedStateHandle,
         initialProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
+        initialSort: SortMode? = null,
     ) : this(
         engine = CoordinatorForYouRouteEngine(coordinator),
         savedStateHandle = savedStateHandle,
         initialProfiles = initialProfiles,
+        initialSort = initialSort,
     )
 
     private val ownerScope = coroutineScope ?: viewModelScope
@@ -144,6 +147,7 @@ internal class ForYouViewModel(
         ?.let { name -> SourceKey.entries.firstOrNull { it.name == name } }
     private val restoredSort = savedStateHandle.get<String>(KEY_SORT_MODE)
         ?.let { name -> SortMode.entries.firstOrNull { it.name == name } }
+        ?: initialSort
     private val restoredProfileId = savedStateHandle.get<String>(KEY_PROFILE_ID)
 
     private var profiles = initialProfiles
@@ -432,12 +436,14 @@ internal class ForYouViewModel(
         fun factory(
             coordinator: ForYouCoordinator,
             initialProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
+            initialSort: SortMode? = null,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 ForYouViewModel(
                     coordinator = coordinator,
                     savedStateHandle = createSavedStateHandle(),
                     initialProfiles = initialProfiles,
+                    initialSort = initialSort,
                 )
             }
         }

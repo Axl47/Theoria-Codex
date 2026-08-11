@@ -78,6 +78,7 @@ internal class UiRestoreLegacyDataMigration(
                 lastTab = null,
                 scrollStates = emptyMap(),
                 settingsSectionExpansion = emptyMap(),
+                feedFabRestoreStates = emptyMap(),
                 viewerLaunchContext = null,
             )
             if (uiSnapshot != null && legacyUi != null) {

@@ -614,6 +614,7 @@ class InMemoryUiRestoreRepository : UiRestoreRepository {
     private val lastTab = MutableStateFlow<String?>(null)
     private val scrollStates = MutableStateFlow<Map<String, SearchScrollState>>(emptyMap())
     private val settingsSectionExpansion = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    private val feedFabRestoreStates = MutableStateFlow<Map<String, FeedFabRestoreState>>(emptyMap())
     private val viewerLaunchContext = MutableStateFlow<ViewerLaunchContext?>(null)
 
     override suspend fun setLastTab(route: String) {
@@ -654,6 +655,18 @@ class InMemoryUiRestoreRepository : UiRestoreRepository {
 
     override suspend fun getSettingsSectionExpansion(): Map<String, Boolean> {
         return settingsSectionExpansion.value
+    }
+
+    override suspend fun setFeedFabRestoreState(contextKey: String, state: FeedFabRestoreState) {
+        val normalizedKey = contextKey.trim()
+        if (normalizedKey.isBlank()) return
+        mutex.withLock {
+            feedFabRestoreStates.value = feedFabRestoreStates.value + (normalizedKey to state)
+        }
+    }
+
+    override suspend fun getFeedFabRestoreStates(): Map<String, FeedFabRestoreState> {
+        return feedFabRestoreStates.value
     }
 
     override fun observeViewerLaunchContext(): Flow<ViewerLaunchContext?> {

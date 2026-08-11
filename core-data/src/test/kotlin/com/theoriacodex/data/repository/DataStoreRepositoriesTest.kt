@@ -324,6 +324,25 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
+    fun `ui restore reconstructs independent feed FAB contexts after reopening`() = runTest {
+        val directory = tempFolder.newFolder("ui-feed-fab-contexts")
+        val firstScope = newScope()
+        val first = DataStoreUiRestoreRepository(directory, firstScope)
+        val search = FeedFabRestoreState(animatedOnly = true, hideLiked = true)
+        val codex = FeedFabRestoreState(source = "PIXIV", language = "JAPANESE", sortMode = "OLDEST_SAVED")
+
+        first.setFeedFabRestoreState("search", search)
+        first.setFeedFabRestoreState("codex:one", codex)
+        closeScope(firstScope)
+
+        val secondScope = newScope()
+        val reconstructed = DataStoreUiRestoreRepository(directory, secondScope)
+
+        assertEquals(mapOf("search" to search, "codex:one" to codex), reconstructed.getFeedFabRestoreStates())
+        closeScope(secondScope)
+    }
+
+    @Test
     fun `ui restore migrates legacy query offsets once and removes the second store`() = runTest {
         val directory = tempFolder.newFolder("ui-query-scroll-migration")
         directory.resolve(DATASTORE_UI_RESTORE_FILE_NAME).writeText(
