@@ -12,12 +12,14 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -103,6 +105,17 @@ internal fun representedAutomaticTagSources(
     .map { presentation -> presentation.source }
     .filter { source -> tagOptionsBySource[source].orEmpty().isNotEmpty() }
 
+internal fun filterAutomaticTagRows(
+    rows: List<CodexAutomaticTagRow>,
+    query: String,
+): List<CodexAutomaticTagRow> {
+    val normalizedQuery = query.normalizedTagFilterText()
+    if (normalizedQuery.isBlank()) return rows
+    return rows.filter { row ->
+        normalizedQuery in row.automaticTag.tag.normalizedTagFilterText()
+    }
+}
+
 @Composable
 internal fun CodexAutomaticTagContent(
     isLikesCodex: Boolean,
@@ -136,8 +149,12 @@ internal fun CodexAutomaticTagSections(
     val presentation = codexAutomaticTagPresentation(automaticTags, tagOptionsBySource)
     val representedSources = representedAutomaticTagSources(tagOptionsBySource)
     var preferredSource by remember { mutableStateOf<SourceKey?>(null) }
+    var tagFilter by remember { mutableStateOf("") }
     val selectedSource = preferredSource?.takeIf { source -> source in representedSources }
         ?: representedSources.firstOrNull()
+    val selectedSection = presentation.availableSections.firstOrNull { section ->
+        section.source == selectedSource
+    }
     LazyColumn(
         modifier = Modifier
             .fillMaxWidth()
@@ -148,11 +165,14 @@ internal fun CodexAutomaticTagSections(
         availableTagItems(
             representedSources = representedSources,
             selectedSource = selectedSource,
-            selectedSection = presentation.availableSections.firstOrNull { section ->
-                section.source == selectedSource
-            },
+            selectedRows = selectedSection?.rows?.let { rows -> filterAutomaticTagRows(rows, tagFilter) },
+            tagFilter = tagFilter,
             automaticGroups = presentation.automaticGroups,
-            onSourceSelected = { source -> preferredSource = source },
+            onSourceSelected = { source ->
+                preferredSource = source
+                tagFilter = ""
+            },
+            onTagFilterChanged = { value -> tagFilter = value },
             onSetAutomaticTag = onSetAutomaticTag,
         )
     }
@@ -237,9 +257,11 @@ private fun LazyListScope.automaticRuleGroupItems(
 private fun LazyListScope.availableTagItems(
     representedSources: List<SourceKey>,
     selectedSource: SourceKey?,
-    selectedSection: CodexAutomaticTagSection?,
+    selectedRows: List<CodexAutomaticTagRow>?,
+    tagFilter: String,
     automaticGroups: List<CodexAutomaticTagGroup>,
     onSourceSelected: (SourceKey) -> Unit,
+    onTagFilterChanged: (String) -> Unit,
     onSetAutomaticTag: (CodexAutomaticTag, Boolean) -> Unit,
 ) {
     item { HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp)) }
@@ -250,6 +272,14 @@ private fun LazyListScope.availableTagItems(
             onSourceSelected = onSourceSelected,
         )
     }
+    if (selectedSource != null) {
+        item {
+            AutomaticTagFilterField(
+                value = tagFilter,
+                onValueChange = onTagFilterChanged,
+            )
+        }
+    }
     if (selectedSource == null) {
         item {
             Text(
@@ -259,7 +289,7 @@ private fun LazyListScope.availableTagItems(
                 modifier = Modifier.padding(vertical = 8.dp),
             )
         }
-    } else if (selectedSection == null) {
+    } else if (selectedRows == null) {
         item {
             Text(
                 text = "All ${selectedSource.displayName()} tags are automatic",
@@ -268,9 +298,18 @@ private fun LazyListScope.availableTagItems(
                 modifier = Modifier.padding(vertical = 8.dp),
             )
         }
+    } else if (selectedRows.isEmpty()) {
+        item {
+            Text(
+                text = "No tags match \"${tagFilter.trim()}\"",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp),
+            )
+        }
     } else {
         items(
-            items = selectedSection.rows,
+            items = selectedRows,
             key = { row ->
                 val tag = row.automaticTag
                 "available:${tag.source}:${sourceTagKey(tag.source, tag.tag)}"
@@ -283,6 +322,30 @@ private fun LazyListScope.availableTagItems(
             )
         }
     }
+}
+
+@Composable
+private fun AutomaticTagFilterField(
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text("Filter tags") },
+        singleLine = true,
+        leadingIcon = {
+            Icon(imageVector = Icons.Default.Search, contentDescription = null)
+        },
+        trailingIcon = value.takeIf(String::isNotEmpty)?.let {
+            {
+                IconButton(onClick = { onValueChange("") }) {
+                    Icon(imageVector = Icons.Default.Close, contentDescription = "Clear tag filter")
+                }
+            }
+        },
+    )
 }
 
 @Composable
@@ -415,3 +478,10 @@ private fun AutomaticOrButton(
         }
     }
 }
+
+private fun String.normalizedTagFilterText(): String = trim()
+    .lowercase()
+    .replace('_', ' ')
+    .replace(TAG_FILTER_WHITESPACE, " ")
+
+private val TAG_FILTER_WHITESPACE = Regex("\\s+")

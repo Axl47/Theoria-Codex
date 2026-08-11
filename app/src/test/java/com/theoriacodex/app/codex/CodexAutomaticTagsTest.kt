@@ -7,6 +7,19 @@ import org.junit.Test
 
 class CodexAutomaticTagsTest {
     @Test
+    fun `tag filter is case insensitive and treats spaces like underscores`() {
+        val rows = listOf(
+            CodexAutomaticTagRow(CodexAutomaticTag(SourceKey.GELBOORU, "blue_sky"), 3),
+            CodexAutomaticTagRow(CodexAutomaticTag(SourceKey.GELBOORU, "Night Landscape"), 2),
+            CodexAutomaticTagRow(CodexAutomaticTag(SourceKey.GELBOORU, "portrait"), 1),
+        )
+
+        assertEquals(listOf(rows[0]), filterAutomaticTagRows(rows, "BLUE SKY"))
+        assertEquals(listOf(rows[1]), filterAutomaticTagRows(rows, "land"))
+        assertEquals(rows, filterAutomaticTagRows(rows, "  "))
+    }
+
+    @Test
     fun `represented source selector follows presentation order and skips empty sources`() {
         assertEquals(
             listOf(SourceKey.GELBOORU, SourceKey.PIXIV),

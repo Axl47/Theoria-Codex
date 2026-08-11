@@ -21,5 +21,6 @@
 - [x] Removed repetitive `AND` labels from the editable Search tag row while retaining explicit OR labels inside alternative groups.
 - [x] Replaced stacked Automatic Rules source tag sections with a source-name dropdown that renders one provider's available tags at a time.
 - [x] Canonicalized Automatic Rule numbering per source so deleting an entire group shifts every later group down immediately and durably.
+- [x] Added a local filter field for the selected Automatic Rules source, including space/underscore matching, clear action, and distinct empty-result messaging.
 - [x] Added source-scoped grouped Codex Automatic rules, Room schema 7 migration, JSON compatibility, atomic like-time matching, and AND/OR editing in the existing collection-action sheet.
 - [x] Completed host validation: relevant Gradle unit suites, Android-test source compilation, app compilation, Detekt, `git diff --check`, and ExecPlan HTML parsing all pass.
