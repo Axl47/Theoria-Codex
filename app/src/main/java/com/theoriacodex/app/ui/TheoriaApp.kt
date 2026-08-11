@@ -241,16 +241,6 @@ internal fun statisticsUsageCategory(
     else -> null
 }
 
-internal data class ReleaseChangelogEntry(
-    val releaseId: Long?,
-    val versionCode: Int,
-    val commitShaShort: String,
-    val releaseName: String?,
-    val publishedAtEpochMs: Long?,
-    val changelogMarkdown: String,
-    val changelogSections: List<ChangelogSection>,
-)
-
 @Composable
 fun TheoriaApp(
     incomingUri: Uri? = null,
@@ -2362,85 +2352,6 @@ private fun installedAppVersionCode(context: Context): Int {
         context.packageManager.getPackageInfo(context.packageName, 0)
     }
     return PackageInfoCompat.getLongVersionCode(packageInfo).toInt()
-}
-
-private fun mergeReleaseHistory(
-    remoteHistory: List<RemoteUpdate>,
-    localCurrent: PendingPostInstallChangelog?,
-): List<ReleaseChangelogEntry> {
-    val entries = remoteHistory.map { remote ->
-        ReleaseChangelogEntry(
-            releaseId = remote.releaseId,
-            versionCode = remote.versionCode,
-            commitShaShort = remote.commitShaShort,
-            releaseName = remote.releaseName,
-            publishedAtEpochMs = remote.publishedAtEpochMs,
-            changelogMarkdown = remote.changelogMarkdown,
-            changelogSections = remote.changelogSections,
-        )
-    }.toMutableList()
-
-    localCurrent?.let { local ->
-        val alreadyPresent = entries.any { entry ->
-            entry.releaseId == local.releaseId ||
-                (entry.versionCode == local.versionCode && entry.commitShaShort == local.commitShaShort)
-        }
-        if (!alreadyPresent) {
-            entries += ReleaseChangelogEntry(
-                releaseId = local.releaseId,
-                versionCode = local.versionCode,
-                commitShaShort = local.commitShaShort,
-                releaseName = local.releaseName,
-                publishedAtEpochMs = null,
-                changelogMarkdown = local.changelogMarkdown,
-                changelogSections = local.changelogSections,
-            )
-        }
-    }
-
-    return entries.sortedWith(releaseChangelogNewestFirstComparator())
-}
-
-private fun PendingPostInstallChangelog.toReleaseHistoryEntry(): ReleaseChangelogEntry {
-    return ReleaseChangelogEntry(
-        releaseId = releaseId,
-        versionCode = versionCode,
-        commitShaShort = commitShaShort,
-        releaseName = releaseName,
-        publishedAtEpochMs = null,
-        changelogMarkdown = changelogMarkdown,
-        changelogSections = changelogSections,
-    )
-}
-
-private fun RemoteUpdate.toReleaseHistoryEntry(): ReleaseChangelogEntry {
-    return ReleaseChangelogEntry(
-        releaseId = releaseId,
-        versionCode = versionCode,
-        commitShaShort = commitShaShort,
-        releaseName = releaseName,
-        publishedAtEpochMs = publishedAtEpochMs,
-        changelogMarkdown = changelogMarkdown,
-        changelogSections = changelogSections,
-    )
-}
-
-private fun releaseChangelogNewestFirstComparator(): Comparator<ReleaseChangelogEntry> {
-    return compareByDescending<ReleaseChangelogEntry> { it.publishedAtEpochMs ?: Long.MIN_VALUE }
-        .thenByDescending { it.versionCode }
-}
-
-internal fun releaseDisplayTitle(releaseName: String?, versionCode: Int): String {
-    val normalized = releaseName?.trim().orEmpty()
-    if (normalized.isNotBlank()) return normalized
-    return "vc$versionCode"
-}
-
-internal fun firstChangelogLine(markdown: String): String? {
-    return markdown
-        .lineSequence()
-        .map { it.trim() }
-        .firstOrNull { it.isNotBlank() && !it.startsWith("#") }
 }
 
 private suspend fun DataDependencies.currentSettingsSnapshot(): AppSettings {

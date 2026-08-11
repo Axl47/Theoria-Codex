@@ -59,7 +59,7 @@ class FeedAutoplayArchitectureTest {
         assertTrue("Animated images must stop outside the active viewport", "animatable?.stop()" in feedMedia)
 
         val ugoira = file(
-            "app/src/main/java/com/theoriacodex/app/viewer/PixivUgoiraPlayer.kt",
+            "app/src/main/java/com/theoriacodex/app/viewer/PixivUgoiraPlayerUi.kt",
         ).readText()
         assertTrue(
             "Never-visible Ugoira cards must not start archive download or decode",

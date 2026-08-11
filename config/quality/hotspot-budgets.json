@@ -27,8 +27,8 @@
   },
   "detektBaselines": {
     "config/detekt/baseline-app-debug.xml": {
-      "CognitiveComplexMethod": 27,
-      "LongMethod": 32
+      "CognitiveComplexMethod": 26,
+      "LongMethod": 30
     },
     "config/detekt/baseline-app-logic.xml": {},
     "config/detekt/baseline-core-data-android-debug.xml": {

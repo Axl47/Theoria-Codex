@@ -39,13 +39,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.creator.state.CreatorAction
+import com.theoriacodex.app.creator.state.CreatorUiState
 import com.theoriacodex.app.media.ANIMATED_DURATION_MAX_BUCKET
 import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.durationFilterReadiness
-import com.theoriacodex.app.media.durationFilterMetadata
 import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.media.copyTextToClipboard
@@ -53,8 +53,8 @@ import com.theoriacodex.app.media.showClipboardCopyConfirmation
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.SearchVisibilityFilters
-import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.search.filterSearchResults
+import com.theoriacodex.app.search.rememberSearchDurationFilterPresentation
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.FeedEmptyTile
@@ -67,8 +67,6 @@ import com.theoriacodex.app.ui.components.PostActionSheet
 import com.theoriacodex.app.ui.components.SecondaryScreenAppBar
 import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
 import com.theoriacodex.app.viewer.PixivUgoiraClient
-import com.theoriacodex.app.creator.state.CreatorAction
-import com.theoriacodex.app.creator.state.CreatorUiState
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
@@ -118,7 +116,6 @@ fun CreatorProfileScreen(
             maxBucket = durationMaxBucket,
         )
     }
-    val animatedDurationFilterActive = !animatedDurationRange.isFullRange
     val visibilityFilters = remember(animatedOnly, hideLiked, hideSaved, animatedDurationRange) {
         SearchVisibilityFilters(
             animatedOnly = animatedOnly,
@@ -127,33 +124,14 @@ fun CreatorProfileScreen(
             animatedDurationRange = animatedDurationRange,
         )
     }
-    val unknownAnimatedDurationPolicy = remember(resolveUnknownAnimatedDurations) {
-        if (resolveUnknownAnimatedDurations) {
-            UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
-        } else {
-            UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
-        }
-    }
-    val durationMetadata = remember(
-        state.results,
-        durationStates,
-        animatedDurationFilterActive,
-    ) {
-        durationFilterMetadata(state.results, durationStates, animatedDurationFilterActive)
-    }
-    val acquiredDurations = durationMetadata.knownDurationMsByPostId
-    val durationDecisionStates = durationMetadata.stateByPostId
-    val durationReadiness = remember(
-        state.results,
-        animatedDurationFilterActive,
-        durationDecisionStates,
-    ) {
-        durationFilterReadiness(
-            state.results,
-            animatedDurationFilterActive,
-            durationDecisionStates,
-        )
-    }
+    val durationFilter = rememberSearchDurationFilterPresentation(
+        state.results, animatedDurationRange, durationStates, resolveUnknownAnimatedDurations,
+    )
+    val animatedDurationFilterActive = durationFilter.active
+    val unknownAnimatedDurationPolicy = durationFilter.unknownPolicy
+    val acquiredDurations = durationFilter.knownDurationMsByPostId
+    val durationDecisionStates = durationFilter.stateByPostId
+    val durationReadiness = durationFilter.readiness
     val visibleResults = remember(
         state.results,
         visibilityFilters,

@@ -88,92 +88,18 @@ internal fun SaveToCodexSheet(
     val selectedProfile = profiles.firstOrNull { profile -> profile.profileId == selectedProfileId }
     val selectedCodices = codicesByProfile[selectedProfileId].orEmpty()
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        dragHandle = null,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close save menu",
-                    )
-                }
-                Text(
-                    text = "Save to Codex",
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(modifier = Modifier.size(48.dp))
-            }
-
-            if (selectedProfile != null) {
-                Text(
-                    text = "Profile: ${selectedProfile.name}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                )
-            }
-
-            if (selectedCodices.isEmpty()) {
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    tonalElevation = 1.dp,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        text = "No codices in this profile yet.",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 20.dp),
-                        textAlign = TextAlign.Center,
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.heightIn(max = 420.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(selectedCodices, key = { codex -> codex.codexId }) { codex ->
-                        CodexPickerRow(
-                            codex = codex,
-                            itemCount = codexItemCounts[codex.codexId] ?: 0,
-                            coverCandidates = codexCoverCandidates[codex.codexId].orEmpty(),
-                            onClick = { onSelectCodex(codex.codexId) },
-                        )
-                    }
-                }
-            }
-
-            SheetActionRow(
-                icon = Icons.Default.Person,
-                label = selectedProfile?.name ?: "Profile",
-                onClick = {
-                    selectedProfileId = nextProfileId(
-                        profiles = profiles,
-                        currentProfileId = selectedProfileId,
-                    )
-                },
-            )
-            SheetActionRow(
-                icon = Icons.Default.Add,
-                label = "Create Codex",
-                onClick = { showCreateDialog = true },
-            )
-        }
-    }
+    SaveToCodexSheetContent(
+        selectedProfile = selectedProfile,
+        selectedCodices = selectedCodices,
+        codexItemCounts = codexItemCounts,
+        codexCoverCandidates = codexCoverCandidates,
+        onSelectCodex = onSelectCodex,
+        onCycleProfile = {
+            selectedProfileId = nextProfileId(profiles, selectedProfileId)
+        },
+        onCreateCodex = { showCreateDialog = true },
+        onDismiss = onDismiss,
+    )
 
     if (showCreateDialog) {
         CreateCodexDialog(
@@ -187,6 +113,102 @@ internal fun SaveToCodexSheet(
                 showCreateDialog = false
             },
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SaveToCodexSheetContent(
+    selectedProfile: RecommendationProfile?,
+    selectedCodices: List<Codex>,
+    codexItemCounts: Map<String, Int>,
+    codexCoverCandidates: Map<String, List<CodexCoverCandidate>>,
+    onSelectCodex: (String) -> Unit,
+    onCycleProfile: () -> Unit,
+    onCreateCodex: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SaveToCodexHeader(onDismiss)
+            selectedProfile?.let { profile ->
+                Text(
+                    text = "Profile: ${profile.name}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
+            }
+            CodexPickerList(
+                codices = selectedCodices,
+                itemCounts = codexItemCounts,
+                coverCandidates = codexCoverCandidates,
+                onSelectCodex = onSelectCodex,
+            )
+            SheetActionRow(Icons.Default.Person, selectedProfile?.name ?: "Profile", onCycleProfile)
+            SheetActionRow(Icons.Default.Add, "Create Codex", onCreateCodex)
+        }
+    }
+}
+
+@Composable
+private fun SaveToCodexHeader(onDismiss: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onDismiss) {
+            Icon(Icons.Default.Close, contentDescription = "Close save menu")
+        }
+        Text(
+            text = "Save to Codex",
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(modifier = Modifier.size(48.dp))
+    }
+}
+
+@Composable
+private fun CodexPickerList(
+    codices: List<Codex>,
+    itemCounts: Map<String, Int>,
+    coverCandidates: Map<String, List<CodexCoverCandidate>>,
+    onSelectCodex: (String) -> Unit,
+) {
+    if (codices.isEmpty()) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            tonalElevation = 1.dp,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text = "No codices in this profile yet.",
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp),
+                textAlign = TextAlign.Center,
+            )
+        }
+        return
+    }
+    LazyColumn(
+        modifier = Modifier.heightIn(max = 420.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items(codices, key = Codex::codexId) { codex ->
+            CodexPickerRow(
+                codex = codex,
+                itemCount = itemCounts[codex.codexId] ?: 0,
+                coverCandidates = coverCandidates[codex.codexId].orEmpty(),
+                onClick = { onSelectCodex(codex.codexId) },
+            )
+        }
     }
 }
 

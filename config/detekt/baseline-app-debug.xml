@@ -3,14 +3,13 @@
   <ManuallySuppressedIssues/>
   <CurrentIssues>
     <ID>CognitiveComplexMethod:ApkDownloadManager.kt:ApkDownloadManager$suspend fun download: Result&lt;File&gt;</ID>
-    <ID>CognitiveComplexMethod:CodexListScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CodexListScreen</ID>
     <ID>CognitiveComplexMethod:CreatorProfileScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CreatorProfileScreen</ID>
     <ID>CognitiveComplexMethod:CreatorStateContract.kt:fun CreatorUiState.reduce: CreatorTransition</ID>
     <ID>CognitiveComplexMethod:ForYouScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun ForYouScreen</ID>
     <ID>CognitiveComplexMethod:ForYouStateContract.kt:fun ForYouUiState.reduce: ForYouTransition</ID>
     <ID>CognitiveComplexMethod:LegacyAnimatedWebPDecoder.kt:LegacyAnimatedWebPDecoder$override suspend fun decode: DecodeResult</ID>
     <ID>CognitiveComplexMethod:MediaTimelineBar.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun MediaTimelineBar</ID>
-    <ID>CognitiveComplexMethod:PixivUgoiraPlayer.kt:@Composable fun PixivUgoiraPlayer</ID>
+    <ID>CognitiveComplexMethod:PixivUgoiraPlayerUi.kt:@Composable fun PixivUgoiraPlayer</ID>
     <ID>CognitiveComplexMethod:PixivUgoiraPlayer.kt:PixivUgoiraClient$private fun encodePlaybackToMp4</ID>
     <ID>CognitiveComplexMethod:PostTagActionSection.kt:@Composable fun PostTagActionSection</ID>
     <ID>CognitiveComplexMethod:Rule34XxxCredentialInputParser.kt:fun parseRule34XxxCredentialInput: Rule34XxxCredentials?</ID>
@@ -30,7 +29,6 @@
     <ID>CognitiveComplexMethod:ViewerScreen.kt:internal fun viewerHorizontalSwipeTarget: ViewerHorizontalSwipeTarget?</ID>
     <ID>CognitiveComplexMethod:ViewerStateReducer.kt:internal fun reduceViewerState: ViewerReduction</ID>
     <ID>LongMethod:CodexDetailScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CodexDetailScreen</ID>
-    <ID>LongMethod:CodexListScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CodexListScreen</ID>
     <ID>LongMethod:CodexListScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun CodexSearchTagSelectionSheet</ID>
     <ID>LongMethod:CreatorProfileScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun CreatorProfileScreen</ID>
     <ID>LongMethod:CreatorStateContract.kt:fun CreatorUiState.reduce: CreatorTransition</ID>
@@ -39,12 +37,11 @@
     <ID>LongMethod:ForYouScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun ForYouScreen</ID>
     <ID>LongMethod:ForYouStateContract.kt:fun ForYouUiState.reduce: ForYouTransition</ID>
     <ID>LongMethod:MediaTimelineBar.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun MediaTimelineBar</ID>
-    <ID>LongMethod:PixivUgoiraPlayer.kt:@Composable fun PixivUgoiraPlayer</ID>
+    <ID>LongMethod:PixivUgoiraPlayerUi.kt:@Composable fun PixivUgoiraPlayer</ID>
     <ID>LongMethod:PixivUgoiraPlayer.kt:PixivUgoiraClient$private fun encodePlaybackToMp4</ID>
     <ID>LongMethod:PostActionSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun PostActionSheet</ID>
     <ID>LongMethod:PostTagActionSection.kt:@Composable fun PostTagActionSection</ID>
     <ID>LongMethod:RecentsScreen.kt:@Composable fun RecentsScreen</ID>
-    <ID>LongMethod:SaveToCodexSheet.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun SaveToCodexSheet</ID>
     <ID>LongMethod:SearchScreen.kt:@Composable @OptIn(ExperimentalFoundationApi::class) fun SearchResultCard</ID>
     <ID>LongMethod:SearchScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun FilterSheet</ID>
     <ID>LongMethod:SearchScreen.kt:@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class) @Composable fun SearchScreen</ID>

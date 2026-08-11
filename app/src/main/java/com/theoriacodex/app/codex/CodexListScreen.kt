@@ -55,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.input.ImeAction
@@ -89,32 +90,27 @@ internal fun CodexListScreen(
     onDeleteCodex: (String) -> Unit,
     likesCodexId: String,
 ) {
-    var showCreateDialog by remember { mutableStateOf(false) }
-    var renameTarget by remember { mutableStateOf<Codex?>(null) }
-    var deleteTarget by remember { mutableStateOf<Codex?>(null) }
-    var actionTarget by remember { mutableStateOf<Codex?>(null) }
-    var searchSourceTarget by remember { mutableStateOf<Codex?>(null) }
-    var tagSelectionTarget by remember { mutableStateOf<CodexSourceSelection?>(null) }
-    var reorderMode by remember { mutableStateOf(false) }
+    val state = remember { CodexListUiState(codices) }
+    val presentation = CodexListPresentation(
+        codices, itemCounts, codexCoverCandidates, codexSearchSourceOptions,
+        codexSearchTagOptions, likesCodexId,
+    )
+    val actions = CodexListActions(
+        onOpenCodex, onImportCodex, onDownloadCodex, onShareCodex, onSearchFromCodex,
+        onCommitReorder, onCreateCodex, onRenameCodex, onSetAutomaticTag, onDeleteCodex,
+    )
+    LaunchedEffect(codices, state.reorderMode) { state.synchronizeCodices(codices) }
+    CodexListContent(presentation, state, actions)
+    CodexListOverlays(presentation, state, actions)
+}
 
-    var reorderDraft by remember { mutableStateOf(codices) }
-    var draggingCodexId by remember { mutableStateOf<String?>(null) }
-    var draggingIndex by remember { mutableIntStateOf(-1) }
-    var dragOffsetY by remember { mutableFloatStateOf(0f) }
-    var itemHeightPx by remember { mutableFloatStateOf(1f) }
-
-    LaunchedEffect(codices, reorderMode) {
-        if (!reorderMode) {
-            reorderDraft = codices
-        } else {
-            val idOrder = reorderDraft.map { it.codexId }
-            reorderDraft = idOrder.mapNotNull { id -> codices.firstOrNull { it.codexId == id } }
-                .let { existing ->
-                    val missing = codices.filterNot { codex -> existing.any { it.codexId == codex.codexId } }
-                    existing + missing
-                }
-        }
-    }
+@Composable
+private fun CodexListContent(
+    presentation: CodexListPresentation,
+    state: CodexListUiState,
+    actions: CodexListActions,
+) {
+    val codices = presentation.codices
 
     Column(
         modifier = Modifier
@@ -122,451 +118,421 @@ internal fun CodexListScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+        CodexListHeader(codices, state, actions)
+
+        CodexListBody(presentation, state, actions)
+    }
+}
+
+@Composable
+private fun CodexListHeader(
+    codices: List<Codex>,
+    state: CodexListUiState,
+    actions: CodexListActions,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Codex", style = MaterialTheme.typography.titleLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = actions.importCodex) { Text("Import") }
+            TextButton(onClick = { state.toggleReorder(codices, actions.commitReorder) }) {
+                Text(if (state.reorderMode) "Done" else "Reorder")
+            }
+            TextButton(onClick = { state.showCreateDialog = true }) { Text("+ Create") }
+        }
+    }
+}
+
+@Composable
+private fun CodexListBody(
+    presentation: CodexListPresentation,
+    state: CodexListUiState,
+    actions: CodexListActions,
+) {
+    when {
+        presentation.codices.isEmpty() -> EmptyCodexList { state.showCreateDialog = true }
+        state.reorderMode -> CodexReorderList(presentation, state)
+        else -> CodexGrid(presentation, state, actions.openCodex)
+    }
+}
+
+@Composable
+private fun EmptyCodexList(onCreate: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Codex", style = MaterialTheme.typography.titleLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = onImportCodex) {
-                    Text("Import")
-                }
-                TextButton(
-                    onClick = {
-                        if (!reorderMode) {
-                            reorderDraft = codices
-                            reorderMode = true
-                            return@TextButton
-                        }
-                        onCommitReorder(reorderDraft.map { it.codexId })
-                        draggingCodexId = null
-                        draggingIndex = -1
-                        dragOffsetY = 0f
-                        reorderMode = false
-                    },
-                ) {
-                    Text(if (reorderMode) "Done" else "Reorder")
-                }
-                TextButton(onClick = { showCreateDialog = true }) {
-                    Text("+ Create")
-                }
-            }
-        }
-
-        if (codices.isEmpty()) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text("No codices yet", style = MaterialTheme.typography.titleMedium)
-                    TextButton(onClick = { showCreateDialog = true }) {
-                        Text("Create codex")
-                    }
-                }
-            }
-        } else if (reorderMode) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                userScrollEnabled = draggingCodexId == null,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                itemsIndexed(reorderDraft, key = { _, codex -> codex.codexId }) { index, codex ->
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .graphicsLayer {
-                                if (draggingCodexId == codex.codexId) {
-                                    translationY = dragOffsetY
-                                    shadowElevation = 14f
-                                }
-                            }
-                            .onSizeChanged { size ->
-                                val height = size.height.toFloat()
-                                if (height > 1f) {
-                                    itemHeightPx = height
-                                }
-                            }
-                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        tonalElevation = if (draggingCodexId == codex.codexId) 6.dp else 0.dp,
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(68.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(MaterialTheme.colorScheme.surface),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                CodexCoverImage(
-                                    candidates = codexCoverCandidates[codex.codexId].orEmpty(),
-                                    contentDescription = codex.name,
-                                    modifier = Modifier.fillMaxSize(),
-                                    fallback = {
-                                        Icon(
-                                            imageVector = Icons.Default.Image,
-                                            contentDescription = null,
-                                        )
-                                    },
-                                )
-                            }
-
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(2.dp),
-                            ) {
-                                Text(
-                                    text = codex.name,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    text = "${itemCounts[codex.codexId] ?: 0} items",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-
-                            IconButton(
-                                modifier = Modifier.pointerInput(codex.codexId, itemHeightPx) {
-                                    detectDragGestures(
-                                        onDragStart = {
-                                            draggingCodexId = codex.codexId
-                                            draggingIndex = index
-                                            dragOffsetY = 0f
-                                        },
-                                        onDragCancel = {
-                                            draggingCodexId = null
-                                            draggingIndex = -1
-                                            dragOffsetY = 0f
-                                        },
-                                        onDragEnd = {
-                                            draggingCodexId = null
-                                            draggingIndex = -1
-                                            dragOffsetY = 0f
-                                        },
-                                        onDrag = { change, dragAmount ->
-                                            if (draggingCodexId != codex.codexId) return@detectDragGestures
-                                            change.consume()
-                                            dragOffsetY += dragAmount.y
-
-                                            val currentIndex = draggingIndex.takeIf { it >= 0 } ?: index
-                                            val threshold = itemHeightPx * 0.55f
-
-                                            if (dragOffsetY >= threshold && currentIndex < reorderDraft.lastIndex) {
-                                                reorderDraft = moveCodex(reorderDraft, currentIndex, currentIndex + 1)
-                                                draggingIndex = currentIndex + 1
-                                                dragOffsetY -= itemHeightPx
-                                            } else if (dragOffsetY <= -threshold && currentIndex > 0) {
-                                                reorderDraft = moveCodex(reorderDraft, currentIndex, currentIndex - 1)
-                                                draggingIndex = currentIndex - 1
-                                                dragOffsetY += itemHeightPx
-                                            }
-                                        },
-                                    )
-                                },
-                                onClick = {},
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.DragHandle,
-                                    contentDescription = "Drag to reorder",
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                items(codices, key = { codex -> codex.codexId }) { codex ->
-                    CodexGridTile(
-                        codex = codex,
-                        itemCount = itemCounts[codex.codexId] ?: 0,
-                        coverCandidates = codexCoverCandidates[codex.codexId].orEmpty(),
-                        onOpen = { onOpenCodex(codex.codexId) },
-                        onOpenActions = { actionTarget = codex },
-                        onLongPress = { actionTarget = codex },
-                    )
-                }
-            }
+            Text("No codices yet", style = MaterialTheme.typography.titleMedium)
+            TextButton(onClick = onCreate) { Text("Create codex") }
         }
     }
+}
 
-    if (showCreateDialog) {
-        CodexNameDialog(
-            title = "Create Codex",
-            initialName = "",
-            onDismiss = { showCreateDialog = false },
-            onSave = { name ->
-                onCreateCodex(name)
-                showCreateDialog = false
-            },
+@Composable
+private fun CodexReorderList(presentation: CodexListPresentation, state: CodexListUiState) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        userScrollEnabled = state.draggingCodexId == null,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        itemsIndexed(state.reorderDraft, key = { _, codex -> codex.codexId }) { index, codex ->
+            CodexReorderRow(codex, index, presentation, state)
+        }
+    }
+}
+
+@Composable
+private fun CodexReorderRow(
+    codex: Codex,
+    index: Int,
+    presentation: CodexListPresentation,
+    state: CodexListUiState,
+) {
+    val isDragging = state.draggingCodexId == codex.codexId
+    Surface(
+        modifier = Modifier.fillMaxWidth().graphicsLayer {
+            if (isDragging) {
+                translationY = state.dragOffsetY
+                shadowElevation = 14f
+            }
+        }.onSizeChanged { size ->
+            size.height.toFloat().takeIf { it > 1f }?.let { state.itemHeightPx = it }
+        }.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        shape = RoundedCornerShape(16.dp),
+        tonalElevation = if (isDragging) 6.dp else 0.dp,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(68.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            CodexReorderCover(codex, presentation.coverCandidates[codex.codexId].orEmpty())
+            CodexReorderMetadata(codex, presentation.itemCounts[codex.codexId] ?: 0, Modifier.weight(1f))
+            CodexReorderHandle(codex.codexId, index, state)
+        }
+    }
+}
+
+@Composable
+private fun CodexReorderCover(codex: Codex, candidates: List<CodexCoverCandidate>) {
+    Box(
+        modifier = Modifier.size(52.dp).clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surface),
+        contentAlignment = Alignment.Center,
+    ) {
+        CodexCoverImage(candidates, codex.name, Modifier.fillMaxSize()) {
+            Icon(Icons.Default.Image, contentDescription = null)
+        }
+    }
+}
+
+@Composable
+private fun CodexReorderMetadata(codex: Codex, itemCount: Int, modifier: Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            codex.name, style = MaterialTheme.typography.titleMedium, maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            "$itemCount items", style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
 
-    val rename = renameTarget
-    if (rename != null) {
-        CodexNameDialog(
-            title = "Rename Codex",
-            initialName = rename.name,
-            onDismiss = { renameTarget = null },
-            onSave = { name ->
-                onRenameCodex(rename.codexId, name)
-                renameTarget = null
-            },
-        )
+@Composable
+private fun CodexReorderHandle(codexId: String, index: Int, state: CodexListUiState) {
+    IconButton(
+        modifier = Modifier.pointerInput(codexId, state.itemHeightPx) {
+            detectDragGestures(
+                onDragStart = { state.startDrag(codexId, index) },
+                onDragCancel = state::resetDrag,
+                onDragEnd = state::resetDrag,
+                onDrag = { change, dragAmount ->
+                    if (state.draggingCodexId != codexId) return@detectDragGestures
+                    change.consume()
+                    state.drag(codexId, index, dragAmount.y)
+                },
+            )
+        },
+        onClick = {},
+    ) {
+        Icon(Icons.Default.DragHandle, contentDescription = "Drag to reorder")
     }
+}
 
-    val delete = deleteTarget
-    if (delete != null) {
-        val clearsLikes = delete.codexId == likesCodexId
-        AlertDialog(
-            onDismissRequest = { deleteTarget = null },
-            title = { Text(if (clearsLikes) "Clear Likes?" else "Delete Codex?") },
-            text = {
-                Text(
-                    if (clearsLikes) {
-                        "Clear all liked posts from this recommendation profile? The Likes Codex will remain."
-                    } else {
-                        "Delete \"${delete.name}\" and all saved items in it? This cannot be undone."
-                    },
-                )
-            },
-            dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) {
-                    Text("Cancel")
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onDeleteCodex(delete.codexId)
-                        deleteTarget = null
-                    },
-                ) {
-                    Text(if (clearsLikes) "Clear" else "Delete")
-                }
-            },
-        )
+@Composable
+private fun CodexGrid(
+    presentation: CodexListPresentation,
+    state: CodexListUiState,
+    onOpenCodex: (String) -> Unit,
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        modifier = Modifier.fillMaxSize(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        items(presentation.codices, key = Codex::codexId) { codex ->
+            CodexGridTile(
+                codex = codex,
+                itemCount = presentation.itemCounts[codex.codexId] ?: 0,
+                coverCandidates = presentation.coverCandidates[codex.codexId].orEmpty(),
+                onOpen = { onOpenCodex(codex.codexId) },
+                onOpenActions = { state.actionTarget = codex },
+                onLongPress = { state.actionTarget = codex },
+            )
+        }
     }
+}
 
-    val actionCodex = actionTarget?.let { target ->
+@Composable
+private fun CodexListOverlays(
+    presentation: CodexListPresentation,
+    state: CodexListUiState,
+    actions: CodexListActions,
+) {
+    val codices = presentation.codices
+    CodexNameOverlays(state, actions)
+    CodexDeleteConfirmation(state, presentation.likesCodexId, actions.deleteCodex)
+
+    val actionCodex = state.actionTarget?.let { target ->
         codices.firstOrNull { codex -> codex.codexId == target.codexId } ?: target
     }
     if (actionCodex != null) {
-        val clearsLikes = actionCodex.codexId == likesCodexId
-        val searchOptions = codexSearchSourceOptions[actionCodex.codexId].orEmpty()
-        ModalBottomSheet(
-            onDismissRequest = { actionTarget = null },
-            dragHandle = null,
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    IconButton(
-                        onClick = {
-                            actionTarget = null
-                            onDownloadCodex(actionCodex.codexId)
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = "Download codex",
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            actionTarget = null
-                            onShareCodex(actionCodex.codexId)
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "Share codex",
-                        )
-                    }
-                    IconButton(
-                        enabled = searchOptions.isNotEmpty(),
-                        onClick = {
-                            searchSourceTarget = actionCodex
-                            actionTarget = null
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Search from codex",
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            renameTarget = actionCodex
-                            actionTarget = null
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Rename codex",
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            deleteTarget = actionCodex
-                            actionTarget = null
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = if (clearsLikes) "Clear likes" else "Delete codex",
-                        )
-                    }
-                }
-                Text(
-                    text = actionCodex.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                CodexAutomaticTagContent(
-                    isLikesCodex = clearsLikes,
-                    automaticTags = actionCodex.automaticTags,
-                    tagOptionsBySource = codexSearchTagOptions[actionCodex.codexId].orEmpty(),
-                    onSetAutomaticTag = { tag, enabled ->
-                        onSetAutomaticTag(actionCodex.codexId, tag, enabled)
-                    },
-                )
-                TextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { actionTarget = null },
-                ) {
-                    Text("Cancel")
-                }
-            }
-        }
+        CodexActionSheet(actionCodex, presentation, state, actions)
     }
 
-    val searchCodex = searchSourceTarget
+    val searchCodex = state.searchSourceTarget
     if (searchCodex != null) {
-        val sourceOptions = codexSearchSourceOptions[searchCodex.codexId].orEmpty()
-        ModalBottomSheet(
-            onDismissRequest = { searchSourceTarget = null },
-            dragHandle = null,
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = searchCodex.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                )
-                Text(
-                    text = "Search source",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                if (sourceOptions.isEmpty()) {
-                    Text(
-                        text = "No searchable sources available",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                    )
-                } else {
-                    sourceOptions.forEach { option ->
-                        TextButton(
-                            modifier = Modifier.fillMaxWidth(),
-                            onClick = {
-                                searchSourceTarget = null
-                                tagSelectionTarget = CodexSourceSelection(
-                                    codex = searchCodex,
-                                    source = option.source,
-                                )
-                            },
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(option.source.displayName())
-                                Text(
-                                    text = "${option.postCount} ${if (option.postCount == 1) "post" else "posts"}",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                }
-
-                TextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { searchSourceTarget = null },
-                ) {
-                    Text("Cancel")
-                }
-            }
-        }
+        CodexSourceSheet(
+            codex = searchCodex,
+            options = presentation.searchSourceOptions[searchCodex.codexId].orEmpty(),
+            state = state,
+        )
     }
 
-    val tagSelection = tagSelectionTarget
+    val tagSelection = state.tagSelectionTarget
     if (tagSelection != null) {
-        val tagOptions = codexSearchTagOptions[tagSelection.codex.codexId]
+        val tagOptions = presentation.searchTagOptions[tagSelection.codex.codexId]
             ?.get(tagSelection.source)
             .orEmpty()
         CodexSearchTagSelectionSheet(
             selection = tagSelection,
             tags = tagOptions,
-            onDismiss = { tagSelectionTarget = null },
+            onDismiss = { state.tagSelectionTarget = null },
             onApply = { includeTags ->
-                tagSelectionTarget = null
-                onSearchFromCodex(tagSelection.codex.codexId, tagSelection.source, includeTags)
+                state.tagSelectionTarget = null
+                actions.searchFromCodex(tagSelection.codex.codexId, tagSelection.source, includeTags)
             },
         )
     }
 }
 
-private data class CodexSourceSelection(
-    val codex: Codex,
-    val source: SourceKey,
-)
+@Composable
+private fun CodexNameOverlays(state: CodexListUiState, actions: CodexListActions) {
+    if (state.showCreateDialog) {
+        CodexNameDialog(
+            title = "Create Codex",
+            initialName = "",
+            onDismiss = { state.showCreateDialog = false },
+            onSave = { name ->
+                actions.createCodex(name)
+                state.showCreateDialog = false
+            },
+        )
+    }
+    state.renameTarget?.let { codex ->
+        CodexNameDialog(
+            title = "Rename Codex",
+            initialName = codex.name,
+            onDismiss = { state.renameTarget = null },
+            onSave = { name ->
+                actions.renameCodex(codex.codexId, name)
+                state.renameTarget = null
+            },
+        )
+    }
+}
+
+@Composable
+private fun CodexDeleteConfirmation(
+    state: CodexListUiState,
+    likesCodexId: String,
+    onDeleteCodex: (String) -> Unit,
+) {
+    val codex = state.deleteTarget ?: return
+    val clearsLikes = codex.codexId == likesCodexId
+    AlertDialog(
+        onDismissRequest = { state.deleteTarget = null },
+        title = { Text(if (clearsLikes) "Clear Likes?" else "Delete Codex?") },
+        text = {
+            Text(
+                if (clearsLikes) {
+                    "Clear all liked posts from this recommendation profile? The Likes Codex will remain."
+                } else {
+                    "Delete \"${codex.name}\" and all saved items in it? This cannot be undone."
+                },
+            )
+        },
+        dismissButton = { TextButton(onClick = { state.deleteTarget = null }) { Text("Cancel") } },
+        confirmButton = {
+            TextButton(onClick = {
+                onDeleteCodex(codex.codexId)
+                state.deleteTarget = null
+            }) { Text(if (clearsLikes) "Clear" else "Delete") }
+        },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CodexActionSheet(
+    codex: Codex,
+    presentation: CodexListPresentation,
+    state: CodexListUiState,
+    actions: CodexListActions,
+) {
+    val isLikesCodex = codex.codexId == presentation.likesCodexId
+    ModalBottomSheet(onDismissRequest = { state.actionTarget = null }, dragHandle = null) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            CodexActionButtons(
+                codex = codex,
+                isLikesCodex = isLikesCodex,
+                searchEnabled = presentation.searchSourceOptions[codex.codexId].orEmpty().isNotEmpty(),
+                state = state,
+                actions = actions,
+            )
+            Text(
+                codex.name, style = MaterialTheme.typography.titleMedium, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            CodexAutomaticTagContent(
+                isLikesCodex = isLikesCodex,
+                automaticTags = codex.automaticTags,
+                tagOptionsBySource = presentation.searchTagOptions[codex.codexId].orEmpty(),
+                onSetAutomaticTag = { tag, enabled -> actions.setAutomaticTag(codex.codexId, tag, enabled) },
+            )
+            TextButton(modifier = Modifier.fillMaxWidth(), onClick = { state.actionTarget = null }) {
+                Text("Cancel")
+            }
+        }
+    }
+}
+
+@Composable
+private fun CodexActionButtons(
+    codex: Codex,
+    isLikesCodex: Boolean,
+    searchEnabled: Boolean,
+    state: CodexListUiState,
+    actions: CodexListActions,
+) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        CodexActionIcon(Icons.Default.Download, "Download codex") {
+            state.actionTarget = null; actions.downloadCodex(codex.codexId)
+        }
+        CodexActionIcon(Icons.Default.Share, "Share codex") {
+            state.actionTarget = null; actions.shareCodex(codex.codexId)
+        }
+        CodexActionIcon(Icons.Default.Search, "Search from codex", searchEnabled) {
+            state.searchSourceTarget = codex; state.actionTarget = null
+        }
+        CodexActionIcon(Icons.Default.Edit, "Rename codex") {
+            state.renameTarget = codex; state.actionTarget = null
+        }
+        val deleteLabel = if (isLikesCodex) "Clear likes" else "Delete codex"
+        CodexActionIcon(Icons.Default.Delete, deleteLabel) {
+            state.deleteTarget = codex; state.actionTarget = null
+        }
+    }
+}
+
+@Composable
+private fun CodexActionIcon(
+    icon: ImageVector,
+    description: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    IconButton(enabled = enabled, onClick = onClick) {
+        Icon(icon, contentDescription = description)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CodexSourceSheet(
+    codex: Codex,
+    options: List<CodexSearchSourceOption>,
+    state: CodexListUiState,
+) {
+    ModalBottomSheet(onDismissRequest = { state.searchSourceTarget = null }, dragHandle = null) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                codex.name, style = MaterialTheme.typography.titleMedium, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                "Search source", style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            CodexSourceOptions(codex, options, state)
+            TextButton(modifier = Modifier.fillMaxWidth(), onClick = { state.searchSourceTarget = null }) {
+                Text("Cancel")
+            }
+        }
+    }
+}
+
+@Composable
+private fun CodexSourceOptions(
+    codex: Codex,
+    options: List<CodexSearchSourceOption>,
+    state: CodexListUiState,
+) {
+    if (options.isEmpty()) {
+        Text(
+            "No searchable sources available", style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        )
+        return
+    }
+    options.forEach { option ->
+        TextButton(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = {
+                state.searchSourceTarget = null
+                state.tagSelectionTarget = CodexSourceSelection(codex, option.source)
+            },
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(option.source.displayName())
+                val label = if (option.postCount == 1) "post" else "posts"
+                Text("${option.postCount} $label", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -799,20 +765,6 @@ private fun CodexSearchTagSelectionCell(
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
         )
     }
-}
-
-private fun moveCodex(
-    codices: List<Codex>,
-    fromIndex: Int,
-    toIndex: Int,
-): List<Codex> {
-    if (fromIndex == toIndex) return codices
-    if (fromIndex !in codices.indices || toIndex !in codices.indices) return codices
-
-    val mutable = codices.toMutableList()
-    val moved = mutable.removeAt(fromIndex)
-    mutable.add(toIndex, moved)
-    return mutable
 }
 
 private const val DEFAULT_CODEX_RANDOM_TAG_AMOUNT = 3

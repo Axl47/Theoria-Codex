@@ -1,8 +1,31 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-10T20:05:00-04:00
+updated_at: 2026-08-10T21:27:00-04:00
 ---
 # Working List
+
+## Current Task: Clear Static Analysis And Maintainability Findings
+
+### In Progress
+
+None.
+
+### Pending
+
+None.
+
+### Done
+
+- [x] Reconcile every current static-analysis failure with its shared owner and freeze the repair boundaries.
+  - Evidence: workflow lint passed; the initial host scan identified four Detekt findings and seven hotspot-budget failures, while the full quality lane additionally exposed production duplication above its 0.60% cap.
+- [x] Split the Codex list/save UI and simplify the Search empty-state decision until Detekt is clean without suppressions.
+  - Evidence: the Codex list now delegates route state, list modes, reorder mechanics, and overlays to named owners; the save sheet delegates its header/list/content; Search derives visibility copy through a small policy helper. `:app:compileDebugKotlin :app:detektDebug` passes, and baseline debt fell by one cognitive and two long-method entries.
+- [x] Extract cohesive helpers from all seven over-budget production files without raising a line budget.
+  - Evidence: Viewer GIF loading, release history, Search filter controls/coordinator policy, Hitomi JSON hydration, legacy Likes records, and Ugoira UI now have named owners. The hotspot gate passes with every frozen file below its existing limit, and the production exception limits were not raised.
+- [x] Run one bounded static-analysis, test, compilation, workflow, and diff validation batch.
+  - Evidence: all seven Detekt owners, app and Room lint, Debug Android-test compilation, and workflow `actionlint` pass. The app, core-data, and core-sources suites report 876 tests with zero failures/errors and 10 intentional skips; 36 quality-helper tests pass. Hotspot ownership passes, duplication is 267/44,861 production Kotlin lines (0.595%) against the 0.60% cap, and `git diff --check` is clean.
+- [x] Record final evidence and any durable repository guidance before closeout.
+  - Evidence: this checklist records the authoritative host-only proof. No new non-standard command, runtime boundary, or reusable safety contract was discovered, so the existing AGENTS quality and device-safety guidance remains sufficient.
 
 ## Current Task: Improve Preview And Viewer Media Delivery
 

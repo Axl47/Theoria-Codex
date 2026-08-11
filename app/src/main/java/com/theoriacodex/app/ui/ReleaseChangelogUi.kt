@@ -18,6 +18,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.update.ChangelogSection
+import com.theoriacodex.app.update.PendingPostInstallChangelog
+import com.theoriacodex.app.update.RemoteUpdate
+
+internal data class ReleaseChangelogEntry(
+    val releaseId: Long?,
+    val versionCode: Int,
+    val commitShaShort: String,
+    val releaseName: String?,
+    val publishedAtEpochMs: Long?,
+    val changelogMarkdown: String,
+    val changelogSections: List<ChangelogSection>,
+)
 
 @Composable
 internal fun StartupUpdatePromptCard(
@@ -120,4 +133,54 @@ private fun ReleaseChangelogEntryContent(release: ReleaseChangelogEntry, install
             style = MaterialTheme.typography.bodySmall,
         )
     }
+}
+
+internal fun mergeReleaseHistory(
+    remoteHistory: List<RemoteUpdate>,
+    localCurrent: PendingPostInstallChangelog?,
+): List<ReleaseChangelogEntry> {
+    val entries = remoteHistory.map(RemoteUpdate::toReleaseHistoryEntry).toMutableList()
+    localCurrent?.let { local ->
+        val alreadyPresent = entries.any { entry ->
+            entry.releaseId == local.releaseId ||
+                (entry.versionCode == local.versionCode && entry.commitShaShort == local.commitShaShort)
+        }
+        if (!alreadyPresent) entries += local.toReleaseHistoryEntry()
+    }
+    return entries.sortedWith(releaseChangelogNewestFirstComparator())
+}
+
+internal fun PendingPostInstallChangelog.toReleaseHistoryEntry() = ReleaseChangelogEntry(
+    releaseId = releaseId,
+    versionCode = versionCode,
+    commitShaShort = commitShaShort,
+    releaseName = releaseName,
+    publishedAtEpochMs = null,
+    changelogMarkdown = changelogMarkdown,
+    changelogSections = changelogSections,
+)
+
+internal fun RemoteUpdate.toReleaseHistoryEntry() = ReleaseChangelogEntry(
+    releaseId = releaseId,
+    versionCode = versionCode,
+    commitShaShort = commitShaShort,
+    releaseName = releaseName,
+    publishedAtEpochMs = publishedAtEpochMs,
+    changelogMarkdown = changelogMarkdown,
+    changelogSections = changelogSections,
+)
+
+internal fun releaseChangelogNewestFirstComparator(): Comparator<ReleaseChangelogEntry> {
+    return compareByDescending<ReleaseChangelogEntry> { it.publishedAtEpochMs ?: Long.MIN_VALUE }
+        .thenByDescending(ReleaseChangelogEntry::versionCode)
+}
+
+internal fun releaseDisplayTitle(releaseName: String?, versionCode: Int): String {
+    return releaseName?.trim()?.takeIf(String::isNotBlank) ?: "vc$versionCode"
+}
+
+internal fun firstChangelogLine(markdown: String): String? {
+    return markdown.lineSequence()
+        .map(String::trim)
+        .firstOrNull { line -> line.isNotBlank() && !line.startsWith("#") }
 }

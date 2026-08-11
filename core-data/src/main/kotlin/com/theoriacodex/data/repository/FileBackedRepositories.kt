@@ -1184,39 +1184,6 @@ private data class RecommendationProfileRecord(
     }
 }
 
-private data class LikesStoreFile(
-    @field:SerializedName("likes")
-    val likes: List<LikedPostRecord>? = null,
-)
-
-private data class LikedPostRecord(
-    @field:SerializedName("profileId")
-    val profileId: String? = null,
-    @field:SerializedName("profile")
-    val profile: String? = null,
-    @field:SerializedName("source")
-    val source: String? = null,
-    @field:SerializedName("sourcePostId")
-    val sourcePostId: String? = null,
-    @field:SerializedName("likedAtEpochMs")
-    val likedAtEpochMs: Long? = null,
-    @field:SerializedName("tags")
-    val tags: List<String>? = null,
-) {
-    companion object {
-        fun fromDomain(profileId: String, liked: LikedPost): LikedPostRecord {
-            return LikedPostRecord(
-                profileId = profileId,
-                profile = null,
-                source = liked.postId.source.name,
-                sourcePostId = liked.postId.sourcePostId,
-                likedAtEpochMs = liked.likedAtEpochMs,
-                tags = liked.tags,
-            )
-        }
-    }
-}
-
 private fun String?.toSourceKeyOrNull(): SourceKey? {
     return this
         ?.trim()
@@ -1235,24 +1202,4 @@ private fun String?.toSortModeOrDefault(): SortMode {
 private fun String?.toSearchFacetOrNull(): SearchFacet? {
     val normalized = this?.trim()?.takeIf(String::isNotBlank) ?: return SearchFacet.TAG
     return runCatching { SearchFacet.valueOf(normalized) }.getOrNull()
-}
-
-private fun parseStoredProfileId(
-    profileId: String?,
-    legacyProfile: String?,
-): String {
-    val normalizedProfileId = profileId?.trim().orEmpty()
-    if (normalizedProfileId.isNotBlank()) {
-        return when (normalizedProfileId) {
-            "USER_1" -> "profile-main"
-            "USER_2" -> "profile-alt"
-            else -> normalizedProfileId
-        }
-    }
-
-    return when (legacyProfile?.trim()) {
-        "USER_1" -> "profile-main"
-        "USER_2" -> "profile-alt"
-        else -> "profile-main"
-    }
 }

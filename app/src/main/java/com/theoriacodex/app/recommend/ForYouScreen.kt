@@ -51,8 +51,6 @@ import com.theoriacodex.app.media.ANIMATED_DURATION_MIN_BUCKET
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.durationFilterReadiness
-import com.theoriacodex.app.media.durationFilterMetadata
 import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.recommend.state.ForYouAction
@@ -60,8 +58,8 @@ import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.SearchVisibilityFilters
-import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
 import com.theoriacodex.app.search.filterSearchResults
+import com.theoriacodex.app.search.rememberSearchDurationFilterPresentation
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.ui.components.FeedEmptyTile
@@ -124,40 +122,20 @@ fun ForYouScreen(
             maxBucket = durationMaxBucket,
         )
     }
-    val animatedDurationFilterActive = !animatedDurationRange.isFullRange
     val visibilityFilters = remember(animatedOnly, animatedDurationRange) {
         SearchVisibilityFilters(
             animatedOnly = animatedOnly,
             animatedDurationRange = animatedDurationRange,
         )
     }
-    val unknownAnimatedDurationPolicy = remember(resolveUnknownAnimatedDurations) {
-        if (resolveUnknownAnimatedDurations) {
-            UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND
-        } else {
-            UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
-        }
-    }
-    val durationMetadata = remember(
-        state.results,
-        durationStates,
-        animatedDurationFilterActive,
-    ) {
-        durationFilterMetadata(state.results, durationStates, animatedDurationFilterActive)
-    }
-    val acquiredDurations = durationMetadata.knownDurationMsByPostId
-    val durationDecisionStates = durationMetadata.stateByPostId
-    val durationReadiness = remember(
-        state.results,
-        animatedDurationFilterActive,
-        durationDecisionStates,
-    ) {
-        durationFilterReadiness(
-            state.results,
-            animatedDurationFilterActive,
-            durationDecisionStates,
-        )
-    }
+    val durationFilter = rememberSearchDurationFilterPresentation(
+        state.results, animatedDurationRange, durationStates, resolveUnknownAnimatedDurations,
+    )
+    val animatedDurationFilterActive = durationFilter.active
+    val unknownAnimatedDurationPolicy = durationFilter.unknownPolicy
+    val acquiredDurations = durationFilter.knownDurationMsByPostId
+    val durationDecisionStates = durationFilter.stateByPostId
+    val durationReadiness = durationFilter.readiness
     val visibleResults = remember(
         state.results,
         visibilityFilters,
