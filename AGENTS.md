@@ -128,6 +128,8 @@ Codex detail, Creator Profile, Viewer, and future secondary routes use `Secondar
 
 Codex Automatic rules are source-aware canonical tag memberships owned by each user Codex. The shared collection-action sheet derives represented-tag counts from hydrated Codex posts and promotes one source/tag pair at a time. Multiple rules use OR matching. A transition to liked may add the post to matching Codices belonging to the active recommendation profile in the same Room transaction as Likes; unliking, disabling a rule, or clearing Likes must never remove those user-Codex memberships. The system Likes Codex does not need Automatic rules because it already receives every liked post.
 
+`MigrationTestHelper.runMigrationsAndValidate` returns a raw validation connection with SQLite foreign-key enforcement disabled. Migration tests that assert `ON DELETE CASCADE` behavior must enable `PRAGMA foreign_keys = ON` on that connection before performing the delete.
+
 Codex detail filtering is route-local and uses the shared feed filter FAB/sheet. Repository observation remains the authority for Newest, Oldest, and By source ordering; local filters preserve that order. Source options are the enabled sources represented in the collection. Language and Full Color are offered only when enabled NHentai or Hitomi posts are represented, and unsupported-source posts do not match an active capability filter. Animated-duration resolution runs through the navigation-scoped bounded enrichment owner without rewriting durable Codex snapshots. Viewer launch must receive the exact visible ordered post list and index from the screen rather than reopening the unfiltered repository snapshot.
 
 ## Actionable Transient Feedback

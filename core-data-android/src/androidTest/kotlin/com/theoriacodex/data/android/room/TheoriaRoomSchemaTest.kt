@@ -108,6 +108,7 @@ class TheoriaRoomSchemaTest {
             true,
             TheoriaRoomDatabase.MIGRATION_3_4,
         )
+        database.execSQL("PRAGMA foreign_keys = ON")
         database.execSQL("INSERT INTO codex_automatic_tags(codex_id,source,tag_key,tag_display) VALUES('saved','PIXIV','landscape','landscape')")
         database.query("SELECT name FROM codices WHERE codex_id='saved'").use { cursor ->
             assertTrue(cursor.moveToFirst())
