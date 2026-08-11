@@ -110,18 +110,21 @@ class AppLogicArchitectureTest {
     }
 
     @Test
-    fun `app integration reuses progressive image source policy off the hot path`() {
+    fun `app integration reuses quality upgrade source policy across delivery plans`() {
         val postMedia = File(
             root,
             "app/src/main/java/com/theoriacodex/app/media/PostMedia.kt",
         ).readText()
-        val progressiveCheck = postMedia
-            .substringAfter("fun supportsProgressiveImageCandidates")
-            .substringBefore("fun isLikelyImageLocation")
+        val previewPlan = postMedia
+            .substringAfter("fun previewMediaDeliveryPlan")
+            .substringBefore("fun viewerMediaDeliveryPlan")
+        val viewerPlan = postMedia
+            .substringAfter("fun viewerMediaDeliveryPlan")
+            .substringBefore("private fun mediaDeliveryPlan")
 
-        assertTrue("PROGRESSIVE_IMAGE_SOURCES" in progressiveCheck)
-        assertFalse("setOf(" in progressiveCheck)
-        assertTrue("private val PROGRESSIVE_IMAGE_SOURCES = setOf(" in postMedia)
+        assertTrue("QUALITY_UPGRADE_IMAGE_SOURCES" in previewPlan)
+        assertTrue("QUALITY_UPGRADE_IMAGE_SOURCES" in viewerPlan)
+        assertTrue("private val QUALITY_UPGRADE_IMAGE_SOURCES = setOf(" in postMedia)
     }
 
     private fun sourceFiles(): Sequence<File> = File(root, "app-logic/src/main/kotlin")

@@ -1180,7 +1180,7 @@ None.
 
 ### In Progress
 
-- [~] Commit and push the Detekt repair, then require fresh exact-SHA GitHub gates before tagging.
+- [~] Repair the stale media architecture guard found by aggregate coverage, then require fresh exact-SHA GitHub gates before tagging.
 
 ### Pending
 
@@ -1195,3 +1195,8 @@ None.
   - Evidence: `:core-data-android:testDebugUnitTest`, `:core-data-android:detekt`, `:app:detektDebug`, `:app:compileDebugAndroidTestKotlin`, and `:app:testDebugUnitTest` completed successfully.
 - [x] Rebuild the v0.9.0 release and verify both obfuscated JSON contracts.
   - Evidence: `:app:assembleRelease`, `:app:verifyReleaseJsonContracts`, and `:app:verifyReleaseAcceptanceJsonContracts` completed successfully; release metadata remains version 0.9.0 / code 1500000900.
+- [x] Pass exact-SHA Device Validation, Dependency Submission, and the Verify Detekt/hotspot budget on `a099ce0`.
+  - Evidence: Device Validation and Dependency Submission succeeded; Verify reached aggregate coverage after its core, Android, Detekt/hotspot, duplication, and complexity checks passed.
+- [x] Trace the Verify failure to the stale progressive-image architecture guard left behind by the typed media-delivery refactor.
+- [x] Update the guard to assert the current shared quality-upgrade policy across preview and Viewer delivery plans.
+  - Evidence: focused `AppLogicArchitectureTest` and `:app-logic:detektMain` pass; the exact failed `:koverXmlReport :koverVerify` command now completes successfully.
