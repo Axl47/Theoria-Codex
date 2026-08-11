@@ -176,6 +176,30 @@ class TheoriaRoomSchemaTest {
         database.close()
     }
 
+    @Test
+    fun migrationSixToSevenPreservesAutomaticRulesAsOneOrGroupPerSource() {
+        migrationHelper.createDatabase(TEST_DATABASE_NAME, 6).apply {
+            execSQL("INSERT INTO codices(codex_id,name,created_at_epoch_ms,display_order) VALUES('saved','Saved',1,0)")
+            execSQL("INSERT INTO codex_automatic_tags(codex_id,source,tag_key,tag_display) VALUES('saved','PIXIV','tag1','tag1')")
+            execSQL("INSERT INTO codex_automatic_tags(codex_id,source,tag_key,tag_display) VALUES('saved','PIXIV','tag2','tag2')")
+            close()
+        }
+
+        val database = migrationHelper.runMigrationsAndValidate(
+            TEST_DATABASE_NAME,
+            7,
+            true,
+            TheoriaRoomDatabase.MIGRATION_6_7,
+        )
+        database.query("SELECT group_index FROM codex_automatic_tags ORDER BY tag_key").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+            assertTrue(cursor.moveToNext())
+            assertEquals(0, cursor.getInt(0))
+        }
+        database.close()
+    }
+
     companion object {
         private const val TEST_DATABASE_NAME = "theoria-room-schema-test"
     }

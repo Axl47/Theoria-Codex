@@ -8,17 +8,18 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 
 internal data class SanitizedQuery(val query: Query, val removedSourceOwnedTerms: Boolean)
 
 internal fun Query.sanitizedForMode(mode: QueryMode): SanitizedQuery {
     if (mode != QueryMode.Unified) return SanitizedQuery(copy(mode = mode), false)
-    val include = includeTerms.filter(SearchTerm::isPortableGeneralTag)
+    val includeGroups = effectiveIncludeTermGroups.filter(SearchTermGroup::isPortableGeneralTagGroup)
     val exclude = excludeTerms.filter(SearchTerm::isPortableGeneralTag)
     return SanitizedQuery(
-        copy(mode = mode, includeTerms = include, excludeTerms = exclude),
-        include.size != includeTerms.size || exclude.size != excludeTerms.size,
+        withIncludeTermGroups(includeGroups).copy(mode = mode, excludeTerms = exclude),
+        includeGroups.size != effectiveIncludeTermGroups.size || exclude.size != excludeTerms.size,
     )
 }
 

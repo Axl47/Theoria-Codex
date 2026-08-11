@@ -44,9 +44,11 @@ object CodexLikesPolicy {
             .asSequence()
             .map { tag -> tag.copy(tag = tag.tag.trim()) }
             .filter { tag -> tag.tag.isNotBlank() && !tag.tag.startsWith("-") }
+            .map { tag -> tag.copy(groupIndex = tag.groupIndex.coerceAtLeast(0)) }
             .distinctBy { tag -> tag.source to sourceTagKey(tag.source, tag.tag) }
             .sortedWith(
                 compareBy<CodexAutomaticTag> { tag -> tag.source.ordinal }
+                    .thenBy(CodexAutomaticTag::groupIndex)
                     .thenBy { tag -> sourceTagKey(tag.source, tag.tag) },
             )
             .toList()
@@ -73,17 +75,25 @@ object CodexLikesPolicy {
         )
     }
 
-    fun postMatchesAnyAutomaticTag(post: Post, automaticTags: List<CodexAutomaticTag>): Boolean {
+    fun postMatchesAutomaticTagGroups(post: Post, automaticTags: List<CodexAutomaticTag>): Boolean {
         val postTagKeys = post.canonicalTags
             .asSequence()
             .map { tag -> sourceTagKey(post.id.source, tag) }
             .filter(String::isNotBlank)
             .toSet()
-        return automaticTags.any { automaticTag ->
-            automaticTag.source == post.id.source &&
+        val sourceGroups = normalizeAutomaticTags(automaticTags)
+            .filter { tag -> tag.source == post.id.source }
+            .groupBy(CodexAutomaticTag::groupIndex)
+        return sourceGroups.isNotEmpty() && sourceGroups.values.all { group ->
+            group.any { automaticTag ->
                 sourceTagKey(automaticTag.source, automaticTag.tag) in postTagKeys
+            }
         }
     }
+
+    /** Compatibility name retained for repository callers; matching is now AND across OR groups. */
+    fun postMatchesAnyAutomaticTag(post: Post, automaticTags: List<CodexAutomaticTag>): Boolean =
+        postMatchesAutomaticTagGroups(post, automaticTags)
 
     /**
      * Resolves a complete requested order or returns null when it is partial, duplicated, or

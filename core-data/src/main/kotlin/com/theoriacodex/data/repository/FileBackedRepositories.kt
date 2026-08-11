@@ -894,15 +894,21 @@ private data class CodexAutomaticTagRecord(
     val source: String = "",
     @field:SerializedName("tag")
     val tag: String = "",
+    @field:SerializedName("groupIndex")
+    val groupIndex: Int = 0,
 ) {
     fun toDomainOrNull(): CodexAutomaticTag? {
         val sourceKey = source.toSourceKeyOrNull() ?: return null
-        return CodexAutomaticTag(source = sourceKey, tag = tag)
+        return CodexAutomaticTag(source = sourceKey, tag = tag, groupIndex = groupIndex)
     }
 
     companion object {
         fun fromDomain(tag: CodexAutomaticTag): CodexAutomaticTagRecord {
-            return CodexAutomaticTagRecord(source = tag.source.name, tag = tag.tag)
+            return CodexAutomaticTagRecord(
+                source = tag.source.name,
+                tag = tag.tag,
+                groupIndex = tag.groupIndex,
+            )
         }
     }
 }

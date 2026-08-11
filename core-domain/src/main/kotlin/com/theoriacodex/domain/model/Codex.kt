@@ -10,6 +10,8 @@ data class Codex(
 data class CodexAutomaticTag(
     val source: SourceKey,
     val tag: String,
+    /** Tags with the same source and group index are alternatives; separate groups are required. */
+    val groupIndex: Int = 0,
 )
 
 data class CodexItem(

@@ -50,6 +50,7 @@ class GelbooruSourceAdapter(
         supportsDateRangeServerSide = false,
         supportsMinScoreServerSide = false,
         requiresCredentials = false,
+        supportsGroupedIncludeTagsServerSide = true,
     )
 
     override suspend fun search(query: Query, pageToken: String?): Page<Post> {
@@ -309,7 +310,14 @@ private fun parseGelbooruDurationMs(raw: JsonObject): Long? {
 }
 
 private fun compileTags(query: Query): String {
-    val include = query.includeTags.map { it.trim() }.filter { it.isNotBlank() }
+    val include = query.effectiveIncludeTermGroups.mapNotNull { group ->
+        val alternatives = group.terms.map { term -> term.value.trim() }.filter(String::isNotBlank)
+        when (alternatives.size) {
+            0 -> null
+            1 -> alternatives.single()
+            else -> alternatives.joinToString(separator = " ~ ", prefix = "{", postfix = "}")
+        }
+    }
     val exclude = query.excludeTags.map { it.trim() }.filter { it.isNotBlank() }.map { "-$it" }
     val order = when (query.sort) {
         SortMode.NEWEST -> "sort:id:desc"

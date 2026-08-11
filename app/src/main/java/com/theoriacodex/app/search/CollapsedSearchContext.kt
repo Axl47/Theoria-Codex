@@ -18,7 +18,10 @@ internal fun collapsedSearchContextSummary(
             "$first +${appliedSourceScope.sources.size - 1}"
         }
     }
-    val query = appliedQuery.includeTerms.firstOrNull()?.value
+    val query = appliedQuery.effectiveIncludeTermGroups.takeIf(List<*>::isNotEmpty)?.joinToString(" AND ") { group ->
+        if (group.terms.size == 1) group.terms.single().value
+        else group.terms.joinToString(prefix = "(", postfix = ")", separator = " OR ") { it.value }
+    }
         ?: appliedQuery.excludeTerms.firstOrNull()?.value?.let { value -> "-$value" }
     return buildList {
         add(source)

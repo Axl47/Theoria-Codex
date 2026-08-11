@@ -14,6 +14,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.CapabilityExclusionReason
@@ -24,6 +25,31 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UnifiedSearchOrchestratorTest {
+    @Test
+    fun `fallback branches one OR group filters canonically and retains branch continuation`() = runTest {
+        val required = SearchTerm("landscape")
+        val cat = SearchTerm("cat")
+        val dog = SearchTerm("dog")
+        val query = sampleQuery().withIncludeTermGroups(
+            listOf(SearchTermGroup.single(required), SearchTermGroup(listOf(cat, dog))),
+        )
+        val adapter = BranchingAdapter()
+        val orchestrator = UnifiedSearchOrchestrator(mapOf(SourceKey.PIXIV to adapter))
+
+        val first = orchestrator.searchSource(adapter, query, null)
+        val second = orchestrator.searchSource(adapter, query, first.nextPageToken)
+
+        assertEquals(listOf("cat-1", "dog-1"), first.items.map { it.id.sourcePostId })
+        assertTrue(first.nextPageToken?.startsWith("theoria-group-v1:") == true)
+        assertEquals(listOf("cat-2"), second.items.map { it.id.sourcePostId })
+        assertEquals(null, second.nextPageToken)
+        assertEquals(
+            listOf(setOf("landscape", "cat"), setOf("landscape", "dog"), setOf("landscape", "cat")),
+            adapter.calls.map { call -> call.first.includeTags.toSet() },
+        )
+        assertEquals(listOf(null, null, "cat-next"), adapter.calls.map { call -> call.second })
+    }
+
     @Test
     fun `excludes source when capability does not support selected sort`() = runTest {
         val query = Query(
@@ -385,5 +411,37 @@ class UnifiedSearchOrchestratorTest {
         override suspend fun resolvePost(id: PostId): Post? {
             return posts.firstOrNull { it.id == id }
         }
+    }
+
+    private inner class BranchingAdapter : SourceAdapter {
+        override val sourceKey: SourceKey = SourceKey.PIXIV
+        override val capabilities: SourceCapabilities = supportedCapabilities()
+        val calls = mutableListOf<Pair<Query, String?>>()
+
+        override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+            calls += query to pageToken
+            return when {
+                "cat" in query.includeTags && pageToken == null -> Page(
+                    items = listOf(post(SourceKey.PIXIV, "cat-1", listOf("landscape", "cat"))),
+                    nextPageToken = "cat-next",
+                )
+                "cat" in query.includeTags -> Page(
+                    items = listOf(post(SourceKey.PIXIV, "cat-2", listOf("landscape", "cat"))),
+                    nextPageToken = null,
+                )
+                else -> Page(
+                    items = listOf(
+                        post(SourceKey.PIXIV, "dog-1", listOf("landscape", "dog")),
+                        post(SourceKey.PIXIV, "not-a-match", listOf("portrait")),
+                    ),
+                    nextPageToken = null,
+                )
+            }
+        }
+
+        override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
+        override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = emptyList()
+        override suspend fun quickQuery(kind: QuickQueryKind): Query = sampleQuery()
+        override suspend fun resolvePost(id: PostId): Post? = null
     }
 }

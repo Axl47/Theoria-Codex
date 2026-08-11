@@ -164,6 +164,9 @@ sealed interface SearchAction {
     data class AddExcludeTerm(val term: SearchTerm) : SearchAction
     data class RemoveIncludeTerm(val term: SearchTerm) : SearchAction
     data class RemoveExcludeTerm(val term: SearchTerm) : SearchAction
+    data class AddIncludeAlternative(val groupIndex: Int, val term: SearchTerm) : SearchAction
+    data class SplitIncludeAlternative(val groupIndex: Int, val term: SearchTerm) : SearchAction
+    data class RemoveIncludeGroup(val groupIndex: Int) : SearchAction
     data class SelectSuggestionScope(val scope: FacetedSearchScope) : SearchAction
     data class AutocompleteChanged(val input: String) : SearchAction
     data class IncludeSuggestion(val suggestion: FacetedTagSuggestion) : SearchAction

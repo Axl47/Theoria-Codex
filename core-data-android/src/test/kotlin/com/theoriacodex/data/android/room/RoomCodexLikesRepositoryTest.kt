@@ -280,6 +280,31 @@ class RoomCodexLikesRepositoryTest {
     }
 
     @Test
+    fun `automatic tag group identity round trips`() = runTest {
+        val repository = repository()
+        val codex = repository.createCodex("Grouped Automatic")
+
+        repository.setAutomaticTag(
+            codex.codexId,
+            CodexAutomaticTag(SourceKey.PIXIV, "tag1", groupIndex = 0),
+            enabled = true,
+        )
+        repository.setAutomaticTag(
+            codex.codexId,
+            CodexAutomaticTag(SourceKey.PIXIV, "tag2", groupIndex = 1),
+            enabled = true,
+        )
+
+        assertEquals(
+            listOf(
+                CodexAutomaticTag(SourceKey.PIXIV, "tag1", groupIndex = 0),
+                CodexAutomaticTag(SourceKey.PIXIV, "tag2", groupIndex = 1),
+            ),
+            repository.observeCodex(codex.codexId).first()?.automaticTags,
+        )
+    }
+
+    @Test
     fun `ordinary Likes clear removes only pre-clear liked memberships`() = runTest {
         val repository = repository()
         val liked = post("liked")

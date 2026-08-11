@@ -38,6 +38,12 @@ For page-number providers, derive continuation from authoritative provider metad
 
 Provider pages must publish unique canonical `Post.id` values after hydration. Raw provider IDs can repeat, and distinct raw IDs can resolve to the same canonical post identity; deduplicate only after hydration while continuing to advance pagination from the raw provider records.
 
+## Grouped Search Tags
+
+Positive Search terms use a shallow Boolean grammar: every group is required with AND, while terms inside one group are alternatives with OR. Exclusions remain flat. Group matching is eligibility only and must never boost or otherwise replace the selected provider/Unified ordering. Persist group boundaries in query hashes, applied queries, Saved State, and Recents; legacy flat includes decode as singleton required groups.
+
+Gelbooru supports exact native OR with brace groups such as `{tag1 ~ tag2}`; its older bare-tilde form is not equivalent. Providers without verified native support use the bounded orchestrator fallback with independent branch continuation, post-hydration group verification, and canonical-ID deduplication. Never infer a fallback branch's exhaustion from the locally filtered visible count.
+
 ## Search Scroll Restoration
 
 The Search route applies persisted scroll position once when the route is restored or re-entered. Page appends must not retrigger that restoration from a changed result count, or pagination will replay the initial saved position and jump the grid to the top. Keep route-entry restoration separate from page-loading state. Unified execution may retain `EXCLUDED` source statuses for orchestration diagnostics, but the UI status row should only render actionable provider failures.
@@ -110,7 +116,7 @@ FAB filter/sort restore state lives in `UiRestoreRepository` and is loaded by th
 
 `CodexListScreen` owns one collection-action sheet reached by both the compact tile overflow affordance and tile long-press; keep export/share, search, rename, and delete behavior in that shared surface rather than creating divergent entry-point logic. `CodexDetailScreen` owns explicit multi-post edit selection through `CodexEditSelection`, while long-press retains the full single-post action sheet. Do not add permanent overflow controls to individual feed or Codex post cards to expose these actions.
 
-Codex Automatic rules are source-aware canonical tag memberships owned by each user Codex. The shared collection-action sheet derives represented-tag counts from hydrated Codex posts and promotes one source/tag pair at a time. Multiple rules use OR matching. A transition to liked may add the post to matching Codices belonging to the active recommendation profile in the same Room transaction as Likes; unliking, disabling a rule, or clearing Likes must never remove those user-Codex memberships. The system Likes Codex does not need Automatic rules because it already receives every liked post.
+Codex Automatic rules are source-aware grouped canonical tag memberships owned by each user Codex. The shared collection-action sheet derives represented-tag counts from hydrated Codex posts and edits one source recipe at a time: every group is required with AND, while tags inside a group match with OR. Legacy flat rules migrate into one OR group per source so their behavior is preserved. A transition to liked may add the post to matching Codices belonging to the active recommendation profile in the same Room transaction as Likes; unliking, disabling a rule, or clearing Likes must never remove those user-Codex memberships. The system Likes Codex does not need Automatic rules because it already receives every liked post.
 
 `MigrationTestHelper.runMigrationsAndValidate` returns a raw validation connection with SQLite foreign-key enforcement disabled. Migration tests that assert `ON DELETE CASCADE` behavior must enable `PRAGMA foreign_keys = ON` on that connection before performing the delete.
 

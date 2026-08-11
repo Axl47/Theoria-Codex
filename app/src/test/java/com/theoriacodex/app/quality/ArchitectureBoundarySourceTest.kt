@@ -353,9 +353,10 @@ class ArchitectureBoundarySourceTest {
             "tableName = \"media_durations\"" in durationEntity &&
                 "url" !in durationEntity.lowercase() &&
                 "header" !in durationEntity.lowercase() &&
-                "version = 6" in roomDatabase &&
+                "version = 7" in roomDatabase &&
                 "MIGRATION_4_5" in roomDatabase &&
                 "MIGRATION_5_6" in roomDatabase &&
+                "MIGRATION_6_7" in roomDatabase &&
                 "DEFAULT_MEDIA_DURATION_ENTRY_LIMIT = 4_096" in File(
                     repositoryRoot,
                     "core-data/src/main/kotlin/com/theoriacodex/data/repository/" +

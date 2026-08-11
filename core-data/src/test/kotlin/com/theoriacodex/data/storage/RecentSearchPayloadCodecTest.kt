@@ -4,6 +4,8 @@ import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
@@ -57,6 +59,21 @@ class RecentSearchPayloadCodecTest {
         val decoded = RecentSearchPayloadCodec.decodeJson(RecentSearchPayloadCodec.encodeJson(entry))
 
         assertEquals(sourceTags, decoded.sourceTags)
+    }
+
+    @Test
+    fun `query payload round trips positive group boundaries`() {
+        val grouped = query(QueryMode.Unified).withIncludeTermGroups(
+            listOf(
+                SearchTermGroup.single(SearchTerm("landscape")),
+                SearchTermGroup(listOf(SearchTerm("night"), SearchTerm("sunset"))),
+            ),
+        )
+
+        val restored = QueryStorageCodec.decodeJson(QueryStorageCodec.encodeJson(grouped))
+
+        assertEquals(grouped, restored)
+        assertEquals(grouped.effectiveIncludeTermGroups, restored.effectiveIncludeTermGroups)
     }
 
     private fun query(mode: QueryMode) = Query(

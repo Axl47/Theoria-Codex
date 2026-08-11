@@ -10,6 +10,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
@@ -106,6 +107,43 @@ class SearchDraftReducerTest {
         assertTrue(prepared.state.content.results.isEmpty())
         assertFalse(SearchDraftReducer.prepareTagSearch(state(), emptyList(), emptyList(), QueryMode.Unified, available, ::noScopes).accepted)
         assertFalse(SearchDraftReducer.prepareTagSearch(state(), listOf("x"), emptyList(), QueryMode.Source(SourceKey.GELBOORU), setOf(SourceKey.PIXIV), ::noScopes).accepted)
+    }
+
+    @Test
+    fun `include alternatives stay in one OR group and can become required`() {
+        val initial = state(query(QueryMode.Source(SourceKey.PIXIV), listOf(SearchTerm("tag1"))))
+        val grouped = SearchDraftReducer.addIncludeAlternative(initial, 0, SearchTerm("tag2"))
+        val required = SearchDraftReducer.splitIncludeAlternative(grouped.state, 0, SearchTerm("tag2"))
+
+        assertTrue(grouped.accepted)
+        assertEquals(
+            listOf(SearchTermGroup(listOf(SearchTerm("tag1"), SearchTerm("tag2")))),
+            grouped.state.query.draft.effectiveIncludeTermGroups,
+        )
+        assertEquals(
+            listOf(SearchTermGroup.single(SearchTerm("tag1")), SearchTermGroup.single(SearchTerm("tag2"))),
+            required.state.query.draft.effectiveIncludeTermGroups,
+        )
+    }
+
+    @Test
+    fun `Gelbooru alternatives retain exact suggestion validation`() {
+        val query = query(QueryMode.Source(SourceKey.GELBOORU), listOf(SearchTerm("landscape")))
+        val initial = state(query).copy(
+            suggestions = SearchSuggestionsUiState(
+                autocomplete = listOf(TagSuggestion("blue_hair", "tag", 10)),
+            ),
+        )
+
+        val rejected = SearchDraftReducer.addIncludeAlternative(initial, 0, SearchTerm("portrait"))
+        val accepted = SearchDraftReducer.addIncludeAlternative(initial, 0, SearchTerm("blue hair"))
+
+        assertFalse(rejected.accepted)
+        assertTrue(accepted.accepted)
+        assertEquals(
+            listOf(SearchTerm("landscape"), SearchTerm("blue_hair")),
+            accepted.state.query.draft.includeTerms,
+        )
     }
 
     @Test

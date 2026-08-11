@@ -504,8 +504,8 @@ class ForYouCoordinator(
     private suspend fun recordRecommendationSearch(seed: Map<SourceKey, List<String>>) {
         runCatchingPreservingCancellation {
             recentsRepository.recordSearch(
-                query = baseQuery().copy(
-                    includeTerms = seed.values
+                query = baseQuery().withIncludeTermsAsRequired(
+                    seed.values
                         .flatten()
                         .distinct()
                         .map(::SearchTerm),

@@ -149,6 +149,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
@@ -207,6 +208,7 @@ fun SearchScreen(
     var searchFieldFocused by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var showFavoriteTagSheet by remember { mutableStateOf(false) }
+    var editingIncludeGroupIndex by remember { mutableStateOf<Int?>(null) }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var selectedActionPostResolving by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
@@ -620,9 +622,9 @@ fun SearchScreen(
                     )
 
                     TagRow(
-                        includeTerms = state.query.draft.includeTerms,
+                        includeGroups = state.query.draft.effectiveIncludeTermGroups,
                         excludeTerms = state.query.draft.excludeTerms,
-                        onRemoveInclude = { term -> onAction(SearchAction.RemoveIncludeTerm(term)) },
+                        onEditIncludeGroup = { groupIndex -> editingIncludeGroupIndex = groupIndex },
                         onRemoveExclude = { term -> onAction(SearchAction.RemoveExcludeTerm(term)) },
                     )
 
@@ -859,6 +861,42 @@ fun SearchScreen(
             },
             onDismiss = { showFavoriteTagSheet = false },
         )
+    }
+
+    editingIncludeGroupIndex?.let { groupIndex ->
+        val group = state.query.draft.effectiveIncludeTermGroups.getOrNull(groupIndex)
+        if (group == null) {
+            editingIncludeGroupIndex = null
+        } else {
+            IncludeTagGroupSheet(
+                groupIndex = groupIndex,
+                group = group,
+                autocompleteInput = state.suggestions.input,
+                facetedSuggestions = facetedAutocompleteSuggestions.filter { suggestion ->
+                    val anchor = group.terms.first()
+                    suggestion.facet == anchor.facet && suggestion.sourceNamespace == anchor.sourceNamespace
+                },
+                suggestions = autocompleteSuggestions,
+                onAutocompleteChanged = { value -> onAction(SearchAction.AutocompleteChanged(value)) },
+                onAddAlternative = { term ->
+                    onAction(SearchAction.AddIncludeAlternative(groupIndex, term))
+                    onAction(SearchAction.ClearAutocomplete)
+                },
+                onRemoveTerm = { term -> onAction(SearchAction.RemoveIncludeTerm(term)) },
+                onRequireTerm = { term ->
+                    onAction(SearchAction.SplitIncludeAlternative(groupIndex, term))
+                    editingIncludeGroupIndex = null
+                },
+                onRemoveGroup = {
+                    onAction(SearchAction.RemoveIncludeGroup(groupIndex))
+                    editingIncludeGroupIndex = null
+                },
+                onDismiss = {
+                    onAction(SearchAction.ClearAutocomplete)
+                    editingIncludeGroupIndex = null
+                },
+            )
+        }
     }
 
     if (showFilterSheet) {
@@ -1874,18 +1912,46 @@ private fun SourceBadge(
 
 @Composable
 private fun TagRow(
-    includeTerms: List<SearchTerm>,
+    includeGroups: List<SearchTermGroup>,
     excludeTerms: List<SearchTerm>,
-    onRemoveInclude: (SearchTerm) -> Unit,
+    onEditIncludeGroup: (Int) -> Unit,
     onRemoveExclude: (SearchTerm) -> Unit,
 ) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(includeTerms.size) { index ->
-            val term = includeTerms[index]
-            AssistChip(
-                onClick = { onRemoveInclude(term) },
-                label = { Text(searchTermChipLabel(term, excluded = false)) }
-            )
+        includeGroups.forEachIndexed { index, group ->
+            if (index > 0) {
+                item(key = "include-and:$index") {
+                    Text(
+                        text = "AND",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
+                }
+            }
+            item(key = "include-group:$index:${group.terms.joinToString { it.value }}") {
+                val label = if (group.terms.size == 1) {
+                    searchTermChipLabel(group.terms.single(), excluded = false)
+                } else {
+                    group.terms.joinToString(prefix = "(", postfix = ")", separator = " OR ") { term ->
+                        searchTermChipLabel(term, excluded = false)
+                    }
+                }
+                AssistChip(
+                    onClick = { onEditIncludeGroup(index) },
+                    label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                )
+            }
+        }
+        if (includeGroups.isNotEmpty() && excludeTerms.isNotEmpty()) {
+            item(key = "exclude-and") {
+                Text(
+                    text = "AND",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+            }
         }
         items(excludeTerms.size) { index ->
             val term = excludeTerms[index]
@@ -1893,6 +1959,185 @@ private fun TagRow(
                 onClick = { onRemoveExclude(term) },
                 label = { Text(searchTermChipLabel(term, excluded = true)) }
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun IncludeTagGroupSheet(
+    groupIndex: Int,
+    group: SearchTermGroup,
+    autocompleteInput: String,
+    facetedSuggestions: List<FacetedTagSuggestion>,
+    suggestions: List<TagSuggestion>,
+    onAutocompleteChanged: (String) -> Unit,
+    onAddAlternative: (SearchTerm) -> Unit,
+    onRemoveTerm: (SearchTerm) -> Unit,
+    onRequireTerm: (SearchTerm) -> Unit,
+    onRemoveGroup: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val anchor = group.terms.first()
+    val addTypedAlternative = {
+        autocompleteInput.trim().takeIf(String::isNotBlank)?.let { value ->
+            onAddAlternative(anchor.copy(value = value))
+        }
+        Unit
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        IncludeTagGroupSheetContent(
+            groupIndex = groupIndex,
+            group = group,
+            anchor = anchor,
+            autocompleteInput = autocompleteInput,
+            facetedSuggestions = facetedSuggestions,
+            suggestions = suggestions,
+            onAutocompleteChanged = onAutocompleteChanged,
+            onAddAlternative = onAddAlternative,
+            onRemoveTerm = onRemoveTerm,
+            onRequireTerm = onRequireTerm,
+            onRemoveGroup = onRemoveGroup,
+            addTypedAlternative = addTypedAlternative,
+        )
+    }
+}
+
+@Composable
+private fun IncludeTagGroupSheetContent(
+    groupIndex: Int,
+    group: SearchTermGroup,
+    anchor: SearchTerm,
+    autocompleteInput: String,
+    facetedSuggestions: List<FacetedTagSuggestion>,
+    suggestions: List<TagSuggestion>,
+    onAutocompleteChanged: (String) -> Unit,
+    onAddAlternative: (SearchTerm) -> Unit,
+    onRemoveTerm: (SearchTerm) -> Unit,
+    onRequireTerm: (SearchTerm) -> Unit,
+    onRemoveGroup: () -> Unit,
+    addTypedAlternative: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text("Required tag group ${groupIndex + 1}", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "A post must match at least one tag in this group. Separate groups are all required.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        IncludeTagGroupTerms(group, onRequireTerm, onRemoveTerm)
+        HorizontalDivider()
+        IncludeTagAlternativeEditor(
+            anchor, autocompleteInput, facetedSuggestions, suggestions,
+            onAutocompleteChanged, onAddAlternative, addTypedAlternative,
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(onClick = onRemoveGroup) { Text("Remove group") }
+            TextButton(onClick = addTypedAlternative, enabled = autocompleteInput.isNotBlank()) {
+                Text("Add alternative")
+            }
+        }
+    }
+}
+
+@Composable
+private fun IncludeTagGroupTerms(
+    group: SearchTermGroup,
+    onRequireTerm: (SearchTerm) -> Unit,
+    onRemoveTerm: (SearchTerm) -> Unit,
+) {
+    group.terms.forEach { term ->
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(term.value, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+            if (group.terms.size > 1) {
+                TextButton(onClick = { onRequireTerm(term) }) { Text("Require") }
+            }
+            TextButton(onClick = { onRemoveTerm(term) }) { Text("Remove") }
+        }
+    }
+}
+
+@Composable
+private fun IncludeTagAlternativeEditor(
+    anchor: SearchTerm,
+    input: String,
+    facetedSuggestions: List<FacetedTagSuggestion>,
+    suggestions: List<TagSuggestion>,
+    onInputChanged: (String) -> Unit,
+    onAddAlternative: (SearchTerm) -> Unit,
+    onDone: () -> Unit,
+) {
+    Text("Add an OR alternative", style = MaterialTheme.typography.titleSmall)
+    OutlinedTextField(
+        value = input,
+        onValueChange = onInputChanged,
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text("Tag") },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { onDone() }),
+    )
+    val options = alternativeSuggestions(anchor, facetedSuggestions, suggestions)
+    if (options.isNotEmpty()) {
+        AlternativeAutocompletePanel(options, onAddAlternative)
+    }
+}
+
+private fun alternativeSuggestions(
+    anchor: SearchTerm,
+    facetedSuggestions: List<FacetedTagSuggestion>,
+    suggestions: List<TagSuggestion>,
+): List<AlternativeTagSuggestion> {
+    if (facetedSuggestions.isNotEmpty()) {
+        return facetedSuggestions.map { suggestion ->
+            AlternativeTagSuggestion(suggestion.toSearchTerm(), facetedSuggestionMetaLabel(suggestion))
+        }
+    }
+    if (anchor.facet != SearchFacet.TAG || anchor.sourceNamespace != null) return emptyList()
+    return suggestions.map { suggestion ->
+        AlternativeTagSuggestion(
+            term = anchor.copy(value = suggestion.text),
+            meta = listOfNotNull(suggestion.type, suggestion.count?.toString()).joinToString(" • "),
+        )
+    }
+}
+
+private data class AlternativeTagSuggestion(
+    val term: SearchTerm,
+    val meta: String,
+)
+
+@Composable
+private fun AlternativeAutocompletePanel(
+    suggestions: List<AlternativeTagSuggestion>,
+    onAddAlternative: (SearchTerm) -> Unit,
+) {
+    AutocompleteListShell(items = suggestions) { suggestion ->
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onAddAlternative(suggestion.term) }
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(suggestion.term.value, style = MaterialTheme.typography.bodyMedium)
+                suggestion.meta.takeIf(String::isNotBlank)?.let { meta ->
+                    Text(meta, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            Text("Add", color = MaterialTheme.colorScheme.primary)
         }
     }
 }

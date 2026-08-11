@@ -564,8 +564,13 @@ internal data class RecentSearchPresentation(
 )
 
 internal fun recentSearchPresentation(entry: RecentSearchEntry): RecentSearchPresentation {
-    val terms = entry.query.includeTags + entry.query.excludeTags.map { tag -> "-$tag" }
-    val title = terms.joinToString(", ").ifBlank { "No tags" }
+    val includes = entry.query.effectiveIncludeTermGroups.joinToString(" AND ") { group ->
+        if (group.terms.size == 1) group.terms.single().value
+        else group.terms.joinToString(prefix = "(", postfix = ")", separator = " OR ") { it.value }
+    }
+    val exclusions = entry.query.excludeTags.joinToString(" AND ") { tag -> "-$tag" }
+    val title = listOf(includes, exclusions).filter(String::isNotBlank).joinToString(" AND ")
+        .ifBlank { "No tags" }
     val sourceList = entry.sources.joinToString(", ") { source -> source.displayName() }
         .takeIf(String::isNotBlank)
     val subtitle = when (entry.kind) {

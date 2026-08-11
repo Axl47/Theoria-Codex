@@ -4,6 +4,7 @@ import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.emptySearchQuery
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
@@ -17,12 +18,28 @@ class CollapsedSearchContextTest {
         )
 
         assertEquals(
-            "Pixiv · klee · 2 filters",
+            "Pixiv · klee AND landscape · 2 filters",
             collapsedSearchContextSummary(
                 appliedSourceScope = SearchSourceScope.Single(SourceKey.PIXIV),
                 appliedQuery = query,
                 activeFilterCount = 2,
             ),
+        )
+    }
+
+    @Test
+    fun `summary renders grouped applied terms`() {
+        val query = emptySearchQuery().copy(
+            includeTermGroups = listOf(
+                SearchTermGroup.single(SearchTerm("tag1")),
+                SearchTermGroup(listOf(SearchTerm("tag2"), SearchTerm("tag3"))),
+            ),
+            includeTerms = listOf(SearchTerm("tag1"), SearchTerm("tag2"), SearchTerm("tag3")),
+        )
+
+        assertEquals(
+            "Unified · tag1 AND (tag2 OR tag3)",
+            collapsedSearchContextSummary(SearchSourceScope.GlobalUnified, query, 0),
         )
     }
 

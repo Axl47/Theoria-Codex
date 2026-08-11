@@ -12,10 +12,11 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 
-const val CURRENT_QUERY_STORAGE_SCHEMA_VERSION = 1
+const val CURRENT_QUERY_STORAGE_SCHEMA_VERSION = 2
 
 data class QueryStorageRecord(
     @field:SerializedName("schemaVersion") val schemaVersion: Int? = null,
@@ -29,6 +30,8 @@ data class QueryStorageRecord(
     @field:SerializedName("minScore") val minScore: Int? = null,
     @field:SerializedName("includeTerms") val includeTerms: List<SearchTermStorageRecord?>? = null,
     @field:SerializedName("excludeTerms") val excludeTerms: List<SearchTermStorageRecord?>? = null,
+    @field:SerializedName("includeTermGroups")
+    val includeTermGroups: List<List<SearchTermStorageRecord?>?>? = null,
 )
 
 data class SearchTermStorageRecord(
@@ -52,12 +55,15 @@ object QueryStorageCodec {
             minScore = query.minScore,
             includeTerms = query.includeTerms.map(::encodeTerm),
             excludeTerms = query.excludeTerms.map(::encodeTerm),
+            includeTermGroups = query.effectiveIncludeTermGroups.map { group ->
+                group.terms.map(::encodeTerm)
+            },
         )
     }
 
     /** Missing version is the legacy v1 shape; newer versions fail closed. */
     fun decode(record: QueryStorageRecord): Query {
-        require(record.schemaVersion == null || record.schemaVersion == CURRENT_QUERY_STORAGE_SCHEMA_VERSION) {
+        require(record.schemaVersion == null || record.schemaVersion in 1..CURRENT_QUERY_STORAGE_SCHEMA_VERSION) {
             "Unsupported stored Query version: ${record.schemaVersion}"
         }
         val mode = when (record.modeType) {
@@ -65,10 +71,23 @@ object QueryStorageCodec {
             "source" -> record.modeSource.toSourceKeyOrNull()?.let(QueryMode::Source) ?: QueryMode.Unified
             else -> QueryMode.Unified
         }
+        val includeTerms = record.includeTerms?.mapNotNull { it?.toDomainOrNull() }
+            ?: record.includeTags.map(::SearchTerm)
+        val includeGroups = if (
+            record.schemaVersion == CURRENT_QUERY_STORAGE_SCHEMA_VERSION &&
+            !record.includeTermGroups.isNullOrEmpty()
+        ) {
+            record.includeTermGroups.orEmpty().mapNotNull { rawGroup ->
+                rawGroup.orEmpty().mapNotNull { it?.toDomainOrNull() }
+                    .takeIf(List<SearchTerm>::isNotEmpty)
+                    ?.let(::SearchTermGroup)
+            }
+        } else {
+            includeTerms.map(SearchTermGroup::single)
+        }
         return Query(
             mode = mode,
-            includeTerms = record.includeTerms?.mapNotNull { it?.toDomainOrNull() }
-                ?: record.includeTags.map(::SearchTerm),
+            includeTerms = includeGroups.flatMap(SearchTermGroup::terms),
             excludeTerms = record.excludeTerms?.mapNotNull { it?.toDomainOrNull() }
                 ?: record.excludeTags.map(::SearchTerm),
             sort = runCatching { SortMode.valueOf(record.sort) }.getOrDefault(SortMode.TOP),
@@ -76,6 +95,7 @@ object QueryStorageCodec {
                 DateRange(record.dateFromEpochMs, record.dateToEpochMs)
             },
             minScore = record.minScore,
+            includeTermGroups = includeGroups,
         )
     }
 
@@ -86,8 +106,8 @@ object QueryStorageCodec {
         require(root.isJsonObject) { "Stored Query root must be an object" }
         val record = gson.fromJson(root, QueryStorageRecord::class.java)
             ?: error("Stored Query decoded to null")
-        require(record.schemaVersion == CURRENT_QUERY_STORAGE_SCHEMA_VERSION) {
-            "Room Query payload requires schema version $CURRENT_QUERY_STORAGE_SCHEMA_VERSION"
+        require(record.schemaVersion != null && record.schemaVersion in 1..CURRENT_QUERY_STORAGE_SCHEMA_VERSION) {
+            "Room Query payload requires a supported schema version"
         }
         return decode(record)
     }

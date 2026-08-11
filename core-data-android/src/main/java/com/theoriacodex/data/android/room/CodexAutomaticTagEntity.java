@@ -29,21 +29,26 @@ public final class CodexAutomaticTagEntity {
     @NonNull
     @ColumnInfo(name = "tag_display")
     private final String tagDisplay;
+    @ColumnInfo(name = "group_index")
+    private final int groupIndex;
 
     public CodexAutomaticTagEntity(
             @NonNull String codexId,
             @NonNull String source,
             @NonNull String tagKey,
-            @NonNull String tagDisplay
+            @NonNull String tagDisplay,
+            int groupIndex
     ) {
         this.codexId = codexId;
         this.source = source;
         this.tagKey = tagKey;
         this.tagDisplay = tagDisplay;
+        this.groupIndex = groupIndex;
     }
 
     @NonNull public String getCodexId() { return codexId; }
     @NonNull public String getSource() { return source; }
     @NonNull public String getTagKey() { return tagKey; }
     @NonNull public String getTagDisplay() { return tagDisplay; }
+    public int getGroupIndex() { return groupIndex; }
 }

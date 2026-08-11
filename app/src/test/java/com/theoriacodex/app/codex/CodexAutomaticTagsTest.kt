@@ -30,6 +30,10 @@ class CodexAutomaticTagsTest {
             presentation.automaticRows,
         )
         assertEquals(
+            listOf(SourceKey.PIXIV to 0, SourceKey.HITOMI to 0),
+            presentation.automaticGroups.map { group -> group.source to group.groupIndex },
+        )
+        assertEquals(
             listOf(SourceKey.GELBOORU, SourceKey.PIXIV),
             presentation.availableSections.map { section -> section.source },
         )

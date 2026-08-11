@@ -24,6 +24,27 @@ data class SearchTerm(
         get() = facet == SearchFacet.TAG && sourceNamespace == null
 }
 
+data class SearchTermGroup(
+    val terms: List<SearchTerm>,
+) {
+    init {
+        require(terms.isNotEmpty()) { "A Search term group must contain at least one term" }
+        val first = terms.first()
+        require(terms.all { term ->
+            term.facet == first.facet && term.sourceNamespace == first.sourceNamespace
+        }) {
+            "Search term alternatives must share one facet and source namespace"
+        }
+    }
+
+    val isPortableGeneralTagGroup: Boolean
+        get() = terms.all(SearchTerm::isPortableGeneralTag)
+
+    companion object {
+        fun single(term: SearchTerm): SearchTermGroup = SearchTermGroup(listOf(term))
+    }
+}
+
 data class Query(
     val mode: QueryMode,
     val includeTerms: List<SearchTerm>,
@@ -31,7 +52,13 @@ data class Query(
     val sort: SortMode,
     val dateRange: DateRange?,
     val minScore: Int?,
+    val includeTermGroups: List<SearchTermGroup> = includeTerms.map(SearchTermGroup::single),
 ) {
+    val effectiveIncludeTermGroups: List<SearchTermGroup>
+        get() = includeTermGroups.takeIf { groups ->
+            groups.flatMap(SearchTermGroup::terms) == includeTerms
+        } ?: includeTerms.map(SearchTermGroup::single)
+
     val includeTags: List<String>
         get() = includeTerms.map(SearchTerm::value)
 
@@ -56,10 +83,22 @@ data class Query(
 
     fun portableTermsForUnified(): Query {
         if (mode != QueryMode.Unified) return this
-        return copy(
-            includeTerms = includeTerms.filter(SearchTerm::isPortableGeneralTag),
+        return withIncludeTermGroups(
+            effectiveIncludeTermGroups.filter(SearchTermGroup::isPortableGeneralTagGroup),
+        ).copy(
             excludeTerms = excludeTerms.filter(SearchTerm::isPortableGeneralTag),
         )
+    }
+
+    fun withIncludeTermGroups(groups: List<SearchTermGroup>): Query {
+        return copy(
+            includeTerms = groups.flatMap(SearchTermGroup::terms),
+            includeTermGroups = groups,
+        )
+    }
+
+    fun withIncludeTermsAsRequired(terms: List<SearchTerm>): Query {
+        return withIncludeTermGroups(terms.map(SearchTermGroup::single))
     }
 }
 

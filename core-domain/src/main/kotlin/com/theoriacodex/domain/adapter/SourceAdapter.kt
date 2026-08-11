@@ -132,6 +132,7 @@ data class SourceCapabilities(
     val supportsDateRangeServerSide: Boolean,
     val supportsMinScoreServerSide: Boolean,
     val requiresCredentials: Boolean,
+    val supportsGroupedIncludeTagsServerSide: Boolean = false,
 )
 
 enum class QuickQueryKind {

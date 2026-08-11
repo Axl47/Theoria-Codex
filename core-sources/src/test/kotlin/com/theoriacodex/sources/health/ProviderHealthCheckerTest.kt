@@ -64,6 +64,7 @@ class ProviderHealthCheckerTest {
                 "includeTerms": [
                   {"value": "najar", "facet": "ARTIST", "sourceNamespace": "artist"}
                 ],
+                "requiredAnyTagGroups": [["landscape", "cityscape"]],
                 "sort": "TOP",
                 "autocompletePrefix": "land",
                 "autocompleteProbes": [
@@ -81,6 +82,7 @@ class ProviderHealthCheckerTest {
         assertEquals(SourceKey.GELBOORU, cases.single().source)
         assertEquals(listOf("landscape"), cases.single().includeTags)
         assertEquals(listOf(SearchTerm("najar", SearchFacet.ARTIST, "artist")), cases.single().includeTerms)
+        assertEquals(listOf(listOf("landscape", "cityscape")), cases.single().requiredAnyTagGroups)
         assertEquals(SortMode.TOP, cases.single().sort)
         assertEquals("land", cases.single().autocompletePrefix)
         assertEquals(
@@ -126,6 +128,39 @@ class ProviderHealthCheckerTest {
         assertEquals(ProviderHealthStatus.OK, results.getValue("media-metadata").status)
         assertEquals("1", results.getValue("seeded-search").samplePostId)
         assertTrue(results.getValue("media-metadata").message.orEmpty().contains("media URLs"))
+    }
+
+    @Test
+    fun `probe runner verifies every seeded post against diagnostic OR groups`() = runTest {
+        val matching = samplePost(SourceKey.GELBOORU)
+        val nonMatching = samplePost(SourceKey.GELBOORU).copy(
+            id = PostId(SourceKey.GELBOORU, "2"),
+            canonicalTags = listOf("portrait"),
+            rawTags = listOf("portrait"),
+        )
+        val registry = FakeRegistry(
+            mapOf(
+                SourceKey.GELBOORU to FakeAdapter(
+                    sourceKey = SourceKey.GELBOORU,
+                    page = Page(items = listOf(matching, nonMatching), nextPageToken = null),
+                )
+            )
+        )
+
+        val result = ProviderProbeRunner(registry).runAll(
+            listOf(
+                ProviderProbeCase(
+                    source = SourceKey.GELBOORU,
+                    includeTags = listOf("{landscape ~ cityscape}"),
+                    requiredAnyTagGroups = listOf(listOf("landscape", "cityscape")),
+                    mediaProbe = false,
+                    trendingProbe = false,
+                )
+            )
+        ).first { it.checkName == "seeded-search" }
+
+        assertEquals(ProviderHealthStatus.DEGRADED, result.status)
+        assertTrue(result.message.orEmpty().contains("1/2 posts"))
     }
 
     @Test

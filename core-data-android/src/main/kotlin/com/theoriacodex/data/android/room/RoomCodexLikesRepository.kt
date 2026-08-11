@@ -531,7 +531,7 @@ private fun CodexEntity.toDomain(automaticTagEntities: List<CodexAutomaticTagEnt
 
 private fun CodexAutomaticTagEntity.toDomainOrNull(): CodexAutomaticTag? {
     val sourceKey = source.toSourceKeyOrNull() ?: return null
-    return CodexAutomaticTag(source = sourceKey, tag = tagDisplay)
+    return CodexAutomaticTag(source = sourceKey, tag = tagDisplay, groupIndex = groupIndex)
 }
 
 private fun CodexAutomaticTag.toEntity(codexId: String): CodexAutomaticTagEntity {
@@ -540,6 +540,7 @@ private fun CodexAutomaticTag.toEntity(codexId: String): CodexAutomaticTagEntity
         source.name,
         sourceTagKey(source, tag),
         tag,
+        groupIndex,
     )
 }
 

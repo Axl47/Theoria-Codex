@@ -309,7 +309,8 @@ class RoomRecentsRepositoryTest {
         repository.recordSearch(query, "hash")
 
         val reconstructed = RoomRecentsRepository(database)
-        assertEquals(query, reconstructed.observeSearches().first().single().query)
+        val restored = reconstructed.observeSearches().first().single().query
+        assertEquals(query.copy(includeTermGroups = query.effectiveIncludeTermGroups), restored)
         assertTrue(database.recentsDao().searches().single().queryPayloadJson.contains("schemaVersion"))
     }
 

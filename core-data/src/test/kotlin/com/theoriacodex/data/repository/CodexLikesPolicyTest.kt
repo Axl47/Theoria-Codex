@@ -7,7 +7,9 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CodexLikesPolicyTest {
@@ -103,6 +105,36 @@ class CodexLikesPolicyTest {
             CodexLikesPolicy.postMatchesAnyAutomaticTag(
                 post,
                 listOf(CodexAutomaticTag(SourceKey.GELBOORU, "blue sky")),
+            ),
+        )
+    }
+
+    @Test
+    fun `automatic tag groups require every group while accepting alternatives`() {
+        val post = Post(
+            id = PostId(SourceKey.PIXIV, "grouped"),
+            preview = ImageRef(null, null, null),
+            full = null,
+            pageUrl = null,
+            width = null,
+            height = null,
+            canonicalTags = listOf("tag1", "tag4"),
+            rawTags = emptyList(),
+            authorName = null,
+            createdAtEpochMs = null,
+        )
+        val matching = listOf(
+            CodexAutomaticTag(SourceKey.PIXIV, "tag1", groupIndex = 0),
+            CodexAutomaticTag(SourceKey.PIXIV, "tag2", groupIndex = 0),
+            CodexAutomaticTag(SourceKey.PIXIV, "tag3", groupIndex = 1),
+            CodexAutomaticTag(SourceKey.PIXIV, "tag4", groupIndex = 1),
+        )
+
+        assertTrue(CodexLikesPolicy.postMatchesAutomaticTagGroups(post, matching))
+        assertFalse(
+            CodexLikesPolicy.postMatchesAutomaticTagGroups(
+                post,
+                matching.filterNot { tag -> tag.groupIndex == 1 && tag.tag == "tag4" },
             ),
         )
     }

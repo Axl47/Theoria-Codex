@@ -48,6 +48,7 @@ data class ProviderProbeCase(
     val source: SourceKey,
     val includeTags: List<String> = emptyList(),
     val includeTerms: List<SearchTerm> = emptyList(),
+    val requiredAnyTagGroups: List<List<String>> = emptyList(),
     val sort: SortMode = SortMode.NEWEST,
     val autocompletePrefix: String? = null,
     val autocompleteProbes: List<ProviderAutocompleteProbe> = emptyList(),
@@ -190,6 +191,9 @@ object ProviderProbeCases {
                         sourceNamespace = term.sourceNamespace,
                     )
                 },
+                requiredAnyTagGroups = record.requiredAnyTagGroups.orEmpty()
+                    .map { group -> group.map(String::trim).filter(String::isNotBlank).distinct() }
+                    .filter(List<String>::isNotEmpty),
                 sort = record.sort?.let(SortMode::valueOf) ?: SortMode.NEWEST,
                 autocompletePrefix = record.autocompletePrefix,
                 autocompleteProbes = record.autocompleteProbes.orEmpty().map { probe ->
@@ -213,6 +217,7 @@ object ProviderProbeCases {
         val source: String,
         val includeTags: List<String>? = null,
         val includeTerms: List<ProviderProbeTermRecord>? = null,
+        val requiredAnyTagGroups: List<List<String>>? = null,
         val sort: String? = null,
         val autocompletePrefix: String? = null,
         val autocompleteProbes: List<ProviderAutocompleteProbeRecord>? = null,
@@ -368,6 +373,14 @@ class ProviderProbeRunner(
                     tags.any { tag -> tagsMatch(tag, expected) }
                 }
             }
+            val groupedEchoMatchCount = page.items.count { post ->
+                val tags = post.canonicalTags + post.rawTags
+                probeCase.requiredAnyTagGroups.all { group ->
+                    group.any { expected -> tags.any { actual -> tagsMatch(actual, expected) } }
+                }
+            }
+            val groupedEchoMatches = probeCase.requiredAnyTagGroups.isEmpty() ||
+                groupedEchoMatchCount == page.items.size
             val termsLabel = includeTerms.joinToString { term ->
                 "${term.sourceNamespace?.let { "$it:" }.orEmpty()}${term.value}"
             }
@@ -385,12 +398,23 @@ class ProviderProbeRunner(
                     samplePost = seededSample,
                     message = "Returned posts, but none echoed required terms $termsLabel",
                 )
+                !groupedEchoMatches -> degraded(
+                    probeCase = probeCase,
+                    checkName = "seeded-search",
+                    itemCount = page.items.size,
+                    samplePost = seededSample,
+                    message = "$groupedEchoMatchCount/${page.items.size} posts satisfied required OR groups",
+                )
                 else -> ok(
                     probeCase = probeCase,
                     checkName = "seeded-search",
                     itemCount = page.items.size,
                     samplePost = seededSample,
-                    message = "Returned ${page.items.size} seeded posts",
+                    message = if (probeCase.requiredAnyTagGroups.isEmpty()) {
+                        "Returned ${page.items.size} seeded posts"
+                    } else {
+                        "Returned ${page.items.size} seeded posts; all satisfied required OR groups"
+                    },
                 )
             }
         }

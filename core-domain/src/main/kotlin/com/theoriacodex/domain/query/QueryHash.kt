@@ -6,7 +6,7 @@ import com.theoriacodex.domain.model.SearchTerm
 import java.util.Locale
 
 object QueryHash {
-    private const val VERSION = "v2"
+    private const val VERSION = "v3"
     private val whitespace = Regex("\\s+")
 
     fun from(query: Query): String {
@@ -14,10 +14,18 @@ object QueryHash {
             QueryMode.Unified -> "unified"
             is QueryMode.Source -> "source:${modeValue.source.name}"
         }
-        val terms = buildList {
-            query.includeTerms.mapNotNullTo(this) { term -> term.hashEntry(polarity = "include") }
-            query.excludeTerms.mapNotNullTo(this) { term -> term.hashEntry(polarity = "exclude") }
-        }.sorted().joinToString(separator = ";")
+        val includeGroups = query.effectiveIncludeTermGroups
+            .mapNotNull { group ->
+                group.terms.mapNotNull { term -> term.hashEntry(polarity = "include") }
+                    .sorted()
+                    .takeIf(List<String>::isNotEmpty)
+                    ?.joinToString(separator = ",", prefix = "group[", postfix = "]")
+            }
+            .sorted()
+        val exclusions = query.excludeTerms
+            .mapNotNull { term -> term.hashEntry(polarity = "exclude") }
+            .sorted()
+        val terms = (includeGroups + exclusions).joinToString(separator = ";")
         val date = query.dateRange?.let { "${it.fromEpochMs ?: "-"}:${it.toEpochMs ?: "-"}" } ?: "none"
         val score = query.minScore?.toString() ?: "none"
         return listOf(VERSION, mode, terms, query.sort.name, date, score).joinToString("|")

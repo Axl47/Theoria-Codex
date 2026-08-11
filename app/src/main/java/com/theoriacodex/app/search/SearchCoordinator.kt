@@ -37,6 +37,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
@@ -267,7 +268,7 @@ class SearchCoordinator(
             )
         }
         val adapter = requireNotNull(registry.adapterFor(mode.source)) { "No adapter for ${mode.source}" }
-        val page = adapter.search(query, null)
+        val page = registry.unifiedOrchestrator().searchSource(adapter, query, null)
         currentCoroutineContext().ensureActive()
         rememberSeenTags(page.items)
         return SearchExecutionResult.Success(
@@ -361,7 +362,7 @@ class SearchCoordinator(
             )
         }
         val adapter = requireNotNull(registry.adapterFor(mode.source)) { "No adapter for ${mode.source}" }
-        val page = adapter.search(continuation.query, token)
+        val page = registry.unifiedOrchestrator().searchSource(adapter, continuation.query, token)
         currentCoroutineContext().ensureActive()
         rememberSeenTags(page.items)
         return SearchPageResult.Success(
@@ -707,21 +708,30 @@ class SearchCoordinator(
         enabledSources: Set<SourceKey>,
     ): Map<SourceKey, Query> {
         if (query.mode != QueryMode.Unified) return emptyMap()
-        val include = query.includeTerms.filter(SearchTerm::isPortableGeneralTag)
+        val includeGroups = query.effectiveIncludeTermGroups
+            .filter(SearchTermGroup::isPortableGeneralTagGroup)
         val exclude = query.excludeTerms.filter(SearchTerm::isPortableGeneralTag)
         val overrides = mutableMapOf<SourceKey, Query>()
         registry.adapterFor(SourceKey.GELBOORU)?.takeIf { SourceKey.GELBOORU in enabledSources }
             ?.let { adapter ->
-                overrides[SourceKey.GELBOORU] = query.copy(
-                    includeTerms = resolveGelbooruCompatibilityTags(adapter, include.map(SearchTerm::value))
-                        .map(::SearchTerm),
+                val groups = includeGroups.map { group ->
+                    SearchTermGroup(
+                        resolveGelbooruCompatibilityTags(adapter, group.terms.map(SearchTerm::value))
+                            .map(::SearchTerm)
+                    )
+                }
+                overrides[SourceKey.GELBOORU] = query.withIncludeTermGroups(groups).copy(
                     excludeTerms = resolveGelbooruCompatibilityTags(adapter, exclude.map(SearchTerm::value))
                         .map(::SearchTerm),
                 )
             }
         if (SourceKey.PIXIV in enabledSources) {
-            overrides[SourceKey.PIXIV] = query.copy(
-                includeTerms = resolvePixivCompatibilityTags(include.map(SearchTerm::value)).map(::SearchTerm),
+            val groups = includeGroups.map { group ->
+                SearchTermGroup(
+                    resolvePixivCompatibilityTags(group.terms.map(SearchTerm::value)).map(::SearchTerm)
+                )
+            }
+            overrides[SourceKey.PIXIV] = query.withIncludeTermGroups(groups).copy(
                 excludeTerms = resolvePixivCompatibilityTags(exclude.map(SearchTerm::value)).map(::SearchTerm),
             )
         }

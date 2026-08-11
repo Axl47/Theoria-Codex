@@ -10,14 +10,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -38,8 +44,15 @@ internal data class CodexAutomaticTagSection(
     val rows: List<CodexAutomaticTagRow>,
 )
 
+internal data class CodexAutomaticTagGroup(
+    val source: SourceKey,
+    val groupIndex: Int,
+    val rows: List<CodexAutomaticTagRow>,
+)
+
 internal data class CodexAutomaticTagPresentation(
     val automaticRows: List<CodexAutomaticTagRow>,
+    val automaticGroups: List<CodexAutomaticTagGroup>,
     val availableSections: List<CodexAutomaticTagSection>,
 )
 
@@ -74,6 +87,11 @@ internal fun codexAutomaticTagPresentation(
     }
     return CodexAutomaticTagPresentation(
         automaticRows = automaticRows,
+        automaticGroups = automaticRows
+            .groupBy { row -> row.automaticTag.source to row.automaticTag.groupIndex }
+            .map { (identity, rows) ->
+                CodexAutomaticTagGroup(identity.first, identity.second, rows)
+            },
         availableSections = sections,
     )
 }
@@ -115,9 +133,10 @@ internal fun CodexAutomaticTagSections(
             .heightIn(max = 420.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        automaticTagItems(presentation.automaticRows, onSetAutomaticTag)
+        automaticTagItems(presentation.automaticGroups, onSetAutomaticTag)
         availableTagItems(
             sections = presentation.availableSections,
+            automaticGroups = presentation.automaticGroups,
             hasRepresentedTags = tagOptionsBySource.isNotEmpty(),
             onSetAutomaticTag = onSetAutomaticTag,
         )
@@ -125,17 +144,29 @@ internal fun CodexAutomaticTagSections(
 }
 
 private fun LazyListScope.automaticTagItems(
-    rows: List<CodexAutomaticTagRow>,
+    groups: List<CodexAutomaticTagGroup>,
     onSetAutomaticTag: (CodexAutomaticTag, Boolean) -> Unit,
 ) {
+    automaticRuleIntroItems(groups.isEmpty())
+    if (groups.isNotEmpty()) automaticRuleGroupItems(groups, onSetAutomaticTag)
+}
+
+private fun LazyListScope.automaticRuleIntroItems(empty: Boolean) {
     item {
         Text(
-            text = "Automatic",
+            text = "Automatic rules",
             style = MaterialTheme.typography.titleSmall,
             modifier = Modifier.padding(top = 4.dp),
         )
     }
-    if (rows.isEmpty()) {
+    item {
+        Text(
+            text = "A liked post must match every group for its source. Tags inside a group are alternatives.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    if (empty) {
         item {
             Text(
                 text = "No automatic tags",
@@ -144,18 +175,44 @@ private fun LazyListScope.automaticTagItems(
                 modifier = Modifier.padding(vertical = 8.dp),
             )
         }
-    } else {
+    }
+}
+
+private fun LazyListScope.automaticRuleGroupItems(
+    groups: List<CodexAutomaticTagGroup>,
+    onSetAutomaticTag: (CodexAutomaticTag, Boolean) -> Unit,
+) {
+    groups.forEachIndexed { index, group ->
+        if (index > 0 && groups[index - 1].source == group.source) {
+            item(key = "and:${group.source}:${group.groupIndex}") {
+                Text(
+                    text = "AND",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(vertical = 2.dp),
+                )
+            }
+        }
+        item(key = "group:${group.source}:${group.groupIndex}") {
+            Text(
+                text = "${group.source.displayName()} · Group ${group.groupIndex + 1}",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
         items(
-            items = rows,
+            items = group.rows,
             key = { row ->
                 val tag = row.automaticTag
-                "automatic:${tag.source}:${sourceTagKey(tag.source, tag.tag)}"
+                "automatic:${tag.source}:${tag.groupIndex}:${sourceTagKey(tag.source, tag.tag)}"
             },
         ) { row ->
             CodexAutomaticTagRow(
                 row = row,
                 actionDescription = "Remove ${row.automaticTag.tag} from Automatic",
                 actionIcon = Icons.Default.Close,
+                prefix = if (row != group.rows.first()) "OR" else null,
                 onAction = { onSetAutomaticTag(row.automaticTag, false) },
             )
         }
@@ -164,6 +221,7 @@ private fun LazyListScope.automaticTagItems(
 
 private fun LazyListScope.availableTagItems(
     sections: List<CodexAutomaticTagSection>,
+    automaticGroups: List<CodexAutomaticTagGroup>,
     hasRepresentedTags: Boolean,
     onSetAutomaticTag: (CodexAutomaticTag, Boolean) -> Unit,
 ) {
@@ -195,11 +253,10 @@ private fun LazyListScope.availableTagItems(
                     "available:${tag.source}:${sourceTagKey(tag.source, tag.tag)}"
                 },
             ) { row ->
-                CodexAutomaticTagRow(
+                AvailableAutomaticTagRow(
                     row = row,
-                    actionDescription = "Add ${row.automaticTag.tag} to Automatic",
-                    actionIcon = Icons.Default.Add,
-                    onAction = { onSetAutomaticTag(row.automaticTag, true) },
+                    groups = automaticGroups.filter { group -> group.source == section.source },
+                    onSetAutomaticTag = onSetAutomaticTag,
                 )
             }
         }
@@ -211,6 +268,7 @@ private fun CodexAutomaticTagRow(
     row: CodexAutomaticTagRow,
     actionDescription: String,
     actionIcon: ImageVector,
+    prefix: String? = null,
     onAction: () -> Unit,
 ) {
     Row(
@@ -218,6 +276,13 @@ private fun CodexAutomaticTagRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        prefix?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text(text = row.automaticTag.tag, style = MaterialTheme.typography.bodyLarge)
             Text(
@@ -233,6 +298,64 @@ private fun CodexAutomaticTagRow(
         }
         IconButton(onClick = onAction) {
             Icon(imageVector = actionIcon, contentDescription = actionDescription)
+        }
+    }
+}
+
+@Composable
+private fun AvailableAutomaticTagRow(
+    row: CodexAutomaticTagRow,
+    groups: List<CodexAutomaticTagGroup>,
+    onSetAutomaticTag: (CodexAutomaticTag, Boolean) -> Unit,
+) {
+    val nextGroupIndex = (groups.maxOfOrNull(CodexAutomaticTagGroup::groupIndex) ?: -1) + 1
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = row.automaticTag.tag, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = "${row.postCount} ${if (row.postCount == 1) "post" else "posts"}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (groups.isNotEmpty()) {
+            AutomaticOrButton(row.automaticTag, groups, onSetAutomaticTag)
+        }
+        TextButton(onClick = {
+            onSetAutomaticTag(row.automaticTag.copy(groupIndex = nextGroupIndex), true)
+        }) { Text(if (groups.isEmpty()) "Add" else "AND") }
+    }
+}
+
+@Composable
+private fun AutomaticOrButton(
+    tag: CodexAutomaticTag,
+    groups: List<CodexAutomaticTagGroup>,
+    onSetAutomaticTag: (CodexAutomaticTag, Boolean) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    androidx.compose.foundation.layout.Box {
+        TextButton(onClick = {
+            if (groups.size == 1) {
+                onSetAutomaticTag(tag.copy(groupIndex = groups.single().groupIndex), true)
+            } else {
+                expanded = true
+            }
+        }) { Text("OR") }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            groups.forEach { group ->
+                DropdownMenuItem(
+                    text = { Text("Group ${group.groupIndex + 1}") },
+                    onClick = {
+                        expanded = false
+                        onSetAutomaticTag(tag.copy(groupIndex = group.groupIndex), true)
+                    },
+                )
+            }
         }
     }
 }

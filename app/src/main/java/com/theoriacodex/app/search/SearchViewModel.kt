@@ -160,6 +160,18 @@ internal class SearchViewModel(
                 SearchDraftReducer.removeTerm(it, action.term, excluded = true).state
             }
 
+            is SearchAction.AddIncludeAlternative -> mutateDraft {
+                SearchDraftReducer.addIncludeAlternative(it, action.groupIndex, action.term).state
+            }
+
+            is SearchAction.SplitIncludeAlternative -> mutateDraft {
+                SearchDraftReducer.splitIncludeAlternative(it, action.groupIndex, action.term).state
+            }
+
+            is SearchAction.RemoveIncludeGroup -> mutateDraft {
+                SearchDraftReducer.removeIncludeGroup(it, action.groupIndex).state
+            }
+
             is SearchAction.SelectSuggestionScope -> {
                 val reduction = SearchDraftReducer.selectScope(mutableState.value, action.scope)
                 if (reduction.accepted) {
@@ -1028,9 +1040,10 @@ private fun Query.reconciledWith(scope: SearchSourceScope): Query {
         is SearchSourceScope.Single -> QueryMode.Source(scope.source)
     }
     return if (mode == QueryMode.Unified) {
-        copy(
+        withIncludeTermGroups(
+            effectiveIncludeTermGroups.filter { group -> group.isPortableGeneralTagGroup },
+        ).copy(
             mode = mode,
-            includeTerms = includeTerms.filter { it.isPortableGeneralTag },
             excludeTerms = excludeTerms.filter { it.isPortableGeneralTag },
         )
     } else {

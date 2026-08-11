@@ -5,6 +5,8 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.GelbooruCredentials
@@ -19,6 +21,28 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GelbooruSourceAdapterTest {
+    @Test
+    fun `search compiles required groups with native Gelbooru OR braces`() = runTest {
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(statusCode = 200, body = "{\"post\":[]}")
+        }
+        val adapter = GelbooruSourceAdapter(httpClient, FakeCredentialsProvider())
+        val query = sampleQuery().withIncludeTermGroups(
+            listOf(
+                SearchTermGroup.single(SearchTerm("landscape")),
+                SearchTermGroup(listOf(SearchTerm("cat"), SearchTerm("dog"))),
+            )
+        )
+
+        adapter.search(query, pageToken = null)
+
+        assertEquals(
+            "landscape {cat ~ dog} sort:id:desc",
+            httpClient.lastGet?.query?.get("tags"),
+        )
+        assertTrue(adapter.capabilities.supportsGroupedIncludeTagsServerSide)
+    }
+
     @Test
     fun `search attaches credentials when configured`() = runTest {
         val credentials = FakeCredentialsProvider().apply {

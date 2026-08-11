@@ -5,13 +5,14 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 
 internal object SearchSavedStateKeys {
-    const val DRAFT_QUERY = "search_draft_query_v1"
+    const val DRAFT_QUERY = "search_draft_query_v2"
     const val RESTORATION_STARTED = "search_restoration_started"
     const val RESTORATION_COMPLETED = "search_restoration_completed"
     const val SCROLL_INDEX = "search_scroll_index"
@@ -29,7 +30,7 @@ internal object SearchSavedQueryCodec {
             query.dateRange?.fromEpochMs?.toString() ?: NULL,
             query.dateRange?.toEpochMs?.toString() ?: NULL,
             query.minScore?.toString() ?: NULL,
-            encodeTerms(query.includeTerms),
+            encodeGroups(query.effectiveIncludeTermGroups),
             encodeTerms(query.excludeTerms),
         ).joinToString("|")
     }
@@ -40,7 +41,7 @@ internal object SearchSavedQueryCodec {
             require(parts.size == 7)
             Query(
                 mode = decodeMode(parts[0]),
-                includeTerms = decodeTerms(parts[5]),
+                includeTerms = decodeGroups(parts[5]).flatMap(SearchTermGroup::terms),
                 excludeTerms = decodeTerms(parts[6]),
                 sort = SortMode.valueOf(parts[1]),
                 dateRange = if (parts[2] == NULL && parts[3] == NULL) {
@@ -52,6 +53,7 @@ internal object SearchSavedQueryCodec {
                     )
                 },
                 minScore = parts[4].takeUnless { it == NULL }?.toInt(),
+                includeTermGroups = decodeGroups(parts[5]),
             )
         }.getOrNull()
     }
@@ -75,6 +77,15 @@ internal object SearchSavedQueryCodec {
                     .joinToString("\n"),
             )
         }
+    }
+
+    private fun encodeGroups(groups: List<SearchTermGroup>): String {
+        return groups.joinToString("~") { group -> encodeTerms(group.terms) }
+    }
+
+    private fun decodeGroups(encoded: String): List<SearchTermGroup> {
+        if (encoded.isBlank()) return emptyList()
+        return encoded.split('~').map { group -> SearchTermGroup(decodeTerms(group)) }
     }
 
     private fun decodeTerms(encoded: String): List<SearchTerm> {

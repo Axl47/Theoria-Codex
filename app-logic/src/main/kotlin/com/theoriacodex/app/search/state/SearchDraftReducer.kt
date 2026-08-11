@@ -15,6 +15,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeGelbooruToken
 import com.theoriacodex.domain.tags.sourceTagsMatch
@@ -144,8 +145,13 @@ object SearchDraftReducer {
         val current = if (excluded) state.query.draft.excludeTerms else state.query.draft.includeTerms
         if (normalized in current) return SearchDraftReduction(state, changed = false, accepted = false)
         val reduced = mutateQuery(state) { query ->
-            if (excluded) query.copy(excludeTerms = query.excludeTerms + normalized)
-            else query.copy(includeTerms = query.includeTerms + normalized)
+            if (excluded) {
+                query.copy(excludeTerms = query.excludeTerms + normalized)
+            } else {
+                query.withIncludeTermGroups(
+                    query.effectiveIncludeTermGroups + SearchTermGroup.single(normalized),
+                )
+            }
         }
         return reduced.copy(
             state = reduced.state.copy(
@@ -156,9 +162,100 @@ object SearchDraftReducer {
 
     fun removeTerm(state: SearchUiState, term: SearchTerm, excluded: Boolean): SearchDraftReduction {
         return mutateQuery(state) { query ->
-            if (excluded) query.copy(excludeTerms = query.excludeTerms.filterNot { it == term })
-            else query.copy(includeTerms = query.includeTerms.filterNot { it == term })
+            if (excluded) {
+                query.copy(excludeTerms = query.excludeTerms.filterNot { it == term })
+            } else {
+                query.withIncludeTermGroups(
+                    query.effectiveIncludeTermGroups.mapNotNull { group ->
+                        group.terms.filterNot { it == term }
+                            .takeIf(List<SearchTerm>::isNotEmpty)
+                            ?.let(::SearchTermGroup)
+                    }
+                )
+            }
         }
+    }
+
+    fun addIncludeAlternative(
+        state: SearchUiState,
+        groupIndex: Int,
+        term: SearchTerm,
+    ): SearchDraftReduction {
+        if (
+            term.isPortableGeneralTag &&
+            state.query.draft.mode == QueryMode.Source(SourceKey.GELBOORU) &&
+            !canCommitInput(state, term.value)
+        ) {
+            return SearchDraftReduction(
+                state.copy(
+                    query = state.query.copy(validationMessage = GELBOORU_SUGGESTION_REQUIRED_MESSAGE),
+                ),
+                changed = false,
+                accepted = false,
+            )
+        }
+        val resolved = if (term.isPortableGeneralTag) {
+            term.copy(value = parseScopedInput(resolveCommittedInput(state, term.value)).value)
+        } else {
+            term
+        }
+        val normalized = resolved.normalizedOrNull()
+            ?: return SearchDraftReduction(state, changed = false, accepted = false)
+        val groups = state.query.draft.effectiveIncludeTermGroups
+        val group = groups.getOrNull(groupIndex)
+            ?: return SearchDraftReduction(state, changed = false, accepted = false)
+        val anchor = group.terms.first()
+        if (
+            normalized.facet != anchor.facet ||
+            normalized.sourceNamespace != anchor.sourceNamespace ||
+            normalized in state.query.draft.includeTerms ||
+            group.terms.size >= MAX_GROUP_ALTERNATIVES ||
+            (state.query.draft.mode == QueryMode.Unified && !normalized.isPortableGeneralTag)
+        ) {
+            return SearchDraftReduction(state, changed = false, accepted = false)
+        }
+        return mutateQuery(state) { query ->
+            query.withIncludeTermGroups(
+                groups.mapIndexed { index, current ->
+                    if (index == groupIndex) SearchTermGroup(current.terms + normalized) else current
+                }
+            )
+        }.copy(accepted = true)
+    }
+
+    fun splitIncludeAlternative(
+        state: SearchUiState,
+        groupIndex: Int,
+        term: SearchTerm,
+    ): SearchDraftReduction {
+        val groups = state.query.draft.effectiveIncludeTermGroups
+        val group = groups.getOrNull(groupIndex)
+            ?: return SearchDraftReduction(state, changed = false, accepted = false)
+        if (group.terms.size <= 1 || term !in group.terms) {
+            return SearchDraftReduction(state, changed = false, accepted = false)
+        }
+        val replacement = buildList {
+            groups.forEachIndexed { index, current ->
+                if (index != groupIndex) {
+                    add(current)
+                } else {
+                    add(SearchTermGroup(current.terms.filterNot { it == term }))
+                    add(SearchTermGroup.single(term))
+                }
+            }
+        }
+        return mutateQuery(state) { query -> query.withIncludeTermGroups(replacement) }
+            .copy(accepted = true)
+    }
+
+    fun removeIncludeGroup(state: SearchUiState, groupIndex: Int): SearchDraftReduction {
+        val groups = state.query.draft.effectiveIncludeTermGroups
+        if (groupIndex !in groups.indices) {
+            return SearchDraftReduction(state, changed = false, accepted = false)
+        }
+        return mutateQuery(state) { query ->
+            query.withIncludeTermGroups(groups.filterIndexed { index, _ -> index != groupIndex })
+        }.copy(accepted = true)
     }
 
     fun addPostTerm(
@@ -178,9 +275,11 @@ object SearchDraftReducer {
                 return SearchDraftReduction(state, changed = false, accepted = false)
             }
             if (state.query.draft.mode != sourceMode) {
-                val query = state.query.draft.copy(
+                val query = state.query.draft.withIncludeTermGroups(
+                    state.query.draft.effectiveIncludeTermGroups
+                        .filter(SearchTermGroup::isPortableGeneralTagGroup),
+                ).copy(
                     mode = sourceMode,
-                    includeTerms = state.query.draft.includeTerms.filter(SearchTerm::isPortableGeneralTag),
                     excludeTerms = state.query.draft.excludeTerms.filter(SearchTerm::isPortableGeneralTag),
                 )
                 val scopes = supportedScopes(sourceMode)
@@ -288,8 +387,9 @@ object SearchDraftReducer {
         if ((includes.isEmpty() && excludes.isEmpty()) || !mode.isAvailable(availableSources)) {
             return SearchDraftReduction(state, changed = false, accepted = false)
         }
-        val query = emptySearchQuery(mode).copy(
-            includeTerms = includes.map(::SearchTerm),
+        val query = emptySearchQuery(mode).withIncludeTermsAsRequired(
+            includes.map(::SearchTerm),
+        ).copy(
             excludeTerms = excludes.map(::SearchTerm),
         )
         val scopes = supportedScopes(mode)
@@ -314,19 +414,29 @@ object SearchDraftReducer {
     }
 
     fun setNhentaiLanguage(state: SearchUiState, filter: NhentaiLanguageFilter): SearchDraftReduction {
-        val cleaned = state.query.draft.includeTerms.filterNot { it.nhentaiLanguageFilterOrNull() != null }
+        val cleaned = state.query.draft.effectiveIncludeTermGroups.filterNot { group ->
+            group.terms.any { it.nhentaiLanguageFilterOrNull() != null }
+        }
         val term = NHENTAI_LANGUAGE_TAG_BY_FILTER[filter]?.let { value ->
             SearchTerm(value, SearchFacet.LANGUAGE, NHENTAI_LANGUAGE_NAMESPACE)
         }
-        return mutateQuery(state) { query -> query.copy(includeTerms = if (term == null) cleaned else cleaned + term) }
+        return mutateQuery(state) { query ->
+            query.withIncludeTermGroups(
+                if (term == null) cleaned else cleaned + SearchTermGroup.single(term),
+            )
+        }
     }
 
     fun setNhentaiFullColor(state: SearchUiState, enabled: Boolean): SearchDraftReduction {
-        val cleaned = state.query.draft.includeTerms.filterNot(SearchTerm::isNhentaiFullColorFilter)
-        val terms = if (enabled) {
-            cleaned + SearchTerm(NHENTAI_FULL_COLOR_TAG, SearchFacet.TAG, NHENTAI_TAG_NAMESPACE)
+        val cleaned = state.query.draft.effectiveIncludeTermGroups.filterNot { group ->
+            group.terms.any(SearchTerm::isNhentaiFullColorFilter)
+        }
+        val groups = if (enabled) {
+            cleaned + SearchTermGroup.single(
+                SearchTerm(NHENTAI_FULL_COLOR_TAG, SearchFacet.TAG, NHENTAI_TAG_NAMESPACE)
+            )
         } else cleaned
-        return mutateQuery(state) { it.copy(includeTerms = terms) }
+        return mutateQuery(state) { it.withIncludeTermGroups(groups) }
     }
 
     fun commitInput(state: SearchUiState, input: String): SearchDraftReduction {
@@ -433,11 +543,11 @@ private data class SanitizedQuery(val query: Query, val removedSourceOwnedTerms:
 
 private fun Query.forMode(mode: QueryMode): SanitizedQuery {
     if (mode != QueryMode.Unified) return SanitizedQuery(copy(mode = mode), false)
-    val includes = includeTerms.filter(SearchTerm::isPortableGeneralTag)
+    val includeGroups = effectiveIncludeTermGroups.filter(SearchTermGroup::isPortableGeneralTagGroup)
     val excludes = excludeTerms.filter(SearchTerm::isPortableGeneralTag)
     return SanitizedQuery(
-        copy(mode = mode, includeTerms = includes, excludeTerms = excludes),
-        includes.size != includeTerms.size || excludes.size != excludeTerms.size,
+        withIncludeTermGroups(includeGroups).copy(mode = mode, excludeTerms = excludes),
+        includeGroups.size != effectiveIncludeTermGroups.size || excludes.size != excludeTerms.size,
     )
 }
 
@@ -448,6 +558,8 @@ private fun SearchTerm.normalizedOrNull(): SearchTerm? {
     val value = value.trim().takeIf(String::isNotBlank) ?: return null
     return copy(value = value, sourceNamespace = sourceNamespace?.trim()?.takeIf(String::isNotBlank))
 }
+
+private const val MAX_GROUP_ALTERNATIVES = 8
 
 private fun Query.nhentaiLanguageFilter(): NhentaiLanguageFilter =
     includeTerms.firstNotNullOfOrNull(SearchTerm::nhentaiLanguageFilterOrNull)

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Add Grouped Search Tags And Automatic Rules</title>
+  <style>
+    :root { color-scheme:light dark; --bg:#f7f7f4; --surface:#fff; --text:#202124; --muted:#5f6368; --border:#d7d7d0; --accent:#0f766e; --soft:#dff3ef; --risk:#9a3412; --risk-soft:#ffedd5; --code:#111827; }
+    @media (prefers-color-scheme:dark) { :root { --bg:#151716; --surface:#202321; --text:#f0f2ef; --muted:#b8beb7; --border:#3a403c; --accent:#5eead4; --soft:#123b37; --risk:#fdba74; --risk-soft:#43230f; --code:#0b0f0d; } }
+    * { box-sizing:border-box; }
+    body { margin:0; font:15px/1.55 system-ui,sans-serif; background:var(--bg); color:var(--text); }
+    header,main { max-width:1160px; margin:auto; padding:24px; }
+    header { padding-top:36px; }
+    h1,h2,h3 { line-height:1.18; margin:0 0 12px; }
+    h2 { margin-top:18px; }
+    p { margin:0 0 14px; }
+    nav { position:sticky; top:0; z-index:2; border-block:1px solid var(--border); background:var(--surface); }
+    nav ul { display:flex; gap:8px; max-width:1160px; margin:auto; padding:8px 24px; list-style:none; overflow:auto; }
+    a { color:var(--accent); }
+    section,.card { border:1px solid var(--border); border-radius:8px; background:var(--surface); }
+    section { padding:22px; margin:18px 0; }
+    .dashboard { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; }
+    .card { padding:14px; }
+    .card strong { display:block; color:var(--muted); font-size:.82rem; text-transform:uppercase; }
+    .meta { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; color:var(--muted); }
+    .pill { border:1px solid var(--border); border-radius:999px; padding:4px 8px; }
+    table { width:100%; border-collapse:collapse; margin:12px 0; }
+    th,td { padding:9px 10px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; }
+    th { color:var(--muted); }
+    code { font-family:ui-monospace,monospace; }
+    pre { overflow:auto; padding:14px; border-radius:8px; background:var(--code); color:#f8fafc; }
+    .callout { padding:12px 14px; border-left:4px solid var(--accent); background:var(--soft); border-radius:6px; }
+    .risk { border-left-color:var(--risk); background:var(--risk-soft); }
+    details { margin:12px 0; padding:12px 14px; border:1px solid var(--border); border-radius:8px; }
+    summary { cursor:pointer; font-weight:700; }
+    @media print { nav { position:static; } section,.card { break-inside:avoid; } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Add Grouped Search Tags And Automatic Rules</h1>
+  <p>Search will support required tag groups with OR alternatives, while Codex Automatic rules will use the same Boolean model inside source-scoped recipes. Basic tag entry stays unchanged; grouping remains an advanced secondary interaction.</p>
+  <div class="meta"><span class="pill">Status: Complete, host validated</span><span class="pill">Owner: Codex</span><span class="pill">Created: 2026-08-11</span><span class="pill">Updated: 2026-08-11</span><span class="pill">Plan: .docs/exec/grouped-search-tags-and-automatic-rules.html</span></div>
+  <div class="dashboard">
+    <div class="card"><strong>Next Action</strong>Optional isolated Debug device acceptance for touch feel and visual density.</div>
+    <div class="card"><strong>Main Risk</strong>Provider OR syntax and cross-branch continuation must remain exact without losing ordering or exhausting a source early.</div>
+    <div class="card"><strong>Validation</strong>Model/reducer tests, adapter tests, Room migration tests, app tests, compilation, Detekt, and credentialed host-only provider probes.</div>
+    <div class="card"><strong>Affected Areas</strong>core-domain, core-data, core-data-android, core-sources, app-logic, Search UI, and Codex collection actions.</div>
+  </div>
+</header>
+<nav aria-label="Plan sections"><ul><li><a href="#purpose">Purpose</a></li><li><a href="#context">Context</a></li><li><a href="#phases">Phases</a></li><li><a href="#work">Work Plan</a></li><li><a href="#validation">Validation</a></li><li><a href="#log">Living Log</a></li><li><a href="#recovery">Recovery</a></li><li><a href="#appendix">Appendix</a></li></ul></nav>
+<main>
+  <section id="purpose">
+    <h2>Purpose / Big Picture</h2>
+    <p>A user can express <code>tag1 AND tag2 AND (tag3 OR tag4)</code> without learning query syntax. Search treats groups as Boolean eligibility and preserves the selected sort. In the Codex overflow, each source can own an Automatic recipe such as <code>landscape AND (night OR sunset)</code>; a newly liked post is added only when it satisfies every required group for its source.</p>
+    <div class="callout">The grammar is intentionally shallow: AND between positive groups, OR inside a group, and the existing flat exclusions. No arbitrary nesting or grouped negative expressions are introduced.</div>
+  </section>
+  <section id="context">
+    <h2>Context And Orientation</h2>
+    <p>A <strong>tag group</strong> is one or more equivalent alternatives. Every positive group is required; any term inside that group may satisfy it. A <strong>source recipe</strong> is the complete list of groups used for one provider in a Codex Automatic rule. Providers retain ownership of syntax and transport, while platform-free code owns the expression model and deterministic matching.</p>
+    <table><thead><tr><th>File or module</th><th>Role</th></tr></thead><tbody>
+      <tr><td><code>core-domain/.../model/Query.kt</code><br><code>core-domain/.../query/QueryHash.kt</code></td><td>Canonical grouped Search expression and stable identity.</td></tr>
+      <tr><td><code>core-sources/.../*SourceAdapter.kt</code></td><td>Provider-native grouped execution where verified; ordinary flat-query transport remains provider-owned.</td></tr>
+      <tr><td><code>app/.../search/SearchCoordinator.kt</code></td><td>Per-source grouped planning, bounded fallback branches, canonical deduplication, ordering, and continuation.</td></tr>
+      <tr><td><code>app-logic/.../search/state</code></td><td>Draft group actions, validation, and platform-free Search state transitions.</td></tr>
+      <tr><td><code>app/.../search/SearchScreen.kt</code></td><td>Compact expression strip and group editor sheet.</td></tr>
+      <tr><td><code>core-domain/.../model/Codex.kt</code><br><code>core-data/.../CodexLikesPolicy.kt</code></td><td>Source-scoped Automatic recipe and pure canonical matching.</td></tr>
+      <tr><td><code>core-data-android/.../room</code></td><td>Production rule persistence, migration, and atomic like-time membership routing.</td></tr>
+      <tr><td><code>app/.../codex/CodexAutomaticTags.kt</code></td><td>Automatic rules presentation and represented-tag picker inside the existing shared collection-action sheet.</td></tr>
+    </tbody></table>
+  </section>
+  <section id="phases">
+    <h2>Phases</h2>
+    <h3>Phase 1: Provider OR Research</h3>
+    <p>Use repository HTTP clients and local environment credentials to compare known single-tag result sets with candidate natural-OR forms for Pixiv and Gelbooru. Record only syntax, result identities/counts, and whether the response is exact; never print tokens, user IDs, API keys, or signed request URLs.</p>
+    <h3>Phase 2: Shared Expression And Compatibility</h3>
+    <p>Add ordered positive groups. Existing Search include terms decode as singleton groups, preserving current AND behavior. Existing Automatic tags migrate into one OR group per source, preserving current match-any behavior. Query hashes, applied queries, saved state, Recents payloads, JSON stores, Room records, and tests move together.</p>
+    <h3>Phase 3: Grouped Search Execution</h3>
+    <p>Prefer verified native OR. Otherwise branch on the smallest OR group, include all singleton requirements in each request, verify remaining groups against authoritative post taxonomy, deduplicate after hydration, and retain one continuation token per branch. Group matching never boosts rank.</p>
+    <h3>Phase 4: Search Interaction</h3>
+    <p>Normal Add creates a singleton required group. The compact row renders AND between groups and OR within multi-term groups. Tapping a group opens an editor that reuses current autocomplete and favorites for Add alternative, removal, and splitting a term into a separate required group. Applied collapsed context remains one-line and never shows draft state.</p>
+    <h3>Phase 5: Codex Automatic Recipes</h3>
+    <p>The shared overflow becomes Automatic rules. Each represented source owns an independent recipe. Existing represented-tag counts feed Add requirement and Add alternative pickers. Like transitions evaluate the post only against its source recipe in the existing Room transaction; editing rules never removes saved memberships.</p>
+    <h3>Phase 6: Bounded Validation</h3>
+    <p>Run one focused host batch covering model compatibility, reducer behavior, query execution, provider compilation, Room migration/transaction matching, and UI presentation. No connected, installation, or production-package command is required.</p>
+  </section>
+  <section id="work">
+    <h2>Work Plan</h2>
+    <ol>
+      <li>Build a credential-safe, test-only OR probe at the provider boundary and record Pixiv/Gelbooru findings.</li>
+      <li>Add <code>SearchTermGroup</code> and canonical normalization/evaluation helpers in platform-free modules. Restrict one group to one facet/namespace; Unified accepts portable general-tag groups only.</li>
+      <li>Version all Search encodings and hashes. Legacy flat includes become ordered singleton groups; exclusions stay flat.</li>
+      <li>Add grouped continuation state and exact provider execution without deriving exhaustion from filtered visible results.</li>
+      <li>Implement Search reducer actions and one reusable group editor UI. Preserve existing Add, Exclude, Apply, Reset, restoration, and scroll ownership.</li>
+      <li>Replace <code>CodexAutomaticTag</code> storage with ordered source recipes/groups, retaining compatibility migration from flat OR rules.</li>
+      <li>Update Room and atomic like matching, then replace the flat Automatic list with per-source recipe cards and represented-tag group editing.</li>
+      <li>Run focused validation once, repair root causes in grouped patches, update this plan/checklist, and add only genuinely non-obvious durable findings to <code>AGENTS.md</code>.</li>
+    </ol>
+    <div class="callout risk">The fallback planner must have a small branch and scan bound and an explicit unsupported result when authoritative taxonomy cannot prove remaining groups. It must never silently approximate a Boolean expression.</div>
+  </section>
+  <section id="validation">
+    <h2>Validation And Acceptance</h2>
+    <table><thead><tr><th>Check</th><th>Command or action</th><th>Expected</th></tr></thead><tbody>
+      <tr><td>Provider research</td><td>Credential-safe host probe limited to <code>PIXIV,GELBOORU</code>.</td><td>Each provider is classified native-exact or fallback-required with non-secret evidence.</td></tr>
+      <tr><td>Domain/data</td><td><code>./gradlew :core-domain:test :core-data:test</code></td><td>Grouping, migration compatibility, hashing, Recents, and Automatic matching pass.</td></tr>
+      <tr><td>Providers</td><td><code>./gradlew :core-sources:test</code></td><td>Native syntax and flat fallback requests compile and parse as expected.</td></tr>
+      <tr><td>Room</td><td><code>./gradlew :core-data-android:testDebugUnitTest :core-data-android:compileDebugAndroidTestKotlin</code></td><td>Schema migration and atomic grouped-rule matching pass.</td></tr>
+      <tr><td>Search/app</td><td><code>./gradlew :app-logic:test :app:testDebugUnitTest :app:compileDebugKotlin</code></td><td>Draft interactions, branch continuation, ordering, UI projection, and existing flows pass.</td></tr>
+      <tr><td>Quality</td><td>Focused Detekt tasks, <code>git diff --check</code>, and HTML parse.</td><td>No new findings, whitespace errors, or plan parse errors.</td></tr>
+      <tr><td>Manual acceptance</td><td>In isolated Debug, create <code>A AND (B OR C)</code>, edit the group, replay from Recents, and configure a Codex recipe.</td><td>Results satisfy the expression; ordering remains sort-owned; collapsed context is applied-only; future matching likes route once and previous memberships remain.</td></tr>
+    </tbody></table>
+  </section>
+  <section id="log">
+    <h2>Living Log</h2>
+    <h3>Progress</h3><ul><li>[x] 2026-08-11 - Traced the current query, Unified merge, Search chip row, Automatic policy, Room transaction, and shared collection-action sheet.</li><li>[x] 2026-08-11 - Recorded the agreed grammar, ordering ownership, compatibility direction, and source-scoped Automatic recipes.</li><li>[x] 2026-08-11 - Verified Gelbooru native grouped OR with a 40/40 aggregate tag-echo probe; classified Pixiv as fallback-required because its token failed the ordinary control request.</li><li>[x] 2026-08-11 - Implemented the grouped model, compatibility encodings, execution planner, Search editor, Automatic rule editor, and schema 7 migration.</li><li>[x] 2026-08-11 - Passed the focused host validation batch, Android-test source compilation, Detekt, diff whitespace check, and ExecPlan HTML parse.</li></ul>
+    <h3>Surprises And Discoveries</h3><ul><li>The current production Room schema is version 6; grouped Automatic storage must advance from that system of record rather than the older completed Automatic-rule plan's version 4 snapshot.</li><li>Gelbooru's current exact OR syntax is a brace group with tilde-separated tags, for example <code>{landscape ~ cat}</code>; the older bare-tilde form returns no posts.</li><li>The supplied Pixiv access token returns OAuth <code>invalid_grant</code> for ordinary search, autocomplete, and trending calls. Native OR therefore remains unproven and must not be assumed.</li><li>Search and Codex already converge at shared owners, so no route-specific duplicate logic is needed.</li></ul>
+    <h3>Decision Log</h3><ul><li>Decision: AND between positive groups and OR within a group only. Rationale: this covers the requested behavior while keeping entry and editing comprehensible. Date/Author: 2026-08-11 / Codex.</li><li>Decision: groups are Boolean eligibility, never a ranking boost. Rationale: Newest, Popular, Top, Random, and Unified source weights remain meaningful. Date/Author: 2026-08-11 / Codex.</li><li>Decision: Automatic recipes are independent per source. Rationale: canonical tag identity is provider-owned and a post belongs to one source. Date/Author: 2026-08-11 / Codex.</li><li>Decision: legacy Search terms become singleton groups while legacy Automatic tags become one OR group per source. Rationale: both current behaviors survive migration exactly. Date/Author: 2026-08-11 / Codex.</li></ul>
+    <h3>Outcomes And Retrospective</h3><p>The feature is implemented end to end. Search preserves shallow Boolean groups through draft/application, execution, paging, hashing, Saved State, Recents, and replay. Gelbooru compiles native brace groups; Pixiv and unverified providers use bounded exact fallback branches without changing sort ownership. Codex Automatic rules now evaluate AND across groups and OR within a group in the existing like transaction, while migration keeps every legacy source recipe as one OR group. All focused host checks pass. Device interaction and visual-density acceptance remain explicitly unrun; no APK was installed and no device data was touched.</p>
+  </section>
+  <section id="recovery"><h2>Idempotence And Recovery</h2><p>All planned probes and host tests are read-only or write only build reports and are safe to rerun. The Room migration will be additive and covered by exported-schema validation before any device work. No destructive command, connected task, install, database reset, or production-package action is authorized. If interrupted, inspect <code>git status</code>, this plan's progress log, and <code>working_list.md</code>, then resume from the first incomplete phase.</p></section>
+  <section id="appendix"><h2>Appendix: Expression And Runtime Notes</h2><details open><summary>Canonical example</summary><pre><code>groups = [[tag1], [tag2], [tag3, tag4]]; match(post) = every group contains at least one matching post term; visible(post) = match(post) and no flat exclusion matches.</code></pre></details><details><summary>Fallback execution invariant</summary><pre><code>Branch on one bounded OR group. Retain raw provider continuation per branch. Hydrate before canonical identity and remaining-group verification. Deduplicate canonical Post.id after hydration. Never infer exhaustion from filtered or malformed visible records.</code></pre></details></section>
+</main>
+</body>
+</html>

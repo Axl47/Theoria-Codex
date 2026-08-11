@@ -8,7 +8,12 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTermGroup
+import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.query.matchesIncludeTermGroups
+import java.nio.charset.StandardCharsets
+import java.util.Base64
 import com.theoriacodex.domain.query.CapabilityExclusionReason
 import com.theoriacodex.domain.query.SourceCapabilityGate
 import kotlinx.coroutines.async
@@ -72,8 +77,11 @@ class UnifiedSearchOrchestrator(
                     val sourceBaseQuery = (queryOverridesBySource[source] ?: portableQuery)
                         .let { override ->
                             if (query.mode == QueryMode.Unified) {
-                                override.copy(
-                                    includeTerms = override.includeTerms.filter { it.isPortableGeneralTag },
+                                override.withIncludeTermGroups(
+                                    override.effectiveIncludeTermGroups.filter { group ->
+                                        group.isPortableGeneralTagGroup
+                                    },
+                                ).copy(
                                     excludeTerms = override.excludeTerms.filter { it.isPortableGeneralTag },
                                 )
                             } else {
@@ -86,7 +94,7 @@ class UnifiedSearchOrchestrator(
                         sourceBaseQuery
                     }
                     source to runCatchingPreservingCancellation {
-                        adapter.search(sourceQuery, pageTokens[source]).let { page ->
+                        searchSource(adapter, sourceQuery, pageTokens[source]).let { page ->
                             if (source in clientSideExcludeSources) {
                                 page.copy(
                                     items = applyClientSideExcludeFilter(
@@ -143,6 +151,50 @@ class UnifiedSearchOrchestrator(
         )
     }
 
+    suspend fun searchSource(
+        adapter: SourceAdapter,
+        query: Query,
+        pageToken: String?,
+    ): Page<Post> {
+        val groups = query.effectiveIncludeTermGroups
+        val alternatives = groups.filter { group -> group.terms.size > 1 }
+        if (alternatives.isEmpty() || adapter.capabilities.supportsGroupedIncludeTagsServerSide) {
+            return adapter.search(query, pageToken)
+        }
+        val pivot = alternatives.minBy { group -> group.terms.size }
+        require(pivot.terms.size <= MAX_FALLBACK_BRANCHES) {
+            "A tag group may contain at most $MAX_FALLBACK_BRANCHES alternatives for this source"
+        }
+        val singletonGroups = groups.filter { group -> group.terms.size == 1 }
+        val branchQueries = pivot.terms.map { alternative ->
+            query.withIncludeTermGroups(singletonGroups + SearchTermGroup.single(alternative))
+        }
+        val initial = pageToken == null
+        val incomingTokens = if (initial) {
+            List(branchQueries.size) { null }
+        } else {
+            decodeGroupedPageToken(pageToken, branchQueries.size)
+        }
+        val pages = branchQueries.mapIndexed { index, branchQuery ->
+            val branchToken = incomingTokens[index]
+            if (!initial && branchToken == null) {
+                Page(items = emptyList(), nextPageToken = null)
+            } else {
+                adapter.search(branchQuery, branchToken)
+            }
+        }
+        val visibleByBranch = pages.map { page ->
+            page.items.filter { post -> post.matchesIncludeTermGroups(query) }
+        }
+        val merged = mergeBranches(visibleByBranch, query.sort)
+        val nextTokens = pages.map(Page<Post>::nextPageToken)
+        return Page(
+            items = merged,
+            nextPageToken = nextTokens.takeIf { tokens -> tokens.any { it != null } }
+                ?.let(::encodeGroupedPageToken),
+        )
+    }
+
     private fun weightedInterleave(
         pagesBySource: Map<SourceKey, Page<Post>>,
         weightsBySource: Map<SourceKey, Double>,
@@ -179,6 +231,55 @@ class UnifiedSearchOrchestrator(
         return merged
     }
 
+    private fun mergeBranches(
+        branches: List<List<Post>>,
+        sort: SortMode,
+    ): List<Post> {
+        if (sort == SortMode.NEWEST) {
+            return branches.flatten()
+                .distinctBy(Post::id)
+                .sortedWith(compareByDescending<Post> { post -> post.createdAtEpochMs ?: Long.MIN_VALUE })
+        }
+        val queues = branches.map(::ArrayDeque)
+        val merged = mutableListOf<Post>()
+        val seen = mutableSetOf<com.theoriacodex.domain.model.PostId>()
+        while (queues.any { queue -> queue.isNotEmpty() }) {
+            queues.forEach { queue ->
+                while (queue.isNotEmpty()) {
+                    val candidate = queue.removeFirst()
+                    if (seen.add(candidate.id)) {
+                        merged += candidate
+                        break
+                    }
+                }
+            }
+        }
+        return merged
+    }
+
+    private fun encodeGroupedPageToken(tokens: List<String?>): String {
+        val encoded = tokens.joinToString(".") { token ->
+            token?.let { value ->
+                Base64.getUrlEncoder().withoutPadding()
+                    .encodeToString(value.toByteArray(StandardCharsets.UTF_8))
+            } ?: NULL_BRANCH_TOKEN
+        }
+        return GROUPED_TOKEN_PREFIX + encoded
+    }
+
+    private fun decodeGroupedPageToken(token: String, expectedBranches: Int): List<String?> {
+        require(token.startsWith(GROUPED_TOKEN_PREFIX)) { "Invalid grouped Search continuation" }
+        val encoded = token.removePrefix(GROUPED_TOKEN_PREFIX).split('.')
+        require(encoded.size == expectedBranches) { "Grouped Search continuation has the wrong branch count" }
+        return encoded.map { item ->
+            if (item == NULL_BRANCH_TOKEN) {
+                null
+            } else {
+                String(Base64.getUrlDecoder().decode(item), StandardCharsets.UTF_8)
+            }
+        }
+    }
+
     private fun mapFailureReason(error: Throwable): SourceFailureReason {
         return when (error) {
             is SourceAdapterException -> error.reason
@@ -203,5 +304,11 @@ class UnifiedSearchOrchestrator(
                 .filter { it.isNotBlank() }
             postTags.any { it in normalizedExcluded }
         }
+    }
+
+    private companion object {
+        const val MAX_FALLBACK_BRANCHES = 8
+        const val GROUPED_TOKEN_PREFIX = "theoria-group-v1:"
+        const val NULL_BRANCH_TOKEN = "~"
     }
 }

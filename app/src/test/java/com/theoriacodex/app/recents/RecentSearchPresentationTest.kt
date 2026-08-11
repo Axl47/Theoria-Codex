@@ -4,6 +4,8 @@ import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.SearchTerm
+import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import org.junit.Assert.assertEquals
@@ -13,7 +15,7 @@ import org.junit.Test
 
 class RecentSearchPresentationTest {
     @Test
-    fun `source search uses comma-separated tags without a sort or subtitle`() {
+    fun `source search shows required terms without a sort or subtitle`() {
         val presentation = recentSearchPresentation(
             entry(
                 query = query(QueryMode.Source(SourceKey.PIXIV)),
@@ -22,7 +24,7 @@ class RecentSearchPresentationTest {
             )
         )
 
-        assertEquals("landscape, night, -ai", presentation.title)
+        assertEquals("landscape AND night AND -ai", presentation.title)
         assertNull(presentation.subtitle)
         assertFalse(presentation.title.contains("Newest"))
     }
@@ -42,6 +44,21 @@ class RecentSearchPresentationTest {
         assertEquals(
             "Gelbooru, Pixiv",
             recentSearchPresentation(entry(query(), RecentSearchKind.FYP, sources)).subtitle,
+        )
+    }
+
+    @Test
+    fun `grouped search title preserves AND and OR boundaries`() {
+        val grouped = query().withIncludeTermGroups(
+            listOf(
+                SearchTermGroup.single(SearchTerm("landscape")),
+                SearchTermGroup(listOf(SearchTerm("night"), SearchTerm("sunset"))),
+            ),
+        ).copy(excludeTerms = emptyList())
+
+        assertEquals(
+            "landscape AND (night OR sunset)",
+            recentSearchPresentation(entry(grouped, RecentSearchKind.UNIFIED, emptyList())).title,
         )
     }
 
