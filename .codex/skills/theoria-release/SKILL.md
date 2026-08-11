@@ -39,6 +39,8 @@ Proceed only after the user approves the version and release-note wording.
 3. Run the host validation batch:
 
    ```sh
+   previous_release_tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*')"
+   python3 scripts/check_hotspots.py --base "$previous_release_tag"
    ./gradlew :app:detektDebug --stacktrace
    ./gradlew :app:compileDebugAndroidTestKotlin --stacktrace
    ./gradlew :app:testDebugUnitTest
@@ -51,7 +53,7 @@ Proceed only after the user approves the version and release-note wording.
 
    If a supported API 35 target is already available and the packaged application IDs and signing lanes have been proven safe, also run `./gradlew :app:connectedDebugAndroidTest --stacktrace`. Otherwise report the local connected lane as unavailable; do not substitute another API level or personal device. The pushed commit's GitHub `Device Validation` workflow must pass before tagging, so local unit/build success never replaces instrumentation coverage.
 
-   Confirm Detekt reports no new issues before continuing.
+   Confirm the hotspot/Detekt debt gate and Detekt report no new issues before continuing.
    Confirm `app/build/outputs/apk/release/output-metadata.json` reports the same name and code. Also confirm the working tree contains only intended release changes and the new version is greater than the prior release.
 
 4. Show the final diff, the exact commit message, and the exact tag that would be created.

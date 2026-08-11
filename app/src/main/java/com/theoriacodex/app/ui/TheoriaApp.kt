@@ -1,14 +1,10 @@
 package com.theoriacodex.app.ui
 
-import android.app.Activity
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
-import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -86,7 +82,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import androidx.core.content.pm.PackageInfoCompat
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.core.view.WindowInsetsCompat
@@ -187,7 +182,6 @@ import com.theoriacodex.app.viewer.prefetchViewerMedia
 import com.theoriacodex.app.viewer.requiresLazyMediaResolution
 import com.theoriacodex.app.viewer.requiresViewerPostResolution
 import com.theoriacodex.data.repository.CodexSortMode
-import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentPostEntry
@@ -2365,81 +2359,3 @@ private fun openInBrowser(context: Context, url: String) {
         context.startActivity(intent)
     }
 }
-
-private fun isCodexImportUri(context: Context, uri: Uri): Boolean {
-    val scheme = uri.scheme?.lowercase().orEmpty()
-    if (scheme != "content" && scheme != "file") return false
-
-    val path = uri.path?.lowercase().orEmpty()
-    val lastSegment = uri.lastPathSegment?.lowercase().orEmpty()
-    if (path.endsWith(".json") || lastSegment.endsWith(".json")) {
-        return true
-    }
-
-    val mimeType = runCatching {
-        context.contentResolver.getType(uri)
-    }.getOrNull()?.lowercase()
-    if (mimeType == null || mimeType in CODEX_IMPORT_MIME_TYPES || mimeType == "application/octet-stream") {
-        return true
-    }
-    return false
-}
-
-@Composable
-internal fun ChangelogBulletText(bullet: String) {
-    val leadingSpaces = bullet.takeWhile { it == ' ' }.length
-    val indentLevel = (leadingSpaces / 2).coerceAtLeast(0)
-    val normalized = bullet.trimStart()
-    Text(
-        text = "• $normalized",
-        style = MaterialTheme.typography.bodySmall,
-        modifier = Modifier.padding(start = (indentLevel * 14).dp),
-    )
-}
-
-private fun openUnknownSourcesSettings(context: Context) {
-    runCatching {
-        val intent = Intent(
-            android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-            "package:${context.packageName}".toUri(),
-        ).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
-    }
-}
-
-private tailrec fun Context.findActivity(): Activity? = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> null
-}
-
-private fun installedAppVersionCode(context: Context): Int {
-    val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        context.packageManager.getPackageInfo(
-            context.packageName,
-            PackageManager.PackageInfoFlags.of(0),
-        )
-    } else {
-        @Suppress("DEPRECATION")
-        context.packageManager.getPackageInfo(context.packageName, 0)
-    }
-    return PackageInfoCompat.getLongVersionCode(packageInfo).toInt()
-}
-
-private suspend fun DataDependencies.currentSettingsSnapshot(): AppSettings {
-    return settingsRepository.observeSettings().first()
-}
-
-private suspend fun DataDependencies.currentActiveRecommendationProfile(): RecommendationProfile {
-    return currentSettingsSnapshot().activeRecommendationProfile()
-}
-
-private fun parseGelbooruProfileOwner(html: String): String? {
-    val owner = GELBOORU_PROFILE_OWNER_REGEX.find(html)?.groupValues?.getOrNull(1)
-    return owner?.trim()?.takeIf(String::isNotBlank)
-}
-
-private val CODEX_IMPORT_MIME_TYPES = setOf("application/json", "text/json")
-private val GELBOORU_PROFILE_OWNER_REGEX = Regex("""user:([A-Za-z0-9_:-]+)""", RegexOption.IGNORE_CASE)
