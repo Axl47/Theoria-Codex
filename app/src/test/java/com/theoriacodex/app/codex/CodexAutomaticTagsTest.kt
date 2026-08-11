@@ -7,6 +7,20 @@ import org.junit.Test
 
 class CodexAutomaticTagsTest {
     @Test
+    fun `represented source selector follows presentation order and skips empty sources`() {
+        assertEquals(
+            listOf(SourceKey.GELBOORU, SourceKey.PIXIV),
+            representedAutomaticTagSources(
+                mapOf(
+                    SourceKey.PIXIV to listOf(CodexSearchTagOption("portrait", 2)),
+                    SourceKey.HITOMI to emptyList(),
+                    SourceKey.GELBOORU to listOf(CodexSearchTagOption("landscape", 1)),
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun `presentation moves selected tags into Automatic and preserves counts`() {
         val presentation = codexAutomaticTagPresentation(
             automaticTags = listOf(

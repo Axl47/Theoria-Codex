@@ -1,6 +1,7 @@
 package com.theoriacodex.app.codex
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -96,6 +97,12 @@ internal fun codexAutomaticTagPresentation(
     )
 }
 
+internal fun representedAutomaticTagSources(
+    tagOptionsBySource: Map<SourceKey, List<CodexSearchTagOption>>,
+): List<SourceKey> = SourcePresentationCatalog.orderedPresentations()
+    .map { presentation -> presentation.source }
+    .filter { source -> tagOptionsBySource[source].orEmpty().isNotEmpty() }
+
 @Composable
 internal fun CodexAutomaticTagContent(
     isLikesCodex: Boolean,
@@ -127,6 +134,10 @@ internal fun CodexAutomaticTagSections(
     onSetAutomaticTag: (CodexAutomaticTag, Boolean) -> Unit,
 ) {
     val presentation = codexAutomaticTagPresentation(automaticTags, tagOptionsBySource)
+    val representedSources = representedAutomaticTagSources(tagOptionsBySource)
+    var preferredSource by remember { mutableStateOf<SourceKey?>(null) }
+    val selectedSource = preferredSource?.takeIf { source -> source in representedSources }
+        ?: representedSources.firstOrNull()
     LazyColumn(
         modifier = Modifier
             .fillMaxWidth()
@@ -135,9 +146,13 @@ internal fun CodexAutomaticTagSections(
     ) {
         automaticTagItems(presentation.automaticGroups, onSetAutomaticTag)
         availableTagItems(
-            sections = presentation.availableSections,
+            representedSources = representedSources,
+            selectedSource = selectedSource,
+            selectedSection = presentation.availableSections.firstOrNull { section ->
+                section.source == selectedSource
+            },
             automaticGroups = presentation.automaticGroups,
-            hasRepresentedTags = tagOptionsBySource.isNotEmpty(),
+            onSourceSelected = { source -> preferredSource = source },
             onSetAutomaticTag = onSetAutomaticTag,
         )
     }
@@ -220,44 +235,85 @@ private fun LazyListScope.automaticRuleGroupItems(
 }
 
 private fun LazyListScope.availableTagItems(
-    sections: List<CodexAutomaticTagSection>,
+    representedSources: List<SourceKey>,
+    selectedSource: SourceKey?,
+    selectedSection: CodexAutomaticTagSection?,
     automaticGroups: List<CodexAutomaticTagGroup>,
-    hasRepresentedTags: Boolean,
+    onSourceSelected: (SourceKey) -> Unit,
     onSetAutomaticTag: (CodexAutomaticTag, Boolean) -> Unit,
 ) {
     item { HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp)) }
-    item { Text(text = "Tags", style = MaterialTheme.typography.titleSmall) }
-    if (sections.isEmpty()) {
+    item {
+        AvailableTagSourceSelector(
+            sources = representedSources,
+            selectedSource = selectedSource,
+            onSourceSelected = onSourceSelected,
+        )
+    }
+    if (selectedSource == null) {
         item {
             Text(
-                text = if (hasRepresentedTags) "All tags are automatic" else "No tags in this Codex",
+                text = "No tags in this Codex",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 8.dp),
+            )
+        }
+    } else if (selectedSection == null) {
+        item {
+            Text(
+                text = "All ${selectedSource.displayName()} tags are automatic",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
         }
     } else {
-        sections.forEach { section ->
-            item(key = "source:${section.source}") {
-                Text(
-                    text = section.source.displayName(),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-            items(
-                items = section.rows,
-                key = { row ->
-                    val tag = row.automaticTag
-                    "available:${tag.source}:${sourceTagKey(tag.source, tag.tag)}"
-                },
-            ) { row ->
-                AvailableAutomaticTagRow(
-                    row = row,
-                    groups = automaticGroups.filter { group -> group.source == section.source },
-                    onSetAutomaticTag = onSetAutomaticTag,
-                )
+        items(
+            items = selectedSection.rows,
+            key = { row ->
+                val tag = row.automaticTag
+                "available:${tag.source}:${sourceTagKey(tag.source, tag.tag)}"
+            },
+        ) { row ->
+            AvailableAutomaticTagRow(
+                row = row,
+                groups = automaticGroups.filter { group -> group.source == selectedSource },
+                onSetAutomaticTag = onSetAutomaticTag,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AvailableTagSourceSelector(
+    sources: List<SourceKey>,
+    selectedSource: SourceKey?,
+    onSourceSelected: (SourceKey) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text = "Tags", style = MaterialTheme.typography.titleSmall)
+        selectedSource?.let { selected ->
+            Box {
+                TextButton(onClick = { expanded = true }) {
+                    Text("${selected.displayName()} ▾")
+                }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    sources.forEach { source ->
+                        DropdownMenuItem(
+                            text = { Text(source.displayName()) },
+                            onClick = {
+                                expanded = false
+                                onSourceSelected(source)
+                            },
+                        )
+                    }
+                }
             }
         }
     }
@@ -338,7 +394,7 @@ private fun AutomaticOrButton(
     onSetAutomaticTag: (CodexAutomaticTag, Boolean) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    androidx.compose.foundation.layout.Box {
+    Box {
         TextButton(onClick = {
             if (groups.size == 1) {
                 onSetAutomaticTag(tag.copy(groupIndex = groups.single().groupIndex), true)
