@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -230,7 +231,12 @@ fun CodexDetailScreen(
         ) {
             CodexDetailHeader(
                 codexName = codexName,
-                itemSummary = codexItemSummary(visiblePosts.size, posts.size, filters.isActive),
+                itemSummary = codexItemSummary(
+                    visibleCount = visiblePosts.size,
+                    totalCount = posts.size,
+                    filtersActive = filters.isActive,
+                    selectedCount = editSelection.selectedPostIds.size.takeIf { editSelection.active },
+                ),
                 itemCount = posts.size,
                 editSelection = editSelection,
                 onBack = onBack,
@@ -429,15 +435,26 @@ private fun CodexDetailHeaderActions(
                 val selectedCount = editSelection.selectedPostIds.size
                 Icon(
                     imageVector = Icons.Default.BookmarkAdd,
-                    contentDescription = "Add $selectedCount selected " +
-                        if (selectedCount == 1) "post to another Codex" else "posts to another Codex",
+                    contentDescription = codexSelectedPostActionDescription(
+                        action = "Add",
+                        selectedCount = selectedCount,
+                        destination = "to another Codex",
+                    ),
                 )
             }
-            TextButton(
+            IconButton(
                 enabled = editSelection.selectedPostIds.isNotEmpty(),
                 onClick = onRemoveSelected,
             ) {
-                Text("Remove (${editSelection.selectedPostIds.size})")
+                val selectedCount = editSelection.selectedPostIds.size
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = codexSelectedPostActionDescription(
+                        action = "Remove",
+                        selectedCount = selectedCount,
+                        destination = "from this Codex",
+                    ),
+                )
             }
         } else {
             TextButton(enabled = hasPosts, onClick = onBeginEdit) { Text("Edit") }
@@ -688,8 +705,23 @@ private fun CodexSortFilters(
     }
 }
 
-internal fun codexItemSummary(visibleCount: Int, totalCount: Int, filtersActive: Boolean): String {
+internal fun codexItemSummary(
+    visibleCount: Int,
+    totalCount: Int,
+    filtersActive: Boolean,
+    selectedCount: Int? = null,
+): String {
+    if (selectedCount != null) return "$selectedCount/$totalCount"
     return if (filtersActive) "$visibleCount of $totalCount items" else "$totalCount items"
+}
+
+internal fun codexSelectedPostActionDescription(
+    action: String,
+    selectedCount: Int,
+    destination: String,
+): String {
+    val postLabel = if (selectedCount == 1) "post" else "posts"
+    return "$action $selectedCount selected $postLabel $destination"
 }
 
 private fun CodexLanguageFilter.displayLabel(): String = when (this) {
