@@ -26,11 +26,13 @@ public final class RecentWatchedEntity {
     @ColumnInfo(name = "sort_sequence") private final long sortSequence;
     @NonNull private final String origin;
     @Nullable @ColumnInfo(name = "origin_query_hash") private final String originQueryHash;
+    @ColumnInfo(name = "max_viewed_media_number", defaultValue = "1")
+    private final int maxViewedMediaNumber;
 
     public RecentWatchedEntity(@NonNull String source, @NonNull String sourcePostId,
             @NonNull String section,
             long viewedAtEpochMs, long sortSequence, @NonNull String origin,
-            @Nullable String originQueryHash) {
+            @Nullable String originQueryHash, int maxViewedMediaNumber) {
         this.source = source;
         this.sourcePostId = sourcePostId;
         this.section = section;
@@ -38,6 +40,7 @@ public final class RecentWatchedEntity {
         this.sortSequence = sortSequence;
         this.origin = origin;
         this.originQueryHash = originQueryHash;
+        this.maxViewedMediaNumber = maxViewedMediaNumber;
     }
 
     @NonNull public String getSource() { return source; }
@@ -47,4 +50,5 @@ public final class RecentWatchedEntity {
     public long getSortSequence() { return sortSequence; }
     @NonNull public String getOrigin() { return origin; }
     @Nullable public String getOriginQueryHash() { return originQueryHash; }
+    public int getMaxViewedMediaNumber() { return maxViewedMediaNumber; }
 }

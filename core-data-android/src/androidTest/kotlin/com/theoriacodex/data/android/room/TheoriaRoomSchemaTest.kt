@@ -149,6 +149,32 @@ class TheoriaRoomSchemaTest {
         database.close()
     }
 
+    @Test
+    fun migrationFiveToSixPreservesWatchedRowsAndDefaultsMediaProgress() {
+        migrationHelper.createDatabase(TEST_DATABASE_NAME, 5).apply {
+            execSQL("INSERT INTO posts(source,source_post_id,payload_json) VALUES('PIXIV','watched','{}')")
+            execSQL(
+                "INSERT INTO recent_watched(source,source_post_id,section,viewed_at_epoch_ms,sort_sequence,origin,origin_query_hash) " +
+                    "VALUES('PIXIV','watched','WATCHED',10,1,'SEARCH','search')",
+            )
+            close()
+        }
+
+        val database = migrationHelper.runMigrationsAndValidate(
+            TEST_DATABASE_NAME,
+            6,
+            true,
+            TheoriaRoomDatabase.MIGRATION_5_6,
+        )
+        database.query(
+            "SELECT max_viewed_media_number FROM recent_watched WHERE source_post_id='watched'",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(1, cursor.getInt(0))
+        }
+        database.close()
+    }
+
     companion object {
         private const val TEST_DATABASE_NAME = "theoria-room-schema-test"
     }

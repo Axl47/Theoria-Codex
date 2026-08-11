@@ -160,6 +160,48 @@ class RoomRecentsRepositoryTest {
         assertEquals(1, database.codexLikesDao().posts().size)
     }
 
+    @Test fun `watched media progress keeps the highest page per membership`() = runTest {
+        val repository = RoomRecentsRepository(database, clock = { now++ })
+        val post = recentPost("progress")
+
+        repository.recordWatchedMediaProgress(
+            post,
+            origin = ViewerStreamSource.SEARCH,
+            originQueryHash = null,
+            section = RecentPostSection.WATCHED,
+            viewedMediaNumber = 50,
+        )
+        repository.recordWatchedPost(
+            post,
+            ViewerStreamSource.SEARCH,
+            null,
+            viewedMediaNumber = 1,
+        )
+        repository.recordWatchedPost(
+            post,
+            ViewerStreamSource.CODEX,
+            null,
+            viewedMediaNumber = 4,
+        )
+        repository.recordWatchedMediaProgress(
+            post,
+            ViewerStreamSource.SEARCH,
+            null,
+            RecentPostSection.WATCHED,
+            30,
+        )
+
+        val entries = repository.observeWatchedPosts().first()
+        assertEquals(
+            50,
+            entries.single { it.section == RecentPostSection.WATCHED }.maxViewedMediaNumber,
+        )
+        assertEquals(
+            4,
+            entries.single { it.section == RecentPostSection.CODEX }.maxViewedMediaNumber,
+        )
+    }
+
     @Test fun `restore preserves exact rows and keeps newer activity`() = runTest {
         val repository = RoomRecentsRepository(database, clock = { now++ })
         val shared = recentPost("restore-shared")

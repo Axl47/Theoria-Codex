@@ -62,6 +62,8 @@ FYP Recents stores recommendation searches, never the posts returned by those se
 
 Recent Searches preserve the accepted execution kind and participating sources. Temporary multi-source executions are recorded and reopen as Multi-Search with their explicit source set, but they remain excluded from durable applied-query and Search-scroll restoration. Room stores this metadata in the versioned recent-search wrapper inside the existing query payload column; keep decoding the legacy raw Query payload so existing history remains readable without a database migration.
 
+Watched Recents retains one-based multi-media progress as the highest media number ever made visible for that post and section. Viewer post visibility remains the one-shot owner of lifetime watched statistics; later media-page changes update only the monotonic Recents progress and must not reorder history or rewrite the shared post payload. Existing rows start at media 1, and only the Watched card badge presents `highest/total`; Codex and other card surfaces keep the total-only badge.
+
 ## Legacy JSON Recovery
 
 `AtomicJsonFileStore` owns verified quarantine for the remaining live whole-file JSON stores: applied queries, Recents, updater state, and tag suggestions. A present malformed, empty, null, or invalid UTF-8 file is never a normal miss: preserve and verify its exact bytes under the deterministic filename/byte-count/SHA-256 identity before removing the live name or returning a default. Register each production owner with the shared `LegacyJsonRecoveryRegistry` so verified quarantines are rediscovered across process restart and surfaced through Settings. Do not apply this fallback to DataStore newer-schema failures or Room migration conflicts; those contracts remain fail-closed.

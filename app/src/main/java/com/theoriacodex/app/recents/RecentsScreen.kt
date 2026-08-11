@@ -156,6 +156,7 @@ fun RecentsScreen(
                 onToggleLike = onToggleLike,
                 onOpenWatchedPost = onOpenWatchedPost,
                 onLongPress = { selectedActionPost = it },
+                showMediaProgress = true,
             )
 
             RecentsFilter.CODEX -> WatchedGrid(
@@ -240,6 +241,7 @@ private fun WatchedGrid(
     onOpenWatchedPost: (Int) -> Unit,
     onLongPress: (Post) -> Unit,
     emptyMessage: String = "Posts appear here after you open them in Viewer.",
+    showMediaProgress: Boolean = false,
 ) {
     if (watchedPosts.isEmpty()) {
         EmptyRecentState(emptyMessage)
@@ -262,6 +264,7 @@ private fun WatchedGrid(
             acquiredDurationMs = observedDurationMs,
             showSourceBadge = true,
             metadataLabel = relativeTimeLabel(now, entry.viewedAtEpochMs),
+            viewedMediaNumber = entry.maxViewedMediaNumber.takeIf { showMediaProgress },
             liked = post.id in likedPostIds,
             onToggleLike = onToggleLike?.let { toggle -> { toggle(post) } },
             onClick = { onOpenWatchedPost(index) },

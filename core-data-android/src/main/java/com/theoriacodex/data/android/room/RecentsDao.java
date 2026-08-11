@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.Flow;
 
 @Dao
 public interface RecentsDao {
-    @Query("SELECT posts.source, posts.source_post_id, posts.payload_json, recent_watched.section, recent_watched.viewed_at_epoch_ms, recent_watched.sort_sequence, recent_watched.origin, recent_watched.origin_query_hash "
+    @Query("SELECT posts.source, posts.source_post_id, posts.payload_json, recent_watched.section, recent_watched.viewed_at_epoch_ms, recent_watched.sort_sequence, recent_watched.origin, recent_watched.origin_query_hash, recent_watched.max_viewed_media_number "
             + "FROM recent_watched INNER JOIN posts ON posts.source = recent_watched.source AND posts.source_post_id = recent_watched.source_post_id "
             + "ORDER BY recent_watched.viewed_at_epoch_ms DESC, recent_watched.sort_sequence DESC, posts.source ASC, posts.source_post_id ASC, recent_watched.section ASC")
     Flow<List<RecentWatchedRow>> observeWatched();
@@ -18,6 +18,8 @@ public interface RecentsDao {
     @Query("SELECT * FROM recent_watched WHERE source = :source AND source_post_id = :postId AND section = :section LIMIT 1")
     RecentWatchedEntity watched(String source, String postId, String section);
     @Insert(onConflict = OnConflictStrategy.REPLACE) void upsertWatched(RecentWatchedEntity entity);
+    @Query("UPDATE recent_watched SET max_viewed_media_number = MAX(max_viewed_media_number, :viewedMediaNumber) WHERE source = :source AND source_post_id = :postId AND section = :section")
+    int updateWatchedMediaProgress(String source, String postId, String section, int viewedMediaNumber);
     @Query("SELECT COALESCE(MAX(sort_sequence), 0) + 1 FROM recent_watched") long nextWatchedSequence();
     @Query("DELETE FROM recent_watched WHERE (source, source_post_id, section) IN (SELECT source, source_post_id, section FROM recent_watched ORDER BY viewed_at_epoch_ms DESC, sort_sequence DESC, source ASC, source_post_id ASC, section ASC LIMIT -1 OFFSET :limit)")
     int trimWatched(int limit);

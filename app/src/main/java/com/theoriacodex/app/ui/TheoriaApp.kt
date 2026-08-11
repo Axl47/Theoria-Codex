@@ -2130,9 +2130,22 @@ internal fun TheoriaAppContent(
                                             .setInvertMultiImageScrollDirection(enabled)
                                     }
                                 },
-                                onVisiblePostChanged = { post, session ->
+                                onVisiblePostChanged = { post, viewedMediaNumber, session ->
                                     scope.launch {
-                                        viewerRouteWorkflow.recordVisiblePost(post, session)
+                                        viewerRouteWorkflow.recordVisiblePost(
+                                            post,
+                                            viewedMediaNumber,
+                                            session,
+                                        )
+                                    }
+                                },
+                                onVisibleMediaChanged = { post, viewedMediaNumber, session ->
+                                    scope.launch {
+                                        viewerRouteWorkflow.recordVisibleMediaProgress(
+                                            post,
+                                            viewedMediaNumber,
+                                            session,
+                                        )
                                     }
                                 },
                                 onOpenInBrowser = { post ->

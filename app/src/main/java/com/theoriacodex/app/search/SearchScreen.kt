@@ -937,6 +937,7 @@ fun SearchResultCard(
     acquiredDurationMs: Long? = null,
     showSourceBadge: Boolean = false,
     metadataLabel: String? = null,
+    viewedMediaNumber: Int? = null,
     liked: Boolean = false,
     onToggleLike: (() -> Unit)? = null,
     resolvePostById: (suspend (PostId) -> Post?)? = null,
@@ -1216,6 +1217,7 @@ fun SearchResultCard(
             if (mediaCount > 1) {
                 ImageCountBadge(
                     count = mediaCount,
+                    viewedMediaNumber = viewedMediaNumber,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(8.dp),
@@ -1345,6 +1347,7 @@ private fun PreviewMetadataLabel(label: String) {
 @Composable
 private fun ImageCountBadge(
     count: Int,
+    viewedMediaNumber: Int?,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -1359,17 +1362,26 @@ private fun ImageCountBadge(
         ) {
             Icon(
                 imageVector = Icons.Default.Image,
-                contentDescription = "Image count",
+                contentDescription = if (viewedMediaNumber == null) {
+                    "Image count"
+                } else {
+                    "Watched media progress"
+                },
                 tint = Color.White,
                 modifier = Modifier.size(14.dp),
             )
             Text(
-                text = count.toString(),
+                text = imageCountBadgeLabel(count, viewedMediaNumber),
                 color = Color.White,
                 style = MaterialTheme.typography.labelSmall,
             )
         }
     }
+}
+
+internal fun imageCountBadgeLabel(count: Int, viewedMediaNumber: Int?): String {
+    val progress = viewedMediaNumber?.coerceIn(1, count)
+    return progress?.let { "$it/$count" } ?: count.toString()
 }
 
 internal fun postMediaCount(post: Post): Int {

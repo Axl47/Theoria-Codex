@@ -20,15 +20,24 @@ class ViewerRecentsRecordingSourceTest {
         val shell = source("app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt")
         val boundary = source("app/src/main/java/com/theoriacodex/app/ui/routes/DestinationStateBoundaries.kt")
 
-        assertTrue("Viewer callbacks must carry the active route session", "(Post, ViewerSession)" in route)
+        assertTrue(
+            "Viewer callbacks must carry progress and the active route session",
+            "(Post, Int, ViewerSession)" in route,
+        )
         assertTrue(
             "ViewerRoute must pair the visible post with its current owner session",
-            "onVisiblePostChanged(post, currentSession)" in route,
+            "latestScreenCallbacks.value.onVisiblePostChanged(" in route &&
+                "currentSession" in route,
         )
         assertTrue(
             "The shell must record using the session delivered with the visible post",
-            "onVisiblePostChanged = { post, session ->" in shell &&
-                "recordVisiblePost(post, session)" in shell,
+            "onVisiblePostChanged = { post, viewedMediaNumber, session ->" in shell &&
+                "viewerRouteWorkflow.recordVisiblePost(" in shell,
+        )
+        assertTrue(
+            "Media changes must use the progress-only path",
+            "onVisibleMediaChanged = { post, viewedMediaNumber, session ->" in shell &&
+                "viewerRouteWorkflow.recordVisibleMediaProgress(" in shell,
         )
         assertFalse(
             "The outer destination snapshot must not own Viewer session recording",

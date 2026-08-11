@@ -264,6 +264,7 @@ class InMemoryRecentsRepository(
         origin: ViewerStreamSource,
         originQueryHash: String?,
         section: RecentPostSection,
+        viewedMediaNumber: Int,
     ) {
         mutex.withLock {
             val recordedAt = clock()
@@ -280,6 +281,10 @@ class InMemoryRecentsRepository(
                 origin = effectiveOrigin,
                 originQueryHash = effectiveQueryHash,
                 section = section,
+                maxViewedMediaNumber = maxOf(
+                    previousEntry?.maxViewedMediaNumber ?: 1,
+                    viewedMediaNumber.coerceAtLeast(1),
+                ),
             )
             watched.value = RepositoryPolicies.normalizeRecentWatched(
                 entries = listOf(replacement) + watched.value.filterNot { entry ->
@@ -287,6 +292,48 @@ class InMemoryRecentsRepository(
                 },
                 limit = watchedLimit,
             )
+        }
+    }
+
+    override suspend fun recordWatchedMediaProgress(
+        post: Post,
+        origin: ViewerStreamSource,
+        originQueryHash: String?,
+        section: RecentPostSection,
+        viewedMediaNumber: Int,
+    ) {
+        mutex.withLock {
+            val normalizedMediaNumber = viewedMediaNumber.coerceAtLeast(1)
+            val existing = watched.value.firstOrNull { entry ->
+                entry.post.id == post.id && entry.section == section
+            }
+            watched.value = if (existing == null) {
+                val inserted = RecentPostEntry(
+                    post = post,
+                    viewedAtEpochMs = clock(),
+                    origin = origin,
+                    originQueryHash = originQueryHash,
+                    section = section,
+                    maxViewedMediaNumber = normalizedMediaNumber,
+                )
+                RepositoryPolicies.normalizeRecentWatched(
+                    entries = listOf(inserted) + watched.value,
+                    limit = watchedLimit,
+                )
+            } else {
+                watched.value.map { entry ->
+                    if (entry.post.id == post.id && entry.section == section) {
+                        entry.copy(
+                            maxViewedMediaNumber = maxOf(
+                                entry.maxViewedMediaNumber,
+                                normalizedMediaNumber,
+                            )
+                        )
+                    } else {
+                        entry
+                    }
+                }
+            }
         }
     }
 

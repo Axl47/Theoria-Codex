@@ -123,6 +123,7 @@ class RoomRecentsLegacyImporter(
                     (prepared.watched.size - index).toLong(),
                     entry.origin.name,
                     entry.originQueryHash,
+                    entry.maxViewedMediaNumber.coerceAtLeast(1),
                 )
             )
         }

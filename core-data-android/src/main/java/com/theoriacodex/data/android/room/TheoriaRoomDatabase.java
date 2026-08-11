@@ -21,7 +21,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
                 RecentsMigrationEntity.class,
                 MediaDurationEntity.class
         },
-        version = 5,
+        version = 6,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -61,11 +61,17 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             database.execSQL("CREATE INDEX IF NOT EXISTS `index_media_durations_updated_at_epoch_ms_source_source_post_id_media_fingerprint` ON `media_durations` (`updated_at_epoch_ms`, `source`, `source_post_id`, `media_fingerprint`)");
         }
     };
+    public static final Migration MIGRATION_5_6 = new Migration(5, 6) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE `recent_watched` ADD COLUMN `max_viewed_media_number` INTEGER NOT NULL DEFAULT 1");
+        }
+    };
     public static final Migration[] MIGRATIONS = new Migration[] {
             MIGRATION_1_2,
             MIGRATION_2_3,
             MIGRATION_3_4,
-            MIGRATION_4_5
+            MIGRATION_4_5,
+            MIGRATION_5_6
     };
 
     public abstract CodexLikesDao codexLikesDao();

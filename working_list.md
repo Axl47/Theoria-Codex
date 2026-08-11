@@ -1,8 +1,33 @@
 ---
 created_at: 2026-05-31T00:13:56Z
-updated_at: 2026-08-10T21:27:00-04:00
+updated_at: 2026-08-11T00:04:54-04:00
 ---
 # Working List
+
+## Current Task: Show Highest Watched Media Progress In Recents
+
+### In Progress
+
+None.
+
+### Pending
+
+None.
+
+### Done
+
+- [x] Freeze the Viewer -> Recents -> shared-card data flow and acceptance boundary.
+  - Evidence: Viewer retains one-shot post/statistics recording and gains a separate media-progress event; Recents merges one-based progress monotonically per section; only the Watched filter supplies progress to the shared card badge.
+- [x] Persist highest-viewed media progress independently for each Watched/Codex membership, with existing rows defaulting to media 1.
+  - Evidence: both in-memory and Room owners merge progress with `max(old, new)` by post and section; Room schema 6 adds a non-null default-1 column and an explicit 5-to-6 migration.
+- [x] Publish media-page visibility from Viewer without duplicating lifetime watched statistics.
+  - Evidence: the post callback records statistics and initial progress once per visible post; the separate page callback updates only Recents progress and does not rewrite timestamps or post payloads.
+- [x] Render progress only in the Recents -> Watched top-right media-count badge.
+  - Evidence: the Watched filter opts into the shared badge's `current/total` label; Codex and all other card surfaces retain the total-only badge.
+- [x] Run one focused repository, migration, Viewer-flow, UI-contract, compilation, and diff validation batch.
+  - Evidence: all 514 app JVM tests pass with zero failures/errors and three intentional skips; the 17 in-memory Recents and 11 Room Recents tests pass; Debug compilation, Android migration-test compilation, Room schema generation, core-data-android lint, app Detekt, and `git diff --check` pass. App Detekt still reports its existing compiler-analysis warning, and core-data Detekt remains red only on five inherited findings in untouched files.
+- [x] Record final evidence and durable repository guidance before closeout.
+  - Evidence: `AGENTS.md` now records monotonic per-section progress, the statistics/progress event split, and the Watched-only presentation rule. The 5-to-6 migration test compiled but was not executed because no connected-device lane was run; visual device acceptance also remains unrun.
 
 ## Current Task: Clear Static Analysis And Maintainability Findings
 

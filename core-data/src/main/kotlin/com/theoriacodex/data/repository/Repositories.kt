@@ -64,6 +64,7 @@ data class RecentPostEntry(
     val origin: ViewerStreamSource,
     val originQueryHash: String?,
     val section: RecentPostSection = RecentPostSection.fromOrigin(origin),
+    val maxViewedMediaNumber: Int = 1,
 )
 
 data class RecentSearchEntry(
@@ -115,6 +116,14 @@ interface RecentsRepository {
         origin: ViewerStreamSource,
         originQueryHash: String?,
         section: RecentPostSection = RecentPostSection.fromOrigin(origin),
+        viewedMediaNumber: Int = 1,
+    )
+    suspend fun recordWatchedMediaProgress(
+        post: Post,
+        origin: ViewerStreamSource,
+        originQueryHash: String?,
+        section: RecentPostSection,
+        viewedMediaNumber: Int,
     )
     suspend fun recordSearch(
         query: Query,

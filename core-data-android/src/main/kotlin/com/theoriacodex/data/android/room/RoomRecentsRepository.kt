@@ -44,7 +44,14 @@ class RoomRecentsRepository(
                 .getOrElse { error("Invalid recent watched origin ${row.origin}") }
             val section = runCatching { RecentPostSection.valueOf(row.section) }
                 .getOrElse { error("Invalid recent watched section ${row.section}") }
-            RecentPostEntry(post, row.viewedAtEpochMs, origin, row.originQueryHash, section)
+            RecentPostEntry(
+                post = post,
+                viewedAtEpochMs = row.viewedAtEpochMs,
+                origin = origin,
+                originQueryHash = row.originQueryHash,
+                section = section,
+                maxViewedMediaNumber = row.maxViewedMediaNumber,
+            )
         }
     }
 
@@ -81,6 +88,7 @@ class RoomRecentsRepository(
         origin: ViewerStreamSource,
         originQueryHash: String?,
         section: RecentPostSection,
+        viewedMediaNumber: Int,
     ) {
         database.withTransaction {
             val recordedAt = clock()
@@ -96,10 +104,49 @@ class RoomRecentsRepository(
                     dao.nextWatchedSequence(),
                     if (preserve) previous.origin else origin.name,
                     if (preserve) previous.originQueryHash else originQueryHash,
+                    maxOf(
+                        previous?.maxViewedMediaNumber ?: 1,
+                        viewedMediaNumber.coerceAtLeast(1),
+                    ),
                 )
             )
             dao.trimWatched(watchedLimit)
             contentDao.deleteOrphanPosts()
+        }
+    }
+
+    override suspend fun recordWatchedMediaProgress(
+        post: Post,
+        origin: ViewerStreamSource,
+        originQueryHash: String?,
+        section: RecentPostSection,
+        viewedMediaNumber: Int,
+    ) {
+        database.withTransaction {
+            val normalizedMediaNumber = viewedMediaNumber.coerceAtLeast(1)
+            val updated = dao.updateWatchedMediaProgress(
+                post.id.source.name,
+                post.id.sourcePostId,
+                section.name,
+                normalizedMediaNumber,
+            )
+            if (updated == 0) {
+                sharedPostPayloads.upsert(post)
+                dao.upsertWatched(
+                    RecentWatchedEntity(
+                        post.id.source.name,
+                        post.id.sourcePostId,
+                        section.name,
+                        clock(),
+                        dao.nextWatchedSequence(),
+                        origin.name,
+                        originQueryHash,
+                        normalizedMediaNumber,
+                    )
+                )
+                dao.trimWatched(watchedLimit)
+                contentDao.deleteOrphanPosts()
+            }
         }
     }
 
@@ -144,6 +191,7 @@ class RoomRecentsRepository(
                             dao.nextWatchedSequence(),
                             entry.origin.name,
                             entry.originQueryHash,
+                            entry.maxViewedMediaNumber.coerceAtLeast(1),
                         )
                     )
                 }

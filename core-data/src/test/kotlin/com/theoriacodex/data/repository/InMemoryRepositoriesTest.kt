@@ -180,6 +180,49 @@ class InMemoryRepositoriesTest {
     }
 
     @Test
+    fun `watched media progress is monotonic and section scoped`() = runTest {
+        val repo = InMemoryRecentsRepository(clock = { 1L })
+        val post = samplePost("progress")
+
+        repo.recordWatchedMediaProgress(
+            post,
+            origin = ViewerStreamSource.SEARCH,
+            originQueryHash = null,
+            section = RecentPostSection.WATCHED,
+            viewedMediaNumber = 50,
+        )
+        repo.recordWatchedPost(
+            post,
+            ViewerStreamSource.SEARCH,
+            null,
+            viewedMediaNumber = 1,
+        )
+        repo.recordWatchedPost(
+            post,
+            ViewerStreamSource.CODEX,
+            null,
+            viewedMediaNumber = 3,
+        )
+        repo.recordWatchedMediaProgress(
+            post,
+            ViewerStreamSource.SEARCH,
+            null,
+            RecentPostSection.WATCHED,
+            30,
+        )
+
+        val entries = repo.observeWatchedPosts().first()
+        assertEquals(
+            50,
+            entries.single { it.section == RecentPostSection.WATCHED }.maxViewedMediaNumber,
+        )
+        assertEquals(
+            3,
+            entries.single { it.section == RecentPostSection.CODEX }.maxViewedMediaNumber,
+        )
+    }
+
+    @Test
     fun `cache repository tracks thumbnail and full counts`() = runTest {
         val repo = InMemoryCacheRepository()
 

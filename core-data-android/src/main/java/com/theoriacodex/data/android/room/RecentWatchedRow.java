@@ -13,4 +13,5 @@ public final class RecentWatchedRow {
     @ColumnInfo(name = "sort_sequence") public long sortSequence;
     @NonNull public String origin;
     @Nullable @ColumnInfo(name = "origin_query_hash") public String originQueryHash;
+    @ColumnInfo(name = "max_viewed_media_number") public int maxViewedMediaNumber;
 }

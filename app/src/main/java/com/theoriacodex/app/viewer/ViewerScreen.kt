@@ -176,7 +176,8 @@ internal fun ViewerScreen(
     onInvertMultiImageScrollDirectionChange: (Boolean) -> Unit = {},
     likedPostIds: Set<PostId> = emptySet(),
     onRequestMediaRecovery: ((Post, ImageRef) -> Unit)? = null,
-    onVisiblePostChanged: ((Post) -> Unit)? = null,
+    onVisiblePostChanged: ((Post, Int) -> Unit)? = null,
+    onVisibleMediaChanged: ((Post, Int) -> Unit)? = null,
     onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
     onOpenInBrowser: (Post) -> Unit,
     onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
@@ -385,7 +386,7 @@ internal fun ViewerScreen(
     }
 
     LaunchedEffect(selectedPost.id, currentPostIndex) {
-        onVisiblePostChanged?.invoke(selectedPost)
+        onVisiblePostChanged?.invoke(selectedPost, selectedMediaIndex + 1)
     }
 
     LaunchedEffect(chromeVisible, interactionSerial, timelineInteractionActive, mediaOverviewVisible) {
@@ -472,6 +473,9 @@ internal fun ViewerScreen(
             LaunchedEffect(mediaPagerState.currentPage) {
                 if (postPage == currentPostIndex && mediaPagerState.currentPage != selectedMediaIndex) {
                     onAction(ViewerAction.SelectMedia(mediaPagerState.currentPage))
+                }
+                if (postPage == currentPostIndex) {
+                    onVisibleMediaChanged?.invoke(post, mediaPagerState.currentPage + 1)
                 }
                 if (postPage == postPagerState.currentPage) {
                     markInteraction()

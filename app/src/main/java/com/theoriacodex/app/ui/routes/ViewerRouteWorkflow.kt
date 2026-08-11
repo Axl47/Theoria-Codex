@@ -161,7 +161,11 @@ internal class ViewerRouteWorkflow(
         )
     }
 
-    suspend fun recordVisiblePost(post: Post, session: ViewerSession?) {
+    suspend fun recordVisiblePost(
+        post: Post,
+        viewedMediaNumber: Int,
+        session: ViewerSession?,
+    ) {
         val origin = session?.context?.streamSource ?: ViewerStreamSource.SEARCH
         runCatchingPreservingCancellation {
             data.statisticsRepository.recordWatchedPost(
@@ -174,6 +178,22 @@ internal class ViewerRouteWorkflow(
             origin = origin,
             originQueryHash = session?.context?.queryHash,
             section = recentPostSectionForViewer(session?.context),
+            viewedMediaNumber = viewedMediaNumber,
+        )
+    }
+
+    suspend fun recordVisibleMediaProgress(
+        post: Post,
+        viewedMediaNumber: Int,
+        session: ViewerSession?,
+    ) {
+        val origin = session?.context?.streamSource ?: ViewerStreamSource.SEARCH
+        data.recentsRepository.recordWatchedMediaProgress(
+            post = post,
+            origin = origin,
+            originQueryHash = session?.context?.queryHash,
+            section = recentPostSectionForViewer(session?.context),
+            viewedMediaNumber = viewedMediaNumber,
         )
     }
 }
