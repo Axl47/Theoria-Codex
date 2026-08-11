@@ -40,18 +40,28 @@ object CodexLikesPolicy {
     }
 
     fun normalizeAutomaticTags(tags: List<CodexAutomaticTag>): List<CodexAutomaticTag> {
-        return tags
+        val normalized = tags
             .asSequence()
-            .map { tag -> tag.copy(tag = tag.tag.trim()) }
-            .filter { tag -> tag.tag.isNotBlank() && !tag.tag.startsWith("-") }
-            .map { tag -> tag.copy(groupIndex = tag.groupIndex.coerceAtLeast(0)) }
+            .mapNotNull(::normalizeAutomaticTagOrNull)
             .distinctBy { tag -> tag.source to sourceTagKey(tag.source, tag.tag) }
+            .toList()
+        val compactGroupIndexBySource = normalized.groupBy(CodexAutomaticTag::source)
+            .mapValues { (_, sourceTags) ->
+                sourceTags.map(CodexAutomaticTag::groupIndex)
+                    .distinct()
+                    .sorted()
+                    .withIndex()
+                    .associate { (compactIndex, storedIndex) -> storedIndex to compactIndex }
+            }
+        return normalized
+            .map { tag ->
+                tag.copy(groupIndex = compactGroupIndexBySource.getValue(tag.source).getValue(tag.groupIndex))
+            }
             .sortedWith(
                 compareBy<CodexAutomaticTag> { tag -> tag.source.ordinal }
                     .thenBy(CodexAutomaticTag::groupIndex)
                     .thenBy { tag -> sourceTagKey(tag.source, tag.tag) },
             )
-            .toList()
     }
 
     fun setAutomaticTag(
@@ -59,7 +69,7 @@ object CodexLikesPolicy {
         requested: CodexAutomaticTag,
         enabled: Boolean,
     ): List<CodexAutomaticTag> {
-        val normalizedRequest = normalizeAutomaticTags(listOf(requested)).singleOrNull()
+        val normalizedRequest = normalizeAutomaticTagOrNull(requested)
             ?: return normalizeAutomaticTags(current)
         val requestedKey = sourceTagKey(normalizedRequest.source, normalizedRequest.tag)
         val normalizedCurrent = normalizeAutomaticTags(current)
@@ -94,6 +104,16 @@ object CodexLikesPolicy {
     /** Compatibility name retained for repository callers; matching is now AND across OR groups. */
     fun postMatchesAnyAutomaticTag(post: Post, automaticTags: List<CodexAutomaticTag>): Boolean =
         postMatchesAutomaticTagGroups(post, automaticTags)
+
+    private fun normalizeAutomaticTagOrNull(tag: CodexAutomaticTag): CodexAutomaticTag? {
+        val normalized = tag.copy(
+            tag = tag.tag.trim(),
+            groupIndex = tag.groupIndex.coerceAtLeast(0),
+        )
+        return normalized.takeIf { candidate ->
+            candidate.tag.isNotBlank() && !candidate.tag.startsWith("-")
+        }
+    }
 
     /**
      * Resolves a complete requested order or returns null when it is partial, duplicated, or

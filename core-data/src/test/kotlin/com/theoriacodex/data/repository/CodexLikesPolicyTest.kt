@@ -79,6 +79,45 @@ class CodexLikesPolicyTest {
     }
 
     @Test
+    fun `removing the last tag in a group compacts later group numbers for that source`() {
+        val current = listOf(
+            CodexAutomaticTag(SourceKey.PIXIV, "first", groupIndex = 0),
+            CodexAutomaticTag(SourceKey.PIXIV, "remove", groupIndex = 1),
+            CodexAutomaticTag(SourceKey.PIXIV, "third-a", groupIndex = 2),
+            CodexAutomaticTag(SourceKey.PIXIV, "third-b", groupIndex = 2),
+            CodexAutomaticTag(SourceKey.GELBOORU, "other-source", groupIndex = 0),
+        )
+
+        val updated = CodexLikesPolicy.setAutomaticTag(
+            current = current,
+            requested = CodexAutomaticTag(SourceKey.PIXIV, "remove", groupIndex = 1),
+            enabled = false,
+        )
+
+        assertEquals(
+            listOf(
+                CodexAutomaticTag(SourceKey.PIXIV, "first", groupIndex = 0),
+                CodexAutomaticTag(SourceKey.PIXIV, "third-a", groupIndex = 1),
+                CodexAutomaticTag(SourceKey.PIXIV, "third-b", groupIndex = 1),
+                CodexAutomaticTag(SourceKey.GELBOORU, "other-source", groupIndex = 0),
+            ),
+            updated,
+        )
+
+        assertEquals(
+            listOf(
+                CodexAutomaticTag(SourceKey.PIXIV, "first", groupIndex = 0),
+                CodexAutomaticTag(SourceKey.PIXIV, "new required", groupIndex = 1),
+            ),
+            CodexLikesPolicy.setAutomaticTag(
+                current = listOf(CodexAutomaticTag(SourceKey.PIXIV, "first", groupIndex = 0)),
+                requested = CodexAutomaticTag(SourceKey.PIXIV, "new required", groupIndex = 9),
+                enabled = true,
+            ),
+        )
+    }
+
+    @Test
     fun `automatic tags match any canonical tag only within the same source`() {
         val post = Post(
             id = PostId(SourceKey.PIXIV, "1"),
