@@ -51,6 +51,7 @@ fun PostActionSheet(
     onDismiss: () -> Unit,
     onSaveToDevice: () -> Unit,
     onSaveToCodex: (() -> Unit)? = null,
+    saveToCodexContentDescription: String = "Save to Codex",
     onRemoveFromCodex: (() -> Unit)? = null,
     onOpenCreatorProfile: ((CreatorProfile) -> Unit)? = null,
     onOpenLegacyCreatorProfile: (() -> Unit)? = null,
@@ -58,9 +59,6 @@ fun PostActionSheet(
     onPostUrlCopied: (Post) -> Unit = {},
     tagContent: @Composable () -> Unit,
 ) {
-    require(onSaveToCodex == null || onRemoveFromCodex == null) {
-        "A post action sheet cannot save to and remove from a Codex at the same time"
-    }
     require((onOpenCreatorProfile == null) == (onOpenLegacyCreatorProfile == null)) {
         "Creator profile callbacks must be supplied together"
     }
@@ -96,7 +94,7 @@ fun PostActionSheet(
                     IconButton(onClick = { dismissThen(save) }) {
                         Icon(
                             imageVector = Icons.Default.BookmarkAdd,
-                            contentDescription = "Save to Codex",
+                            contentDescription = saveToCodexContentDescription,
                         )
                     }
                 }

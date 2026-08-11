@@ -433,12 +433,36 @@ internal fun TheoriaAppContent(
         dispatchOrQueueSearchAction(SearchAction.RemoveExcludeTerm(term))
     }
     var showSaveSheet by remember { mutableStateOf(false) }
-    var pendingSavePost by remember { mutableStateOf<Post?>(null) }
+    var pendingSavePosts by remember { mutableStateOf<List<Post>>(emptyList()) }
     var pendingSaveFromForYou by remember { mutableStateOf(false) }
-    fun requestSaveToCodex(post: Post, fromForYou: Boolean = false) {
-        pendingSavePost = post
+    var excludedCodexIdsForSave by remember { mutableStateOf<Set<String>>(emptySet()) }
+    fun requestSaveToCodex(
+        posts: List<Post>,
+        fromForYou: Boolean = false,
+        excludedCodexId: String? = null,
+    ) {
+        val uniquePosts = posts.distinctBy(Post::id)
+        if (uniquePosts.isEmpty()) return
+        pendingSavePosts = uniquePosts
         pendingSaveFromForYou = fromForYou
+        excludedCodexIdsForSave = setOfNotNull(excludedCodexId)
         showSaveSheet = true
+    }
+    fun requestSaveToCodex(post: Post, fromForYou: Boolean = false) {
+        requestSaveToCodex(listOf(post), fromForYou)
+    }
+    fun clearPendingCodexSave() {
+        showSaveSheet = false
+        pendingSavePosts = emptyList()
+        pendingSaveFromForYou = false
+        excludedCodexIdsForSave = emptySet()
+    }
+    suspend fun savePostsToCodex(codexId: String, posts: List<Post>, cacheFullImage: Boolean) {
+        posts.forEach { post ->
+            dataDependencies.codexRepository.addItem(codexId, post)
+            dataDependencies.cacheRepository.cacheThumbnail(post)
+            if (cacheFullImage) dataDependencies.cacheRepository.cacheFull(post)
+        }
     }
     var homeTabRoute by rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
     LaunchedEffect(homeTabRoute) {
@@ -1946,6 +1970,9 @@ internal fun TheoriaAppContent(
                                     )
                                 }
                             },
+                            onAddPostsToAnotherCodex = { posts ->
+                                requestSaveToCodex(posts, excludedCodexId = codexId)
+                            },
                             onSavePostToDevice = { post ->
                                 requestSaveToDevice(post)
                             },
@@ -2228,8 +2255,8 @@ internal fun TheoriaAppContent(
             }
         }
 
-        if (showSaveSheet && pendingSavePost != null) {
-            val post = requireNotNull(pendingSavePost)
+        if (showSaveSheet && pendingSavePosts.isNotEmpty()) {
+            val posts = pendingSavePosts
             SaveToCodexDestinationStateBoundary(dataDependencies) { state ->
                 SaveToCodexSheet(
                 profiles = state.settings.recommendationProfiles,
@@ -2237,6 +2264,7 @@ internal fun TheoriaAppContent(
                 codicesByProfile = state.codicesByProfile,
                 codexItemCounts = state.itemCounts,
                 codexCoverCandidates = state.coverCandidates,
+                excludedCodexIds = excludedCodexIdsForSave,
                 onCreateCodex = { profileId, name ->
                     val recordForYouSave = pendingSaveFromForYou
                     scope.launch {
@@ -2244,36 +2272,28 @@ internal fun TheoriaAppContent(
                             codexId = profileScopedCodexId(profileId),
                             name = name,
                         )
-                        dataDependencies.codexRepository.addItem(codex.codexId, post)
+                        savePostsToCodex(
+                            codexId = codex.codexId,
+                            posts = posts,
+                            cacheFullImage = state.settings.cache.cacheFullImageOnSave,
+                        )
                         recordForYouSaveIfNeeded(recordForYouSave)
-                        dataDependencies.cacheRepository.cacheThumbnail(post)
-                        if (state.settings.cache.cacheFullImageOnSave) {
-                            dataDependencies.cacheRepository.cacheFull(post)
-                        }
                     }
-                    showSaveSheet = false
-                    pendingSavePost = null
-                    pendingSaveFromForYou = false
+                    clearPendingCodexSave()
                 },
                 onSelectCodex = { codexId ->
                     val recordForYouSave = pendingSaveFromForYou
                     scope.launch {
-                        dataDependencies.codexRepository.addItem(codexId, post)
+                        savePostsToCodex(
+                            codexId = codexId,
+                            posts = posts,
+                            cacheFullImage = state.settings.cache.cacheFullImageOnSave,
+                        )
                         recordForYouSaveIfNeeded(recordForYouSave)
-                        dataDependencies.cacheRepository.cacheThumbnail(post)
-                        if (state.settings.cache.cacheFullImageOnSave) {
-                            dataDependencies.cacheRepository.cacheFull(post)
-                        }
                     }
-                    showSaveSheet = false
-                    pendingSavePost = null
-                    pendingSaveFromForYou = false
+                    clearPendingCodexSave()
                 },
-                onDismiss = {
-                    showSaveSheet = false
-                    pendingSavePost = null
-                    pendingSaveFromForYou = false
-                },
+                onDismiss = ::clearPendingCodexSave,
             )
             }
         }

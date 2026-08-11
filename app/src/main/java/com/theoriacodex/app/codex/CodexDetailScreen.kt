@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
@@ -21,6 +22,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -82,6 +84,7 @@ fun CodexDetailScreen(
     onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
     onOpenViewer: (List<Post>, Int) -> Unit,
     resolvePostById: suspend (PostId) -> Post? = { null },
+    onAddPostsToAnotherCodex: (List<Post>) -> Unit,
     onRemovePosts: (List<Post>) -> Unit,
     onSavePostToDevice: (Post) -> Unit,
     onPostUrlCopied: (Post) -> Unit = {},
@@ -233,6 +236,11 @@ fun CodexDetailScreen(
                 onBack = onBack,
                 onBeginEdit = { editSelection = editSelection.begin() },
                 onCancelEdit = { editSelection = editSelection.exit() },
+                onAddSelected = {
+                    val selected = posts.filter { it.id in editSelection.selectedPostIds }
+                    editSelection = editSelection.exit()
+                    onAddPostsToAnotherCodex(selected)
+                },
                 onRemoveSelected = {
                     val selected = posts.filter { it.id in editSelection.selectedPostIds }
                     editSelection = editSelection.exit()
@@ -285,6 +293,8 @@ fun CodexDetailScreen(
             creatorBrowsingSources = creatorBrowsingSources,
             onDismiss = { selectedActionPost = null },
             onSaveToDevice = { onSavePostToDevice(post) },
+            onSaveToCodex = { onAddPostsToAnotherCodex(listOf(post)) },
+            saveToCodexContentDescription = "Add to another Codex",
             onRemoveFromCodex = { onRemovePosts(listOf(post)) },
             onOpenCreatorProfile = onOpenCreatorProfile,
             onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
@@ -375,6 +385,7 @@ private fun CodexDetailHeader(
     onBack: () -> Unit,
     onBeginEdit: () -> Unit,
     onCancelEdit: () -> Unit,
+    onAddSelected: () -> Unit,
     onRemoveSelected: () -> Unit,
     onDeleteCodex: () -> Unit,
     isLikesCodex: Boolean,
@@ -389,6 +400,7 @@ private fun CodexDetailHeader(
             editSelection = editSelection,
             onBeginEdit = onBeginEdit,
             onCancelEdit = onCancelEdit,
+            onAddSelected = onAddSelected,
             onRemoveSelected = onRemoveSelected,
             onDeleteCodex = onDeleteCodex,
             isLikesCodex = isLikesCodex,
@@ -402,6 +414,7 @@ private fun CodexDetailHeaderActions(
     editSelection: CodexEditSelection,
     onBeginEdit: () -> Unit,
     onCancelEdit: () -> Unit,
+    onAddSelected: () -> Unit,
     onRemoveSelected: () -> Unit,
     onDeleteCodex: () -> Unit,
     isLikesCodex: Boolean,
@@ -409,6 +422,17 @@ private fun CodexDetailHeaderActions(
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         if (editSelection.active) {
             TextButton(onClick = onCancelEdit) { Text("Cancel") }
+            IconButton(
+                enabled = editSelection.selectedPostIds.isNotEmpty(),
+                onClick = onAddSelected,
+            ) {
+                val selectedCount = editSelection.selectedPostIds.size
+                Icon(
+                    imageVector = Icons.Default.BookmarkAdd,
+                    contentDescription = "Add $selectedCount selected " +
+                        if (selectedCount == 1) "post to another Codex" else "posts to another Codex",
+                )
+            }
             TextButton(
                 enabled = editSelection.selectedPostIds.isNotEmpty(),
                 onClick = onRemoveSelected,

@@ -58,6 +58,7 @@ internal fun SaveToCodexSheet(
     codicesByProfile: Map<String, List<Codex>>,
     codexItemCounts: Map<String, Int>,
     codexCoverCandidates: Map<String, List<CodexCoverCandidate>>,
+    excludedCodexIds: Set<String> = emptySet(),
     onCreateCodex: (String, String) -> Unit,
     onSelectCodex: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -86,11 +87,14 @@ internal fun SaveToCodexSheet(
     }
 
     val selectedProfile = profiles.firstOrNull { profile -> profile.profileId == selectedProfileId }
-    val selectedCodices = codicesByProfile[selectedProfileId].orEmpty()
+    val profileCodices = codicesByProfile[selectedProfileId].orEmpty()
+    val selectedCodices = availableSaveTargetCodices(profileCodices, excludedCodexIds)
 
     SaveToCodexSheetContent(
+        title = if (excludedCodexIds.isEmpty()) "Save to Codex" else "Add to another Codex",
         selectedProfile = selectedProfile,
         selectedCodices = selectedCodices,
+        hasExcludedCodices = profileCodices.size != selectedCodices.size,
         codexItemCounts = codexItemCounts,
         codexCoverCandidates = codexCoverCandidates,
         onSelectCodex = onSelectCodex,
@@ -119,8 +123,10 @@ internal fun SaveToCodexSheet(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SaveToCodexSheetContent(
+    title: String,
     selectedProfile: RecommendationProfile?,
     selectedCodices: List<Codex>,
+    hasExcludedCodices: Boolean,
     codexItemCounts: Map<String, Int>,
     codexCoverCandidates: Map<String, List<CodexCoverCandidate>>,
     onSelectCodex: (String) -> Unit,
@@ -135,7 +141,7 @@ private fun SaveToCodexSheetContent(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            SaveToCodexHeader(onDismiss)
+            SaveToCodexHeader(title, onDismiss)
             selectedProfile?.let { profile ->
                 Text(
                     text = "Profile: ${profile.name}",
@@ -146,6 +152,11 @@ private fun SaveToCodexSheetContent(
             }
             CodexPickerList(
                 codices = selectedCodices,
+                emptyMessage = if (hasExcludedCodices) {
+                    "No other Codices in this profile yet."
+                } else {
+                    "No Codices in this profile yet."
+                },
                 itemCounts = codexItemCounts,
                 coverCandidates = codexCoverCandidates,
                 onSelectCodex = onSelectCodex,
@@ -157,7 +168,7 @@ private fun SaveToCodexSheetContent(
 }
 
 @Composable
-private fun SaveToCodexHeader(onDismiss: () -> Unit) {
+private fun SaveToCodexHeader(title: String, onDismiss: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -166,7 +177,7 @@ private fun SaveToCodexHeader(onDismiss: () -> Unit) {
             Icon(Icons.Default.Close, contentDescription = "Close save menu")
         }
         Text(
-            text = "Save to Codex",
+            text = title,
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.titleLarge,
@@ -179,6 +190,7 @@ private fun SaveToCodexHeader(onDismiss: () -> Unit) {
 @Composable
 private fun CodexPickerList(
     codices: List<Codex>,
+    emptyMessage: String,
     itemCounts: Map<String, Int>,
     coverCandidates: Map<String, List<CodexCoverCandidate>>,
     onSelectCodex: (String) -> Unit,
@@ -190,7 +202,7 @@ private fun CodexPickerList(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(
-                text = "No codices in this profile yet.",
+                text = emptyMessage,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 20.dp),
                 textAlign = TextAlign.Center,
             )
@@ -211,6 +223,11 @@ private fun CodexPickerList(
         }
     }
 }
+
+internal fun availableSaveTargetCodices(
+    codices: List<Codex>,
+    excludedCodexIds: Set<String>,
+): List<Codex> = codices.filterNot { codex -> codex.codexId in excludedCodexIds }
 
 @Composable
 private fun CodexPickerRow(
