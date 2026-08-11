@@ -2,16 +2,7 @@ package com.theoriacodex.data.android.room
 
 import androidx.room.withTransaction
 import com.google.gson.Gson
-import com.google.gson.JsonObject
-import com.google.gson.JsonSyntaxException
-import com.theoriacodex.data.repository.CodexLikesPolicy
-import com.theoriacodex.data.storage.CURRENT_POST_STORAGE_SCHEMA_VERSION
-import com.theoriacodex.data.storage.PostStorageCodec
-import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.data.storage.archiveVerifiedLegacyFile
-import com.theoriacodex.domain.model.Post
-import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.SourceKey
 import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlinx.coroutines.CancellationException
@@ -129,7 +120,7 @@ class RoomLegacyJsonImporter(
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val dao = database.codexLikesDao()
-    private val postCodec = LocalPostPayloadCodec(gson)
+    private val preparer = LegacyDataPreparer(gson, clock)
 
     init {
         require(maxSourceBytes in 1L..Int.MAX_VALUE.toLong()) {
@@ -148,95 +139,120 @@ class RoomLegacyJsonImporter(
         codexFile: File,
         likesFile: File,
     ): LegacyJsonImportResult {
-        val storedProof = database.withTransaction {
-            dao.migrationMetadata(LEGACY_MIGRATION_KEY)?.validateProof()
-        }
-        if (storedProof is StoredProofValidation.Invalid) {
-            return LegacyJsonImportResult.InvalidStoredProof(storedProof.reason)
-        }
-        val previousProof = (storedProof as? StoredProofValidation.Valid)?.proof
-        if (previousProof != null && !previousProof.isFullyArchived) {
-            val currentDestination = database.withTransaction { destinationSummary() }
-            if (!currentDestination.matches(previousProof)) {
-                return LegacyJsonImportResult.DestinationDrift(previousProof, currentDestination)
-            }
-        }
+        val start = resolveImportStart()
+        start.terminalResult?.let { return it }
+        val previousProof = start.previousProof
         val source = withContext(ioDispatcher) {
             readSourcePair(codexFile, likesFile, previousProof)
         }
         if (previousProof != null) {
-            return if (previousProof.sourceFingerprintSha256 == source.identity.sourceFingerprintSha256) {
-                LegacyJsonImportResult.AlreadyImported(previousProof)
-            } else {
-                LegacyJsonImportResult.SplitBrain(
-                    importedProof = previousProof,
-                    incomingSource = source.identity,
-                )
-            }
+            return resultForExistingProof(previousProof, source.identity)
         }
-        val prepared = withContext(ioDispatcher) { prepare(source) }
+        val prepared = withContext(ioDispatcher) { preparer.prepare(source) }
+        return commitPreparedImport(source.identity, prepared)
+    }
 
-        return database.withTransaction {
-            val completed = dao.migrationMetadata(LEGACY_MIGRATION_KEY)
-            if (completed != null) {
-                return@withTransaction when (val validation = completed.validateProof()) {
-                    is StoredProofValidation.Invalid -> {
-                        LegacyJsonImportResult.InvalidStoredProof(validation.reason)
-                    }
-                    is StoredProofValidation.Valid -> {
-                        val currentDestination = destinationSummary()
-                        if (
-                            !validation.proof.isFullyArchived &&
-                            !currentDestination.matches(validation.proof)
-                        ) {
-                            LegacyJsonImportResult.DestinationDrift(
-                                validation.proof,
-                                currentDestination,
-                            )
-                        } else if (
-                            validation.proof.sourceFingerprintSha256 ==
-                            source.identity.sourceFingerprintSha256
-                        ) {
-                            LegacyJsonImportResult.AlreadyImported(validation.proof)
-                        } else {
-                            LegacyJsonImportResult.SplitBrain(validation.proof, source.identity)
-                        }
-                    }
-                }
-            }
-
-            val expectedDestination = prepared.destinationSummary()
-            val currentDestination = destinationSummary()
-            if (!currentDestination.isEmpty && currentDestination != expectedDestination) {
-                return@withTransaction LegacyJsonImportResult.DestinationConflict(
-                    incomingSource = prepared.sourceSummary(source.identity),
-                    destination = currentDestination,
-                )
-            }
-            val adoptedExistingDestination = !currentDestination.isEmpty
-            if (!adoptedExistingDestination) {
-                insertPrepared(prepared)
-            }
-            val verifiedDestination = destinationSummary()
-            if (verifiedDestination != expectedDestination) {
-                throw LegacyDestinationVerificationException(
-                    "Room destination ${verifiedDestination.fingerprintSha256} does not match " +
-                        "prepared legacy destination ${expectedDestination.fingerprintSha256}"
-                )
-            }
-
-            val proof = createProof(
-                source = source.identity,
-                destination = verifiedDestination,
-                completedAtEpochMs = clock(),
+    private suspend fun resolveImportStart(): ImportStart {
+        val validation = database.withTransaction {
+            dao.migrationMetadata(LEGACY_MIGRATION_KEY)?.validateProof()
+        }
+        if (validation == null) return ImportStart()
+        if (validation is StoredProofValidation.Invalid) {
+            return ImportStart(
+                terminalResult = LegacyJsonImportResult.InvalidStoredProof(validation.reason)
             )
-            dao.insertMigrationMetadata(proof.toEntity())
-            if (adoptedExistingDestination) {
-                LegacyJsonImportResult.AdoptedVerifiedDestination(proof)
-            } else {
-                LegacyJsonImportResult.Imported(proof)
-            }
         }
+        val proof = (validation as StoredProofValidation.Valid).proof
+        if (proof.isFullyArchived) return ImportStart(previousProof = proof)
+        val currentDestination = database.withTransaction { destinationSummary() }
+        return if (currentDestination.matches(proof)) {
+            ImportStart(previousProof = proof)
+        } else {
+            ImportStart(
+                terminalResult = LegacyJsonImportResult.DestinationDrift(proof, currentDestination)
+            )
+        }
+    }
+
+    private fun resultForExistingProof(
+        proof: LegacyMigrationProof,
+        source: LegacySourceIdentity,
+    ): LegacyJsonImportResult {
+        return if (proof.sourceFingerprintSha256 == source.sourceFingerprintSha256) {
+            LegacyJsonImportResult.AlreadyImported(proof)
+        } else {
+            LegacyJsonImportResult.SplitBrain(proof, source)
+        }
+    }
+
+    private suspend fun commitPreparedImport(
+        source: LegacySourceIdentity,
+        prepared: PreparedLegacyData,
+    ): LegacyJsonImportResult = database.withTransaction {
+        val completed = dao.migrationMetadata(LEGACY_MIGRATION_KEY)
+        if (completed != null) {
+            return@withTransaction resultForConcurrentCompletion(completed, source)
+        }
+        commitPreparedDestination(source, prepared)
+    }
+
+    private fun resultForConcurrentCompletion(
+        completed: MigrationMetadataEntity,
+        source: LegacySourceIdentity,
+    ): LegacyJsonImportResult {
+        return when (val validation = completed.validateProof()) {
+            is StoredProofValidation.Invalid -> {
+                LegacyJsonImportResult.InvalidStoredProof(validation.reason)
+            }
+            is StoredProofValidation.Valid -> resultForValidatedCompletion(validation.proof, source)
+        }
+    }
+
+    private fun resultForValidatedCompletion(
+        proof: LegacyMigrationProof,
+        source: LegacySourceIdentity,
+    ): LegacyJsonImportResult {
+        val currentDestination = destinationSummary()
+        if (!proof.isFullyArchived && !currentDestination.matches(proof)) {
+            return LegacyJsonImportResult.DestinationDrift(proof, currentDestination)
+        }
+        return resultForExistingProof(proof, source)
+    }
+
+    private fun commitPreparedDestination(
+        source: LegacySourceIdentity,
+        prepared: PreparedLegacyData,
+    ): LegacyJsonImportResult {
+        val expectedDestination = prepared.destinationSummary()
+        val currentDestination = destinationSummary()
+        if (!currentDestination.isEmpty && currentDestination != expectedDestination) {
+            return LegacyJsonImportResult.DestinationConflict(
+                incomingSource = prepared.sourceSummary(source),
+                destination = currentDestination,
+            )
+        }
+        val adoptedExistingDestination = !currentDestination.isEmpty
+        if (!adoptedExistingDestination) insertPrepared(prepared)
+        val verifiedDestination = destinationSummary()
+        verifyPreparedDestination(verifiedDestination, expectedDestination)
+        val proof = createProof(source, verifiedDestination, clock())
+        dao.insertMigrationMetadata(proof.toEntity())
+        return if (adoptedExistingDestination) {
+            LegacyJsonImportResult.AdoptedVerifiedDestination(proof)
+        } else {
+            LegacyJsonImportResult.Imported(proof)
+        }
+    }
+
+    private fun verifyPreparedDestination(
+        actual: LegacyDestinationSummary,
+        expected: LegacyDestinationSummary,
+    ) {
+        if (actual == expected) return
+        throw LegacyDestinationVerificationException(
+            "Room destination ${actual.fingerprintSha256} does not match " +
+                "prepared legacy destination ${expected.fingerprintSha256}"
+        )
     }
 
     suspend fun archiveImportedSources(
@@ -401,33 +417,52 @@ class RoomLegacyJsonImporter(
         val archiveFile = archiveDirectory.resolve(
             "${source.name}.${expectedChecksum.take(16)}.imported"
         )
+        archiveIntegrityFailure(source, archiveFile, expectedChecksum)?.let { return it }
+        if (!source.exists()) return missingSourceOutcome(archiveFile)
+        if (archiveFile.exists()) return removeSourceWithVerifiedArchive(source)
+        archiveVerifiedLegacyFile(source, archiveFile)
+        return verifyArchiveMove(source, archiveFile, expectedChecksum)
+    }
 
+    private fun archiveIntegrityFailure(
+        source: File,
+        archiveFile: File,
+        expectedChecksum: String,
+    ): ArchiveFileOutcome.Blocked? {
         if (archiveFile.exists() && fileChecksum(archiveFile) != expectedChecksum) {
             return ArchiveFileOutcome.Blocked("archive destination exists with different content")
         }
         if (source.exists() && fileChecksum(source) != expectedChecksum) {
             return ArchiveFileOutcome.Blocked("legacy source changed after its migration proof")
         }
-        if (!source.exists()) {
-            return if (archiveFile.exists()) {
-                ArchiveFileOutcome.Success
-            } else {
-                ArchiveFileOutcome.Blocked("source and verified archive are both missing")
-            }
-        }
+        return null
+    }
 
-        if (archiveFile.exists()) {
-            return if (source.delete()) {
-                ArchiveFileOutcome.Success
-            } else {
-                ArchiveFileOutcome.Blocked("verified archive exists but source could not be removed")
-            }
+    private fun missingSourceOutcome(archiveFile: File): ArchiveFileOutcome {
+        return if (archiveFile.exists()) {
+            ArchiveFileOutcome.Success
+        } else {
+            ArchiveFileOutcome.Blocked("source and verified archive are both missing")
         }
+    }
 
-        archiveVerifiedLegacyFile(source, archiveFile)
-        return if (
-            !source.exists() && archiveFile.exists() && fileChecksum(archiveFile) == expectedChecksum
-        ) {
+    private fun removeSourceWithVerifiedArchive(source: File): ArchiveFileOutcome {
+        return if (source.delete()) {
+            ArchiveFileOutcome.Success
+        } else {
+            ArchiveFileOutcome.Blocked("verified archive exists but source could not be removed")
+        }
+    }
+
+    private fun verifyArchiveMove(
+        source: File,
+        archiveFile: File,
+        expectedChecksum: String,
+    ): ArchiveFileOutcome {
+        val verified = !source.exists() &&
+            archiveFile.exists() &&
+            fileChecksum(archiveFile) == expectedChecksum
+        return if (verified) {
             ArchiveFileOutcome.Success
         } else {
             ArchiveFileOutcome.Blocked("archive move completed without a verifiable destination")
@@ -479,205 +514,6 @@ class RoomLegacyJsonImporter(
         return SourceComponentIdentity(source.exists, sourceChecksum(source))
     }
 
-    private fun prepare(source: LegacySourcePair): PreparedLegacyData {
-        val codexStore = parseSource(
-            source = source.codex,
-            label = LEGACY_CODEX_FILE_NAME,
-            type = LegacyCodexStoreFile::class.java,
-            emptyValue = LegacyCodexStoreFile(),
-        )
-        val likesStore = parseSource(
-            source = source.likes,
-            label = LEGACY_LIKES_FILE_NAME,
-            type = LegacyLikesStoreFile::class.java,
-            emptyValue = LegacyLikesStoreFile(),
-        )
-
-        val codicesById = linkedMapOf<String, CodexEntity>()
-        codexStore.codices.orEmpty().forEachIndexed { index, record ->
-            val value = record ?: migrationFailure("Codex record at index $index is null")
-            val id = requireNonBlankKey(value.codexId, "Codex record at index $index has no id")
-            if (id in codicesById) {
-                migrationFailure("Codex id '$id' appears more than once")
-            }
-            codicesById[id] = CodexEntity(
-                id,
-                value.name?.trim()?.ifBlank { "Codex" } ?: "Codex",
-                value.createdAtEpochMs ?: 0L,
-                codicesById.size,
-            )
-        }
-        val codices = codicesById.values.toList()
-
-        val postsById = linkedMapOf<PostId, Post>()
-        codexStore.posts.orEmpty().forEachIndexed { index, record ->
-            val post = decodeLegacyPost(record, index)
-            if (post.id in postsById) {
-                migrationFailure("Post id '${post.id.source}:${post.id.sourcePostId}' appears more than once")
-            }
-            postsById[post.id] = post
-        }
-        val posts = postsById.values.map { post ->
-            PostEntity(post.id.source.name, post.id.sourcePostId, postCodec.encode(post))
-        }
-
-        val itemsByKey = linkedMapOf<Triple<String, SourceKey, String>, CodexItemEntity>()
-        codexStore.items.orEmpty().forEach { (mapCodexId, records) ->
-            val codexId = requireNonBlankKey(mapCodexId, "Codex item group has no Codex id")
-            if (codexId !in codicesById) {
-                migrationFailure("Codex item group '$codexId' references an unknown Codex")
-            }
-            val group = records
-                ?: migrationFailure("Codex item group '$codexId' is null")
-            group.forEachIndexed { index, record ->
-                val value = record
-                    ?: migrationFailure("Codex item '$codexId'[$index] is null")
-                val recordCodexId = requireNonBlankKey(
-                    value.codexId,
-                    "Codex item '$codexId'[$index] has no record Codex id",
-                )
-                if (recordCodexId != codexId) {
-                    migrationFailure(
-                        "Codex item '$codexId'[$index] declares mismatched Codex '$recordCodexId'"
-                    )
-                }
-                val sourceKey = requireSource(
-                    value.source,
-                    "Codex item '$codexId'[$index]",
-                )
-                val sourcePostId = requireNonBlankKey(
-                    value.sourcePostId,
-                    "Codex item '$codexId'[$index] has no post id",
-                )
-                val postId = PostId(sourceKey, sourcePostId)
-                if (postId !in postsById) {
-                    migrationFailure(
-                        "Codex item '$codexId'[$index] references missing post " +
-                            "'${sourceKey.name}:$sourcePostId'"
-                    )
-                }
-                val key = Triple(codexId, sourceKey, sourcePostId)
-                if (key in itemsByKey) {
-                    migrationFailure(
-                        "Codex item '${sourceKey.name}:$sourcePostId' appears more than once in '$codexId'"
-                    )
-                }
-                itemsByKey[key] = CodexItemEntity(
-                    codexId,
-                    sourceKey.name,
-                    sourcePostId,
-                    value.savedAtEpochMs ?: 0L,
-                )
-            }
-        }
-
-        val likesByKey = linkedMapOf<Triple<String, SourceKey, String>, LikedPostEntity>()
-        likesStore.likes.orEmpty().forEachIndexed { index, record ->
-            val value = record ?: migrationFailure("Like record at index $index is null")
-            val sourceKey = requireSource(value.source, "Like record at index $index")
-            val sourcePostId = requireNonBlankKey(
-                value.sourcePostId,
-                "Like record at index $index has no post id",
-            )
-            val profileId = parseStoredProfileId(value.profileId, value.profile)
-            val key = Triple(profileId, sourceKey, sourcePostId)
-            if (key in likesByKey) {
-                migrationFailure(
-                    "Like '${sourceKey.name}:$sourcePostId' appears more than once for profile '$profileId'"
-                )
-            }
-            val tags = try {
-                CodexLikesPolicy.normalizeLikedTags(value.tags.orEmpty())
-            } catch (error: RuntimeException) {
-                migrationFailure("Like record at index $index contains invalid tags", error)
-            }
-            likesByKey[key] = LikedPostEntity(
-                profileId,
-                sourceKey.name,
-                sourcePostId,
-                value.likedAtEpochMs ?: clock(),
-                gson.toJson(tags),
-            )
-        }
-
-        return PreparedLegacyData(
-            codices = codices,
-            posts = posts,
-            items = itemsByKey.values.toList(),
-            likes = likesByKey.values.toList(),
-        )
-    }
-
-    private fun decodeLegacyPost(record: JsonObject?, index: Int): Post {
-        val value = record ?: migrationFailure("Post record at index $index is null")
-        val label = "Post record at index $index"
-        val sourceName = requiredJsonString(value, "source", "$label has no source")
-        val sourceKey = requireSource(sourceName, label)
-        val sourcePostId = requiredJsonString(value, "sourcePostId", "$label has no post id")
-        validatePostSchemaVersion(value, label)
-
-        val storageRecord = try {
-            gson.fromJson(value, PostStorageRecord::class.java)
-                ?: migrationFailure("$label decoded to null")
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: RuntimeException) {
-            migrationFailure("$label does not match the legacy Post schema", error)
-        }
-        val post = try {
-            PostStorageCodec.decode(storageRecord)
-                ?: migrationFailure("$label cannot be decoded by Post storage schema v1")
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: RuntimeException) {
-            migrationFailure("$label contains invalid Post values", error)
-        }
-        val expectedId = PostId(sourceKey, sourcePostId)
-        if (post.id != expectedId) {
-            migrationFailure("$label changed identity while decoding")
-        }
-        return post
-    }
-
-    private fun validatePostSchemaVersion(record: JsonObject, label: String) {
-        val element = record.get("schemaVersion") ?: return
-        if (element.isJsonNull) return
-        if (!element.isJsonPrimitive || !element.asJsonPrimitive.isNumber) {
-            migrationFailure("$label has a non-integer Post schema version")
-        }
-        val raw = element.asJsonPrimitive.asString
-        if (!raw.matches(LEGACY_INTEGER_PATTERN)) {
-            migrationFailure("$label has a non-integer Post schema version")
-        }
-        val version = raw.toIntOrNull()
-            ?: migrationFailure("$label has a Post schema version outside the integer range")
-        if (version != CURRENT_POST_STORAGE_SCHEMA_VERSION) {
-            migrationFailure("$label uses unsupported future Post schema version $version")
-        }
-    }
-
-    private fun requiredJsonString(record: JsonObject, field: String, failure: String): String {
-        val element = record.get(field) ?: migrationFailure(failure)
-        if (!element.isJsonPrimitive || !element.asJsonPrimitive.isString) {
-            migrationFailure(failure)
-        }
-        return requireNonBlankKey(element.asString, failure)
-    }
-
-    private fun requireSource(raw: String?, label: String): SourceKey {
-        val normalized = requireNonBlankKey(raw, "$label has no source")
-        return normalized.toSourceKeyOrNull()
-            ?: migrationFailure("$label uses unknown source '$normalized'")
-    }
-
-    private fun requireNonBlankKey(raw: String?, failure: String): String {
-        return raw?.trim()?.takeIf(String::isNotBlank) ?: migrationFailure(failure)
-    }
-
-    private fun migrationFailure(message: String, cause: Throwable? = null): Nothing {
-        throw LegacyJsonMigrationException(message, cause)
-    }
-
     private fun readBounded(file: File): LegacySource {
         if (!file.exists()) return LegacySource(exists = false, bytes = byteArrayOf())
         val size = file.length()
@@ -705,23 +541,6 @@ class RoomLegacyJsonImporter(
         return LegacySource(exists = true, bytes = output.toByteArray())
     }
 
-    private fun <T> parseSource(
-        source: LegacySource,
-        label: String,
-        type: Class<T>,
-        emptyValue: T,
-    ): T {
-        if (!source.exists || source.bytes.isEmpty() || source.bytes.all(Byte::isWhitespaceByte)) {
-            return emptyValue
-        }
-        return try {
-            gson.fromJson(source.bytes.decodeToString(), type)
-                ?: throw LegacyJsonMigrationException("$label decoded to null")
-        } catch (error: JsonSyntaxException) {
-            throw LegacyJsonMigrationException("$label is not valid legacy JSON", error)
-        }
-    }
-
     private fun sourceChecksum(source: LegacySource): String {
         val prefix = if (source.exists) "present\n" else "missing\n"
         return sha256(prefix.encodeToByteArray() + source.bytes)
@@ -743,18 +562,23 @@ class RoomLegacyJsonImporter(
     }
 }
 
-private data class LegacySource(
+private data class ImportStart(
+    val previousProof: LegacyMigrationProof? = null,
+    val terminalResult: LegacyJsonImportResult? = null,
+)
+
+internal data class LegacySource(
     val exists: Boolean,
     val bytes: ByteArray,
 )
 
-private data class LegacySourcePair(
+internal data class LegacySourcePair(
     val codex: LegacySource,
     val likes: LegacySource,
     val identity: LegacySourceIdentity,
 )
 
-private data class PreparedLegacyData(
+internal data class PreparedLegacyData(
     val codices: List<CodexEntity>,
     val posts: List<PostEntity>,
     val items: List<CodexItemEntity>,
@@ -784,10 +608,6 @@ private sealed interface ArchiveFileOutcome {
     data object Success : ArchiveFileOutcome
     data class Blocked(val reason: String) : ArchiveFileOutcome
 }
-
-private fun Byte.isWhitespaceByte(): Boolean = toInt().toChar().isWhitespace()
-
-private val LEGACY_INTEGER_PATTERN = Regex("-?(0|[1-9][0-9]*)")
 
 private fun LegacyDestinationSummary.matches(proof: LegacyMigrationProof): Boolean {
     return fingerprintSha256 == proof.destinationFingerprintSha256 &&

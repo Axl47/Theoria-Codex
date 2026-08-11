@@ -126,168 +126,44 @@ class RoomLegacyJsonImporterTest {
 
     @Test
     fun `invalid legacy records fail closed without certifying or archiving partial data`() = runTest {
-        val cases = listOf(
-            InvalidLegacyCase(
-                label = "null Codex",
-                codexJson = mutateValidCodex { root ->
-                    root.getAsJsonArray("codices").add(JsonNull.INSTANCE)
-                },
-            ),
-            InvalidLegacyCase(
-                label = "null Post",
-                codexJson = mutateValidCodex { root ->
-                    root.getAsJsonArray("posts").add(JsonNull.INSTANCE)
-                },
-            ),
-            InvalidLegacyCase(
-                label = "null Codex item",
-                codexJson = mutateValidCodex { root ->
-                    root.getAsJsonObject("items")
-                        .getAsJsonArray("legacy")
-                        .add(JsonNull.INSTANCE)
-                },
-            ),
-            InvalidLegacyCase(
-                label = "null Like",
-                likesJson = mutateValidLikes { root ->
-                    root.getAsJsonArray("likes").add(JsonNull.INSTANCE)
-                },
-            ),
-            InvalidLegacyCase(
-                label = "duplicate Codex id",
-                codexJson = mutateValidCodex { root ->
-                    val codices = root.getAsJsonArray("codices")
-                    codices.add(codices[0].deepCopy())
-                },
-            ),
-            InvalidLegacyCase(
-                label = "duplicate Post id",
-                codexJson = mutateValidCodex { root ->
-                    val posts = root.getAsJsonArray("posts")
-                    posts.add(posts[0].deepCopy())
-                },
-            ),
-            InvalidLegacyCase(
-                label = "duplicate Codex item key",
-                codexJson = mutateValidCodex { root ->
-                    val items = root.getAsJsonObject("items").getAsJsonArray("legacy")
-                    items.add(items[0].deepCopy())
-                },
-            ),
-            InvalidLegacyCase(
-                label = "future Post schema",
-                codexJson = mutateValidCodex { root ->
-                    root.getAsJsonArray("posts")[0].asJsonObject.addProperty("schemaVersion", 99)
-                },
-            ),
-            InvalidLegacyCase(
-                label = "item map and row Codex mismatch",
-                codexJson = mutateValidCodex { root ->
-                    root.getAsJsonObject("items")
-                        .getAsJsonArray("legacy")[0]
-                        .asJsonObject
-                        .addProperty("codexId", "different")
-                },
-            ),
-            InvalidLegacyCase(
-                label = "item group references unknown Codex",
-                codexJson = mutateValidCodex { root ->
-                    val items = root.getAsJsonObject("items")
-                    items.add("missing", items.remove("legacy"))
-                },
-            ),
-            InvalidLegacyCase(
-                label = "item references missing Post",
-                codexJson = mutateValidCodex { root ->
-                    root.getAsJsonObject("items")
-                        .getAsJsonArray("legacy")[0]
-                        .asJsonObject
-                        .addProperty("sourcePostId", "missing")
-                },
-            ),
-            InvalidLegacyCase(
-                label = "item has unknown source",
-                codexJson = mutateValidCodex { root ->
-                    root.getAsJsonObject("items")
-                        .getAsJsonArray("legacy")[0]
-                        .asJsonObject
-                        .addProperty("source", "UNKNOWN")
-                },
-            ),
-            InvalidLegacyCase(
-                label = "Post has unknown source",
-                codexJson = mutateValidCodex { root ->
-                    root.getAsJsonArray("posts")[0]
-                        .asJsonObject
-                        .addProperty("source", "UNKNOWN")
-                },
-            ),
-            InvalidLegacyCase(
-                label = "duplicate Like key",
-                likesJson = mutateValidLikes { root ->
-                    val likes = root.getAsJsonArray("likes")
-                    likes.add(likes[0].deepCopy())
-                },
-            ),
-            InvalidLegacyCase(
-                label = "Like has unknown source",
-                likesJson = mutateValidLikes { root ->
-                    root.getAsJsonArray("likes")[0]
-                        .asJsonObject
-                        .addProperty("source", "UNKNOWN")
-                },
-            ),
-            InvalidLegacyCase(
-                label = "Like has blank post id",
-                likesJson = mutateValidLikes { root ->
-                    root.getAsJsonArray("likes")[0]
-                        .asJsonObject
-                        .addProperty("sourcePostId", " ")
-                },
-            ),
-        )
         val importer = RoomLegacyJsonImporter(database)
         val dao = database.codexLikesDao()
+        invalidLegacyCases().forEach { case -> verifyInvalidLegacyCase(case, importer, dao) }
+    }
 
-        cases.forEach { case ->
-            writeCodexFile(case.codexJson)
-            writeLikesFile(case.likesJson)
+    private suspend fun verifyInvalidLegacyCase(
+        case: InvalidLegacyCase,
+        importer: RoomLegacyJsonImporter,
+        dao: CodexLikesDao,
+    ) {
+        writeCodexFile(case.codexJson)
+        writeLikesFile(case.likesJson)
+        val failed = runCatching { importer.importIfNeeded(directory) }
 
-            val failed = runCatching { importer.importIfNeeded(directory) }
+        assertTrue(case.label, failed.exceptionOrNull() is LegacyJsonMigrationException)
+        assertLegacySourcesPreserved(case)
+        assertTrue("${case.label}: no Codex rows", dao.codices().isEmpty())
+        assertTrue("${case.label}: no Post rows", dao.posts().isEmpty())
+        assertTrue("${case.label}: no membership rows", dao.codexItems().isEmpty())
+        assertTrue("${case.label}: no Like rows", dao.allLikes().isEmpty())
+        assertEquals(
+            "${case.label}: no migration proof",
+            null,
+            dao.migrationMetadata(LEGACY_MIGRATION_KEY),
+        )
+        assertTrue(
+            "${case.label}: archive must not be created",
+            !directory.resolve(RoomLegacyJsonImporter.DEFAULT_ARCHIVE_DIRECTORY_NAME).exists(),
+        )
+    }
 
-            assertTrue(case.label, failed.exceptionOrNull() is LegacyJsonMigrationException)
-            assertTrue(
-                "${case.label}: Codex source must remain retryable",
-                directory.resolve(RoomLegacyJsonImporter.LEGACY_CODEX_FILE_NAME).exists(),
-            )
-            assertTrue(
-                "${case.label}: Likes source must remain retryable",
-                directory.resolve(RoomLegacyJsonImporter.LEGACY_LIKES_FILE_NAME).exists(),
-            )
-            assertEquals(
-                "${case.label}: Codex source changed",
-                case.codexJson,
-                directory.resolve(RoomLegacyJsonImporter.LEGACY_CODEX_FILE_NAME).readText(),
-            )
-            assertEquals(
-                "${case.label}: Likes source changed",
-                case.likesJson,
-                directory.resolve(RoomLegacyJsonImporter.LEGACY_LIKES_FILE_NAME).readText(),
-            )
-            assertTrue("${case.label}: no Codex rows", dao.codices().isEmpty())
-            assertTrue("${case.label}: no Post rows", dao.posts().isEmpty())
-            assertTrue("${case.label}: no membership rows", dao.codexItems().isEmpty())
-            assertTrue("${case.label}: no Like rows", dao.allLikes().isEmpty())
-            assertEquals(
-                "${case.label}: no migration proof",
-                null,
-                dao.migrationMetadata(LEGACY_MIGRATION_KEY),
-            )
-            assertTrue(
-                "${case.label}: archive must not be created",
-                !directory.resolve(RoomLegacyJsonImporter.DEFAULT_ARCHIVE_DIRECTORY_NAME).exists(),
-            )
-        }
+    private fun assertLegacySourcesPreserved(case: InvalidLegacyCase) {
+        val codexFile = directory.resolve(RoomLegacyJsonImporter.LEGACY_CODEX_FILE_NAME)
+        val likesFile = directory.resolve(RoomLegacyJsonImporter.LEGACY_LIKES_FILE_NAME)
+        assertTrue("${case.label}: Codex source must remain retryable", codexFile.exists())
+        assertTrue("${case.label}: Likes source must remain retryable", likesFile.exists())
+        assertEquals("${case.label}: Codex source changed", case.codexJson, codexFile.readText())
+        assertEquals("${case.label}: Likes source changed", case.likesJson, likesFile.readText())
     }
 
     @Test
@@ -419,6 +295,76 @@ private data class InvalidLegacyCase(
     val codexJson: String = validCodexJson(),
     val likesJson: String = validLikesJson(),
 )
+
+private fun invalidLegacyCases(): List<InvalidLegacyCase> {
+    return invalidCodexCases() + invalidItemCases() + invalidLikeCases()
+}
+
+private fun invalidCodexCases(): List<InvalidLegacyCase> = listOf(
+    InvalidLegacyCase("null Codex", mutateValidCodex { root ->
+        root.getAsJsonArray("codices").add(JsonNull.INSTANCE)
+    }),
+    InvalidLegacyCase("null Post", mutateValidCodex { root ->
+        root.getAsJsonArray("posts").add(JsonNull.INSTANCE)
+    }),
+    InvalidLegacyCase("duplicate Codex id", mutateValidCodex { root ->
+        val codices = root.getAsJsonArray("codices")
+        codices.add(codices[0].deepCopy())
+    }),
+    InvalidLegacyCase("duplicate Post id", mutateValidCodex { root ->
+        val posts = root.getAsJsonArray("posts")
+        posts.add(posts[0].deepCopy())
+    }),
+    InvalidLegacyCase("future Post schema", mutateValidCodex { root ->
+        root.getAsJsonArray("posts")[0].asJsonObject.addProperty("schemaVersion", 99)
+    }),
+    InvalidLegacyCase("Post has unknown source", mutateValidCodex { root ->
+        root.getAsJsonArray("posts")[0].asJsonObject.addProperty("source", "UNKNOWN")
+    }),
+)
+
+private fun invalidItemCases(): List<InvalidLegacyCase> = listOf(
+    InvalidLegacyCase("null Codex item", mutateValidCodex { root ->
+        root.getAsJsonObject("items").getAsJsonArray("legacy").add(JsonNull.INSTANCE)
+    }),
+    InvalidLegacyCase("duplicate Codex item key", mutateValidCodex { root ->
+        val items = root.getAsJsonObject("items").getAsJsonArray("legacy")
+        items.add(items[0].deepCopy())
+    }),
+    InvalidLegacyCase("item map and row Codex mismatch", mutateValidCodex { root ->
+        root.legacyItem().addProperty("codexId", "different")
+    }),
+    InvalidLegacyCase("item group references unknown Codex", mutateValidCodex { root ->
+        val items = root.getAsJsonObject("items")
+        items.add("missing", items.remove("legacy"))
+    }),
+    InvalidLegacyCase("item references missing Post", mutateValidCodex { root ->
+        root.legacyItem().addProperty("sourcePostId", "missing")
+    }),
+    InvalidLegacyCase("item has unknown source", mutateValidCodex { root ->
+        root.legacyItem().addProperty("source", "UNKNOWN")
+    }),
+)
+
+private fun invalidLikeCases(): List<InvalidLegacyCase> = listOf(
+    InvalidLegacyCase("null Like", likesJson = mutateValidLikes { root ->
+        root.getAsJsonArray("likes").add(JsonNull.INSTANCE)
+    }),
+    InvalidLegacyCase("duplicate Like key", likesJson = mutateValidLikes { root ->
+        val likes = root.getAsJsonArray("likes")
+        likes.add(likes[0].deepCopy())
+    }),
+    InvalidLegacyCase("Like has unknown source", likesJson = mutateValidLikes { root ->
+        root.getAsJsonArray("likes")[0].asJsonObject.addProperty("source", "UNKNOWN")
+    }),
+    InvalidLegacyCase("Like has blank post id", likesJson = mutateValidLikes { root ->
+        root.getAsJsonArray("likes")[0].asJsonObject.addProperty("sourcePostId", " ")
+    }),
+)
+
+private fun com.google.gson.JsonObject.legacyItem(): com.google.gson.JsonObject {
+    return getAsJsonObject("items").getAsJsonArray("legacy")[0].asJsonObject
+}
 
 private fun mutateValidCodex(mutation: (com.google.gson.JsonObject) -> Unit): String {
     val root = JsonParser.parseString(validCodexJson()).asJsonObject

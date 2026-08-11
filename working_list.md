@@ -1175,3 +1175,23 @@ None.
   - Evidence: a stale exiting claim cannot consume a newer retained session, while the matching incoming claim transfers it successfully.
 - [x] Run the bounded host validation batch and record the result.
   - Evidence: 11 focused Viewer tests pass with zero failures/errors/skips; `:app:compileDebugKotlin` passes; `git diff --check` passes. `:app:detektDebug` reached analysis but remains red on the same four inherited findings in untouched Codex/Search files and reported compiler-analysis warnings.
+
+## Current Task: Clear Legacy Import Detekt Debt Before v0.9.0
+
+### In Progress
+
+- [~] Commit and push the Detekt repair, then require fresh exact-SHA GitHub gates before tagging.
+
+### Pending
+
+### Done
+
+- [x] Freeze the scope to the six reported Detekt findings; no schema, repository contract, or user-facing behavior changes.
+- [x] Trace the importer hotspots and preserve fail-closed, split-brain, archive, and destination-verification outcomes.
+- [x] Split import orchestration and archive verification into focused helpers; move record decoding/preparation to `LegacyDataPreparer`.
+- [x] Split invalid-record fixtures and per-case assertions without reducing coverage.
+- [x] Pass focused importer tests, instrumentation compilation, and module Detekt in one batch.
+- [x] Pass the full host unit/compile/Detekt batch.
+  - Evidence: `:core-data-android:testDebugUnitTest`, `:core-data-android:detekt`, `:app:detektDebug`, `:app:compileDebugAndroidTestKotlin`, and `:app:testDebugUnitTest` completed successfully.
+- [x] Rebuild the v0.9.0 release and verify both obfuscated JSON contracts.
+  - Evidence: `:app:assembleRelease`, `:app:verifyReleaseJsonContracts`, and `:app:verifyReleaseAcceptanceJsonContracts` completed successfully; release metadata remains version 0.9.0 / code 1500000900.
