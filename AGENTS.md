@@ -46,14 +46,6 @@ The Search route applies persisted scroll position once when the route is restor
 
 The collapsed Search field renders applied context through its existing unfocused placeholder slot. Build that summary only from `applied` query/source state plus current visibility-filter state; never copy the summary into the real text input or present draft terms as applied. Keep it one line with ellipsis and do not add a separate applied-query row.
 
-## Viewer Session Handoff
-
-Each Viewer navigation entry claims the Activity-retained launch payload by its unique session ID once at route startup. Navigation transitions keep an exiting Viewer composed briefly, so it must never observe and consume a newer payload retained for rapid re-entry. A mismatched claim stays in the retention owner for the incoming entry. While that startup handoff or compact restoration is pending, render an empty Viewer surface rather than presenting a false missing-session state; only the completed unavailable-restoration path may report an expired session.
-
-## Browsing Destination Readiness
-
-`BrowsingDestinationStateBoundary` must not mount Search or For You with synthetic `AppSettings()` or empty-like placeholders while repository flows are still loading. Wait for the first authoritative settings, liked-ID, and active-profile likes emissions. For You retains its current feed in its navigation-scoped owner/coordinator; a transient zero-like placeholder clears that cache and regenerates the same recommendation when real data arrives.
-
 ## Recents Section Identity
 
 Watched and Codex are independent Recents memberships, not mutually exclusive labels derived from the latest Viewer origin. One canonical post may have one row in each section while sharing the same `posts` payload. Keep section in the `recent_watched` identity, preserve exact launch origin as row metadata, carry the section explicitly through `ViewerLaunchContext` when reopening from Recents, and clear or route by section. The combined All activity view may collapse duplicate canonical posts to the newest membership, but the filtered sections must retain both.
@@ -63,10 +55,6 @@ FYP Recents stores recommendation searches, never the posts returned by those se
 Recent Searches preserve the accepted execution kind and participating sources. Temporary multi-source executions are recorded and reopen as Multi-Search with their explicit source set, but they remain excluded from durable applied-query and Search-scroll restoration. Room stores this metadata in the versioned recent-search wrapper inside the existing query payload column; keep decoding the legacy raw Query payload so existing history remains readable without a database migration.
 
 Watched Recents retains one-based multi-media progress as the highest media number ever made visible for that post and section. Viewer post visibility remains the one-shot owner of lifetime watched statistics; later media-page changes update only the monotonic Recents progress and must not reorder history or rewrite the shared post payload. Existing rows start at media 1, and only the Watched card badge presents `highest/total`; Codex and other card surfaces keep the total-only badge.
-
-## Legacy JSON Recovery
-
-`AtomicJsonFileStore` owns verified quarantine for the remaining live whole-file JSON stores: applied queries, Recents, updater state, and tag suggestions. A present malformed, empty, null, or invalid UTF-8 file is never a normal miss: preserve and verify its exact bytes under the deterministic filename/byte-count/SHA-256 identity before removing the live name or returning a default. Register each production owner with the shared `LegacyJsonRecoveryRegistry` so verified quarantines are rediscovered across process restart and surfaced through Settings. Do not apply this fallback to DataStore newer-schema failures or Room migration conflicts; those contracts remain fail-closed.
 
 ## Feed Autoplay Performance
 
@@ -104,12 +92,6 @@ Every debug-signed or device-testable application variant must use a non-product
 
 For a new or changed device command, use a host-only dry run to inspect its task graph, verify output metadata or the packaged manifest for every APK it can install, and confirm that no production-ID target or package-mutating listener is configured. If that proof is incomplete, stop before connecting to the device. Use `installDebug` only for the isolated Debug app; production releases must be installed only through the signed release/update path.
 
-## Settings Sections
-
-Settings cards use the shared `SettingsSection` composable with independently persisted expanded state owned by `TheoriaAppContent` and stored through `UiRestoreRepository`, so leaving and reopening the app does not reset the user's choices. New settings groups should use the same header and right-side chevron pattern rather than introducing another section-specific collapse control.
-
-First-open Settings sections default collapsed only when their persistence key is absent; explicit stored true or false choices remain authoritative. Collapsed summaries expose compact repeated-use state only. Keep credentials, per-source weights, cache-clearing actions, and other sensitive or destructive controls inside expanded content.
-
 ## Local Statistics
 
 `StatisticsRepository` owns forward-only, on-device lifetime counters; it must not duplicate current Codex library state. Saved post, saved source, saved tag, and top-Codex-source statistics are live projections of the active profile's visible Codices, deduplicated by canonical `Post.id`. Lifetime counters begin when the statistics store is introduced and are not backfilled from clearable Recents data.
@@ -133,12 +115,6 @@ Codex Automatic rules are source-aware canonical tag memberships owned by each u
 `MigrationTestHelper.runMigrationsAndValidate` returns a raw validation connection with SQLite foreign-key enforcement disabled. Migration tests that assert `ON DELETE CASCADE` behavior must enable `PRAGMA foreign_keys = ON` on that connection before performing the delete.
 
 Codex detail filtering is route-local and uses the shared feed filter FAB/sheet. Repository observation remains the authority for Newest, Oldest, and By source ordering; local filters preserve that order. Source options are the enabled sources represented in the collection. Language and Full Color are offered only when enabled NHentai or Hitomi posts are represented, and unsupported-source posts do not match an active capability filter. Animated-duration resolution runs through the navigation-scoped bounded enrichment owner without rewriting durable Codex snapshots. Viewer launch must receive the exact visible ordered post list and index from the screen rather than reopening the unfiltered repository snapshot.
-
-## Actionable Transient Feedback
-
-`TheoriaAppContent` owns the app's single `SnackbarHost`, positioned by the outer Scaffold above bottom navigation. Feature routes send typed requests to that shell boundary; keep passive confirmations on Toast and reserve snackbars for immediate Undo or Retry actions. Recents clear Undo restores exact repository snapshots so timestamps, provenance, search identity, and Watched/Codex section membership survive. Codex detail removal uses the same boundary and restores exact saved timestamps/payloads for single or bulk selection. For You seed mutations run independently from settings-triggered route refresh cancellation; Undo carries the originating profile and only the blacklist entries newly added by that hide action, so it cannot remove pre-existing exclusions.
-
-Android 13 and newer render their own clipboard confirmation. All clipboard writes go through the shared clipboard helper, which shows feature-specific success Toasts only through Android 12L and relies on the single system confirmation on newer releases. Failure feedback remains app-owned on every version; do not add unconditional copy-success Toasts at call sites.
 
 ## Releases
 
