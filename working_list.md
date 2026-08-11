@@ -1103,3 +1103,27 @@ None. F19–F21 and their bounded integrated host validation are complete; only 
 - [x] Build Codex tag picker UI with randomize and floating Apply
 - [x] Update README recent updates
 - [x] Run Gradle verification and inspect diff
+
+
+## Current Task: Repair Rapid Viewer Re-entry Session Handoff
+
+### In Progress
+
+None.
+
+### Pending
+
+None.
+
+### Done
+
+- [x] Trace post launch, Viewer handoff, dismissal, and navigation transition ownership.
+  - Evidence: the Activity-scoped retained session currently retriggers every still-composed Viewer entry by session ID.
+- [x] Prevent an exiting Viewer entry from consuming a rapid re-entry session.
+  - Evidence: each route captures one session-ID claim at startup, and the retention owner rejects stale claims without clearing the incoming payload.
+- [x] Replace the transient empty-session frame with startup-safe rendering.
+  - Evidence: the route renders an empty full-size surface until handoff/restoration completes; the true unavailable-restoration callback remains the only expired-session feedback path.
+- [x] Add focused regression coverage for one-shot Viewer handoff startup.
+  - Evidence: a stale exiting claim cannot consume a newer retained session, while the matching incoming claim transfers it successfully.
+- [x] Run the bounded host validation batch and record the result.
+  - Evidence: 11 focused Viewer tests pass with zero failures/errors/skips; `:app:compileDebugKotlin` passes; `git diff --check` passes. `:app:detektDebug` reached analysis but remains red on the same four inherited findings in untouched Codex/Search files and reported compiler-analysis warnings.

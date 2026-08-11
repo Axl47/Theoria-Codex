@@ -79,13 +79,33 @@ class ViewerSessionRetentionViewModelTest {
         holder.retain(retained)
         val owner = ViewerViewModel(SavedStateHandle())
 
-        assertTrue(holder.handoffTo(owner))
+        assertTrue(holder.handoffTo(owner, retained.sessionId))
 
         assertNull(holder.session.value)
         assertEquals(retained, owner.session.value)
         assertEquals(retained.sessionId, owner.state.value.session?.value)
         assertEquals(retained.posts, owner.state.value.pages.map { page -> page.post })
-        assertEquals(false, holder.handoffTo(owner))
+        assertEquals(false, holder.handoffTo(owner, retained.sessionId))
+    }
+
+    @Test
+    fun `exiting route claim cannot consume a newer rapid reentry payload`() {
+        val holder = ViewerSessionRetentionViewModel()
+        val exitingSession = viewerSession(postId = "exiting")
+        val reentrySession = viewerSession(postId = "reentry")
+        val exitingClaim = exitingSession.sessionId
+        holder.retain(exitingSession)
+        holder.retain(reentrySession)
+        val exitingOwner = ViewerViewModel(SavedStateHandle())
+        val reentryOwner = ViewerViewModel(SavedStateHandle())
+
+        assertEquals(false, holder.handoffTo(exitingOwner, exitingClaim))
+        assertNull(exitingOwner.session.value)
+        assertEquals(reentrySession, holder.session.value)
+
+        assertTrue(holder.handoffTo(reentryOwner, reentrySession.sessionId))
+        assertEquals(reentrySession, reentryOwner.session.value)
+        assertNull(holder.session.value)
     }
 
     private fun viewerSession(postId: String): ViewerSession {

@@ -2,7 +2,6 @@ package com.theoriacodex.app.ui.routes
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -11,7 +10,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -212,7 +210,9 @@ internal fun ViewerRoute(
     val ownerHandle = remember(viewerOwner) { ViewerRouteOwnerHandle(viewerOwner) }
     val viewerState by viewerOwner.state.collectAsStateWithLifecycle()
     val session by viewerOwner.session.collectAsStateWithLifecycle()
-    val retainedSession by dependencies.sessionRetentionOwner.session
+    val claimedSessionId = remember(viewerOwner) {
+        dependencies.sessionRetentionOwner.session.value?.sessionId
+    }
 
     DisposableEffect(viewerOwner) {
         latestScreenCallbacks.value.onOwnerChanged(ownerHandle)
@@ -221,9 +221,12 @@ internal fun ViewerRoute(
         }
     }
 
-    LaunchedEffect(viewerOwner, retainedSession?.sessionId) {
+    LaunchedEffect(viewerOwner, claimedSessionId) {
         val currentDependencies = latestDependencies.value
-        val handedOff = currentDependencies.sessionRetentionOwner.handoffTo(viewerOwner)
+        val handedOff = currentDependencies.sessionRetentionOwner.handoffTo(
+            owner = viewerOwner,
+            claimedSessionId = claimedSessionId,
+        )
         if (!handedOff && viewerOwner.session.value == null) {
             val pending = viewerOwner.pendingRestoration
             val restored = try {
@@ -349,12 +352,7 @@ internal fun ViewerRoute(
 
     val activeSession = session
     if (activeSession == null) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("No viewer session")
-        }
+        Box(modifier = Modifier.fillMaxSize())
         return
     }
 

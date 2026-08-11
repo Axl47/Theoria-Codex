@@ -46,6 +46,10 @@ The Search route applies persisted scroll position once when the route is restor
 
 The collapsed Search field renders applied context through its existing unfocused placeholder slot. Build that summary only from `applied` query/source state plus current visibility-filter state; never copy the summary into the real text input or present draft terms as applied. Keep it one line with ellipsis and do not add a separate applied-query row.
 
+## Viewer Session Handoff
+
+Each Viewer navigation entry claims the Activity-retained launch payload by its unique session ID once at route startup. Navigation transitions keep an exiting Viewer composed briefly, so it must never observe and consume a newer payload retained for rapid re-entry. A mismatched claim stays in the retention owner for the incoming entry. While that startup handoff or compact restoration is pending, render an empty Viewer surface rather than presenting a false missing-session state; only the completed unavailable-restoration path may report an expired session.
+
 ## Browsing Destination Readiness
 
 `BrowsingDestinationStateBoundary` must not mount Search or For You with synthetic `AppSettings()` or empty-like placeholders while repository flows are still loading. Wait for the first authoritative settings, liked-ID, and active-profile likes emissions. For You retains its current feed in its navigation-scoped owner/coordinator; a transient zero-like placeholder clears that cache and regenerates the same recommendation when real data arrives.

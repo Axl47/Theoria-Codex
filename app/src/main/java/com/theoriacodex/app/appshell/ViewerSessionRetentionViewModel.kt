@@ -32,9 +32,15 @@ internal class ViewerSessionRetentionViewModel : ViewModel() {
         mutableSession.value = null
     }
 
-    /** Transfers the process-local navigation payload; the route owner is authoritative afterward. */
-    fun handoffTo(owner: ViewerViewModel): Boolean {
+    /**
+     * Transfers only the process-local payload claimed when this route entry started.
+     *
+     * Navigation keeps an exiting destination composed briefly. Matching the claim identity stops
+     * that old entry from consuming a newer payload retained for a rapid Viewer re-entry.
+     */
+    fun handoffTo(owner: ViewerViewModel, claimedSessionId: String?): Boolean {
         val current = mutableSession.value ?: return false
+        if (current.sessionId != claimedSessionId) return false
         owner.replaceSession(current)
         mutableSession.value = null
         return true
