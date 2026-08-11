@@ -63,6 +63,7 @@ import kotlinx.coroutines.withContext
 import kotlin.math.max
 import kotlin.math.roundToInt
 
+@Suppress("LargeClass") // One lifecycle owner keeps archive, decoded-frame, export, and cancellation state coherent.
 class PixivUgoiraClient internal constructor(
     credentialsProvider: SourceCredentialsProvider,
     httpClient: SourceHttpClient,
@@ -643,25 +644,8 @@ class PixivUgoiraClient internal constructor(
         return try {
             val status = connection.responseCode
             if (status in 200..299) {
-                connection.inputStream.use { input ->
-                    FileOutputStream(temporary).use { output ->
-                        val buffer = ByteArray(UGOIRA_DOWNLOAD_BUFFER_BYTES)
-                        var written = 0L
-                        while (true) {
-                            val read = input.read(buffer)
-                            if (read < 0) break
-                            written += read
-                            if (written > UGOIRA_MAX_COMPRESSED_BYTES) {
-                                throw IOException("Pixiv ugoira archive exceeds compressed-byte limit")
-                            }
-                            output.write(buffer, 0, read)
-                        }
-                        output.fd.sync()
-                    }
-                }
-                if (!temporary.renameTo(destination)) {
-                    throw IOException("Could not publish Pixiv ugoira archive")
-                }
+                copyArchiveResponse(connection, temporary)
+                publishArchive(temporary, destination)
             } else {
                 connection.errorStream?.close()
             }
@@ -669,6 +653,31 @@ class PixivUgoiraClient internal constructor(
         } finally {
             connection.disconnect()
             if (temporary.exists()) temporary.delete()
+        }
+    }
+
+    private fun copyArchiveResponse(connection: HttpURLConnection, temporary: File) {
+        connection.inputStream.use { input ->
+            FileOutputStream(temporary).use { output ->
+                val buffer = ByteArray(UGOIRA_DOWNLOAD_BUFFER_BYTES)
+                var written = 0L
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    written += read
+                    if (written > UGOIRA_MAX_COMPRESSED_BYTES) {
+                        throw IOException("Pixiv ugoira archive exceeds compressed-byte limit")
+                    }
+                    output.write(buffer, 0, read)
+                }
+                output.fd.sync()
+            }
+        }
+    }
+
+    private fun publishArchive(temporary: File, destination: File) {
+        if (!temporary.renameTo(destination)) {
+            throw IOException("Could not publish Pixiv ugoira archive")
         }
     }
 

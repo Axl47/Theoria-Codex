@@ -8,12 +8,15 @@ updated_at: 2026-08-10T20:05:00-04:00
 
 ### In Progress
 
-- [~] Phase 7: run integrated validation and close the living ExecPlan.
+None.
 
 ### Pending
 
 
 ### Done
+
+- [x] Phase 7: complete integrated validation and close the living ExecPlan.
+  - Evidence: the bounded host matrix passed 1,017 tests with zero failures/errors and 10 intentional skips; aggregate Kover verification passed, with 84/85 executable platform-free changed lines covered (98.82%). Focused media tests pass, and app/core-sources Detekt report only their 4/15 inherited findings with no changed-file issue. The verified isolated `com.theoriacodex.debug` 0.8.2-debug APK installed on Samsung SM-S926U, cold-launched in 712 ms, remained alive with multiple preview decoders active, and produced no app crash. Five app live-route/media tests passed; provider health reported NHentai 6/6 and Hitomi 11/11 OK, while Pixiv/Gelbooru were credential-skipped. Phase 0 had no connected-device baseline, so comparative p50/p90, request-byte, cache-occupancy, and Ugoira heap gains remain explicitly unclaimed.
 
 - [x] Phase 6: reuse bounded Hitomi gallery manifests.
   - Evidence: sparse Search and full Viewer resolution share successful parsed manifests for two minutes through an 8 MiB byte-weighted LRU and per-gallery single-flight. Missing/blocked/malformed/failed/expired/over-budget values are not cached, while every projection reruns the existing live CDN candidate resolver. Search-to-Viewer uses one manifest request but still expands candidate derivation from the sparse poster to all 44 full pages. Thirty focused Hitomi tests pass.

@@ -211,14 +211,14 @@
     <h1>Make Preview and Viewer media delivery faster and more reliable</h1>
     <p>This plan makes existing Pixiv, Gelbooru, NHentai, and Hitomi media appear with less avoidable waiting and recover cleanly when a request fails. It repairs generic retry, chooses the media nearest to the current Viewer position for prefetch, reuses one playback cache, distinguishes quality upgrades from failure fallbacks, bounds Pixiv Ugoira memory, and removes duplicate provider work without changing the app's simultaneous-autoplay contract.</p>
     <div class="meta" role="group" aria-label="Plan metadata">
-      <span class="pill">Status: In progress — Phase 6 complete</span>
+      <span class="pill">Status: Complete — available acceptance recorded</span>
       <span class="pill">Owner: Codex</span>
       <span class="pill">Created: 2026-08-10</span>
       <span class="pill">Updated: 2026-08-10</span>
       <span class="pill">Plan: .docs/exec/preview-viewer-media-delivery-reliability.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next action</strong>Run the Phase 7 integrated host and device-safety gates, then close the plan with explicit live/device evidence gaps.</div>
+      <div class="card"><strong>Next action</strong>No implementation work remains. A future authenticated, instrumented run may add comparative Pixiv/Gelbooru timing and Ugoira heap evidence without reopening this architecture.</div>
       <div class="card"><strong>Main risk</strong>Viewer, player ownership, and Pixiv Ugoira overlap the active performance work. Starting early could invalidate both baselines or reintroduce lifecycle churn.</div>
       <div class="card"><strong>Validation</strong>Deterministic retry/candidate/prefetch tests, provider adapter tests, isolated Debug behavior, request-count traces, same-device cold/warm timings, and bounded-memory evidence.</div>
       <div class="card"><strong>Affected areas</strong>Shared media policy, Search cards, Viewer reducer/route/prefetch, Media3 infrastructure, Pixiv auth/Ugoira, and Hitomi gallery hydration.</div>
@@ -257,7 +257,7 @@
       <h2>Current Status</h2>
       <table class="status-table">
         <tbody>
-          <tr><td>Plan state</td><td>In progress. All implementation phases are complete; Phase 7 runs the integrated host/safety matrix and records unavailable physical/live-provider evidence honestly.</td></tr>
+          <tr><td>Plan state</td><td>Complete. All implementation phases and available host/live/device-safety gates pass. Comparative same-device timing, cache occupancy, and Ugoira heap remain unproven because Phase 0 had no connected-device baseline; authenticated Pixiv/Gelbooru live checks remain unproven because the host process had no credentials.</td></tr>
           <tr><td>Audit evidence</td><td>On 2026-08-10, 85 focused JVM tests across Viewer, media recovery, video prefetch, Pixiv Ugoira, and the four provider adapters passed with zero failures or errors. This proves the current contracts, not live performance or device reliability.</td></tr>
           <tr><td>Implementation gate</td><td>Satisfied by the user's explicit implementation instruction after <code>91dd752</code>. That commit's reusable player pool, stable-visibility gate, prepare pacing, and asynchronous teardown are the fixed ownership baseline; this plan must not restore pre-repair player behavior.</td></tr>
           <tr><td>Current checkout rule</td><td>Do not change <code>working_list.md</code> while authoring and committing this plan. When implementation is explicitly started, use the then-current project workflow without rewriting existing checklist history.</td></tr>
@@ -476,7 +476,7 @@
 
       <article>
         <h3>Phase 7: Integrated device and live-provider acceptance</h3>
-        <p class="phase-status">Status: Proposed.</p>
+        <p class="phase-status">Status: Complete. Implementation and available acceptance pass; unavailable baseline/authenticated evidence is explicit.</p>
         <table class="status-table">
           <tbody>
             <tr><td>Goal</td><td>Prove the completed system is more reliable and does less unnecessary work without regressing first render, swipe readiness, memory, or simultaneous autoplay.</td></tr>
@@ -491,6 +491,7 @@
           <li>Repeat the exact Phase 0 samples and action sequence on the same device/network class. Report per-source cold/warm p50 and p90, request count/bytes, adjacent warm-hit result, cache occupancy, Ugoira peak Java/native heap, and retry outcomes.</li>
           <li>Update Progress, Surprises, Decision Log, and Outcomes with exact commands and evidence. Add an <code>AGENTS.md</code> note only if implementation discovers a durable non-obvious rule not already encoded there.</li>
         </ol>
+        <p><strong>Result:</strong> the bounded host matrix passed 1,017 tests with zero failures or errors and 10 intentional skips, then aggregate Kover XML and verification passed. The repository changed-line gate measured 84/85 executable platform-free lines covered (98.82%). Focused media tests pass after the final cleanup. App Detekt reports only its four inherited findings and core-sources Detekt only its fifteen inherited findings; neither lane reports a changed-file issue. The packaged Debug APK is <code>com.theoriacodex.debug</code> <code>0.8.2-debug</code>, version code <code>1500000802</code>, SHA-256 <code>aff17a68bf4ea135ef4f3d66bcb0d724757a6f43e6d95a8e1b83d1e5978327ac</code>. Its application-ID verifier and install dry-run passed before installation on Samsung SM-S926U; cold launch completed in 712 ms, the process remained alive, simultaneous preview decoders were active, and no app crash appeared. Five opt-in app live-route/media tests passed. Provider health reported NHentai 6/6 and Hitomi 11/11 steps OK; Pixiv and Gelbooru were credential-skipped. Phase 0 had no device, so same-device cold/warm p50/p90, request-byte deltas, cache occupancy, and Ugoira peak-heap comparisons cannot be reconstructed and are not claimed.</p>
       </article>
     </section>
 
@@ -573,13 +574,15 @@
         <li>[x] 2026-08-10 — Phase 4: made local, primary, progressive, and preview locations sufficient for immediate Viewer launch while preserving route-owned refresh and durable healing. Twenty-nine focused tests plus Debug compilation pass.</li>
         <li>[x] 2026-08-10 — Phase 5: unified Pixiv token refresh and replaced full-ZIP/all-frame/count caching with atomic bounded archives, size-keyed single-flight decode, hard validation limits, and weighted retention. Thirty-six focused tests plus Debug compilation pass.</li>
         <li>[x] 2026-08-10 — Phase 6: added two-minute, 8 MiB, success-only Hitomi gallery-manifest reuse with per-ID single-flight while preserving fresh media candidate derivation. Thirty focused tests pass.</li>
-        <li>[ ] Phase 7 — Complete integrated host/device/live-provider acceptance and retrospective.</li>
+        <li>[x] 2026-08-10 — Phase 7: passed the integrated host and coverage gates, isolated Debug identity/install/launch smoke, and credential-free live-provider routes; recorded authenticated and baseline-dependent evidence as unproven.</li>
       </ul>
 
       <h3>Surprises And Discoveries</h3>
       <ul>
         <li><strong>Observation:</strong> the accepted long-scroll repair expanded the shared Media3 cache to 256 MiB and moved Preview player lifetime into an application-owned reusable pool. <strong>Consequence:</strong> Viewer preloading must reuse that cache/data-source identity without entering the feed lease or preparation owners.</li>
         <li><strong>Observation:</strong> no Android device was connected at Phase 0. <strong>Consequence:</strong> deterministic behavior can proceed, but final device timing, request, cache, and heap gates remain unproven until hardware is available.</li>
+        <li><strong>Observation:</strong> a Samsung SM-S926U was connected for Phase 7, but no comparable Phase 0 device trace exists. <strong>Consequence:</strong> isolated Debug package, cold-launch, process, and crash-state evidence is valid, while same-device before/after percentiles and heap deltas remain impossible to calculate honestly.</li>
+        <li><strong>Observation:</strong> NHentai and Hitomi live provider and app-route probes pass, while the host process has no Pixiv or Gelbooru credentials. <strong>Consequence:</strong> authenticated provider status is reported as skipped/unproven rather than inferred from deterministic fakes or the app's private on-device credential state.</li>
         <li><strong>Observation:</strong> the visible image Retry control is not a generic reload. It only requests optional provider recovery, and only Hitomi implements that interface. <strong>Evidence:</strong> <code>ViewerRoute.recoverAndApplyMedia</code> returns when <code>recoverRemoteMedia</code> returns null.</li>
         <li><strong>Observation:</strong> the current prefetch window contains six items but is unrelated to the current flattened position after the beginning of a session. <strong>Evidence:</strong> <code>ViewerScreen</code> filters the current key and then calls <code>take(left + right)</code> from the start.</li>
         <li><strong>Observation:</strong> video prefetch treats unsupported work as success. <strong>Evidence:</strong> <code>ViewerVideoPrefetchAction.SKIP</code> returns <code>true</code>, after which reducer state adds the key to <code>ready</code>.</li>
@@ -605,10 +608,11 @@
         <li><strong>Decision:</strong> retain successful Hitomi manifests for two minutes under an 8 MiB byte budget. <strong>Rationale:</strong> this spans the normal Search-to-Viewer handoff while keeping mutable provider metadata short-lived; derived CDN candidates are never cached here and remain governed by <code>HitomiMediaUrlResolver</code>. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
         <li><strong>Decision:</strong> cache Hitomi provider manifests, not derived CDN URLs. <strong>Rationale:</strong> Search-to-Viewer avoids a duplicate request while live <code>gg.js</code> configuration and recovery stay authoritative. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
         <li><strong>Decision:</strong> preserve all-visible autoplay. <strong>Rationale:</strong> lower player count is not an acceptable substitute for better selection, caching, scheduling, and bounded decoding. <strong>Date/Author:</strong> 2026-08-10 / User and Codex.</li>
+        <li><strong>Decision:</strong> close implementation after the available Phase 7 matrix without manufacturing comparative metrics. <strong>Rationale:</strong> every planned ownership and deterministic contract is implemented and accepted; a missing Phase 0 device baseline and absent host credentials are evidence constraints, not remaining code work. <strong>Date/Author:</strong> 2026-08-10 / Codex.</li>
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>Phases 1–6 implement the complete planned delivery architecture: truthful retry/candidates/prefetch, viable-first Viewer launch, bounded shared Pixiv work, and success-only Hitomi manifest reuse. Only integrated acceptance remains. Host contracts pass, but no device is connected, so timing, cache, and heap improvements are not yet claimed as measured device gains.</p>
+      <p>Phases 1–7 complete the planned delivery architecture and its available acceptance. Retry now reconstructs every renderer before optional provider healing; candidate intent distinguishes upgrades from failure fallbacks; Viewer mounts known media before refresh; adjacent video work shares the playback cache; Pixiv auth/archive/decode work is single-flight and bounded; and Hitomi reuses only short-lived successful manifests while deriving fresh CDN candidates. The integrated host, coverage, live NHentai/Hitomi, package-safety, and isolated Debug launch gates pass. No universal speedup is claimed: same-device before/after timing, request-byte, cache-occupancy, and Ugoira heap comparisons have no Phase 0 hardware baseline, and authenticated Pixiv/Gelbooru live status has no host credentials. Those evidence gaps can be measured later without changing the completed architecture.</p>
     </section>
 
     <section id="recovery">

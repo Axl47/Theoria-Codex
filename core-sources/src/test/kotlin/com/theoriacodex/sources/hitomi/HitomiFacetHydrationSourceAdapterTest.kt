@@ -271,8 +271,6 @@ internal class HitomiFacetHydrationSourceAdapterTest : HitomiSourceAdapterTestFi
         )
         assertSparseAnimeCard(cards.last())
         assertEquals(2, mediaCalls.get())
-        assertEquals(1, http.galleryRequestCount(4_042_375))
-        assertEquals(1, http.galleryRequestCount(7_231))
 
         val resolved = requireNotNull(adapter.resolvePost(PostId(SourceKey.HITOMI, "4042375")))
         assertEquals(44, resolved.media.size)
@@ -288,11 +286,11 @@ internal class HitomiFacetHydrationSourceAdapterTest : HitomiSourceAdapterTestFi
                 media.progressiveUrls.any { it.contains("/original/") }
         })
         assertEquals(46, mediaCalls.get())
-        assertEquals(1, http.galleryRequestCount(4_042_375))
 
         val anime = requireNotNull(adapter.resolvePost(PostId(SourceKey.HITOMI, "7231")))
         assertResolvedAnime(anime)
         assertEquals(47, mediaCalls.get())
+        assertEquals(1, http.galleryRequestCount(4_042_375))
         assertEquals(1, http.galleryRequestCount(7_231))
     }
 

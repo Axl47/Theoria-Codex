@@ -157,13 +157,10 @@ private fun mediaDeliveryPlan(
                 if (!isLikelyImageLocation(normalizedRef.mime, location) || !seen.add(location)) {
                     return@locationsLoop
                 }
-                val activation = when {
-                    isEmpty() -> MediaDeliveryActivation.PRIMARY
-                    ref in qualityUpgradeRefs && normalizedRef.localPath.isNullOrBlank() -> {
-                        MediaDeliveryActivation.QUALITY_UPGRADE
-                    }
-                    else -> MediaDeliveryActivation.FAILURE_FALLBACK
-                }
+                val activation = mediaDeliveryActivation(
+                    isFirstCandidate = isEmpty(),
+                    isQualityUpgrade = ref in qualityUpgradeRefs && normalizedRef.localPath.isNullOrBlank(),
+                )
                 add(
                     MediaDeliveryCandidate(
                         location = location,
@@ -176,6 +173,15 @@ private fun mediaDeliveryPlan(
         }
     }
     return MediaDeliveryPlan(candidates)
+}
+
+private fun mediaDeliveryActivation(
+    isFirstCandidate: Boolean,
+    isQualityUpgrade: Boolean,
+): MediaDeliveryActivation = when {
+    isFirstCandidate -> MediaDeliveryActivation.PRIMARY
+    isQualityUpgrade -> MediaDeliveryActivation.QUALITY_UPGRADE
+    else -> MediaDeliveryActivation.FAILURE_FALLBACK
 }
 
 private fun orderedImageLocations(ref: ImageRef, urlFirst: Boolean): List<String> = buildList {
