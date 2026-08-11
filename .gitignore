@@ -13,3 +13,4 @@ local.properties
 node_modules
 .kotlin
 __pycache__
+.env
