@@ -18,5 +18,6 @@
 - [x] Added grouped positive Search terms, stable v3 query hashes, Saved State/Recents compatibility, applied-query replay, and collapsed/Recent expression summaries.
 - [x] Added Gelbooru-native grouped OR and bounded exact fallback execution with canonical filtering, deduplication, sort-owned merging, and independent branch continuation.
 - [x] Added compact Search group chips and the shared group editor for OR alternatives, term removal, group removal, and splitting an alternative back into a required group.
+- [x] Removed repetitive `AND` labels from the editable Search tag row while retaining explicit OR labels inside alternative groups.
 - [x] Added source-scoped grouped Codex Automatic rules, Room schema 7 migration, JSON compatibility, atomic like-time matching, and AND/OR editing in the existing collection-action sheet.
 - [x] Completed host validation: relevant Gradle unit suites, Android-test source compilation, app compilation, Detekt, `git diff --check`, and ExecPlan HTML parsing all pass.

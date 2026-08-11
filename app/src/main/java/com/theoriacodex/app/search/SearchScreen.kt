@@ -1919,16 +1919,6 @@ private fun TagRow(
 ) {
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         includeGroups.forEachIndexed { index, group ->
-            if (index > 0) {
-                item(key = "include-and:$index") {
-                    Text(
-                        text = "AND",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 10.dp),
-                    )
-                }
-            }
             item(key = "include-group:$index:${group.terms.joinToString { it.value }}") {
                 val label = if (group.terms.size == 1) {
                     searchTermChipLabel(group.terms.single(), excluded = false)
@@ -1940,16 +1930,6 @@ private fun TagRow(
                 AssistChip(
                     onClick = { onEditIncludeGroup(index) },
                     label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                )
-            }
-        }
-        if (includeGroups.isNotEmpty() && excludeTerms.isNotEmpty()) {
-            item(key = "exclude-and") {
-                Text(
-                    text = "AND",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 10.dp),
                 )
             }
         }
