@@ -98,6 +98,8 @@ Every debug-signed or device-testable application variant must use a non-product
 
 For a new or changed device command, use a host-only dry run to inspect its task graph, verify output metadata or the packaged manifest for every APK it can install, and confirm that no production-ID target or package-mutating listener is configured. If that proof is incomplete, stop before connecting to the device. Use `installDebug` only for the isolated Debug app; production releases must be installed only through the signed release/update path.
 
+Baseline-profile collection installs both the isolated target APK and a self-instrumenting test APK. Keep their packaged IDs distinct (`com.theoriacodex.baselineprofile` and `com.theoriacodex.baselineprofile.test`) and verify both before connected collection; a shared ID makes Android treat the version-code-0 test APK as a downgrade of the target.
+
 ## Local Statistics
 
 `StatisticsRepository` owns forward-only, on-device lifetime counters; it must not duplicate current Codex library state. Saved post, saved source, saved tag, and top-Codex-source statistics are live projections of the active profile's visible Codices, deduplicated by canonical `Post.id`. Lifetime counters begin when the statistics store is introduced and are not backfilled from clearable Recents data.

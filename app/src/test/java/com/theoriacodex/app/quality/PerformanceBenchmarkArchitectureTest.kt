@@ -47,6 +47,13 @@ class PerformanceBenchmarkArchitectureTest {
             "PACKAGE_NAME = \"com.theoriacodex.baselineprofile\"" in baselineGenerator &&
                 "verifyNonMinifiedReleaseInstallableApplicationId" in baselineBuild,
         )
+        assertTrue(
+            "Baseline-profile test and target APKs must keep distinct isolated identities",
+            "namespace = \"com.theoriacodex.baselineprofile.test\"" in baselineBuild &&
+                "VerifyBaselineProfileTestApplicationIdTask" in baselineBuild &&
+                "verifyNonMinifiedReleaseTestApplicationId" in baselineBuild &&
+                "expectedApplicationId.set(\"com.theoriacodex.baselineprofile.test\")" in baselineBuild,
+        )
         assertFalse(
             "Baseline-profile collection must never target production",
             "PACKAGE_NAME = \"com.theoriacodex\"" in baselineGenerator,
