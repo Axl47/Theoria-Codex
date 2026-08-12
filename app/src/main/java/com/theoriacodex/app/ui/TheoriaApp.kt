@@ -3,7 +3,6 @@ package com.theoriacodex.app.ui
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -24,21 +23,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Collections
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarDefaults
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -84,8 +73,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.PostDownloadService
 import com.theoriacodex.app.codex.CodexDetailScreen
@@ -271,32 +258,6 @@ fun TheoriaApp(
         ApplicationDataState.Loading,
         ApplicationDataState.NotStarted,
         -> AppContainerStartupSurface(failed = false, onRetry = {})
-    }
-}
-
-@Composable
-private fun AppContainerStartupSurface(
-    failed: Boolean,
-    onRetry: () -> Unit,
-) {
-    TheoriaNightTheme {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                if (failed) {
-                    Text("Saved data could not be opened safely.")
-                    Button(onClick = onRetry) { Text("Retry") }
-                } else {
-                    CircularProgressIndicator()
-                    Text("Preparing your library…")
-                }
-            }
-        }
     }
 }
 
@@ -1221,38 +1182,11 @@ internal fun TheoriaAppContent(
         }
     }
 
-    DisposableEffect(hostActivity, currentRoute) {
-        hostActivity?.requestedOrientation = if (currentRoute == AppRoute.Viewer) {
-            ActivityInfo.SCREEN_ORIENTATION_FULL_USER
-        } else {
-            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
-        onDispose {
-            hostActivity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
-    }
-
-    DisposableEffect(hostActivity, currentRoute, configuration.orientation) {
-        val window = hostActivity?.window
-        val insetsController = window?.let {
-            WindowInsetsControllerCompat(it, it.decorView)
-        }
-        val shouldUseLandscapeFullscreen =
-            currentRoute == AppRoute.Viewer &&
-                configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
-
-        if (shouldUseLandscapeFullscreen) {
-            insetsController?.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            insetsController?.hide(WindowInsetsCompat.Type.statusBars())
-        } else {
-            insetsController?.show(WindowInsetsCompat.Type.statusBars())
-        }
-
-        onDispose {
-            insetsController?.show(WindowInsetsCompat.Type.statusBars())
-        }
-    }
+    TheoriaAppPlatformEffects(
+        hostActivity = hostActivity,
+        viewerActive = currentRoute == AppRoute.Viewer,
+        orientation = configuration.orientation,
+    )
 
     DisposableEffect(
         lifecycleOwner,
@@ -1400,51 +1334,30 @@ internal fun TheoriaAppContent(
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 bottomBar = {
                     if (showBottomBar) {
-                        NavigationBar(
-                            modifier = Modifier.height(bottomBarHeight),
+                        TheoriaBottomNavigation(
+                            selectedIndex = selectedTopLevelIndex,
+                            height = bottomBarHeight,
+                            iconSize = bottomBarIconSize,
                             windowInsets = bottomBarWindowInsets,
-                        ) {
-                            TopLevelDestination.entries.forEach { destination ->
-                                val selected = selectedTopLevelIndex == TopLevelDestination.entries.indexOf(destination)
-                                NavigationBarItem(
-                                    selected = selected,
-                                    onClick = {
-                                        homeTabRoute = destination.route
-                                        val targetIndex = TopLevelDestination.entries.indexOf(destination)
-                                        scope.launch {
-                                            if (currentRoute != AppRoute.Home) {
-                                                navController.navigate(AppRoute.Home) {
-                                                    popUpTo(navController.graph.findStartDestination().id) {
-                                                        saveState = true
-                                                    }
-                                                    launchSingleTop = true
-                                                    restoreState = true
-                                                }
-                                                topLevelPagerState.scrollToPage(targetIndex)
-                                            } else if (topLevelPagerState.currentPage != targetIndex) {
-                                                topLevelPagerState.scrollToPage(targetIndex)
+                            onDestinationSelected = { destination ->
+                                homeTabRoute = destination.route
+                                val targetIndex = TopLevelDestination.entries.indexOf(destination)
+                                scope.launch {
+                                    if (currentRoute != AppRoute.Home) {
+                                        navController.navigate(AppRoute.Home) {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
                                             }
+                                            launchSingleTop = true
+                                            restoreState = true
                                         }
-                                    },
-                                    icon = {
-                                        val icon = when (destination) {
-                                            TopLevelDestination.Search -> Icons.Default.Search
-                                            TopLevelDestination.Recents -> Icons.Default.History
-                                            TopLevelDestination.ForYou -> Icons.Default.Favorite
-                                            TopLevelDestination.Codex -> Icons.Default.Collections
-                                            TopLevelDestination.Settings -> Icons.Default.Settings
-                                        }
-                                        Icon(
-                                            imageVector = icon,
-                                            contentDescription = destination.label,
-                                            modifier = Modifier.size(bottomBarIconSize),
-                                        )
-                                    },
-                                    label = null,
-                                    alwaysShowLabel = false,
-                                )
-                            }
-                        }
+                                        topLevelPagerState.scrollToPage(targetIndex)
+                                    } else if (topLevelPagerState.currentPage != targetIndex) {
+                                        topLevelPagerState.scrollToPage(targetIndex)
+                                    }
+                                }
+                            },
+                        )
                     }
                 },
             ) { innerPadding ->
