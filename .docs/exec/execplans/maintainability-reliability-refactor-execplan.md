@@ -199,13 +199,13 @@ Composition acceptance:
 
 Manual verification checklist:
 
-- [ ] Search works in Unified mode and single-source mode.
-- [ ] Viewer opens image, video, and animated posts.
-- [ ] Codex saved posts preserve duration and progressive image fallback data after app restart.
-- [ ] Creator Profile browsing still opens uploads and post action sheets.
-- [ ] Settings shows useful source/provider status without blocking the rest of the app.
-- [ ] External post deeplinks still route to the intended post.
-- [ ] Importing and exporting Codex data still works.
+- [x] Search works in Unified mode and single-source mode. User-accepted 2026-08-12.
+- [x] Viewer opens image, video, and animated posts. User-accepted 2026-08-12.
+- [x] Codex saved posts preserve duration and progressive image fallback data after app restart. User-accepted 2026-08-12.
+- [x] Creator Profile browsing still opens uploads and post action sheets. User-accepted 2026-08-12.
+- [x] Settings shows useful source/provider status without blocking the rest of the app. User-accepted 2026-08-12.
+- [x] External post deeplinks still route to the intended post. User-accepted 2026-08-12.
+- [x] Importing and exporting Codex data still works. User-accepted 2026-08-12.
 
 ## Idempotence and Recovery
 

@@ -66,14 +66,14 @@
     <h1>Durable App Statistics In Settings</h1>
     <p>Add one persisted, collapsible Stats section that combines forward-looking lifetime activity with a live projection of the active profile's current Codex library.</p>
     <div class="meta">
-      <span class="pill">Status: Host implementation complete</span>
+      <span class="pill">Status: Complete and user-accepted</span>
       <span class="pill">Owner: Codex</span>
       <span class="pill">Created: 2026-08-10</span>
       <span class="pill">Updated: 2026-08-10</span>
       <span class="pill">Plan: .docs/exec/settings-statistics.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next action</strong>Manually accept the complete flow in the isolated Debug app after package-identity proof.</div>
+      <div class="card"><strong>Next action</strong>None; the complete user-facing flow is accepted.</div>
       <div class="card"><strong>Main risk</strong>Live device behavior remains unobserved; host coverage fixes event ownership and timing semantics.</div>
       <div class="card"><strong>Validation</strong>31 focused tests, Debug compilation, app-logic Detekt, changed-owner static review, HTML, and diff checks.</div>
       <div class="card"><strong>Affected areas</strong>core-data, app-logic, app lifecycle/navigation, search/FYP, Viewer, shared post actions, Settings.</div>
@@ -196,7 +196,7 @@
           <tr><td>Manual isolated Debug</td><td>Verify package identity before any install, then foreground/background, switch routes, view posts, run single/Unified/FYP searches, copy URLs, save from FYP, enter Codices, and relaunch.</td><td>Each count changes once at its authoritative outcome; timers stop in background; rankings and active-profile Codex composition are correct; section expansion and values survive relaunch.</td></tr>
         </tbody>
       </table>
-      <div class="callout risk">No connected, install, device, or package-mutating command is part of the host validation batch. Physical acceptance remains explicitly pending unless the isolated Debug identity is proven first.</div>
+      <div class="callout">The deterministic host batch did not run a package-mutating command. The user later completed the physical interaction group and accepted the result on 2026-08-12.</div>
     </section>
 
     <section id="log">
@@ -209,6 +209,7 @@
         <li>[x] 2026-08-10 — Wired process timing and authoritative Search, FYP, Viewer, URL-copy, save-origin, and Codex-entry outcomes.</li>
         <li>[x] 2026-08-10 — Added the persisted Settings section, five requested groups, compact summary, profile context, percentages, and empty states.</li>
         <li>[x] 2026-08-10 — Closed the bounded host batch with 31 passing focused tests, Debug compilation, app-logic Detekt, changed-owner static review, HTML validation, and diff checks.</li>
+        <li>[x] 2026-08-12 — User completed the full statistics interaction group and accepted the result.</li>
       </ul>
       <h3>Surprises And Discoveries</h3>
       <ul>
@@ -225,7 +226,7 @@
         <li>Decision: use process lifecycle and elapsed realtime. Rationale: Activity recreation must not create opens, and wall-clock changes must not alter duration. Date/Author: 2026-08-10 / Codex.</li>
       </ul>
       <h3>Outcomes And Retrospective</h3>
-      <p>The host implementation is complete. Thirty-one focused tests pass with no failures, errors, or skips; Debug Kotlin compilation and app-logic Detekt pass. App Detekt remains red only on four inherited findings in <code>CodexListScreen</code>, <code>SaveToCodexSheet</code>, and <code>SearchEmptyStatePolicy</code>. Core-data Detekt remains red only on five inherited migration, policy, and repository-test findings; neither lane reports a statistics owner. Manual isolated-Debug acceptance remains pending, and no device, install, connected, package-mutation, release, or live-provider command ran.</p>
+      <p>The implementation is complete and user-accepted. Thirty-one focused tests pass with no failures, errors, or skips; Debug Kotlin compilation and app-logic Detekt pass. App Detekt remained red only on four inherited findings in <code>CodexListScreen</code>, <code>SaveToCodexSheet</code>, and <code>SearchEmptyStatePolicy</code>. Core-data Detekt remained red only on five inherited migration, policy, and repository-test findings; neither lane reported a statistics owner. The original implementation batch ran no device, install, connected, package-mutation, release, or live-provider command; the later user-run interaction acceptance is recorded separately.</p>
     </section>
 
     <section id="recovery">

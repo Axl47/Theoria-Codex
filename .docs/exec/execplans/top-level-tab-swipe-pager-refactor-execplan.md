@@ -1,6 +1,6 @@
 ---
 created_at: 2026-03-05T01:16
-updated_at: 2026-04-10T16:28
+updated_at: 2026-08-12T04:30
 ---
 # Top-Level Tab Swipe Pager Refactor
 
@@ -32,7 +32,7 @@ The current top-level swipe behavior is implemented by applying horizontal offse
 - [x] (2026-03-05 18:02Z) Implemented pager-based top-level host under `AppRoute.Home`.
 - [x] (2026-03-05 18:05Z) Rewired bottom bar selection/taps, tab persistence, and tab-jump callbacks to pager state.
 - [x] (2026-03-05 18:07Z) Removed NavHost swipe emulation pointer/offset logic and obsolete constants.
-- [~] (2026-03-05 18:14Z) Local validation complete (`:app:compileDebugKotlin`, `:app:testDebugUnitTest`, `:app:assembleDebug`); device interaction checklist pending user run-through.
+- [x] (2026-08-12) Local validation was already complete; the user has now accepted vertical scroll arbitration and repeated fast horizontal swipes on device.
 
 ## Decision Log
 
@@ -97,4 +97,4 @@ Validation status:
 - Passed: `./gradlew :app:compileDebugKotlin`
 - Passed: `./gradlew :app:testDebugUnitTest`
 - Passed: `./gradlew :app:assembleDebug`
-- Pending: manual device verification for vertical scroll arbitration + repeated fast horizontal swipes.
+- Passed: user-reported device verification for vertical scroll arbitration + repeated fast horizontal swipes on 2026-08-12.

@@ -21,7 +21,8 @@ After the change, a user can open the app, tap the second bottom navigation icon
 - [x] (2026-06-25 09:32Z) Replaced `Explore` with `Recents` in top-level navigation, deleted the Explore UI, removed app-layer quick-query entry points, and updated Search empty-state copy.
 - [x] (2026-06-25 09:32Z) Built Recents UI with Watched/Searches/All filters, persistent clear actions, watched-grid Viewer launching, and search-history reapply.
 - [x] (2026-06-25 09:34Z) Updated `README.md`, `AGENTS.md`, `working_list.md`, and this ExecPlan.
-- [x] (2026-06-25 09:35Z) Ran focused verification: `./gradlew :core-data:test`, `./gradlew :app:testDebugUnitTest --tests '*SearchCoordinatorTest*'`, `./gradlew :app:testDebugUnitTest`, and `./gradlew :app:compileDebugKotlin :app:assembleDebug` all passed. Manual device acceptance is still pending user run-through.
+- [x] (2026-06-25 09:35Z) Ran focused verification: `./gradlew :core-data:test`, `./gradlew :app:testDebugUnitTest --tests '*SearchCoordinatorTest*'`, `./gradlew :app:testDebugUnitTest`, and `./gradlew :app:compileDebugKotlin :app:assembleDebug` all passed.
+- [x] (2026-08-12) User completed the Recents interaction group and accepted navigation, recording, replay, independent clearing, and relaunch persistence.
 
 ## Surprises & Discoveries
 
@@ -177,14 +178,14 @@ Manual device acceptance:
 
 User checklist to include in the implementation closeout:
 
-- [ ] Bottom nav shows Search, Recents, For You, Codex, Settings in that order.
-- [ ] Explore and quick queries are fully gone.
-- [ ] Watched posts appear in Recents after opening Viewer.
-- [ ] Search entries appear only after pressing Apply in Search.
-- [ ] Tapping watched posts opens Viewer correctly.
-- [ ] Tapping search entries reruns the historical search.
-- [ ] Clear actions work independently for watched and searches.
-- [ ] Recents survive app restart.
+- [x] Bottom nav shows Search, Recents, For You, Codex, Settings in that order.
+- [x] Explore and quick queries are fully gone.
+- [x] Watched posts appear in Recents after opening Viewer.
+- [x] Search entries appear only after pressing Apply in Search.
+- [x] Tapping watched posts opens Viewer correctly.
+- [x] Tapping search entries reruns the historical search.
+- [x] Clear actions work independently for watched and searches.
+- [x] Recents survive app restart.
 
 ## Idempotence and Recovery
 

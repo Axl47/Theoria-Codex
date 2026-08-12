@@ -22,7 +22,7 @@ After this change, Gelbooru posts that are videos (for example `.mp4` and `.webm
 - [x] (2026-02-26 00:50Z) Add in-card video autoplay previews for Search/Codex cards (muted loop with image fallback), then revalidate app tests/build.
 - [x] (2026-02-26 01:02Z) Add shared interactive timeline scrubber and enable drag-to-seek for Viewer ugoira/GIF/video playback.
 - [x] (2026-02-26 01:07Z) Reduce Viewer video exit lag by force-stopping playback before dismiss and add upcoming-video prefetch warmup.
-- [ ] Perform manual device QA checklist (developer-run).
+- [x] (2026-08-12) User completed the cross-source playback interaction group and accepted the result on device.
 
 ## Surprises & Discoveries
 
@@ -74,7 +74,7 @@ Validation outcome:
 - Timeline-scrub follow-up validation: `./gradlew :app:testDebugUnitTest assembleDebug` passed.
 - Dismiss/prefetch follow-up validation: `./gradlew :app:testDebugUnitTest assembleDebug` passed.
 
-Remaining work is manual on-device verification (playback UX across several posts/sources).
+The user completed and accepted on-device playback UX across the tested post and source groups on 2026-08-12.
 
 ## Context and Orientation
 
