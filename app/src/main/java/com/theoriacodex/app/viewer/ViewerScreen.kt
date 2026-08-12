@@ -209,8 +209,8 @@ internal fun ViewerScreen(
         initialPage = initialIndex,
         pageCount = { posts.size },
     )
-    var viewerState by remember(uiState.session?.value) {
-        mutableStateOf(ViewerState(streamSize = posts.size, currentIndex = initialIndex))
+    var viewerTransform by remember(uiState.session?.value, uiState.currentMedia?.key) {
+        mutableStateOf(ViewerTransformState())
     }
     var interactionSerial by remember { mutableIntStateOf(0) }
     var timelineInteractionActive by remember { mutableStateOf(false) }
@@ -483,7 +483,7 @@ internal fun ViewerScreen(
             }
 
             fun navigateFromHorizontalSwipe(direction: ViewerHorizontalSwipeDirection) {
-                if (viewerState.zoom > ViewerState.FIT_SCALE + 0.01f) return
+                if (viewerTransform.isZoomed) return
                 if (postPage != postPagerState.currentPage) return
                 val targetPostIndex = when (direction) {
                     ViewerHorizontalSwipeDirection.Previous -> postPage - 1
@@ -536,7 +536,7 @@ internal fun ViewerScreen(
                     ?.loadGeneration
                     ?: 0L
                 val transformState = rememberTransformableState { _, zoomChange, panChange, _ ->
-                    viewerState = viewerState.transform(
+                    viewerTransform = viewerTransform.transform(
                         zoomChange = zoomChange,
                         panChangeX = panChange.x,
                         panChangeY = panChange.y,
@@ -600,7 +600,7 @@ internal fun ViewerScreen(
                                 )
                                 markInteraction()
                             } else if (isCenterTap) {
-                                viewerState = viewerState.doubleTap()
+                                viewerTransform = viewerTransform.doubleTap()
                                 markInteraction()
                             }
                         },
@@ -616,25 +616,25 @@ internal fun ViewerScreen(
                 }
                 val mediaTransformModifier = Modifier
                     .graphicsLayer {
-                        scaleX = viewerState.zoom
-                        scaleY = viewerState.zoom
-                        translationX = viewerState.panX
-                        translationY = viewerState.panY
+                        scaleX = viewerTransform.zoom
+                        scaleY = viewerTransform.zoom
+                        translationX = viewerTransform.panX
+                        translationY = viewerTransform.panY
                     }
                 val transformInputModifier = Modifier
                     .transformable(
                         state = transformState,
-                        canPan = { viewerState.zoom > ViewerState.FIT_SCALE + 0.01f },
+                        canPan = { viewerTransform.isZoomed },
                     )
                 val horizontalPageSwipeModifier = Modifier.pointerInput(
                     postPage,
                     mediaPage,
                     postMedia.size,
                     posts.size,
-                    viewerState.zoom,
+                    viewerTransform.zoom,
                     invertMultiImageScrollDirection,
                 ) {
-                    if (viewerState.zoom > ViewerState.FIT_SCALE + 0.01f) return@pointerInput
+                    if (viewerTransform.isZoomed) return@pointerInput
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         var totalX = 0f
