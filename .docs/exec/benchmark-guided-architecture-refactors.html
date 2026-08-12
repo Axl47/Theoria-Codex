@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Benchmark-Guided Architecture Refactors</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#f7f7f4; --surface:#fff; --text:#202124; --muted:#5f6368; --border:#d7d7d0; --accent:#0f766e; --accent-soft:#dff3ef; --risk:#9a3412; --risk-soft:#ffedd5; --code:#111827; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#151716; --surface:#202321; --text:#f0f2ef; --muted:#b8beb7; --border:#3a403c; --accent:#5eead4; --accent-soft:#123b37; --risk:#fdba74; --risk-soft:#43230f; --code:#0b0f0d; } }
+    * { box-sizing:border-box; }
+    body { margin:0; font:15px/1.55 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:var(--bg); color:var(--text); }
+    header,main { max-width:1180px; margin:0 auto; padding:24px; }
+    header { padding-top:36px; }
+    h1,h2,h3 { line-height:1.15; margin:0 0 12px; }
+    h1 { font-size:clamp(2rem,4vw,3.25rem); }
+    h2 { margin-top:36px; font-size:1.55rem; }
+    h3 { margin-top:24px; font-size:1.1rem; }
+    p { margin:0 0 14px; }
+    a { color:var(--accent); }
+    nav { position:sticky; top:0; z-index:10; border-block:1px solid var(--border); background:color-mix(in srgb,var(--surface) 92%,transparent); backdrop-filter:blur(10px); }
+    nav ul { display:flex; gap:6px; max-width:1180px; margin:0 auto; padding:8px 24px; list-style:none; overflow-x:auto; }
+    nav a { display:block; padding:6px 10px; border-radius:6px; text-decoration:none; white-space:nowrap; }
+    nav a:hover { background:var(--accent-soft); }
+    section { padding:22px; margin:18px 0; border:1px solid var(--border); border-radius:8px; background:var(--surface); }
+    table { width:100%; border-collapse:collapse; margin:12px 0; font-size:.95rem; }
+    th,td { padding:9px 10px; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; }
+    th { color:var(--muted); font-weight:650; }
+    code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.92em; }
+    pre { overflow-x:auto; padding:14px; border-radius:8px; background:var(--code); color:#f8fafc; }
+    details { margin:12px 0; padding:12px 14px; border:1px solid var(--border); border-radius:8px; }
+    summary { cursor:pointer; font-weight:700; }
+    .meta { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; color:var(--muted); }
+    .pill { padding:4px 8px; border:1px solid var(--border); border-radius:999px; background:var(--surface); }
+    .dashboard { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin:18px 0 0; }
+    .card { padding:14px; border:1px solid var(--border); border-radius:8px; background:var(--surface); }
+    .card strong { display:block; margin-bottom:4px; color:var(--muted); font-size:.82rem; text-transform:uppercase; }
+    .callout { margin:14px 0; padding:12px 14px; border-left:4px solid var(--accent); background:var(--accent-soft); border-radius:6px; }
+    .risk { border-left-color:var(--risk); background:var(--risk-soft); }
+    .status-table td:first-child { width:180px; color:var(--muted); font-weight:650; }
+    @media print { nav { position:static; } section,.card { break-inside:avoid; } body { background:#fff; color:#000; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ExecPlan: Benchmark-Guided Architecture Refactors</h1>
+    <p>This plan converts the v0.10.0 interaction acceptance, physical-device measurements, and follow-up architecture audit into one bounded modernization pass. It improves startup evidence, Viewer state ownership, production/test separation, shell organization, and the two largest provider adapters while preserving visible behavior and simultaneous autoplay.</p>
+    <div class="meta" aria-label="Plan metadata">
+      <span class="pill">Status: Complete</span>
+      <span class="pill">Owner: Codex</span>
+      <span class="pill">Created: 2026-08-12</span>
+      <span class="pill">Updated: 2026-08-12</span>
+      <span class="pill">Baseline SHA: 6bd7536</span>
+      <span class="pill">Starting SHA: d439ca7 / v0.10.0</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Current state</strong>All six refactor phases and their host/device evidence are complete.</div>
+      <div class="card"><strong>Outcome</strong>Runtime ownership is clearer, profiles match the final layout, and autoplay/performance contracts remain intact.</div>
+      <div class="card"><strong>Watch item</strong>Warm startup and bimodal duration RSS need future repeated-run evidence before another architecture change.</div>
+      <div class="card"><strong>Validation</strong>Host quality lane passed; isolated profile collection passed; physical Macrobenchmark passed 5/5 with 35 traces.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li><li><a href="#context">Context</a></li><li><a href="#findings">Findings</a></li><li><a href="#phases">Phases</a></li><li><a href="#work-plan">Work Plan</a></li><li><a href="#validation">Validation</a></li><li><a href="#living-log">Living Log</a></li><li><a href="#recovery">Recovery</a></li><li><a href="#appendix">Evidence</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>The current app is behaviorally strong: the developer accepted every outstanding user-facing interaction group on 2026-08-12, and all five physical Macrobenchmarks passed with the simultaneous-autoplay contract intact. The remaining opportunity is architectural. Production source sets still carry test repositories, Viewer has a second state model beside its authoritative reducer, app-shell and provider files combine too many policies, startup profiles predate major architecture changes, and one duration metric no longer means what its label suggests.</p>
+      <p>When complete, the production graph will require explicit durable dependencies, media zoom will reset with the selected media rather than leak between pages, benchmark output will distinguish per-item work from batch latency, the app shell and large providers will have clearer component boundaries, and startup profiles will describe the final code layout. Users should see the same workflows, with lower maintenance risk and startup performance that is measured against fresh compiler guidance.</p>
+      <div class="callout"><strong>Scope guard:</strong> this is a behavior-preserving refactor. No new store, navigation framework, single-active-player rule, schema, provider feature, or UI redesign is authorized.</div>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <p><code>app</code> owns Android, Compose, navigation, and media runtime objects. <code>app-logic</code> owns platform-free application policy. <code>core-data</code> defines repository contracts and active non-Android persistence. <code>core-sources</code> owns provider transport and hydration. <code>macrobenchmark</code> drives isolated, offline physical-device scenarios against <code>com.theoriacodex.benchmark</code>.</p>
+      <table>
+        <thead><tr><th>Boundary</th><th>Starting state</th><th>Desired state</th></tr></thead>
+        <tbody>
+          <tr><td>Viewer state</td><td><code>ViewerUiState</code> owns session/page/media/chrome, while <code>ViewerState</code> duplicates stream index and chrome beside transform.</td><td>Only <code>ViewerUiState</code> owns route state; a media-keyed <code>ViewerTransformState</code> owns zoom/pan.</td></tr>
+          <tr><td>Repository graph</td><td>Coordinator defaults instantiate in-memory test repositories, keeping nine test doubles in production artifacts.</td><td>Production constructors require explicit interfaces; reusable test repositories live in <code>core-data</code> test fixtures.</td></tr>
+          <tr><td>Duration evidence</td><td><code>durationWorkload</code> sums 24 overlapping per-key spans and cannot represent batch latency.</td><td>Per-key counts remain; one <code>TheoriaDurationBatch</code> span measures request-to-settlement makespan.</td></tr>
+          <tr><td>App shell</td><td><code>TheoriaApp.kt</code> is 2,361 lines and mixes startup surface, platform window effects, navigation graph, bottom navigation, and modal hosts.</td><td>Extract stable rendering/platform seams while <code>TheoriaAppContent</code> retains navigation and global state authority.</td></tr>
+          <tr><td>Providers</td><td><code>HitomiSourceAdapter.kt</code> is 1,716 lines; <code>NHentaiSourceAdapter.kt</code> is 1,196 lines. Transport, parsing, query compilation, and hydration share adapter files.</td><td>Extract cohesive pure/compiler/parser/transport helpers without changing pagination, canonical-ID, headers, fallback, or ordering contracts.</td></tr>
+          <tr><td>Startup profiles</td><td>Generated baseline/startup profiles were last refreshed on 2026-07-11 and D8 reports 736 additional missing startup entries.</td><td>Regenerate from the final layout using the isolated <code>com.theoriacodex.baselineprofile</code> package, then benchmark the exact final code.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="findings">
+      <h2>Measured Findings And Audit Decisions</h2>
+      <table>
+        <thead><tr><th>Finding</th><th>Evidence</th><th>Decision</th></tr></thead>
+        <tbody>
+          <tr><td>Startup materially regressed</td><td>Cold median 306.844 to 338.730 ms (+10.39%); warm 44.652 to 54.067 ms (+21.09%) on the same SM-S926U build fingerprint with locked CPU and no thermal delay.</td><td>Refresh profiles only after code movement, then remeasure. Treat compiler warnings as likely attribution, not proof of the entire regression.</td></tr>
+          <tr><td>Search core performance remains healthy</td><td>Frame CPU P90 improved 0.57%; duration-search P90 improved 2.25%; media-load spans fell about 36%. Search RSS rose 13.29% and ordinary Search overrun P99 rose from 3.525 to 5.718 ms.</td><td>Keep the current route/controller architecture. Re-evaluate only if final traces show a reproducible owner.</td></tr>
+          <tr><td>Viewer remained broadly stable</td><td>Frame CPU P90 +4.23%, overrun P99 +9.85%, RSS -1.74%, heap +0.46%, media-load count stable.</td><td>Fix the state-ownership defect for correctness/maintainability, not as a claimed performance win.</td></tr>
+          <tr><td>Duration total is semantically invalid across architectures</td><td>Baseline traced one batch span; current code traces 24 overlapping per-key spans, so <code>Mode.Sum</code> grew 295% while measuring a different quantity.</td><td>Add one batch makespan span and retain per-key diagnostics.</td></tr>
+          <tr><td>Autoplay contract passed</td><td>Search reported 24 prepares/24 first frames; Viewer reported 10/10; all visible videos remained playing during every gesture.</td><td>No single-player or visible-lease cap. Any structural edit must preserve this evidence.</td></tr>
+          <tr><td>Route-wide viewport controller is not justified</td><td>Current feed hot-path architecture achieved stable/slightly better CPU and complete concurrent playback.</td><td>Explicitly defer. This plan does not promote the speculative controller rewrite.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout risk"><strong>Evidence boundary:</strong> the user interaction pass proves user-facing behavior. The Macrobenchmark proves only the isolated offline scenarios on the named device. Neither is live-provider, production-package, or broad device-matrix proof.</div>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+      <article>
+        <h3>Phase 0: Synchronize acceptance and capture the benchmark baseline — complete</h3>
+        <p>Update every active/historical plan that still showed a pending user-facing interaction group. Preserve non-user fault injection and numeric/live-provider gaps as separate evidence. Prove the benchmark package/task boundary, run the five-test physical suite, and retain all JSON/traces.</p>
+      </article>
+      <article>
+        <h3>Phase 1: Repair duration benchmark semantics — complete</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Report one wall-clock duration batch latency alongside per-key work.</td></tr>
+          <tr><td>Edits</td><td>Add a benchmark-only async trace from the first accepted batch through all 24 <code>Known</code> states in <code>BenchmarkDurationWorkload.kt</code>; register a one-span <code>TraceSectionMetric</code> in <code>TheoriaMacrobenchmark.kt</code>.</td></tr>
+          <tr><td>Acceptance</td><td>The benchmark source compiles; final device JSON contains one batch measurement per iteration and retains demand/resolve/probe/publish/workload diagnostics.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 2: Make Viewer transform media-scoped — complete</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Changing post or media immediately returns the visible media to fit scale without rebuilding player/navigation ownership.</td></tr>
+          <tr><td>Edits</td><td>Replace <code>ViewerState</code> with pure <code>ViewerTransformState</code>; key the remembered transform by session and authoritative current media key; keep <code>ViewerUiState</code> as the only route owner.</td></tr>
+          <tr><td>Acceptance</td><td>Transform tests pass, route reducer tests pass, and no obsolete stream/chrome methods remain.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 3: Separate production persistence from test doubles — complete</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>No in-memory repository implementation is packaged with production simply to satisfy a silent default.</td></tr>
+          <tr><td>Edits</td><td>Remove repository defaults from <code>SearchCoordinator</code> and <code>ForYouCoordinator</code>; enable <code>core-data</code> test fixtures; move reusable in-memory repositories to fixtures; delete unused legacy persistence families; split active query/cache persistence into named production files.</td></tr>
+          <tr><td>Acceptance</td><td>Main-source scans find no in-memory repository class; all app/core-data tests compile and pass; production container wiring is unchanged and explicit.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 4: Reduce app-shell mixing at stable seams — complete</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Make startup, window/platform effects, bottom navigation, and global modal rendering independently readable while retaining one app-shell owner.</td></tr>
+          <tr><td>Edits</td><td>Extract <code>AppContainerStartupSurface</code>, activity/window effects, bottom bar rendering, and Save-to-Codex/changelog modal hosts into focused files or components. Pass state/actions; do not create a second store or move route authority.</td></tr>
+          <tr><td>Acceptance</td><td>App compiles, architecture tests remain green, and top-level/deep-link/update/navigation behavior is structurally owned by <code>TheoriaAppContent</code>.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 5: Decompose high-debt providers — complete</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Provider adapters orchestrate; cohesive pure query/parsing/transport policies live in named helpers.</td></tr>
+          <tr><td>Edits</td><td>Extract NHentai mirror parsing and query compilation, and extract Hitomi's page-token codec. Reuse existing Hitomi protocol/cache/resolver helpers rather than layering a second framework.</td></tr>
+          <tr><td>Acceptance</td><td>Provider unit suites and Detekt pass; pagination remains raw-record-owned; canonical post deduplication remains post-hydration; fallback/header/order contracts do not change.</td></tr>
+        </tbody></table>
+      </article>
+      <article>
+        <h3>Phase 6: Refresh compiler profiles and remeasure exact final code — complete</h3>
+        <table class="status-table"><tbody>
+          <tr><td>Goal</td><td>Generated profiles match the final layout and final physical evidence is directly comparable.</td></tr>
+          <tr><td>Safety</td><td>Dry-run and packaged-manifest proof must show <code>com.theoriacodex.baselineprofile</code> before generation and <code>com.theoriacodex.benchmark</code> before benchmark. Never mutate <code>com.theoriacodex</code>.</td></tr>
+          <tr><td>Acceptance</td><td>No stale-profile warning flood; generated profiles change intentionally; all five Macrobenchmarks pass; the complete final connected-output directory is retained; comparison distinguishes regression, improvement, noise, and changed semantics.</td></tr>
+        </tbody></table>
+      </article>
+    </section>
+
+    <section id="work-plan">
+      <h2>Work Plan</h2>
+      <ol>
+        <li>Instrument the benchmark batch before touching runtime architecture so the final run has honest semantics.</li>
+        <li>Remove duplicate Viewer route fields and key only transform state by selected media identity.</li>
+        <li>Make repository dependencies explicit, move reusable fakes to test fixtures, and keep only active file-backed owners in production.</li>
+        <li>Extract shell UI/platform seams through parameterized components; leave state/effect orchestration in <code>TheoriaAppContent</code>.</li>
+        <li>Extract provider policies one adapter at a time, running its focused test suite after each cohesive patch.</li>
+        <li>Run one host validation batch. Repair common causes in grouped patches.</li>
+        <li>Generate profiles through the isolated collection package, rebuild exact final artifacts, then run the physical benchmark once and compare it with both frozen and pre-refactor v0.10.0 results.</li>
+      </ol>
+      <p>Do not touch the route-wide media-duration viewport design, repository schemas, playback pool policy, provider feature behavior, or navigation model. Those areas lack benchmark justification or requirements in this request.</p>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <table>
+        <thead><tr><th>Layer</th><th>Command / observation</th><th>Required result</th></tr></thead>
+        <tbody>
+          <tr><td>Focused JVM</td><td><code>./gradlew :app:testDebugUnitTest :core-data:test :core-sources:test --no-configuration-cache</code></td><td>All relevant state, repository, and provider tests pass.</td></tr>
+          <tr><td>Compile/static</td><td>Compile Debug and benchmarkRelease, run <code>:app:lintDebug</code>, and run each module's configured baseline-aware Detekt owner.</td><td>No compile, lint, or configured Detekt errors.</td></tr>
+          <tr><td>Repo quality</td><td><code>npm run audit:quality</code>, workflow lint, plan validation, and <code>git diff --check</code>.</td><td>Budgets remain fail-closed; no suppressions or threshold increases.</td></tr>
+          <tr><td>Profile safety</td><td>Dry-run task graph plus packaged target/test application-ID guards.</td><td>The target is <code>com.theoriacodex.baselineprofile</code>, the self-instrumenting test APK is <code>com.theoriacodex.baselineprofile.test</code>, and neither can collide with production or each other.</td></tr>
+          <tr><td>Benchmark safety</td><td>Repeat benchmark artifact guards before the final connected run.</td><td>Only <code>com.theoriacodex.benchmark</code> is targeted in <code>:benchmarkFixture</code>.</td></tr>
+          <tr><td>Physical proof</td><td><code>./gradlew :macrobenchmark:connectedBenchmarkReleaseAndroidTest --no-configuration-cache</code> on SM-S926U.</td><td>5/5 pass; 35 traces retained; 24/24 Search and 10/10 Viewer playback events; duration batch present once per iteration.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout"><strong>Manual acceptance:</strong> user-facing interaction groups were already accepted on 2026-08-12. Repeat manual device interaction only if final refactors produce a reproducible behavior signal not covered by the automated lanes.</div>
+    </section>
+
+    <section id="living-log">
+      <h2>Progress, Discoveries, Decisions, And Retrospective</h2>
+      <h3>Progress</h3>
+      <ul>
+        <li>[x] 2026-08-12 — Recorded user acceptance in every plan that still listed a user-facing interaction group as pending.</li>
+        <li>[x] 2026-08-12 — Proved device safety and ran exact-v0.10.0 physical evidence: 5 tests, zero failures/errors/skips, 35 traces.</li>
+        <li>[x] 2026-08-12 — Compared the same-device frozen and current runs; audited startup profiles, duration trace semantics, Viewer state, repository source sets, shell, and provider hotspots.</li>
+        <li>[x] 2026-08-12 — Phase 1: retained per-key duration traces and added one batch-makespan trace/metric for the 24-key workload.</li>
+        <li>[x] 2026-08-12 — Phase 2: replaced duplicate Viewer route state with media-keyed zoom/pan transform state.</li>
+        <li>[x] 2026-08-12 — Phase 3: made coordinator repositories explicit, moved reusable in-memory implementations to test fixtures, split active file-backed query/cache owners, and removed retired file persistence implementations and tests.</li>
+        <li>[x] 2026-08-12 — Phase 4: extracted shell chrome and platform effects while preserving <code>TheoriaAppContent</code> as the navigation/global-state owner.</li>
+        <li>[x] 2026-08-12 — Phase 5: extracted Hitomi page-token policy and NHentai query/mirror parsing from their adapters.</li>
+        <li>[x] 2026-08-12 — Phase 6: regenerated both profiles on the isolated lane, passed the final host and artifact guards, and completed the exact final five-scenario physical benchmark with 35 traces.</li>
+      </ul>
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li>The first benchmark shell setup emitted a nonfatal <code>appops</code> warning because <code>androidx.test.services</code> had no UID before installation; instrumentation continued and all five tests passed. Treat as harness noise unless it becomes fatal or skips evidence.</li>
+        <li>The duration-workload “regression” is a measurement-definition change: one legacy batch span became 24 concurrent spans.</li>
+        <li>D8 reported 736 additional missing startup classes/methods while the checked-in profiles predate the latest application architecture.</li>
+        <li>The first profile-generation attempt found that the Android test module namespace collided with its isolated target package. Android installed the target first, then rejected the version-code-0 test APK as a downgrade. Giving the test APK its own <code>.test</code> identity and guarding both packaged IDs repaired the lane without touching production data.</li>
+        <li>Profile regeneration completed on SM-S926U with 38,889 baseline rules and 36,436 startup rules; the structural refactors changed enough ownership paths to add 9,308 and 9,024 rules respectively.</li>
+        <li>The duplication gate exposed that retaining already-retired file-backed repositories as test fixtures preserved needless parallel implementations. Removing those dead implementations restored the 0.58% fail-closed result while keeping active query/cache migration owners.</li>
+        <li>The current feed system delivered all expected first frames with stable frame CPU, so a route-wide viewport controller would add risk without an evidence-backed payoff.</li>
+        <li>The final duration RSS median rose 19.49% from the pre-refactor run, but its five samples shifted from <code>115788, 130056, 156784, 157376, 194404</code> KiB to <code>117612, 127696, 187340, 189028, 187376</code> KiB. Ordinary Search RSS improved 2.24% and Viewer remained within 0.80%, so this is a bimodal process-state watch item rather than evidence of a duration-owner leak.</li>
+      </ul>
+      <h3>Decision Log</h3>
+      <table>
+        <thead><tr><th>Date</th><th>Decision</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr><td>2026-08-12</td><td>Do not promote the route-wide viewport controller.</td><td>Current numeric evidence does not support replacing the existing hot-path design.</td></tr>
+          <tr><td>2026-08-12</td><td>Regenerate profiles last.</td><td>Profile entries encode code layout; generating before structural movement would immediately stale them again.</td></tr>
+          <tr><td>2026-08-12</td><td>Keep navigation/global effect authority in <code>TheoriaAppContent</code>.</td><td>The maintainability win comes from readable seams, not a second application owner.</td></tr>
+          <tr><td>2026-08-12</td><td>Use Gradle test fixtures for shared repository fakes.</td><td>App tests need the same robust doubles, but production artifacts and constructors should not silently depend on them.</td></tr>
+          <tr><td>2026-08-12</td><td>Delete retired file-backed repositories instead of relocating them.</td><td>No runtime owner or compatibility test used them; retaining a second obsolete persistence family added maintenance and duplication without preserving a live contract.</td></tr>
+          <tr><td>2026-08-12</td><td>Guard the profile test APK identity independently.</td><td>A safe target package is insufficient if the self-instrumenting runner shares its ID; both packaged artifacts must be distinct and non-production before a connected lane starts.</td></tr>
+          <tr><td>2026-08-12</td><td>Stop after the final evidence rather than broadening the audit.</td><td>The target scenarios all passed, autoplay remained complete, frame/heap results were stable or improved, and the sole large RSS movement was bimodal rather than isolated to the refactored owner.</td></tr>
+        </tbody>
+      </table>
+      <h3>Outcomes And Retrospective</h3>
+      <p>All six phases are complete. The code now has explicit production/test repository boundaries, one Viewer route state owner, smaller app-shell and provider seams, honest duration latency semantics, and profiles generated from the final code layout. The bounded host lane passes all app/module unit suites, benchmarkRelease compilation, Android lint, every configured baseline-aware Detekt owner, hotspot budgets, duplication at 0.58%, workflow lint, and whitespace integrity.</p>
+      <table>
+        <thead><tr><th>Final evidence</th><th>Pre-refactor v0.10.0</th><th>Exact final</th><th>Interpretation</th></tr></thead>
+        <tbody>
+          <tr><td>Cold startup median</td><td>338.730 ms</td><td>327.896 ms</td><td>3.20% improvement after profile refresh; still 6.86% above the older frozen build.</td></tr>
+          <tr><td>Warm startup median</td><td>54.067 ms</td><td>56.908 ms</td><td>5.25% slower and 27.45% above frozen; retain as a future multi-run watch item, not a refactor claim.</td></tr>
+          <tr><td>Search CPU P90 / overrun P99</td><td>6.321 / 5.718 ms</td><td>6.209 / 3.822 ms</td><td>CPU improved 1.77%; high-percentile overrun improved 33.17%.</td></tr>
+          <tr><td>Search RSS / heap median</td><td>189572 / 80368 KiB</td><td>185324 / 78271 KiB</td><td>RSS improved 2.24%; heap improved 2.61%.</td></tr>
+          <tr><td>Duration batch makespan</td><td>Unmeasured</td><td>173.118 ms</td><td>Exactly one batch span and 24 per-key spans in every iteration; semantics are now actionable.</td></tr>
+          <tr><td>Viewer CPU P90 / overrun P99</td><td>8.290 / 33.767 ms</td><td>8.174 / 30.192 ms</td><td>CPU improved 1.39%; high-percentile overrun improved 10.59%.</td></tr>
+          <tr><td>Autoplay and progression</td><td>24/24 Search, 10/10 Viewer</td><td>24/24 Search, 10/10 Viewer</td><td>The simultaneous-visible-autoplay contract is preserved.</td></tr>
+        </tbody>
+      </table>
+      <p>The final SM-S926U / Android 16 run completed 5/5 tests with zero failures, errors, or skips and retained 35 Perfetto traces. JSON SHA-256: <code>16778f3b8600e818972522fe80f246a6f850ffff97caac574e009e4de8393190</code>. Checked-in baseline/startup profile SHA-256 values are <code>3fce8166596ab0ac33dc4661b26106b8d503eef3ddbcdba648421f83d357ee48</code> and <code>d9f20751924d5bc298dd50825f8574c5efaebd022242fe5ba0f0c6826356fd32</code>. D8's stale-profile warning count fell from 736 additional missing entries to 68 generated Compose synthetic entries.</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <p>Source and documentation edits are ordinary version-controlled changes and safe to reapply after inspecting the diff. Gradle host tasks are safe to rerun. Profile generation intentionally rewrites checked-in generated profile files; inspect their diff before acceptance. Connected profile and benchmark tasks install only isolated application IDs after their guards pass. Preserve the current benchmark output before rerunning because Gradle may replace variant output directories.</p>
+      <p>If a refactor fails validation, keep already passing independent phases, revert only the incomplete owned patch, update this plan, and resume from its focused test. Do not use destructive Git cleanup, clear packages, uninstall production, or delete the preserved trace directory.</p>
+    </section>
+
+    <section id="appendix">
+      <h2>Appendix: Starting Evidence</h2>
+      <details open><summary>Exact-v0.10.0 physical benchmark</summary>
+        <pre><code>Device: Samsung SM-S926U / Android 16 / SDK 36
+Target package: com.theoriacodex.benchmark
+Tests: 5; failures: 0; errors: 0; skipped: 0
+Traces: 35 Perfetto traces, complete connected output 3.0 GiB
+JSON SHA-256: 5601840e21aa919fc63e7586150d725bf3a75bf4341a5e2edf425ef5c4eab36a
+Output: macrobenchmark/build/outputs/connected_android_test_additional_output/benchmarkRelease/connected/SM-S926U - 16/</code></pre>
+      </details>
+      <details><summary>Same-device baseline comparison</summary>
+        <pre><code>Frozen baseline SHA: 6bd75360747d4dea00ffde8bd97c8078c66b1c88
+Cold startup median: 306.844 ms -> 338.730 ms (+10.39%)
+Warm startup median: 44.652 ms -> 54.067 ms (+21.09%)
+Search frame CPU P90: 6.357 ms -> 6.321 ms (-0.57%)
+Duration Search frame CPU P90: 6.274 ms -> 6.133 ms (-2.25%)
+Viewer frame CPU P90: 7.953 ms -> 8.290 ms (+4.23%)
+Search/duration media-load median: 360/361 -> 230/228 (about -36%)</code></pre>
+      </details>
+    </section>
+  </main>
+</body>
+</html>
