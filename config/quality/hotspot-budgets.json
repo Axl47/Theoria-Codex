@@ -19,7 +19,6 @@
       "app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt": 2420,
       "app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt": 1958,
       "core-sources/src/main/kotlin/com/theoriacodex/sources/hitomi/HitomiSourceAdapter.kt": 1760,
-      "core-data/src/main/kotlin/com/theoriacodex/data/repository/FileBackedRepositories.kt": 1228,
       "core-sources/src/main/kotlin/com/theoriacodex/sources/nhentai/NhentaiSourceAdapter.kt": 1196,
       "app/src/main/java/com/theoriacodex/app/search/SearchViewModel.kt": 1100,
       "app/src/main/java/com/theoriacodex/app/search/SearchCoordinator.kt": 998

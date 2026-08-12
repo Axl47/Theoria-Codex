@@ -51,7 +51,7 @@ internal abstract class LiveSearchCoordinatorRouteTestFixture {
         registry: RealAdapterRegistry,
         storeName: String,
     ): SearchCoordinator {
-        return SearchCoordinator(
+        return testSearchCoordinator(
             registry = registry,
             tagSuggestionStore = FileBackedTagSuggestionStore(
                 storeFile = File(tempFolder.newFolder(storeName), "tag_suggestions.json"),

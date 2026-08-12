@@ -147,60 +147,6 @@ internal class FileBackedQueryRepositoryTest : FileBackedRepositoryTestFixture()
     }
 
     @Test
-    fun `cancelled Codex persistence rolls back every in-memory flow`() = runTest {
-        val dir = tempDir("codex-cancelled-persistence-")
-        ControllableIoDispatcher("codex-io").use { dispatcher ->
-            val repository = FileBackedCodexRepository(dir, ioDispatcher = dispatcher)
-            val codex = repository.createCodex("Saved")
-            val persisted = samplePost("persisted", localPath = null)
-            repository.addItem(codex.codexId, persisted)
-            val originalItems = repository.observeCodexItems(codex.codexId).first()
-            val attempted = samplePost("attempted", localPath = null, source = SourceKey.GELBOORU)
-            val cancellation = CancellationException("cancelled write")
-            dispatcher.dispatchFailure = cancellation
-
-            val failure = runCatching { repository.addItem(codex.codexId, attempted) }.exceptionOrNull()
-
-            assertTrue(failure is CancellationException)
-            assertEquals(cancellation.message, failure?.message)
-            assertEquals(originalItems, repository.observeCodexItems(codex.codexId).first())
-            assertEquals(null, repository.getPost(attempted.id))
-            assertEquals(listOf(persisted), repository.observeCodexPosts(codex.codexId, CodexSortMode.NEWEST_SAVED).first())
-            val reconstructed = FileBackedCodexRepository(dir)
-            assertEquals(originalItems, reconstructed.observeCodexItems(codex.codexId).first())
-            assertEquals(null, reconstructed.getPost(attempted.id))
-        }
-    }
-
-    @Test
-    fun `failed UI restore persistence rolls back plain and mapped state`() = runTest {
-        val dir = tempDir("ui-restore-failed-persistence-")
-        ControllableIoDispatcher("ui-restore-io").use { dispatcher ->
-            val repository = FileBackedUiRestoreRepository(dir, ioDispatcher = dispatcher)
-            val originalScroll = SearchScrollState(firstVisibleItemIndex = 2, firstVisibleItemOffsetPx = 30)
-            repository.setLastTab("codex")
-            repository.setSearchScrollState("query", originalScroll)
-            dispatcher.dispatchFailure = RejectedExecutionException("write rejected")
-
-            val tabFailure = runCatching { repository.setLastTab("settings") }.exceptionOrNull()
-            val scrollFailure = runCatching {
-                repository.setSearchScrollState(
-                    "query",
-                    SearchScrollState(firstVisibleItemIndex = 9, firstVisibleItemOffsetPx = 90),
-                )
-            }.exceptionOrNull()
-
-            assertTrue(tabFailure is RejectedExecutionException)
-            assertTrue(scrollFailure is RejectedExecutionException)
-            assertEquals("codex", repository.getLastTab())
-            assertEquals(originalScroll, repository.getSearchScrollState("query"))
-            val reconstructed = FileBackedUiRestoreRepository(dir)
-            assertEquals("codex", reconstructed.getLastTab())
-            assertEquals(originalScroll, reconstructed.getSearchScrollState("query"))
-        }
-    }
-
-    @Test
     fun `query repository falls back when persisted source or sort is unknown`() = runTest {
         val dir = tempDir("query-unknown-enums-")
         dir.resolve("query_store.json").writeText(

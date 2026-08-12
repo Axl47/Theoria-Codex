@@ -95,7 +95,6 @@ class DataStoreRepositoryContractsTest(
     private fun createSettingsRepository(): SettingsRepository {
         return when (backend) {
             Backend.IN_MEMORY -> InMemorySettingsRepository()
-            Backend.FILE_BACKED -> FileBackedSettingsRepository(newDirectory())
             Backend.DATASTORE -> DataStoreSettingsRepository(newDirectory(), newDataStoreScope())
         }
     }
@@ -103,7 +102,6 @@ class DataStoreRepositoryContractsTest(
     private fun createUiRestoreRepository(): UiRestoreRepository {
         return when (backend) {
             Backend.IN_MEMORY -> InMemoryUiRestoreRepository()
-            Backend.FILE_BACKED -> FileBackedUiRestoreRepository(newDirectory())
             Backend.DATASTORE -> DataStoreUiRestoreRepository(newDirectory(), newDataStoreScope())
         }
     }
@@ -119,7 +117,6 @@ class DataStoreRepositoryContractsTest(
 
     enum class Backend {
         IN_MEMORY,
-        FILE_BACKED,
         DATASTORE,
     }
 

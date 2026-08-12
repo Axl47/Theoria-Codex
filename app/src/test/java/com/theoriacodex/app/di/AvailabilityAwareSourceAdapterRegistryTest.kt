@@ -2,6 +2,8 @@ package com.theoriacodex.app.di
 
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.recommend.ForYouCoordinator
+import com.theoriacodex.app.recommend.testForYouCoordinator
+import com.theoriacodex.app.search.testSearchCoordinator
 import com.theoriacodex.data.repository.InMemoryLikesRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.defaultRecommendationProfiles
@@ -34,7 +36,7 @@ class AvailabilityAwareSourceAdapterRegistryTest {
         val delegate = FakeRegistry(mapOf(pixiv.sourceKey to pixiv, rule34.sourceKey to rule34))
         val capabilities = MutableStateFlow(setOf(SourceKey.PIXIV))
         val registry = AvailabilityAwareSourceAdapterRegistry(delegate, capabilities)
-        val coordinator = SearchCoordinator(registry)
+        val coordinator = testSearchCoordinator(registry)
         val orchestrator = registry.unifiedOrchestrator()
 
         assertEquals(listOf(SourceKey.PIXIV), coordinator.availableSources)
@@ -65,7 +67,7 @@ class AvailabilityAwareSourceAdapterRegistryTest {
     fun `search initialization is idempotent and returns immutable persisted state`() = runTest {
         val pixiv = FakeAdapter(SourceKey.PIXIV)
         val registry = FakeRegistry(mapOf(SourceKey.PIXIV to pixiv))
-        val coordinator = SearchCoordinator(registry)
+        val coordinator = testSearchCoordinator(registry)
 
         val first = coordinator.initializeRoute()
         val second = coordinator.initializeRoute()
@@ -84,7 +86,7 @@ class AvailabilityAwareSourceAdapterRegistryTest {
             delegate = FakeRegistry(mapOf(pixiv.sourceKey to pixiv, rule34.sourceKey to rule34)),
             availableSourceState = capabilities,
         )
-        val search = SearchCoordinator(registry)
+        val search = testSearchCoordinator(registry)
         search.initializeRoute()
 
         val likes = InMemoryLikesRepository()
@@ -94,7 +96,7 @@ class AvailabilityAwareSourceAdapterRegistryTest {
             postId = PostId(SourceKey.RULE34XXX, "liked"),
             tags = listOf("tag"),
         )
-        val forYou = ForYouCoordinator(
+        val forYou = testForYouCoordinator(
             registry = registry,
             settingsRepository = InMemorySettingsRepository(),
             likesRepository = likes,

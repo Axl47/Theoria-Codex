@@ -79,7 +79,7 @@ internal abstract class SearchViewModelTestFixture {
         recentsRepository: RecentsRepository = InMemoryRecentsRepository(),
         executionService: ((SearchCoordinator) -> SearchExecutionService)? = null,
     ): SearchViewModel {
-        val coordinator = SearchCoordinator(
+        val coordinator = testSearchCoordinator(
             ViewModelSearchRegistry(adapter, *additionalAdapters.toTypedArray()),
             queryRepository = queryRepository,
             settingsRepository = InMemorySettingsRepository(),

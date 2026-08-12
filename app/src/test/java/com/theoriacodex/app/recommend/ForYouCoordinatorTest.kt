@@ -47,7 +47,7 @@ class ForYouCoordinatorTest {
             postId = PostId(SourceKey.PIXIV, "liked-pixiv"),
             tags = listOf("favorite"),
         )
-        val coordinator = ForYouCoordinator(
+        val coordinator = testForYouCoordinator(
             registry = registryOf(FakeAdapter(SourceKey.PIXIV, "pixiv-post")),
             settingsRepository = InMemorySettingsRepository(),
             likesRepository = likes,
@@ -76,7 +76,7 @@ class ForYouCoordinatorTest {
     fun `saved FYP search replays exact source tags and sort`() = runTest {
         val pixiv = FakeAdapter(SourceKey.PIXIV, "pixiv-post")
         val gelbooru = FakeAdapter(SourceKey.GELBOORU, "gelbooru-post")
-        val coordinator = ForYouCoordinator(
+        val coordinator = testForYouCoordinator(
             registry = registryOf(pixiv, gelbooru),
             settingsRepository = InMemorySettingsRepository(),
         )
@@ -99,7 +99,7 @@ class ForYouCoordinatorTest {
     @Test
     fun `shuffled recommendations use the injected seed source`() = runTest {
         var seedReads = 0
-        val coordinator = ForYouCoordinator(
+        val coordinator = testForYouCoordinator(
             registry = registryOf(FakeAdapter(SourceKey.PIXIV, "pixiv-post")),
             settingsRepository = InMemorySettingsRepository(),
             seedSource = {
@@ -131,7 +131,7 @@ class ForYouCoordinatorTest {
             postId = PostId(SourceKey.GELBOORU, "liked-gelbooru"),
             tags = listOf("gelbooru favorite"),
         )
-        val coordinator = ForYouCoordinator(
+        val coordinator = testForYouCoordinator(
             registry = registryOf(pixiv, gelbooru),
             settingsRepository = InMemorySettingsRepository(),
             likesRepository = likesRepository,
@@ -182,7 +182,7 @@ class ForYouCoordinatorTest {
             source = SourceKey.PIXIV,
             tags = listOf("only seed"),
         )
-        val coordinator = ForYouCoordinator(
+        val coordinator = testForYouCoordinator(
             registry = registryOf(adapter),
             settingsRepository = settingsRepository,
             likesRepository = likesRepository,
@@ -207,7 +207,7 @@ class ForYouCoordinatorTest {
         val profileId = defaultRecommendationProfiles().first().profileId
         likesRepository.toggleLike(profileId, PostId(SourceKey.PIXIV, "liked-pixiv"), listOf("pixiv seed"))
         likesRepository.toggleLike(profileId, PostId(SourceKey.GELBOORU, "liked-gelbooru"), listOf("gelbooru seed"))
-        val coordinator = ForYouCoordinator(
+        val coordinator = testForYouCoordinator(
             registry = registryOf(healthy, failing),
             settingsRepository = InMemorySettingsRepository(),
             likesRepository = likesRepository,
@@ -232,7 +232,7 @@ class ForYouCoordinatorTest {
             postId = PostId(SourceKey.PIXIV, "liked-pixiv"),
             tags = listOf("pixiv favorite"),
         )
-        val coordinator = ForYouCoordinator(
+        val coordinator = testForYouCoordinator(
             registry = registryOf(adapter),
             settingsRepository = InMemorySettingsRepository(),
             likesRepository = likesRepository,
@@ -274,7 +274,7 @@ class ForYouCoordinatorTest {
         val profileId = defaultRecommendationProfiles().first().profileId
         likesRepository.toggleLike(profileId, PostId(SourceKey.PIXIV, "liked-pixiv"), listOf("pixiv seed"))
         likesRepository.toggleLike(profileId, PostId(SourceKey.RULE34XXX, "liked-rule34"), listOf("rule34 seed"))
-        val coordinator = ForYouCoordinator(
+        val coordinator = testForYouCoordinator(
             registry = registry,
             settingsRepository = InMemorySettingsRepository(),
             likesRepository = likesRepository,
@@ -321,7 +321,7 @@ class ForYouCoordinatorTest {
         val profileId = defaultRecommendationProfiles().first().profileId
         likesRepository.toggleLike(profileId, PostId(SourceKey.PIXIV, "liked-pixiv"), listOf("pixiv seed"))
         likesRepository.toggleLike(profileId, PostId(SourceKey.RULE34XXX, "liked-rule34"), listOf("rule34 seed"))
-        val coordinator = ForYouCoordinator(
+        val coordinator = testForYouCoordinator(
             registry = registryOf(pixiv, rule34),
             settingsRepository = InMemorySettingsRepository(),
             likesRepository = likesRepository,

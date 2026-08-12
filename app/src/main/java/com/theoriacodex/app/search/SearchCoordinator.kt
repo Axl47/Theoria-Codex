@@ -7,11 +7,6 @@ import com.theoriacodex.app.search.state.modeKey
 import com.theoriacodex.app.search.state.queryMode
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.data.repository.AppSettings
-import com.theoriacodex.data.repository.InMemoryQueryRepository
-import com.theoriacodex.data.repository.InMemoryRecentsRepository
-import com.theoriacodex.data.repository.InMemorySettingsRepository
-import com.theoriacodex.data.repository.InMemoryStatisticsRepository
-import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.data.repository.QueryRepository
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.RecentsRepository
@@ -69,11 +64,11 @@ import kotlinx.coroutines.withContext
 @Suppress("LargeClass") // F12 removes route ownership; F15 owns remaining service-size ratchets.
 class SearchCoordinator(
     private val registry: SourceAdapterRegistry,
-    private val queryRepository: QueryRepository = InMemoryQueryRepository(),
-    private val settingsRepository: SettingsRepository = InMemorySettingsRepository(),
-    private val uiRestoreRepository: UiRestoreRepository = InMemoryUiRestoreRepository(),
-    private val recentsRepository: RecentsRepository = InMemoryRecentsRepository(),
-    private val statisticsRepository: StatisticsRepository = InMemoryStatisticsRepository(),
+    private val queryRepository: QueryRepository,
+    private val settingsRepository: SettingsRepository,
+    private val uiRestoreRepository: UiRestoreRepository,
+    private val recentsRepository: RecentsRepository,
+    private val statisticsRepository: StatisticsRepository,
     private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : SearchExecutionService {

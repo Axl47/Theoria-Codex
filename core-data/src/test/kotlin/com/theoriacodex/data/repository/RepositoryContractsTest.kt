@@ -484,10 +484,7 @@ class RepositoryContractTest(
     }
 
     private fun createCodexRepository(): CodexRepository {
-        return when (backend) {
-            Backend.IN_MEMORY -> InMemoryCodexRepository()
-            Backend.FILE_BACKED -> FileBackedCodexRepository(newDirectory())
-        }
+        return InMemoryCodexRepository()
     }
 
     private fun createRecentsRepository(clock: () -> Long): RecentsRepository {
@@ -495,24 +492,15 @@ class RepositoryContractTest(
     }
 
     private fun createSettingsRepository(): SettingsRepository {
-        return when (backend) {
-            Backend.IN_MEMORY -> InMemorySettingsRepository()
-            Backend.FILE_BACKED -> FileBackedSettingsRepository(newDirectory())
-        }
+        return InMemorySettingsRepository()
     }
 
     private fun createLikesRepository(clock: () -> Long): LikesRepository {
-        return when (backend) {
-            Backend.IN_MEMORY -> InMemoryLikesRepository(clock = clock)
-            Backend.FILE_BACKED -> FileBackedLikesRepository(baseDirectory = newDirectory(), clock = clock)
-        }
+        return InMemoryLikesRepository(clock = clock)
     }
 
     private fun createUiRestoreRepository(): UiRestoreRepository {
-        return when (backend) {
-            Backend.IN_MEMORY -> InMemoryUiRestoreRepository()
-            Backend.FILE_BACKED -> FileBackedUiRestoreRepository(newDirectory())
-        }
+        return InMemoryUiRestoreRepository()
     }
 
     private fun newDirectory(): File {
@@ -522,7 +510,6 @@ class RepositoryContractTest(
 
     enum class Backend {
         IN_MEMORY,
-        FILE_BACKED,
     }
 
     companion object {

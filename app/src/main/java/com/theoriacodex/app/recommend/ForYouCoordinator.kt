@@ -5,10 +5,6 @@ import com.theoriacodex.app.search.TagSuggestionStore
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
-import com.theoriacodex.data.repository.InMemoryLikesRepository
-import com.theoriacodex.data.repository.InMemoryRecentsRepository
-import com.theoriacodex.data.repository.InMemorySettingsRepository
-import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.LikedPost
 import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.data.repository.RecentSearchKind
@@ -44,10 +40,10 @@ import kotlin.random.Random
 
 class ForYouCoordinator(
     private val registry: SourceAdapterRegistry,
-    private val settingsRepository: SettingsRepository = InMemorySettingsRepository(),
-    private val likesRepository: LikesRepository = InMemoryLikesRepository(),
-    private val recentsRepository: RecentsRepository = InMemoryRecentsRepository(),
-    private val statisticsRepository: StatisticsRepository = InMemoryStatisticsRepository(),
+    private val settingsRepository: SettingsRepository,
+    private val likesRepository: LikesRepository,
+    private val recentsRepository: RecentsRepository,
+    private val statisticsRepository: StatisticsRepository,
     private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
     private val seedSource: () -> Long = System::currentTimeMillis,
 ) {

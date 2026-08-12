@@ -312,7 +312,7 @@ class SearchCoordinatorTest {
             full = ImageRef("https://example.test/resolved.mp4", null, "video/mp4"),
         )
         val adapter = TestAdapter(SourceKey.IWARA).apply { resolvedPost = resolved }
-        val coordinator = SearchCoordinator(TestRegistry(listOf(adapter)), clock = { now })
+        val coordinator = testSearchCoordinator(TestRegistry(listOf(adapter)), clock = { now })
         val key = "query-a"
 
         assertEquals(resolved, coordinator.resolvePostForSearch(resolved.id, key))
@@ -366,7 +366,7 @@ class SearchCoordinatorTest {
             autocomplete = listOf(suggestion),
             featured = listOf(suggestion),
         )
-        val coordinator = SearchCoordinator(TestRegistry(listOf(adapter)))
+        val coordinator = testSearchCoordinator(TestRegistry(listOf(adapter)))
         coordinator.initializeRoute()
         val query = query(SourceKey.HITOMI, "")
 
@@ -427,7 +427,7 @@ class SearchCoordinatorTest {
         val countDelegate = TestAdapter(SourceKey.GELBOORU)
         val countAdapter = CountAdapter(countDelegate, mapOf("blue_hair" to 321))
         val countStore = RecordingTagStore()
-        val counts = SearchCoordinator(TestRegistry(listOf(countAdapter)), tagSuggestionStore = countStore)
+        val counts = testSearchCoordinator(TestRegistry(listOf(countAdapter)), tagSuggestionStore = countStore)
         counts.initializeRoute()
 
         assertEquals(321, counts.fetchTagVideoCounts(SourceKey.GELBOORU, listOf("blue hair"))["blue hair"])
@@ -443,7 +443,7 @@ class SearchCoordinatorTest {
         )
         val taxonomyAdapter = TestAdapter(SourceKey.NHENTAI).apply { fixedPosts = listOf(post) }
         val taxonomyStore = RecordingTagStore()
-        val taxonomy = SearchCoordinator(TestRegistry(listOf(taxonomyAdapter)), tagSuggestionStore = taxonomyStore)
+        val taxonomy = testSearchCoordinator(TestRegistry(listOf(taxonomyAdapter)), tagSuggestionStore = taxonomyStore)
         taxonomy.initializeRoute()
         taxonomy.executeInitial(query(SourceKey.NHENTAI, ""), SearchSourceScope.Single(SourceKey.NHENTAI))
 
@@ -456,7 +456,10 @@ class SearchCoordinatorTest {
         val gelbooru = TestAdapter(SourceKey.GELBOORU).apply { autocomplete = listOf(TagSuggestion("gelbooru", "tag", 2)) }
         val hitomi = TestAdapter(SourceKey.HITOMI).apply { autocomplete = listOf(TagSuggestion("hitomi", "tag", 1)) }
         val store = RecordingTagStore()
-        val coordinator = SearchCoordinator(TestRegistry(listOf(hitomi, gelbooru, pixiv)), tagSuggestionStore = store)
+        val coordinator = testSearchCoordinator(
+            TestRegistry(listOf(hitomi, gelbooru, pixiv)),
+            tagSuggestionStore = store,
+        )
         coordinator.initializeRoute()
 
         val trending = coordinator.fetchTrending(
@@ -485,7 +488,7 @@ class SearchCoordinatorTest {
         recentsRepository: InMemoryRecentsRepository = InMemoryRecentsRepository(),
         vararg adapters: TestAdapter,
     ): SearchCoordinator {
-        return SearchCoordinator(
+        return testSearchCoordinator(
             registry = TestRegistry(adapters.toList()),
             queryRepository = queryRepository,
             settingsRepository = settingsRepository,
