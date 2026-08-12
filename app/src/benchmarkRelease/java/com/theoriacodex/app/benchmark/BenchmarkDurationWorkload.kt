@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Resources
 import android.media.MediaMetadataRetriever
+import android.os.Build
 import android.os.Trace
 import com.theoriacodex.app.R
 import com.theoriacodex.app.media.DurationDemand
@@ -19,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -84,16 +86,25 @@ internal class BenchmarkDurationWorkload(
                 lifecycleStarted = true,
                 scrollIdle = true,
             )
-            posts.forEach { post ->
-                coordinator.submit(
-                    post = post,
-                    demand = DurationDemand(
-                        identity = DURATION_WORKLOAD_IDENTITY,
-                        key = mediaDurationKey(post),
-                        priority = DurationDemandPriority.BACKGROUND_IDLE,
-                        reason = DurationDemandReason.APPEND,
-                    ),
-                )
+            val keys = posts.map(::mediaDurationKey)
+            beginDurationBatchTrace()
+            try {
+                posts.zip(keys).forEach { (post, key) ->
+                    coordinator.submit(
+                        post = post,
+                        demand = DurationDemand(
+                            identity = DURATION_WORKLOAD_IDENTITY,
+                            key = key,
+                            priority = DurationDemandPriority.BACKGROUND_IDLE,
+                            reason = DurationDemandReason.APPEND,
+                        ),
+                    )
+                }
+                coordinator.states.first { states ->
+                    keys.all { key -> states[key] is MediaDurationState.Known }
+                }
+            } finally {
+                endDurationBatchTrace()
             }
         }
     }
@@ -134,6 +145,18 @@ private fun recordDurationTraceEvent(name: String) {
     Trace.endSection()
 }
 
+private fun beginDurationBatchTrace() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        Trace.beginAsyncSection(TRACE_DURATION_BATCH, DURATION_BATCH_TRACE_COOKIE)
+    }
+}
+
+private fun endDurationBatchTrace() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        Trace.endAsyncSection(TRACE_DURATION_BATCH, DURATION_BATCH_TRACE_COOKIE)
+    }
+}
+
 internal const val ACTION_BENCHMARK_DURATION_START =
     "com.theoriacodex.action.BENCHMARK_DURATION_START"
 internal const val DURATION_STATUS_TAG = "benchmark_duration_status"
@@ -144,4 +167,6 @@ internal const val TRACE_DURATION_PROBE = "TheoriaDurationProbe"
 internal const val TRACE_DURATION_PUBLISH = "TheoriaDurationPublish"
 internal const val TRACE_DURATION_SETTLED = "TheoriaDurationSettled"
 internal const val TRACE_DURATION_WORKLOAD = "TheoriaDurationWorkload"
+internal const val TRACE_DURATION_BATCH = "TheoriaDurationBatch"
 private const val DURATION_WORKLOAD_IDENTITY = "benchmark-duration-workload"
+private const val DURATION_BATCH_TRACE_COOKIE = 1

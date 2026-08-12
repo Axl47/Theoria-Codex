@@ -58,6 +58,7 @@ private const val TRACE_DURATION_PROBE = "TheoriaDurationProbe"
 private const val TRACE_DURATION_PUBLISH = "TheoriaDurationPublish"
 private const val TRACE_DURATION_SETTLED = "TheoriaDurationSettled"
 private const val TRACE_DURATION_WORKLOAD = "TheoriaDurationWorkload"
+private const val TRACE_DURATION_BATCH = "TheoriaDurationBatch"
 
 private val COMPILATION_MODE = CompilationMode.Partial(
     baselineProfileMode = BaselineProfileMode.Require,
@@ -140,6 +141,7 @@ class TheoriaMacrobenchmark {
             countMetric(TRACE_DURATION_PUBLISH, "durationPublish"),
             countMetric(TRACE_DURATION_SETTLED, "durationSettled"),
             durationWorkloadMetric(),
+            durationBatchMetric(),
         ),
         compilationMode = COMPILATION_MODE,
         startupMode = null,
@@ -217,6 +219,15 @@ class TheoriaMacrobenchmark {
             sectionName = TRACE_DURATION_WORKLOAD,
             mode = TraceSectionMetric.Mode.Sum,
             label = "durationWorkload",
+            targetPackageOnly = false,
+        )
+    }
+
+    private fun durationBatchMetric(): TraceSectionMetric {
+        return TraceSectionMetric(
+            sectionName = TRACE_DURATION_BATCH,
+            mode = TraceSectionMetric.Mode.Sum,
+            label = "durationBatch",
             targetPackageOnly = false,
         )
     }
