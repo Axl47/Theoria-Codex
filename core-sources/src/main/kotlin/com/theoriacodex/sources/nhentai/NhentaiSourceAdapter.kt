@@ -47,7 +47,6 @@ import java.net.URLEncoder
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import org.jsoup.Jsoup
 
 class NhentaiSourceAdapter(
     private val httpClient: SourceHttpClient,
@@ -429,7 +428,7 @@ class NhentaiSourceAdapter(
             }
         }
         val body = requestMirror(pathAndQuery)
-        return parseMirrorSearchPage(body)
+        return NhentaiMirrorParser.parseSearchPage(body)
     }
 
     private suspend fun resolvePostFromMirrorPage(galleryId: String): Post? {
@@ -445,7 +444,7 @@ class NhentaiSourceAdapter(
             ?.toIntOrNull()
             ?.coerceAtLeast(1)
             ?: 1
-        val title = parseMirrorTitle(body)
+        val title = NhentaiMirrorParser.parseTitle(body)
             ?.removeSuffix(" - Page 1")
             ?.removeSuffix(" » nhentai")
             ?.trim()
@@ -497,7 +496,7 @@ class NhentaiSourceAdapter(
         NHENTAI_METADATA_MIRROR_BASES.forEach { baseUrl ->
             val response = requestMetadataMirror("$baseUrl/g/$galleryId/")
             if (response != null && response.statusCode in 200..299) {
-                parseMirrorGalleryMetadata(response.body)?.let { metadata ->
+                NhentaiMirrorParser.parseGalleryMetadata(response.body)?.let { metadata ->
                     if (metadata.taxonomy.isNotEmpty()) return metadata
                 }
             }
@@ -514,39 +513,6 @@ class NhentaiSourceAdapter(
                 headers = NHENTAI_METADATA_MIRROR_HEADERS,
             )
         }.getOrNull()
-    }
-
-    private fun parseMirrorGalleryMetadata(body: String): NhentaiMirrorMetadata? {
-        val document = Jsoup.parse(body)
-        val tagLinks = document.select(
-            "section#tags a.tag, li.tags a.tag_btn"
-        )
-        val taxonomy = tagLinks
-            .mapNotNull { link ->
-                val href = link.attr("href").trim()
-                if (!href.isNhentaiTaxonomyPath()) return@mapNotNull null
-                val name = link.selectFirst(".name")?.text()?.trim()
-                    ?: link.ownText().trim()
-                val normalizedName = name.takeIf(String::isNotBlank) ?: return@mapNotNull null
-                val mapped = nhentaiTaxonomy(href.nhentaiTaxonomyNamespace())
-                PostTaxonomyTerm(
-                    value = normalizedName,
-                    facet = mapped.first,
-                    sourceNamespace = mapped.second,
-                )
-            }
-            .distinctBy { term ->
-                Triple(term.facet, term.sourceNamespace, term.value.lowercase())
-            }
-        if (taxonomy.isEmpty()) return null
-
-        val authorName = taxonomy
-            .firstOrNull { term -> term.facet == SearchFacet.ARTIST }
-            ?.value
-        return NhentaiMirrorMetadata(
-            taxonomy = taxonomy,
-            authorName = authorName,
-        )
     }
 
     private suspend fun requestMirror(pathAndQuery: String): String {
@@ -805,84 +771,6 @@ class NhentaiSourceAdapter(
             }
     }
 
-    private fun parseMirrorSearchPage(body: String): JsonObject {
-        val posts = JsonArray()
-        body.lineSequence()
-            .mapNotNull(::parseMirrorSearchPost)
-            .forEach(posts::add)
-        val root = JsonObject()
-        root.add("result", posts)
-        root.addProperty("num_pages", parseMirrorPageCount(body))
-        root.addProperty("per_page", posts.size().coerceAtLeast(1))
-        return root
-    }
-
-    private fun parseMirrorSearchPost(line: String): JsonObject? {
-        val galleryId = NHENTAI_MIRROR_GALLERY_LINK_REGEX.find(line)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?: return null
-        val previewMatch = NHENTAI_MIRROR_THUMB_REGEX.find(line) ?: return null
-        val previewUrl = previewMatch.groupValues[1]
-        val mediaId = previewMatch.groupValues[2]
-        val thumbExt = imageExtension(previewUrl.substringAfterLast('.').substringBefore('?'))
-        val title = parseMirrorSearchTitle(line, previewUrl)
-
-        return JsonObject().apply {
-            addProperty("id", galleryId)
-            addProperty("media_id", mediaId)
-            add("title", JsonObject().apply {
-                addProperty("pretty", title)
-            })
-            add("images", JsonObject().apply {
-                add("thumbnail", JsonObject().apply {
-                    addProperty("t", thumbExt)
-                })
-                add("cover", JsonObject().apply {
-                    addProperty("t", thumbExt)
-                })
-                add("pages", JsonArray())
-            })
-            add("tags", JsonArray())
-            addProperty("mirror_sparse", true)
-        }
-    }
-
-    private fun parseMirrorSearchTitle(line: String, previewUrl: String): String? {
-        val beforePreview = line.substringBefore("]($previewUrl)", missingDelimiterValue = "")
-        val titleStart = beforePreview.indexOf(": ").takeIf { it >= 0 }?.plus(2) ?: return null
-        val titleEnd = beforePreview.lastIndexOf("](").takeIf { it > titleStart } ?: beforePreview.length
-        return beforePreview.substring(titleStart, titleEnd)
-            .trim()
-            .takeIf(String::isNotBlank)
-    }
-
-    private fun parseMirrorPageCount(body: String): Int {
-        val linkedMaxPage = NHENTAI_MIRROR_PAGE_LINK_REGEX.findAll(body)
-            .mapNotNull { match -> match.groupValues.getOrNull(1)?.toIntOrNull() }
-            .maxOrNull()
-        if (linkedMaxPage != null) return linkedMaxPage.coerceAtLeast(1)
-
-        val totalResults = NHENTAI_MIRROR_RESULT_COUNT_REGEX.find(body)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.replace(",", "")
-            ?.toIntOrNull()
-        return if (totalResults != null) {
-            ((totalResults + NHENTAI_SEARCH_PAGE_SIZE - 1) / NHENTAI_SEARCH_PAGE_SIZE).coerceAtLeast(1)
-        } else {
-            1
-        }
-    }
-
-    private fun parseMirrorTitle(body: String): String? {
-        return body.lineSequence()
-            .firstOrNull { line -> line.startsWith("Title: ") }
-            ?.removePrefix("Title: ")
-            ?.trim()
-            ?.takeIf(String::isNotBlank)
-    }
-
     private fun shouldUseMirrorFallback(response: SourceHttpResponse): Boolean {
         return response.matchesChallenge(
             bodyMarkers = setOf("cloudflare", "cf-mitigated", "attention required"),
@@ -894,14 +782,6 @@ private data class ParsedNhentaiTag(
     val name: String,
     val type: String?,
 )
-
-private data class NhentaiMirrorMetadata(
-    val taxonomy: List<PostTaxonomyTerm>,
-    val authorName: String?,
-) {
-    val canonicalTags: List<String>
-        get() = taxonomy.map(PostTaxonomyTerm::value)
-}
 
 private data class NhentaiTagInfo(
     val id: Int,
@@ -934,7 +814,7 @@ private fun ParsedNhentaiTag.toPostTaxonomyTerm(): PostTaxonomyTerm {
     )
 }
 
-private fun nhentaiTaxonomy(type: String?): Pair<SearchFacet, String> {
+internal fun nhentaiTaxonomy(type: String?): Pair<SearchFacet, String> {
     return when (type?.trim()?.lowercase()) {
         NHENTAI_ARTIST_NAMESPACE -> SearchFacet.ARTIST to NHENTAI_ARTIST_NAMESPACE
         NHENTAI_CHARACTER_NAMESPACE -> SearchFacet.CHARACTER to NHENTAI_CHARACTER_NAMESPACE
@@ -946,95 +826,7 @@ private fun nhentaiTaxonomy(type: String?): Pair<SearchFacet, String> {
     }
 }
 
-private fun compileNhentaiQuery(query: Query): String {
-    val include = query.includeTerms.mapNotNull(SearchTerm::compileNhentaiTerm)
-    val exclude = query.excludeTerms
-        .mapNotNull(SearchTerm::compileNhentaiTerm)
-        .map { compiled -> "-$compiled" }
-    return (include + exclude).take(40).joinToString(" ")
-}
-
-private fun SearchTerm.compileNhentaiTerm(): String? {
-    val normalizedValue = normalizeNhentaiTag(value).takeIf(String::isNotBlank) ?: return null
-    val namespace = resolvedNhentaiNamespace() ?: return normalizedValue.takeIf {
-        facet == SearchFacet.TAG && sourceNamespace == null
-    }
-    return "$namespace:${normalizedValue.quotedNhentaiValue()}"
-}
-
-private fun SearchTerm.resolvedNhentaiNamespace(): String? {
-    val expected = when (facet) {
-        SearchFacet.TAG -> NHENTAI_TAG_NAMESPACE
-        SearchFacet.ARTIST -> NHENTAI_ARTIST_NAMESPACE
-        SearchFacet.CHARACTER -> NHENTAI_CHARACTER_NAMESPACE
-        SearchFacet.SERIES -> NHENTAI_SERIES_NAMESPACE
-        SearchFacet.GROUP -> NHENTAI_GROUP_NAMESPACE
-        SearchFacet.TYPE -> NHENTAI_TYPE_NAMESPACE
-        SearchFacet.LANGUAGE -> NHENTAI_LANGUAGE_NAMESPACE
-    }
-    val explicit = sourceNamespace?.trim()?.lowercase()
-    return when {
-        explicit == null && facet == SearchFacet.TAG -> null
-        explicit == null -> expected
-        explicit == expected -> expected
-        else -> null
-    }
-}
-
-private fun String.quotedNhentaiValue(): String {
-    val escaped = replace("\\", "\\\\").replace("\"", "\\\"")
-    return if (any(Char::isWhitespace)) "\"$escaped\"" else escaped
-}
-
-private fun normalizeNhentaiTag(value: String): String {
-    return value
-        .trim()
-        .removePrefix("-")
-        .replace('_', ' ')
-        .replace(NHENTAI_WHITESPACE_REGEX, " ")
-        .trim()
-}
-
-private fun Query.directNhentaiGalleryIdCandidate(): String? {
-    if (excludeTerms.isNotEmpty()) return null
-    val searchable = includeTerms.filterNot { term ->
-        term.isNhentaiDirectLookupFilter()
-    }
-    if (searchable.size != 1) return null
-    val candidate = searchable.single()
-    if (!candidate.isPortableGeneralTag) return null
-    return candidate.value.trim().takeIf(String::isDigitsOnly)
-}
-
-private fun Query.singleIncludeTagCandidate(): String? {
-    if (excludeTerms.isNotEmpty() || includeTerms.size != 1) return null
-    val term = includeTerms.single()
-    if (!term.isPortableGeneralTag) return null
-    return normalizeNhentaiTag(term.value).takeIf(String::isNotBlank)
-}
-
-private fun SearchTerm.isNhentaiDirectLookupFilter(): Boolean {
-    val normalized = normalizeNhentaiFilterTag(value)
-    val isLanguage = normalized in NHENTAI_LANGUAGE_FILTER_TAGS && (
-        isPortableGeneralTag ||
-            (facet == SearchFacet.LANGUAGE && sourceNamespace in setOf(null, NHENTAI_LANGUAGE_NAMESPACE))
-        )
-    val isFullColor = normalized == NHENTAI_FULL_COLOR_TAG && (
-        isPortableGeneralTag ||
-            (facet == SearchFacet.TAG && sourceNamespace == NHENTAI_TAG_NAMESPACE)
-        )
-    return isLanguage || isFullColor
-}
-
-private fun normalizeNhentaiFilterTag(value: String): String {
-    return value
-        .trim()
-        .lowercase()
-        .replace('_', ' ')
-        .replace(NHENTAI_WHITESPACE_REGEX, " ")
-}
-
-private fun String.isNhentaiTaxonomyPath(): Boolean {
+internal fun String.isNhentaiTaxonomyPath(): Boolean {
     return startsWith("/tag/") ||
         startsWith("/artist/") ||
         startsWith("/character/") ||
@@ -1044,38 +836,11 @@ private fun String.isNhentaiTaxonomyPath(): Boolean {
         startsWith("/category/")
 }
 
-private fun String.nhentaiTaxonomyNamespace(): String? {
+internal fun String.nhentaiTaxonomyNamespace(): String? {
     return trim()
         .removePrefix("/")
         .substringBefore('/')
         .takeIf(String::isNotBlank)
-}
-
-private fun mapSortParam(sortMode: SortMode): String? {
-    return when (sortMode) {
-        SortMode.NEWEST -> null
-        SortMode.POPULAR -> "popular-today"
-        SortMode.TOP -> "popular-week"
-        SortMode.RANDOM -> null
-    }
-}
-
-private fun mapTaggedSortParam(sortMode: SortMode): String? {
-    return when (sortMode) {
-        SortMode.NEWEST -> "date"
-        SortMode.POPULAR -> "popular-today"
-        SortMode.TOP -> "popular-week"
-        SortMode.RANDOM -> null
-    }
-}
-
-private fun mapMirrorSortParam(sortMode: SortMode): String? {
-    return when (sortMode) {
-        SortMode.NEWEST -> "date"
-        SortMode.POPULAR -> "popular-today"
-        SortMode.TOP -> "popular-week"
-        SortMode.RANDOM -> "date"
-    }
 }
 
 private fun mapHttpFailure(statusCode: Int): SourceFailureReason {
@@ -1086,7 +851,7 @@ private fun mapHttpFailure(statusCode: Int): SourceFailureReason {
     )
 }
 
-private fun imageExtension(type: String?): String {
+internal fun imageExtension(type: String?): String {
     return when (type?.trim()?.lowercase()) {
         "p", "png" -> "png"
         "g", "gif" -> "gif"
@@ -1156,7 +921,7 @@ private val NHENTAI_METADATA_MIRROR_BASES = listOf(
     "https://nhentai.to",
     "https://nhentai.website",
 )
-private const val NHENTAI_SEARCH_PAGE_SIZE = 25
+internal const val NHENTAI_SEARCH_PAGE_SIZE = 25
 private const val NHENTAI_V2_SEARCH_ALL_QUERY = "*"
 private val NHENTAI_DEFAULT_HEADERS = mapOf(
     "User-Agent" to "TheoriaCodex/1.0 (Android source adapter)",
@@ -1175,22 +940,12 @@ private val NHENTAI_METADATA_MIRROR_HEADERS = mapOf(
     "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 )
 private val NHENTAI_IMAGE_FALLBACK_EXTENSIONS = listOf("webp", "jpg", "png", "gif")
-private const val NHENTAI_FULL_COLOR_TAG = "full color"
-private const val NHENTAI_TAG_NAMESPACE = "tag"
-private const val NHENTAI_ARTIST_NAMESPACE = "artist"
-private const val NHENTAI_CHARACTER_NAMESPACE = "character"
-private const val NHENTAI_SERIES_NAMESPACE = "parody"
-private const val NHENTAI_GROUP_NAMESPACE = "group"
-private const val NHENTAI_TYPE_NAMESPACE = "category"
-private const val NHENTAI_LANGUAGE_NAMESPACE = "language"
-private val NHENTAI_LANGUAGE_FILTER_TAGS = setOf("english", "chinese", "japanese")
 private val NHENTAI_DIRECT_LOOKUP_FILTER_TAGS = NHENTAI_LANGUAGE_FILTER_TAGS + NHENTAI_FULL_COLOR_TAG
-private val NHENTAI_WHITESPACE_REGEX = Regex("\\s+")
-private val NHENTAI_MIRROR_THUMB_REGEX =
+internal val NHENTAI_MIRROR_THUMB_REGEX =
     Regex("""(https://t\d*\.nhentai\.net/galleries/(\d+)/thumb[^\)]*)""")
-private val NHENTAI_MIRROR_GALLERY_LINK_REGEX = Regex("""https?://nhentai\.net/g/(\d+)/""")
-private val NHENTAI_MIRROR_PAGE_LINK_REGEX = Regex("""[?&]page=(\d+)""")
-private val NHENTAI_MIRROR_RESULT_COUNT_REGEX = Regex("""(?m)^#+\s*([\d,]+)\s+results\b""")
+internal val NHENTAI_MIRROR_GALLERY_LINK_REGEX = Regex("""https?://nhentai\.net/g/(\d+)/""")
+internal val NHENTAI_MIRROR_PAGE_LINK_REGEX = Regex("""[?&]page=(\d+)""")
+internal val NHENTAI_MIRROR_RESULT_COUNT_REGEX = Regex("""(?m)^#+\s*([\d,]+)\s+results\b""")
 private val NHENTAI_MIRROR_PAGE_IMAGE_REGEX =
     Regex("""https://i\d*\.nhentai\.net/galleries/(\d+)/1\.(webp|jpg|jpeg|png|gif)""")
 private val NHENTAI_MIRROR_PAGE_COUNT_REGEX = Regex("""\b1\s+of\s+(\d+)\b""")

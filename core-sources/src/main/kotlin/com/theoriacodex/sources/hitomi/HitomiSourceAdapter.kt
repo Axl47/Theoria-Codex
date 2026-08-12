@@ -1,10 +1,8 @@
 package com.theoriacodex.sources.hitomi
 
-import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
-import com.google.gson.annotations.SerializedName
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
@@ -45,7 +43,6 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
-import java.util.Base64
 import java.util.Locale
 import kotlin.math.max
 import kotlinx.coroutines.CancellationException
@@ -105,7 +102,7 @@ class HitomiSourceAdapter(
         FacetedSearchScope(SearchFacet.LANGUAGE, HITOMI_LANGUAGE_NAMESPACE),
     )
 
-    private val gson = Gson()
+    private val pageTokenCodec = HitomiPageTokenCodec()
     private val suggestionCounts = HitomiByteBudgetCache<String, Int>(
         maxBytes = suggestionCountCacheMaxBytes,
         weigh = { key, _ -> key.hitomiUtf8ByteWeight() + Int.SIZE_BYTES },
@@ -266,7 +263,7 @@ class HitomiSourceAdapter(
         val nextToken = if (!exhausted && scannedIds > 0) {
             encodePageToken(
                 HitomiPageToken(
-                    version = PAGE_TOKEN_VERSION,
+                    version = HITOMI_PAGE_TOKEN_VERSION,
                     queryHash = queryHash,
                     primaryKey = primary.key,
                     primaryOffset = primaryOffset,
@@ -322,7 +319,7 @@ class HitomiSourceAdapter(
         val nextToken = if (offset < randomIds.size.toLong()) {
             encodePageToken(
                 HitomiPageToken(
-                    version = PAGE_TOKEN_VERSION,
+                    version = HITOMI_PAGE_TOKEN_VERSION,
                     queryHash = queryHash,
                     primaryKey = primary.key,
                     primaryOffset = offset,
@@ -1376,58 +1373,15 @@ class HitomiSourceAdapter(
     }
 
     private fun encodePageToken(token: HitomiPageToken): String {
-        val json = gson.toJson(token).toByteArray(Charsets.UTF_8)
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(json)
+        return pageTokenCodec.encode(token)
     }
 
     private fun decodePageToken(raw: String): DecodedHitomiPageToken {
-        val token = try {
-            val json = Base64.getUrlDecoder().decode(raw).toString(Charsets.UTF_8)
-            gson.fromJson(json, HitomiPageToken::class.java)
-                ?: throw IllegalArgumentException("null token")
-        } catch (error: RuntimeException) {
-            throw sourceParseFailure("Hitomi page token was malformed", error)
+        return try {
+            pageTokenCodec.decode(raw)
+        } catch (error: HitomiPageTokenException) {
+            throw sourceParseFailure(error.message ?: "Hitomi page token was invalid", error)
         }
-        if (
-            token.version !in setOf(
-                LEGACY_PAGE_TOKEN_VERSION,
-                PREVIOUS_PAGE_TOKEN_VERSION,
-                PAGE_TOKEN_VERSION,
-            ) ||
-            token.queryHash.isNullOrBlank() ||
-            token.primaryKey.isNullOrBlank() ||
-            token.primaryOffset == null ||
-            token.randomSeed == null
-        ) {
-            throw sourceParseFailure("Hitomi page token used an unsupported shape")
-        }
-        return DecodedHitomiPageToken(
-            queryHash = token.queryHash,
-            primaryKey = token.primaryKey,
-            primaryOffset = token.primaryOffset,
-            randomSeed = token.randomSeed,
-            randomSnapshotFingerprint = token.randomSnapshotFingerprint
-                ?.takeIf(RANDOM_SNAPSHOT_FINGERPRINT::matches)
-                ?: token.randomSnapshotFingerprint?.let {
-                    throw sourceParseFailure("Hitomi page token contained an invalid random snapshot")
-                },
-            randomPermutationVersion = if (token.version == PAGE_TOKEN_VERSION) {
-                token.randomPermutationVersion
-            } else {
-                null
-            },
-            globalIndexVersion = if (
-                token.version == PREVIOUS_PAGE_TOKEN_VERSION || token.version == PAGE_TOKEN_VERSION
-            ) {
-                token.globalIndexVersion
-                    ?.takeIf(GLOBAL_INDEX_VERSION_PATTERN::matches)
-                    ?: token.globalIndexVersion?.let {
-                        throw sourceParseFailure("Hitomi page token contained an invalid global index version")
-                    }
-            } else {
-                null
-            },
-        )
     }
 
     private fun sourceHttpFailure(step: String, statusCode: Int): SourceAdapterException {
@@ -1481,35 +1435,6 @@ class HitomiSourceAdapter(
         val exhausted: Boolean,
     )
 
-    private data class HitomiPageToken(
-        @field:SerializedName("version")
-        val version: Int? = null,
-        @field:SerializedName("queryHash")
-        val queryHash: String? = null,
-        @field:SerializedName("primaryKey")
-        val primaryKey: String? = null,
-        @field:SerializedName("primaryOffset")
-        val primaryOffset: Long? = null,
-        @field:SerializedName("randomSeed")
-        val randomSeed: Long? = null,
-        @field:SerializedName("randomSnapshotFingerprint")
-        val randomSnapshotFingerprint: String? = null,
-        @field:SerializedName("randomPermutationVersion")
-        val randomPermutationVersion: Int? = null,
-        @field:SerializedName("globalIndexVersion")
-        val globalIndexVersion: String? = null,
-    )
-
-    private data class DecodedHitomiPageToken(
-        val queryHash: String,
-        val primaryKey: String,
-        val primaryOffset: Long,
-        val randomSeed: Long,
-        val randomSnapshotFingerprint: String?,
-        val randomPermutationVersion: Int?,
-        val globalIndexVersion: String?,
-    )
-
     private data class ParsedContentRange(
         val startByte: Long,
         val endByte: Long,
@@ -1547,9 +1472,6 @@ class HitomiSourceAdapter(
         internal const val DEFAULT_SUGGESTION_COUNT_CACHE_BYTES = 256L * 1024L
         internal const val DEFAULT_GALLERY_MANIFEST_CACHE_BYTES = 8L * 1024L * 1024L
         internal const val DEFAULT_GALLERY_MANIFEST_TTL_MILLIS = 2L * 60L * 1000L
-        private const val LEGACY_PAGE_TOKEN_VERSION = 2
-        private const val PREVIOUS_PAGE_TOKEN_VERSION = 3
-        private const val PAGE_TOKEN_VERSION = 4
         private const val BASE_PRIMARY_KEY = "__all__"
         private const val HITOMI_ALL_LANGUAGE = "all"
         private const val HITOMI_ANIME_TYPE = "anime"
@@ -1581,7 +1503,6 @@ class HitomiSourceAdapter(
             "russian",
         )
         private const val HITOMI_LANGUAGE_NAMESPACE = "language"
-        private val GLOBAL_INDEX_VERSION_PATTERN = Regex("[0-9]+")
 
         private val HITOMI_AVIF_HOST = Regex("""a[12]\.gold-usergeneratedcontent\.net""")
         private val HITOMI_WEBP_HOST = Regex("""w[12]\.gold-usergeneratedcontent\.net""")
@@ -1589,7 +1510,6 @@ class HitomiSourceAdapter(
         private val HITOMI_MEDIA_HASH = Regex("""[0-9a-f]{64}""")
         private val HITOMI_MEDIA_EXTENSION = Regex("""[a-z0-9]{1,10}""")
         private val CONTENT_RANGE_PATTERN = Regex("""bytes\s+(\d+)-(\d+)/(\d+|\*)""", RegexOption.IGNORE_CASE)
-        private val RANDOM_SNAPSHOT_FINGERPRINT = Regex("[0-9a-f]{64}")
         private val WHITESPACE_PATTERN = Regex("\\s+")
         private val EMPTY_IMAGE_REF = ImageRef(url = null, localPath = null, mime = null)
 

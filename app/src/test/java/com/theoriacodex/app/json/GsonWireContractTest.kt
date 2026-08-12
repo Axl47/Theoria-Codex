@@ -121,7 +121,7 @@ class GsonWireContractTest {
                 1,
             ),
             LegacyFixture(
-                "com.theoriacodex.sources.hitomi.HitomiSourceAdapter\$HitomiPageToken",
+                "com.theoriacodex.sources.hitomi.HitomiPageToken",
                 """{"version":2,"queryHash":"legacy-query","primaryKey":"all","primaryOffset":12}""",
                 "primaryOffset",
                 12L,

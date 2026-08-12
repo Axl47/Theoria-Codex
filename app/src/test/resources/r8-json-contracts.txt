@@ -45,4 +45,4 @@ com.theoriacodex.app.codex.CodexSharePostSnapshot|preview,full,media,pageUrl,wid
 com.theoriacodex.app.codex.CodexShareImageRef|url,mime,progressiveUrls,isAnimated
 com.theoriacodex.app.codex.CodexShareTaxonomyTerm|value,facet,sourceNamespace
 com.theoriacodex.app.codex.CodexShareCreatorProfile|source,displayName,profileId,profileUrl,uploadsQuery
-com.theoriacodex.sources.hitomi.HitomiSourceAdapter$HitomiPageToken|version,queryHash,primaryKey,primaryOffset,randomSeed,randomSnapshotFingerprint,randomPermutationVersion,globalIndexVersion
+com.theoriacodex.sources.hitomi.HitomiPageToken|version,queryHash,primaryKey,primaryOffset,randomSeed,randomSnapshotFingerprint,randomPermutationVersion,globalIndexVersion
