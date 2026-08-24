@@ -7,6 +7,6 @@
     "audit:quality": "npm run audit:hotspots && npm run audit:duplicates"
   },
   "devDependencies": {
-    "jscpd": "4.2.5"
+    "jscpd": "5.0.16"
   }
 }
