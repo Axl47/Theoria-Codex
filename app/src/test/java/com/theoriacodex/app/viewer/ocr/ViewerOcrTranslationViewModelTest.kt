@@ -185,14 +185,6 @@ class ViewerOcrTranslationViewModelTest {
         assertEquals(2, service.translationCallCount)
     }
 
-    @Test
-    fun `missing platform language message identifies the device translator`() {
-        assertEquals(
-            "Japanese → English isn't available through this device's on-device translator.",
-            translationLanguageNotReadyMessage(ViewerOcrLanguage.JAPANESE),
-        )
-    }
-
     private fun identity(name: String): ViewerOcrSelectionIdentity {
         return ViewerOcrSelectionIdentity(
             session = ViewerSessionIdentity("session-$name"),

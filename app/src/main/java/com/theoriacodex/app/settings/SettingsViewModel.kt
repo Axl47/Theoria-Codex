@@ -334,7 +334,6 @@ internal class SettingsViewModel(
             }
             is SettingsAction.SetOcrLanguageEnabled -> setOcrLanguageEnabled(action)
             is SettingsAction.DownloadOcrLanguage -> downloadOcrLanguage(action.language)
-            is SettingsAction.DownloadTranslationLanguage -> downloadTranslationLanguage(action.language)
             is SettingsAction.SetScenarioPreset -> launchMutation {
                 dependencies.settingsRepository.setScenarioPreset(action.preset)
             }
@@ -362,9 +361,6 @@ internal class SettingsViewModel(
                     updateState { copy(changelogLoading = true) }
                     effectChannel.trySend(SettingsEffect.LoadChangelog)
                 }
-            }
-            SettingsAction.OpenTranslationSettings -> {
-                effectChannel.trySend(SettingsEffect.OpenTranslationSettings)
             }
             SettingsAction.ChangelogRequestFinished -> updateState { copy(changelogLoading = false) }
             else -> return false
@@ -437,10 +433,6 @@ internal class SettingsViewModel(
             if (!dependencies.ocrLanguageModels.download(language)) return@launch
             dependencies.settingsRepository.setOcrLanguageEnabled(language, true)
         }
-    }
-
-    private fun downloadTranslationLanguage(language: ViewerOcrLanguage) {
-        ownerScope.launch { dependencies.ocrLanguageModels.downloadTranslation(language) }
     }
 
     private fun refreshOcrLanguageModels() {

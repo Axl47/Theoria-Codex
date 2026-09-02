@@ -192,7 +192,7 @@ internal fun viewerOcrTransform(
 @Composable
 private fun TranslationCardContent(card: ViewerTranslationCardState) {
     when (card) {
-        is ViewerTranslationCardState.PreparingTranslator -> LoadingTranslationCard("Preparing translation…")
+        is ViewerTranslationCardState.PreparingTranslator -> LoadingTranslationCard("Connecting…")
         is ViewerTranslationCardState.Translating -> LoadingTranslationCard("Translating…")
         is ViewerTranslationCardState.Ready -> Text(
             text = card.translatedText,

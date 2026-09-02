@@ -102,13 +102,11 @@ sealed interface SettingsAction {
         val enabled: Boolean,
     ) : SettingsAction
     data class DownloadOcrLanguage(val language: ViewerOcrLanguage) : SettingsAction
-    data class DownloadTranslationLanguage(val language: ViewerOcrLanguage) : SettingsAction
     data class SetScenarioPreset(val preset: ScenarioPreset) : SettingsAction
     data object ToggleClearCacheOptions : SettingsAction
     data object ClearThumbnailCache : SettingsAction
     data object ClearFullImageCache : SettingsAction
     data object OpenChangelog : SettingsAction
-    data object OpenTranslationSettings : SettingsAction
     data object ChangelogRequestFinished : SettingsAction
     data object ConnectPixiv : SettingsAction
     data object DisconnectPixiv : SettingsAction
@@ -131,7 +129,6 @@ sealed interface SettingsEffect {
     data class OpenExternalUri(val uri: String) : SettingsEffect
     data class ShowMessage(val message: String, val long: Boolean = false) : SettingsEffect
     data object LoadChangelog : SettingsEffect
-    data object OpenTranslationSettings : SettingsEffect
     data object ThumbnailCacheCleared : SettingsEffect
     data object NavigateToSettings : SettingsEffect
 }

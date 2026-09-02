@@ -71,14 +71,11 @@ internal fun ViewerOcrSettingsSection(
         }
 
         Text(
-            text = "OCR models are shared device modules. Translation languages are managed " +
-                "by the device's on-device translation service when supported.",
+            text = "OCR runs on this device. When you tap detected text, only that phrase " +
+                "and its source language are sent to translate.axor.dev for translation.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        TextButton(onClick = { onAction(SettingsAction.OpenTranslationSettings) }) {
-            Text("Manage translation languages")
-        }
     }
 }
 
@@ -110,15 +107,6 @@ private fun ViewerOcrLanguageRow(
                     Text("Download OCR")
                 }
             }
-            OcrLanguageModelState.TranslationNotDownloaded ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    DisableUnavailableLanguageSwitch(language, enabled, onAction)
-                    TextButton(
-                        onClick = { onAction(SettingsAction.DownloadTranslationLanguage(language)) },
-                    ) {
-                        Text("Get translation")
-                    }
-                }
             is OcrLanguageModelState.Downloading -> {
                 val progress = modelState.progressPercent
                 if (progress == null) {
@@ -171,10 +159,9 @@ private fun ViewerOcrLanguage.displayLabel(): String = when (this) {
 internal fun ocrLanguageModelStatusLabel(state: OcrLanguageModelState): String = when (state) {
     OcrLanguageModelState.Checking -> "Checking availability"
     OcrLanguageModelState.NotDownloaded -> "OCR model needed"
-    OcrLanguageModelState.TranslationNotDownloaded -> "OCR available · translation needed"
     is OcrLanguageModelState.Downloading ->
         state.progressPercent?.let { "Downloading · $it%" } ?: "Downloading"
-    OcrLanguageModelState.Ready -> "OCR and translation available"
+    OcrLanguageModelState.Ready -> "OCR available on device"
     is OcrLanguageModelState.Failed -> state.message
     is OcrLanguageModelState.Unavailable -> state.message
 }

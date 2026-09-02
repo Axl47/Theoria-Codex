@@ -7,7 +7,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.view.translation.TranslationManager
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -18,7 +17,6 @@ import androidx.core.content.pm.PackageInfoCompat
 import androidx.core.net.toUri
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.ui.routes.activeRecommendationProfile
-import com.theoriacodex.app.viewer.ocr.openSamsungTranslationSettings
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.RecommendationProfile
 import kotlinx.coroutines.flow.first
@@ -61,15 +59,6 @@ internal fun openUnknownSourcesSettings(context: Context) {
         }
         context.startActivity(intent)
     }
-}
-
-internal fun openOnDeviceTranslationSettings(context: Context): Boolean {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        val standardIntent = context.getSystemService(TranslationManager::class.java)
-            ?.onDeviceTranslationSettingsActivityIntent
-        if (standardIntent != null && runCatching { standardIntent.send() }.isSuccess) return true
-    }
-    return openSamsungTranslationSettings(context)
 }
 
 internal tailrec fun Context.findActivity(): Activity? = when (this) {

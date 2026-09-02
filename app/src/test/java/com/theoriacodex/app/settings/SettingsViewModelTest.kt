@@ -133,30 +133,6 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `missing translation language delegates to the model source`() = runTest {
-        val models = FakeOcrLanguageModelSource(
-            initial = ViewerOcrLanguage.entries.associateWith {
-                OcrLanguageModelState.TranslationNotDownloaded
-            },
-        )
-        val owner = owner(ocrLanguageModels = models)
-
-        owner.onAction(SettingsAction.DownloadTranslationLanguage(ViewerOcrLanguage.KOREAN))
-        runCurrent()
-
-        assertEquals(listOf(ViewerOcrLanguage.KOREAN), models.translationDownloads)
-    }
-
-    @Test
-    fun `translation language action delegates to the platform settings effect`() = runTest {
-        val owner = owner()
-
-        owner.onAction(SettingsAction.OpenTranslationSettings)
-
-        assertEquals(SettingsEffect.OpenTranslationSettings, owner.effects.first())
-    }
-
-    @Test
     fun `late source availability appears and toggle persists from the live source set`() = runTest {
         val settingsRepository = InMemorySettingsRepository()
         val availableSources = MutableStateFlow(setOf(SourceKey.PIXIV))
@@ -319,7 +295,6 @@ private class FakeOcrLanguageModelSource(
     private val mutableStates = MutableStateFlow(initial)
     override val states: StateFlow<Map<ViewerOcrLanguage, OcrLanguageModelState>> = mutableStates
     val downloads = mutableMapOf<ViewerOcrLanguage, Int>()
-    val translationDownloads = mutableListOf<ViewerOcrLanguage>()
     var refreshCount = 0
 
     override suspend fun refresh() {
@@ -329,11 +304,6 @@ private class FakeOcrLanguageModelSource(
     override suspend fun download(language: ViewerOcrLanguage): Boolean {
         downloads[language] = downloads.getOrDefault(language, 0) + 1
         mutableStates.value = mutableStates.value + (language to OcrLanguageModelState.Ready)
-        return true
-    }
-
-    override suspend fun downloadTranslation(language: ViewerOcrLanguage): Boolean {
-        translationDownloads += language
         return true
     }
 }

@@ -3,14 +3,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
-    <queries>
-        <package android:name="com.samsung.android.smartsuggestions" />
-        <package android:name="com.sec.android.app.samsungapps" />
-        <package android:name="com.samsung.android.nmt.apps.t2t.languagepack.enja" />
-        <package android:name="com.samsung.android.nmt.apps.t2t.languagepack.enzh" />
-        <package android:name="com.samsung.android.nmt.apps.t2t.languagepack.enko" />
-    </queries>
-
     <application
         android:name=".TheoriaApplication"
         android:allowBackup="true"

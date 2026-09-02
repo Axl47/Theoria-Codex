@@ -426,18 +426,6 @@ internal fun TheoriaAppContent(
             settingsOwner.onAction(SettingsAction.SettingsEntered)
         }
     }
-    DisposableEffect(lifecycleOwner, settingsOwner, homeTabRoute) {
-        if (homeTabRoute != TopLevelDestination.Settings.route) {
-            return@DisposableEffect onDispose {}
-        }
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                settingsOwner.onAction(SettingsAction.SettingsEntered)
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
     var pendingTopLevelRoute by remember { mutableStateOf<String?>(null) }
     var homeTabRestoreComplete by remember { mutableStateOf(false) }
     var navReady by remember(appContainer) { mutableStateOf(appShellState.appReady) }
@@ -1136,15 +1124,6 @@ internal fun TheoriaAppContent(
                     }
                 } finally {
                     settingsOwner.onAction(SettingsAction.ChangelogRequestFinished)
-                }
-            }
-            SettingsEffect.OpenTranslationSettings -> {
-                if (!openOnDeviceTranslationSettings(appContext)) {
-                    Toast.makeText(
-                        appContext,
-                        "On-device translation settings aren't available",
-                        Toast.LENGTH_LONG,
-                    ).show()
                 }
             }
             SettingsEffect.ThumbnailCacheCleared -> thumbnailCacheGeneration += 1
