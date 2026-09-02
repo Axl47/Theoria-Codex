@@ -268,6 +268,11 @@ dependencies {
     implementation(libs.androidx.media3.ui)
     implementation(libs.androidx.profileinstaller)
     implementation(libs.gson)
+    implementation(libs.kotlinx.coroutines.play.services)
+    implementation(libs.play.services.base)
+    implementation(libs.play.services.mlkit.text.recognition.chinese)
+    implementation(libs.play.services.mlkit.text.recognition.japanese)
+    implementation(libs.play.services.mlkit.text.recognition.korean)
 
     baselineProfile(project(":baseline-profile"))
 

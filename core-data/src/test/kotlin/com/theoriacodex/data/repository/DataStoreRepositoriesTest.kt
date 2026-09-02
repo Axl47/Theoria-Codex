@@ -55,6 +55,8 @@ class DataStoreRepositoriesTest {
         assertEquals(setOf(SourceKey.PIXIV, SourceKey.GELBOORU), settings.runtime.enabledSources)
         assertTrue(settings.cache.cacheFullImageOnSave)
         assertTrue(settings.viewer.invertMultiImageScrollDirection)
+        assertFalse(settings.viewer.automaticTextTranslationEnabled)
+        assertTrue(settings.viewer.enabledOcrLanguages.isEmpty())
         assertEquals("profile-custom", settings.activeProfileId)
         assertEquals(listOf("blue_hair"), settings.favoriteTagsByProfile.getValue("profile-custom").map { it.tag })
         assertFalse(legacy.exists())
@@ -83,6 +85,9 @@ class DataStoreRepositoriesTest {
         val firstScope = newScope()
         val first = DataStoreSettingsRepository(directory, firstScope)
         first.setCacheFullImageOnSave(false)
+        first.setAutomaticTextTranslationEnabled(true)
+        first.setOcrLanguageEnabled(ViewerOcrLanguage.CHINESE, true)
+        first.setOcrLanguageEnabled(ViewerOcrLanguage.KOREAN, true)
         first.setScenarioPreset(ScenarioPreset.SLOW_NETWORK)
         closeScope(firstScope)
 
@@ -91,9 +96,37 @@ class DataStoreRepositoriesTest {
         val settings = reconstructed.observeSettings().first()
 
         assertFalse(settings.cache.cacheFullImageOnSave)
+        assertTrue(settings.viewer.automaticTextTranslationEnabled)
+        assertEquals(
+            setOf(ViewerOcrLanguage.CHINESE, ViewerOcrLanguage.KOREAN),
+            settings.viewer.enabledOcrLanguages,
+        )
         assertEquals(ScenarioPreset.SLOW_NETWORK, settings.scenarioPreset)
         assertEquals(1, reconstructed.storageStatus.value.imports.size)
         closeScope(secondScope)
+    }
+
+    @Test
+    fun `settings ignore unknown OCR languages without resetting known preferences`() = runTest {
+        val directory = tempFolder.newFolder("settings-unknown-ocr-language")
+        directory.resolve(DATASTORE_SETTINGS_FILE_NAME).writeText(
+            """
+            {
+              "schemaVersion": 3,
+              "settings": {
+                "viewerAutomaticTextTranslationEnabled": true,
+                "viewerEnabledOcrLanguages": ["JAPANESE", "FUTURE_SCRIPT"]
+              },
+              "legacyImports": []
+            }
+            """.trimIndent(),
+        )
+        val scope = newScope()
+        val settings = DataStoreSettingsRepository(directory, scope).observeSettings().first()
+
+        assertTrue(settings.viewer.automaticTextTranslationEnabled)
+        assertEquals(setOf(ViewerOcrLanguage.JAPANESE), settings.viewer.enabledOcrLanguages)
+        closeScope(scope)
     }
 
     @Test

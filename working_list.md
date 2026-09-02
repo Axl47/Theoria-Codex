@@ -1,6 +1,6 @@
 # Working List
 
-## Current Task: Viewer CJK OCR Translation ExecPlan
+## Current Task: Implement Viewer CJK OCR Translation
 
 ### In Progress
 
@@ -12,10 +12,14 @@
 
 ### Done
 
-- [x] Read the task-orchestrator workflow and `.docs/PLANS.md` in full. Verification: required plan format, living-log sections, recovery guidance, and authoring checklist captured before plan edits.
-- [x] Initialized this task-specific working list before editing the ExecPlan.
-- [x] Inspected Viewer, Settings, persistence, dependency, and test boundaries. Verification: traced `ViewerScreen` image success/fit/transform/gesture paths, `ViewerRoute` ownership, DataStore-backed `ViewerSettings`, Settings actions/owner, application container construction, CJK taxonomy metadata, and existing unit/device safety lanes.
-- [x] Defined the OCR language/model lifecycle and ordered recognition fallback. Verification: the plan specifies durable enablement versus live readiness, explicit-only model downloads, metadata-first ordering, Japanese → Chinese → Korean fallback, first valid script-evidence stop, and non-GMS failure behavior.
-- [x] Defined background Viewer analysis, overlay geometry, tap/loading/translation states, and failure behavior. Verification: the plan specifies current/static-only admission, resolution-aware start, bounded decode, stale identity, transformed highlights, inverse hit testing, screen-space cards, model preparation, success/failure timers, and gesture preservation.
-- [x] Created `.docs/exec/viewer-cjk-ocr-translation.html` as a self-contained implementation plan. Verification: required purpose, status, context, phases, work plan, validation, living log, recovery, and appendix sections are present.
-- [x] Validated HTML structure, repository references, commands, acceptance checks, and working-tree scope. Verification: strict tag-stack/anchor audit passed for 64,781 bytes, 11 unique section IDs, and 15 links; trailing-whitespace and `git diff --check` checks passed; only `working_list.md` and the new ExecPlan are changed.
+- [x] Re-read the task-orchestrator workflow and the complete current ExecPlan before implementation.
+- [x] Reinitialized this implementation checklist before source edits.
+- [x] Phase 1 — Added backward-compatible Viewer OCR settings, atomic per-language persistence, unbundled ML Kit dependencies, explicit Google Play module state/download management, Settings UI, container wiring, R8 contract fields, and focused tests. Verification: `:core-data:test`, focused Settings/model-manager tests, and `:app:compileDebugKotlin` passed; the batch exposed and then proved the repair for a concurrent language-enable lost update.
+- [x] Phase 2 — Added Android-free metadata/order/script/geometry policy, bounded Coil decode, sequential ML Kit recognition, trace spans, and a cancellable Android 12+ system translation gateway. Verification: `ViewerOcrPolicyTest` and Debug Kotlin compilation passed. Discovery: ML Kit Translation attribution conflicts with its adult-content branding restriction, so the living plan now uses the neutral platform translator and retains ML Kit only for OCR.
+- [x] Phase 3 — Wired a dedicated navigation-scoped OCR owner to live model readiness, durable Viewer settings, current static media identity, resolved metadata, and successful Coil image delivery. Verification: focused owner/route/image-pipeline tests and Debug Kotlin compilation passed; tests cover delayed eligibility, stale media results, positive quality-upgrade stability, and immediate disable clearing.
+- [x] Phase 4 — Added a shared transformed image/highlight layer, padded fit/zoom/pan hit testing, accessibility activation semantics, an unscaled below/above-clamped card, and preparing/translating/success/failure state with cache reuse and bounded timers. Verification: focused OCR policy, owner, overlay geometry, Viewer transform/image pipeline, and model-manager tests plus Debug compilation passed.
+- [x] Phase 5 — Completed host validation and durable documentation. Verification: 106 app-logic, 112 core-data, and 538 app tests passed with zero failures/errors; Android-test compilation, Debug assembly, affected Detekt owners, hotspot gate, 0.57% duplication gate, both 241-field release JSON checks, HTML/diff checks, and Debug package identity `com.theoriacodex.debug` passed. No APK was installed or launched.
+
+### Needs Human Validation
+
+- [!] On an isolated Debug install, download the requested OCR models and validate real horizontal/vertical/stylized CJK pages plus OEM on-device translation. This was not claimed from host tests because it requires a compatible device, model downloads, and representative user media.

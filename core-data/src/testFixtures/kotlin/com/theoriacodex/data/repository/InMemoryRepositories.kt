@@ -456,6 +456,20 @@ class InMemorySettingsRepository : SettingsRepository {
         }
     }
 
+    override suspend fun setAutomaticTextTranslationEnabled(enabled: Boolean) {
+        updateSettings { current ->
+            current.copy(viewer = current.viewer.copy(automaticTextTranslationEnabled = enabled))
+        }
+    }
+
+    override suspend fun setOcrLanguageEnabled(language: ViewerOcrLanguage, enabled: Boolean) {
+        updateSettings { current ->
+            val updated = current.viewer.enabledOcrLanguages.toMutableSet()
+            if (enabled) updated += language else updated -= language
+            current.copy(viewer = current.viewer.copy(enabledOcrLanguages = updated))
+        }
+    }
+
     override suspend fun setScenarioPreset(preset: ScenarioPreset) {
         updateSettings { current -> current.copy(scenarioPreset = preset) }
     }

@@ -17,10 +17,14 @@ class NavigationChromeArchitectureTest {
         listOf(
             "app/src/main/java/com/theoriacodex/app/codex/CodexDetailScreen.kt",
             "app/src/main/java/com/theoriacodex/app/creator/CreatorProfileScreen.kt",
-            "app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt",
+            "app/src/main/java/com/theoriacodex/app/viewer/ViewerChrome.kt",
         ).forEach { path ->
             assertTrue("$path must use shared secondary chrome", "SecondaryScreenAppBar(" in source(path))
         }
+        assertTrue(
+            "ViewerScreen must delegate its chrome to ViewerChrome",
+            "ViewerChrome(" in source("app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt"),
+        )
     }
 
     @Test

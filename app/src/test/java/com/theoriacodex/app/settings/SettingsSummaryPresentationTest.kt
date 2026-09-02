@@ -34,6 +34,13 @@ class SettingsSummaryPresentationTest {
     }
 
     @Test
+    fun `Viewer OCR summary reports global state and configured languages`() {
+        assertEquals("Off", viewerOcrSettingsSummary(enabled = false, enabledLanguageCount = 3))
+        assertEquals("On · 1 language enabled", viewerOcrSettingsSummary(true, 1))
+        assertEquals("On · 2 languages enabled", viewerOcrSettingsSummary(true, 2))
+    }
+
+    @Test
     fun `Codex entry count uses singular and plural labels`() {
         assertEquals("Entered 1 Time", codexEntryCountLabel(1))
         assertEquals("Entered 2 Times", codexEntryCountLabel(2))

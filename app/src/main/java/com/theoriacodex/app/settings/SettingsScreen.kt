@@ -368,6 +368,11 @@ fun SettingsScreen(
             }
         }
 
+        ViewerOcrSettingsSection(
+            state = state,
+            onAction = onAction,
+        )
+
         SettingsSection(
             title = "Storage & Caching",
             summary = cacheSummary(state.cacheSnapshot.thumbnailCount, state.cacheSnapshot.fullImageCount),

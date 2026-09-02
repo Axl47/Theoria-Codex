@@ -52,6 +52,14 @@ The Search route applies persisted scroll position once when the route is restor
 
 The collapsed Search field renders applied context through its existing unfocused placeholder slot. Build that summary only from `applied` query/source state plus current visibility-filter state; never copy the summary into the real text input or present draft terms as applied. Keep it one line with ellipsis and do not add a separate applied-query row.
 
+## Viewer OCR Translation
+
+Viewer OCR is opt-in, current-static-image-only work. Intersect the durable enabled-language set with live downloaded model readiness, prefer typed post language metadata, then try remaining ready recognizers in Japanese, Chinese, Korean order. Never download an OCR model from Viewer, pre-scan adjacent media, scan animated media, or accept Latin-only recognizer output as CJK text.
+
+Decode OCR input through the source-aware Coil request path into at most a 2048 by 2048 software bitmap. Store regions as normalized image polygons, keep highlights under the exact Viewer image transform, keep the translation card at screen scale, and reject every late result by session, media, load generation, and displayed candidate identity. A positive detection survives same-media quality upgrades; a negative result may retry only one later candidate.
+
+Use Android's API-31+ on-device translation framework and its cancellation/destroy lifecycle. Do not substitute ML Kit Translation: it requires Google Translate attribution whose branding rules conflict with an adult-content Viewer. Older or unsupported platform translators retain OCR highlights and show the bounded translation-unavailable card.
+
 ## Recents Section Identity
 
 Watched and Codex are independent Recents memberships, not mutually exclusive labels derived from the latest Viewer origin. One canonical post may have one row in each section while sharing the same `posts` payload. Keep section in the `recent_watched` identity, preserve exact launch origin as row metadata, carry the section explicitly through `ViewerLaunchContext` when reopening from Recents, and clear or route by section. The combined All activity view may collapse duplicate canonical posts to the newest membership, but the filtered sections must retain both.

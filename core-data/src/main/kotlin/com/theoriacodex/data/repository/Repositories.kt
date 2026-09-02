@@ -328,8 +328,16 @@ data class ContentFilterSettings(
     val resolveUnknownAnimatedDurations: Boolean = false,
 )
 
+enum class ViewerOcrLanguage {
+    JAPANESE,
+    CHINESE,
+    KOREAN,
+}
+
 data class ViewerSettings(
     val invertMultiImageScrollDirection: Boolean = false,
+    val automaticTextTranslationEnabled: Boolean = false,
+    val enabledOcrLanguages: Set<ViewerOcrLanguage> = emptySet(),
 )
 
 data class RecommendationProfile(
@@ -386,6 +394,8 @@ interface SettingsRepository {
     suspend fun setCacheFullImageOnSave(enabled: Boolean)
     suspend fun setResolveUnknownAnimatedDurations(enabled: Boolean)
     suspend fun setInvertMultiImageScrollDirection(enabled: Boolean)
+    suspend fun setAutomaticTextTranslationEnabled(enabled: Boolean)
+    suspend fun setOcrLanguageEnabled(language: ViewerOcrLanguage, enabled: Boolean)
     suspend fun setScenarioPreset(preset: ScenarioPreset)
     @Deprecated("Last-tab state is owned by UiRestoreRepository; retain this writer only for compatibility.")
     suspend fun setLastTab(route: String)

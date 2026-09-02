@@ -6,8 +6,10 @@ import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ScenarioPreset
+import com.theoriacodex.data.repository.ViewerOcrLanguage
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.app.viewer.ocr.OcrLanguageModelState
 
 enum class SettingsSectionKey {
     RECOMMENDATION_PROFILES,
@@ -16,6 +18,7 @@ enum class SettingsSectionKey {
     STATS,
     SOURCE_ACCOUNTS,
     UPDATES,
+    VIEWER_OCR_TRANSLATION,
     STORAGE_AND_CACHING,
     DEVELOPER_SCENARIOS,
 }
@@ -76,6 +79,8 @@ data class SettingsUiState(
     val profileDeleteTargetId: String? = null,
     val showClearCacheOptions: Boolean = false,
     val changelogLoading: Boolean = false,
+    val ocrLanguageModels: Map<ViewerOcrLanguage, OcrLanguageModelState> =
+        ViewerOcrLanguage.entries.associateWith { OcrLanguageModelState.Checking },
     val legacyJsonRecoveries: List<CorruptionRecovery> = emptyList(),
 )
 
@@ -91,6 +96,12 @@ sealed interface SettingsAction {
     data class SetSourceWeights(val weights: Map<SourceKey, Double>) : SettingsAction
     data class SetCacheFullImageOnSave(val enabled: Boolean) : SettingsAction
     data class SetResolveUnknownAnimatedDurations(val enabled: Boolean) : SettingsAction
+    data class SetAutomaticTextTranslationEnabled(val enabled: Boolean) : SettingsAction
+    data class SetOcrLanguageEnabled(
+        val language: ViewerOcrLanguage,
+        val enabled: Boolean,
+    ) : SettingsAction
+    data class DownloadOcrLanguage(val language: ViewerOcrLanguage) : SettingsAction
     data class SetScenarioPreset(val preset: ScenarioPreset) : SettingsAction
     data object ToggleClearCacheOptions : SettingsAction
     data object ClearThumbnailCache : SettingsAction

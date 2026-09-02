@@ -23,6 +23,10 @@ internal data class LegacySettingsStoreRecord(
     val resolveUnknownAnimatedDurations: Boolean = false,
     @field:SerializedName("invertMultiImageScrollDirection")
     val invertMultiImageScrollDirection: Boolean = false,
+    @field:SerializedName("viewerAutomaticTextTranslationEnabled")
+    val viewerAutomaticTextTranslationEnabled: Boolean = false,
+    @field:SerializedName("viewerEnabledOcrLanguages")
+    val viewerEnabledOcrLanguages: List<String> = emptyList(),
     @field:SerializedName("scenarioPreset")
     val scenarioPreset: String = ScenarioPreset.NORMAL.name,
     @field:SerializedName("lastSelectedTabRoute")
@@ -74,9 +78,7 @@ internal data class LegacySettingsStoreRecord(
                 contentFilters = ContentFilterSettings(
                     resolveUnknownAnimatedDurations = resolveUnknownAnimatedDurations,
                 ),
-                viewer = ViewerSettings(
-                    invertMultiImageScrollDirection = invertMultiImageScrollDirection,
-                ),
+                viewer = toViewerSettings(),
                 scenarioPreset = runCatching { ScenarioPreset.valueOf(scenarioPreset) }
                     .getOrDefault(ScenarioPreset.NORMAL),
                 lastSelectedTabRoute = lastSelectedTabRoute,
@@ -102,6 +104,16 @@ internal data class LegacySettingsStoreRecord(
         return sourceSchemaVersion() < SHARED_SOURCE_CATALOG_VERSION
     }
 
+    private fun toViewerSettings(): ViewerSettings {
+        return ViewerSettings(
+            invertMultiImageScrollDirection = invertMultiImageScrollDirection,
+            automaticTextTranslationEnabled = viewerAutomaticTextTranslationEnabled,
+            enabledOcrLanguages = viewerEnabledOcrLanguages.mapNotNullTo(linkedSetOf()) { name ->
+                runCatching { ViewerOcrLanguage.valueOf(name) }.getOrNull()
+            },
+        )
+    }
+
     fun sourceSchemaVersion(): Int = sourceCatalogVersion ?: 1
 
     fun importCounts(): Map<String, Int> {
@@ -123,6 +135,10 @@ internal data class LegacySettingsStoreRecord(
                 cacheFullImageOnSave = settings.cache.cacheFullImageOnSave,
                 resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
                 invertMultiImageScrollDirection = settings.viewer.invertMultiImageScrollDirection,
+                viewerAutomaticTextTranslationEnabled = settings.viewer.automaticTextTranslationEnabled,
+                viewerEnabledOcrLanguages = settings.viewer.enabledOcrLanguages
+                    .sortedBy(ViewerOcrLanguage::ordinal)
+                    .map(ViewerOcrLanguage::name),
                 scenarioPreset = settings.scenarioPreset.name,
                 lastSelectedTabRoute = settings.lastSelectedTabRoute,
                 recommendationProfiles = settings.recommendationProfiles.map(LegacyRecommendationProfileRecord::fromDomain),

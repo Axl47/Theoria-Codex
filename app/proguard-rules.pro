@@ -235,7 +235,7 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
--keepclassmembers class com.theoriacodex.sources.hitomi.HitomiSourceAdapter$HitomiPageToken {
+-keepclassmembers class com.theoriacodex.sources.hitomi.HitomiPageToken {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }

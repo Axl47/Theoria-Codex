@@ -3,6 +3,8 @@ package com.theoriacodex.app.settings
 import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
 import com.theoriacodex.app.sourceauth.CredentialStoreUnavailableException
 import com.theoriacodex.app.statistics.AppUsageTracker
+import com.theoriacodex.app.viewer.ocr.OcrLanguageModelSource
+import com.theoriacodex.app.viewer.ocr.OcrLanguageModelState
 import com.theoriacodex.data.repository.InMemoryCacheRepository
 import com.theoriacodex.data.repository.InMemoryCodexRepository
 import com.theoriacodex.data.repository.InMemoryLikesRepository
@@ -11,6 +13,7 @@ import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.data.repository.ViewerOcrLanguage
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -90,6 +93,43 @@ class SettingsViewModelTest {
         assertTrue(owner.state.value.settings.cache.cacheFullImageOnSave)
         assertFalse(owner.state.value.settings.contentFilters.resolveUnknownAnimatedDurations)
         assertEquals(setOf(SourceKey.PIXIV), owner.state.value.settings.runtime.enabledSources)
+    }
+
+    @Test
+    fun `OCR language downloads enable only ready requested models`() = runTest {
+        val settingsRepository = InMemorySettingsRepository()
+        val models = FakeOcrLanguageModelSource(
+            initial = mapOf(
+                ViewerOcrLanguage.JAPANESE to OcrLanguageModelState.NotDownloaded,
+                ViewerOcrLanguage.CHINESE to OcrLanguageModelState.Ready,
+                ViewerOcrLanguage.KOREAN to OcrLanguageModelState.NotDownloaded,
+            ),
+        )
+        val owner = owner(settingsRepository = settingsRepository, ocrLanguageModels = models)
+        runCurrent()
+
+        owner.onAction(SettingsAction.SetOcrLanguageEnabled(ViewerOcrLanguage.JAPANESE, true))
+        owner.onAction(SettingsAction.SetOcrLanguageEnabled(ViewerOcrLanguage.CHINESE, true))
+        owner.onAction(SettingsAction.DownloadOcrLanguage(ViewerOcrLanguage.JAPANESE))
+        runCurrent()
+
+        assertEquals(1, models.downloads[ViewerOcrLanguage.JAPANESE])
+        assertEquals(
+            setOf(ViewerOcrLanguage.JAPANESE, ViewerOcrLanguage.CHINESE),
+            settingsRepository.observeSettings().first().viewer.enabledOcrLanguages,
+        )
+    }
+
+    @Test
+    fun `entering Settings refreshes OCR model availability`() = runTest {
+        val models = FakeOcrLanguageModelSource()
+        val owner = owner(ocrLanguageModels = models)
+        runCurrent()
+
+        owner.onAction(SettingsAction.SettingsEntered)
+        runCurrent()
+
+        assertEquals(1, models.refreshCount)
     }
 
     @Test
@@ -220,6 +260,7 @@ class SettingsViewModelTest {
         accounts: FakeSettingsAccountGateway = FakeSettingsAccountGateway(),
         legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>> = MutableStateFlow(emptyList()),
         availableSources: StateFlow<Set<SourceKey>> = MutableStateFlow(setOf(SourceKey.PIXIV)),
+        ocrLanguageModels: OcrLanguageModelSource = FakeOcrLanguageModelSource(),
     ): SettingsViewModel {
         val statisticsRepository = InMemoryStatisticsRepository()
         return SettingsViewModel(
@@ -238,11 +279,32 @@ class SettingsViewModelTest {
                 ),
                 profileMutations = NoOpSettingsProfileMutations,
                 accounts = accounts,
+                ocrLanguageModels = ocrLanguageModels,
                 availableSources = availableSources,
                 legacyJsonRecoveries = legacyJsonRecoveries,
             ),
             coroutineScope = backgroundScope,
         )
+    }
+}
+
+private class FakeOcrLanguageModelSource(
+    initial: Map<ViewerOcrLanguage, OcrLanguageModelState> =
+        ViewerOcrLanguage.entries.associateWith { OcrLanguageModelState.NotDownloaded },
+) : OcrLanguageModelSource {
+    private val mutableStates = MutableStateFlow(initial)
+    override val states: StateFlow<Map<ViewerOcrLanguage, OcrLanguageModelState>> = mutableStates
+    val downloads = mutableMapOf<ViewerOcrLanguage, Int>()
+    var refreshCount = 0
+
+    override suspend fun refresh() {
+        refreshCount += 1
+    }
+
+    override suspend fun download(language: ViewerOcrLanguage): Boolean {
+        downloads[language] = downloads.getOrDefault(language, 0) + 1
+        mutableStates.value = mutableStates.value + (language to OcrLanguageModelState.Ready)
+        return true
     }
 }
 
