@@ -21,6 +21,42 @@ import org.junit.Test
 
 class PixivSourceAdapterTest {
     @Test
+    fun `autocomplete and trending preserve native tags with translated labels`() = runTest {
+        val credentials = FakeCredentialsProvider().apply {
+            pixivTokens = PixivAuthTokens(
+                accessToken = "access",
+                refreshToken = "refresh",
+                expiresAtEpochMs = Long.MAX_VALUE,
+            )
+        }
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """{"tags":[{"name":"初音ミク","translated_name":"Hatsune Miku"}]}""",
+            )
+        }
+        val adapter = PixivSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = credentials,
+            minRequestIntervalMs = 0L,
+            languageTag = "en-US",
+        )
+
+        val autocomplete = adapter.autocompleteTags("hatsune", limit = 10).single()
+        assertEquals("初音ミク", autocomplete.text)
+        assertEquals("Hatsune Miku", autocomplete.alternateText)
+        assertEquals("en-US", httpClient.lastGet?.headers?.get("Accept-Language"))
+
+        httpClient.nextGetResponse = SourceHttpResponse(
+            statusCode = 200,
+            body = """{"trend_tags":[{"tag":{"name":"風景","translated_name":"Scenery"}}]}""",
+        )
+        val trending = adapter.trendingTags(limit = 10).single()
+        assertEquals("風景", trending.text)
+        assertEquals("Scenery", trending.alternateText)
+    }
+
+    @Test
     fun `related posts use bounded first response and preserve unique provider order`() = runTest {
         val credentials = FakeCredentialsProvider().apply {
             pixivTokens = PixivAuthTokens(

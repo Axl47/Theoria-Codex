@@ -28,12 +28,44 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+enum class TagSuggestionOrigin {
+    SEED,
+    AUTOCOMPLETE,
+    TRENDING,
+    SEEN,
+    FEATURED,
+    COUNT_LOOKUP,
+}
+
 interface TagSuggestionStore {
     /**
      * Compatibility lane for callers that only understand portable, general tags.
      */
     fun get(source: SourceKey, limit: Int): List<TagSuggestion>
     fun put(source: SourceKey, suggestions: List<TagSuggestion>)
+
+    fun find(source: SourceKey, prefix: String, limit: Int): List<TagSuggestion> =
+        get(source, Int.MAX_VALUE)
+            .asSequence()
+            .filter { suggestion -> tagSuggestionMatches(suggestion, prefix) }
+            .take(limit.coerceAtLeast(0))
+            .toList()
+
+    fun getTrending(source: SourceKey, limit: Int): List<TagSuggestion> =
+        get(source, Int.MAX_VALUE)
+            .asSequence()
+            .filter { suggestion -> suggestion.type.equals("trending", ignoreCase = true) }
+            .take(limit.coerceAtLeast(0))
+            .toList()
+
+    fun put(
+        source: SourceKey,
+        suggestions: List<TagSuggestion>,
+        origin: TagSuggestionOrigin,
+    ) = put(source, suggestions)
+
+    fun replaceTrending(source: SourceKey, suggestions: List<TagSuggestion>) =
+        put(source, suggestions, TagSuggestionOrigin.TRENDING)
 
     suspend fun awaitLoaded() = Unit
     suspend fun flush() = Unit
@@ -58,6 +90,20 @@ interface TagSuggestionStore {
         }
     }
 
+    fun findFaceted(
+        source: SourceKey,
+        prefix: String,
+        limit: Int,
+        scope: FacetedSearchScope = FacetedSearchScope.All,
+    ): List<FacetedTagSuggestion> = getFaceted(source, Int.MAX_VALUE, scope)
+        .asSequence()
+        .filter { suggestion ->
+            val normalizedPrefix = com.theoriacodex.domain.tags.normalizeMatchToken(prefix)
+            com.theoriacodex.domain.tags.normalizeMatchToken(suggestion.text).contains(normalizedPrefix)
+        }
+        .take(limit.coerceAtLeast(0))
+        .toList()
+
     fun putFaceted(source: SourceKey, suggestions: List<FacetedTagSuggestion>) {
         put(
             source = source,
@@ -74,6 +120,12 @@ interface TagSuggestionStore {
                 },
         )
     }
+
+    fun putFaceted(
+        source: SourceKey,
+        suggestions: List<FacetedTagSuggestion>,
+        origin: TagSuggestionOrigin,
+    ) = putFaceted(source, suggestions)
 }
 
 object NoOpTagSuggestionStore : TagSuggestionStore {
@@ -144,13 +196,81 @@ internal class FileBackedTagSuggestionStore(
         }
     }
 
+    override fun find(source: SourceKey, prefix: String, limit: Int): List<TagSuggestion> {
+        if (limit <= 0 || prefix.isBlank()) return emptyList()
+        return synchronized(lock) {
+            inMemory[source]
+                .orEmpty()
+                .asSequence()
+                .filter(CachedSuggestion::isRecommendationTag)
+                .map(CachedSuggestion::toLegacySuggestion)
+                .filter { suggestion -> tagSuggestionMatches(suggestion, prefix) }
+                .distinctBy { suggestion -> suggestion.text.lowercase(Locale.ROOT) }
+                .take(limit)
+                .toList()
+        }
+    }
+
+    override fun getTrending(source: SourceKey, limit: Int): List<TagSuggestion> {
+        if (limit <= 0) return emptyList()
+        return synchronized(lock) {
+            inMemory[source]
+                .orEmpty()
+                .asSequence()
+                .filter(CachedSuggestion::isRecommendationTag)
+                .filter { suggestion -> TagSuggestionOrigin.TRENDING in suggestion.origins }
+                .map(CachedSuggestion::toLegacySuggestion)
+                .take(limit)
+                .toList()
+        }
+    }
+
     override fun put(source: SourceKey, suggestions: List<TagSuggestion>) {
         putCached(
             source = source,
             suggestions = suggestions.mapNotNull { suggestion ->
-                CachedSuggestion.fromLegacySuggestion(source, suggestion)
+                CachedSuggestion.fromLegacySuggestion(
+                    source,
+                    suggestion,
+                    inferredOrigin(suggestion.type),
+                )
             },
         )
+    }
+
+    override fun put(
+        source: SourceKey,
+        suggestions: List<TagSuggestion>,
+        origin: TagSuggestionOrigin,
+    ) {
+        putCached(
+            source = source,
+            suggestions = suggestions.mapNotNull { suggestion ->
+                CachedSuggestion.fromLegacySuggestion(source, suggestion, origin)
+            },
+        )
+    }
+
+    override fun replaceTrending(source: SourceKey, suggestions: List<TagSuggestion>) {
+        if (suggestions.isEmpty()) return
+        synchronized(lock) {
+            check(!closing && !closed) { "Tag suggestion store is closing or closed" }
+            val retained = inMemory[source].orEmpty().mapNotNull { suggestion ->
+                val remainingOrigins = suggestion.origins - TagSuggestionOrigin.TRENDING
+                suggestion.copy(origins = remainingOrigins).takeIf { remainingOrigins.isNotEmpty() }
+            }
+            val incoming = suggestions.mapNotNull { suggestion ->
+                CachedSuggestion.fromLegacySuggestion(source, suggestion, TagSuggestionOrigin.TRENDING)
+            }
+            replaceSourceLocked(
+                source = source,
+                suggestions = mergeByIdentity(existing = retained, incoming = incoming)
+                    .take(maxEntriesPerSource),
+            )
+            enforceTotalByteBudgetLocked()
+            mutationVersion += 1L
+            schedulePersistenceLocked()
+        }
     }
 
     override fun getFaceted(
@@ -170,10 +290,43 @@ internal class FileBackedTagSuggestionStore(
         }
     }
 
+    override fun findFaceted(
+        source: SourceKey,
+        prefix: String,
+        limit: Int,
+        scope: FacetedSearchScope,
+    ): List<FacetedTagSuggestion> {
+        if (limit <= 0 || prefix.isBlank()) return emptyList()
+        val normalizedPrefix = com.theoriacodex.domain.tags.normalizeMatchToken(prefix)
+        return synchronized(lock) {
+            inMemory[source]
+                .orEmpty()
+                .asSequence()
+                .filter { suggestion -> suggestion.matches(scope) }
+                .filter { suggestion ->
+                    com.theoriacodex.domain.tags.normalizeMatchToken(suggestion.text)
+                        .contains(normalizedPrefix)
+                }
+                .take(limit)
+                .map(CachedSuggestion::toFacetedSuggestion)
+                .toList()
+        }
+    }
+
     override fun putFaceted(source: SourceKey, suggestions: List<FacetedTagSuggestion>) {
+        putFaceted(source, suggestions, TagSuggestionOrigin.AUTOCOMPLETE)
+    }
+
+    override fun putFaceted(
+        source: SourceKey,
+        suggestions: List<FacetedTagSuggestion>,
+        origin: TagSuggestionOrigin,
+    ) {
         putCached(
             source = source,
-            suggestions = suggestions.mapNotNull(CachedSuggestion::fromFacetedSuggestion),
+            suggestions = suggestions.mapNotNull { suggestion ->
+                CachedSuggestion.fromFacetedSuggestion(suggestion, origin)
+            },
         )
     }
 
@@ -249,7 +402,7 @@ internal class FileBackedTagSuggestionStore(
             mergeByIdentity(
                 existing = emptyList(),
                 incoming = values.mapNotNull { suggestion ->
-                    CachedSuggestion.fromLegacySuggestion(source, suggestion)
+                    CachedSuggestion.fromLegacySuggestion(source, suggestion, TagSuggestionOrigin.SEED)
                 },
             )
                 .take(maxEntriesPerSource)
@@ -273,7 +426,7 @@ internal class FileBackedTagSuggestionStore(
                 val current = inMemory[source].orEmpty()
                 replaceSourceLocked(
                     source = source,
-                    suggestions = mergeByIdentity(existing = parsed, incoming = current)
+                    suggestions = mergeByIdentity(existing = current, incoming = parsed)
                         .take(maxEntriesPerSource),
                 )
             }
@@ -420,6 +573,10 @@ private data class TagStoreEntry(
     val type: String? = null,
     @field:SerializedName("count")
     val count: Int? = null,
+    @field:SerializedName("alternateText")
+    val alternateText: String? = null,
+    @field:SerializedName("origins")
+    val origins: List<String>? = null,
 )
 
 private data class CachedSuggestion(
@@ -428,6 +585,8 @@ private data class CachedSuggestion(
     val sourceNamespace: String?,
     val type: String?,
     val count: Int?,
+    val alternateText: String?,
+    val origins: Set<TagSuggestionOrigin>,
 ) {
     val isRecommendationTag: Boolean
         get() = facet == SearchFacet.TAG
@@ -439,7 +598,12 @@ private data class CachedSuggestion(
     }
 
     fun toLegacySuggestion(): TagSuggestion {
-        return TagSuggestion(text = text, type = type, count = count)
+        return TagSuggestion(
+            text = text,
+            type = type,
+            count = count,
+            alternateText = alternateText,
+        )
     }
 
     fun toFacetedSuggestion(): FacetedTagSuggestion {
@@ -458,11 +622,17 @@ private data class CachedSuggestion(
             sourceNamespace = sourceNamespace,
             type = type,
             count = count,
+            alternateText = alternateText,
+            origins = origins.map(TagSuggestionOrigin::name).sorted(),
         )
     }
 
     companion object {
-        fun fromLegacySuggestion(source: SourceKey, suggestion: TagSuggestion): CachedSuggestion? {
+        fun fromLegacySuggestion(
+            source: SourceKey,
+            suggestion: TagSuggestion,
+            origin: TagSuggestionOrigin,
+        ): CachedSuggestion? {
             val taxonomy = legacySuggestionTaxonomy(source, suggestion.type)
             return create(
                 text = suggestion.text,
@@ -470,16 +640,23 @@ private data class CachedSuggestion(
                 sourceNamespace = taxonomy.second,
                 type = suggestion.type,
                 count = suggestion.count,
+                alternateText = suggestion.alternateText,
+                origins = setOf(origin),
             )
         }
 
-        fun fromFacetedSuggestion(suggestion: FacetedTagSuggestion): CachedSuggestion? {
+        fun fromFacetedSuggestion(
+            suggestion: FacetedTagSuggestion,
+            origin: TagSuggestionOrigin,
+        ): CachedSuggestion? {
             return create(
                 text = suggestion.text,
                 facet = suggestion.facet,
                 sourceNamespace = suggestion.sourceNamespace,
                 type = null,
                 count = suggestion.count,
+                alternateText = null,
+                origins = setOf(origin),
             )
         }
 
@@ -496,6 +673,14 @@ private data class CachedSuggestion(
                 sourceNamespace = entry.sourceNamespace,
                 type = entry.type,
                 count = entry.count,
+                alternateText = entry.alternateText,
+                origins = entry.origins
+                    .orEmpty()
+                    .mapNotNull { origin ->
+                        runCatching { TagSuggestionOrigin.valueOf(origin) }.getOrNull()
+                    }
+                    .toSet()
+                    .ifEmpty { setOf(inferredOrigin(entry.type)) },
             )
         }
 
@@ -505,6 +690,8 @@ private data class CachedSuggestion(
             sourceNamespace: String?,
             type: String?,
             count: Int?,
+            alternateText: String?,
+            origins: Set<TagSuggestionOrigin>,
         ): CachedSuggestion? {
             val normalizedText = text.trim().takeIf(String::isNotBlank) ?: return null
             return CachedSuggestion(
@@ -516,6 +703,12 @@ private data class CachedSuggestion(
                     ?.takeIf(String::isNotBlank),
                 type = type,
                 count = count,
+                alternateText = alternateText
+                    ?.trim()
+                    ?.takeIf { alternate ->
+                        alternate.isNotBlank() && !alternate.equals(normalizedText, ignoreCase = true)
+                    },
+                origins = origins,
             )
         }
     }
@@ -556,6 +749,8 @@ private fun mergeByIdentity(
             else -> previous.copy(
                 type = preferredSuggestionType(primary = previous.type, secondary = suggestion.type),
                 count = maxCount(previous.count, suggestion.count),
+                alternateText = previous.alternateText ?: suggestion.alternateText,
+                origins = previous.origins + suggestion.origins,
             )
         }
     }
@@ -592,6 +787,16 @@ private fun suggestionTypeRank(type: String?): Int {
         "seed" -> 0
         null, "" -> -1
         else -> 1
+    }
+}
+
+private fun inferredOrigin(type: String?): TagSuggestionOrigin {
+    return when (type?.trim()?.lowercase(Locale.ROOT)) {
+        "trending" -> TagSuggestionOrigin.TRENDING
+        "seen" -> TagSuggestionOrigin.SEEN
+        "seed", "pixiv_tags_page" -> TagSuggestionOrigin.SEED
+        "tag_count_lookup" -> TagSuggestionOrigin.COUNT_LOOKUP
+        else -> TagSuggestionOrigin.AUTOCOMPLETE
     }
 }
 

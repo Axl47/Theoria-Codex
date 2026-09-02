@@ -127,6 +127,39 @@ internal class RequestOwnershipSearchViewModelTest : SearchViewModelTestFixture(
         }
 
     @Test
+    fun `autocomplete publishes local matches before the remote debounce`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val adapter = ViewModelSearchAdapter()
+            val cachedSuggestion = TagSuggestion(
+                text = "初音ミク",
+                type = "tag",
+                count = null,
+                alternateText = "Hatsune Miku",
+            )
+            val store = object : TagSuggestionStore {
+                override fun get(source: SourceKey, limit: Int): List<TagSuggestion> =
+                    listOf(cachedSuggestion).take(limit)
+
+                override fun put(source: SourceKey, suggestions: List<TagSuggestion>) = Unit
+            }
+            val viewModel = viewModel(
+                adapter = adapter,
+                autocompleteDelayMs = 1_000L,
+                tagSuggestionStore = store,
+            )
+            restore(viewModel)
+            viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+
+            viewModel.onAction(SearchAction.AutocompleteChanged("hatsune"))
+
+            assertEquals(
+                listOf("初音ミク"),
+                viewModel.state.value.suggestions.autocomplete.map(TagSuggestion::text),
+            )
+            assertEquals(0L, testScheduler.currentTime)
+        }
+
+    @Test
     fun `cancel action clears active request and rejects its late result`() =
         runTest(mainDispatcherRule.dispatcher) {
             val adapter = ViewModelSearchAdapter()

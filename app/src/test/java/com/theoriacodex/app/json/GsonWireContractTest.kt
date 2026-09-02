@@ -104,6 +104,8 @@ class GsonWireContractTest {
                             "sourceNamespace" to null,
                             "type" to "trending",
                             "count" to 9,
+                            "alternateText" to null,
+                            "origins" to null,
                         )
                     )
                 ),

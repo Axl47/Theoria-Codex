@@ -81,6 +81,7 @@ internal abstract class SearchViewModelTestFixture {
         recentsRepository: RecentsRepository = InMemoryRecentsRepository(),
         executionService: ((SearchCoordinator) -> SearchExecutionService)? = null,
         relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
+        tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
     ): SearchViewModel {
         val coordinator = testSearchCoordinator(
             ViewModelSearchRegistry(adapter, *additionalAdapters.toTypedArray()),
@@ -88,6 +89,7 @@ internal abstract class SearchViewModelTestFixture {
             settingsRepository = InMemorySettingsRepository(),
             uiRestoreRepository = uiRestoreRepository,
             recentsRepository = recentsRepository,
+            tagSuggestionStore = tagSuggestionStore,
         )
         return SearchViewModel(
             coordinator = coordinator,

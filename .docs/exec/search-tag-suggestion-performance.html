@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Make Search Tag Suggestions Immediate And Pixiv-Aware</title>
+  <style>
+    :root{color-scheme:light dark;--bg:#f7f7f4;--surface:#fff;--text:#202124;--muted:#5f6368;--border:#d7d7d0;--accent:#0f766e;--soft:#dff3ef;--risk:#9a3412;--risk-soft:#ffedd5;--code:#111827}
+    @media(prefers-color-scheme:dark){:root{--bg:#151716;--surface:#202321;--text:#f0f2ef;--muted:#b8beb7;--border:#3a403c;--accent:#5eead4;--soft:#123b37;--risk:#fdba74;--risk-soft:#43230f;--code:#0b0f0d}}
+    *{box-sizing:border-box}body{margin:0;font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}header,main{max-width:1180px;margin:0 auto;padding:24px}header{padding-top:36px}h1,h2,h3{line-height:1.15;margin:0 0 12px}h1{font-size:clamp(2rem,4vw,3.25rem)}h2{margin-top:30px;font-size:1.55rem}h3{margin-top:22px;font-size:1.1rem}p{margin:0 0 14px}a{color:var(--accent)}
+    nav{position:sticky;top:0;z-index:10;border-block:1px solid var(--border);background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(10px)}nav ul{display:flex;gap:6px;max-width:1180px;margin:0 auto;padding:8px 24px;list-style:none;overflow-x:auto}nav a{display:block;padding:6px 10px;border-radius:6px;text-decoration:none;white-space:nowrap}nav a:hover{background:var(--soft)}
+    section{padding:22px;margin:18px 0;border:1px solid var(--border);border-radius:8px;background:var(--surface)}table{width:100%;border-collapse:collapse;margin:12px 0;font-size:.95rem}th,td{padding:9px 10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}th{color:var(--muted);font-weight:650}code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em}pre{overflow-x:auto;padding:14px;border-radius:8px;background:var(--code);color:#f8fafc}.meta{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0;color:var(--muted)}.pill{padding:4px 8px;border:1px solid var(--border);border-radius:999px;background:var(--surface)}.dashboard{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-top:18px}.card{padding:14px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}.card strong{display:block;margin-bottom:4px;color:var(--muted);font-size:.82rem;text-transform:uppercase}.callout{margin:14px 0;padding:12px 14px;border-left:4px solid var(--accent);background:var(--soft);border-radius:6px}.risk{border-left-color:var(--risk);background:var(--risk-soft)}.status-table td:first-child{width:180px;color:var(--muted);font-weight:650}@media print{nav{position:static}section,.card{break-inside:avoid}body{background:#fff;color:#000}}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Make Search Tag Suggestions Immediate And Pixiv-Aware</h1>
+    <p>Search should show relevant locally known tags immediately, refresh providers without duplicate or serial work, keep trending data authoritative, and use Pixiv's native/translated tag pair without changing the value submitted to Pixiv.</p>
+    <div class="meta" aria-label="Plan metadata"><span class="pill">Status: Complete</span><span class="pill">Owner: Codex</span><span class="pill">Created: 2026-09-02</span><span class="pill">Updated: 2026-09-02</span><span class="pill">Plan: .docs/exec/search-tag-suggestion-performance.html</span></div>
+    <div class="dashboard"><div class="card"><strong>Next Action</strong>Human-check the behavior in an isolated Debug install when convenient.</div><div class="card"><strong>Main Risk</strong>Live Pixiv response shape and latency still require configured-credential observation.</div><div class="card"><strong>Validation</strong>Module tests, 555 app tests, compile, Detekt, Kover, diff, and hotspots pass.</div><div class="card"><strong>Affected Areas</strong>Suggestion model, Pixiv adapter, ranking, Search store/coordinator/ViewModel/UI.</div></div>
+  </header>
+  <nav aria-label="Plan sections"><ul><li><a href="#purpose">Purpose</a></li><li><a href="#context">Context</a></li><li><a href="#phases">Phases</a></li><li><a href="#work-plan">Work Plan</a></li><li><a href="#validation">Validation</a></li><li><a href="#living-log">Living Log</a></li><li><a href="#recovery">Recovery</a></li><li><a href="#appendix">Appendix</a></li></ul></nav>
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>A suggestion lexicon is the bounded local collection of tags learned from bundled seed data, provider responses, and viewed results. Today Search waits for the provider before consulting it and examines only the first 120 stored entries. After this change, local matches publish immediately and a later healthy provider response can improve the list.</p>
+      <p>Pixiv suggestions retain the native tag as their search value and may carry a translated label. Matching considers both forms, while selection always submits the native value. Pixiv's provider order is retained when it has no comparable count.</p>
+    </section>
+    <section id="context">
+      <h2>Context And Orientation</h2>
+      <table><thead><tr><th>File or module</th><th>Role</th></tr></thead><tbody>
+        <tr><td><code>core-domain/.../adapter/SourceAdapter.kt</code></td><td>Provider-neutral <code>TagSuggestion</code> model.</td></tr>
+        <tr><td><code>core-sources/.../pixiv/PixivSourceAdapter.kt</code></td><td>Pixiv autocomplete/trending requests, auth, throttling, and parsing.</td></tr>
+        <tr><td><code>app-logic/.../search/TagSuggestionRanking.kt</code> (new)</td><td>Pure relevance, provider-order, deduplication, and fair Unified interleaving.</td></tr>
+        <tr><td><code>app/.../search/TagSuggestionStore.kt</code></td><td>Bounded in-memory and JSON-backed lexicon.</td></tr>
+        <tr><td><code>app/.../search/SearchCoordinator.kt</code></td><td>Local/remote candidate combination and Unified provider coordination.</td></tr>
+        <tr><td><code>app/.../search/SearchViewModel.kt</code></td><td>Debounce, cancellation, immediate publication, and stale-generation rejection.</td></tr>
+        <tr><td><code>app/.../search/SearchScreen.kt</code></td><td>Native/translated rendering without internal cache provenance.</td></tr>
+      </tbody></table>
+      <div class="callout risk"><strong>Protected scope.</strong> Existing OCR/settings changes and the production Android package are out of scope. Validation is host-only; no APK install, connected test, or production-data operation is planned.</div>
+    </section>
+    <section id="phases">
+      <h2>Phases</h2>
+      <article><h3>Phase 1: Correct Local Lexicon And Ranking</h3><table class="status-table"><tbody><tr><td>Goal</td><td>Filter the complete bounded store before limiting, preserve learned rows after restart, separate active trending membership, and rank exact/prefix relevance ahead of count.</td></tr><tr><td>Edits</td><td>Add an alternate label to <code>TagSuggestion</code>, pure app-logic ranking, store origins, full-query reads, and replace-style trending writes.</td></tr><tr><td>Commands</td><td><code>./gradlew :core-domain:test :app-logic:test :app:testDebugUnitTest --tests '*TagSuggestion*' --tests '*SearchCoordinatorTest*'</code></td></tr><tr><td>Acceptance</td><td>A match after row 120 is returned; a learned row survives restart; replacing trending removes obsolete active-trending membership without deleting other knowledge.</td></tr></tbody></table></article>
+      <article><h3>Phase 2: Immediate And Bounded Refresh</h3><table class="status-table"><tbody><tr><td>Goal</td><td>Publish local candidates synchronously, then refresh with exact-prefix TTL reuse, a request timeout, and concurrent Unified calls.</td></tr><tr><td>Edits</td><td>Add cached-only coordinator reads, bounded freshness keys, coroutine fan-out, and a ViewModel two-stage path retaining generation checks.</td></tr><tr><td>Commands</td><td><code>./gradlew :app:testDebugUnitTest --tests '*SearchCoordinatorTest*' --tests '*RequestOwnershipSearchViewModelTest*'</code></td></tr><tr><td>Acceptance</td><td>Local rows appear before debounce; repeated fresh prefixes avoid adapter calls; delayed Unified adapters complete concurrently; superseded input never publishes.</td></tr></tbody></table></article>
+      <article><h3>Phase 3: Pixiv Translation And Presentation</h3><table class="status-table"><tbody><tr><td>Goal</td><td>Capture Pixiv <code>translated_name</code>, request the device language, match both forms, preserve native submission, and remove internal provenance labels.</td></tr><tr><td>Edits</td><td>Update Pixiv parsing/headers, JSON cache fields, display helpers, and focused provider/UI tests.</td></tr><tr><td>Commands</td><td><code>./gradlew :core-sources:test --tests '*PixivSourceAdapterTest*' :app:testDebugUnitTest --tests '*SearchFacetUiTest*'</code></td></tr><tr><td>Acceptance</td><td>An English prefix matches a translated Pixiv label, the row includes native context, and selection emits the native tag.</td></tr></tbody></table></article>
+    </section>
+    <section id="work-plan">
+      <h2>Work Plan</h2>
+      <ol><li>Add <code>alternateText</code> with a default to <code>TagSuggestion</code>.</li><li>Create pure ranking in <code>app-logic</code>: exact, prefix, then contained; counts only inside a source/relevance band; stable provider order; round-robin Unified sources.</li><li>Extend <code>TagSuggestionStore</code> with full-query reads and explicit origins. Persist additive fields, decode old snapshots, merge disk knowledge ahead of seeds, and replace active trending per source.</li><li>Split cached-only and remote coordinator paths. Merge both, deduplicate exact prefixes for a TTL, time-limit autocomplete, and run Unified source calls concurrently.</li><li>Publish cached results immediately from <code>SearchViewModel</code>, then remote results after debounce; preserve cancellation/generation ownership.</li><li>Parse Pixiv translations, send <code>Accept-Language</code>, and render translated/native text without raw internal labels.</li><li>Run one focused validation batch, group root-cause fixes, and update this plan and <code>working_list.md</code>.</li></ol>
+    </section>
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <table><thead><tr><th>Check</th><th>Command/action</th><th>Expected result</th></tr></thead><tbody>
+        <tr><td>Focused behavior</td><td>Run phase-specific JVM tests from the repository root.</td><td>Cache, ranking, concurrency, cancellation, and Pixiv parser cases pass.</td></tr>
+        <tr><td>Module regression</td><td><code>./gradlew :core-domain:test :core-sources:test :app-logic:test :app:testDebugUnitTest</code></td><td>No JVM regression.</td></tr>
+        <tr><td>Compile/static</td><td><code>./gradlew :app:compileDebugKotlin :app:detekt :app-logic:detekt</code></td><td>Compilation and relevant static checks pass or only report documented inherited owners.</td></tr>
+        <tr><td>Coverage/hotspots</td><td><code>./gradlew koverVerify</code> and the repository hotspot command supported for the final diff.</td><td>Changed-line coverage and production-file budgets pass.</td></tr>
+        <tr><td>Manual isolated app</td><td>Future human check in <code>com.theoriacodex.debug</code>: type a bundled Pixiv native/translated prefix, repeat it, switch to Unified, inspect trending.</td><td>Immediate rows, clean labels, native selection, later refreshed results, and genuine trending rows.</td></tr>
+      </tbody></table>
+    </section>
+    <section id="living-log">
+      <h2>Living Log</h2>
+      <h3>Progress</h3><ul><li>[x] 2026-09-02 — Audited the suggestion flow, cache ordering, provider metadata, UI, and tests.</li><li>[x] 2026-09-02 — Defined the local-first/native-value contract and initialized the checklist.</li><li>[x] 2026-09-02 — Phase 1 added pure ranking and complete, origin-aware store lookup. Focused ranking and store tests pass.</li><li>[x] 2026-09-02 — Phase 2 added immediate local publication, timeout/TTL policy, and concurrent Unified refresh. Focused coordinator/ViewModel tests pass.</li><li>[x] 2026-09-02 — Phase 3 added Pixiv translated labels, locale headers, native-safe presentation, and active-trending separation. Focused source/app tests pass.</li><li>[x] 2026-09-02 — Extracted suggestion orchestration, removed the stale SearchCoordinator hotspot exception, synchronized the Gson wire contract, and completed integrated host validation.</li></ul>
+      <h3>Surprises And Discoveries</h3><ul><li>The bundled Pixiv lexicon has 477 rows, but 357 cannot participate in the current 120-before-match fallback.</li><li>On reload, seeds are merged before disk rows, pushing learned-only Pixiv rows behind all seeds.</li><li>Pixiv's null counts cause alphabetical ordering and structural demotion behind counted Unified providers.</li><li>One ordered list currently represents autocomplete, seeds, seen tags, count lookups, and trending.</li></ul>
+      <h3>Decision Log</h3><ul><li><strong>Native identity:</strong> keep native text as the durable/search value and add one optional alternate label so translated display never changes the submitted query. 2026-09-02 / Codex.</li><li><strong>Policy owner:</strong> put ranking in <code>app-logic</code>, matching the platform-free Search policy boundary. 2026-09-02 / Codex.</li><li><strong>Storage evolution:</strong> use additive JSON fields rather than a database migration because absent optional fields remain decodeable. 2026-09-02 / Codex.</li></ul>
+      <h3>Outcomes And Retrospective</h3><p>Complete. Search now publishes complete-cache matches before debounce, bounds provider autocomplete to four seconds, reuses exact source/prefix/scope refreshes for fifteen minutes, and fans Unified providers out concurrently. Ranking is relevance-first and fair across sources. Active Trending is an explicit replaceable origin. Pixiv requests the current locale, persists native/translated pairs, matches either label, displays the translation with native context, and always submits the native tag. The extraction reduced <code>SearchCoordinator.kt</code> to 787 lines and removed its frozen hotspot exception. The final host batch passed all relevant module tests, 555 app tests with three expected opt-in skips, Debug compilation, Detekt, aggregate Kover XML/verification, and the hotspot gate.</p>
+    </section>
+    <section id="recovery"><h2>Idempotence And Recovery</h2><p>Planned edits are additive source/tests and tolerant JSON handling. Host Gradle commands are safe to rerun and do not install an APK. No destructive operation is required. If interrupted, inspect <code>working_list.md</code>, this log, and a path-limited <code>git diff</code>; preserve unrelated OCR/settings changes.</p></section>
+    <section id="appendix"><h2>Appendix: Evidence And Notes</h2><pre><code>Pre-change: 300 ms debounce + up to 350 ms Pixiv spacing + auth/network.
+Unified providers are awaited in presentation order.
+
+Non-goals: fuzzy edit-distance search, fake Pixiv counts, database migration,
+app install, device benchmark, live credential use, or production-package work.</code></pre></section>
+  </main>
+</body>
+</html>

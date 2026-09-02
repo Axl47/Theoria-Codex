@@ -38,6 +38,7 @@ import java.io.IOException
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -53,6 +54,7 @@ class PixivSourceAdapter(
     private val gson: Gson = Gson(),
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val minRequestIntervalMs: Long = 350L,
+    private val languageTag: String = Locale.getDefault().toLanguageTag(),
 ) : SourceAdapter, CreatorPostsSourceAdapter, RelatedPostsSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.PIXIV
 
@@ -112,11 +114,7 @@ class PixivSourceAdapter(
                 ?.asJsonObject
                 ?.optionalJsonObject("tag")
                 ?: return@mapNotNull null
-            TagSuggestion(
-                text = tag.stringValue("name").orEmpty(),
-                type = "trending",
-                count = null,
-            ).takeIf { it.text.isNotBlank() }
+            parseTagSuggestion(tag, type = "trending")
         }.take(limit)
     }
 
@@ -130,11 +128,7 @@ class PixivSourceAdapter(
         val tags = root.optionalJsonArray("tags").elementsOrEmpty()
         return tags.mapNotNull { item ->
             val tag = item.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
-            TagSuggestion(
-                text = tag.stringValue("name").orEmpty(),
-                type = "tag",
-                count = null,
-            ).takeIf { it.text.isNotBlank() }
+            parseTagSuggestion(tag, type = "tag")
         }.take(limit)
     }
 
@@ -227,7 +221,7 @@ class PixivSourceAdapter(
             httpClient.get(
                 url = url,
                 query = query,
-                headers = mapOf("Authorization" to "Bearer ${currentTokens.accessToken}"),
+                headers = authorizedHeaders(currentTokens.accessToken),
             )
         } catch (error: IOException) {
             sourceNetworkFailure("Pixiv network", error)
@@ -239,7 +233,7 @@ class PixivSourceAdapter(
                 httpClient.get(
                     url = url,
                     query = query,
-                    headers = mapOf("Authorization" to "Bearer ${refreshed.accessToken}"),
+                    headers = authorizedHeaders(refreshed.accessToken),
                 )
             } catch (error: IOException) {
                 sourceNetworkFailure("Pixiv retry", error)
@@ -261,6 +255,29 @@ class PixivSourceAdapter(
         }
 
         return response.body
+    }
+
+    private fun authorizedHeaders(accessToken: String): Map<String, String> = buildMap {
+        put("Authorization", "Bearer $accessToken")
+        languageTag.trim().takeIf(String::isNotBlank)?.let { tag ->
+            put("Accept-Language", tag)
+        }
+    }
+
+    private fun parseTagSuggestion(tag: JsonObject, type: String): TagSuggestion? {
+        val name = tag.stringValue("name")?.trim().orEmpty()
+        if (name.isBlank()) return null
+        val translatedName = tag.stringValue("translated_name")
+            ?.trim()
+            ?.takeIf { translated ->
+                translated.isNotBlank() && !translated.equals(name, ignoreCase = true)
+            }
+        return TagSuggestion(
+            text = name,
+            type = type,
+            count = null,
+            alternateText = translatedName,
+        )
     }
 
     private suspend fun throttle() {

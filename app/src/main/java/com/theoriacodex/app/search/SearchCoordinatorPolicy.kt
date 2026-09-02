@@ -65,6 +65,11 @@ internal const val PIXIV_UNKNOWN_RETRY_MESSAGE =
     "Pixiv returned a temporary unknown error. Search was reset. Please retry."
 internal const val FACETED_AUTOCOMPLETE_LIMIT = 20
 internal const val FACETED_AUTOCOMPLETE_CACHE_LIMIT = 120
+internal const val AUTOCOMPLETE_CACHE_MATCH_LIMIT = 120
+internal const val AUTOCOMPLETE_RESULT_LIMIT = 20
+internal const val AUTOCOMPLETE_REQUEST_TIMEOUT_MS = 4_000L
+internal const val AUTOCOMPLETE_REFRESH_INTERVAL_MS = 15L * 60L * 1000L
+internal const val MAX_AUTOCOMPLETE_REFRESH_KEYS = 256
 internal const val TAG_LOOKUP_LIMIT = 20_000
 internal const val TAG_FETCH_LIMIT = 25
 internal const val TRENDING_REFRESH_INTERVAL_MS = 12L * 60L * 60L * 1000L
@@ -80,3 +85,15 @@ internal const val RATE_LIMIT_BACKOFF_REPEAT_MS = 2L * 60L * 1000L
 internal const val RATE_LIMIT_REPEAT_WINDOW_MS = 2L * 60L * 1000L
 internal val WHITESPACE_REGEX = Regex("\\s+")
 internal val PIXIV_TRAILING_PARENTHESIS_REGEX = Regex("\\s*\\([^)]*\\)\\s*$")
+
+internal data class ResolvedAutocompleteRequest(
+    val scope: FacetedSearchScope,
+    val prefix: String,
+    val validationMessage: String? = null,
+)
+
+internal data class AutocompleteFetchKey(
+    val source: com.theoriacodex.domain.model.SourceKey,
+    val prefix: String,
+    val scope: FacetedSearchScope,
+)

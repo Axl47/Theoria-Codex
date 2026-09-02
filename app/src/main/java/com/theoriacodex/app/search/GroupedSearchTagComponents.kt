@@ -207,20 +207,26 @@ private fun alternativeSuggestions(
 ): List<AlternativeTagSuggestion> {
     if (facetedSuggestions.isNotEmpty()) {
         return facetedSuggestions.map { suggestion ->
-            AlternativeTagSuggestion(suggestion.toSearchTerm(), facetedSuggestionMetaLabel(suggestion))
+            AlternativeTagSuggestion(
+                term = suggestion.toSearchTerm(),
+                displayText = suggestion.text,
+                meta = facetedSuggestionMetaLabel(suggestion),
+            )
         }
     }
     if (anchor.facet != SearchFacet.TAG || anchor.sourceNamespace != null) return emptyList()
     return suggestions.map { suggestion ->
         AlternativeTagSuggestion(
             term = anchor.copy(value = suggestion.text),
-            meta = listOfNotNull(suggestion.type, suggestion.count?.toString()).joinToString(" • "),
+            displayText = tagSuggestionDisplayText(suggestion),
+            meta = tagSuggestionMetaLabel(suggestion),
         )
     }
 }
 
 private data class AlternativeTagSuggestion(
     val term: SearchTerm,
+    val displayText: String,
     val meta: String,
 )
 
@@ -239,7 +245,7 @@ private fun AlternativeAutocompletePanel(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(suggestion.term.value, style = MaterialTheme.typography.bodyMedium)
+                Text(suggestion.displayText, style = MaterialTheme.typography.bodyMedium)
                 suggestion.meta.takeIf(String::isNotBlank)?.let { meta ->
                     Text(meta, style = MaterialTheme.typography.bodySmall)
                 }

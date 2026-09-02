@@ -2,6 +2,7 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
+import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import org.junit.Assert.assertEquals
@@ -60,5 +61,19 @@ class SearchFacetUiTest {
                 ),
             ),
         )
+    }
+
+    @Test
+    fun `plain suggestion presentation uses translation without exposing cache provenance`() {
+        val suggestion = TagSuggestion(
+            text = "初音ミク",
+            type = "pixiv_tags_page",
+            count = null,
+            alternateText = "Hatsune Miku",
+        )
+
+        assertEquals("Hatsune Miku", tagSuggestionDisplayText(suggestion))
+        assertEquals("初音ミク", tagSuggestionMetaLabel(suggestion))
+        assertEquals("", tagSuggestionMetaLabel(TagSuggestion("landscape", "seed", null)))
     }
 }

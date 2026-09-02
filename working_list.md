@@ -1,6 +1,6 @@
 # Working List
 
-## Current Task: Implement Pixiv and Gelbooru Related Posts After Likes
+## Current Task: Optimize Search Tag Suggestions And Pixiv Discovery
 
 ### In Progress
 
@@ -12,15 +12,18 @@
 
 ### Done
 
-- [x] Re-read the task-orchestrator workflow and the complete committed ExecPlan before source edits.
-- [x] Reinitialized this implementation checklist and confirmed the worktree is clean at `80fa8d4` before feature changes.
-- [x] Phase 1 — Added `RelatedPostsSourceAdapter`, bounded first-response Pixiv retrieval, source-owned Gelbooru HTML parsing, two-wide ordered hydration, and opt-in related provider health checks. Verification: `./gradlew :core-domain:test :core-sources:test --no-configuration-cache` passed twice, including the final health-contract patch.
-- [x] Phase 2 — Added shared latest-wins related state and a canonical-index feed projection with hidden-seed placement plus grid/scroll/paging translation. Verification: focused `RelatedPostsStateTest` and `RelatedFeedProjectionTest` passed through `:app-logic:test`.
-- [x] Phase 3 — Added the registry loader, typed Like outcome, exact shell-to-route post-commit handoff, Search/FYP request ownership, root clearing, and count-stable non-empty FYP synchronization. Verification: focused Likes, loader, Search ViewModel, and For You ViewModel tests passed through `:app:testDebugUnitTest`; Debug Kotlin compilation passed.
-- [x] Phase 4 — Added the full-line projected shelf, shared `SearchResultCard` rendering, canonical Search scroll/FYP paging translation, duration input union, and static `RELATED` Viewer source. Verification: focused related app-logic/app tests, `ViewerRoutePolicyTest`, and `FeedAutoplayArchitectureTest` passed together; Debug Kotlin compilation passed.
-- [x] Phase 5 — Completed host validation and durable guidance. Verification: all affected JVM suites, Android-test compilation, Debug assembly, app/app-logic Detekt, aggregate Kover, hotspot gate, Debug package identity, HTML/diff checks, and focused post-extraction tests passed. Core Detekt still reports only inherited frozen owners; no new related file is named.
+- [x] Re-read the task-orchestrator workflow and the complete HTML ExecPlan standard.
+- [x] Confirmed the pre-existing dirty files are confined to unrelated OCR/settings work; this task will not edit them.
+- [x] Finalized the local-first/native-value architecture and created `.docs/exec/search-tag-suggestion-performance.html`; required sections are present and the host HTML parser exited successfully (its legacy parser reported expected HTML5 element warnings).
+- [x] Added alternate-label semantics, pure provider-aware ranking, full-prefix cache reads, learned-row restart priority, and explicit active-trending origins. Verification: focused `TagSuggestionRankingTest` and `TagSuggestionStoreTest` passed; the first compile exposed and then verified the public origin-contract correction.
+- [x] Added immediate cached publication, four-second provider bounds, fifteen-minute exact-prefix reuse, fair concurrent Unified fan-out, and interactive cancellation of background trending. Verification: focused `SearchCoordinatorTest` and `RequestOwnershipSearchViewModelTest` pass, including virtual-time concurrency, timeout, reuse, and pre-debounce publication cases.
+- [x] Added Pixiv native/translated tag parsing, locale request headers, stable provider-order ranking, and native-safe clean UI labels. Verification: focused `PixivSourceAdapterTest`, `TagSuggestionRankingTest`, and `SearchFacetUiTest` pass.
+- [x] Separated active trending membership from autocomplete/seed/seen/count origins, changed trending replacement to preserve other knowledge, and retained the general lexicon as For You's offline fallback. Verification: focused store, Search coordinator, and app compilation tests pass.
+- [x] Extracted `SearchSuggestionCoordinator` and pure suggestion-state transitions after the hotspot gate identified growth in frozen owners; split the new test coverage and removed SearchCoordinator's now-stale hotspot exception. Verification: SearchCoordinator is 787 lines, SearchViewModel is 1099/1100, tests are under 700 lines, and the hotspot gate passes.
+- [x] Synchronized the additive tag-cache fields with the central Gson/R8 contract after its guard identified the stale manifest and fixture.
+- [x] Completed the integrated host-only validation batch. Verification: relevant core/app module tests, 555 app tests with three expected opt-in skips, Debug compilation, app/app-logic/core Detekt, aggregate Kover XML, and Kover verification all passed.
+- [x] Updated `AGENTS.md` and the living ExecPlan with the local-first, origin-separated, native-Pixiv suggestion invariants.
 
 ### Needs Human Validation
 
-- [!] Run the read-only Pixiv/Gelbooru related provider health steps with configured credentials. The current environment has no Pixiv token or Gelbooru user/API key.
-- [!] In an isolated `com.theoriacodex.debug` install, validate shelf placement, Hide liked anchoring, rapid replacement, horizontal autoplay, retry, and static Viewer behavior. No APK was installed or launched during host validation.
+- [!] In an isolated `com.theoriacodex.debug` install, confirm immediate Pixiv cached suggestions, translated/native row presentation, repeated-prefix reuse, refreshed Unified results, and genuine Trending rows. No APK was installed or launched during host validation.

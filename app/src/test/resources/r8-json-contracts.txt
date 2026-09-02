@@ -38,7 +38,7 @@ com.theoriacodex.app.update.UpdateStateSnapshot|lastSeenReleaseId,pendingInstall
 com.theoriacodex.app.update.PendingPostInstallChangelog|releaseId,fromVersionCode,versionCode,tagName,commitShaShort,releaseName,changelogMarkdown,changelogSections
 com.theoriacodex.app.update.ChangelogSection|title,bullets
 com.theoriacodex.app.search.TagStoreSnapshot|sources
-com.theoriacodex.app.search.TagStoreEntry|text,facet,sourceNamespace,type,count
+com.theoriacodex.app.search.TagStoreEntry|text,facet,sourceNamespace,type,count,alternateText,origins
 com.theoriacodex.app.codex.CodexShareFile|version,title,posts
 com.theoriacodex.app.codex.CodexSharePost|source,sourcePostId,snapshot
 com.theoriacodex.app.codex.CodexSharePostSnapshot|preview,full,media,pageUrl,width,height,canonicalTags,rawTags,taxonomy,authorName,createdAtEpochMs,title,creatorProfile,creatorProfiles,durationMs,mediaCount

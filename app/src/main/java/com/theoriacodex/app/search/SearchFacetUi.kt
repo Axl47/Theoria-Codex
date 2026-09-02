@@ -2,6 +2,7 @@ package com.theoriacodex.app.search
 
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
+import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 
@@ -61,4 +62,14 @@ internal fun facetedSuggestionMetaLabel(suggestion: FacetedTagSuggestion): Strin
     val facet = searchFacetLabel(suggestion.facet, suggestion.sourceNamespace)
     val count = suggestion.count?.toString()
     return listOfNotNull(facet, count).joinToString(" • ")
+}
+
+internal fun tagSuggestionDisplayText(suggestion: TagSuggestion): String =
+    suggestion.alternateText?.takeIf(String::isNotBlank) ?: suggestion.text
+
+internal fun tagSuggestionMetaLabel(suggestion: TagSuggestion): String {
+    val nativeText = suggestion.text.takeIf { text ->
+        suggestion.alternateText?.let { alternate -> !alternate.equals(text, ignoreCase = true) } == true
+    }
+    return listOfNotNull(nativeText, suggestion.count?.toString()).joinToString(" • ")
 }

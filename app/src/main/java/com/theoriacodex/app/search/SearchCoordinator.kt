@@ -74,7 +74,13 @@ class SearchCoordinator(
 ) : SearchExecutionService {
     private var runtimeSettings = AppSettings()
     private var availableSourcesSnapshot = registry.availableSources()
-    private val lastTrendingRefreshAtBySource = mutableMapOf<SourceKey, Long>()
+    private val suggestionCoordinator = SearchSuggestionCoordinator(
+        registry = registry,
+        tagSuggestionStore = tagSuggestionStore,
+        clock = clock,
+        supportedSearchScopes = ::supportedSearchScopes,
+        effectiveEnabledSources = ::effectiveEnabledSources,
+    )
     private val resolvedPostsByExecution = linkedMapOf<String, LinkedHashMap<PostId, Post>>()
     private val resolveFailuresByExecution = mutableMapOf<String, MutableMap<PostId, ResolveFailureRecord>>()
     private val appliedPersistenceMutex = Mutex()
@@ -409,176 +415,38 @@ class SearchCoordinator(
         selectedScope: FacetedSearchScope,
         input: String,
         trending: List<TagSuggestion>,
-    ): SearchAutocompleteResult {
-        val parsed = parseScopedInput(input)
-        val supported = supportedSearchScopes(query.mode)
-        var scope = selectedScope.takeIf { it in supported } ?: FacetedSearchScope.All
-        parsed.explicitScope?.let { explicit ->
-            if (query.mode == QueryMode.Unified) {
-                return SearchAutocompleteResult(input, scope, UNIFIED_SCOPED_INPUT_BLOCKED_MESSAGE)
-            }
-            scope = resolveSupportedScope(explicit, supported)
-                ?: return SearchAutocompleteResult(input, scope, UNSUPPORTED_SEARCH_SCOPE_MESSAGE)
-        }
-        if (parsed.value.isBlank()) return fetchFeaturedAutocomplete(query, scope, input)
-        return when (val mode = query.mode) {
-            QueryMode.Unified -> fetchUnifiedAutocomplete(sourceScope, scope, input, parsed.value)
-            is QueryMode.Source -> fetchSourceAutocomplete(mode, scope, input, parsed.value, trending)
-        }
-    }
+    ): SearchAutocompleteResult = suggestionCoordinator.fetchAutocomplete(
+        query,
+        sourceScope,
+        selectedScope,
+        input,
+        trending,
+    )
 
-    private suspend fun fetchUnifiedAutocomplete(
+    internal fun cachedAutocomplete(
+        query: Query,
         sourceScope: SearchSourceScope,
         selectedScope: FacetedSearchScope,
         input: String,
-        prefix: String,
-    ): SearchAutocompleteResult {
-        val enabled = effectiveEnabledSources(sourceScope)
-        val fetched = enabled.flatMap { source -> fetchUnifiedSuggestionsForSource(source, prefix) }
-        val candidates = fetched.ifEmpty { enabled.flatMap { tagSuggestionStore.get(it, 120) } }
-        return SearchAutocompleteResult(
-            input = input,
-            selectedScope = selectedScope,
-            autocomplete = rankSuggestionsByPrefix(candidates, prefix, 20),
-        )
-    }
-
-    private suspend fun fetchUnifiedSuggestionsForSource(
-        source: SourceKey,
-        prefix: String,
-    ): List<TagSuggestion> {
-        val adapter = registry.adapterFor(source)
-        val sourcePrefix = autocompletePrefixForSource(source, prefix)
-        if (adapter !is FacetedSearchSourceAdapter) {
-            val suggestions = runCatchingPreservingCancellation {
-                adapter?.autocompleteTags(sourcePrefix, 10).orEmpty()
-            }.getOrDefault(emptyList())
-            if (suggestions.isNotEmpty()) tagSuggestionStore.put(source, suggestions)
-            return suggestions.filter(TagSuggestion::isPortableTagSuggestion)
-        }
-        val all = FacetedSearchScope.All.takeIf { it in adapter.supportedSearchScopes }
-            ?: adapter.supportedSearchScopes.firstOrNull {
-                it.facet == SearchFacet.TAG && it.sourceNamespace in setOf(null, "tag")
-            }
-            ?: return emptyList()
-        val suggestions = try {
-            adapter.autocompleteFaceted(sourcePrefix, all, FACETED_AUTOCOMPLETE_LIMIT)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (_: Throwable) {
-            emptyList()
-        }
-        if (suggestions.isNotEmpty()) tagSuggestionStore.putFaceted(source, suggestions)
-        return suggestions.filter(FacetedTagSuggestion::isPortableTagSuggestion)
-            .map(FacetedTagSuggestion::toPortableLegacySuggestion)
-    }
-
-    private suspend fun fetchSourceAutocomplete(
-        mode: QueryMode.Source,
-        selectedScope: FacetedSearchScope,
-        input: String,
-        prefix: String,
         trending: List<TagSuggestion>,
-    ): SearchAutocompleteResult {
-        val adapter = registry.adapterFor(mode.source)
-        if (adapter is FacetedSearchSourceAdapter) {
-            val supported = supportedSearchScopes(mode)
-            val scope = selectedScope.takeIf { it in supported }
-                ?: FacetedSearchScope.All.takeIf { it in supported }
-                ?: return SearchAutocompleteResult(input, selectedScope, UNSUPPORTED_SEARCH_SCOPE_MESSAGE)
-            val fetched = try {
-                adapter.autocompleteFaceted(prefix, scope, FACETED_AUTOCOMPLETE_LIMIT)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Throwable) {
-                emptyList()
-            }
-            if (fetched.isNotEmpty()) tagSuggestionStore.putFaceted(mode.source, fetched)
-            val candidates = fetched.ifEmpty {
-                tagSuggestionStore.getFaceted(mode.source, FACETED_AUTOCOMPLETE_CACHE_LIMIT, scope)
-            }
-            val ranked = rankFacetedSuggestionsByPrefix(candidates, prefix, FACETED_AUTOCOMPLETE_LIMIT)
-            return SearchAutocompleteResult(
-                input,
-                scope,
-                autocomplete = ranked.map(FacetedTagSuggestion::toLegacySuggestion),
-                facetedAutocomplete = ranked,
-            )
-        }
-        val sourcePrefix = autocompletePrefixForSource(mode.source, prefix)
-        val fetched = runCatchingPreservingCancellation {
-            adapter?.autocompleteTags(sourcePrefix, 20).orEmpty()
-        }.getOrDefault(emptyList())
-        if (fetched.isNotEmpty()) tagSuggestionStore.put(mode.source, fetched)
-        val candidates = fetched.ifEmpty { tagSuggestionStore.get(mode.source, 120).ifEmpty { trending } }
-        return SearchAutocompleteResult(
-            input,
-            selectedScope,
-            autocomplete = rankSuggestionsByPrefix(candidates, prefix, 20),
-        )
-    }
-
-    private suspend fun fetchFeaturedAutocomplete(
-        query: Query,
-        selectedScope: FacetedSearchScope,
-        input: String,
-    ): SearchAutocompleteResult {
-        val mode = query.mode as? QueryMode.Source
-        val adapter = mode?.let { registry.adapterFor(it.source) as? FacetedSearchSourceAdapter }
-        val scope = selectedScope.takeIf { !it.isAll && it in supportedSearchScopes(query.mode) }
-        if (mode == null || adapter == null || scope == null) {
-            return SearchAutocompleteResult(input, selectedScope)
-        }
-        val featured = try {
-            adapter.featuredFacetedSuggestions(scope, FACETED_AUTOCOMPLETE_LIMIT)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (_: Throwable) {
-            emptyList()
-        }
-        if (featured.isNotEmpty()) tagSuggestionStore.putFaceted(mode.source, featured)
-        val suggestions = featured.ifEmpty {
-            tagSuggestionStore.getFaceted(mode.source, FACETED_AUTOCOMPLETE_LIMIT, scope)
-        }
-        return SearchAutocompleteResult(
-            input,
-            scope,
-            autocomplete = suggestions.map(FacetedTagSuggestion::toLegacySuggestion),
-            facetedAutocomplete = suggestions,
-        )
-    }
+    ): SearchAutocompleteResult = suggestionCoordinator.cachedAutocomplete(
+        query,
+        sourceScope,
+        selectedScope,
+        input,
+        trending,
+    )
 
     internal suspend fun fetchTrending(
         query: Query,
         sourceScope: SearchSourceScope,
         forceRefresh: Boolean = false,
-    ): List<TagSuggestion> {
-        val now = clock()
-        return when (val mode = query.mode) {
-            QueryMode.Unified -> {
-                val enabled = effectiveEnabledSources(sourceScope)
-                if (enabled.isEmpty()) return emptyList()
-                val cached = enabled.associateWith { tagSuggestionStore.get(it, TRENDING_PER_SOURCE_CACHE_LIMIT) }
-                enabled.filter {
-                    shouldRefreshTrending(it, now, forceRefresh, cached[it].orEmpty())
-                }.forEach { fetchTrendingForSource(it, TRENDING_FETCH_PER_SOURCE_LIMIT) }
-                rankTrendingSuggestions(
-                    enabled.flatMap { tagSuggestionStore.get(it, TRENDING_PER_SOURCE_CACHE_LIMIT) },
-                    UNIFIED_TRENDING_LIMIT,
-                )
-            }
-            is QueryMode.Source -> {
-                val cached = tagSuggestionStore.get(mode.source, SOURCE_TRENDING_LIMIT)
-                if (shouldRefreshTrending(mode.source, now, forceRefresh, cached)) {
-                    fetchTrendingForSource(mode.source, SOURCE_TRENDING_LIMIT)
-                }
-                rankTrendingSuggestions(
-                    tagSuggestionStore.get(mode.source, SOURCE_TRENDING_LIMIT),
-                    SOURCE_TRENDING_LIMIT,
-                )
-            }
-        }
-    }
+    ): List<TagSuggestion> = suggestionCoordinator.fetchTrending(query, sourceScope, forceRefresh)
+
+    internal fun cachedTrending(
+        query: Query,
+        sourceScope: SearchSourceScope,
+    ): List<TagSuggestion> = suggestionCoordinator.cachedTrending(query, sourceScope)
 
     internal fun tagVideoCount(
         source: SourceKey,
@@ -616,9 +484,11 @@ class SearchCoordinator(
                 adapter.fetchTagCounts(missing.map { autocompletePrefixForSource(source, it) })
             }.getOrDefault(emptyMap())
             if (counts.isNotEmpty()) {
-                tagSuggestionStore.put(source, counts.map { (text, count) ->
-                    TagSuggestion(text, "tag_count_lookup", count)
-                })
+                tagSuggestionStore.put(
+                    source,
+                    counts.map { (text, count) -> TagSuggestion(text, "tag_count_lookup", count) },
+                    TagSuggestionOrigin.COUNT_LOOKUP,
+                )
                 missing.forEach { tag ->
                     counts.entries.firstOrNull { sourceTagsMatch(source, it.key, tag) }
                         ?.value?.let { resolved[tag] = it }
@@ -630,7 +500,9 @@ class SearchCoordinator(
             val fetched = runCatchingPreservingCancellation {
                 adapter.autocompleteTags(autocompletePrefixForSource(source, tag), TAG_FETCH_LIMIT)
             }.getOrDefault(emptyList())
-            if (fetched.isNotEmpty()) tagSuggestionStore.put(source, fetched)
+            if (fetched.isNotEmpty()) {
+                tagSuggestionStore.put(source, fetched, TagSuggestionOrigin.AUTOCOMPLETE)
+            }
             val count = fetched.firstOrNull { sourceTagsMatch(source, it.text, tag) }?.count
                 ?: tagVideoCount(source, tag, autocomplete, trending)
             if (count != null) resolved[tag] = count
@@ -747,7 +619,13 @@ class SearchCoordinator(
                 val suggestions = runCatchingPreservingCancellation {
                     adapter.autocompleteTags(autocompletePrefixForSource(SourceKey.GELBOORU, normalized), 1)
                 }.getOrDefault(emptyList())
-                if (suggestions.isNotEmpty()) tagSuggestionStore.put(SourceKey.GELBOORU, suggestions)
+                if (suggestions.isNotEmpty()) {
+                    tagSuggestionStore.put(
+                        SourceKey.GELBOORU,
+                        suggestions,
+                        TagSuggestionOrigin.AUTOCOMPLETE,
+                    )
+                }
                 suggestions.firstOrNull()?.text?.trim().takeUnless { it.isNullOrBlank() } ?: normalized
             }
             if (mapped !in resolved) resolved += mapped
@@ -782,7 +660,9 @@ class SearchCoordinator(
                 .distinctBy { Triple(it.facet, it.sourceNamespace, sourceTagKey(source, it.text)) }
                 .take(SEEN_TAGS_PER_SOURCE_INGEST_LIMIT)
                 .toList()
-            if (suggestions.isNotEmpty()) tagSuggestionStore.putFaceted(source, suggestions)
+            if (suggestions.isNotEmpty()) {
+                tagSuggestionStore.putFaceted(source, suggestions, TagSuggestionOrigin.SEEN)
+            }
         }
     }
 
@@ -895,58 +775,6 @@ class SearchCoordinator(
     private fun isModeAvailable(mode: QueryMode): Boolean = when (mode) {
         QueryMode.Unified -> true
         is QueryMode.Source -> mode.source in registry.availableSources()
-    }
-
-    private fun shouldRefreshTrending(
-        source: SourceKey,
-        now: Long,
-        force: Boolean,
-        cached: List<TagSuggestion>,
-    ): Boolean = force || cached.isEmpty() ||
-        lastTrendingRefreshAtBySource[source]?.let { now - it >= TRENDING_REFRESH_INTERVAL_MS } != false
-
-    private suspend fun fetchTrendingForSource(source: SourceKey, limit: Int): List<TagSuggestion> {
-        val fetched = runCatchingPreservingCancellation {
-            registry.adapterFor(source)?.trendingTags(limit).orEmpty()
-        }.getOrDefault(emptyList())
-        lastTrendingRefreshAtBySource[source] = clock()
-        if (fetched.isNotEmpty()) tagSuggestionStore.put(source, fetched)
-        return fetched
-    }
-
-    private fun rankTrendingSuggestions(suggestions: List<TagSuggestion>, limit: Int): List<TagSuggestion> =
-        suggestions.asSequence().filter { it.text.isNotBlank() }
-            .distinctBy { normalizeMatchToken(it.text) }
-            .sortedWith(compareByDescending<TagSuggestion> { it.count ?: Int.MIN_VALUE }
-                .thenBy { it.text.lowercase() })
-            .take(limit).toList()
-
-    private fun rankSuggestionsByPrefix(
-        suggestions: List<TagSuggestion>,
-        prefix: String,
-        limit: Int,
-    ): List<TagSuggestion> {
-        val normalized = normalizeMatchToken(prefix)
-        return suggestions.asSequence().filter { normalizeMatchToken(it.text).contains(normalized) }
-            .distinctBy { it.text.trim().lowercase() }
-            .sortedWith(compareByDescending<TagSuggestion> { it.count ?: Int.MIN_VALUE }
-                .thenBy { !normalizeMatchToken(it.text).startsWith(normalized) }
-                .thenBy { it.text.lowercase() })
-            .take(limit).toList()
-    }
-
-    private fun rankFacetedSuggestionsByPrefix(
-        suggestions: List<FacetedTagSuggestion>,
-        prefix: String,
-        limit: Int,
-    ): List<FacetedTagSuggestion> {
-        val normalized = normalizeMatchToken(prefix)
-        return suggestions.asSequence().filter { normalizeMatchToken(it.text).contains(normalized) }
-            .distinctBy { Triple(it.facet, it.sourceNamespace, normalizeMatchToken(it.text)) }
-            .sortedWith(compareByDescending<FacetedTagSuggestion> { it.count ?: Int.MIN_VALUE }
-                .thenBy { !normalizeMatchToken(it.text).startsWith(normalized) }
-                .thenBy { it.text.lowercase() })
-            .take(limit).toList()
     }
 
     private fun autocompletePrefixForSource(source: SourceKey, input: String): String {

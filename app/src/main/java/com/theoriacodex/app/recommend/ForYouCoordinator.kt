@@ -612,7 +612,7 @@ class ForYouCoordinator(
 
     private suspend fun fallbackTagsForSource(source: SourceKey): List<String> {
         val cached = tagSuggestionStore
-            .get(source = source, limit = TRENDING_FALLBACK_LIMIT)
+            .getTrending(source = source, limit = TRENDING_FALLBACK_LIMIT)
             .filter(TagSuggestion::isRecommendationTagSuggestion)
         if (cached.isNotEmpty()) {
             return cached.map { suggestion -> suggestion.text }
@@ -622,9 +622,12 @@ class ForYouCoordinator(
             registry.adapterFor(source)?.trendingTags(limit = TRENDING_FALLBACK_LIMIT).orEmpty()
         }.getOrDefault(emptyList())
         if (fetched.isNotEmpty()) {
-            tagSuggestionStore.put(source, fetched)
+            tagSuggestionStore.replaceTrending(source, fetched)
         }
-        return fetched
+        val fallback = fetched.ifEmpty {
+            tagSuggestionStore.get(source = source, limit = TRENDING_FALLBACK_LIMIT)
+        }
+        return fallback
             .filter(TagSuggestion::isRecommendationTagSuggestion)
             .map { suggestion -> suggestion.text }
     }

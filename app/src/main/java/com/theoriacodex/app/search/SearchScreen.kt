@@ -1781,8 +1781,8 @@ private fun AutocompletePanel(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = item.text, style = MaterialTheme.typography.bodyMedium)
-                val meta = listOfNotNull(item.type, item.count?.toString()).joinToString(" • ")
+                Text(text = tagSuggestionDisplayText(item), style = MaterialTheme.typography.bodyMedium)
+                val meta = tagSuggestionMetaLabel(item)
                 if (meta.isNotBlank()) {
                     Text(text = meta, style = MaterialTheme.typography.bodySmall)
                 }

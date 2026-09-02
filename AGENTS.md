@@ -44,6 +44,14 @@ Positive Search terms use a shallow Boolean grammar: every group is required wit
 
 Gelbooru supports exact native OR with brace groups such as `{tag1 ~ tag2}`; its older bare-tilde form is not equivalent. Providers without verified native support use the bounded orchestrator fallback with independent branch continuation, post-hydration group verification, and canonical-ID deduplication. Never infer a fallback branch's exhaustion from the locally filtered visible count.
 
+## Search Tag Suggestions
+
+Search autocomplete is local-first: query the complete bounded tag lexicon before applying a result limit, publish those matches before the network debounce, and let the bounded provider refresh improve the same generation later. Reuse fresh exact source/prefix/scope requests, keep Unified provider calls concurrent, and preserve cancellation plus stale-generation rejection. Ranking must prefer exact, prefix, then contained matches; compare counts only within one provider/relevance band and fairly interleave Unified sources whose corpus sizes are not comparable.
+
+Suggestion origins are storage policy, not user-facing taxonomy. Keep active Trending membership separate from seed, autocomplete, seen, featured, and count-lookup knowledge; replacing Trending must not delete another origin for the same tag. Never display raw cache labels such as `seed`, `seen`, or `pixiv_tags_page`.
+
+Pixiv suggestion identity is its native tag text. A provider translation is an alternate match/display label only, and selecting the suggestion must still submit the native value. Request Pixiv's current locale, retain its authoritative response order when counts are absent, and persist native/alternate pairs without learning them as two independent recommendation interests.
+
 ## Search Scroll Restoration
 
 The Search route applies persisted scroll position once when the route is restored or re-entered. Page appends must not retrigger that restoration from a changed result count, or pagination will replay the initial saved position and jump the grid to the top. Keep route-entry restoration separate from page-loading state. Unified execution may retain `EXCLUDED` source statuses for orchestration diagnostics, but the UI status row should only render actionable provider failures.

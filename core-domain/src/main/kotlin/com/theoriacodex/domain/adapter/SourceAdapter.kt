@@ -126,6 +126,8 @@ data class TagSuggestion(
     val text: String,
     val type: String?,
     val count: Int?,
+    /** Optional localized or provider-supplied label; [text] remains the submitted search value. */
+    val alternateText: String? = null,
 )
 
 data class SourceCapabilities(

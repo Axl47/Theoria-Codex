@@ -36,6 +36,8 @@ import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import com.theoriacodex.domain.query.QueryHash
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -43,6 +45,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SearchCoordinatorTest {
     @Test
     fun `initial execution returns immutable posts status and continuation`() = runTest {
@@ -279,7 +282,7 @@ class SearchCoordinatorTest {
         assertEquals("blue_hair", gelbooru.autocompletePrefixes.single())
         assertTrue(hitomi.autocompletePrefixes.isEmpty())
         assertEquals(
-            listOf("blue_hair_high", "blue_hair_mid", "blue_hair_low"),
+            listOf("blue_hair_mid", "blue_hair_high", "blue_hair_low"),
             result.autocomplete.map(TagSuggestion::text),
         )
     }
@@ -415,7 +418,7 @@ class SearchCoordinatorTest {
                     query,
                     SearchSourceScope.Single(SourceKey.HITOMI),
                     artist,
-                    "naj",
+                    "naja",
                     emptyList(),
                 )
             }.exceptionOrNull() is CancellationException,
@@ -508,7 +511,7 @@ private class CountingRestoreRepository(
     }
 }
 
-private class TestRegistry(adapters: List<SourceAdapter>) : SourceAdapterRegistry {
+internal class TestRegistry(adapters: List<SourceAdapter>) : SourceAdapterRegistry {
     private val bySource = adapters.associateBy(SourceAdapter::sourceKey)
     private val orchestrator = UnifiedSearchOrchestrator(bySource)
     override fun availableSources(): Set<SourceKey> = bySource.keys
@@ -516,12 +519,13 @@ private class TestRegistry(adapters: List<SourceAdapter>) : SourceAdapterRegistr
     override fun unifiedOrchestrator(): UnifiedSearchOrchestrator = orchestrator
 }
 
-private class TestAdapter(override val sourceKey: SourceKey) : SourceAdapter {
+internal class TestAdapter(override val sourceKey: SourceKey) : SourceAdapter {
     var failure: Throwable? = null
     var autocompleteFailure: Throwable? = null
     var autocomplete: List<TagSuggestion> = emptyList()
     val autocompleteByPrefix = mutableMapOf<String, List<TagSuggestion>>()
     val autocompletePrefixes = mutableListOf<String>()
+    var autocompleteResponseDelayMs = 0L
     val searchedTags = mutableListOf<List<String>>()
     val searchedExclusions = mutableListOf<List<String>>()
     var resolvedPost: Post? = null
@@ -556,6 +560,7 @@ private class TestAdapter(override val sourceKey: SourceKey) : SourceAdapter {
     override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
         autocompleteFailure?.let { throw it }
         autocompletePrefixes += prefix
+        if (autocompleteResponseDelayMs > 0L) delay(autocompleteResponseDelayMs)
         return autocompleteByPrefix[prefix]?.take(limit) ?: autocomplete.take(limit)
     }
 
@@ -607,8 +612,9 @@ private class CountAdapter(
     }
 }
 
-private class RecordingTagStore : TagSuggestionStore {
+internal class RecordingTagStore : TagSuggestionStore {
     private val legacy = mutableMapOf<SourceKey, MutableList<TagSuggestion>>()
+    private val trending = mutableMapOf<SourceKey, List<TagSuggestion>>()
     val faceted = mutableListOf<FacetedTagSuggestion>()
 
     override fun get(source: SourceKey, limit: Int): List<TagSuggestion> = legacy[source].orEmpty().take(limit)
@@ -620,6 +626,14 @@ private class RecordingTagStore : TagSuggestionStore {
                 add(incoming)
             }
         }
+    }
+
+    override fun getTrending(source: SourceKey, limit: Int): List<TagSuggestion> =
+        trending[source].orEmpty().take(limit)
+
+    override fun replaceTrending(source: SourceKey, suggestions: List<TagSuggestion>) {
+        trending[source] = suggestions
+        put(source, suggestions)
     }
 
     override fun getFaceted(
@@ -635,7 +649,7 @@ private class RecordingTagStore : TagSuggestionStore {
     }
 }
 
-private fun query(source: SourceKey, tag: String) = Query(
+internal fun query(source: SourceKey, tag: String) = Query(
     mode = QueryMode.Source(source),
     includeTerms = listOf(SearchTerm(tag)),
     excludeTerms = emptyList(),
@@ -644,7 +658,7 @@ private fun query(source: SourceKey, tag: String) = Query(
     minScore = null,
 )
 
-private fun unifiedQuery(tag: String) = query(SourceKey.PIXIV, tag).copy(mode = QueryMode.Unified)
+internal fun unifiedQuery(tag: String) = query(SourceKey.PIXIV, tag).copy(mode = QueryMode.Unified)
 
 private fun post(source: SourceKey, id: String) = Post(
     id = PostId(source, id),

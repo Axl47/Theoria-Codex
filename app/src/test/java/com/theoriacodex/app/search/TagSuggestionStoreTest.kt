@@ -73,6 +73,68 @@ class TagSuggestionStoreTest {
     }
 
     @Test
+    fun `prefix lookup filters the complete bounded lexicon before limiting`() = runTest {
+        val seed = (0 until 200).map { index ->
+            TagSuggestion(text = "seed_${index.toString().padStart(3, '0')}", type = "seed", count = null)
+        }
+        val store = FileBackedTagSuggestionStore(
+            storeFile = tempDir("tag-store-complete-prefix-test").resolve("tag_suggestions.json"),
+            seedData = mapOf(SourceKey.PIXIV to seed),
+        )
+
+        assertEquals(
+            listOf("seed_199"),
+            store.find(SourceKey.PIXIV, prefix = "199", limit = 20).map(TagSuggestion::text),
+        )
+        store.close()
+    }
+
+    @Test
+    fun `learned rows stay ahead of seeds and remain queryable after restart`() = runTest {
+        val directory = tempDir("tag-store-restart-priority-test")
+        val storeFile = directory.resolve("tag_suggestions.json")
+        val seed = (0 until 150).map { index ->
+            TagSuggestion(text = "seed_$index", type = "seed", count = null)
+        }
+        val initial = FileBackedTagSuggestionStore(
+            storeFile = storeFile,
+            seedData = mapOf(SourceKey.PIXIV to seed),
+        )
+        initial.put(
+            SourceKey.PIXIV,
+            listOf(TagSuggestion("初音ミク", "tag", null, alternateText = "Hatsune Miku")),
+            TagSuggestionOrigin.AUTOCOMPLETE,
+        )
+        initial.close()
+
+        val reopened = FileBackedTagSuggestionStore(
+            storeFile = storeFile,
+            seedData = mapOf(SourceKey.PIXIV to seed),
+        )
+        reopened.awaitLoaded()
+
+        assertEquals("初音ミク", reopened.get(SourceKey.PIXIV, 1).single().text)
+        assertEquals("初音ミク", reopened.find(SourceKey.PIXIV, "hatsune", 10).single().text)
+        reopened.close()
+    }
+
+    @Test
+    fun `replacing trending membership preserves other cached knowledge`() = runTest {
+        val store = FileBackedTagSuggestionStore(
+            storeFile = tempDir("tag-store-trending-origin-test").resolve("tag_suggestions.json"),
+        )
+        val old = TagSuggestion("old_tag", "tag", null)
+        val fresh = TagSuggestion("fresh_tag", "trending", null)
+        store.put(SourceKey.PIXIV, listOf(old), TagSuggestionOrigin.AUTOCOMPLETE)
+        store.replaceTrending(SourceKey.PIXIV, listOf(old.copy(type = "trending")))
+        store.replaceTrending(SourceKey.PIXIV, listOf(fresh))
+
+        assertEquals(listOf("fresh_tag"), store.getTrending(SourceKey.PIXIV, 10).map(TagSuggestion::text))
+        assertTrue(store.get(SourceKey.PIXIV, 10).any { suggestion -> suggestion.text == "old_tag" })
+        store.close()
+    }
+
+    @Test
     fun `store size respects max entries per source`() = runTest {
         val tempDir = tempDir("tag-store-cap-test")
         val store = FileBackedTagSuggestionStore(

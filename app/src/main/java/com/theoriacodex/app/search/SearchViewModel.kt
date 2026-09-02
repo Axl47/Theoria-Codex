@@ -16,6 +16,9 @@ import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchStateChange
 import com.theoriacodex.app.search.state.SearchStateReducer
 import com.theoriacodex.app.search.state.SearchUiState
+import com.theoriacodex.app.search.state.withAutocompleteResult
+import com.theoriacodex.app.search.state.withSuggestionInput
+import com.theoriacodex.app.search.state.withTrendingSuggestions
 import com.theoriacodex.app.search.state.SearchQueryUiState
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.modeKey
@@ -310,6 +313,7 @@ internal class SearchViewModel(
     }
 
     private fun selectMode(mode: QueryMode) {
+        cancelAutocomplete()
         mutableState.value = SearchDraftReducer.selectMode(
             state = mutableState.value,
             mode = mode,
@@ -767,8 +771,23 @@ internal class SearchViewModel(
 
     private fun refreshAutocomplete(input: String) {
         cancelAutocomplete()
+        if (input.isNotBlank()) {
+            trendingJob?.cancel(CancellationException("Interactive autocomplete superseded trending refresh"))
+            trendingJob = null
+        }
         updateSuggestionInput(input)
         val generation = ++nextAutocompleteGeneration
+        val localState = mutableState.value
+        publishAutocompleteIfCurrent(
+            generation = generation,
+            result = coordinator.cachedAutocomplete(
+                query = localState.query.draft,
+                sourceScope = localState.query.draftSourceScope,
+                selectedScope = localState.query.selectedScope,
+                input = input,
+                trending = localState.suggestions.trending,
+            ),
+        )
         autocompleteJob = viewModelScope.launch {
             if (autocompleteDelayMs > 0) delay(autocompleteDelayMs)
             val requestState = mutableState.value
@@ -780,26 +799,13 @@ internal class SearchViewModel(
                 trending = requestState.suggestions.trending,
             )
             coroutineContext.ensureActive()
-            if (generation != nextAutocompleteGeneration) return@launch
-            val current = mutableState.value
-            mutableState.value = current.copy(
-                query = current.query.copy(
-                    selectedScope = result.selectedScope,
-                    validationMessage = result.validationMessage,
-                ),
-                suggestions = current.suggestions.copy(
-                    input = result.input,
-                    autocomplete = result.autocomplete,
-                    facetedAutocomplete = result.facetedAutocomplete,
-                    canCommitInput = SearchDraftReducer.canCommitInput(
-                        current.copy(
-                            suggestions = current.suggestions.copy(autocomplete = result.autocomplete),
-                        ),
-                        result.input,
-                    ),
-                ),
-            )
+            publishAutocompleteIfCurrent(generation, result)
         }
+    }
+
+    private fun publishAutocompleteIfCurrent(generation: Long, result: SearchAutocompleteResult) {
+        if (generation != nextAutocompleteGeneration) return
+        mutableState.value = mutableState.value.withAutocompleteResult(result)
     }
 
     private fun cancelAutocomplete() {
@@ -810,8 +816,15 @@ internal class SearchViewModel(
 
     private fun refreshTrending() {
         trendingJob?.cancel(CancellationException("Trending refresh superseded"))
+        val requestState = mutableState.value
+        val cached = coordinator.cachedTrending(
+            query = requestState.query.draft,
+            sourceScope = requestState.query.draftSourceScope,
+        )
+        if (cached.isNotEmpty()) {
+            mutableState.value = requestState.withTrendingSuggestions(cached)
+        }
         trendingJob = viewModelScope.launch {
-            val requestState = mutableState.value
             val trending = coordinator.fetchTrending(
                 query = requestState.query.draft,
                 sourceScope = requestState.query.draftSourceScope,
@@ -821,9 +834,7 @@ internal class SearchViewModel(
             if (current.query.draft != requestState.query.draft ||
                 current.query.draftSourceScope != requestState.query.draftSourceScope
             ) return@launch
-            mutableState.value = current.copy(
-                suggestions = current.suggestions.copy(trending = trending),
-            )
+            mutableState.value = current.withTrendingSuggestions(trending)
         }
     }
 
@@ -966,17 +977,9 @@ internal class SearchViewModel(
         savedStateHandle[SearchSavedStateKeys.DRAFT_QUERY] =
             SearchSavedQueryCodec.encode(current.query.draft)
     }
-
     private fun updateSuggestionInput(input: String) {
-        val current = mutableState.value
-        mutableState.value = current.copy(
-            suggestions = current.suggestions.copy(
-                input = input,
-                canCommitInput = SearchDraftReducer.canCommitInput(current, input),
-            ),
-        )
+        mutableState.value = mutableState.value.withSuggestionInput(input)
     }
-
     private fun draftContext(): SearchDraftContext = SearchDraftContext(
         availableSources = mutableState.value.query.availableSources.toSet(),
         appliedByMode = appliedByMode,
