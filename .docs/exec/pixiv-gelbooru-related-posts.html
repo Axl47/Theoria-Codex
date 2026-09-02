@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Surface Pixiv and Gelbooru Related Posts After Likes</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f4;
+      --surface: #ffffff;
+      --text: #202124;
+      --muted: #5f6368;
+      --border: #d7d7d0;
+      --accent: #0f766e;
+      --accent-soft: #dff3ef;
+      --risk: #9a3412;
+      --risk-soft: #ffedd5;
+      --decision: #1d4ed8;
+      --decision-soft: #dbeafe;
+      --code: #111827;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151716;
+        --surface: #202321;
+        --text: #f0f2ef;
+        --muted: #b8beb7;
+        --border: #3a403c;
+        --accent: #5eead4;
+        --accent-soft: #123b37;
+        --risk: #fdba74;
+        --risk-soft: #43230f;
+        --decision: #93c5fd;
+        --decision-soft: #172554;
+        --code: #0b0f0d;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header, main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    header { padding-top: 36px; }
+    h1, h2, h3, h4 {
+      line-height: 1.2;
+      margin: 0 0 12px;
+    }
+    h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+    h2 { margin-top: 4px; font-size: 1.55rem; }
+    h3 { margin-top: 26px; font-size: 1.12rem; }
+    h4 { margin-top: 18px; font-size: 1rem; }
+    p { margin: 0 0 14px; }
+    ul, ol { margin: 10px 0 16px; padding-left: 24px; }
+    li + li { margin-top: 6px; }
+    a { color: var(--accent); }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-block: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(10px);
+    }
+    nav ul {
+      display: flex;
+      gap: 6px;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 8px 24px;
+      list-style: none;
+      overflow-x: auto;
+    }
+    nav li + li { margin-top: 0; }
+    nav a {
+      display: block;
+      padding: 6px 10px;
+      border-radius: 6px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    nav a:hover { background: var(--accent-soft); }
+    section {
+      padding: 22px;
+      margin: 18px 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    article + article {
+      margin-top: 26px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 18px;
+      font-size: 0.94rem;
+    }
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 700; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      overflow-x: auto;
+      padding: 14px;
+      border-radius: 8px;
+      background: var(--code);
+      color: #f8fafc;
+      line-height: 1.45;
+    }
+    details {
+      margin: 12px 0;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+    }
+    summary { cursor: pointer; font-weight: 700; }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0;
+      color: var(--muted);
+    }
+    .pill {
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+    }
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin: 18px 0 0;
+    }
+    .card {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    .card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .callout {
+      margin: 14px 0;
+      padding: 12px 14px;
+      border-left: 4px solid var(--accent);
+      background: var(--accent-soft);
+      border-radius: 6px;
+    }
+    .risk {
+      border-left-color: var(--risk);
+      background: var(--risk-soft);
+    }
+    .decision {
+      border-left-color: var(--decision);
+      background: var(--decision-soft);
+    }
+    .status-table td:first-child {
+      width: 180px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+    .nowrap { white-space: nowrap; }
+
+    @media (max-width: 720px) {
+      header, main { padding: 18px; }
+      section { padding: 17px; }
+      th, td { padding: 8px 7px; }
+    }
+    @media print {
+      nav { position: static; }
+      section, .card { break-inside: avoid; }
+      body { background: #fff; color: #000; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ExecPlan: Surface Related Posts After Likes</h1>
+    <p>After a successful local Like on a Pixiv or Gelbooru card in Search or For You, Theoria Codex will reveal one contextual, dismissible “More like this” shelf without mixing provider-related posts into the canonical feed. The shelf will preserve provider ordering, Search scroll restoration, FYP pagination, Viewer ownership, duration enrichment, and the rule that provider requests never become remote bookmarks or durable FYP searches.</p>
+    <div class="meta" aria-label="Plan metadata">
+      <span class="pill">Status: Proposed</span>
+      <span class="pill">Owner: Codex</span>
+      <span class="pill">Created: 2026-09-02</span>
+      <span class="pill">Updated: 2026-09-02</span>
+      <span class="pill">Plan: .docs/exec/pixiv-gelbooru-related-posts.html</span>
+    </div>
+    <div class="dashboard">
+      <div class="card"><strong>Next Action</strong>Prototype and test the optional provider capability, especially Gelbooru’s server-rendered “More Like This” parser.</div>
+      <div class="card"><strong>Main Risk</strong>Gelbooru has no documented related-post DAPI operation; its HTML recommendation block can change independently of the API.</div>
+      <div class="card"><strong>Validation</strong>Focused JVM tests, final module/static/coverage batch, opt-in live provider probes, and an isolated Debug-app manual flow.</div>
+      <div class="card"><strong>Affected Areas</strong><code>core-domain</code>, <code>core-sources</code>, <code>app-logic</code>, Search, For You, Viewer, shared feed UI, and architecture documentation.</div>
+    </div>
+  </header>
+
+  <nav aria-label="Plan sections">
+    <ul>
+      <li><a href="#purpose">Purpose</a></li>
+      <li><a href="#status">Status</a></li>
+      <li><a href="#context">Context</a></li>
+      <li><a href="#behavior">Behavior</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#work-plan">Work Plan</a></li>
+      <li><a href="#validation">Validation</a></li>
+      <li><a href="#living-log">Living Log</a></li>
+      <li><a href="#recovery">Recovery</a></li>
+      <li><a href="#appendix">Appendix</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <section id="purpose">
+      <h2>Purpose / Big Picture</h2>
+      <p>A person browsing Search or For You can already Like a post, which records that choice locally for the active recommendation profile and synchronizes the system Likes Codex. This change makes that moment immediately useful: liking an eligible Pixiv or Gelbooru post reveals a small provider-native discovery shelf next to the post instead of waiting for a later global recommendation refresh.</p>
+      <p>The completed behavior is visible without opening a post. Tap the heart on a Pixiv or Gelbooru feed card, keep the current feed and scroll position, and observe a loading shelf become an ordered row of related cards. The row supports ordinary card actions and a static Viewer stream. Liking a card in the shelf continues discovery in the same location. Dismissing, unliking the current seed, replacing the root feed, changing profile, or restarting the process removes the transient shelf without changing the Like that already committed.</p>
+      <div class="callout decision"><strong>Product decision:</strong> a non-empty FYP feed no longer reruns its root generation solely because the active profile’s Like count changed. The new shelf is the immediate reaction. Newly recorded Likes train the next explicit refresh, shuffle, source/sort change, replay, or other legitimate root generation.</div>
+      <div class="callout"><strong>Non-goal:</strong> this feature does not bookmark or favorite anything on Pixiv or Gelbooru. The only provider mutations remain none; related retrieval is read-only and the existing Like remains local.</div>
+    </section>
+
+    <section id="status">
+      <h2>Current Status</h2>
+      <table class="status-table">
+        <tbody>
+          <tr><td>Status</td><td>Proposed; repository orientation and product decisions are complete. No feature implementation has started.</td></tr>
+          <tr><td>Next action</td><td>Implement Phase 1’s provider capability and deterministic parser tests, then obtain sanitized live proof before depending on Gelbooru’s HTML shape.</td></tr>
+          <tr><td>Known blockers</td><td>None for deterministic implementation. Final provider acceptance requires usable Pixiv and Gelbooru credentials or already-authenticated isolated Debug-app accounts.</td></tr>
+          <tr><td>Durable data</td><td>No schema, Room, DataStore, Saved State, Recents payload, or query-persistence migration is planned.</td></tr>
+          <tr><td>Device safety</td><td>Build-only validation is safe. Any later device install must prove the APK application ID is <code>com.theoriacodex.debug</code> before connecting to a personal device.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="context">
+      <h2>Context And Orientation</h2>
+
+      <h3>Terms</h3>
+      <dl>
+        <dt><strong>Canonical feed</strong></dt>
+        <dd>The authoritative ordered <code>List&lt;Post&gt;</code> produced by Search or FYP root/pagination work. Provider-related posts never enter this list.</dd>
+        <dt><strong>Seed</strong></dt>
+        <dd>The Pixiv or Gelbooru post whose successful transition to Liked started the related request.</dd>
+        <dt><strong>Related shelf</strong></dt>
+        <dd>One transient full-line grid section containing loading, loaded, empty, or retry presentation for the active seed.</dd>
+        <dt><strong>Presentation projection</strong></dt>
+        <dd>A platform-free mapping from canonical visible posts plus one shelf into lazy-grid entries. It retains each post’s canonical index so UI-only insertion cannot corrupt paging, Viewer order, or Search scroll persistence.</dd>
+        <dt><strong>Latest-wins request</strong></dt>
+        <dd>A request identified by a monotonically increasing generation. A later seed, unlike, dismissal, root replacement, or owner teardown cancels or invalidates older responses.</dd>
+      </dl>
+
+      <h3>Existing system</h3>
+      <table>
+        <thead><tr><th>File or module</th><th>Current role and consequence for this plan</th></tr></thead>
+        <tbody>
+          <tr><td><code>core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceAdapter.kt</code></td><td>Defines <code>SourceAdapter</code> and optional operational interfaces such as creator browsing and duration metadata. Related retrieval belongs here as another optional typed capability, not in <code>SourceCapabilities</code> or a UI allowlist.</td></tr>
+          <tr><td><code>core-sources/src/main/kotlin/com/theoriacodex/sources/pixiv/PixivSourceAdapter.kt</code></td><td>Already owns authorized Pixiv App API GETs, throttling, illustration parsing, and token refresh. It can reuse <code>parseIllust</code> for <code>/v2/illust/related</code>.</td></tr>
+          <tr><td><code>core-sources/src/main/kotlin/com/theoriacodex/sources/gelbooru/GelbooruSourceAdapter.kt</code></td><td>Already owns Gelbooru DAPI requests and <code>Post</code> parsing. Related IDs must first be extracted from the post-page HTML and then hydrated through the existing source owner.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/codex/LikesCodexSyncService.kt</code></td><td><code>toggle</code> already returns <code>Boolean nowLiked</code> after the atomic Likes/Codex transaction. Replace the ambiguous Boolean at the shell boundary with a typed outcome while retaining transaction ownership.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt</code></td><td><code>toggleLikeAndSyncCodex</code> currently discards <code>nowLiked</code>. Search and FYP callbacks launch this work in the app-shell scope. They must capture the exact route-owner handle and dispatch a committed outcome only after success.</td></tr>
+          <tr><td><code>app-logic/src/main/kotlin/com/theoriacodex/app/search/state/SearchContract.kt</code><br><code>app/src/main/java/com/theoriacodex/app/recommend/state/ForYouStateContract.kt</code></td><td>Own immutable route state/actions/effects. Both should embed the same platform-free related-shelf state rather than keeping request state in composables.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/search/SearchViewModel.kt</code><br><code>app/src/main/java/com/theoriacodex/app/recommend/ForYouViewModel.kt</code></td><td>Own request jobs and stale-response rejection. FYP currently refreshes when only <code>activeProfileLikesCount</code> changes; this condition must be narrowed.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt</code><br><code>app/src/main/java/com/theoriacodex/app/recommend/ForYouScreen.kt</code></td><td>Compute visibility filters, lazy-grid positions, paging thresholds, and card callbacks. They must render the projection while all domain operations continue to use canonical posts.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/ui/components/PostStaggeredGrid.kt</code></td><td>Provides the shared two-column grid for five routes. Extend it through a focused projected-grid entry point while keeping Recents, Codex, and Creator call sites unchanged.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/ui/routes/SearchRoute.kt</code><br><code>app/src/main/java/com/theoriacodex/app/ui/routes/ForYouRoute.kt</code></td><td>Create route ViewModels and media-duration bindings. The duration input must be the distinct union of canonical posts and loaded related posts under the existing route content identity.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRouteWorkflow.kt</code><br><code>app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRoute.kt</code></td><td>Distinguish live feed streams from static Viewer sessions. Related cards need a static source that cannot attach to Search/FYP pagination or restore as the wrong canonical stream.</td></tr>
+          <tr><td><code>app/src/main/java/com/theoriacodex/app/di/TheoriaAppContainer.kt</code></td><td>Constructs application-scoped feature dependencies around the availability-aware source registry. Construct one shared related-post loader here.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Provider evidence known at plan creation</h3>
+      <ul>
+        <li>Pixiv’s reverse-engineered App API exposes a seed-specific <code>/v2/illust/related</code> response with <code>illusts</code> and a complex <code>next_url</code>. This feature intentionally consumes only the first bounded response; it does not implement continuation.</li>
+        <li>Gelbooru’s documented DAPI supports ordinary post retrieval, including direct ID lookup, but documents no related-post operation.</li>
+        <li>A live Gelbooru post page inspected on 2026-09-02 contained a server-rendered “More Like This: (Beta Temporary Feature)” block with six ordered post links. The separate “Similar” link targeted SauceNAO and is not the desired feed.</li>
+        <li><code>core-sources</code> already depends on Jsoup 1.22.2, so HTML parsing needs no new dependency.</li>
+      </ul>
+
+      <h3>Planned file inventory</h3>
+      <table>
+        <thead><tr><th>Area</th><th>Exact repository-relative paths</th></tr></thead>
+        <tbody>
+          <tr><td>Domain/provider production</td><td><code>core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceAdapter.kt</code><br><code>core-sources/src/main/kotlin/com/theoriacodex/sources/pixiv/PixivSourceAdapter.kt</code><br><code>core-sources/src/main/kotlin/com/theoriacodex/sources/gelbooru/GelbooruSourceAdapter.kt</code><br><code>core-sources/src/main/kotlin/com/theoriacodex/sources/gelbooru/GelbooruRelatedPostsParser.kt</code> (new)<br><code>core-sources/src/main/kotlin/com/theoriacodex/sources/health/ProviderHealth.kt</code></td></tr>
+          <tr><td>Domain/provider tests</td><td><code>core-sources/src/test/kotlin/com/theoriacodex/sources/pixiv/PixivSourceAdapterTest.kt</code><br><code>core-sources/src/test/kotlin/com/theoriacodex/sources/gelbooru/GelbooruSourceAdapterTest.kt</code><br><code>core-sources/src/test/kotlin/com/theoriacodex/sources/gelbooru/GelbooruRelatedPostsParserTest.kt</code> (new)<br><code>core-sources/src/test/kotlin/com/theoriacodex/sources/health/ProviderHealthCheckerTest.kt</code><br><code>core-sources/src/test/kotlin/com/theoriacodex/sources/health/ProviderHealthCheckCliTest.kt</code> if the probe-case codec or reporting shape changes</td></tr>
+          <tr><td>Platform-free state/projection</td><td><code>app-logic/src/main/kotlin/com/theoriacodex/app/related/RelatedPostsState.kt</code> (new)<br><code>app-logic/src/main/kotlin/com/theoriacodex/app/related/RelatedFeedProjection.kt</code> (new)<br><code>app-logic/src/test/kotlin/com/theoriacodex/app/related/RelatedPostsStateTest.kt</code> (new)<br><code>app-logic/src/test/kotlin/com/theoriacodex/app/related/RelatedFeedProjectionTest.kt</code> (new)</td></tr>
+          <tr><td>Application loading/workflow</td><td><code>app/src/main/java/com/theoriacodex/app/related/RelatedPostsLoader.kt</code> (new)<br><code>app/src/test/java/com/theoriacodex/app/related/RelatedPostsLoaderTest.kt</code> (new)<br><code>app/src/main/java/com/theoriacodex/app/di/TheoriaAppContainer.kt</code><br><code>app/src/main/java/com/theoriacodex/app/codex/LikesCodexSyncService.kt</code><br><code>app/src/test/java/com/theoriacodex/app/codex/LikesCodexSyncServiceTest.kt</code><br><code>app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt</code></td></tr>
+          <tr><td>Search</td><td><code>app-logic/src/main/kotlin/com/theoriacodex/app/search/state/SearchContract.kt</code><br><code>app/src/main/java/com/theoriacodex/app/search/SearchViewModel.kt</code><br><code>app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt</code><br><code>app/src/main/java/com/theoriacodex/app/ui/routes/SearchRoute.kt</code><br><code>app/src/test/java/com/theoriacodex/app/search/SearchViewModelTestFixture.kt</code><br><code>app/src/test/java/com/theoriacodex/app/search/RequestOwnershipSearchViewModelTest.kt</code><br><code>app/src/test/java/com/theoriacodex/app/search/ScrollPersistenceSearchViewModelTest.kt</code><br><code>app-logic/src/test/kotlin/com/theoriacodex/app/search/state/SearchStateContractTest.kt</code></td></tr>
+          <tr><td>For You</td><td><code>app/src/main/java/com/theoriacodex/app/recommend/state/ForYouStateContract.kt</code><br><code>app/src/main/java/com/theoriacodex/app/recommend/ForYouViewModel.kt</code><br><code>app/src/main/java/com/theoriacodex/app/recommend/ForYouScreen.kt</code><br><code>app/src/main/java/com/theoriacodex/app/ui/routes/ForYouRoute.kt</code><br><code>app/src/test/java/com/theoriacodex/app/recommend/state/ForYouStateContractTest.kt</code><br><code>app/src/test/java/com/theoriacodex/app/recommend/ForYouViewModelTest.kt</code></td></tr>
+          <tr><td>Shared grid/media/Viewer</td><td><code>app/src/main/java/com/theoriacodex/app/ui/components/PostStaggeredGrid.kt</code><br><code>core-data/src/main/kotlin/com/theoriacodex/data/repository/Repositories.kt</code><br><code>app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRoute.kt</code><br><code>app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRouteWorkflow.kt</code><br><code>app/src/test/java/com/theoriacodex/app/ui/routes/ViewerRoutePolicyTest.kt</code><br><code>app/src/test/java/com/theoriacodex/app/media/MediaDurationRouteViewModelTest.kt</code><br><code>app/src/test/java/com/theoriacodex/app/quality/FeedAutoplayArchitectureTest.kt</code><br><code>app/src/test/java/com/theoriacodex/app/quality/RelatedPostsArchitectureTest.kt</code> (new)</td></tr>
+          <tr><td>Durable guidance</td><td><code>AGENTS.md</code><br><code>.docs/exec/pixiv-gelbooru-related-posts.html</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="behavior">
+      <h2>Required Behavior</h2>
+
+      <h3>Successful Like</h3>
+      <ol>
+        <li>The app shell completes the existing atomic local Like and Likes-Codex synchronization.</li>
+        <li>If the committed outcome is <code>LIKED</code> and the post’s available adapter implements <code>RelatedPostsSourceAdapter</code>, the exact route owner receives <code>RelatedLikeCommitted</code>.</li>
+        <li>The route replaces any older shelf with <code>Loading(seed, anchorCanonicalIndex, generation)</code> and starts one request.</li>
+        <li>The adapter returns at most six fully usable, same-source posts in provider order.</li>
+        <li>The route removes the seed, duplicate IDs, and IDs already present in the canonical feed without reordering survivors.</li>
+        <li>The shelf becomes <code>Loaded</code>. If no new posts survive, show a compact “No new related posts” state with Dismiss; do not fabricate tag-based results.</li>
+      </ol>
+
+      <h3>Shelf placement and continued discovery</h3>
+      <ul>
+        <li>If the seed is visible, insert one full-line shelf immediately after it.</li>
+        <li>If Search’s Hide liked filter removes the seed, insert after the nearest still-visible post whose canonical index precedes the seed. If none exists, insert before the first visible post.</li>
+        <li>Liking a supported card inside the shelf reuses the shelf’s original canonical anchor and replaces its contents; shelves never nest.</li>
+        <li>Liking an unsupported-source canonical card does not start a request and does not relabel or move an existing supported shelf.</li>
+        <li>Only the latest supported seed is active. Dismissal hides the shelf but does not Unlike anything.</li>
+      </ul>
+
+      <h3>Clear and retention rules</h3>
+      <table>
+        <thead><tr><th>Event</th><th>Shelf behavior</th><th>Canonical feed behavior</th></tr></thead>
+        <tbody>
+          <tr><td>Page append</td><td>Retain if its seed/generation is still current.</td><td>Append normally; related IDs remain outside pagination.</td></tr>
+          <tr><td>Visibility filter change</td><td>Retain state; reproject placement and filter loaded cards.</td><td>Unchanged.</td></tr>
+          <tr><td>Unlike active seed</td><td>Cancel/clear immediately after committed <code>UNLIKED</code>.</td><td>Unchanged except ordinary Like visibility.</td></tr>
+          <tr><td>New Search root, Retry replacement, historical query, or applied tag search</td><td>Clear before root work.</td><td>Replace through existing Search state flow.</td></tr>
+          <tr><td>FYP refresh, shuffle, source/sort/profile change, replay, or seed blacklist</td><td>Clear before root work.</td><td>Replace through existing FYP flow.</td></tr>
+          <tr><td>FYP Like count changes while results are non-empty</td><td>Outcome action may update the shelf.</td><td>Do not start a count-only root refresh.</td></tr>
+          <tr><td>FYP Like count reaches zero</td><td>Clear.</td><td>Preserve current behavior: cancel work and clear the feed.</td></tr>
+          <tr><td>Route owner survives tab switch/re-entry</td><td>Retain in memory.</td><td>Unchanged.</td></tr>
+          <tr><td>Owner clear or process restart</td><td>Discard; do not restore.</td><td>Existing durable Search/FYP restoration remains authoritative.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Failures</h3>
+      <ul>
+        <li>A failed Like commit emits no related request and leaves observer-backed Like state authoritative.</li>
+        <li>A provider authentication, rate-limit, network, parse, or all-hydration failure produces an inline retry state. It never rolls back a committed Like and never replaces the route’s primary error.</li>
+        <li>Partial Gelbooru hydration keeps successful posts in original order. If all candidates fail, treat the request as failed rather than as a truthful empty recommendation set.</li>
+        <li>Cancellation must propagate. A stale provider response cannot reopen a dismissed shelf, replace a newer seed, cross a profile/query boundary, or mutate canonical results.</li>
+      </ul>
+    </section>
+
+    <section id="architecture">
+      <h2>Architecture And Data Flow</h2>
+      <pre><code>Search/FYP heart tap
+        |
+        v
+TheoriaApp shell scope -- atomic Likes + system-Codex transaction
+        |
+        +-- failure -----------------------> no shelf request
+        |
+        +-- UNLIKED -----------------------> exact route owner clears matching seed
+        |
+        +-- LIKED
+              |
+              v
+      exact route owner + generation + canonical anchor
+              |
+              v
+      RelatedPostsLoader -> available SourceAdapterRegistry
+              |
+              v
+      RelatedPostsSourceAdapter (Pixiv or Gelbooru)
+              |
+              v
+      ordered/deduplicated RelatedPostsUiState
+              |
+              +--> presentation-only grid projection
+              +--> media-duration route input union
+              +--> static RELATED Viewer session</code></pre>
+
+      <h3>Provider capability</h3>
+      <p>Add this bounded operational interface to <code>SourceAdapter.kt</code>:</p>
+      <pre><code>interface RelatedPostsSourceAdapter {
+    suspend fun relatedPosts(seed: PostId, limit: Int): List&lt;Post&gt;
+}</code></pre>
+      <p>The loader checks the runtime adapter type through the availability-aware registry. Do not add <code>supportsRelatedPosts</code> to <code>SourceCapabilities</code> and do not hard-code Pixiv/Gelbooru in Search or FYP UI. Clamp the requested limit to <code>1..6</code>, reject cross-source output, preserve adapter order, and let cancellation escape.</p>
+
+      <h3>Pixiv implementation</h3>
+      <ul>
+        <li>Issue an authorized GET to <code>https://app-api.pixiv.net/v2/illust/related</code> with <code>illust_id</code> and the same Android filter convention as existing calls.</li>
+        <li>Use the adapter’s existing throttle, token refresh, HTTP failure mapping, and <code>parseIllust</code>.</li>
+        <li>Read only the first response and take the bounded prefix after parsing. Do not parse or persist <code>next_url</code>; Pixiv continuation carries repeated viewed/seed parameters that a <code>Map&lt;String, String&gt;</code> cannot represent faithfully and the UX does not require pagination.</li>
+      </ul>
+
+      <h3>Gelbooru implementation</h3>
+      <ol>
+        <li>Fetch <code>https://gelbooru.com/index.php?page=post&amp;s=view&amp;id=&lt;seed&gt;</code> as a read-only text request.</li>
+        <li>Parse with a new pure <code>GelbooruRelatedPostsParser</code>. Locate the exact “More Like This” heading, scope to its containing block, extract only post-view links, normalize ordered numeric IDs, remove duplicates/seed, and apply the limit.</li>
+        <li>Hydrate those IDs through <code>GelbooruSourceAdapter.resolvePost</code> with at most two requests in flight. Use a supervisor boundary so one malformed/deleted post does not discard healthy peers, while preserving cancellation and original order.</li>
+        <li>Publish only hydrated posts so cards have authoritative animation/media identity and participate correctly in autoplay, duration enrichment, Viewer, Likes training tags, and post actions.</li>
+      </ol>
+      <div class="callout risk"><strong>Gelbooru fragility:</strong> the HTML block is an undocumented beta surface. Keep all selectors and URL parsing in the source-owned pure parser, cover image/video/deleted/missing-block fragments, add a live health step, and never let app-layer code know Gelbooru markup.</div>
+
+      <h3>Shared route state</h3>
+      <p>Create platform-free state and reduction helpers in <code>app-logic/src/main/kotlin/com/theoriacodex/app/related/</code>. Use one discriminated state with seed <code>Post</code>, original anchor, generation, and loaded posts:</p>
+      <pre><code>Idle
+Loading(request)
+Loaded(request, posts)
+Failed(request, userMessage)
+Empty(request)</code></pre>
+      <p>Both Search and FYP embed this state. Their ViewModels own a single related request <code>Job</code> and monotonically increasing generation. The application-scoped <code>RelatedPostsLoader</code> owns registry routing and output validation but no UI state, durable storage, or unbounded cache. A small in-memory LRU may be added only if live measurement shows repeated relikes cause unnecessary requests; it is not part of the first pass.</p>
+
+      <h3>Typed Like outcome and owner handoff</h3>
+      <p>Replace Boolean interpretation at the app-shell boundary with <code>LikeToggleOutcome.LIKED</code> and <code>LikeToggleOutcome.UNLIKED</code>. Keep <code>LikesCodexSyncService</code> as the atomic transaction owner. For each Search/FYP grid callback, capture that route’s current weak owner handle before launching the shell coroutine. After a successful commit, dispatch the outcome to that captured handle. If the owner was cleared, the lease rejects delivery and the Like remains valid without creating orphan UI work.</p>
+      <p>Viewer, Creator, Recents, and Codex Like callbacks may ignore the returned outcome because this feature is intentionally limited to Search and FYP grids.</p>
+
+      <h3>Grid projection and canonical indices</h3>
+      <p>Create <code>RelatedFeedProjection</code> in <code>app-logic</code> with <code>PostEntry(post, canonicalIndex)</code> and <code>ShelfEntry(state, anchorCanonicalIndex)</code>. Search/FYP screens build it after ordinary visibility filtering. Add a projected entry point in <code>PostStaggeredGrid.kt</code> backed by the same private two-column implementation; leave the existing post-only function and the other three feed call sites intact.</p>
+      <ul>
+        <li>Grid keys are <code>post:&lt;source&gt;:&lt;id&gt;</code> and <code>related:&lt;source&gt;:&lt;seed-id&gt;</code>.</li>
+        <li>The shelf uses <code>StaggeredGridItemSpan.FullLine</code> and a horizontal row of bounded cards with an explicit heading, source label, Dismiss, and Retry where applicable.</li>
+        <li>Main-card Viewer launches use <code>PostEntry.canonicalIndex</code>, never the lazy-grid index.</li>
+        <li>Paging uses the greatest visible <code>PostEntry.canonicalIndex</code>; a visible shelf alone cannot trigger a page.</li>
+        <li>Search persists/restores canonical post indices. When the first visible entry is the shelf, persist the nearest preceding post index with offset zero; if none exists, persist index zero. Restore by translating the stored canonical index into the current projected grid index.</li>
+      </ul>
+
+      <h3>Media and Viewer integration</h3>
+      <ul>
+        <li>Render loaded recommendations with <code>SearchResultCard</code> so visible video/animated cards retain stable-visibility gating, pooled playback, action behavior, and duration publication.</li>
+        <li>Pass the distinct canonical-plus-related post union to each <code>rememberMediaDurationRouteBinding</code> without changing the root query/seed content identity. Related additions are content reconciliation, not a new route identity.</li>
+        <li>Add <code>ViewerStreamSource.RELATED</code>. It has no live route snapshot, no load-more owner, no durable source-list restoration, and maps to ordinary Watched Recents through the existing default section policy.</li>
+        <li>Open a shelf card with <code>queryHash = "related:&lt;source&gt;:&lt;seed-id&gt;"</code>, only the shelf’s visible ordered posts, and <code>liveSearchBinding = false</code>. A process-death restoration attempt for this transient stream returns unavailable rather than substituting current Search/FYP results.</li>
+        <li>A related request is not a Search execution or accepted FYP root generation. It must not write applied queries, Search scroll records beyond canonical position, recent searches, FYP search history, or FYP source statuses.</li>
+      </ul>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+
+      <article>
+        <h3>Phase 1: Prove and Add the Provider Capability</h3>
+        <p>Add the optional domain interface, implement Pixiv first-page related parsing, isolate Gelbooru HTML parsing, hydrate its bounded IDs, and extend provider health with a related-post step for configured seeds.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Primary files</td><td><code>core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceAdapter.kt</code>; <code>core-sources/src/main/kotlin/com/theoriacodex/sources/pixiv/PixivSourceAdapter.kt</code>; <code>core-sources/src/main/kotlin/com/theoriacodex/sources/gelbooru/GelbooruSourceAdapter.kt</code>; new adjacent <code>GelbooruRelatedPostsParser.kt</code>; provider tests; and <code>core-sources/src/main/kotlin/com/theoriacodex/sources/health/ProviderHealth.kt</code>.</td></tr>
+            <tr><td>Focused command</td><td><code>./gradlew :core-domain:test :core-sources:test --no-configuration-cache</code></td></tr>
+            <tr><td>Expected observation</td><td>Fixtures prove exact request shape, ordered prefix, seed/duplicate removal, bounded Gelbooru concurrency, partial hydration, cancellation, and missing/changed HTML behavior.</td></tr>
+            <tr><td>Promotion criterion</td><td>Each adapter returns at least two unique, same-source, usable posts for a representative live seed; the seed is absent and no write endpoint is called.</td></tr>
+            <tr><td>Discard/recovery</td><td>If Gelbooru no longer exposes a safely scoped block, keep the optional capability absent for Gelbooru and record the blocker. Do not silently substitute a tag heuristic under the “More like this” label.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 2: Add Shared Latest-Wins State and Projection Logic</h3>
+        <p>Add the platform-free state machine and canonical/grid mapping before touching composables. Cover supported/unsupported admission, replace/retry/dismiss/unlike transitions, stale generations, deduplication, filter-hidden anchors, projected paging, and scroll translation.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Primary files</td><td>New <code>app-logic/src/main/kotlin/com/theoriacodex/app/related/RelatedPostsState.kt</code> and <code>RelatedFeedProjection.kt</code> plus focused tests.</td></tr>
+            <tr><td>Focused command</td><td><code>./gradlew :app-logic:test --tests '*RelatedPostsStateTest' --tests '*RelatedFeedProjectionTest' --no-configuration-cache</code></td></tr>
+            <tr><td>Expected observation</td><td>The canonical list never changes; every projected entry maps predictably; a shelf grid index cannot become a persisted or paged post index.</td></tr>
+            <tr><td>Acceptance</td><td>Pure tests describe every placement/clear/error rule in the Required Behavior section.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 3: Connect Like Outcomes, Route Owners, and FYP Semantics</h3>
+        <p>Construct the shared loader, surface the typed commit outcome, dispatch to exact Search/FYP owners, add state/actions/effects and request jobs, and narrow FYP’s count-only refresh behavior.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Primary files</td><td><code>app/src/main/java/com/theoriacodex/app/di/TheoriaAppContainer.kt</code>, new <code>app/src/main/java/com/theoriacodex/app/related/RelatedPostsLoader.kt</code>, <code>app/src/main/java/com/theoriacodex/app/codex/LikesCodexSyncService.kt</code>, <code>app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt</code>, and the exact Search/FYP contract, ViewModel, route, and owner files in the inventory above.</td></tr>
+            <tr><td>Focused command</td><td><code>./gradlew :app:testDebugUnitTest --tests '*LikesCodexSyncServiceTest' --tests '*RelatedPostsLoaderTest' --tests '*SearchStateContractTest' --tests '*SearchViewModelTest' --tests '*ForYouStateContractTest' --tests '*ForYouViewModelTest' --no-configuration-cache</code></td></tr>
+            <tr><td>Expected observation</td><td>Only committed Likes start related work; stale and cleared owners ignore completion; count-only FYP changes keep a non-empty feed; empty/profile/settings/source cases retain their existing refresh behavior.</td></tr>
+            <tr><td>Acceptance</td><td>Rapid Like A then Like B cannot publish A after B, and an Unlike during loading cannot reopen the shelf.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 4: Render the Shelf and Integrate Media/Viewer Behavior</h3>
+        <p>Add the full-line projected grid item, use normal cards, route related posts through duration ownership, launch static Related Viewer sessions, and preserve all canonical paging/scroll behavior.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Primary files</td><td><code>PostStaggeredGrid.kt</code>, <code>SearchScreen.kt</code>, <code>ForYouScreen.kt</code>, both route bindings, <code>Repositories.kt</code>, <code>ViewerRoute.kt</code>, <code>ViewerRouteWorkflow.kt</code>, and focused UI/architecture tests.</td></tr>
+            <tr><td>Focused command</td><td><code>./gradlew :app-logic:test :app:testDebugUnitTest --tests '*Related*' --tests '*ScrollPersistence*' --tests '*ViewerRoute*' --tests '*MediaDurationRoute*' --tests '*FeedAutoplayArchitectureTest' :app:compileDebugAndroidTestKotlin --no-configuration-cache</code></td></tr>
+            <tr><td>Expected observation</td><td>Search and FYP render one shelf; other feeds remain on the post-only grid; related videos participate in duration/autoplay ownership; static Viewer never appends canonical pages.</td></tr>
+            <tr><td>Acceptance</td><td>Hide liked, page append, route re-entry, Viewer swipes, and process restart all obey the Required Behavior table.</td></tr>
+          </tbody>
+        </table>
+      </article>
+
+      <article>
+        <h3>Phase 5: Live and Isolated Debug Acceptance</h3>
+        <p>Run one final deterministic validation batch, then verify real providers and the complete interaction in the isolated Debug application. Update this plan with exact counts, provider observations, screenshots if useful, and remaining limitations.</p>
+        <table class="status-table">
+          <tbody>
+            <tr><td>Host gate</td><td>Final commands in Validation And Acceptance pass with no changed-file findings.</td></tr>
+            <tr><td>Provider gate</td><td>Pixiv and Gelbooru each return usable related posts for a representative current seed. Record only source, seed ID, count, latency, and result IDs; do not record credentials, headers, URLs with secrets, or explicit tags.</td></tr>
+            <tr><td>Device gate</td><td>Only <code>com.theoriacodex.debug</code> may be installed or launched. No command may touch <code>com.theoriacodex</code>.</td></tr>
+            <tr><td>Acceptance</td><td>The manual matrix passes in Search single-source, Search multi/Unified, mixed-source FYP, failure/retry, Hide liked, and static Viewer flows.</td></tr>
+          </tbody>
+        </table>
+      </article>
+    </section>
+
+    <section id="work-plan">
+      <h2>Work Plan</h2>
+      <ol>
+        <li>Add <code>RelatedPostsSourceAdapter</code> to <code>core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceAdapter.kt</code>. Keep the return bounded and first-page-only.</li>
+        <li>Implement Pixiv related retrieval inside <code>PixivSourceAdapter</code> using existing authorization, throttling, failure mapping, and <code>parseIllust</code>. Add request/parse/cancellation tests.</li>
+        <li>Create <code>GelbooruRelatedPostsParser.kt</code>, implement scoped ordered ID extraction, then implement bounded hydration in <code>GelbooruSourceAdapter</code>. Add minimal sanitized HTML fragments rather than a full copied provider page.</li>
+        <li>Extend <code>ProviderHealth.kt</code>, its JSON case codec/defaults, and tests with an optional related seed and <code>related-posts</code> step. Credentials remain environment-only.</li>
+        <li>Create shared <code>RelatedPostsUiState</code>, request identity, reducer helpers, and <code>RelatedFeedProjection</code> in <code>app-logic</code>. Test all transitions and index mappings before UI integration.</li>
+        <li>Create <code>app/src/main/java/com/theoriacodex/app/related/RelatedPostsLoader.kt</code> around <code>SourceAdapterRegistry</code>. Validate runtime capability, source identity, seed exclusion, uniqueness, bounded size, and cancellation. Construct it once in <code>FeatureDependencies</code> in <code>app/src/main/java/com/theoriacodex/app/di/TheoriaAppContainer.kt</code>.</li>
+        <li>Introduce <code>LikeToggleOutcome</code> at the Likes workflow boundary. Return it from <code>toggleLikeAndSyncCodex</code> and update existing callers that intentionally ignore it.</li>
+        <li>Add related state/actions/effects to Search and FYP contracts. Inject the loader into both ViewModels, own one request job per route, invalidate by generation, clear on root transitions, and retain across page append/filter presentation.</li>
+        <li>In each Search/FYP callback in <code>TheoriaApp.kt</code>, capture the exact route owner before launching the shell coroutine and dispatch the committed outcome to that handle. Do not broadcast through the current handle after completion.</li>
+        <li>Change <code>ForYouViewModel.synchronizeEnvironment</code> so a count-only change with non-empty results updates state without refreshing. Keep zero-Like clearing and genuine engine/profile/source/startup refreshes. Add focused regression tests.</li>
+        <li>Extend <code>PostStaggeredGrid.kt</code> with a projected entry point that shares the existing geometry implementation. Add an accessible full-line shelf with Loading, Loaded, Empty, Failed/Retry, and Dismiss states.</li>
+        <li>Build projections in Search/FYP screens after visibility filtering. Translate main-card indices, paging thresholds, and Search persisted/restored positions through the projection. Keep related cards out of canonical lists.</li>
+        <li>Pass canonical-plus-related posts to each media-duration route binding, deduplicated by <code>Post.id</code>. Keep content identity tied to the root query/seed.</li>
+        <li>Add <code>ViewerStreamSource.RELATED</code> and handle every exhaustive branch: no live source, no load more, no canonical owner writeback, Watched Recents, direct source resolution/recovery, and no process-death list restoration. Launch shelf posts with <code>liveSearchBinding = false</code>.</li>
+        <li>Add/update deterministic provider, state, loader, route, UI architecture, scroll, Viewer, media-duration, and autoplay tests. Avoid snapshot-only tests that duplicate reducer coverage.</li>
+        <li>Add a concise “Related Post Shelves” invariant to <code>AGENTS.md</code>: provider-native, transient, ordered, outside canonical pagination/history, exact-owner post-commit trigger, and no count-only non-empty FYP reroll.</li>
+        <li>Run the bounded final validation batch once. Repair common causes in grouped patches, update this living plan after every phase, and stop when the stated evidence passes.</li>
+      </ol>
+
+      <h3>Areas intentionally unchanged</h3>
+      <ul>
+        <li>No Room/DataStore schema or migration.</li>
+        <li>No Pixiv bookmark-add or Gelbooru favorite endpoint.</li>
+        <li>No related support for Aibooru, Hitomi, NHentai, Iwara, or Rule34-family sources.</li>
+        <li>No tag-overlap fallback masquerading as provider-native similarity.</li>
+        <li>No unbounded related pagination, durable related cache, multiple simultaneous shelves, or recursive nested shelves.</li>
+        <li>No production-package install, connected benchmark, baseline-profile collection, or performance claim.</li>
+      </ul>
+    </section>
+
+    <section id="validation">
+      <h2>Validation And Acceptance</h2>
+      <p>Run commands from the repository root: <code>/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex</code>. Use the phase-specific tests while editing, then one final batch after the last relevant patch.</p>
+
+      <h3>Final automated batch</h3>
+      <table>
+        <thead><tr><th>Check</th><th>Command</th><th>Expected result</th></tr></thead>
+        <tbody>
+          <tr><td>Relevant modules</td><td><code>./gradlew :core-domain:test :core-sources:test :app-logic:test :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:assembleDebug --no-configuration-cache</code></td><td>All deterministic provider, state, route, Viewer, media, and architecture tests pass; Android test sources compile; isolated Debug APK assembles.</td></tr>
+          <tr><td>Static analysis</td><td><code>./gradlew :core-domain:detekt :core-sources:detekt :app-logic:detekt :app:detektDebug --no-configuration-cache</code></td><td>No findings in changed owners. Record inherited untouched findings separately if the baseline is already red.</td></tr>
+          <tr><td>Coverage gate</td><td><code>./gradlew koverXmlReport koverVerify --no-configuration-cache</code></td><td>Aggregate configured coverage and the 60% changed-line gate pass.</td></tr>
+          <tr><td>Diff integrity</td><td><code>git diff --check</code></td><td>No whitespace errors. Existing unrelated worktree changes remain untouched.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Opt-in live provider proof</h3>
+      <p>Configure provider credentials only through the existing environment variables consumed by <code>ProviderHealthCheckCli</code>. Never print their values. Select representative, permitted seed IDs in a temporary probe-case JSON or the checked-in sanitized defaults:</p>
+      <pre><code>./gradlew :core-sources:providerHealthCheck \
+  -Ptheoria.liveProviders=true \
+  -Ptheoria.liveSources.sources=PIXIV,GELBOORU \
+  -Ptheoria.liveSources.strict=true \
+  --rerun-tasks</code></pre>
+      <p>Expected: both sources report <code>related-posts=OK</code>; each result set is non-empty, unique, same-source, excludes the seed, and contains usable card media. A skipped credentialed source is not final live proof. A Gelbooru parse failure blocks Gelbooru acceptance and must not be hidden by a heuristic fallback.</p>
+
+      <h3>Manual behavior matrix</h3>
+      <table>
+        <thead><tr><th>Scenario</th><th>Action</th><th>Expected observation</th></tr></thead>
+        <tbody>
+          <tr><td>Search / Pixiv</td><td>Like an unliked Pixiv card in single-source Search.</td><td>Heart commits; one loading shelf appears after the card and becomes up to six Pixiv cards; the primary feed does not reorder.</td></tr>
+          <tr><td>Search / Gelbooru</td><td>Like an unliked Gelbooru card.</td><td>The same shelf behavior appears with hydrated Gelbooru cards in website order; no dead thumbnail-only Viewer cards.</td></tr>
+          <tr><td>Unified or Multi-Search</td><td>Like Pixiv, then Gelbooru, then an unsupported-source card.</td><td>Gelbooru replaces Pixiv in the single shelf. The unsupported Like commits normally without a related request or false source label.</td></tr>
+          <tr><td>Hide liked</td><td>Enable Hide liked, then Like a visible supported card.</td><td>The seed disappears but the shelf remains at the nearest canonical anchor; saved scroll restores to the same post after route/process re-entry without a one-item drift.</td></tr>
+          <tr><td>Rapid replacement</td><td>Like two supported cards quickly or Unlike while loading.</td><td>Only the latest still-valid outcome can render. No stale shelf flashes after cancellation.</td></tr>
+          <tr><td>FYP behavior change</td><td>Like a supported post in a non-empty FYP feed.</td><td>The current feed and scroll stay intact; the shelf appears; no root loading state or seed replacement occurs. Manual Refresh later regenerates from the updated Likes and clears the shelf.</td></tr>
+          <tr><td>Related chain</td><td>Like a card inside the shelf.</td><td>The same shelf location enters Loading for the new seed and replaces its cards; no nested shelf appears.</td></tr>
+          <tr><td>Failure/retry</td><td>Use a deterministic fake or controlled network failure.</td><td>The Like remains committed; only the shelf shows Retry; primary Search/FYP errors and pagination remain unchanged.</td></tr>
+          <tr><td>Viewer</td><td>Open a related card and swipe through the shelf set.</td><td>Viewer contains only related cards, records ordinary Watched activity, never requests Search/FYP pages, and exits cleanly if a killed process cannot restore the transient list.</td></tr>
+          <tr><td>Media</td><td>Use a shelf containing multiple visible videos/animations.</td><td>All visibly presented animated cards follow the existing stable-visibility autoplay contract; duration metadata resolves through the route owner.</td></tr>
+          <tr><td>Persistence/history</td><td>Inspect Recents, recent searches, relaunch, and applied Search state.</td><td>Viewed related cards appear only as Watched; no related request becomes a recent/applied/FYP search; shelf state is absent after process restart.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Safe optional device lane</h3>
+      <p>Do not install before the host-only proof below. First inspect the task graph, assemble, and verify output metadata:</p>
+      <pre><code>./gradlew :app:installDebug --dry-run
+./gradlew :app:assembleDebug --no-configuration-cache
+rg -n '"applicationId"\s*:\s*"com\.theoriacodex\.debug"' \
+  app/build/outputs/apk/debug/output-metadata.json</code></pre>
+      <p>Proceed with <code>./gradlew :app:installDebug</code> only if the packaged application ID proof succeeds and the developer chooses connected manual validation. Never uninstall, clear, downgrade, replace, or launch <code>com.theoriacodex</code>.</p>
+
+      <h3>Acceptance criteria</h3>
+      <ul>
+        <li>Provider eligibility derives only from the optional adapter interface and current registry availability.</li>
+        <li>Related work begins only after a successful <code>LIKED</code> commit for the exact route owner.</li>
+        <li>At most one shelf and six related posts are visible; provider order is preserved after stable filtering/deduplication.</li>
+        <li>Canonical Search/FYP lists, continuation, statuses, applied queries, recents searches, and FYP history contain no related results or executions.</li>
+        <li>Search paging and persisted scroll use canonical post indices despite the inserted shelf.</li>
+        <li>A non-empty FYP feed does not auto-refresh for Like-count-only changes; legitimate root transitions still refresh.</li>
+        <li>Related cards retain the existing post action, autoplay, duration, Like, and Viewer contracts.</li>
+        <li>Provider failure or UI cancellation never rolls back a committed Like or publishes stale results.</li>
+        <li>Pixiv and Gelbooru have both deterministic fixture coverage and current live proof.</li>
+      </ul>
+    </section>
+
+    <section id="living-log">
+      <h2>Living Log</h2>
+
+      <h3>Progress</h3>
+      <ul>
+        <li>[x] 2026-09-02 — Traced the atomic Like result, Search/FYP state owners, grid index consumers, media-duration bindings, Viewer live/static boundary, provider adapters, and dependency construction.</li>
+        <li>[x] 2026-09-02 — Confirmed product direction: one transient provider-native shelf and no count-only non-empty FYP reroll.</li>
+        <li>[x] 2026-09-02 — Authored this standalone implementation and validation plan.</li>
+        <li>[ ] Implement and validate Phase 1 provider capability.</li>
+        <li>[ ] Implement and validate Phase 2 state/projection logic.</li>
+        <li>[ ] Implement and validate Phase 3 Like/route/FYP integration.</li>
+        <li>[ ] Implement and validate Phase 4 UI/media/Viewer integration.</li>
+        <li>[ ] Complete Phase 5 live and isolated Debug acceptance.</li>
+      </ul>
+
+      <h3>Surprises And Discoveries</h3>
+      <ul>
+        <li><strong>Observation:</strong> Gelbooru’s visible “Similar” link is a SauceNAO reverse-image lookup, while the desired recommendations are a separate server-rendered “More Like This” block. <strong>Evidence:</strong> live post-page DOM inspected 2026-09-02.</li>
+        <li><strong>Observation:</strong> Gelbooru’s public post API documentation has no related operation, so the feature needs one HTML discovery request plus bounded post hydration. <strong>Evidence:</strong> <code>howto:api</code> and current <code>GelbooruSourceAdapter</code>.</li>
+        <li><strong>Observation:</strong> Pixiv related continuation includes repeated seed/viewed parameters, but the app HTTP abstraction accepts a string map. <strong>Consequence:</strong> first bounded response only; no lossy token encoding.</li>
+        <li><strong>Observation:</strong> Search persists raw lazy-grid indices and FYP/Search compare lazy-grid indices to post counts. <strong>Consequence:</strong> inserting a shelf without canonical translation would cause restoration drift and premature paging.</li>
+        <li><strong>Observation:</strong> FYP currently refreshes whenever <code>activeProfileLikesCount</code> changes. <strong>Consequence:</strong> preserving an inline seed shelf requires the approved count-only refresh behavior change.</li>
+      </ul>
+
+      <h3>Decision Log</h3>
+      <ul>
+        <li><strong>Decision:</strong> Keep related posts outside canonical Search/FYP results. <strong>Rationale:</strong> protects provider ordering, continuation, Viewer indices, Search restoration, and FYP history. <strong>Date/Author:</strong> 2026-09-02 / Developer and Codex.</li>
+        <li><strong>Decision:</strong> Show one full-line shelf anchored to the latest supported Like; related Likes replace it in place. <strong>Rationale:</strong> immediate context without recursive feeds or multiple network-heavy shelves. <strong>Date/Author:</strong> 2026-09-02 / Developer and Codex.</li>
+        <li><strong>Decision:</strong> Do not regenerate a non-empty FYP feed for count-only Like changes. <strong>Rationale:</strong> keeps the user’s position stable while the shelf provides immediate discovery; next legitimate root generation still trains from all Likes. <strong>Date/Author:</strong> 2026-09-02 / Developer and Codex.</li>
+        <li><strong>Decision:</strong> Use an optional adapter interface instead of source flags/UI checks. <strong>Rationale:</strong> matches existing operational-capability patterns and keeps provider details source-owned. <strong>Date/Author:</strong> 2026-09-02 / Codex.</li>
+        <li><strong>Decision:</strong> Parse Gelbooru’s native HTML block and never relabel tag overlap as native similarity. <strong>Rationale:</strong> preserves truthful product language and provider ordering despite the documented fragility. <strong>Date/Author:</strong> 2026-09-02 / Codex.</li>
+        <li><strong>Decision:</strong> Add a static <code>RELATED</code> Viewer source. <strong>Rationale:</strong> prevents process restoration or live binding from substituting canonical Search/FYP results for an ephemeral shelf stream. <strong>Date/Author:</strong> 2026-09-02 / Codex.</li>
+      </ul>
+
+      <h3>Outcomes And Retrospective</h3>
+      <p>Planning outcome: the feature has explicit provider, transaction, state, placement, cancellation, pagination, scroll, media, Viewer, persistence, and validation boundaries. No implementation outcome exists yet. Update this paragraph after every completed phase with exact commands, counts, live observations, deviations, and remaining risks.</p>
+    </section>
+
+    <section id="recovery">
+      <h2>Idempotence And Recovery</h2>
+      <ul>
+        <li>All deterministic Gradle commands are safe to rerun. They build and test only; they do not install an APK unless <code>installDebug</code> is explicitly invoked.</li>
+        <li>Provider health requests are read-only but external. Keep the result limit bounded, preserve adapter throttling, use configured credentials without printing them, and avoid repeated live probes after one successful evidence run.</li>
+        <li>If interrupted during a phase, reopen this file, update Progress with completed and remaining substeps, inspect <code>git status --short</code>, and resume at the first unmet phase acceptance criterion.</li>
+        <li>Source/parser/state/UI edits are additive and need no data rollback. Reverting the optional interface implementations and route shelf state returns behavior to ordinary local Likes without migrating stored data.</li>
+        <li>If a root request or related request test hangs, cancel the test process, verify cancellation propagation with the focused fake, and repair the shared owner/job cause before retrying the phase command.</li>
+        <li>If Gelbooru markup changes, update only <code>GelbooruRelatedPostsParser</code> and its sanitized fixture after obtaining fresh evidence. Do not push selectors or HTML knowledge into the app layer.</li>
+        <li>If final live proof is unavailable because credentials are missing, mark Phase 5 blocked in this plan. Do not call the feature complete based only on compiled or stubbed provider tests.</li>
+        <li>Do not delete or overwrite unrelated worktree changes. At plan creation, <code>working_list.md</code> and <code>.docs/exec/viewer-cjk-ocr-translation.html</code> belonged to a separate concurrent task and must remain intact.</li>
+      </ul>
+    </section>
+
+    <section id="appendix">
+      <h2>Appendix: Evidence, References, and Suggested Tests</h2>
+
+      <details open>
+        <summary>Provider references</summary>
+        <ul>
+          <li>PixivPy App API implementation: <a href="https://github.com/upbit/pixivpy/blob/master/pixivpy3/api.py">illust_related source</a>.</li>
+          <li>Gelbooru API documentation: <a href="https://gelbooru.com/index.php?id=18780&amp;page=wiki&amp;s=view">howto:api</a>.</li>
+          <li>Representative Gelbooru post page showing “Similar” and “More Like This”: <a href="https://gelbooru.com/index.php?id=11975538&amp;page=post&amp;s=view">post 11975538</a>. Treat the specific seed as diagnostic evidence, not a permanent product dependency.</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>Minimum deterministic test inventory</summary>
+        <ul>
+          <li><code>PixivSourceAdapterTest</code>: exact related endpoint/query/auth retry, parse omissions, limit, order, seed/duplicate handling, cancellation.</li>
+          <li><code>GelbooruRelatedPostsParserTest</code>: expected block, unrelated post links outside block, duplicates, seed, relative/absolute links, missing block, malformed IDs, order.</li>
+          <li><code>GelbooruSourceAdapterTest</code>: concurrency at most two, partial deleted/malformed hydration, all-failed result, cancellation, credentials on DAPI hydration.</li>
+          <li><code>RelatedPostsLoaderTest</code>: unsupported/unavailable adapters, invalid cross-source output, stable deduplication, bounded result.</li>
+          <li><code>RelatedPostsStateTest</code>: latest-wins, retry generation, dismiss/unlike/root clear, page retention, shelf-like anchor reuse.</li>
+          <li><code>RelatedFeedProjectionTest</code>: visible seed, hidden seed, first item, filtered gaps, empty feed, grid/canonical translation, shelf-first scroll fallback.</li>
+          <li>Search/FYP ViewModel tests: exact owner outcome, cancellation, stale completion, no canonical mutation, count-only non-empty FYP stability, zero-Like clear, manual refresh training.</li>
+          <li>Viewer route tests: RELATED has no live source/load more/restore substitution, records Watched, and source resolution remains available.</li>
+          <li>Architecture tests: Search/FYP both render the shared shelf/card; provider names/HTML are absent from route and UI owners; other feeds retain shared post-only grid.</li>
+          <li>Media tests: loaded related posts join route duration metadata and multiple visible animated shelf cards retain concurrent autoplay admission.</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>Plan maintenance checklist</summary>
+        <ul>
+          <li>Update header status/date and dashboard next action at each stopping point.</li>
+          <li>Move Progress items individually; do not mark a phase complete before its command and observation pass.</li>
+          <li>Record provider response-shape surprises without credentials, protected headers, explicit tags, or full media URLs.</li>
+          <li>Record every deviation from the decisions above before implementing it.</li>
+          <li>At completion, replace the planning-only retrospective with the shipped behavior and exact validation evidence.</li>
+        </ul>
+      </details>
+    </section>
+  </main>
+</body>
+</html>
