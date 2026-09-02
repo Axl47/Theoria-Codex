@@ -70,7 +70,7 @@ internal fun ViewerOcrSettingsSection(
 
         Text(
             text = "OCR models are shared device modules. Translation languages are managed " +
-                "separately by Android.",
+                "by the device's on-device translation service when supported.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

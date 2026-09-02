@@ -76,7 +76,7 @@ Decode OCR input through the source-aware Coil request path into at most a 2048 
 
 Use Android's API-31+ on-device translation framework and its cancellation/destroy lifecycle. Do not substitute ML Kit Translation: it requires Google Translate attribution whose branding rules conflict with an adult-content Viewer. Older or unsupported platform translators retain OCR highlights and show the bounded translation-unavailable card.
 
-Google Play-services OCR modules are shared device capabilities and may already be present even when Theoria did not initiate a download; label that state as available on device, not downloaded. Android translation language packs are separate from OCR modules, so Settings must expose the system translation-language settings and phrase failures must direct users there without disabling detected OCR regions.
+Google Play-services OCR modules are shared device capabilities and may already be present even when Theoria did not initiate a download; label that state as available on device, not downloaded. Android translation language packs are separate from OCR modules. Do not request optional translation flags unless the device capability explicitly supports them. Open the standard translation settings intent when present; Samsung exposes only its resolved `com.samsung.android.smartsuggestions.translate.settings.LAUNCH_SETTINGS` action on current devices, so keep that bounded package-specific fallback.
 
 ## Recents Section Identity
 

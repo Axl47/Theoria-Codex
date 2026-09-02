@@ -242,7 +242,6 @@ internal class AndroidSystemViewerTextTranslator(
         )
         val targetSpec = TranslationSpec(ULocale.ENGLISH, TranslationSpec.DATA_FORMAT_TEXT)
         val translationContext = TranslationContext.Builder(sourceSpec, targetSpec)
-            .setTranslationFlags(TranslationContext.FLAG_LOW_LATENCY)
             .build()
         return suspendCancellableCoroutine { continuation ->
             manager.createOnDeviceTranslator(translationContext, callbackExecutor) { created ->
@@ -316,7 +315,7 @@ private fun ViewerOcrLanguage.languageTag(): String = when (this) {
 
 internal fun translationLanguageNotReadyMessage(language: ViewerOcrLanguage): String {
     val label = language.name.lowercase().replaceFirstChar(Char::uppercaseChar)
-    return "$label → English isn't ready. Download it in Android translation settings."
+    return "$label → English isn't available through this device's on-device translator."
 }
 
 private suspend inline fun <T> traceAsyncSection(name: String, crossinline block: suspend () -> T): T {

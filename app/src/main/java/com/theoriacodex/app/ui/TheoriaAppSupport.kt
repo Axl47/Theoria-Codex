@@ -63,11 +63,18 @@ internal fun openUnknownSourcesSettings(context: Context) {
 }
 
 internal fun openOnDeviceTranslationSettings(context: Context): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
-    val manager = context.getSystemService(TranslationManager::class.java) ?: return false
-    val settingsIntent = manager.onDeviceTranslationSettingsActivityIntent ?: return false
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val standardIntent = context.getSystemService(TranslationManager::class.java)
+            ?.onDeviceTranslationSettingsActivityIntent
+        if (standardIntent != null && runCatching { standardIntent.send() }.isSuccess) return true
+    }
+    val manufacturerIntent = Intent(SAMSUNG_TRANSLATION_SETTINGS_ACTION).apply {
+        setPackage(SAMSUNG_TRANSLATION_PACKAGE)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    if (manufacturerIntent.resolveActivity(context.packageManager) == null) return false
     return runCatching {
-        settingsIntent.send()
+        context.startActivity(manufacturerIntent)
         true
     }.getOrDefault(false)
 }
@@ -106,3 +113,6 @@ internal fun parseGelbooruProfileOwner(html: String): String? {
 
 private val CODEX_IMPORT_MIME_TYPES = setOf("application/json", "text/json")
 private val GELBOORU_PROFILE_OWNER_REGEX = Regex("""user:([A-Za-z0-9_:-]+)""", RegexOption.IGNORE_CASE)
+private const val SAMSUNG_TRANSLATION_PACKAGE = "com.samsung.android.smartsuggestions"
+private const val SAMSUNG_TRANSLATION_SETTINGS_ACTION =
+    "com.samsung.android.smartsuggestions.translate.settings.LAUNCH_SETTINGS"

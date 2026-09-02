@@ -186,9 +186,9 @@ class ViewerOcrTranslationViewModelTest {
     }
 
     @Test
-    fun `missing platform language message directs the user to Android settings`() {
+    fun `missing platform language message identifies the device translator`() {
         assertEquals(
-            "Japanese → English isn't ready. Download it in Android translation settings.",
+            "Japanese → English isn't available through this device's on-device translator.",
             translationLanguageNotReadyMessage(ViewerOcrLanguage.JAPANESE),
         )
     }
