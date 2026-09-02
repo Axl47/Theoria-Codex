@@ -42,10 +42,14 @@ class SettingsSummaryPresentationTest {
     }
 
     @Test
-    fun `Viewer OCR ready state describes shared device availability`() {
+    fun `Viewer OCR states distinguish complete readiness from missing translation`() {
         assertEquals(
-            "Available on device",
+            "OCR and translation available",
             ocrLanguageModelStatusLabel(OcrLanguageModelState.Ready),
+        )
+        assertEquals(
+            "OCR available · translation needed",
+            ocrLanguageModelStatusLabel(OcrLanguageModelState.TranslationNotDownloaded),
         )
     }
 

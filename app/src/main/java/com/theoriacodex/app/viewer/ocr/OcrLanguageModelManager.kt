@@ -35,6 +35,7 @@ import kotlinx.coroutines.withContext
 sealed interface OcrLanguageModelState {
     data object Checking : OcrLanguageModelState
     data object NotDownloaded : OcrLanguageModelState
+    data object TranslationNotDownloaded : OcrLanguageModelState
     data class Downloading(val progressPercent: Int? = null) : OcrLanguageModelState
     data object Ready : OcrLanguageModelState
     data class Failed(val message: String) : OcrLanguageModelState
@@ -46,6 +47,7 @@ interface OcrLanguageModelSource {
 
     suspend fun refresh()
     suspend fun download(language: ViewerOcrLanguage): Boolean
+    suspend fun downloadTranslation(language: ViewerOcrLanguage): Boolean
 }
 
 internal fun interface CjkTextRecognizerFactory {
@@ -73,6 +75,17 @@ internal interface OcrLanguageModuleGateway {
         language: ViewerOcrLanguage,
         onProgress: (Int?) -> Unit,
     )
+}
+
+internal enum class TranslationLanguageAvailability {
+    READY,
+    DOWNLOADABLE,
+    UNAVAILABLE,
+}
+
+internal interface TranslationLanguageGateway {
+    suspend fun availability(): Map<ViewerOcrLanguage, TranslationLanguageAvailability>
+    suspend fun requestDownload(language: ViewerOcrLanguage): Boolean
 }
 
 internal class OcrModulesUnavailableException(
@@ -156,6 +169,7 @@ internal class GooglePlayOcrLanguageModuleGateway(
 
 internal class DefaultOcrLanguageModelManager(
     private val gateway: OcrLanguageModuleGateway,
+    private val translationGateway: TranslationLanguageGateway,
 ) : OcrLanguageModelSource {
     private val mutableStates: MutableStateFlow<Map<ViewerOcrLanguage, OcrLanguageModelState>> =
         MutableStateFlow(
@@ -169,10 +183,11 @@ internal class DefaultOcrLanguageModelManager(
 
     override suspend fun refresh() {
         kotlinx.coroutines.coroutineScope {
+            val translationAvailability = translationGateway.availability()
             ViewerOcrLanguage.entries.map { language ->
                 async {
                     language to requireNotNull(languageLocks[language]).withLock {
-                        queryState(language)
+                        queryState(language, translationAvailability[language])
                     }
                 }
             }.awaitAll().forEach { (language, state) -> setState(language, state) }
@@ -187,12 +202,9 @@ internal class DefaultOcrLanguageModelManager(
                 gateway.download(language) { progress ->
                     setState(language, OcrLanguageModelState.Downloading(progress))
                 }
-                val ready = gateway.isDownloaded(language)
-                setState(
-                    language,
-                    if (ready) OcrLanguageModelState.Ready else OcrLanguageModelState.NotDownloaded,
-                )
-                ready
+                val state = queryState(language, translationGateway.availability()[language])
+                setState(language, state)
+                state == OcrLanguageModelState.Ready
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (unavailable: OcrModulesUnavailableException) {
@@ -213,12 +225,39 @@ internal class DefaultOcrLanguageModelManager(
         }
     }
 
-    private suspend fun queryState(language: ViewerOcrLanguage): OcrLanguageModelState {
+    override suspend fun downloadTranslation(language: ViewerOcrLanguage): Boolean {
+        return requireNotNull(languageLocks[language]).withLock {
+            try {
+                translationGateway.requestDownload(language)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Exception) {
+                setState(
+                    language,
+                    OcrLanguageModelState.Failed(
+                        failure.message?.takeIf(String::isNotBlank)
+                            ?: "Could not open translation language download",
+                    ),
+                )
+                false
+            }
+        }
+    }
+
+    private suspend fun queryState(
+        language: ViewerOcrLanguage,
+        translationAvailability: TranslationLanguageAvailability?,
+    ): OcrLanguageModelState {
         return try {
-            if (gateway.isDownloaded(language)) {
-                OcrLanguageModelState.Ready
-            } else {
-                OcrLanguageModelState.NotDownloaded
+            when {
+                !gateway.isDownloaded(language) -> OcrLanguageModelState.NotDownloaded
+                translationAvailability == TranslationLanguageAvailability.READY ->
+                    OcrLanguageModelState.Ready
+                translationAvailability == TranslationLanguageAvailability.DOWNLOADABLE ->
+                    OcrLanguageModelState.TranslationNotDownloaded
+                else -> OcrLanguageModelState.Unavailable(
+                    "Translation isn't available on this device",
+                )
             }
         } catch (cancellation: CancellationException) {
             throw cancellation

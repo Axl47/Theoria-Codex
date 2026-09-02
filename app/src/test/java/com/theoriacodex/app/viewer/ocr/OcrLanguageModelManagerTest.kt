@@ -18,7 +18,7 @@ class OcrLanguageModelManagerTest {
         val gateway = FakeOcrLanguageModuleGateway(
             downloaded = mutableSetOf(ViewerOcrLanguage.JAPANESE),
         )
-        val manager = DefaultOcrLanguageModelManager(gateway)
+        val manager = DefaultOcrLanguageModelManager(gateway, FakeTranslationLanguageGateway())
 
         manager.refresh()
 
@@ -37,7 +37,7 @@ class OcrLanguageModelManagerTest {
     fun `download publishes progress and coalesces concurrent requests`() = runTest {
         val gate = CompletableDeferred<Unit>()
         val gateway = FakeOcrLanguageModuleGateway(downloadGate = gate)
-        val manager = DefaultOcrLanguageModelManager(gateway)
+        val manager = DefaultOcrLanguageModelManager(gateway, FakeTranslationLanguageGateway())
 
         val first = async { manager.download(ViewerOcrLanguage.KOREAN) }
         runCurrent()
@@ -62,12 +62,57 @@ class OcrLanguageModelManagerTest {
         val gateway = FakeOcrLanguageModuleGateway().apply {
             unavailable += ViewerOcrLanguage.CHINESE
         }
-        val manager = DefaultOcrLanguageModelManager(gateway)
+        val manager = DefaultOcrLanguageModelManager(gateway, FakeTranslationLanguageGateway())
 
         assertFalse(manager.download(ViewerOcrLanguage.CHINESE))
 
         assertTrue(manager.states.value[ViewerOcrLanguage.CHINESE] is OcrLanguageModelState.Unavailable)
         assertEquals(1, gateway.downloadCount[ViewerOcrLanguage.CHINESE])
+    }
+
+    @Test
+    fun `refresh distinguishes missing Samsung translation from ready OCR`() = runTest {
+        val gateway = FakeOcrLanguageModuleGateway(
+            downloaded = ViewerOcrLanguage.entries.toMutableSet(),
+        )
+        val translation = FakeTranslationLanguageGateway(
+            states = mapOf(
+                ViewerOcrLanguage.JAPANESE to TranslationLanguageAvailability.READY,
+                ViewerOcrLanguage.CHINESE to TranslationLanguageAvailability.DOWNLOADABLE,
+                ViewerOcrLanguage.KOREAN to TranslationLanguageAvailability.UNAVAILABLE,
+            ),
+        )
+        val manager = DefaultOcrLanguageModelManager(gateway, translation)
+
+        manager.refresh()
+
+        assertEquals(OcrLanguageModelState.Ready, manager.states.value[ViewerOcrLanguage.JAPANESE])
+        assertEquals(
+            OcrLanguageModelState.TranslationNotDownloaded,
+            manager.states.value[ViewerOcrLanguage.CHINESE],
+        )
+        assertTrue(manager.states.value[ViewerOcrLanguage.KOREAN] is OcrLanguageModelState.Unavailable)
+    }
+
+    @Test
+    fun `translation download delegates and Samsung pack names match every language`() = runTest {
+        val translation = FakeTranslationLanguageGateway()
+        val manager = DefaultOcrLanguageModelManager(FakeOcrLanguageModuleGateway(), translation)
+
+        assertTrue(manager.downloadTranslation(ViewerOcrLanguage.CHINESE))
+
+        assertEquals(listOf(ViewerOcrLanguage.CHINESE), translation.downloads)
+        assertEquals(
+            mapOf(
+                ViewerOcrLanguage.JAPANESE to
+                    "com.samsung.android.nmt.apps.t2t.languagepack.enja",
+                ViewerOcrLanguage.CHINESE to
+                    "com.samsung.android.nmt.apps.t2t.languagepack.enzh",
+                ViewerOcrLanguage.KOREAN to
+                    "com.samsung.android.nmt.apps.t2t.languagepack.enko",
+            ),
+            ViewerOcrLanguage.entries.associateWith(::samsungTranslationPackPackage),
+        )
     }
 }
 
@@ -92,5 +137,19 @@ private class FakeOcrLanguageModuleGateway(
         onProgress(40)
         downloadGate?.await()
         downloaded += language
+    }
+}
+
+private class FakeTranslationLanguageGateway(
+    private val states: Map<ViewerOcrLanguage, TranslationLanguageAvailability> =
+        ViewerOcrLanguage.entries.associateWith { TranslationLanguageAvailability.READY },
+) : TranslationLanguageGateway {
+    val downloads = mutableListOf<ViewerOcrLanguage>()
+
+    override suspend fun availability(): Map<ViewerOcrLanguage, TranslationLanguageAvailability> = states
+
+    override suspend fun requestDownload(language: ViewerOcrLanguage): Boolean {
+        downloads += language
+        return true
     }
 }

@@ -18,6 +18,7 @@ import androidx.core.content.pm.PackageInfoCompat
 import androidx.core.net.toUri
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.ui.routes.activeRecommendationProfile
+import com.theoriacodex.app.viewer.ocr.openSamsungTranslationSettings
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.RecommendationProfile
 import kotlinx.coroutines.flow.first
@@ -68,15 +69,7 @@ internal fun openOnDeviceTranslationSettings(context: Context): Boolean {
             ?.onDeviceTranslationSettingsActivityIntent
         if (standardIntent != null && runCatching { standardIntent.send() }.isSuccess) return true
     }
-    val manufacturerIntent = Intent(SAMSUNG_TRANSLATION_SETTINGS_ACTION).apply {
-        setPackage(SAMSUNG_TRANSLATION_PACKAGE)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-    if (manufacturerIntent.resolveActivity(context.packageManager) == null) return false
-    return runCatching {
-        context.startActivity(manufacturerIntent)
-        true
-    }.getOrDefault(false)
+    return openSamsungTranslationSettings(context)
 }
 
 internal tailrec fun Context.findActivity(): Activity? = when (this) {
@@ -113,6 +106,3 @@ internal fun parseGelbooruProfileOwner(html: String): String? {
 
 private val CODEX_IMPORT_MIME_TYPES = setOf("application/json", "text/json")
 private val GELBOORU_PROFILE_OWNER_REGEX = Regex("""user:([A-Za-z0-9_:-]+)""", RegexOption.IGNORE_CASE)
-private const val SAMSUNG_TRANSLATION_PACKAGE = "com.samsung.android.smartsuggestions"
-private const val SAMSUNG_TRANSLATION_SETTINGS_ACTION =
-    "com.samsung.android.smartsuggestions.translate.settings.LAUNCH_SETTINGS"

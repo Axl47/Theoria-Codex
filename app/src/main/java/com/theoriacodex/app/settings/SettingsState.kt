@@ -102,6 +102,7 @@ sealed interface SettingsAction {
         val enabled: Boolean,
     ) : SettingsAction
     data class DownloadOcrLanguage(val language: ViewerOcrLanguage) : SettingsAction
+    data class DownloadTranslationLanguage(val language: ViewerOcrLanguage) : SettingsAction
     data class SetScenarioPreset(val preset: ScenarioPreset) : SettingsAction
     data object ToggleClearCacheOptions : SettingsAction
     data object ClearThumbnailCache : SettingsAction

@@ -26,7 +26,9 @@ internal fun ViewerOcrSettingsSection(
         title = "Viewer OCR & Translation",
         summary = viewerOcrSettingsSummary(
             enabled = viewerSettings.automaticTextTranslationEnabled,
-            enabledLanguageCount = viewerSettings.enabledOcrLanguages.size,
+            enabledLanguageCount = viewerSettings.enabledOcrLanguages.count { language ->
+                state.ocrLanguageModels[language] == OcrLanguageModelState.Ready
+            },
         ),
         expanded = state.sectionExpansion[SettingsSectionKey.VIEWER_OCR_TRANSLATION],
         onToggle = {
@@ -102,11 +104,21 @@ private fun ViewerOcrLanguageRow(
         }
         when (modelState) {
             OcrLanguageModelState.Checking -> CircularProgressIndicator()
-            OcrLanguageModelState.NotDownloaded -> TextButton(
-                onClick = { onAction(SettingsAction.DownloadOcrLanguage(language)) },
-            ) {
-                Text("Download")
+            OcrLanguageModelState.NotDownloaded -> Row(verticalAlignment = Alignment.CenterVertically) {
+                DisableUnavailableLanguageSwitch(language, enabled, onAction)
+                TextButton(onClick = { onAction(SettingsAction.DownloadOcrLanguage(language)) }) {
+                    Text("Download OCR")
+                }
             }
+            OcrLanguageModelState.TranslationNotDownloaded ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    DisableUnavailableLanguageSwitch(language, enabled, onAction)
+                    TextButton(
+                        onClick = { onAction(SettingsAction.DownloadTranslationLanguage(language)) },
+                    ) {
+                        Text("Get translation")
+                    }
+                }
             is OcrLanguageModelState.Downloading -> {
                 val progress = modelState.progressPercent
                 if (progress == null) {
@@ -126,9 +138,23 @@ private fun ViewerOcrLanguageRow(
             ) {
                 Text("Retry")
             }
-            is OcrLanguageModelState.Unavailable -> Unit
+            is OcrLanguageModelState.Unavailable ->
+                DisableUnavailableLanguageSwitch(language, enabled, onAction)
         }
     }
+}
+
+@Composable
+private fun DisableUnavailableLanguageSwitch(
+    language: ViewerOcrLanguage,
+    enabled: Boolean,
+    onAction: (SettingsAction) -> Unit,
+) {
+    if (!enabled) return
+    Switch(
+        checked = true,
+        onCheckedChange = { onAction(SettingsAction.SetOcrLanguageEnabled(language, false)) },
+    )
 }
 
 internal fun viewerOcrSettingsSummary(enabled: Boolean, enabledLanguageCount: Int): String {
@@ -144,10 +170,11 @@ private fun ViewerOcrLanguage.displayLabel(): String = when (this) {
 
 internal fun ocrLanguageModelStatusLabel(state: OcrLanguageModelState): String = when (state) {
     OcrLanguageModelState.Checking -> "Checking availability"
-    OcrLanguageModelState.NotDownloaded -> "Not downloaded"
+    OcrLanguageModelState.NotDownloaded -> "OCR model needed"
+    OcrLanguageModelState.TranslationNotDownloaded -> "OCR available · translation needed"
     is OcrLanguageModelState.Downloading ->
         state.progressPercent?.let { "Downloading · $it%" } ?: "Downloading"
-    OcrLanguageModelState.Ready -> "Available on device"
+    OcrLanguageModelState.Ready -> "OCR and translation available"
     is OcrLanguageModelState.Failed -> state.message
     is OcrLanguageModelState.Unavailable -> state.message
 }

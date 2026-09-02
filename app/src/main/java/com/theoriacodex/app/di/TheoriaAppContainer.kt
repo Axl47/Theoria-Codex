@@ -30,6 +30,7 @@ import com.theoriacodex.app.update.StartupUpdater
 import com.theoriacodex.app.update.UpdateFeedClient
 import com.theoriacodex.app.update.UpdateStateStore
 import com.theoriacodex.app.viewer.PixivUgoiraClient
+import com.theoriacodex.app.viewer.ocr.AndroidTranslationLanguageGateway
 import com.theoriacodex.app.viewer.ocr.DefaultOcrLanguageModelManager
 import com.theoriacodex.app.viewer.ocr.GooglePlayOcrLanguageModuleGateway
 import com.theoriacodex.app.viewer.ocr.MlKitCjkTextRecognizerFactory
@@ -234,6 +235,7 @@ internal class DefaultTheoriaAppContainer(
             context = appContext,
             recognizerFactory = cjkTextRecognizerFactory,
         ),
+        translationGateway = AndroidTranslationLanguageGateway(appContext),
     )
     private val viewerOcrTranslation = ViewerOcrTranslationCoordinator(
         context = appContext,
