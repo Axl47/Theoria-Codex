@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.testing.InMemoryCodexLikesTransactions
 import com.theoriacodex.data.repository.CodexSortMode
@@ -9,7 +10,6 @@ import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,7 +24,7 @@ class LikesCodexSyncServiceTest {
         val profile = RecommendationProfile("profile-main", "Main")
         val post = testPost(sourcePostId = "liked")
 
-        assertTrue(service.toggle(profile, post, listOf("tag")))
+        assertEquals(LikeToggleOutcome.LIKED, service.toggle(profile, post, listOf("tag")))
         assertEquals(listOf(post.id), likes.observeLikedPostIds(profile.profileId).first().toList())
         assertEquals(
             listOf(post.id),
@@ -33,7 +33,7 @@ class LikesCodexSyncServiceTest {
                 .map { it.id },
         )
 
-        assertFalse(service.toggle(profile, post, listOf("tag")))
+        assertEquals(LikeToggleOutcome.UNLIKED, service.toggle(profile, post, listOf("tag")))
         assertTrue(likes.observeLikedPostIds(profile.profileId).first().isEmpty())
         assertTrue(
             codices.observeCodexPosts(likesCodexIdForProfile(profile.profileId), CodexSortMode.NEWEST_SAVED)
@@ -104,12 +104,12 @@ class LikesCodexSyncServiceTest {
         )
         val post = testPost(sourcePostId = "automatic", canonicalTags = listOf("landscape"))
 
-        assertTrue(service.toggle(profile, post, post.canonicalTags))
+        assertEquals(LikeToggleOutcome.LIKED, service.toggle(profile, post, post.canonicalTags))
         assertEquals(listOf(post.id), codices.observeCodexItems(matching.codexId).first().map { it.postId })
         assertTrue(codices.observeCodexItems(otherProfile.codexId).first().isEmpty())
         assertTrue(codices.observeCodexItems(nonmatching.codexId).first().isEmpty())
 
-        assertFalse(service.toggle(profile, post, post.canonicalTags))
+        assertEquals(LikeToggleOutcome.UNLIKED, service.toggle(profile, post, post.canonicalTags))
         assertEquals(listOf(post.id), codices.observeCodexItems(matching.codexId).first().map { it.postId })
     }
 }

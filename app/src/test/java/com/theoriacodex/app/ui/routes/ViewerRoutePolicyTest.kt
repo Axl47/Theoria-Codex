@@ -26,6 +26,29 @@ import org.junit.Test
 
 class ViewerRoutePolicyTest {
     @Test
+    fun `related viewer has no live source and records ordinary watched membership`() {
+        val state = ViewerRouteLiveSourceState()
+        val context = ViewerLaunchContext(
+            queryHash = "related:PIXIV:1",
+            startIndex = 0,
+            streamSource = ViewerStreamSource.RELATED,
+            scrollOffsetHint = 0,
+        )
+
+        assertNull(state.forSource(ViewerStreamSource.RELATED))
+        assertEquals(RecentPostSection.WATCHED, recentPostSectionForViewer(context))
+        assertNull(
+            state.visiblePostsFor(
+                ViewerSession(
+                    posts = listOf(post("related")),
+                    context = context,
+                    liveSearchBinding = false,
+                )
+            )
+        )
+    }
+
+    @Test
     fun `Recents Viewer records the explicit section while direct launches derive it`() {
         val recentsCodex = ViewerLaunchContext(
             queryHash = "recents:codex",

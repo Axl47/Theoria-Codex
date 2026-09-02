@@ -53,6 +53,7 @@ internal class ViewerRouteWorkflow(
             ) {
                 return
             }
+            ViewerStreamSource.RELATED -> Unit
             ViewerStreamSource.CODEX,
             ViewerStreamSource.RECENTS,
             -> {
@@ -95,6 +96,7 @@ internal class ViewerRouteWorkflow(
             ViewerStreamSource.FOR_YOU -> forYouOwner()?.dispatch(ForYouAction.LoadNextPage)
             ViewerStreamSource.CREATOR_PROFILE -> creatorOwner()
                 ?.dispatch(com.theoriacodex.app.creator.state.CreatorAction.LoadNextPage)
+            ViewerStreamSource.RELATED,
             ViewerStreamSource.CODEX,
             ViewerStreamSource.RECENTS,
             -> Unit
@@ -132,6 +134,7 @@ internal class ViewerRouteWorkflow(
             ViewerStreamSource.SEARCH -> searchOwner()?.currentState()?.content?.results.orEmpty()
             ViewerStreamSource.FOR_YOU -> forYouOwner()?.currentState()?.results.orEmpty()
             ViewerStreamSource.CREATOR_PROFILE -> creatorOwner()?.currentState()?.results.orEmpty()
+            ViewerStreamSource.RELATED -> emptyList()
             ViewerStreamSource.RECENTS -> data.recentsRepository
                 .observeWatchedPosts()
                 .first()

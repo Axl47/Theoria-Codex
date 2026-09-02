@@ -425,6 +425,7 @@ interface CacheRepository {
 enum class ViewerStreamSource {
     SEARCH,
     FOR_YOU,
+    RELATED,
     CODEX,
     CREATOR_PROFILE,
     RECENTS,

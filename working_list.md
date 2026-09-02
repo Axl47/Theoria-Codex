@@ -1,6 +1,6 @@
 # Working List
 
-## Current Task: Implement Viewer CJK OCR Translation
+## Current Task: Implement Pixiv and Gelbooru Related Posts After Likes
 
 ### In Progress
 
@@ -12,14 +12,15 @@
 
 ### Done
 
-- [x] Re-read the task-orchestrator workflow and the complete current ExecPlan before implementation.
-- [x] Reinitialized this implementation checklist before source edits.
-- [x] Phase 1 — Added backward-compatible Viewer OCR settings, atomic per-language persistence, unbundled ML Kit dependencies, explicit Google Play module state/download management, Settings UI, container wiring, R8 contract fields, and focused tests. Verification: `:core-data:test`, focused Settings/model-manager tests, and `:app:compileDebugKotlin` passed; the batch exposed and then proved the repair for a concurrent language-enable lost update.
-- [x] Phase 2 — Added Android-free metadata/order/script/geometry policy, bounded Coil decode, sequential ML Kit recognition, trace spans, and a cancellable Android 12+ system translation gateway. Verification: `ViewerOcrPolicyTest` and Debug Kotlin compilation passed. Discovery: ML Kit Translation attribution conflicts with its adult-content branding restriction, so the living plan now uses the neutral platform translator and retains ML Kit only for OCR.
-- [x] Phase 3 — Wired a dedicated navigation-scoped OCR owner to live model readiness, durable Viewer settings, current static media identity, resolved metadata, and successful Coil image delivery. Verification: focused owner/route/image-pipeline tests and Debug Kotlin compilation passed; tests cover delayed eligibility, stale media results, positive quality-upgrade stability, and immediate disable clearing.
-- [x] Phase 4 — Added a shared transformed image/highlight layer, padded fit/zoom/pan hit testing, accessibility activation semantics, an unscaled below/above-clamped card, and preparing/translating/success/failure state with cache reuse and bounded timers. Verification: focused OCR policy, owner, overlay geometry, Viewer transform/image pipeline, and model-manager tests plus Debug compilation passed.
-- [x] Phase 5 — Completed host validation and durable documentation. Verification: 106 app-logic, 112 core-data, and 538 app tests passed with zero failures/errors; Android-test compilation, Debug assembly, affected Detekt owners, hotspot gate, 0.57% duplication gate, both 241-field release JSON checks, HTML/diff checks, and Debug package identity `com.theoriacodex.debug` passed. No APK was installed or launched.
+- [x] Re-read the task-orchestrator workflow and the complete committed ExecPlan before source edits.
+- [x] Reinitialized this implementation checklist and confirmed the worktree is clean at `80fa8d4` before feature changes.
+- [x] Phase 1 — Added `RelatedPostsSourceAdapter`, bounded first-response Pixiv retrieval, source-owned Gelbooru HTML parsing, two-wide ordered hydration, and opt-in related provider health checks. Verification: `./gradlew :core-domain:test :core-sources:test --no-configuration-cache` passed twice, including the final health-contract patch.
+- [x] Phase 2 — Added shared latest-wins related state and a canonical-index feed projection with hidden-seed placement plus grid/scroll/paging translation. Verification: focused `RelatedPostsStateTest` and `RelatedFeedProjectionTest` passed through `:app-logic:test`.
+- [x] Phase 3 — Added the registry loader, typed Like outcome, exact shell-to-route post-commit handoff, Search/FYP request ownership, root clearing, and count-stable non-empty FYP synchronization. Verification: focused Likes, loader, Search ViewModel, and For You ViewModel tests passed through `:app:testDebugUnitTest`; Debug Kotlin compilation passed.
+- [x] Phase 4 — Added the full-line projected shelf, shared `SearchResultCard` rendering, canonical Search scroll/FYP paging translation, duration input union, and static `RELATED` Viewer source. Verification: focused related app-logic/app tests, `ViewerRoutePolicyTest`, and `FeedAutoplayArchitectureTest` passed together; Debug Kotlin compilation passed.
+- [x] Phase 5 — Completed host validation and durable guidance. Verification: all affected JVM suites, Android-test compilation, Debug assembly, app/app-logic Detekt, aggregate Kover, hotspot gate, Debug package identity, HTML/diff checks, and focused post-extraction tests passed. Core Detekt still reports only inherited frozen owners; no new related file is named.
 
 ### Needs Human Validation
 
-- [!] On an isolated Debug install, download the requested OCR models and validate real horizontal/vertical/stylized CJK pages plus OEM on-device translation. This was not claimed from host tests because it requires a compatible device, model downloads, and representative user media.
+- [!] Run the read-only Pixiv/Gelbooru related provider health steps with configured credentials. The current environment has no Pixiv token or Gelbooru user/API key.
+- [!] In an isolated `com.theoriacodex.debug` install, validate shelf placement, Hide liked anchoring, rapid replacement, horizontal autoplay, retry, and static Viewer behavior. No APK was installed or launched during host validation.

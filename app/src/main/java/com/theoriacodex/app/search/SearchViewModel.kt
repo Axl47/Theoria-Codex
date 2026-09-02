@@ -19,6 +19,10 @@ import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.search.state.SearchQueryUiState
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.modeKey
+import com.theoriacodex.app.related.RelatedPostsLoading
+import com.theoriacodex.app.related.RelatedPostsRouteController
+import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
+import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.ui.state.RouteStateOwner
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.AppSettings
@@ -63,6 +67,7 @@ internal class SearchViewModel(
     private val coordinator: SearchCoordinator,
     private val savedStateHandle: SavedStateHandle,
     private val executionService: SearchExecutionService = coordinator,
+    private val relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
     private val autocompleteDelayMs: Long = DEFAULT_AUTOCOMPLETE_DELAY_MS,
     scrollPersistenceDelayMs: Long = DEFAULT_SCROLL_PERSISTENCE_DELAY_MS,
     scrollPersistenceDispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -86,6 +91,13 @@ internal class SearchViewModel(
         ),
     )
     private val effectChannel = Channel<SearchEffect>(capacity = Channel.BUFFERED)
+    private val relatedPosts = RelatedPostsRouteController(
+        scope = viewModelScope,
+        loader = relatedPostsLoader,
+        currentState = { mutableState.value.relatedPosts },
+        canonicalPosts = { mutableState.value.content.results },
+        updateState = { related -> mutableState.value = mutableState.value.copy(relatedPosts = related) },
+    )
 
     override val state: StateFlow<SearchUiState> = mutableState.asStateFlow()
     override val effects: Flow<SearchEffect> = effectChannel.receiveAsFlow()
@@ -277,6 +289,14 @@ internal class SearchViewModel(
                 applyResolvedPosts(mutableState.value.query.appliedQueryHash, listOf(action.post))
             }
 
+            is SearchAction.RelatedLikeCommitted -> relatedPosts.onLikeCommitted(action.post, action.outcome)
+
+            SearchAction.RetryRelatedPosts -> relatedPosts.retry()
+
+            SearchAction.DismissRelatedPosts -> relatedPosts.clear()
+
+            is SearchAction.OpenRelatedResult -> openRelatedResult(action)
+
             is SearchAction.ScrollChanged -> persistScroll(action)
 
             is SearchAction.ScrollRestorationApplied -> reduce(
@@ -396,6 +416,23 @@ internal class SearchViewModel(
         if (!mutableState.value.content.canLoadMore) return
         val continuation = activeContinuation ?: return
         launchPage(continuation)
+    }
+
+    private fun openRelatedResult(action: SearchAction.OpenRelatedResult) {
+        if (action.index !in action.visibleResults.indices) return
+        val request = mutableState.value.relatedPosts.requestOrNull ?: return
+        effectChannel.trySend(
+            SearchEffect.OpenViewer(
+                posts = action.visibleResults.toList(),
+                context = ViewerLaunchContext(
+                    queryHash = "related:${request.seed.id.source.name}:${request.seed.id.sourcePostId}",
+                    startIndex = action.index,
+                    streamSource = ViewerStreamSource.RELATED,
+                    scrollOffsetHint = 0,
+                ),
+                liveSearchBinding = false,
+            )
+        )
     }
 
     fun synchronizeEnvironment(settings: AppSettings) {
@@ -548,6 +585,7 @@ internal class SearchViewModel(
         persistAcceptedResult: Boolean,
         onSuccess: suspend () -> Unit = {},
     ) {
+        relatedPosts.clear()
         cancelActiveRequest()
         activeContinuation = null
         val expectedExecutionKey = executionService.executionKeyFor(query, sourceScope)
@@ -968,7 +1006,9 @@ internal class SearchViewModel(
     private fun publishEffect(effect: SearchEffect) {
         when (effect) {
             is SearchEffect.OpenViewer -> viewModelScope.launch {
-                coordinator.setViewerLaunchContext(effect.context)
+                if (effect.context.streamSource != ViewerStreamSource.RELATED) {
+                    coordinator.setViewerLaunchContext(effect.context)
+                }
                 effectChannel.send(effect)
             }
 
@@ -1005,12 +1045,16 @@ internal class SearchViewModel(
     }
 
     companion object {
-        fun factory(coordinator: SearchCoordinator): ViewModelProvider.Factory {
+        fun factory(
+            coordinator: SearchCoordinator,
+            relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
+        ): ViewModelProvider.Factory {
             return viewModelFactory {
                 initializer {
                     SearchViewModel(
                         coordinator = coordinator,
                         savedStateHandle = createSavedStateHandle(),
+                        relatedPostsLoader = relatedPostsLoader,
                     )
                 }
             }

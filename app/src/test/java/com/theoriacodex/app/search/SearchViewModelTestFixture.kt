@@ -17,6 +17,8 @@ import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchEffect
 import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchSourceScope
+import com.theoriacodex.app.related.RelatedPostsLoading
+import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -78,6 +80,7 @@ internal abstract class SearchViewModelTestFixture {
         scrollPersistenceDispatcher: CoroutineDispatcher = mainDispatcherRule.dispatcher,
         recentsRepository: RecentsRepository = InMemoryRecentsRepository(),
         executionService: ((SearchCoordinator) -> SearchExecutionService)? = null,
+        relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
     ): SearchViewModel {
         val coordinator = testSearchCoordinator(
             ViewModelSearchRegistry(adapter, *additionalAdapters.toTypedArray()),
@@ -90,6 +93,7 @@ internal abstract class SearchViewModelTestFixture {
             coordinator = coordinator,
             savedStateHandle = savedState,
             executionService = executionService?.invoke(coordinator) ?: coordinator,
+            relatedPostsLoader = relatedPostsLoader,
             autocompleteDelayMs = autocompleteDelayMs,
             scrollPersistenceDelayMs = scrollPersistenceDelayMs,
             scrollPersistenceDispatcher = scrollPersistenceDispatcher,

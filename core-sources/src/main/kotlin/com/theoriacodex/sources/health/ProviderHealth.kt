@@ -3,11 +3,13 @@ package com.theoriacodex.sources.health
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.QuickQueryKind
+import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
@@ -56,6 +58,7 @@ data class ProviderProbeCase(
     val requiresCredentials: Boolean = false,
     val mediaProbe: Boolean = true,
     val trendingProbe: Boolean = true,
+    val relatedSeedPostId: String? = null,
     val diagnosticUrls: Map<String, String> = emptyMap(),
 )
 
@@ -100,6 +103,7 @@ object ProviderProbeCases {
             includeTags = listOf("landscape"),
             autocompletePrefix = "land",
             requiresCredentials = true,
+            relatedSeedPostId = "130665095",
         ),
         ProviderProbeCase(
             source = SourceKey.GELBOORU,
@@ -107,6 +111,7 @@ object ProviderProbeCases {
             autocompletePrefix = "land",
             strictTagEcho = true,
             requiresCredentials = true,
+            relatedSeedPostId = "11975538",
         ),
         ProviderProbeCase(
             source = SourceKey.AIBOORU,
@@ -208,6 +213,7 @@ object ProviderProbeCases {
                 requiresCredentials = record.requiresCredentials ?: false,
                 mediaProbe = record.mediaProbe ?: true,
                 trendingProbe = record.trendingProbe ?: true,
+                relatedSeedPostId = record.relatedSeedPostId?.trim()?.takeIf(String::isNotBlank),
                 diagnosticUrls = record.diagnosticUrls.orEmpty(),
             )
         }
@@ -225,6 +231,7 @@ object ProviderProbeCases {
         val requiresCredentials: Boolean? = null,
         val mediaProbe: Boolean? = null,
         val trendingProbe: Boolean? = null,
+        val relatedSeedPostId: String? = null,
         val diagnosticUrls: Map<String, String>? = null,
     )
 
@@ -497,7 +504,54 @@ class ProviderProbeRunner(
             }
         }
 
+        runRelatedPosts(probeCase, adapter)?.let(results::add)
+
         return results
+    }
+
+    private suspend fun runRelatedPosts(
+        probeCase: ProviderProbeCase,
+        adapter: SourceAdapter,
+    ): ProviderProbeStepResult? {
+        val seedId = probeCase.relatedSeedPostId ?: return null
+        if (adapter !is RelatedPostsSourceAdapter) {
+            return degraded(
+                probeCase = probeCase,
+                checkName = "related-posts",
+                message = "Source does not expose related-post discovery",
+            )
+        }
+        return runStep(
+            probeCase = probeCase,
+            checkName = "related-posts",
+            requestUrl = relatedRequestUrl(probeCase.source, seedId),
+        ) {
+            val seed = PostId(probeCase.source, seedId)
+            val posts = adapter.relatedPosts(seed, limit = 6)
+            val valid = posts.isNotEmpty() &&
+                posts.size == posts.map(Post::id).distinct().size &&
+                posts.none { post -> post.id == seed || post.id.source != probeCase.source } &&
+                posts.all { post -> mediaUrls(post).isNotEmpty() }
+            if (valid) {
+                ok(
+                    probeCase = probeCase,
+                    checkName = "related-posts",
+                    itemCount = posts.size,
+                    samplePost = posts.first(),
+                    requestUrl = relatedRequestUrl(probeCase.source, seedId),
+                    message = "Returned ${posts.size} unique usable related posts",
+                )
+            } else {
+                degraded(
+                    probeCase = probeCase,
+                    checkName = "related-posts",
+                    itemCount = posts.size,
+                    samplePost = posts.firstOrNull(),
+                    requestUrl = relatedRequestUrl(probeCase.source, seedId),
+                    message = "Related posts were empty, duplicated, cross-source, seeded, or lacked media",
+                )
+            }
+        }
     }
 
     private suspend fun runAutocomplete(
@@ -768,4 +822,10 @@ class ProviderProbeRunner(
         val facet: SearchFacet? = null,
         val sourceNamespace: String? = null,
     )
+}
+
+private fun relatedRequestUrl(source: SourceKey, seedId: String): String? = when (source) {
+    SourceKey.PIXIV -> "https://app-api.pixiv.net/v2/illust/related?illust_id=$seedId"
+    SourceKey.GELBOORU -> "https://gelbooru.com/index.php?page=post&s=view&id=$seedId"
+    else -> null
 }

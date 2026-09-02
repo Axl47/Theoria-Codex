@@ -27,6 +27,11 @@ interface CreatorPostsSourceAdapter {
     ): Page<Post>
 }
 
+/** Optional source-owned discovery for a bounded set of posts related to one canonical post. */
+interface RelatedPostsSourceAdapter {
+    suspend fun relatedPosts(seed: PostId, limit: Int): List<Post>
+}
+
 /**
  * Optional source-owned recovery for media URLs whose provider configuration can change after a
  * post was loaded. The adapter receives the original post and exact failed media reference so it

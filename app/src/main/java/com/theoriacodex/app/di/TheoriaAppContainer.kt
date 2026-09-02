@@ -10,6 +10,7 @@ import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.app.recommend.ForYouCoordinator
+import com.theoriacodex.app.related.RelatedPostsLoader
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.loadSeedTagSuggestions
@@ -110,6 +111,7 @@ data class UpdateDependencies(
 data class FeatureDependencies(
     val search: SearchCoordinator,
     val forYou: ForYouCoordinator,
+    val relatedPosts: RelatedPostsLoader,
     val creatorProfile: CreatorProfileCoordinator,
     val mediaDurationCoordinator: MediaDurationCoordinator,
     val appUsageTracker: AppUsageTracker,
@@ -310,6 +312,7 @@ internal class DefaultTheoriaAppContainer(
             statisticsRepository = statisticsRepository,
             tagSuggestionStore = tagSuggestionStore,
         ),
+        relatedPosts = RelatedPostsLoader(sourceRegistry),
         creatorProfile = CreatorProfileCoordinator(registry = sourceRegistry),
         mediaDurationCoordinator = mediaDurationCoordinator,
         appUsageTracker = appUsageTracker,

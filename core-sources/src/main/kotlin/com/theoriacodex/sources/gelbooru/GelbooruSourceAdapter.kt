@@ -5,6 +5,7 @@ import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
+import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
@@ -33,12 +34,18 @@ import com.theoriacodex.sources.common.stringValue
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 class GelbooruSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val credentialsProvider: SourceCredentialsProvider,
     private val gson: Gson = Gson(),
-) : SourceAdapter, TagCountLookupSourceAdapter, CreatorPostsSourceAdapter {
+) : SourceAdapter, TagCountLookupSourceAdapter, CreatorPostsSourceAdapter, RelatedPostsSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.GELBOORU
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -138,11 +145,35 @@ class GelbooruSourceAdapter(
             query = baseQuery(
                 "s" to "post",
                 "q" to "index",
-                "tags" to "id:${id.sourcePostId}",
+                "id" to id.sourcePostId,
                 "limit" to "1",
             ),
         )
         return parsePostItems(response).firstOrNull()?.let(::parsePost)
+    }
+
+    override suspend fun relatedPosts(seed: PostId, limit: Int): List<Post> {
+        if (seed.source != SourceKey.GELBOORU || limit <= 0) return emptyList()
+        val boundedLimit = limit.coerceAtMost(MAX_RELATED_POSTS)
+        val html = request(
+            query = linkedMapOf(
+                "page" to "post",
+                "s" to "view",
+                "id" to seed.sourcePostId,
+            ),
+        )
+        val relatedIds = parseGelbooruRelatedPostIds(html, seed.sourcePostId, boundedLimit)
+            ?: throw SourceAdapterException(
+                reason = com.theoriacodex.domain.adapter.SourceFailureReason.PARSE,
+                message = "Gelbooru related-post block was not found",
+            )
+        if (relatedIds.isEmpty()) return emptyList()
+
+        val resolved = hydrateRelatedPosts(relatedIds)
+        val posts = resolved.mapNotNull(Result<Post?>::getOrNull)
+            .distinctBy(Post::id)
+        if (posts.isNotEmpty() || resolved.none(Result<Post?>::isFailure)) return posts
+        throw resolved.firstNotNullOf { result -> result.exceptionOrNull() }
     }
 
     override suspend fun searchCreatorPosts(
@@ -201,6 +232,23 @@ class GelbooruSourceAdapter(
             )
         }
         return response.body
+    }
+
+    private suspend fun hydrateRelatedPosts(ids: List<String>): List<Result<Post?>> = supervisorScope {
+        val semaphore = Semaphore(RELATED_HYDRATION_CONCURRENCY)
+        ids.map { id ->
+            async {
+                semaphore.withPermit {
+                    try {
+                        Result.success(resolvePost(PostId(SourceKey.GELBOORU, id)))
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Throwable) {
+                        Result.failure(error)
+                    }
+                }
+            }
+        }.awaitAll()
     }
 
     private suspend fun baseQuery(vararg entries: Pair<String, String>): Map<String, String> {
@@ -341,4 +389,6 @@ private val GELBOORU_NUMBERED_VIDEO_CDN_PREFIX =
 
 private const val GELBOORU_DAPI_URL = "https://gelbooru.com/index.php"
 private const val GELBOORU_TAG_COUNT_BATCH_SIZE = 50
+private const val MAX_RELATED_POSTS = 6
+private const val RELATED_HYDRATION_CONCURRENCY = 2
 private val WHITESPACE_REGEX = Regex("\\s+")

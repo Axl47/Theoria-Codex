@@ -5,6 +5,7 @@ import com.google.gson.JsonObject
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
+import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
@@ -52,7 +53,7 @@ class PixivSourceAdapter(
     private val gson: Gson = Gson(),
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val minRequestIntervalMs: Long = 350L,
-) : SourceAdapter, CreatorPostsSourceAdapter {
+) : SourceAdapter, CreatorPostsSourceAdapter, RelatedPostsSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.PIXIV
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -159,6 +160,28 @@ class PixivSourceAdapter(
         } else {
             parsed
         }
+    }
+
+    override suspend fun relatedPosts(seed: PostId, limit: Int): List<Post> {
+        if (seed.source != SourceKey.PIXIV || limit <= 0) return emptyList()
+        val response = authorizedGet(
+            url = "$PIXIV_API_BASE/v2/illust/related",
+            query = mapOf(
+                "illust_id" to seed.sourcePostId,
+                "filter" to "for_android",
+            ),
+        )
+        val root = parseJsonObject(response, gson, "Pixiv related illustrations")
+        return root.optionalJsonArray("illusts")
+            .elementsOrEmpty()
+            .mapNotNull { element ->
+                element.takeIf { it.isJsonObject }?.asJsonObject?.let(::parseIllust)
+            }
+            .asSequence()
+            .filterNot { post -> post.id == seed }
+            .distinctBy(Post::id)
+            .take(limit.coerceAtMost(MAX_RELATED_POSTS))
+            .toList()
     }
 
     override suspend fun searchCreatorPosts(
@@ -450,6 +473,7 @@ private fun formatEpochDate(value: Long): String {
 }
 
 private const val PIXIV_API_BASE: String = "https://app-api.pixiv.net"
+private const val MAX_RELATED_POSTS: Int = 6
 const val PIXIV_UGOIRA_MIME: String = com.theoriacodex.domain.model.PIXIV_UGOIRA_MIME
 private val PIXIV_TRAILING_PARENTHESIS_REGEX = Regex("\\s*\\([^)]*\\)\\s*$")
 private val PIXIV_TAG_WHITESPACE_REGEX = Regex("\\s+")

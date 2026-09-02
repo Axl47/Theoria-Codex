@@ -3,6 +3,7 @@ package com.theoriacodex.sources.pixiv
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.CreatorProfile
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
@@ -19,6 +20,46 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PixivSourceAdapterTest {
+    @Test
+    fun `related posts use bounded first response and preserve unique provider order`() = runTest {
+        val credentials = FakeCredentialsProvider().apply {
+            pixivTokens = PixivAuthTokens(
+                accessToken = "access",
+                refreshToken = "refresh",
+                expiresAtEpochMs = Long.MAX_VALUE,
+            )
+        }
+        val httpClient = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(
+                statusCode = 200,
+                body = """
+                    {
+                      "illusts": [
+                        ${pixivIllustJson(10)},
+                        ${pixivIllustJson(20)},
+                        ${pixivIllustJson(20)},
+                        ${pixivIllustJson(30)},
+                        ${pixivIllustJson(40)}
+                      ],
+                      "next_url": "https://app-api.pixiv.net/v2/illust/related?viewed%5B0%5D=20"
+                    }
+                """.trimIndent(),
+            )
+        }
+        val adapter = PixivSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = credentials,
+            minRequestIntervalMs = 0L,
+        )
+
+        val posts = adapter.relatedPosts(PostId(SourceKey.PIXIV, "10"), limit = 2)
+
+        assertEquals(listOf("20", "30"), posts.map { post -> post.id.sourcePostId })
+        assertEquals("https://app-api.pixiv.net/v2/illust/related", httpClient.lastGet?.url)
+        assertEquals("10", httpClient.lastGet?.query?.get("illust_id"))
+        assertEquals("for_android", httpClient.lastGet?.query?.get("filter"))
+    }
+
     @Test
     fun `search requires credentials`() = runTest {
         val adapter = PixivSourceAdapter(
@@ -513,6 +554,21 @@ class PixivSourceAdapterTest {
             minScore = null,
         )
     }
+
+    private fun pixivIllustJson(id: Int): String = """
+        {
+          "id": $id,
+          "image_urls": {
+            "medium": "https://i.pximg.net/$id-medium.jpg",
+            "large": "https://i.pximg.net/$id-large.jpg"
+          },
+          "meta_single_page": {
+            "original_image_url": "https://i.pximg.net/$id-original.jpg"
+          },
+          "tags": [{"name": "landscape"}],
+          "user": {"id": 77, "name": "artist"}
+        }
+    """.trimIndent()
 }
 
 private class QueueHttpClient(

@@ -14,6 +14,10 @@ import com.theoriacodex.app.recommend.state.ForYouRequestIdentity
 import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.recommend.state.reduce
 import com.theoriacodex.app.recommend.state.toUiState
+import com.theoriacodex.app.related.RelatedPostsLoading
+import com.theoriacodex.app.related.RelatedPostsRouteController
+import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
 import com.theoriacodex.app.ui.state.RouteStateOwner
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
@@ -129,17 +133,20 @@ internal class ForYouViewModel(
     initialProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
     initialSort: SortMode? = null,
     coroutineScope: CoroutineScope? = null,
+    private val relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
 ) : ViewModel(), RouteStateOwner<ForYouUiState, ForYouAction, ForYouEffect> {
     constructor(
         coordinator: ForYouCoordinator,
         savedStateHandle: SavedStateHandle,
         initialProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
         initialSort: SortMode? = null,
+        relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
     ) : this(
         engine = CoordinatorForYouRouteEngine(coordinator),
         savedStateHandle = savedStateHandle,
         initialProfiles = initialProfiles,
         initialSort = initialSort,
+        relatedPostsLoader = relatedPostsLoader,
     )
 
     private val ownerScope = coroutineScope ?: viewModelScope
@@ -170,6 +177,13 @@ internal class ForYouViewModel(
             sortMode = restoredSort ?: SortMode.NEWEST,
         )
     )
+    private val relatedPosts = RelatedPostsRouteController(
+        scope = ownerScope,
+        loader = relatedPostsLoader,
+        currentState = { mutableState.value.relatedPosts },
+        canonicalPosts = { mutableState.value.results },
+        updateState = { related -> mutableState.value = mutableState.value.copy(relatedPosts = related) },
+    )
     override val state: StateFlow<ForYouUiState> = mutableState.asStateFlow()
 
     private val effectChannel = Channel<ForYouEffect>(capacity = Channel.BUFFERED)
@@ -183,12 +197,31 @@ internal class ForYouViewModel(
     }
 
     override fun onAction(action: ForYouAction) {
+        when (action) {
+            is ForYouAction.RelatedLikeCommitted -> {
+                relatedPosts.onLikeCommitted(action.post, action.outcome)
+                return
+            }
+            ForYouAction.RetryRelatedPosts -> {
+                relatedPosts.retry()
+                return
+            }
+            ForYouAction.DismissRelatedPosts -> {
+                relatedPosts.clear()
+                return
+            }
+            else -> Unit
+        }
         if (action is ForYouAction.ReplaySearch && !isReplayReady()) {
             pendingReplaySearch = action
             return
         }
+        val previousRelated = mutableState.value.relatedPosts
         val transition = mutableState.value.reduce(action)
         mutableState.value = transition.state
+        if (previousRelated != RelatedPostsUiState.Idle && transition.state.relatedPosts == RelatedPostsUiState.Idle) {
+            relatedPosts.clear()
+        }
         persistRouteInputs(transition.state)
         transition.effect?.let(::handleEffect)
     }
@@ -209,6 +242,7 @@ internal class ForYouViewModel(
 
         if (activeProfileLikesCount <= 0) {
             cancelActiveReduction()
+            relatedPosts.clear()
             engine.clear()
             publishSnapshot(activeLikesOverride = 0)
             environmentSynchronized = true
@@ -225,8 +259,7 @@ internal class ForYouViewModel(
         val current = mutableState.value
         val shouldRefresh = engineChanged ||
             current.results.isEmpty() ||
-            previous.activeProfileId != settings.activeProfileId ||
-            previous.activeProfileLikesCount != activeProfileLikesCount
+            previous.activeProfileId != settings.activeProfileId
         if (shouldRefresh && !current.isRefreshing && !current.isPaging) {
             onAction(ForYouAction.Refresh(shuffle = false))
         }
@@ -407,6 +440,7 @@ internal class ForYouViewModel(
             activeRequest = previous.activeRequest,
             isRefreshing = previous.isRefreshing,
             isPaging = previous.isPaging,
+            relatedPosts = previous.relatedPosts,
         )
         persistRouteInputs(mutableState.value)
     }
@@ -437,6 +471,7 @@ internal class ForYouViewModel(
             coordinator: ForYouCoordinator,
             initialProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
             initialSort: SortMode? = null,
+            relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 ForYouViewModel(
@@ -444,6 +479,7 @@ internal class ForYouViewModel(
                     savedStateHandle = createSavedStateHandle(),
                     initialProfiles = initialProfiles,
                     initialSort = initialSort,
+                    relatedPostsLoader = relatedPostsLoader,
                 )
             }
         }

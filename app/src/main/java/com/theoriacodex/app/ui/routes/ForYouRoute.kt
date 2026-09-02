@@ -11,6 +11,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.recommend.ForYouCoordinator
 import com.theoriacodex.app.recommend.ForYouScreen
 import com.theoriacodex.app.recommend.ForYouViewModel
+import com.theoriacodex.app.related.RelatedPostsLoading
+import com.theoriacodex.app.related.loadedPosts
 import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouEffect
@@ -92,6 +94,7 @@ internal class ForYouRouteOwnerHandle(
 @Composable
 internal fun ForYouRoute(
     coordinator: ForYouCoordinator,
+    relatedPostsLoader: RelatedPostsLoading,
     mediaDurationCoordinator: MediaDurationCoordinator,
     pixivUgoiraClient: PixivUgoiraClient?,
     config: ForYouRouteConfig,
@@ -104,6 +107,7 @@ internal fun ForYouRoute(
         key = FOR_YOU_ROUTE_OWNER_KEY,
         factory = ForYouViewModel.factory(
             coordinator = coordinator,
+            relatedPostsLoader = relatedPostsLoader,
             initialProfiles = config.settings.recommendationProfiles,
             initialSort = fabRestoreState.sortMode?.let { encoded ->
                 com.theoriacodex.domain.model.SortMode.entries.firstOrNull { it.name == encoded }
@@ -111,12 +115,15 @@ internal fun ForYouRoute(
         ),
     )
     val state by owner.state.collectAsStateWithLifecycle()
+    val durationPosts = remember(state.results, state.relatedPosts) {
+        (state.results + state.relatedPosts.loadedPosts).distinctBy(Post::id)
+    }
     val duration = rememberMediaDurationRouteBinding(
         coordinator = mediaDurationCoordinator,
         routeName = "for-you",
         ownerKey = FOR_YOU_DURATION_OWNER_KEY,
         contentIdentity = state.seedId.ifBlank { "unseeded" },
-        posts = state.results,
+        posts = durationPosts,
         resolveInBackground = config.resolveUnknownAnimatedDurations,
     )
     val ownerHandle = remember(owner) { ForYouRouteOwnerHandle(owner) }

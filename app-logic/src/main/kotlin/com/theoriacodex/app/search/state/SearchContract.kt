@@ -3,6 +3,8 @@ package com.theoriacodex.app.search.state
 import com.theoriacodex.app.search.NhentaiLanguageFilter
 import com.theoriacodex.app.search.DateRangePreset
 import com.theoriacodex.app.search.SearchVisibilityFilters
+import com.theoriacodex.app.related.LikeToggleOutcome
+import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.adapter.FacetedSearchScope
@@ -25,6 +27,7 @@ data class SearchUiState(
     val suggestions: SearchSuggestionsUiState = SearchSuggestionsUiState(),
     val execution: SearchExecutionUiState = SearchExecutionUiState(),
     val restoration: SearchRestorationUiState = SearchRestorationUiState.NotStarted,
+    val relatedPosts: RelatedPostsUiState = RelatedPostsUiState.Idle,
 ) {
     val loading: Boolean
         get() = execution.activeKind != null && execution.activeKind != SearchRequestKind.PAGE
@@ -197,6 +200,16 @@ sealed interface SearchAction {
     data class SetNhentaiFullColor(val enabled: Boolean) : SearchAction
     data object ResetFilters : SearchAction
     data class RememberResolvedPost(val post: Post) : SearchAction
+    data class RelatedLikeCommitted(
+        val post: Post,
+        val outcome: LikeToggleOutcome,
+    ) : SearchAction
+    data object RetryRelatedPosts : SearchAction
+    data object DismissRelatedPosts : SearchAction
+    data class OpenRelatedResult(
+        val index: Int,
+        val visibleResults: List<Post>,
+    ) : SearchAction
     data class ScrollChanged(
         val firstVisibleItemIndex: Int,
         val firstVisibleItemOffsetPx: Int,

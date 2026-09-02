@@ -94,6 +94,7 @@ import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.recommend.trainingTagsFor
+import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.recents.RecentsScreen
 import com.theoriacodex.app.recents.fypSeedBySource
 import com.theoriacodex.app.recommend.state.ForYouAction
@@ -625,9 +626,9 @@ internal fun TheoriaAppContent(
         return workflowDependencies.likesCodexSync.ensureProfileCodex(profile)
     }
 
-    suspend fun toggleLikeAndSyncCodex(post: Post) {
+    suspend fun toggleLikeAndSyncCodex(post: Post): LikeToggleOutcome {
         val profile = dataDependencies.currentActiveRecommendationProfile()
-        workflowDependencies.likesCodexSync.toggle(
+        return workflowDependencies.likesCodexSync.toggle(
             profile = profile,
             post = post,
             trainingTags = trainingTagsFor(post),
@@ -1379,6 +1380,7 @@ internal fun TheoriaAppContent(
                                             ?: return@BrowsingDestinationStateBoundary
                                         SearchRoute(
                                         coordinator = featureDependencies.search,
+                                        relatedPostsLoader = featureDependencies.relatedPosts,
                                         mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
                                         pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                         config = SearchRouteConfig(
@@ -1418,7 +1420,11 @@ internal fun TheoriaAppContent(
                                                 Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
                                             },
                                             onToggleLike = { post ->
-                                                scope.launch { toggleLikeAndSyncCodex(post) }
+                                                val owner = searchRouteOwnerBinding.current
+                                                scope.launch {
+                                                    val outcome = toggleLikeAndSyncCodex(post)
+                                                    owner?.dispatch(SearchAction.RelatedLikeCommitted(post, outcome))
+                                                }
                                             },
                                             onOpenCreatorProfile = { creator ->
                                                 scope.launch { openCreatorProfile(creator) }
@@ -1449,6 +1455,7 @@ internal fun TheoriaAppContent(
                                             ?: return@BrowsingDestinationStateBoundary
                                         ForYouRoute(
                                         coordinator = featureDependencies.forYou,
+                                        relatedPostsLoader = featureDependencies.relatedPosts,
                                         mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
                                         pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                         config = ForYouRouteConfig(
@@ -1474,11 +1481,13 @@ internal fun TheoriaAppContent(
                                                     ViewerSession(
                                                         posts = preparedPosts,
                                                         context = effect.context,
-                                                        liveSearchBinding = true,
+                                                        liveSearchBinding = effect.liveSearchBinding,
                                                         searchVisibilityFilters = effect.visibilityFilters,
                                                     ),
                                                 )
-                                                featureDependencies.search.setViewerLaunchContext(effect.context)
+                                                if (effect.liveSearchBinding) {
+                                                    featureDependencies.search.setViewerLaunchContext(effect.context)
+                                                }
                                                 navController.navigate(AppRoute.Viewer)
                                             },
                                             onNavigateToSearch = {
@@ -1496,7 +1505,11 @@ internal fun TheoriaAppContent(
                                                 showActionableFeedback("Seed hidden", "Undo")
                                             },
                                             onToggleLike = { post ->
-                                                scope.launch { toggleLikeAndSyncCodex(post) }
+                                                val owner = forYouRouteOwnerBinding.current
+                                                scope.launch {
+                                                    val outcome = toggleLikeAndSyncCodex(post)
+                                                    owner?.dispatch(ForYouAction.RelatedLikeCommitted(post, outcome))
+                                                }
                                             },
                                             onRequestSaveToCodex = { post ->
                                                 requestSaveToCodex(post, fromForYou = true)
@@ -2077,7 +2090,7 @@ internal fun TheoriaAppContent(
                                     )
                                     Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
                                 },
-                                onToggleLike = ::toggleLikeAndSyncCodex,
+                                onToggleLike = { post -> toggleLikeAndSyncCodex(post) },
                                 onOpenCreatorProfile = ::openCreatorProfile,
                                 onApplyTag = { post, term, excluded ->
                                     if (excluded) {

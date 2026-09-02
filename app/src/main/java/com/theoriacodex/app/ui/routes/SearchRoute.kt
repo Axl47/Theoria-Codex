@@ -17,6 +17,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.search.SearchCoordinator
 import com.theoriacodex.app.search.SearchScreen
 import com.theoriacodex.app.search.SearchViewModel
+import com.theoriacodex.app.related.RelatedPostsLoading
+import com.theoriacodex.app.related.loadedPosts
 import com.theoriacodex.app.media.MediaDurationCoordinator
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchEffect
@@ -262,6 +264,7 @@ internal class SearchRouteResumeObserver(
 @Composable
 internal fun SearchRoute(
     coordinator: SearchCoordinator,
+    relatedPostsLoader: RelatedPostsLoading,
     mediaDurationCoordinator: MediaDurationCoordinator,
     pixivUgoiraClient: PixivUgoiraClient?,
     config: SearchRouteConfig,
@@ -272,15 +275,18 @@ internal fun SearchRoute(
 ) {
     val owner = viewModel<SearchViewModel>(
         key = SEARCH_ROUTE_OWNER_KEY,
-        factory = SearchViewModel.factory(coordinator),
+        factory = SearchViewModel.factory(coordinator, relatedPostsLoader),
     )
     val state by owner.state.collectAsStateWithLifecycle()
+    val durationPosts = remember(state.content.results, state.relatedPosts) {
+        (state.content.results + state.relatedPosts.loadedPosts).distinctBy(Post::id)
+    }
     val duration = rememberMediaDurationRouteBinding(
         coordinator = mediaDurationCoordinator,
         routeName = "search",
         ownerKey = SEARCH_DURATION_OWNER_KEY,
         contentIdentity = state.query.appliedQueryHash.ifBlank { "unapplied" },
-        posts = state.content.results,
+        posts = durationPosts,
         resolveInBackground = config.resolveUnknownAnimatedDurations,
     )
     val ownerHandle = remember(owner) { SearchRouteOwnerHandle(owner) }

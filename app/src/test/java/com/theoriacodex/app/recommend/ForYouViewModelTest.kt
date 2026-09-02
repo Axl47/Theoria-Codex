@@ -4,11 +4,15 @@ import androidx.lifecycle.SavedStateHandle
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouCoordinatorSnapshot
 import com.theoriacodex.app.recommend.state.ForYouEffect
+import com.theoriacodex.app.related.LikeToggleOutcome
+import com.theoriacodex.app.related.RelatedPostsLoading
+import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.defaultRecommendationProfiles
+import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SortMode
@@ -30,6 +34,66 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ForYouViewModelTest {
+    @Test
+    fun `committed like loads related shelf and explicit refresh clears it`() = runTest {
+        val seed = testPost(sourcePostId = "seed")
+        val related = testPost(sourcePostId = "related")
+        val engine = FakeForYouRouteEngine().apply {
+            current = current.copy(
+                activeProfileLikesCount = 1,
+                results = listOf(seed),
+                seedId = "seed",
+            )
+            refreshResult = listOf(seed)
+        }
+        val loader = FakeForYouRelatedPostsLoader(listOf(related))
+        val viewModel = ForYouViewModel(
+            engine = engine,
+            savedStateHandle = SavedStateHandle(),
+            coroutineScope = this,
+            relatedPostsLoader = loader,
+        )
+        advanceUntilIdle()
+
+        viewModel.onAction(ForYouAction.RelatedLikeCommitted(seed, LikeToggleOutcome.LIKED))
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf("related"),
+            (viewModel.state.value.relatedPosts as RelatedPostsUiState.Loaded)
+                .posts.map { post -> post.id.sourcePostId },
+        )
+        assertEquals(listOf(seed.id), loader.requests)
+
+        val effect = async { viewModel.effects.first() }
+        viewModel.onAction(ForYouAction.OpenRelatedResult(0, listOf(related)))
+        val open = effect.await() as ForYouEffect.OpenViewer
+        assertEquals(ViewerStreamSource.RELATED, open.context.streamSource)
+        assertFalse(open.liveSearchBinding)
+
+        viewModel.onAction(ForYouAction.Refresh(shuffle = true))
+        assertEquals(RelatedPostsUiState.Idle, viewModel.state.value.relatedPosts)
+    }
+
+    @Test
+    fun `count only change keeps a non empty feed without another refresh`() = runTest {
+        val post = testPost(sourcePostId = "stable")
+        val engine = FakeForYouRouteEngine().apply { refreshResult = listOf(post) }
+        val viewModel = ForYouViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        advanceUntilIdle()
+
+        viewModel.synchronizeEnvironment(AppSettings(), activeProfileLikesCount = 1)
+        advanceUntilIdle()
+        assertEquals(1, engine.refreshCalls)
+
+        viewModel.synchronizeEnvironment(AppSettings(), activeProfileLikesCount = 2)
+        advanceUntilIdle()
+
+        assertEquals(1, engine.refreshCalls)
+        assertEquals(2, viewModel.state.value.activeProfileLikesCount)
+        assertEquals(listOf(post), viewModel.state.value.results)
+    }
+
     @Test
     fun `saved route inputs reconstruct before provider work`() = runTest {
         val engine = FakeForYouRouteEngine()
@@ -347,7 +411,8 @@ private class FakeForYouRouteEngine(
     var firstRefreshResult: List<Post> = emptyList()
     var blacklistStarted: CompletableDeferred<Unit>? = null
     var blacklistRelease: CompletableDeferred<Unit>? = null
-    private var refreshCalls = 0
+    var refreshCalls = 0
+        private set
 
     override suspend fun initialize() {
         initializeCalls += 1
@@ -475,5 +540,16 @@ private class FakeForYouRouteEngine(
         current = current.copy(
             results = current.results.toMutableList().apply { this[index] = post },
         )
+    }
+}
+
+private class FakeForYouRelatedPostsLoader(
+    private val posts: List<Post>,
+) : RelatedPostsLoading {
+    val requests = mutableListOf<PostId>()
+    override fun supports(source: SourceKey): Boolean = source == SourceKey.PIXIV
+    override suspend fun load(seed: PostId): List<Post> {
+        requests += seed
+        return posts
     }
 }

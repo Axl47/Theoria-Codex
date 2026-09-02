@@ -105,6 +105,7 @@ internal data class ViewerRouteLiveSourceState(
         ViewerStreamSource.SEARCH -> search
         ViewerStreamSource.FOR_YOU -> forYou
         ViewerStreamSource.CREATOR_PROFILE -> creatorProfile
+        ViewerStreamSource.RELATED,
         ViewerStreamSource.CODEX,
         ViewerStreamSource.RECENTS,
         -> null

@@ -2,6 +2,9 @@ package com.theoriacodex.app.recommend.state
 
 import com.theoriacodex.app.recommend.ForYouCoordinator
 import com.theoriacodex.app.recommend.buildForYouSeedId
+import com.theoriacodex.app.related.LikeToggleOutcome
+import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
@@ -58,6 +61,7 @@ data class ForYouUiState(
     val emptyReason: ForYouEmptyReason? = null,
     val nextRequestGeneration: Long = 1L,
     val activeRequest: ForYouRequestIdentity? = null,
+    val relatedPosts: RelatedPostsUiState = RelatedPostsUiState.Idle,
 ) {
     val canRefresh: Boolean
         get() = activeProfileLikesCount > 0 && !isRefreshing && !isPaging
@@ -88,6 +92,16 @@ sealed interface ForYouAction {
         val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
     ) : ForYouAction
     data object GoToSearch : ForYouAction
+    data class RelatedLikeCommitted(
+        val post: Post,
+        val outcome: LikeToggleOutcome,
+    ) : ForYouAction
+    data object RetryRelatedPosts : ForYouAction
+    data object DismissRelatedPosts : ForYouAction
+    data class OpenRelatedResult(
+        val index: Int,
+        val visibleResults: List<Post>,
+    ) : ForYouAction
     data class RefreshCompleted(
         val request: ForYouRequestIdentity,
         val snapshot: ForYouCoordinatorSnapshot,
@@ -162,6 +176,7 @@ sealed interface ForYouEffect {
         val posts: List<Post>,
         val context: ViewerLaunchContext,
         val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
+        val liveSearchBinding: Boolean = true,
     ) : ForYouEffect {
         override val request: ForYouRequestIdentity? = null
     }
@@ -392,6 +407,30 @@ fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
         }
 
         ForYouAction.GoToSearch -> ForYouTransition(this, ForYouEffect.NavigateToSearch)
+        is ForYouAction.OpenRelatedResult -> {
+            if (action.index !in action.visibleResults.indices) {
+                unchanged()
+            } else {
+                val request = relatedPosts.requestOrNull ?: return unchanged()
+                ForYouTransition(
+                    state = this,
+                    effect = ForYouEffect.OpenViewer(
+                        posts = action.visibleResults.toList(),
+                        context = ViewerLaunchContext(
+                            queryHash = "related:${request.seed.id.source.name}:${request.seed.id.sourcePostId}",
+                            startIndex = action.index,
+                            streamSource = ViewerStreamSource.RELATED,
+                            scrollOffsetHint = 0,
+                        ),
+                        liveSearchBinding = false,
+                    ),
+                )
+            }
+        }
+        is ForYouAction.RelatedLikeCommitted,
+        ForYouAction.RetryRelatedPosts,
+        ForYouAction.DismissRelatedPosts,
+        -> unchanged()
         is ForYouAction.RefreshCompleted -> {
             if (!accepts(action.request, ForYouRequestKind.REFRESH)) {
                 unchanged()
@@ -499,6 +538,7 @@ private fun ForYouUiState.beginRefresh(
             emptyReason = null,
             nextRequestGeneration = request.generation + 1L,
             activeRequest = request,
+            relatedPosts = RelatedPostsUiState.Idle,
         ),
         effect = effect(request),
     )

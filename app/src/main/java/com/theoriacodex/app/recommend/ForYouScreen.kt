@@ -65,7 +65,9 @@ import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.PostActionSheet
-import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
+import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
+import com.theoriacodex.app.ui.components.RelatedPostsShelf
+import com.theoriacodex.app.ui.components.rememberRelatedFeedPresentation
 import com.theoriacodex.app.ui.components.expandableControlSemantics
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.FeedFabRestoreState
@@ -150,6 +152,19 @@ fun ForYouScreen(
             knownDurationMsByPostId = acquiredDurations,
         )
     }
+    val relatedPresentation = rememberRelatedFeedPresentation(
+        canonicalPosts = state.results,
+        visibleCanonicalPosts = visibleResults,
+        relatedState = state.relatedPosts,
+        visibilityFilters = visibilityFilters,
+        likedPostIds = emptySet(),
+        savedPostIds = emptySet(),
+        watchedPostIds = emptySet(),
+        unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy,
+        durationStates = durationStates,
+        durationFilterActive = animatedDurationFilterActive,
+    )
+    val feedProjection = relatedPresentation.projection
     LaunchedEffect(animatedDurationFilterActive) {
         onDurationFilterChanged(animatedDurationFilterActive)
     }
@@ -163,24 +178,26 @@ fun ForYouScreen(
         state.canLoadMore,
         animatedDurationFilterActive,
         durationReadiness.pendingCount,
+        feedProjection,
     ) {
         snapshotFlow {
-            (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to state.isPaging
-        }.collect { (lastVisibleIndex, loadingMoreState) ->
+            val visibleIndices = gridState.layoutInfo.visibleItemsInfo.map { item -> item.index }
+            feedProjection.greatestVisibleCanonicalIndex(visibleIndices) to state.isPaging
+        }.collect { (lastVisibleCanonicalIndex, loadingMoreState) ->
             if (loadingMoreState) return@collect
             if (state.isRefreshing || state.isPaging || !state.canLoadMore) return@collect
             if (durationReadiness.isResolving) return@collect
-            if (visibleResults.isEmpty() || lastVisibleIndex < 0) {
+            if (visibleResults.isEmpty() || lastVisibleCanonicalIndex == null) {
                 if (animatedDurationFilterActive && state.results.isNotEmpty()) {
                     onAction(ForYouAction.LoadNextPage)
                 }
                 return@collect
             }
 
-            val triggerIndex = ((visibleResults.lastIndex.coerceAtLeast(0)) * FOR_YOU_PREFETCH_RATIO)
+            val triggerIndex = ((state.results.lastIndex.coerceAtLeast(0)) * FOR_YOU_PREFETCH_RATIO)
                 .toInt()
                 .coerceAtLeast(0)
-            if (lastVisibleIndex >= triggerIndex) {
+            if (lastVisibleCanonicalIndex >= triggerIndex) {
                 onAction(ForYouAction.LoadNextPage)
             }
         }
@@ -313,7 +330,7 @@ fun ForYouScreen(
                 )
             }
 
-            visibleResults.isEmpty() -> {
+            feedProjection.entries.isEmpty() -> {
                 FeedEmptyTile(
                     message = if (durationReadiness.isResolving) {
                             "Resolving durations…"
@@ -330,8 +347,8 @@ fun ForYouScreen(
             }
 
             else -> {
-                TwoColumnPostStaggeredGrid(
-                    posts = visibleResults,
+                TwoColumnProjectedPostStaggeredGrid(
+                    projection = feedProjection,
                     state = gridState,
                     modifier = Modifier.fillMaxSize(),
                     showPagingTile = state.isPaging,
@@ -340,34 +357,55 @@ fun ForYouScreen(
                     } else {
                         null
                     },
-                ) { index, post ->
-                    val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
-                    SearchResultCard(
-                        post = post,
-                        pixivUgoiraClient = pixivUgoiraClient,
-                        acquiredDurationMs = observedDurationMs ?: acquiredDurations[post.id],
-                        showSourceBadge = true,
-                        liked = post.id in likedPostIds,
-                        onToggleLike = { onToggleLike(post) },
-                        onClick = {
-                            onAction(
-                                ForYouAction.OpenResult(
-                                    index = index,
-                                    scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
-                                    visibleResults = visibleResults,
-                                    visibilityFilters = visibilityFilters,
+                    postContent = { _, post ->
+                        val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
+                        SearchResultCard(
+                            post = post,
+                            pixivUgoiraClient = pixivUgoiraClient,
+                            acquiredDurationMs = observedDurationMs ?: acquiredDurations[post.id],
+                            showSourceBadge = true,
+                            liked = post.id in likedPostIds,
+                            onToggleLike = { onToggleLike(post) },
+                            onClick = {
+                                val visibleIndex = visibleResults.indexOfFirst { candidate -> candidate.id == post.id }
+                                onAction(
+                                    ForYouAction.OpenResult(
+                                        index = visibleIndex,
+                                        scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
+                                        visibleResults = visibleResults,
+                                        visibilityFilters = visibilityFilters,
+                                    )
                                 )
-                            )
-                        },
-                        onLongPress = { selectedActionPost = post },
-                        onViewportChanged = { visible ->
-                            onDurationPostVisibilityChanged(post, visible)
-                        },
-                        onAuthoritativeDurationKnown = { durationMs ->
-                            onAuthoritativeDurationKnown(post, durationMs)
-                        },
-                    )
-                }
+                            },
+                            onLongPress = { selectedActionPost = post },
+                            onViewportChanged = { visible ->
+                                onDurationPostVisibilityChanged(post, visible)
+                            },
+                            onAuthoritativeDurationKnown = { durationMs ->
+                                onAuthoritativeDurationKnown(post, durationMs)
+                            },
+                        )
+                    },
+                    shelfContent = {
+                        RelatedPostsShelf(
+                            state = state.relatedPosts,
+                            posts = relatedPresentation.visiblePosts,
+                            likedPostIds = likedPostIds,
+                            pixivUgoiraClient = pixivUgoiraClient,
+                            acquiredDurations = relatedPresentation.knownDurationMsByPostId,
+                            durationStateForPost = durationStateForPost,
+                            onToggleLike = onToggleLike,
+                            onOpenPost = { posts, index ->
+                                onAction(ForYouAction.OpenRelatedResult(index, posts))
+                            },
+                            onLongPress = { post -> selectedActionPost = post },
+                            onDismiss = { onAction(ForYouAction.DismissRelatedPosts) },
+                            onRetry = { onAction(ForYouAction.RetryRelatedPosts) },
+                            onViewportChanged = onDurationPostVisibilityChanged,
+                            onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
+                        )
+                    },
+                )
             }
         }
         }

@@ -123,7 +123,8 @@ import com.theoriacodex.app.ui.components.FeedFilterSheet
 import com.theoriacodex.app.ui.components.FeedLoadingState
 import com.theoriacodex.app.ui.components.DurationRouteEnvironmentEffect
 import com.theoriacodex.app.ui.components.PostActionSheet
-import com.theoriacodex.app.ui.components.TwoColumnPostStaggeredGrid
+import com.theoriacodex.app.ui.components.TwoColumnProjectedPostStaggeredGrid
+import com.theoriacodex.app.ui.components.rememberRelatedFeedPresentation
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchSourceScope
@@ -312,6 +313,14 @@ fun SearchScreen(
             knownDurationMsByPostId = acquiredDurations,
         )
     }
+    val relatedPresentation = rememberRelatedFeedPresentation(
+        canonicalPosts = displayResults, visibleCanonicalPosts = visibleResults,
+        relatedState = state.relatedPosts, visibilityFilters = visibilityFilters,
+        likedPostIds = likedPostIds, savedPostIds = savedPostIds, watchedPostIds = watchedPostIds,
+        unknownAnimatedDurationPolicy = unknownAnimatedDurationPolicy, durationStates = durationStates,
+        durationFilterActive = animatedDurationFilterActive,
+    )
+    val feedProjection = relatedPresentation.projection
     LaunchedEffect(animatedDurationFilterActive) {
         onDurationFilterChanged(animatedDurationFilterActive)
     }
@@ -366,6 +375,7 @@ fun SearchScreen(
         scrollRestoration?.scrollRequestId,
         visibleResults.isNotEmpty(),
         animatedFilterActive,
+        feedProjection,
     ) {
         val request = scrollRestoration ?: return@LaunchedEffect
         val restored = request.scrollState ?: return@LaunchedEffect
@@ -373,20 +383,22 @@ fun SearchScreen(
 
         // A request is issued only for route entry/re-entry and acknowledged after it is applied.
         // Page appends therefore cannot replay the saved position and jump the grid unexpectedly.
-        val lastIndex = visibleResults.lastIndex.coerceAtLeast(0)
+        val lastIndex = feedProjection.entries.lastIndex.coerceAtLeast(0)
         gridState.scrollToItem(
-            index = restored.firstVisibleItemIndex.coerceIn(0, lastIndex),
+            index = feedProjection.gridIndexForCanonicalIndex(restored.firstVisibleItemIndex)
+                .coerceIn(0, lastIndex),
             scrollOffset = restored.firstVisibleItemOffsetPx.coerceAtLeast(0),
         )
         onAction(SearchAction.ScrollRestorationApplied(request.scrollRequestId))
     }
 
-    LaunchedEffect(queryHash, animatedFilterActive) {
+    LaunchedEffect(queryHash, animatedFilterActive, feedProjection) {
         if (animatedFilterActive) return@LaunchedEffect
         snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
             .distinctUntilChanged()
             .collect { (index, offset) ->
-                onAction(SearchAction.ScrollChanged(index, offset))
+                val canonical = feedProjection.canonicalPositionForGridIndex(index, offset)
+                onAction(SearchAction.ScrollChanged(canonical.index, canonical.offsetPx))
             }
     }
 
@@ -400,20 +412,22 @@ fun SearchScreen(
         animatedFilterActive,
         animatedDurationFilterActive,
         durationReadiness.pendingCount,
+        feedProjection,
     ) {
         snapshotFlow {
-            (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to state.loadingMore
-        }.collect { (lastVisibleIndex, loadingMoreState) ->
+            val visibleIndices = gridState.layoutInfo.visibleItemsInfo.map { item -> item.index }
+            feedProjection.greatestVisibleCanonicalIndex(visibleIndices) to state.loadingMore
+        }.collect { (lastVisibleCanonicalIndex, loadingMoreState) ->
             if (loadingMoreState) return@collect
             if (state.loading || state.loadingMore || !state.content.canLoadMore) return@collect
             if (durationReadiness.isResolving) return@collect
 
-            val totalVisible = visibleResults.size
-            val shouldTriggerByThreshold = if (totalVisible > 0 && lastVisibleIndex >= 0) {
-                val triggerIndex = ((totalVisible - 1) * PAGINATION_PREFETCH_RATIO)
+            val totalCanonical = displayResults.size
+            val shouldTriggerByThreshold = if (totalCanonical > 0 && lastVisibleCanonicalIndex != null) {
+                val triggerIndex = ((totalCanonical - 1) * PAGINATION_PREFETCH_RATIO)
                     .toInt()
                     .coerceAtLeast(0)
-                lastVisibleIndex >= triggerIndex
+                lastVisibleCanonicalIndex >= triggerIndex
             } else {
                 false
             }
@@ -421,7 +435,7 @@ fun SearchScreen(
             // Keep filling animated feed when the filtered set is still too small.
             val shouldTriggerForAnimatedBuffer =
                 (animatedFilterActive || animatedDurationFilterActive) &&
-                    totalVisible < ANIMATED_PREFETCH_MIN_VISIBLE &&
+                    visibleResults.size < ANIMATED_PREFETCH_MIN_VISIBLE &&
                     state.content.results.isNotEmpty()
 
             if (shouldTriggerByThreshold || shouldTriggerForAnimatedBuffer) {
@@ -689,7 +703,7 @@ fun SearchScreen(
                         )
                     }
                 }
-                visibleResults.isEmpty() -> {
+                feedProjection.entries.isEmpty() -> {
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -753,8 +767,8 @@ fun SearchScreen(
                                 message = authMessage,
                             )
                         }
-                        TwoColumnPostStaggeredGrid(
-                            posts = visibleResults,
+                        TwoColumnProjectedPostStaggeredGrid(
+                            projection = feedProjection,
                             state = gridState,
                             modifier = Modifier.weight(1f),
                             showPagingTile = state.loadingMore,
@@ -763,39 +777,55 @@ fun SearchScreen(
                             } else {
                                 null
                             },
-                        ) { _, post ->
-                            val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
-                            SearchResultCard(
-                                post = post,
-                                pixivUgoiraClient = pixivUgoiraClient,
-                                acquiredDurationMs = observedDurationMs ?: acquiredDurations[post.id],
-                                showSourceBadge = state.query.appliedSourceScope !is SearchSourceScope.Single,
-                                liked = post.id in likedPostIds,
-                                onToggleLike = onToggleLike?.let { toggle ->
-                                    { toggle(post) }
-                                },
-                                resolvePostById = resolvePostById,
-                                recoverPostMedia = { failedPost, failedMedia ->
-                                    recoverPostMedia(failedPost, failedMedia)
-                                },
-                                onClick = {
-                                    focusManager.clearFocus()
-                                    onAction(SearchAction.OpenResult(
-                                        postId = post.id,
-                                        visibleResults = visibleResults,
-                                        scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
-                                        visibilityFilters = visibilityFilters,
-                                    ))
-                                },
-                                onLongPress = { openPostActionSheet(post) },
-                                onViewportChanged = { visible ->
-                                    onDurationPostVisibilityChanged(post, visible)
-                                },
-                                onAuthoritativeDurationKnown = { durationMs ->
-                                    onAuthoritativeDurationKnown(post, durationMs)
-                                },
-                            )
-                        }
+                            postContent = { _, post ->
+                                val observedDurationMs = observedMediaDurationMs(post, durationStateForPost)
+                                SearchResultCard(
+                                    post = post,
+                                    pixivUgoiraClient = pixivUgoiraClient,
+                                    acquiredDurationMs = observedDurationMs ?: acquiredDurations[post.id],
+                                    showSourceBadge = state.query.appliedSourceScope !is SearchSourceScope.Single,
+                                    liked = post.id in likedPostIds,
+                                    onToggleLike = onToggleLike?.let { toggle ->
+                                        { toggle(post) }
+                                    },
+                                    resolvePostById = resolvePostById,
+                                    recoverPostMedia = { failedPost, failedMedia ->
+                                        recoverPostMedia(failedPost, failedMedia)
+                                    },
+                                    onClick = {
+                                        focusManager.clearFocus()
+                                        onAction(SearchAction.OpenResult(
+                                            postId = post.id,
+                                            visibleResults = visibleResults,
+                                            scrollOffsetHint = gridState.firstVisibleItemScrollOffset,
+                                            visibilityFilters = visibilityFilters,
+                                        ))
+                                    },
+                                    onLongPress = { openPostActionSheet(post) },
+                                    onViewportChanged = { visible ->
+                                        onDurationPostVisibilityChanged(post, visible)
+                                    },
+                                    onAuthoritativeDurationKnown = { durationMs ->
+                                        onAuthoritativeDurationKnown(post, durationMs)
+                                    },
+                                )
+                            },
+                            shelfContent = {
+                                SearchRelatedPostsShelf(
+                                    state = state.relatedPosts,
+                                    presentation = relatedPresentation,
+                                    likedPostIds = likedPostIds,
+                                    pixivUgoiraClient = pixivUgoiraClient,
+                                    durationStateForPost = durationStateForPost,
+                                    recoverPostMedia = recoverPostMedia,
+                                    onToggleLike = onToggleLike,
+                                    onAction = onAction,
+                                    onLongPress = ::openPostActionSheet,
+                                    onViewportChanged = onDurationPostVisibilityChanged,
+                                    onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
+                                )
+                            },
+                        )
                     }
                 }
             }

@@ -207,14 +207,14 @@
     <h1>ExecPlan: Surface Related Posts After Likes</h1>
     <p>After a successful local Like on a Pixiv or Gelbooru card in Search or For You, Theoria Codex will reveal one contextual, dismissible “More like this” shelf without mixing provider-related posts into the canonical feed. The shelf will preserve provider ordering, Search scroll restoration, FYP pagination, Viewer ownership, duration enrichment, and the rule that provider requests never become remote bookmarks or durable FYP searches.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Proposed</span>
+      <span class="pill">Status: Implemented — Live Validation Pending</span>
       <span class="pill">Owner: Codex</span>
       <span class="pill">Created: 2026-09-02</span>
       <span class="pill">Updated: 2026-09-02</span>
       <span class="pill">Plan: .docs/exec/pixiv-gelbooru-related-posts.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next Action</strong>Prototype and test the optional provider capability, especially Gelbooru’s server-rendered “More Like This” parser.</div>
+      <div class="card"><strong>Next Action</strong>Run read-only provider health with credentials and manually validate the isolated Debug app when those external inputs are available.</div>
       <div class="card"><strong>Main Risk</strong>Gelbooru has no documented related-post DAPI operation; its HTML recommendation block can change independently of the API.</div>
       <div class="card"><strong>Validation</strong>Focused JVM tests, final module/static/coverage batch, opt-in live provider probes, and an isolated Debug-app manual flow.</div>
       <div class="card"><strong>Affected Areas</strong><code>core-domain</code>, <code>core-sources</code>, <code>app-logic</code>, Search, For You, Viewer, shared feed UI, and architecture documentation.</div>
@@ -250,13 +250,24 @@
       <h2>Current Status</h2>
       <table class="status-table">
         <tbody>
-          <tr><td>Status</td><td>Proposed; repository orientation and product decisions are complete. No feature implementation has started.</td></tr>
-          <tr><td>Next action</td><td>Implement Phase 1’s provider capability and deterministic parser tests, then obtain sanitized live proof before depending on Gelbooru’s HTML shape.</td></tr>
-          <tr><td>Known blockers</td><td>None for deterministic implementation. Final provider acceptance requires usable Pixiv and Gelbooru credentials or already-authenticated isolated Debug-app accounts.</td></tr>
+          <tr><td>Status</td><td>Implemented and host-verified; live provider and isolated Debug-app acceptance remain pending.</td></tr>
+          <tr><td>Next action</td><td>Run the read-only provider health steps with credentials, then exercise the manual behavior matrix in <code>com.theoriacodex.debug</code>.</td></tr>
+          <tr><td>Known blockers</td><td>The current environment has no Pixiv access token or Gelbooru user/API key. No APK was installed or launched, so live provider and device behavior are not claimed.</td></tr>
           <tr><td>Durable data</td><td>No schema, Room, DataStore, Saved State, Recents payload, or query-persistence migration is planned.</td></tr>
           <tr><td>Device safety</td><td>Build-only validation is safe. Any later device install must prove the APK application ID is <code>com.theoriacodex.debug</code> before connecting to a personal device.</td></tr>
         </tbody>
       </table>
+
+      <h3>Recorded implementation evidence</h3>
+      <ul>
+        <li><code>./gradlew :core-domain:test :core-sources:test :app-logic:test :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:assembleDebug --no-configuration-cache</code> passed: 99 actionable tasks, 0 failures.</li>
+        <li><code>./gradlew koverXmlReport koverVerify --no-configuration-cache</code> passed after the final shared-controller extraction: 200 actionable tasks, 0 failures.</li>
+        <li><code>./gradlew :app-logic:detekt :app:detektDebug --no-configuration-cache</code> passed. App Detekt emitted its existing compiler-analysis warning but no finding.</li>
+        <li>The combined core Detekt command remains red only on inherited oversized Unified, provider-health, Hitomi, NHentai, and Pixiv owners. The new adapter interface, Gelbooru parser, shared state/projection, loader/controller, presentation, shelf, routes, and tests have no reported finding.</li>
+        <li><code>python3 scripts/check_hotspots.py --base HEAD</code> passed after moving duplicated Search/FYP orchestration and presentation into shared modules.</li>
+        <li>Final focused related/Search/FYP/Viewer/autoplay tests, Debug Kotlin compilation, Android-test compilation, and Debug assembly passed after that extraction.</li>
+        <li><code>app/build/outputs/apk/debug/output-metadata.json</code> proves <code>com.theoriacodex.debug</code>. No install or launch command was run.</li>
+      </ul>
     </section>
 
     <section id="context">
@@ -310,10 +321,10 @@
           <tr><td>Domain/provider production</td><td><code>core-domain/src/main/kotlin/com/theoriacodex/domain/adapter/SourceAdapter.kt</code><br><code>core-sources/src/main/kotlin/com/theoriacodex/sources/pixiv/PixivSourceAdapter.kt</code><br><code>core-sources/src/main/kotlin/com/theoriacodex/sources/gelbooru/GelbooruSourceAdapter.kt</code><br><code>core-sources/src/main/kotlin/com/theoriacodex/sources/gelbooru/GelbooruRelatedPostsParser.kt</code> (new)<br><code>core-sources/src/main/kotlin/com/theoriacodex/sources/health/ProviderHealth.kt</code></td></tr>
           <tr><td>Domain/provider tests</td><td><code>core-sources/src/test/kotlin/com/theoriacodex/sources/pixiv/PixivSourceAdapterTest.kt</code><br><code>core-sources/src/test/kotlin/com/theoriacodex/sources/gelbooru/GelbooruSourceAdapterTest.kt</code><br><code>core-sources/src/test/kotlin/com/theoriacodex/sources/gelbooru/GelbooruRelatedPostsParserTest.kt</code> (new)<br><code>core-sources/src/test/kotlin/com/theoriacodex/sources/health/ProviderHealthCheckerTest.kt</code><br><code>core-sources/src/test/kotlin/com/theoriacodex/sources/health/ProviderHealthCheckCliTest.kt</code> if the probe-case codec or reporting shape changes</td></tr>
           <tr><td>Platform-free state/projection</td><td><code>app-logic/src/main/kotlin/com/theoriacodex/app/related/RelatedPostsState.kt</code> (new)<br><code>app-logic/src/main/kotlin/com/theoriacodex/app/related/RelatedFeedProjection.kt</code> (new)<br><code>app-logic/src/test/kotlin/com/theoriacodex/app/related/RelatedPostsStateTest.kt</code> (new)<br><code>app-logic/src/test/kotlin/com/theoriacodex/app/related/RelatedFeedProjectionTest.kt</code> (new)</td></tr>
-          <tr><td>Application loading/workflow</td><td><code>app/src/main/java/com/theoriacodex/app/related/RelatedPostsLoader.kt</code> (new)<br><code>app/src/test/java/com/theoriacodex/app/related/RelatedPostsLoaderTest.kt</code> (new)<br><code>app/src/main/java/com/theoriacodex/app/di/TheoriaAppContainer.kt</code><br><code>app/src/main/java/com/theoriacodex/app/codex/LikesCodexSyncService.kt</code><br><code>app/src/test/java/com/theoriacodex/app/codex/LikesCodexSyncServiceTest.kt</code><br><code>app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt</code></td></tr>
-          <tr><td>Search</td><td><code>app-logic/src/main/kotlin/com/theoriacodex/app/search/state/SearchContract.kt</code><br><code>app/src/main/java/com/theoriacodex/app/search/SearchViewModel.kt</code><br><code>app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt</code><br><code>app/src/main/java/com/theoriacodex/app/ui/routes/SearchRoute.kt</code><br><code>app/src/test/java/com/theoriacodex/app/search/SearchViewModelTestFixture.kt</code><br><code>app/src/test/java/com/theoriacodex/app/search/RequestOwnershipSearchViewModelTest.kt</code><br><code>app/src/test/java/com/theoriacodex/app/search/ScrollPersistenceSearchViewModelTest.kt</code><br><code>app-logic/src/test/kotlin/com/theoriacodex/app/search/state/SearchStateContractTest.kt</code></td></tr>
+          <tr><td>Application loading/workflow</td><td><code>app/src/main/java/com/theoriacodex/app/related/RelatedPostsLoader.kt</code> (new)<br><code>app/src/main/java/com/theoriacodex/app/related/RelatedPostsRouteController.kt</code> (new)<br><code>app/src/test/java/com/theoriacodex/app/related/RelatedPostsLoaderTest.kt</code> (new)<br><code>app/src/main/java/com/theoriacodex/app/di/TheoriaAppContainer.kt</code><br><code>app/src/main/java/com/theoriacodex/app/codex/LikesCodexSyncService.kt</code><br><code>app/src/test/java/com/theoriacodex/app/codex/LikesCodexSyncServiceTest.kt</code><br><code>app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt</code></td></tr>
+          <tr><td>Search</td><td><code>app-logic/src/main/kotlin/com/theoriacodex/app/search/state/SearchContract.kt</code><br><code>app/src/main/java/com/theoriacodex/app/search/SearchViewModel.kt</code><br><code>app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt</code><br><code>app/src/main/java/com/theoriacodex/app/search/SearchRelatedPostsShelf.kt</code> (new)<br><code>app/src/main/java/com/theoriacodex/app/ui/routes/SearchRoute.kt</code><br><code>app/src/test/java/com/theoriacodex/app/search/SearchViewModelTestFixture.kt</code><br><code>app/src/test/java/com/theoriacodex/app/search/RequestOwnershipSearchViewModelTest.kt</code><br><code>app/src/test/java/com/theoriacodex/app/search/ScrollPersistenceSearchViewModelTest.kt</code><br><code>app-logic/src/test/kotlin/com/theoriacodex/app/search/state/SearchStateContractTest.kt</code></td></tr>
           <tr><td>For You</td><td><code>app/src/main/java/com/theoriacodex/app/recommend/state/ForYouStateContract.kt</code><br><code>app/src/main/java/com/theoriacodex/app/recommend/ForYouViewModel.kt</code><br><code>app/src/main/java/com/theoriacodex/app/recommend/ForYouScreen.kt</code><br><code>app/src/main/java/com/theoriacodex/app/ui/routes/ForYouRoute.kt</code><br><code>app/src/test/java/com/theoriacodex/app/recommend/state/ForYouStateContractTest.kt</code><br><code>app/src/test/java/com/theoriacodex/app/recommend/ForYouViewModelTest.kt</code></td></tr>
-          <tr><td>Shared grid/media/Viewer</td><td><code>app/src/main/java/com/theoriacodex/app/ui/components/PostStaggeredGrid.kt</code><br><code>core-data/src/main/kotlin/com/theoriacodex/data/repository/Repositories.kt</code><br><code>app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRoute.kt</code><br><code>app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRouteWorkflow.kt</code><br><code>app/src/test/java/com/theoriacodex/app/ui/routes/ViewerRoutePolicyTest.kt</code><br><code>app/src/test/java/com/theoriacodex/app/media/MediaDurationRouteViewModelTest.kt</code><br><code>app/src/test/java/com/theoriacodex/app/quality/FeedAutoplayArchitectureTest.kt</code><br><code>app/src/test/java/com/theoriacodex/app/quality/RelatedPostsArchitectureTest.kt</code> (new)</td></tr>
+          <tr><td>Shared grid/media/Viewer</td><td><code>app/src/main/java/com/theoriacodex/app/ui/components/PostStaggeredGrid.kt</code><br><code>app/src/main/java/com/theoriacodex/app/ui/components/RelatedFeedPresentation.kt</code> (new)<br><code>app/src/main/java/com/theoriacodex/app/ui/components/RelatedPostsShelf.kt</code> (new)<br><code>core-data/src/main/kotlin/com/theoriacodex/data/repository/Repositories.kt</code><br><code>app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRoute.kt</code><br><code>app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRouteWorkflow.kt</code><br><code>app/src/test/java/com/theoriacodex/app/ui/routes/ViewerRoutePolicyTest.kt</code><br><code>app/src/test/java/com/theoriacodex/app/media/MediaDurationRouteViewModelTest.kt</code><br><code>app/src/test/java/com/theoriacodex/app/quality/FeedAutoplayArchitectureTest.kt</code><br><code>app/src/test/java/com/theoriacodex/app/quality/RelatedPostsArchitectureTest.kt</code> (new)</td></tr>
           <tr><td>Durable guidance</td><td><code>AGENTS.md</code><br><code>.docs/exec/pixiv-gelbooru-related-posts.html</code></td></tr>
         </tbody>
       </table>
@@ -626,11 +637,12 @@ rg -n '"applicationId"\s*:\s*"com\.theoriacodex\.debug"' \
         <li>[x] 2026-09-02 — Traced the atomic Like result, Search/FYP state owners, grid index consumers, media-duration bindings, Viewer live/static boundary, provider adapters, and dependency construction.</li>
         <li>[x] 2026-09-02 — Confirmed product direction: one transient provider-native shelf and no count-only non-empty FYP reroll.</li>
         <li>[x] 2026-09-02 — Authored this standalone implementation and validation plan.</li>
-        <li>[ ] Implement and validate Phase 1 provider capability.</li>
-        <li>[ ] Implement and validate Phase 2 state/projection logic.</li>
-        <li>[ ] Implement and validate Phase 3 Like/route/FYP integration.</li>
-        <li>[ ] Implement and validate Phase 4 UI/media/Viewer integration.</li>
-        <li>[ ] Complete Phase 5 live and isolated Debug acceptance.</li>
+        <li>[x] 2026-09-02 — Implemented and validated Phase 1 provider capability. <code>./gradlew :core-domain:test :core-sources:test --no-configuration-cache</code> passed after the adapter/parser patch and again after the related health-probe contract.</li>
+        <li>[x] 2026-09-02 — Implemented and validated Phase 2 state/projection logic. Focused <code>RelatedPostsStateTest</code> and <code>RelatedFeedProjectionTest</code> passed through <code>:app-logic:test</code>.</li>
+        <li>[x] 2026-09-02 — Implemented and validated Phase 3 Like/route/FYP integration. Focused Likes workflow, loader, Search ViewModel, and For You ViewModel tests passed through <code>:app:testDebugUnitTest</code>; Debug Kotlin compilation passed.</li>
+        <li>[x] 2026-09-02 — Implemented and validated Phase 4 UI/media/Viewer integration. Focused related app-logic/app tests, <code>ViewerRoutePolicyTest</code>, and <code>FeedAutoplayArchitectureTest</code> passed together; Debug compilation passed.</li>
+        <li>[x] 2026-09-02 — Completed Phase 5 host validation: affected suites, Android-test compilation, Debug assembly, app/app-logic Detekt, aggregate Kover, hotspot, package-identity, HTML, and diff gates pass.</li>
+        <li>[!] Live provider and isolated Debug-app acceptance remain pending because credentials are absent and no APK was installed or launched.</li>
       </ul>
 
       <h3>Surprises And Discoveries</h3>
@@ -640,6 +652,8 @@ rg -n '"applicationId"\s*:\s*"com\.theoriacodex\.debug"' \
         <li><strong>Observation:</strong> Pixiv related continuation includes repeated seed/viewed parameters, but the app HTTP abstraction accepts a string map. <strong>Consequence:</strong> first bounded response only; no lossy token encoding.</li>
         <li><strong>Observation:</strong> Search persists raw lazy-grid indices and FYP/Search compare lazy-grid indices to post counts. <strong>Consequence:</strong> inserting a shelf without canonical translation would cause restoration drift and premature paging.</li>
         <li><strong>Observation:</strong> FYP currently refreshes whenever <code>activeProfileLikesCount</code> changes. <strong>Consequence:</strong> preserving an inline seed shelf requires the approved count-only refresh behavior change.</li>
+        <li><strong>Observation:</strong> the first complete diff exceeded frozen Search screen/ViewModel budgets because request and presentation logic existed in both routes. <strong>Consequence:</strong> one shared <code>RelatedPostsRouteController</code> and one shared related-feed presentation owner now keep both routes under the hotspot gate.</li>
+        <li><strong>Observation:</strong> repository-wide core Detekt is red on pre-existing oversized owners unrelated to this feature. <strong>Evidence:</strong> app/app-logic Detekt passes and no new related file appears in core findings; the hotspot debt-exact gate passes.</li>
       </ul>
 
       <h3>Decision Log</h3>
@@ -653,7 +667,7 @@ rg -n '"applicationId"\s*:\s*"com\.theoriacodex\.debug"' \
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>Planning outcome: the feature has explicit provider, transaction, state, placement, cancellation, pagination, scroll, media, Viewer, persistence, and validation boundaries. No implementation outcome exists yet. Update this paragraph after every completed phase with exact commands, counts, live observations, deviations, and remaining risks.</p>
+      <p>Implementation outcome: Search and FYP now surface one transient provider-native related shelf only after a committed local Like. Pixiv uses its bounded related endpoint; Gelbooru isolates and hydrates its HTML recommendation block. Shared latest-wins state/controller logic protects cancellation and canonical feeds; shared projection/presentation logic protects scroll, paging, filters, autoplay, and duration enrichment; and static <code>RELATED</code> Viewer sessions cannot bind to or restore the wrong feed. All host gates pass, including aggregate coverage and frozen hotspot budgets. Live provider and isolated Debug-app behavior remain explicitly pending because credentials/device validation were unavailable.</p>
     </section>
 
     <section id="recovery">

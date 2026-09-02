@@ -52,6 +52,12 @@ The Search route applies persisted scroll position once when the route is restor
 
 The collapsed Search field renders applied context through its existing unfocused placeholder slot. Build that summary only from `applied` query/source state plus current visibility-filter state; never copy the summary into the real text input or present draft terms as applied. Keep it one line with ellipsis and do not add a separate applied-query row.
 
+## Related Post Shelves
+
+Search and For You may show one transient provider-native related shelf only after the local Like/Codex transaction commits a transition to liked. Derive support from `RelatedPostsSourceAdapter`, deliver the typed outcome to the exact originating route owner, preserve provider order, and reject stale generations. Never send a remote Pixiv bookmark or Gelbooru favorite.
+
+Related posts are presentation-only: keep them outside canonical Search/FYP results, continuations, statuses, applied queries, recent searches, FYP history, and durable scroll state. Project the full-line shelf onto canonical post indices so Search restoration and both feeds' paging remain stable. A count-only Like change must not regenerate a non-empty FYP feed; the next legitimate root refresh trains from the updated Likes. Related Viewer streams are static `RELATED` sessions with no live paging or process-restored result substitution.
+
 ## Viewer OCR Translation
 
 Viewer OCR is opt-in, current-static-image-only work. Intersect the durable enabled-language set with live downloaded model readiness, prefer typed post language metadata, then try remaining ready recognizers in Japanese, Chinese, Korean order. Never download an OCR model from Viewer, pre-scan adjacent media, scan animated media, or accept Latin-only recognizer output as CJK text.

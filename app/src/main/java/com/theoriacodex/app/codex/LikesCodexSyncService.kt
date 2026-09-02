@@ -1,5 +1,6 @@
 package com.theoriacodex.app.codex
 
+import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexLikesTransactions
 import com.theoriacodex.data.repository.RecommendationProfile
@@ -16,7 +17,7 @@ class LikesCodexSyncService internal constructor(
         profile: RecommendationProfile,
         post: Post,
         trainingTags: List<String>,
-    ): Boolean {
+    ): LikeToggleOutcome {
         val systemCodexId = likesCodexIdForProfile(profile.profileId)
         val automaticCodexIds = codexRepository.observeCodices().first()
             .asSequence()
@@ -25,7 +26,7 @@ class LikesCodexSyncService internal constructor(
                     codexBelongsToProfile(codex.codexId, profile.profileId)
             }
             .mapTo(linkedSetOf()) { codex -> codex.codexId }
-        return transactions.toggleLikeAndSyncSystemCodex(
+        val nowLiked = transactions.toggleLikeAndSyncSystemCodex(
             profileId = profile.profileId,
             systemCodexId = systemCodexId,
             systemCodexName = likesCodexNameForProfile(profile),
@@ -33,6 +34,7 @@ class LikesCodexSyncService internal constructor(
             tags = trainingTags,
             eligibleAutomaticCodexIds = automaticCodexIds,
         ).nowLiked
+        return if (nowLiked) LikeToggleOutcome.LIKED else LikeToggleOutcome.UNLIKED
     }
 
     suspend fun clearProfile(profileId: String) {

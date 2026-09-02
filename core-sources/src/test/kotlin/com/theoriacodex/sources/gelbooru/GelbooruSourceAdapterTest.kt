@@ -5,15 +5,18 @@ import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.http.SourceHttpResponse
+import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.testing.FakeCredentialsProvider
 import com.theoriacodex.sources.testing.FakeHttpClient
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.delay
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -21,6 +24,31 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GelbooruSourceAdapterTest {
+    @Test
+    fun `related posts hydrate bounded ids with at most two requests and preserve order`() = runTest {
+        val httpClient = RelatedGelbooruHttpClient(
+            html = """
+                <div>
+                  <div>More Like This: (Beta Temporary Feature)</div>
+                  <a href="index.php?page=post&amp;s=view&amp;id=101"><img src="1.jpg"></a>
+                  <a href="index.php?page=post&amp;s=view&amp;id=102"><img src="2.jpg"></a>
+                  <a href="index.php?page=post&amp;s=view&amp;id=103"><img src="3.jpg"></a>
+                </div>
+            """.trimIndent(),
+            malformedIds = setOf("102"),
+        )
+        val adapter = GelbooruSourceAdapter(
+            httpClient = httpClient,
+            credentialsProvider = FakeCredentialsProvider(),
+        )
+
+        val posts = adapter.relatedPosts(PostId(SourceKey.GELBOORU, "100"), limit = 6)
+
+        assertEquals(listOf("101", "103"), posts.map { post -> post.id.sourcePostId })
+        assertTrue(httpClient.maxConcurrentHydrations <= 2)
+        assertEquals(listOf("101", "102", "103"), httpClient.hydratedIds.sorted())
+    }
+
     @Test
     fun `search compiles required groups with native Gelbooru OR braces`() = runTest {
         val httpClient = FakeHttpClient().apply {
@@ -426,4 +454,40 @@ class GelbooruSourceAdapterTest {
         }
         append("]}")
     }
+}
+
+private class RelatedGelbooruHttpClient(
+    private val html: String,
+    private val malformedIds: Set<String> = emptySet(),
+) : SourceHttpClient {
+    val hydratedIds = mutableListOf<String>()
+    var maxConcurrentHydrations: Int = 0
+        private set
+    private var activeHydrations: Int = 0
+
+    override suspend fun get(
+        url: String,
+        query: Map<String, String>,
+        headers: Map<String, String>,
+    ): SourceHttpResponse {
+        if (query["page"] == "post") return SourceHttpResponse(200, html)
+        val id = requireNotNull(query["id"])
+        hydratedIds += id
+        activeHydrations += 1
+        maxConcurrentHydrations = maxOf(maxConcurrentHydrations, activeHydrations)
+        delay(1)
+        activeHydrations -= 1
+        val body = if (id in malformedIds) {
+            """{"post":[{}]}"""
+        } else {
+            """{"post":[{"id":"$id","preview_url":"https://gelbooru.com/$id-preview.jpg","file_url":"https://gelbooru.com/$id.jpg","tags":"landscape"}]}"""
+        }
+        return SourceHttpResponse(200, body)
+    }
+
+    override suspend fun postForm(
+        url: String,
+        form: Map<String, String>,
+        headers: Map<String, String>,
+    ): SourceHttpResponse = error("unused")
 }

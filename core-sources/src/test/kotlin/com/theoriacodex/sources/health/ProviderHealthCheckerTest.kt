@@ -5,6 +5,7 @@ import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
+import com.theoriacodex.domain.adapter.RelatedPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
@@ -72,7 +73,8 @@ class ProviderHealthCheckerTest {
                 ],
                 "strictTagEcho": true,
                 "mediaProbe": false,
-                "trendingProbe": false
+                "trendingProbe": false,
+                "relatedSeedPostId": "123"
               }
             ]
             """.trimIndent(),
@@ -92,11 +94,15 @@ class ProviderHealthCheckerTest {
         assertEquals(true, cases.single().strictTagEcho)
         assertEquals(false, cases.single().mediaProbe)
         assertEquals(false, cases.single().trendingProbe)
+        assertEquals("123", cases.single().relatedSeedPostId)
     }
 
     @Test
     fun `probe runner reports seeded autocomplete trending resolve and media steps`() = runTest {
         val post = samplePost(SourceKey.GELBOORU)
+        val relatedPost = samplePost(SourceKey.GELBOORU).copy(
+            id = PostId(SourceKey.GELBOORU, "2"),
+        )
         val registry = FakeRegistry(
             mapOf(
                 SourceKey.GELBOORU to FakeAdapter(
@@ -105,6 +111,7 @@ class ProviderHealthCheckerTest {
                     trending = listOf(TagSuggestion(text = "landscape", type = "trending", count = 100)),
                     autocomplete = listOf(TagSuggestion(text = "landscape", type = "tag", count = 100)),
                     resolvedPost = post,
+                    related = listOf(relatedPost),
                 )
             )
         )
@@ -116,6 +123,7 @@ class ProviderHealthCheckerTest {
                     includeTags = listOf("landscape"),
                     autocompletePrefix = "land",
                     strictTagEcho = true,
+                    relatedSeedPostId = post.id.sourcePostId,
                 )
             )
         ).associateBy { it.checkName }
@@ -126,6 +134,7 @@ class ProviderHealthCheckerTest {
         assertEquals(ProviderHealthStatus.OK, results.getValue("trending-tags").status)
         assertEquals(ProviderHealthStatus.OK, results.getValue("resolve-post").status)
         assertEquals(ProviderHealthStatus.OK, results.getValue("media-metadata").status)
+        assertEquals(ProviderHealthStatus.OK, results.getValue("related-posts").status)
         assertEquals("1", results.getValue("seeded-search").samplePostId)
         assertTrue(results.getValue("media-metadata").message.orEmpty().contains("media URLs"))
     }
@@ -283,7 +292,8 @@ class ProviderHealthCheckerTest {
         private val trending: List<TagSuggestion> = emptyList(),
         private val autocomplete: List<TagSuggestion> = emptyList(),
         private val resolvedPost: Post? = null,
-    ) : SourceAdapter, FacetedSearchSourceAdapter {
+        private val related: List<Post> = emptyList(),
+    ) : SourceAdapter, FacetedSearchSourceAdapter, RelatedPostsSourceAdapter {
         val capturedQueries = mutableListOf<Query>()
         val capturedAutocompleteScopes = mutableListOf<FacetedSearchScope>()
 
@@ -339,6 +349,7 @@ class ProviderHealthCheckerTest {
         }
 
         override suspend fun resolvePost(id: PostId): Post? = resolvedPost?.takeIf { it.id == id }
+        override suspend fun relatedPosts(seed: PostId, limit: Int): List<Post> = related.take(limit)
     }
 
     private fun samplePost(source: SourceKey): Post {
