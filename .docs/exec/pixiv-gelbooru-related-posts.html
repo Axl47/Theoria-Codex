@@ -267,6 +267,7 @@
         <li><code>python3 scripts/check_hotspots.py --base HEAD</code> passed after moving duplicated Search/FYP orchestration and presentation into shared modules.</li>
         <li>Final focused related/Search/FYP/Viewer/autoplay tests, Debug Kotlin compilation, Android-test compilation, and Debug assembly passed after that extraction.</li>
         <li><code>app/build/outputs/apk/debug/output-metadata.json</code> proves <code>com.theoriacodex.debug</code>. No install or launch command was run.</li>
+        <li>Follow-up scroll/timeout repair: focused projection/controller/Search persistence tests passed after regenerating a missing Gradle test-results artifact, then <code>./gradlew :app-logic:detekt :app:detektDebug koverVerify --no-configuration-cache</code> passed 194 tasks. The hotspot gate passes with SearchScreen at 1,935/1,958 and SearchViewModel unchanged at 1,099/1,100.</li>
       </ul>
     </section>
 
@@ -643,6 +644,7 @@ rg -n '"applicationId"\s*:\s*"com\.theoriacodex\.debug"' \
         <li>[x] 2026-09-02 — Implemented and validated Phase 4 UI/media/Viewer integration. Focused related app-logic/app tests, <code>ViewerRoutePolicyTest</code>, and <code>FeedAutoplayArchitectureTest</code> passed together; Debug compilation passed.</li>
         <li>[x] 2026-09-02 — Completed Phase 5 host validation: affected suites, Android-test compilation, Debug assembly, app/app-logic Detekt, aggregate Kover, hotspot, package-identity, HTML, and diff gates pass.</li>
         <li>[!] Live provider and isolated Debug-app acceptance remain pending because credentials are absent and no APK was installed or launched.</li>
+        <li>[x] 2026-09-02 — Follow-up repair: shelf projection changes no longer restart Search scroll observation or synthesize a persisted seed position, and the complete related load now times out into Retry after 15 seconds while true cancellation remains silent.</li>
       </ul>
 
       <h3>Surprises And Discoveries</h3>
@@ -654,6 +656,8 @@ rg -n '"applicationId"\s*:\s*"com\.theoriacodex\.debug"' \
         <li><strong>Observation:</strong> FYP currently refreshes whenever <code>activeProfileLikesCount</code> changes. <strong>Consequence:</strong> preserving an inline seed shelf requires the approved count-only refresh behavior change.</li>
         <li><strong>Observation:</strong> the first complete diff exceeded frozen Search screen/ViewModel budgets because request and presentation logic existed in both routes. <strong>Consequence:</strong> one shared <code>RelatedPostsRouteController</code> and one shared related-feed presentation owner now keep both routes under the hotspot gate.</li>
         <li><strong>Observation:</strong> repository-wide core Detekt is red on pre-existing oversized owners unrelated to this feature. <strong>Evidence:</strong> app/app-logic Detekt passes and no new related file appears in core findings; the hotspot debt-exact gate passes.</li>
+        <li><strong>Observation:</strong> keying scroll collection on the related projection caused Loading/Loaded changes to emit without user scrolling; a shelf-first viewport then mapped to the liked seed at offset zero and overwrote Saved State before Viewer return. <strong>Consequence:</strong> shelf rows now produce no persistable position and projection updates flow through <code>rememberUpdatedState</code> without restarting the collector.</li>
+        <li><strong>Observation:</strong> provider connect/read timeouts and retries could hold the shelf in Loading far longer than the interaction allows. <strong>Consequence:</strong> the shared route controller owns one 15-second overall deadline and publishes the existing retryable failure message.</li>
       </ul>
 
       <h3>Decision Log</h3>
@@ -664,10 +668,12 @@ rg -n '"applicationId"\s*:\s*"com\.theoriacodex\.debug"' \
         <li><strong>Decision:</strong> Use an optional adapter interface instead of source flags/UI checks. <strong>Rationale:</strong> matches existing operational-capability patterns and keeps provider details source-owned. <strong>Date/Author:</strong> 2026-09-02 / Codex.</li>
         <li><strong>Decision:</strong> Parse Gelbooru’s native HTML block and never relabel tag overlap as native similarity. <strong>Rationale:</strong> preserves truthful product language and provider ordering despite the documented fragility. <strong>Date/Author:</strong> 2026-09-02 / Codex.</li>
         <li><strong>Decision:</strong> Add a static <code>RELATED</code> Viewer source. <strong>Rationale:</strong> prevents process restoration or live binding from substituting canonical Search/FYP results for an ephemeral shelf stream. <strong>Date/Author:</strong> 2026-09-02 / Codex.</li>
+        <li><strong>Decision:</strong> Never translate a visible shelf row into a durable scroll anchor. <strong>Rationale:</strong> structural presentation changes cannot be allowed to replace a more recent canonical user position. <strong>Date/Author:</strong> 2026-09-02 / Developer and Codex.</li>
+        <li><strong>Decision:</strong> Bound the complete related request to 15 seconds. <strong>Rationale:</strong> the provider transport has per-attempt retries, so the interaction needs its own overall deadline and Retry state. <strong>Date/Author:</strong> 2026-09-02 / Developer and Codex.</li>
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>Implementation outcome: Search and FYP now surface one transient provider-native related shelf only after a committed local Like. Pixiv uses its bounded related endpoint; Gelbooru isolates and hydrates its HTML recommendation block. Shared latest-wins state/controller logic protects cancellation and canonical feeds; shared projection/presentation logic protects scroll, paging, filters, autoplay, and duration enrichment; and static <code>RELATED</code> Viewer sessions cannot bind to or restore the wrong feed. All host gates pass, including aggregate coverage and frozen hotspot budgets. Live provider and isolated Debug-app behavior remain explicitly pending because credentials/device validation were unavailable.</p>
+      <p>Implementation outcome: Search and FYP surface one transient provider-native related shelf only after a committed local Like. Pixiv uses its bounded related endpoint; Gelbooru isolates and hydrates its HTML recommendation block. Shared latest-wins state/controller logic protects cancellation and canonical feeds; related requests have a 15-second overall Retry deadline; shelf projection changes cannot overwrite the latest canonical Search position; and static <code>RELATED</code> Viewer sessions cannot bind to or restore the wrong feed. Host tests, coverage, static analysis, and frozen hotspot gates pass. Live provider and isolated Debug-app behavior remain explicitly pending because credentials/device validation were unavailable.</p>
     </section>
 
     <section id="recovery">

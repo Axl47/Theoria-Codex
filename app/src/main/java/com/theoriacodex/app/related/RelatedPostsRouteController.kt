@@ -4,7 +4,9 @@ import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 /** Shared navigation-owner request lifecycle; routes provide only their current canonical posts. */
 internal class RelatedPostsRouteController(
@@ -13,7 +15,12 @@ internal class RelatedPostsRouteController(
     private val currentState: () -> RelatedPostsUiState,
     private val canonicalPosts: () -> List<Post>,
     private val updateState: (RelatedPostsUiState) -> Unit,
+    private val requestTimeoutMs: Long = DEFAULT_RELATED_POSTS_TIMEOUT_MS,
 ) {
+    init {
+        require(requestTimeoutMs > 0L) { "Related-post timeout must be positive" }
+    }
+
     private var job: Job? = null
     private var nextGeneration = 0L
 
@@ -54,7 +61,7 @@ internal class RelatedPostsRouteController(
         updateState(loading)
         job = scope.launch {
             try {
-                val incoming = loader.load(seed.id)
+                val incoming = withTimeout(requestTimeoutMs) { loader.load(seed.id) }
                 updateState(
                     currentState().complete(
                         request = loading.request,
@@ -62,6 +69,8 @@ internal class RelatedPostsRouteController(
                         canonicalPostIds = canonicalPosts().mapTo(mutableSetOf(), Post::id),
                     )
                 )
+            } catch (_: TimeoutCancellationException) {
+                updateState(currentState().fail(loading.request, "Related posts timed out. Try again."))
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
@@ -75,3 +84,5 @@ internal class RelatedPostsRouteController(
         job = null
     }
 }
+
+internal const val DEFAULT_RELATED_POSTS_TIMEOUT_MS = 15_000L

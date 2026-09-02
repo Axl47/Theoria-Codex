@@ -371,36 +371,13 @@ fun SearchScreen(
 
     val scrollRestoration = (state.restoration as? SearchRestorationUiState.Restored)
         ?.takeIf { restored -> restored.scrollState != null }
-    LaunchedEffect(
-        scrollRestoration?.scrollRequestId,
-        visibleResults.isNotEmpty(),
-        animatedFilterActive,
-        feedProjection,
-    ) {
-        val request = scrollRestoration ?: return@LaunchedEffect
-        val restored = request.scrollState ?: return@LaunchedEffect
-        if (animatedFilterActive || visibleResults.isEmpty()) return@LaunchedEffect
-
-        // A request is issued only for route entry/re-entry and acknowledged after it is applied.
-        // Page appends therefore cannot replay the saved position and jump the grid unexpectedly.
-        val lastIndex = feedProjection.entries.lastIndex.coerceAtLeast(0)
-        gridState.scrollToItem(
-            index = feedProjection.gridIndexForCanonicalIndex(restored.firstVisibleItemIndex)
-                .coerceIn(0, lastIndex),
-            scrollOffset = restored.firstVisibleItemOffsetPx.coerceAtLeast(0),
-        )
-        onAction(SearchAction.ScrollRestorationApplied(request.scrollRequestId))
-    }
-
-    LaunchedEffect(queryHash, animatedFilterActive, feedProjection) {
-        if (animatedFilterActive) return@LaunchedEffect
-        snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
-            .distinctUntilChanged()
-            .collect { (index, offset) ->
-                val canonical = feedProjection.canonicalPositionForGridIndex(index, offset)
-                onAction(SearchAction.ScrollChanged(canonical.index, canonical.offsetPx))
-            }
-    }
+    SearchScrollRestorationEffect(
+        scrollRestoration, visibleResults.isNotEmpty(), animatedFilterActive,
+        feedProjection, gridState, onAction,
+    )
+    SearchScrollPersistenceEffect(
+        queryHash, animatedFilterActive, feedProjection, gridState, onAction,
+    )
 
     LaunchedEffect(
         queryHash,

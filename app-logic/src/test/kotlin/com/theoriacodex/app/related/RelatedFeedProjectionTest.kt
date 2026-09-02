@@ -17,7 +17,10 @@ class RelatedFeedProjectionTest {
 
         assertEquals(listOf("0", "1", "shelf", "2"), projection.labels())
         assertEquals(3, projection.gridIndexForCanonicalIndex(2))
-        assertEquals(CanonicalFeedPosition(1, 0), projection.canonicalPositionForGridIndex(2, 50))
+        val latest = projection.canonicalPositionForGridIndex(3, 27)
+        val shelfUpdate = projection.canonicalPositionForGridIndex(2, 50)
+        assertEquals(CanonicalFeedPosition(2, 27), shelfUpdate ?: latest)
+        assertEquals(null, shelfUpdate)
         assertEquals(2, projection.greatestVisibleCanonicalIndex(listOf(1, 2, 3)))
     }
 
@@ -31,7 +34,7 @@ class RelatedFeedProjectionTest {
 
         assertEquals(listOf("0", "shelf", "3"), projection.labels())
         assertEquals(0, projection.gridIndexForCanonicalIndex(2))
-        assertEquals(CanonicalFeedPosition(0, 0), projection.canonicalPositionForGridIndex(1, 80))
+        assertEquals(null, projection.canonicalPositionForGridIndex(1, 80))
     }
 
     @Test
@@ -42,7 +45,7 @@ class RelatedFeedProjectionTest {
         val projection = buildRelatedFeedProjection(posts, listOf(posts[2]), related)
 
         assertEquals(listOf("shelf", "2"), projection.labels())
-        assertEquals(CanonicalFeedPosition(2, 0), projection.canonicalPositionForGridIndex(0, 100))
+        assertEquals(null, projection.canonicalPositionForGridIndex(0, 100))
         assertEquals(null, projection.greatestVisibleCanonicalIndex(listOf(0)))
     }
 

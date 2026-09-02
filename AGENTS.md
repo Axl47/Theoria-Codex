@@ -66,6 +66,8 @@ Search and For You may show one transient provider-native related shelf only aft
 
 Related posts are presentation-only: keep them outside canonical Search/FYP results, continuations, statuses, applied queries, recent searches, FYP history, and durable scroll state. Project the full-line shelf onto canonical post indices so Search restoration and both feeds' paging remain stable. A count-only Like change must not regenerate a non-empty FYP feed; the next legitimate root refresh trains from the updated Likes. Related Viewer streams are static `RELATED` sessions with no live paging or process-restored result substitution.
 
+A related shelf row is never a persistable Search scroll anchor. Projection changes must not restart scroll observation or replace the latest canonical post position with the shelf seed; if the shelf is first visible, retain the previous valid position. Bound the complete related-post load, including provider retries, to 15 seconds and convert only that deadline into the shelf Retry state. Route replacement, dismissal, and owner cancellation remain true cancellation and must not surface as timeout failures.
+
 ## Viewer OCR Translation
 
 Viewer OCR is opt-in, current-static-image-only work. Intersect the durable enabled-language set with live downloaded model readiness, prefer typed post language metadata, then try remaining ready recognizers in Japanese, Chinese, Korean order. Never download an OCR model from Viewer, pre-scan adjacent media, scan animated media, or accept Latin-only recognizer output as CJK text.

@@ -37,20 +37,14 @@ data class RelatedFeedProjection(
             ?: 0
     }
 
-    fun canonicalPositionForGridIndex(gridIndex: Int, offsetPx: Int): CanonicalFeedPosition {
-        if (entries.isEmpty()) return CanonicalFeedPosition(0, 0)
+    /** Only canonical post entries can replace the last persisted scroll position. */
+    fun canonicalPositionForGridIndex(gridIndex: Int, offsetPx: Int): CanonicalFeedPosition? {
+        if (entries.isEmpty()) return null
         val boundedIndex = gridIndex.coerceIn(0, entries.lastIndex)
         val entry = entries[boundedIndex]
-        if (entry is RelatedFeedEntry.PostEntry) {
-            return CanonicalFeedPosition(entry.canonicalIndex, offsetPx.coerceAtLeast(0))
+        return (entry as? RelatedFeedEntry.PostEntry)?.let { postEntry ->
+            CanonicalFeedPosition(postEntry.canonicalIndex, offsetPx.coerceAtLeast(0))
         }
-        val preceding = entries.subList(0, boundedIndex)
-            .filterIsInstance<RelatedFeedEntry.PostEntry>()
-            .lastOrNull()
-        val following = entries.drop(boundedIndex + 1)
-            .filterIsInstance<RelatedFeedEntry.PostEntry>()
-            .firstOrNull()
-        return CanonicalFeedPosition((preceding ?: following)?.canonicalIndex ?: 0, 0)
     }
 
     fun greatestVisibleCanonicalIndex(visibleGridIndices: Iterable<Int>): Int? {
