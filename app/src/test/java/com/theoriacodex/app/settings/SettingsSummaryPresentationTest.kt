@@ -1,6 +1,7 @@
 package com.theoriacodex.app.settings
 
 import com.theoriacodex.data.repository.ScenarioPreset
+import com.theoriacodex.app.viewer.ocr.OcrLanguageModelState
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -38,6 +39,14 @@ class SettingsSummaryPresentationTest {
         assertEquals("Off", viewerOcrSettingsSummary(enabled = false, enabledLanguageCount = 3))
         assertEquals("On · 1 language enabled", viewerOcrSettingsSummary(true, 1))
         assertEquals("On · 2 languages enabled", viewerOcrSettingsSummary(true, 2))
+    }
+
+    @Test
+    fun `Viewer OCR ready state describes shared device availability`() {
+        assertEquals(
+            "Available on device",
+            ocrLanguageModelStatusLabel(OcrLanguageModelState.Ready),
+        )
     }
 
     @Test

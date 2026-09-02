@@ -1126,6 +1126,15 @@ internal fun TheoriaAppContent(
                     settingsOwner.onAction(SettingsAction.ChangelogRequestFinished)
                 }
             }
+            SettingsEffect.OpenTranslationSettings -> {
+                if (!openOnDeviceTranslationSettings(appContext)) {
+                    Toast.makeText(
+                        appContext,
+                        "On-device translation settings aren't available",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
             SettingsEffect.ThumbnailCacheCleared -> thumbnailCacheGeneration += 1
             SettingsEffect.NavigateToSettings -> {
                 pendingTopLevelRoute = TopLevelDestination.Settings.route

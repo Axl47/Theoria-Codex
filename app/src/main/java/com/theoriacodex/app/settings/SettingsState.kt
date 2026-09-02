@@ -107,6 +107,7 @@ sealed interface SettingsAction {
     data object ClearThumbnailCache : SettingsAction
     data object ClearFullImageCache : SettingsAction
     data object OpenChangelog : SettingsAction
+    data object OpenTranslationSettings : SettingsAction
     data object ChangelogRequestFinished : SettingsAction
     data object ConnectPixiv : SettingsAction
     data object DisconnectPixiv : SettingsAction
@@ -129,6 +130,7 @@ sealed interface SettingsEffect {
     data class OpenExternalUri(val uri: String) : SettingsEffect
     data class ShowMessage(val message: String, val long: Boolean = false) : SettingsEffect
     data object LoadChangelog : SettingsEffect
+    data object OpenTranslationSettings : SettingsEffect
     data object ThumbnailCacheCleared : SettingsEffect
     data object NavigateToSettings : SettingsEffect
 }

@@ -507,6 +507,7 @@ ViewerOcrTranslationViewModel ─&gt; coordinator.translate(text, source, ENGLIS
         <li>[x] 2026-09-02 — Implemented Phase 4. Focused policy, model, owner, geometry, Viewer transform/image-pipeline tests and Debug compilation pass.</li>
         <li>[x] 2026-09-02 — Completed the integrated host lane: 106 app-logic, 112 core-data, and 538 app tests passed with zero failures/errors (three existing app tests skipped); Android-test compilation, Debug assembly, affected Detekt owners, hotspot gate, 0.57% duplicated-line gate, and both 241-field minified JSON contract checks passed.</li>
         <li>[x] 2026-09-02 — Proved the packaged Debug application ID is <code>com.theoriacodex.debug</code>. No APK was installed, launched, cleared, downgraded, or connected to a device.</li>
+        <li>[x] 2026-09-02 — Repaired device-feedback issues: shared Google Play-services OCR modules now say <strong>Available on device</strong> instead of implying Theoria downloaded them, Settings opens Android's separate translation-language manager, and phrase failures direct the user there. Focused Settings/OCR owner tests, Debug compilation, and app Detekt pass.</li>
         <li>[ ] Human acceptance: download real OCR models in the isolated Debug app and record manga accuracy, OEM translator behavior, and numeric timing/memory evidence.</li>
       </ul>
 
@@ -522,6 +523,7 @@ ViewerOcrTranslationViewModel ─&gt; coordinator.translate(text, source, ENGLIS
         <li>Concurrent whole-set Settings writes could drop a language when a model download completed beside another toggle. Moving one-language enable/disable into the repository makes each mutation atomic and preserves both intents.</li>
         <li>The hotspot gate rejected the first integrated shape because <code>ViewerScreen.kt</code> grew beyond its frozen budget. Extracting the existing top chrome/playback/actions surface into <code>ViewerChrome.kt</code> restored the budget and made its action groups independently analyzable.</li>
         <li>The first release JSON check exposed an existing keep rule that still named <code>HitomiPageToken</code> as a nested <code>HitomiSourceAdapter</code> class after it had moved top-level. Correcting that exact class name made both release variants verify all 241 durable fields.</li>
+        <li>Read-only SM-S926U logs proved Japanese, Chinese, and Korean OCR were already installed as shared Google Play-services Dynamite modules. The same device exposes Samsung's on-device TranslationService, but its language packs are independently managed; OCR readiness does not imply a source-to-English translator can be created.</li>
       </ul>
 
       <h3>Decision Log</h3>

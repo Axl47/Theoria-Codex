@@ -362,6 +362,9 @@ internal class SettingsViewModel(
                     effectChannel.trySend(SettingsEffect.LoadChangelog)
                 }
             }
+            SettingsAction.OpenTranslationSettings -> {
+                effectChannel.trySend(SettingsEffect.OpenTranslationSettings)
+            }
             SettingsAction.ChangelogRequestFinished -> updateState { copy(changelogLoading = false) }
             else -> return false
         }

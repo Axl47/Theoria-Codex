@@ -133,6 +133,15 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `translation language action delegates to the platform settings effect`() = runTest {
+        val owner = owner()
+
+        owner.onAction(SettingsAction.OpenTranslationSettings)
+
+        assertEquals(SettingsEffect.OpenTranslationSettings, owner.effects.first())
+    }
+
+    @Test
     fun `late source availability appears and toggle persists from the live source set`() = runTest {
         val settingsRepository = InMemorySettingsRepository()
         val availableSources = MutableStateFlow(setOf(SourceKey.PIXIV))

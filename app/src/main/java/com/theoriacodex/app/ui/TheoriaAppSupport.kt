@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.view.translation.TranslationManager
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -59,6 +60,16 @@ internal fun openUnknownSourcesSettings(context: Context) {
         }
         context.startActivity(intent)
     }
+}
+
+internal fun openOnDeviceTranslationSettings(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+    val manager = context.getSystemService(TranslationManager::class.java) ?: return false
+    val settingsIntent = manager.onDeviceTranslationSettingsActivityIntent ?: return false
+    return runCatching {
+        settingsIntent.send()
+        true
+    }.getOrDefault(false)
 }
 
 internal tailrec fun Context.findActivity(): Activity? = when (this) {

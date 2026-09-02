@@ -38,6 +38,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.min
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -121,7 +122,18 @@ internal class ViewerOcrTranslationCoordinator(
         text: String,
         onStage: (ViewerTranslationStage) -> Unit,
     ): String = traceAsyncSection(TRACE_OCR_TRANSLATE) {
-        translator.translate(language, text, onStage)
+        try {
+            translator.translate(language, text, onStage)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Exception) {
+            Log.w(
+                OCR_LOG_TAG,
+                "Viewer translation failed for language=$language: " +
+                    (failure.message ?: failure.javaClass.simpleName),
+            )
+            throw failure
+        }
     }
 
     private suspend fun loadOcrBitmap(request: ViewerOcrAnalysisRequest): Bitmap? {
@@ -213,7 +225,7 @@ internal class AndroidSystemViewerTextTranslator(
         val platformTranslator = createPlatformTranslator(manager, language)
         try {
             onStage(ViewerTranslationStage.TRANSLATING)
-            requestTranslation(platformTranslator, text)
+            requestTranslation(platformTranslator, text, language)
         } finally {
             platformTranslator.destroy()
         }
@@ -238,7 +250,7 @@ internal class AndroidSystemViewerTextTranslator(
                     created?.destroy()
                 } else if (created == null) {
                     continuation.resumeWithException(
-                        UnsupportedOperationException("This language pair is unavailable"),
+                        UnsupportedOperationException(translationLanguageNotReadyMessage(language)),
                     )
                 } else {
                     continuation.resume(created)
@@ -248,7 +260,11 @@ internal class AndroidSystemViewerTextTranslator(
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
-    private suspend fun requestTranslation(translator: Translator, text: String): String {
+    private suspend fun requestTranslation(
+        translator: Translator,
+        text: String,
+        language: ViewerOcrLanguage,
+    ): String {
         val request = TranslationRequest.Builder()
             .setTranslationRequestValues(listOf(TranslationRequestValue.forText(text)))
             .build()
@@ -257,7 +273,7 @@ internal class AndroidSystemViewerTextTranslator(
             continuation.invokeOnCancellation { cancellationSignal.cancel() }
             translator.translate(request, cancellationSignal, callbackExecutor) { response ->
                 if (response.isFinalResponse && continuation.isActive) {
-                    runCatching { response.requireTranslatedText() }
+                    runCatching { response.requireTranslatedText(language) }
                         .onSuccess(continuation::resume)
                         .onFailure(continuation::resumeWithException)
                 }
@@ -267,9 +283,12 @@ internal class AndroidSystemViewerTextTranslator(
 }
 
 @RequiresApi(Build.VERSION_CODES.S)
-private fun TranslationResponse.requireTranslatedText(): String {
-    check(translationStatus == TranslationResponse.TRANSLATION_STATUS_SUCCESS) {
-        "On-device translation failed"
+private fun TranslationResponse.requireTranslatedText(language: ViewerOcrLanguage): String {
+    when (translationStatus) {
+        TranslationResponse.TRANSLATION_STATUS_CONTEXT_UNSUPPORTED ->
+            throw UnsupportedOperationException(translationLanguageNotReadyMessage(language))
+        TranslationResponse.TRANSLATION_STATUS_UNKNOWN_ERROR ->
+            error("Android couldn't translate this phrase")
     }
     val value = translationResponseValues[0]
     return requireNotNull(
@@ -293,6 +312,11 @@ private fun ViewerOcrLanguage.languageTag(): String = when (this) {
     ViewerOcrLanguage.JAPANESE -> "ja"
     ViewerOcrLanguage.CHINESE -> "zh"
     ViewerOcrLanguage.KOREAN -> "ko"
+}
+
+internal fun translationLanguageNotReadyMessage(language: ViewerOcrLanguage): String {
+    val label = language.name.lowercase().replaceFirstChar(Char::uppercaseChar)
+    return "$label → English isn't ready. Download it in Android translation settings."
 }
 
 private suspend inline fun <T> traceAsyncSection(name: String, crossinline block: suspend () -> T): T {

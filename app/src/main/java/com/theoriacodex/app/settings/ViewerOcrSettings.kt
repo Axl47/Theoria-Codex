@@ -69,11 +69,14 @@ internal fun ViewerOcrSettingsSection(
         }
 
         Text(
-            text = "OCR models download only when requested here. The first translation may " +
-                "separately prepare an on-device language model.",
+            text = "OCR models are shared device modules. Translation languages are managed " +
+                "separately by Android.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        TextButton(onClick = { onAction(SettingsAction.OpenTranslationSettings) }) {
+            Text("Manage translation languages")
+        }
     }
 }
 
@@ -92,7 +95,7 @@ private fun ViewerOcrLanguageRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(language.displayLabel())
             Text(
-                text = modelState.statusLabel(),
+                text = ocrLanguageModelStatusLabel(modelState),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -139,11 +142,12 @@ private fun ViewerOcrLanguage.displayLabel(): String = when (this) {
     ViewerOcrLanguage.KOREAN -> "Korean"
 }
 
-private fun OcrLanguageModelState.statusLabel(): String = when (this) {
-    OcrLanguageModelState.Checking -> "Checking download"
+internal fun ocrLanguageModelStatusLabel(state: OcrLanguageModelState): String = when (state) {
+    OcrLanguageModelState.Checking -> "Checking availability"
     OcrLanguageModelState.NotDownloaded -> "Not downloaded"
-    is OcrLanguageModelState.Downloading -> progressPercent?.let { "Downloading · $it%" } ?: "Downloading"
-    OcrLanguageModelState.Ready -> "Downloaded"
-    is OcrLanguageModelState.Failed -> message
-    is OcrLanguageModelState.Unavailable -> message
+    is OcrLanguageModelState.Downloading ->
+        state.progressPercent?.let { "Downloading · $it%" } ?: "Downloading"
+    OcrLanguageModelState.Ready -> "Available on device"
+    is OcrLanguageModelState.Failed -> state.message
+    is OcrLanguageModelState.Unavailable -> state.message
 }

@@ -66,6 +66,8 @@ Decode OCR input through the source-aware Coil request path into at most a 2048 
 
 Use Android's API-31+ on-device translation framework and its cancellation/destroy lifecycle. Do not substitute ML Kit Translation: it requires Google Translate attribution whose branding rules conflict with an adult-content Viewer. Older or unsupported platform translators retain OCR highlights and show the bounded translation-unavailable card.
 
+Google Play-services OCR modules are shared device capabilities and may already be present even when Theoria did not initiate a download; label that state as available on device, not downloaded. Android translation language packs are separate from OCR modules, so Settings must expose the system translation-language settings and phrase failures must direct users there without disabling detected OCR regions.
+
 ## Recents Section Identity
 
 Watched and Codex are independent Recents memberships, not mutually exclusive labels derived from the latest Viewer origin. One canonical post may have one row in each section while sharing the same `posts` payload. Keep section in the `recent_watched` identity, preserve exact launch origin as row metadata, carry the section explicitly through `ViewerLaunchContext` when reopening from Recents, and clear or route by section. The combined All activity view may collapse duplicate canonical posts to the newest membership, but the filtered sections must retain both.
