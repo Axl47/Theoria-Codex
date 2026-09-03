@@ -1,30 +1,105 @@
+name: libretranslate-jxiued
+
 services:
+  # Keep this service name because Dokploy's translate.axor.dev route targets it on port 5000.
   libretranslate:
-    image: libretranslate/libretranslate:v1.9.6
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
     restart: unless-stopped
     expose:
       - "5000"
     environment:
-      LT_LOAD_ONLY: en,ja,zh,ko
-      LT_DISABLE_WEB_UI: "true"
-      LT_DISABLE_FILES_TRANSLATION: "true"
-      LT_CHAR_LIMIT: "1000"
-      LT_REQ_LIMIT: "60"
-      LT_THREADS: "4"
-    volumes:
-      - libretranslate-models:/home/libretranslate/.local:rw
+      HYMT2_BASE_URL: http://hymt2:8080
+      TRANSLATION_CHAR_LIMIT: "1000"
+      TRANSLATION_REQUESTS_PER_MINUTE: "60"
+    depends_on:
+      hymt2:
+        condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "./venv/bin/python scripts/healthcheck.py"]
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=2)"
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 5
       start_period: 180s
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid,nodev
+    mem_limit: 96m
+    pids_limit: 64
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: dokploy-network
+      traefik.http.routers.theoria-translation-web.entrypoints: web
+      traefik.http.routers.theoria-translation-web.middlewares: redirect-to-https@file
+      traefik.http.routers.theoria-translation-web.rule: Host(`translate.axor.dev`)
+      traefik.http.routers.theoria-translation-web.service: theoria-translation-web
+      traefik.http.routers.theoria-translation-websecure.entrypoints: websecure
+      traefik.http.routers.theoria-translation-websecure.rule: Host(`translate.axor.dev`)
+      traefik.http.routers.theoria-translation-websecure.service: theoria-translation-websecure
+      traefik.http.routers.theoria-translation-websecure.tls.certresolver: letsencrypt
+      traefik.http.services.theoria-translation-web.loadbalancer.server.port: "5000"
+      traefik.http.services.theoria-translation-websecure.loadbalancer.server.port: "5000"
     networks:
+      - translation-internal
       - dokploy-network
 
+  hymt2:
+    build:
+      context: .
+      dockerfile: Dockerfile.hymt2
+    restart: unless-stopped
+    command:
+      - --hf-repo
+      - tencent/Hy-MT2-1.8B-GGUF:Q4_K_M
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --ctx-size
+      - "2048"
+      - --parallel
+      - "1"
+      - --threads
+      - "3"
+      - --threads-batch
+      - "3"
+      - --n-gpu-layers
+      - "0"
+      - --no-webui
+      - --log-disable
+    expose:
+      - "8080"
+    environment:
+      LLAMA_CACHE: /models
+    volumes:
+      - hymt2-models:/models:rw
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    mem_limit: 2304m
+    cpus: "3.0"
+    pids_limit: 128
+    networks:
+      - translation-internal
+
 volumes:
-  libretranslate-models:
+  hymt2-models:
+    name: theoria-hymt2-models
 
 networks:
+  translation-internal:
   dokploy-network:
     external: true

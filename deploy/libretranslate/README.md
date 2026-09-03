@@ -1,19 +1,21 @@
-# LibreTranslate on Dokploy
+# Hy-MT2 translation on Dokploy
 
-This service translates only the OCR phrase a user taps. Viewer images, post URLs, tags, and
-other post metadata remain on the Android device.
+This deployment replaces LibreTranslate while retaining its narrow `POST /translate` wire format,
+so existing Theoria builds continue to work. A small gateway accepts only the tapped OCR phrase,
+`ja`/`zh-Hans`/`ko` source code, English target, and text format. It sends that phrase to a private
+CPU-only `tencent/Hy-MT2-1.8B-GGUF:Q4_K_M` llama.cpp service and returns `translatedText`.
 
 ## Deploy
 
-1. In Dokploy, create a Compose service using `compose.yaml`.
-2. Deploy and wait for the health check to pass. The first start downloads the `en`, `ja`, `zh`,
-   and `ko` Argos models into the named volume and can take several minutes.
-3. In the service's Domains tab, map `translate.axor.dev` to the `libretranslate` service on port
-   `5000` with HTTPS enabled and certificate type `none`.
-4. Point the `translate.axor.dev` DNS record at the Dokploy server and enable Cloudflare proxying.
-   The origin uses a Cloudflare Origin CA certificate, so DNS-only mode is intentionally not valid
-   for Android or ordinary public TLS clients.
-5. Verify the service:
+1. In the existing Dokploy Compose service, replace the Compose definition and add both
+   Dockerfiles plus `gateway.py` from this directory. The Hy-MT2 image builds from the pinned
+   official llama.cpp `b10775` Ubuntu binary because GHCR denies anonymous pulls on this VPS.
+2. Keep the existing domain mapped to service `libretranslate` on port `5000`. The legacy service
+   name and deterministic Traefik labels preserve Dokploy's `translate.axor.dev` route even when
+   Compose is invoked directly for recovery.
+3. Deploy and wait for the gateway health check to pass. The first start downloads the 1.13 GB
+   Q4_K_M model into the persistent `hymt2-models` volume.
+4. Verify the bounded public contract:
 
    ```sh
    curl -fsS https://translate.axor.dev/health
@@ -24,6 +26,11 @@ other post metadata remain on the Android device.
      --data 'format=text'
    ```
 
-The endpoint is intentionally keyless for the personal app because an API key embedded in an
-open-source APK is not a durable secret. LibreTranslate limits each client IP to 60 requests per
-minute and 1,000 characters per request. Add proxy-level rate limiting before widening access.
+The model endpoint is reachable only on the internal Compose network. The public gateway accepts
+one inference at a time, limits work to 60 requests per minute and 1,000 characters per phrase,
+caps its model response, and never logs request bodies. The service is intentionally keyless
+because an API key embedded in an open-source APK is not a durable secret.
+
+The llama.cpp container is capped at 2.25 GiB RAM and three CPU cores so it cannot consume the
+entire shared VPS. Q4_K_M is intentional: the lower-bit variants save memory at the expense of the
+translation nuance this deployment exists to improve.
