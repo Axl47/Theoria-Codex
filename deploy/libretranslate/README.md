@@ -1,21 +1,37 @@
-# Hy-MT2 translation on Dokploy
+# Google Cloud Translation on Dokploy
 
-This deployment replaces LibreTranslate while retaining its narrow `POST /translate` wire format,
-so existing Theoria builds continue to work. A small gateway accepts only the tapped OCR phrase,
-`ja`/`zh-Hans`/`ko` source code, English target, and text format. It sends that phrase to a private
-CPU-only `tencent/Hy-MT2-1.8B-GGUF:Q4_K_M` llama.cpp service and returns `translatedText`.
+This deployment retains Theoria's narrow `POST /translate` wire format while using Google Cloud
+Translation's standard NMT model. Existing app builds therefore need no networking change. The
+gateway accepts only the tapped OCR phrase, a `ja`/`zh-Hans`/`ko` source code, English target, and
+text format; it maps `zh-Hans` to Google's `zh-CN` code and returns `translatedText`.
+
+The directory keeps its legacy `libretranslate` name, and the public service retains that name,
+because installed builds and the existing Dokploy domain route depend on the compatibility
+contract—not because LibreTranslate still runs.
 
 ## Deploy
 
-1. In the existing Dokploy Compose service, replace the Compose definition and add both
-   Dockerfiles plus `gateway.py` from this directory. The Hy-MT2 image builds from the pinned
-   official llama.cpp `b10775` Ubuntu binary because GHCR denies anonymous pulls on this VPS.
-2. Keep the existing domain mapped to service `libretranslate` on port `5000`. The legacy service
-   name and deterministic Traefik labels preserve Dokploy's `translate.axor.dev` route even when
-   Compose is invoked directly for recovery.
-3. Deploy and wait for the gateway health check to pass. The first start downloads the 1.13 GB
-   Q4_K_M model into the persistent `hymt2-models` volume.
-4. Verify the bounded public contract:
+1. Build the checked-in gateway on the Dokploy host:
+
+   ```sh
+   docker build \
+     --tag theoriacodex/translation-gateway:google-v1 \
+     --file Dockerfile.gateway \
+     .
+   ```
+
+   Dokploy's Raw Compose provider replaces its working directory before every deployment, so the
+   stored Compose uses the prebuilt local image with `pull_policy: never` instead of `build: .`.
+
+2. In the Dokploy Environment tab, set `GOOGLE_TRANSLATE_API_KEY`. Restrict the Google Cloud key
+   to the Cloud Translation API and the Dokploy host's public IPv4 address. Never put the value in
+   this repository, the Compose source, deployment logs, or the Android APK.
+
+3. Store `compose.yaml` as the service's Raw Compose definition. Keep the existing domain mapped
+   to service `libretranslate` on port `5000`; the deterministic Traefik labels also preserve
+   `translate.axor.dev` during direct recovery.
+
+4. Deploy and verify:
 
    ```sh
    curl -fsS https://translate.axor.dev/health
@@ -26,11 +42,11 @@ CPU-only `tencent/Hy-MT2-1.8B-GGUF:Q4_K_M` llama.cpp service and returns `transl
      --data 'format=text'
    ```
 
-The model endpoint is reachable only on the internal Compose network. The public gateway accepts
-one inference at a time, limits work to 60 requests per minute and 1,000 characters per phrase,
-caps its model response, and never logs request bodies. The service is intentionally keyless
-because an API key embedded in an open-source APK is not a durable secret.
+The public gateway accepts one translation at a time, limits work to 60 requests per minute and
+1,000 characters per phrase, caps Google responses at 64 KiB, and never logs request bodies. It
+places the API key only in the `X-Goog-Api-Key` header. The service remains intentionally keyless
+to the Android client because a credential embedded in an open-source APK is not durable.
 
-The llama.cpp container is capped at 2.25 GiB RAM and three CPU cores so it cannot consume the
-entire shared VPS. Q4_K_M is intentional: the lower-bit variants save memory at the expense of the
-translation nuance this deployment exists to improve.
+The project owner obtained written approval for Theoria's adult-content use and attribution
+exception. Retain that approval outside the repository and re-check it before changing where or
+how Google translation results are presented.

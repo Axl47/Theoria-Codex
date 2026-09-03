@@ -1,4 +1,4 @@
-"""Narrow LibreTranslate-compatible gateway for the private Hy-MT2 model service."""
+"""Narrow LibreTranslate-compatible gateway for Google Cloud Translation."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import os
 from threading import BoundedSemaphore, Lock
 import time
 from typing import Final
+from html import unescape
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs
 from urllib.request import Request, urlopen
@@ -17,19 +18,19 @@ from urllib.request import Request, urlopen
 
 LISTEN_HOST: Final = "0.0.0.0"
 LISTEN_PORT: Final = 5000
-MODEL_BASE_URL: Final = os.environ.get("HYMT2_BASE_URL", "http://hymt2:8080").rstrip("/")
+GOOGLE_TRANSLATE_API_KEY: Final = os.environ.get("GOOGLE_TRANSLATE_API_KEY", "").strip()
+GOOGLE_TRANSLATE_URL: Final = "https://translation.googleapis.com/language/translate/v2"
 CHARACTER_LIMIT: Final = int(os.environ.get("TRANSLATION_CHAR_LIMIT", "1000"))
 REQUESTS_PER_MINUTE: Final = int(os.environ.get("TRANSLATION_REQUESTS_PER_MINUTE", "60"))
 MAX_REQUEST_BYTES: Final = 8 * 1024
-MAX_MODEL_RESPONSE_BYTES: Final = 64 * 1024
-MODEL_TIMEOUT_SECONDS: Final = 20
+MAX_TRANSLATION_RESPONSE_BYTES: Final = 64 * 1024
+TRANSLATION_TIMEOUT_SECONDS: Final = 10
 RATE_WINDOW_SECONDS: Final = 60
 
-SOURCE_CONTEXT: Final = {
-    "ja": "Japanese manga dialogue",
-    "zh": "Simplified Chinese comic dialogue",
-    "zh-Hans": "Simplified Chinese comic dialogue",
-    "ko": "Korean manhwa dialogue",
+GOOGLE_SOURCE_CODES: Final = {
+    "ja": "ja",
+    "zh-Hans": "zh-CN",
+    "ko": "ko",
 }
 
 _inference_slot = BoundedSemaphore(value=1)
@@ -58,54 +59,38 @@ class SlidingWindowRateLimiter:
 _rate_limiter = SlidingWindowRateLimiter(REQUESTS_PER_MINUTE, RATE_WINDOW_SECONDS)
 
 
-def translation_prompt(source: str, text: str) -> str:
-    context = SOURCE_CONTEXT[source]
-    return (
-        f"Translate the following {context} into natural English. "
-        "Correct only obvious OCR spacing artifacts. Preserve the meaning, tone, names, "
-        "honorifics, sound effects, and punctuation. Do not censor, summarize, or add content. "
-        "Only output the translated result without any additional explanation:\n"
-        f"{text}"
-    )
-
-
-def translate(source: str, text: str) -> str:
+def translate(source: str, text: str, api_key: str = GOOGLE_TRANSLATE_API_KEY) -> str:
+    if not api_key:
+        raise ValueError("Google Translation API key is not configured")
     request_body = json.dumps(
         {
-            "model": "Hy-MT2-1.8B",
-            "messages": [{"role": "user", "content": translation_prompt(source, text)}],
-            "temperature": 0.7,
-            "top_p": 0.6,
-            "top_k": 20,
-            "repeat_penalty": 1.05,
-            "max_tokens": 256,
-            "stream": False,
+            "q": text,
+            "source": GOOGLE_SOURCE_CODES[source],
+            "target": "en",
+            "format": "text",
+            "model": "nmt",
         },
         ensure_ascii=False,
     ).encode("utf-8")
     request = Request(
-        f"{MODEL_BASE_URL}/v1/chat/completions",
+        GOOGLE_TRANSLATE_URL,
         data=request_body,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "Accept": "application/json",
+            "X-Goog-Api-Key": api_key,
+        },
         method="POST",
     )
-    with urlopen(request, timeout=MODEL_TIMEOUT_SECONDS) as response:
-        raw_response = response.read(MAX_MODEL_RESPONSE_BYTES + 1)
-    if len(raw_response) > MAX_MODEL_RESPONSE_BYTES:
-        raise ValueError("Model response exceeded the configured limit")
+    with urlopen(request, timeout=TRANSLATION_TIMEOUT_SECONDS) as response:
+        raw_response = response.read(MAX_TRANSLATION_RESPONSE_BYTES + 1)
+    if len(raw_response) > MAX_TRANSLATION_RESPONSE_BYTES:
+        raise ValueError("Translation response exceeded the configured limit")
     payload = json.loads(raw_response)
-    translated = payload["choices"][0]["message"]["content"].strip()
+    translated = unescape(payload["data"]["translations"][0]["translatedText"]).strip()
     if not translated:
-        raise ValueError("Model returned an empty translation")
+        raise ValueError("Google returned an empty translation")
     return translated
-
-
-def model_is_ready() -> bool:
-    try:
-        with urlopen(f"{MODEL_BASE_URL}/health", timeout=2) as response:
-            return response.status == HTTPStatus.OK
-    except (HTTPError, URLError, TimeoutError):
-        return False
 
 
 class TranslationHandler(BaseHTTPRequestHandler):
@@ -115,10 +100,10 @@ class TranslationHandler(BaseHTTPRequestHandler):
         if self.path != "/health":
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
             return
-        if model_is_ready():
+        if GOOGLE_TRANSLATE_API_KEY:
             self._send_json(HTTPStatus.OK, {"status": "ok"})
         else:
-            self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"status": "loading"})
+            self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"status": "unconfigured"})
 
     def do_POST(self) -> None:  # noqa: N802 - required by BaseHTTPRequestHandler
         if self.path != "/translate":
@@ -152,7 +137,7 @@ class TranslationHandler(BaseHTTPRequestHandler):
                 raise ValueError("Repeated translation field")
             text = fields["q"][0].strip()
             source = fields["source"][0]
-            if source not in SOURCE_CONTEXT:
+            if source not in GOOGLE_SOURCE_CODES:
                 raise ValueError("Unsupported source language")
             if fields["target"][0] != "en" or fields["format"][0] != "text":
                 raise ValueError("Unsupported translation request")
