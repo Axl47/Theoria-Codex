@@ -2,11 +2,11 @@
 
 ## In Progress
 
-- None.
+- [!] Install the updated isolated Debug APK and repeat the screenshot acceptance after explicit authorization.
 
 ## Pending
 
-- [ ] Validate the grouping on representative manga pages in the isolated Debug app.
+- [ ] Capture the updated Viewer and confirm the four columns render as one union highlight.
 
 ## Done
 
@@ -33,6 +33,9 @@
 - [x] Corrected the Android Chinese source code from `zh` to LibreTranslate v1.9.6's runtime code `zh-Hans` and updated its contract test.
 - [x] Verified the Cloudflare edge after the user enabled proxying: public resolvers return edge IPs, the certificate chain is trusted, `/health` succeeds, and `ja`, `zh-Hans`, and `ko` live translations succeed without TLS bypasses in roughly 1–2 seconds.
 - [x] User acceptance confirmed live translation works and identified fragmented Japanese vertical text: adjacent right-to-left columns can remain separate ML Kit blocks, producing short low-context LibreTranslate requests.
+- [x] Captured and inspected the connected SM-S926U at 1440×3120. Verification: the installed Debug package postdates `d646762`, and four adjacent vertical columns remain independently highlighted because each ends with Japanese/ASCII exclamation punctuation.
+- [x] Reproduced the screenshot as a four-column normalized geometry fixture and removed punctuation as a grouping boundary while retaining all spatial safeguards.
+- [x] Passed the corrected focused batch: the device-derived four-column regression, existing phrase-grouping/OCR policy coverage, Debug Kotlin compilation, and app-logic Detekt all pass.
 - [x] Traced recognized ML Kit blocks into normalized `ViewerOcrRegion` polygons and defined the smallest policy boundary: Japanese-only tall-region grouping with bounded horizontal gap, vertical overlap, compact union, right-to-left ordering, whitespace collapse, and terminal-punctuation stops.
 - [x] Implemented Japanese vertical-column grouping in `app-logic` and applied it once after ML Kit region normalization. Verification: adjacent columns merge into one union highlight and right-to-left phrase; vertical singleton whitespace is normalized.
 - [x] Preserved uncertainty boundaries. Verification: terminal punctuation, large horizontal gaps, vertically separate bubbles, horizontal Japanese, Chinese, and Korean remain independent in focused policy tests.

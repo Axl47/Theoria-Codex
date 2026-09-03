@@ -50,27 +50,48 @@ class ViewerOcrPhraseGroupingTest {
     }
 
     @Test
-    fun `terminal punctuation prevents merging the next vertical column`() {
-        val complete = region(
-            id = "complete",
-            text = "終わり。",
+    fun `punctuated columns in one compact vertical cluster remain one phrase`() {
+        val farRight = region(
+            id = "far-right",
+            text = "あ〜きっっっ！",
+            language = ViewerOcrLanguage.JAPANESE,
+            left = 0.75f,
+            top = 0.01f,
+            right = 0.84f,
+            bottom = 0.25f,
+        )
+        val right = region(
+            id = "right",
+            text = "右の文！",
             language = ViewerOcrLanguage.JAPANESE,
             left = 0.60f,
-            top = 0.15f,
-            right = 0.66f,
-            bottom = 0.75f,
+            top = 0.01f,
+            right = 0.72f,
+            bottom = 0.56f,
         )
-        val next = region(
-            id = "next",
-            text = "次です",
+        val middle = region(
+            id = "middle",
+            text = "中の文！続く！",
             language = ViewerOcrLanguage.JAPANESE,
-            left = 0.52f,
-            top = 0.18f,
+            left = 0.46f,
+            top = 0.01f,
             right = 0.58f,
-            bottom = 0.78f,
+            bottom = 0.56f,
+        )
+        val left = region(
+            id = "left",
+            text = "左の文!!",
+            language = ViewerOcrLanguage.JAPANESE,
+            left = 0.34f,
+            top = 0.01f,
+            right = 0.45f,
+            bottom = 0.60f,
         )
 
-        assertEquals(2, groupOcrPhraseRegions(listOf(complete, next)).size)
+        val grouped = groupOcrPhraseRegions(listOf(middle, farRight, left, right))
+
+        assertEquals(1, grouped.size)
+        assertEquals("あ〜きっっっ！右の文！中の文！続く！左の文!!", grouped.single().sourceText)
     }
 
     @Test

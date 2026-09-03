@@ -63,7 +63,6 @@ private class VerticalColumnGroup(first: IndexedOcrRegion) {
     fun canAppend(candidate: IndexedOcrRegion): Boolean {
         val leftmost = columns.minBy { column -> column.bounds.center.x }
         if (candidate.bounds.center.x >= leftmost.bounds.center.x) return false
-        if (leftmost.region.sourceText.trimEnd().lastOrNull() in TERMINAL_PUNCTUATION) return false
         if (!leftmost.bounds.hasCompatibleWidth(candidate.bounds)) return false
         if (leftmost.bounds.verticalOverlapRatio(candidate.bounds) < MIN_VERTICAL_OVERLAP_RATIO) {
             return false
@@ -152,4 +151,3 @@ private const val MAX_NORMALIZED_COLUMN_GAP = 0.055f
 private const val MAX_COLUMN_WIDTH_RATIO = 2.25f
 private const val MAX_GROUP_WIDTH_TO_HEIGHT_RATIO = 1.15f
 private const val MAX_COLUMNS_PER_PHRASE = 6
-private val TERMINAL_PUNCTUATION = setOf('。', '！', '？', '!', '?')
