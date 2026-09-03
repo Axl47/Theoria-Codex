@@ -82,6 +82,7 @@ internal abstract class SearchViewModelTestFixture {
         executionService: ((SearchCoordinator) -> SearchExecutionService)? = null,
         relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
         tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
+        rootRequestTimeoutMs: Long = 60_000L,
     ): SearchViewModel {
         val coordinator = testSearchCoordinator(
             ViewModelSearchRegistry(adapter, *additionalAdapters.toTypedArray()),
@@ -97,6 +98,7 @@ internal abstract class SearchViewModelTestFixture {
             executionService = executionService?.invoke(coordinator) ?: coordinator,
             relatedPostsLoader = relatedPostsLoader,
             autocompleteDelayMs = autocompleteDelayMs,
+            rootRequestTimeoutMs = rootRequestTimeoutMs,
             scrollPersistenceDelayMs = scrollPersistenceDelayMs,
             scrollPersistenceDispatcher = scrollPersistenceDispatcher,
         )

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.SourceFailureReason
@@ -21,6 +22,26 @@ internal fun Query.sanitizedForMode(mode: QueryMode): SanitizedQuery {
         withIncludeTermGroups(includeGroups).copy(mode = mode, excludeTerms = exclude),
         includeGroups.size != effectiveIncludeTermGroups.size || exclude.size != excludeTerms.size,
     )
+}
+
+internal fun SearchSourceScope.reconciledWith(available: Set<com.theoriacodex.domain.model.SourceKey>) =
+    when (this) {
+        SearchSourceScope.GlobalUnified -> this
+        is SearchSourceScope.Single -> SearchSourceScope.fromSources(listOf(source).filter { it in available })
+        is SearchSourceScope.Temporary -> SearchSourceScope.fromSources(sources.filter { it in available })
+    }
+
+internal fun Query.reconciledWith(scope: SearchSourceScope): Query {
+    val mode = when (scope) {
+        SearchSourceScope.GlobalUnified, is SearchSourceScope.Temporary -> QueryMode.Unified
+        is SearchSourceScope.Single -> QueryMode.Source(scope.source)
+    }
+    return if (mode == QueryMode.Unified) {
+        withIncludeTermGroups(effectiveIncludeTermGroups.filter(SearchTermGroup::isPortableGeneralTagGroup))
+            .copy(mode = mode, excludeTerms = excludeTerms.filter(SearchTerm::isPortableGeneralTag))
+    } else {
+        copy(mode = mode)
+    }
 }
 
 internal fun FacetedSearchScope.scopeOrder(): Int =

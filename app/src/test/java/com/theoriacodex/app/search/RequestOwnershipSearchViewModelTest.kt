@@ -65,6 +65,82 @@ import org.junit.runner.Description
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class RequestOwnershipSearchViewModelTest : SearchViewModelTestFixture() {
     @Test
+    fun `historical search waits for restoration and then runs exact replay`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val adapter = ViewModelSearchAdapter()
+            val loadStarted = CompletableDeferred<Unit>()
+            val releaseLoad = CompletableDeferred<Unit>()
+            val store = object : TagSuggestionStore {
+                override fun get(source: SourceKey, limit: Int): List<TagSuggestion> = emptyList()
+                override fun put(source: SourceKey, suggestions: List<TagSuggestion>) = Unit
+                override suspend fun awaitLoaded() {
+                    loadStarted.complete(Unit)
+                    releaseLoad.await()
+                }
+            }
+            val viewModel = viewModel(adapter, tagSuggestionStore = store)
+
+            viewModel.onAction(
+                SearchAction.ApplyHistoricalQuery(
+                    Query(
+                        mode = QueryMode.Source(SourceKey.PIXIV),
+                        includeTerms = listOf(SearchTerm("history")),
+                        excludeTerms = emptyList(),
+                        sort = SortMode.NEWEST,
+                        dateRange = null,
+                        minScore = null,
+                    ),
+                ),
+            )
+            runCurrent()
+            loadStarted.await()
+
+            assertEquals(0, adapter.searchCount)
+            assertTrue(viewModel.state.value.restoration is SearchRestorationUiState.Restoring)
+
+            releaseLoad.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(1, adapter.searchCount)
+            assertEquals(listOf("history-result"), resultIds(viewModel))
+            assertFalse(viewModel.state.value.loading)
+        }
+
+    @Test
+    fun `root search timeout clears loading and publishes retryable failure`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val viewModel = viewModel(
+                adapter = ViewModelSearchAdapter(),
+                rootRequestTimeoutMs = 100L,
+                executionService = { coordinator ->
+                    object : SearchExecutionService by coordinator {
+                        override suspend fun executeInitial(
+                            query: Query,
+                            sourceScope: SearchSourceScope,
+                        ): SearchExecutionResult = kotlinx.coroutines.awaitCancellation()
+                    }
+                },
+            )
+            restore(viewModel)
+            viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+            viewModel.onAction(SearchAction.AddIncludeTerm(SearchTerm("timeout")))
+
+            viewModel.onAction(SearchAction.ApplyDraft)
+            runCurrent()
+            assertTrue(viewModel.state.value.loading)
+
+            advanceTimeBy(100L)
+            runCurrent()
+
+            assertFalse(viewModel.state.value.loading)
+            assertEquals(
+                "Search timed out. Check your connection and try again.",
+                viewModel.state.value.content.error?.message,
+            )
+            assertTrue(viewModel.state.value.content.error?.retryable == true)
+        }
+
+    @Test
     fun `new search cancels delayed work and stale completion cannot replace current state`() =
         runTest(mainDispatcherRule.dispatcher) {
             val adapter = ViewModelSearchAdapter()

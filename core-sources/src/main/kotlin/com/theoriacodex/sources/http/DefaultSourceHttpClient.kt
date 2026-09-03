@@ -280,10 +280,13 @@ internal fun resolveRetryDelayMs(
         ?.trim()
         ?.toLongOrNull()
     if (retryAfterSeconds != null && retryAfterSeconds > 0L) {
-        return retryAfterSeconds * 1_000L
+        return retryAfterSeconds
+            .coerceAtMost(MAX_SERVER_RETRY_DELAY_MS / 1_000L) * 1_000L
     }
     return retryBaseDelayMs * attempt
 }
+
+internal const val MAX_SERVER_RETRY_DELAY_MS = 30_000L
 
 private fun isIwaraRequestUrl(requestUrl: String): Boolean {
     val host = runCatching { URL(requestUrl).host.lowercase() }.getOrNull() ?: return false

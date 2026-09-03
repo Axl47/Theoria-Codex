@@ -41,6 +41,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -56,6 +57,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 /**
  * Navigation-scoped owner for Search.
@@ -72,6 +74,7 @@ internal class SearchViewModel(
     private val executionService: SearchExecutionService = coordinator,
     private val relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
     private val autocompleteDelayMs: Long = DEFAULT_AUTOCOMPLETE_DELAY_MS,
+    private val rootRequestTimeoutMs: Long = DEFAULT_ROOT_REQUEST_TIMEOUT_MS,
     scrollPersistenceDelayMs: Long = DEFAULT_SCROLL_PERSISTENCE_DELAY_MS,
     scrollPersistenceDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel(), RouteStateOwner<SearchUiState, SearchAction, SearchEffect> {
@@ -111,6 +114,7 @@ internal class SearchViewModel(
     private var autocompleteJob: Job? = null
     private var trendingJob: Job? = null
     private var restorationJob: Job? = null
+    private var pendingHistoricalQuery: SearchAction.ApplyHistoricalQuery? = null
     private var activeContinuation: SearchContinuation? = null
     private var latestEnvironmentSettings: AppSettings? = null
     private val appliedByMode = mutableMapOf<String, Query>()
@@ -212,7 +216,7 @@ internal class SearchViewModel(
 
             SearchAction.ApplyDraft -> applyDraft()
 
-            is SearchAction.ApplyHistoricalQuery -> applyHistoricalQuery(action.query, action.sourceScope)
+            is SearchAction.ApplyHistoricalQuery -> acceptHistoricalQuery(action)
 
             is SearchAction.ApplyTagSearch -> applyTagSearch(action)
 
@@ -385,6 +389,15 @@ internal class SearchViewModel(
             sourceScope = current.query.draftSourceScope,
             persistAcceptedResult = true,
         )
+    }
+
+    private fun acceptHistoricalQuery(action: SearchAction.ApplyHistoricalQuery) {
+        if (mutableState.value.restoration !is SearchRestorationUiState.Restored) {
+            pendingHistoricalQuery = action
+            restore()
+            return
+        }
+        applyHistoricalQuery(action.query, action.sourceScope)
     }
 
     private fun applyHistoricalQuery(query: Query, sourceScope: SearchSourceScope) {
@@ -597,24 +610,11 @@ internal class SearchViewModel(
         reduce(SearchStateChange.BeginRequest(requestId, kind, query))
         val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             try {
-                val result = executionService.executeInitial(query, sourceScope)
-                coroutineContext.ensureActive()
-                if (!isAdmittedResult(requestId, result, expectedExecutionKey)) {
-                    activeContinuation = null
-                    cancelRequestIfCurrent(requestId)
-                    return@launch
-                }
-                if (persistAcceptedResult) {
-                    executionService.persistAppliedSearch(
-                        query = result.query,
-                        sourceScope = result.sourceScope,
-                        executionKey = result.executionKey,
-                    )
-                }
-                if (completeRequest(requestId, result, expectedExecutionKey)) {
-                    onSuccess()
-                }
-                persistDraftQuery()
+                executeRootRequest(
+                    requestId, query, sourceScope, expectedExecutionKey, persistAcceptedResult, onSuccess,
+                )
+            } catch (_: TimeoutCancellationException) {
+                failRequestIfCurrent(requestId, ROOT_REQUEST_TIMEOUT_MESSAGE)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
@@ -631,6 +631,24 @@ internal class SearchViewModel(
             if (activeRequestJob === job) activeRequestJob = null
         }
         job.start()
+    }
+
+    private suspend fun executeRootRequest(
+        requestId: Long, query: Query, sourceScope: SearchSourceScope,
+        expectedExecutionKey: String, persistAcceptedResult: Boolean, onSuccess: suspend () -> Unit,
+    ) = withTimeout(rootRequestTimeoutMs) {
+        val result = executionService.executeInitial(query, sourceScope)
+        coroutineContext.ensureActive()
+        if (!isAdmittedResult(requestId, result, expectedExecutionKey)) {
+            activeContinuation = null
+            cancelRequestIfCurrent(requestId)
+            return@withTimeout
+        }
+        if (persistAcceptedResult) executionService.persistAppliedSearch(
+            result.query, result.sourceScope, result.executionKey,
+        )
+        if (completeRequest(requestId, result, expectedExecutionKey)) onSuccess()
+        persistDraftQuery()
     }
 
     private fun completeRequest(
@@ -867,7 +885,10 @@ internal class SearchViewModel(
                 savedStateHandle[SearchSavedStateKeys.RESTORATION_COMPLETED] = true
                 persistDraftQuery()
                 refreshTrending()
-                if (environmentChanged) {
+                val historicalQuery = pendingHistoricalQuery.also { pendingHistoricalQuery = null }
+                if (historicalQuery != null) {
+                    applyHistoricalQuery(historicalQuery.query, historicalQuery.sourceScope)
+                } else if (environmentChanged) {
                     val current = mutableState.value
                     launchRootSearch(
                         kind = SearchRequestKind.RETRY,
@@ -1064,8 +1085,10 @@ internal class SearchViewModel(
         }
 
         private const val DEFAULT_AUTOCOMPLETE_DELAY_MS = 300L
+        private const val DEFAULT_ROOT_REQUEST_TIMEOUT_MS = 60_000L
         private const val DEFAULT_SCROLL_PERSISTENCE_DELAY_MS = 150L
         private const val SEARCH_SCROLL_PERSISTENCE_KEY = "search-scroll-persistence"
+        private const val ROOT_REQUEST_TIMEOUT_MESSAGE = "Search timed out. Check your connection and try again."
     }
 }
 
@@ -1073,27 +1096,4 @@ private fun SavedStateHandle.savedSearchScrollState(): SearchScrollState? {
     val index = get<Int>(SearchSavedStateKeys.SCROLL_INDEX) ?: return null
     val offset = get<Int>(SearchSavedStateKeys.SCROLL_OFFSET) ?: 0
     return SearchScrollState(index.coerceAtLeast(0), offset.coerceAtLeast(0))
-}
-
-private fun SearchSourceScope.reconciledWith(available: Set<SourceKey>): SearchSourceScope = when (this) {
-    SearchSourceScope.GlobalUnified -> this
-    is SearchSourceScope.Single -> SearchSourceScope.fromSources(listOf(source).filter { it in available })
-    is SearchSourceScope.Temporary -> SearchSourceScope.fromSources(sources.filter { it in available })
-}
-
-private fun Query.reconciledWith(scope: SearchSourceScope): Query {
-    val mode = when (scope) {
-        SearchSourceScope.GlobalUnified, is SearchSourceScope.Temporary -> QueryMode.Unified
-        is SearchSourceScope.Single -> QueryMode.Source(scope.source)
-    }
-    return if (mode == QueryMode.Unified) {
-        withIncludeTermGroups(
-            effectiveIncludeTermGroups.filter { group -> group.isPortableGeneralTagGroup },
-        ).copy(
-            mode = mode,
-            excludeTerms = excludeTerms.filter { it.isPortableGeneralTag },
-        )
-    } else {
-        copy(mode = mode)
-    }
 }

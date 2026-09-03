@@ -372,6 +372,20 @@ class DefaultSourceHttpClientTest {
     }
 
     @Test
+    fun `retry delay caps excessive server retry after`() {
+        val response = SourceHttpResponse(
+            statusCode = 429,
+            body = "",
+            headers = mapOf("Retry-After" to listOf("3600")),
+        )
+
+        assertEquals(
+            MAX_SERVER_RETRY_DELAY_MS,
+            resolveRetryDelayMs(response, attempt = 1, retryBaseDelayMs = 300L),
+        )
+    }
+
+    @Test
     fun `retry delay falls back to exponential base when retry after missing`() {
         val response = SourceHttpResponse(statusCode = 503, body = "")
 
