@@ -6,7 +6,7 @@
 
 ## Pending
 
-- [ ] Perform isolated Debug-device acceptance when explicitly authorized.
+- [ ] Validate the grouping on representative manga pages in the isolated Debug app.
 
 ## Done
 
@@ -32,3 +32,9 @@
 - [x] Verified the live service behind the origin certificate: `/health` is OK, the catalog contains `en`, `ja`, `ko`, and `zh-Hans`, and all three CJK-to-English smoke requests returned `Hello` in roughly 2–3 seconds.
 - [x] Corrected the Android Chinese source code from `zh` to LibreTranslate v1.9.6's runtime code `zh-Hans` and updated its contract test.
 - [x] Verified the Cloudflare edge after the user enabled proxying: public resolvers return edge IPs, the certificate chain is trusted, `/health` succeeds, and `ja`, `zh-Hans`, and `ko` live translations succeed without TLS bypasses in roughly 1–2 seconds.
+- [x] User acceptance confirmed live translation works and identified fragmented Japanese vertical text: adjacent right-to-left columns can remain separate ML Kit blocks, producing short low-context LibreTranslate requests.
+- [x] Traced recognized ML Kit blocks into normalized `ViewerOcrRegion` polygons and defined the smallest policy boundary: Japanese-only tall-region grouping with bounded horizontal gap, vertical overlap, compact union, right-to-left ordering, whitespace collapse, and terminal-punctuation stops.
+- [x] Implemented Japanese vertical-column grouping in `app-logic` and applied it once after ML Kit region normalization. Verification: adjacent columns merge into one union highlight and right-to-left phrase; vertical singleton whitespace is normalized.
+- [x] Preserved uncertainty boundaries. Verification: terminal punctuation, large horizontal gaps, vertically separate bubbles, horizontal Japanese, Chinese, and Korean remain independent in focused policy tests.
+- [x] Passed the bounded validation batch: focused OCR policy/grouping tests, Debug Kotlin compilation, and affected app/app-logic Detekt tasks complete successfully; app Detekt retains its existing 10 type-resolution warnings.
+- [x] Updated the living ExecPlan and durable Viewer OCR contract, then prepared the validated grouping patch for its authorized Conventional Commit.

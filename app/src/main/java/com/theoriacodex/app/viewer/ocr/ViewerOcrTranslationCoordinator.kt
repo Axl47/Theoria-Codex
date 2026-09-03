@@ -14,6 +14,7 @@ import com.theoriacodex.app.media.MediaRequestFactory
 import com.theoriacodex.app.viewer.ViewerOcrPoint
 import com.theoriacodex.app.viewer.ViewerOcrRegion
 import com.theoriacodex.app.viewer.containsScriptEvidence
+import com.theoriacodex.app.viewer.groupOcrPhraseRegions
 import com.theoriacodex.app.viewer.metadataOcrLanguage
 import com.theoriacodex.app.viewer.normalizeOcrPolygon
 import com.theoriacodex.app.viewer.orderedOcrLanguages
@@ -152,7 +153,7 @@ internal class ViewerOcrTranslationCoordinator(
     ): List<ViewerOcrRegion> {
         val recognizer = recognizerFactory.create(language)
         return try {
-            recognizer.process(input).await().textBlocks.mapIndexedNotNull { index, block ->
+            val regions = recognizer.process(input).await().textBlocks.mapIndexedNotNull { index, block ->
                 val sourceText = block.text.trim().takeIf(String::isNotBlank) ?: return@mapIndexedNotNull null
                 if (!containsScriptEvidence(sourceText, language)) return@mapIndexedNotNull null
                 val points = block.cornerPoints
@@ -168,6 +169,7 @@ internal class ViewerOcrTranslationCoordinator(
                     polygon = polygon,
                 )
             }
+            groupOcrPhraseRegions(regions)
         } finally {
             recognizer.close()
         }
