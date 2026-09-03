@@ -1,5 +1,7 @@
 package com.theoriacodex.app.viewer.ocr
 
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.theoriacodex.data.repository.ViewerOcrLanguage
 import java.io.ByteArrayOutputStream
@@ -7,7 +9,6 @@ import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URI
-import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -18,30 +19,42 @@ internal data class ViewerTranslationHttpResponse(
 )
 
 internal fun interface ViewerTranslationHttpTransport {
-    suspend fun postForm(endpoint: String, body: String): ViewerTranslationHttpResponse
+    suspend fun postJson(endpoint: String, body: String): ViewerTranslationHttpResponse
 }
 
-/** Sends only the tapped OCR phrase and its source language to the self-hosted translator. */
-internal class LibreTranslateViewerTextTranslator(
+/** Sends deduplicated current-image phrases through the narrow Google translation gateway. */
+internal class GoogleViewerTextTranslator(
     baseUrl: String = DEFAULT_TRANSLATION_BASE_URL,
     private val transport: ViewerTranslationHttpTransport = HttpUrlConnectionTranslationTransport(),
 ) : ViewerTextTranslator {
-    private val endpoint = libreTranslateEndpoint(baseUrl)
+    private val endpoint = translationBatchEndpoint(baseUrl)
 
-    override suspend fun translate(
+    override suspend fun translateBatch(
         language: ViewerOcrLanguage,
-        text: String,
+        sourceTexts: List<String>,
         onStage: (ViewerTranslationStage) -> Unit,
-    ): String {
-        val phrase = text.trim()
-        require(phrase.isNotEmpty()) { "Nothing to translate" }
-        require(phrase.length <= MAX_TRANSLATION_CHARACTERS) { "Phrase is too long to translate" }
-
+    ): Map<String, String> {
+        val phrases = sourceTexts.map(String::trim).filter(String::isNotEmpty).distinct()
+        if (phrases.isEmpty()) return emptyMap()
+        phrases.forEach { phrase ->
+            require(phrase.length <= MAX_TRANSLATION_CHARACTERS) { "Phrase is too long to translate" }
+        }
         onStage(ViewerTranslationStage.TRANSLATING)
+        return buildMap {
+            phrases.boundedTranslationBatches().forEach { batch ->
+                putAll(translateOneBatch(language, batch))
+            }
+        }
+    }
+
+    private suspend fun translateOneBatch(
+        language: ViewerOcrLanguage,
+        phrases: List<String>,
+    ): Map<String, String> {
         val response = try {
-            transport.postForm(
+            transport.postJson(
                 endpoint = endpoint,
-                body = translationRequestBody(language, phrase),
+                body = translationRequestBody(language, phrases),
             )
         } catch (failure: IOException) {
             throw IOException("Translation server unavailable · Tap the phrase to retry", failure)
@@ -54,7 +67,7 @@ internal class LibreTranslateViewerTextTranslator(
             }
             throw IOException(message)
         }
-        return parseTranslatedText(response.body)
+        return parseTranslatedTexts(response.body, phrases)
     }
 }
 
@@ -62,7 +75,7 @@ internal class HttpUrlConnectionTranslationTransport(
     private val connectTimeoutMs: Int = CONNECT_TIMEOUT_MS,
     private val readTimeoutMs: Int = READ_TIMEOUT_MS,
 ) : ViewerTranslationHttpTransport {
-    override suspend fun postForm(endpoint: String, body: String): ViewerTranslationHttpResponse =
+    override suspend fun postJson(endpoint: String, body: String): ViewerTranslationHttpResponse =
         withContext(Dispatchers.IO) {
             val connection = URI(endpoint).toURL().openConnection() as HttpURLConnection
             try {
@@ -71,10 +84,7 @@ internal class HttpUrlConnectionTranslationTransport(
                 connection.readTimeout = readTimeoutMs
                 connection.instanceFollowRedirects = false
                 connection.doOutput = true
-                connection.setRequestProperty(
-                    "Content-Type",
-                    "application/x-www-form-urlencoded; charset=UTF-8",
-                )
+                connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 connection.setRequestProperty("Accept", "application/json")
                 connection.outputStream.use { output ->
                     output.write(body.toByteArray(StandardCharsets.UTF_8))
@@ -95,37 +105,61 @@ internal class HttpUrlConnectionTranslationTransport(
         }
 }
 
-private fun libreTranslateEndpoint(baseUrl: String): String {
+internal interface ViewerTextTranslator {
+    suspend fun translateBatch(
+        language: ViewerOcrLanguage,
+        sourceTexts: List<String>,
+        onStage: (ViewerTranslationStage) -> Unit,
+    ): Map<String, String>
+}
+
+private fun translationBatchEndpoint(baseUrl: String): String {
     val uri = URI(baseUrl.trimEnd('/'))
     require(uri.scheme == "https" && !uri.host.isNullOrBlank()) {
         "Translation server must use HTTPS"
     }
-    return "$uri/translate"
+    return "$uri/translate-batch"
 }
 
-private fun translationRequestBody(language: ViewerOcrLanguage, text: String): String {
-    return listOf(
-        "q" to text,
-        "source" to language.libreTranslateCode(),
-        "target" to "en",
-        "format" to "text",
-    ).joinToString("&") { (key, value) ->
-        "${key.urlEncode()}=${value.urlEncode()}"
-    }
+private fun translationRequestBody(language: ViewerOcrLanguage, phrases: List<String>): String {
+    return JsonObject().apply {
+        add("q", JsonArray().apply { phrases.forEach(::add) })
+        addProperty("source", language.gatewayCode())
+        addProperty("target", "en")
+        addProperty("format", "text")
+    }.toString()
 }
 
-private fun parseTranslatedText(body: String): String {
-    val translated = runCatching {
-        JsonParser.parseString(body)
-            .asJsonObject
-            .get("translatedText")
-            ?.asString
-            ?.trim()
-            ?.takeIf(String::isNotBlank)
-    }.getOrNull()
-    return translated ?: throw IOException(
-        "Translation server returned no text · Tap the phrase to retry",
+private fun parseTranslatedTexts(body: String, phrases: List<String>): Map<String, String> {
+    val translations = runCatching {
+        JsonParser.parseString(body).asJsonObject.getAsJsonArray("translations")
+            ?.map { element -> element.asString.trim() }
+            ?.takeIf { values -> values.size == phrases.size && values.all(String::isNotBlank) }
+    }.getOrNull() ?: throw IOException(
+        "Translation server returned incomplete text · Tap the phrase to retry",
     )
+    return phrases.zip(translations).toMap()
+}
+
+private fun List<String>.boundedTranslationBatches(): List<List<String>> {
+    val batches = mutableListOf<List<String>>()
+    var current = mutableListOf<String>()
+    var currentCharacters = 0
+    forEach { phrase ->
+        if (
+            current.isNotEmpty() &&
+            (current.size >= MAX_TRANSLATION_PHRASES_PER_BATCH ||
+                currentCharacters + phrase.length > MAX_TRANSLATION_BATCH_CHARACTERS)
+        ) {
+            batches += current
+            current = mutableListOf()
+            currentCharacters = 0
+        }
+        current += phrase
+        currentCharacters += phrase.length
+    }
+    if (current.isNotEmpty()) batches += current
+    return batches
 }
 
 private fun readBoundedUtf8(input: InputStream): String {
@@ -144,15 +178,15 @@ private fun readBoundedUtf8(input: InputStream): String {
     return output.toString(StandardCharsets.UTF_8.name())
 }
 
-private fun ViewerOcrLanguage.libreTranslateCode(): String = when (this) {
+private fun ViewerOcrLanguage.gatewayCode(): String = when (this) {
     ViewerOcrLanguage.JAPANESE -> "ja"
     ViewerOcrLanguage.CHINESE -> "zh-Hans"
     ViewerOcrLanguage.KOREAN -> "ko"
 }
 
-private fun String.urlEncode(): String = URLEncoder.encode(this, StandardCharsets.UTF_8.name())
-
 internal const val MAX_TRANSLATION_CHARACTERS = 1_000
+internal const val MAX_TRANSLATION_PHRASES_PER_BATCH = 32
+internal const val MAX_TRANSLATION_BATCH_CHARACTERS = 5_000
 private const val DEFAULT_TRANSLATION_BASE_URL = "https://translate.axor.dev"
 private const val CONNECT_TIMEOUT_MS = 4_000
 private const val READ_TIMEOUT_MS = 12_000

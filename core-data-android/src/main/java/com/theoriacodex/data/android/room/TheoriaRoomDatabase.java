@@ -19,9 +19,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
                 RecentWatchedEntity.class,
                 RecentSearchEntity.class,
                 RecentsMigrationEntity.class,
-                MediaDurationEntity.class
+                MediaDurationEntity.class,
+                ViewerTranslationCacheEntity.class
         },
-        version = 7,
+        version = 8,
         exportSchema = true
 )
 public abstract class TheoriaRoomDatabase extends RoomDatabase {
@@ -72,18 +73,26 @@ public abstract class TheoriaRoomDatabase extends RoomDatabase {
             database.execSQL("ALTER TABLE `codex_automatic_tags` ADD COLUMN `group_index` INTEGER NOT NULL DEFAULT 0");
         }
     };
+    public static final Migration MIGRATION_7_8 = new Migration(7, 8) {
+        @Override public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("CREATE TABLE IF NOT EXISTS `viewer_translation_cache` (`backend_version` TEXT NOT NULL, `source_language` TEXT NOT NULL, `source_text_sha256` TEXT NOT NULL, `translated_text` TEXT NOT NULL, `expires_at_epoch_ms` INTEGER NOT NULL, `last_used_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`backend_version`, `source_language`, `source_text_sha256`))");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_viewer_translation_cache_last_used_at_epoch_ms_backend_version_source_language_source_text_sha256` ON `viewer_translation_cache` (`last_used_at_epoch_ms`, `backend_version`, `source_language`, `source_text_sha256`)");
+        }
+    };
     public static final Migration[] MIGRATIONS = new Migration[] {
             MIGRATION_1_2,
             MIGRATION_2_3,
             MIGRATION_3_4,
             MIGRATION_4_5,
             MIGRATION_5_6,
-            MIGRATION_6_7
+            MIGRATION_6_7,
+            MIGRATION_7_8
     };
 
     public abstract CodexLikesDao codexLikesDao();
     public abstract RecentsDao recentsDao();
     public abstract MediaDurationDao mediaDurationDao();
+    public abstract ViewerTranslationCacheDao viewerTranslationCacheDao();
 
     @NonNull
     public static TheoriaRoomDatabase create(@NonNull Context context) {

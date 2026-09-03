@@ -3,7 +3,7 @@ name: libretranslate-jxiued
 services:
   # Keep this service name because Dokploy's translate.axor.dev route targets it on port 5000.
   libretranslate:
-    image: theoriacodex/translation-gateway:google-v1
+    image: theoriacodex/translation-gateway:google-batch-v1
     pull_policy: never
     restart: unless-stopped
     expose:
@@ -12,6 +12,7 @@ services:
       GOOGLE_TRANSLATE_API_KEY: ${GOOGLE_TRANSLATE_API_KEY:?Set GOOGLE_TRANSLATE_API_KEY in Dokploy}
       TRANSLATION_CHAR_LIMIT: "1000"
       TRANSLATION_REQUESTS_PER_MINUTE: "60"
+      TRANSLATION_CHARACTERS_PER_DAY: "15000"
     healthcheck:
       test:
         - CMD

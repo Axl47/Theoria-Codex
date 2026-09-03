@@ -73,6 +73,7 @@ internal data class ViewerOcrTranslationUiState(
     val regions: List<ViewerOcrRegion> = emptyList(),
     val imageWidth: Int = 0,
     val imageHeight: Int = 0,
+    val translations: Map<String, String> = emptyMap(),
     val translationCard: ViewerTranslationCardState? = null,
 )
 
@@ -87,12 +88,11 @@ internal class ViewerOcrTranslationViewModel(
     private var configuration = ViewerOcrConfiguration(false, emptySet(), emptySet())
     private var activeInput: ViewerOcrImageReady? = null
     private var analysisJob: Job? = null
-    private var translationJob: Job? = null
+    private var prefetchJob: Job? = null
+    private var onDemandTranslationJob: Job? = null
+    private var cardDismissJob: Job? = null
     private val analysisCache = BoundedAccessCache<ViewerOcrAnalysisCacheKey, ViewerOcrAnalysis?>(
         MAX_ANALYSIS_CACHE_ENTRIES,
-    )
-    private val translationCache = BoundedAccessCache<ViewerTranslationCacheKey, String>(
-        MAX_TRANSLATION_CACHE_ENTRIES,
     )
     private val attemptedLocations = mutableMapOf<ViewerOcrSelectionIdentity, LinkedHashSet<String>>()
 
@@ -149,39 +149,36 @@ internal class ViewerOcrTranslationViewModel(
         ) {
             return
         }
-        translationJob?.cancel()
-        val cacheKey = ViewerTranslationCacheKey(region.language, region.sourceText)
-        val cached = translationCache[cacheKey]
+        cardDismissJob?.cancel()
+        val cached = snapshot.translations[regionId]
         if (cached != null) {
             publishCard(identity, ViewerTranslationCardState.Ready(regionId, cached))
             scheduleCardDismiss(identity, regionId, TRANSLATION_SUCCESS_DURATION_MS)
             return
         }
-        translationJob = scope.launch {
+        if (prefetchJob?.isActive == true) {
+            publishCard(identity, ViewerTranslationCardState.Translating(regionId))
+            return
+        }
+        onDemandTranslationJob?.cancel()
+        onDemandTranslationJob = scope.launch {
             publishCard(identity, ViewerTranslationCardState.PreparingTranslator(regionId))
             val result = runCatchingPreservingCancellation {
-                service.translate(region.language, region.sourceText) { stage ->
+                service.translate(listOf(region)) { stage ->
                     if (stage == ViewerTranslationStage.TRANSLATING) {
                         publishCard(identity, ViewerTranslationCardState.Translating(regionId))
                     }
                 }
             }
-            result.onSuccess { translated ->
-                translationCache[cacheKey] = translated
-                publishCard(identity, ViewerTranslationCardState.Ready(regionId, translated))
-                delay(TRANSLATION_SUCCESS_DURATION_MS)
-                dismissCard(identity, regionId)
+            result.onSuccess { translations ->
+                val translated = translations[regionId]
+                if (translated == null) {
+                    publishTranslationFailure(identity, regionId, null)
+                } else {
+                    publishTranslations(identity, translations)
+                }
             }.onFailure { failure ->
-                publishCard(
-                    identity,
-                    ViewerTranslationCardState.Failed(
-                        regionId = regionId,
-                        message = failure.message?.takeIf(String::isNotBlank)
-                            ?: "Couldn't translate · Tap the phrase to retry",
-                    ),
-                )
-                delay(TRANSLATION_FAILURE_DURATION_MS)
-                dismissCard(identity, regionId)
+                publishTranslationFailure(identity, regionId, failure)
             }
         }
     }
@@ -195,7 +192,9 @@ internal class ViewerOcrTranslationViewModel(
             taxonomy = input.taxonomy,
         )
         if (analysisCache.contains(cacheKey)) {
-            publishAnalysis(input.identity, analysisCache[cacheKey])
+            val analysis = analysisCache[cacheKey]
+            publishAnalysis(input.identity, analysis)
+            analysis?.let { startTranslationPrefetch(input.identity, it.regions) }
             return
         }
         val attempted = attemptedLocations.getOrPut(input.identity, ::linkedSetOf)
@@ -208,7 +207,9 @@ internal class ViewerOcrTranslationViewModel(
         }
         attempted += input.location
         analysisJob?.cancel()
-        translationJob?.cancel()
+        prefetchJob?.cancel()
+        onDemandTranslationJob?.cancel()
+        cardDismissJob?.cancel()
         mutableState.value = ViewerOcrTranslationUiState(
             identity = input.identity,
             analysisStatus = ViewerOcrAnalysisStatus.RECOGNIZING,
@@ -229,6 +230,7 @@ internal class ViewerOcrTranslationViewModel(
             result.onSuccess { analysis ->
                 analysisCache[cacheKey] = analysis
                 publishAnalysis(input.identity, analysis)
+                analysis?.let { startTranslationPrefetch(input.identity, it.regions) }
             }.onFailure {
                 mutableState.value = ViewerOcrTranslationUiState(
                     identity = input.identity,
@@ -273,13 +275,85 @@ internal class ViewerOcrTranslationViewModel(
         }
     }
 
+    private fun startTranslationPrefetch(
+        identity: ViewerOcrSelectionIdentity,
+        regions: List<ViewerOcrRegion>,
+    ) {
+        prefetchJob?.cancel()
+        prefetchJob = scope.launch {
+            val result = runCatchingPreservingCancellation {
+                service.translate(regions) {}
+            }
+            if (mutableState.value.identity != identity) return@launch
+            result.onSuccess { translations ->
+                publishTranslations(identity, translations)
+            }.onFailure { failure ->
+                val pendingRegion = mutableState.value.translationCard
+                    ?.takeIf { card ->
+                        card is ViewerTranslationCardState.PreparingTranslator ||
+                            card is ViewerTranslationCardState.Translating
+                    }
+                    ?.regionId
+                pendingRegion?.let { regionId ->
+                    publishTranslationFailure(identity, regionId, failure)
+                }
+            }
+        }
+    }
+
+    private fun publishTranslations(
+        identity: ViewerOcrSelectionIdentity,
+        translations: Map<String, String>,
+    ) {
+        if (translations.isEmpty()) return
+        var readyRegionId: String? = null
+        mutableState.update { current ->
+            if (current.identity != identity) return@update current
+            val card = current.translationCard
+            val translated = card?.regionId?.let(translations::get)
+            val nextCard = if (
+                translated != null &&
+                (card is ViewerTranslationCardState.PreparingTranslator ||
+                    card is ViewerTranslationCardState.Translating)
+            ) {
+                readyRegionId = card.regionId
+                ViewerTranslationCardState.Ready(card.regionId, translated)
+            } else {
+                card
+            }
+            current.copy(
+                translations = current.translations + translations,
+                translationCard = nextCard,
+            )
+        }
+        readyRegionId?.let { regionId ->
+            scheduleCardDismiss(identity, regionId, TRANSLATION_SUCCESS_DURATION_MS)
+        }
+    }
+
+    private fun publishTranslationFailure(
+        identity: ViewerOcrSelectionIdentity,
+        regionId: String,
+        failure: Throwable?,
+    ) {
+        publishCard(
+            identity,
+            ViewerTranslationCardState.Failed(
+                regionId = regionId,
+                message = failure?.message?.takeIf(String::isNotBlank)
+                    ?: "Couldn't translate · Tap the phrase to retry",
+            ),
+        )
+        scheduleCardDismiss(identity, regionId, TRANSLATION_FAILURE_DURATION_MS)
+    }
+
     private fun scheduleCardDismiss(
         identity: ViewerOcrSelectionIdentity,
         regionId: String,
         delayMs: Long,
     ) {
-        translationJob?.cancel()
-        translationJob = scope.launch {
+        cardDismissJob?.cancel()
+        cardDismissJob = scope.launch {
             delay(delayMs)
             dismissCard(identity, regionId)
         }
@@ -304,8 +378,12 @@ internal class ViewerOcrTranslationViewModel(
     private fun cancelCurrentWork() {
         analysisJob?.cancel()
         analysisJob = null
-        translationJob?.cancel()
-        translationJob = null
+        prefetchJob?.cancel()
+        prefetchJob = null
+        onDemandTranslationJob?.cancel()
+        onDemandTranslationJob = null
+        cardDismissJob?.cancel()
+        cardDismissJob = null
     }
 
     override fun onCleared() {
@@ -327,11 +405,6 @@ private data class ViewerOcrAnalysisCacheKey(
     val taxonomy: List<PostTaxonomyTerm>,
 )
 
-private data class ViewerTranslationCacheKey(
-    val language: ViewerOcrLanguage,
-    val sourceText: String,
-)
-
 private class BoundedAccessCache<K, V>(
     private val maximumEntries: Int,
 ) {
@@ -348,7 +421,6 @@ private class BoundedAccessCache<K, V>(
 }
 
 private const val MAX_ANALYSIS_CACHE_ENTRIES = 12
-private const val MAX_TRANSLATION_CACHE_ENTRIES = 32
 private const val MAX_NEGATIVE_LOCATIONS_PER_MEDIA = 2
 private const val CACHE_LOAD_FACTOR = 0.75f
 internal const val TRANSLATION_SUCCESS_DURATION_MS = 4_000L

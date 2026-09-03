@@ -30,9 +30,10 @@ import com.theoriacodex.app.update.StartupUpdater
 import com.theoriacodex.app.update.UpdateFeedClient
 import com.theoriacodex.app.update.UpdateStateStore
 import com.theoriacodex.app.viewer.PixivUgoiraClient
+import com.theoriacodex.app.viewer.ocr.CachedViewerRegionTranslator
 import com.theoriacodex.app.viewer.ocr.DefaultOcrLanguageModelManager
+import com.theoriacodex.app.viewer.ocr.GoogleViewerTextTranslator
 import com.theoriacodex.app.viewer.ocr.GooglePlayOcrLanguageModuleGateway
-import com.theoriacodex.app.viewer.ocr.LibreTranslateViewerTextTranslator
 import com.theoriacodex.app.viewer.ocr.MlKitCjkTextRecognizerFactory
 import com.theoriacodex.app.viewer.ocr.OcrLanguageModelSource
 import com.theoriacodex.app.viewer.ocr.ViewerOcrTranslationCoordinator
@@ -60,6 +61,7 @@ import com.theoriacodex.data.android.room.LegacyJsonMigrationException
 import com.theoriacodex.data.android.room.RoomCodexLikesRepository
 import com.theoriacodex.data.android.room.RoomLegacyJsonImporter
 import com.theoriacodex.data.android.room.RoomMediaDurationRepository
+import com.theoriacodex.data.android.room.RoomViewerTranslationCacheRepository
 import com.theoriacodex.data.android.room.RecentsImportResult
 import com.theoriacodex.data.android.room.RoomRecentsLegacyImporter
 import com.theoriacodex.data.android.room.RoomRecentsRepository
@@ -187,6 +189,8 @@ internal class DefaultTheoriaAppContainer(
     )
     private val contentDatabase = TheoriaRoomDatabase.create(appContext)
     private val mediaDurationRepository = RoomMediaDurationRepository(contentDatabase)
+    private val viewerTranslationCacheRepository =
+        RoomViewerTranslationCacheRepository(contentDatabase)
     private val boundedMediaDurationProbe = BoundedMediaDurationProbe(sourceHttpClient)
     private val mediaDurationAcquisitionEngine = MediaDurationAcquisitionEngine(
         registry = sourceRegistry,
@@ -240,7 +244,10 @@ internal class DefaultTheoriaAppContainer(
         context = appContext,
         imageLoader = appContext.imageLoader,
         recognizerFactory = cjkTextRecognizerFactory,
-        translator = LibreTranslateViewerTextTranslator(),
+        translator = CachedViewerRegionTranslator(
+            remote = GoogleViewerTextTranslator(),
+            cache = viewerTranslationCacheRepository,
+        ),
     )
 
     private val updateStateStore = FileBackedUpdateStateStore(

@@ -200,6 +200,35 @@ class TheoriaRoomSchemaTest {
         database.close()
     }
 
+    @Test
+    fun migrationSevenToEightAddsPrivateBoundedViewerTranslationCache() {
+        migrationHelper.createDatabase(TEST_DATABASE_NAME, 7).apply {
+            execSQL("INSERT INTO codices(codex_id,name,created_at_epoch_ms,display_order) VALUES('saved','Saved',1,0)")
+            close()
+        }
+
+        val database = migrationHelper.runMigrationsAndValidate(
+            TEST_DATABASE_NAME,
+            8,
+            true,
+            TheoriaRoomDatabase.MIGRATION_7_8,
+        )
+        database.execSQL(
+            "INSERT INTO viewer_translation_cache(backend_version,source_language," +
+                "source_text_sha256,translated_text,expires_at_epoch_ms,last_used_at_epoch_ms) " +
+                "VALUES('google-nmt-v1','JAPANESE','hash','English',100,1)",
+        )
+        database.query("SELECT translated_text FROM viewer_translation_cache").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("English", cursor.getString(0))
+        }
+        database.query("SELECT name FROM codices WHERE codex_id='saved'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("Saved", cursor.getString(0))
+        }
+        database.close()
+    }
+
     companion object {
         private const val TEST_DATABASE_NAME = "theoria-room-schema-test"
     }

@@ -46,9 +46,9 @@ internal fun ViewerOcrSettingsSection(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Automatically detect text in Viewer")
+                Text("Automatically detect and translate text")
                 Text(
-                    text = "Scans only the current static image in the background",
+                    text = "Processes only the current static Viewer image",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -71,8 +71,8 @@ internal fun ViewerOcrSettingsSection(
         }
 
         Text(
-            text = "OCR runs on this device. When you tap detected text, only that phrase " +
-                "and its source language are sent to translate.axor.dev for translation.",
+            text = "OCR runs on this device. Detected phrases not already cached are sent with " +
+                "their source language to translate.axor.dev in one background batch.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

@@ -1,4 +1,4 @@
-"""Narrow LibreTranslate-compatible gateway for Google Cloud Translation."""
+"""Narrow current-image batch gateway for Google Cloud Translation."""
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ import time
 from typing import Final
 from html import unescape
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs
 from urllib.request import Request, urlopen
 
 
@@ -22,10 +21,14 @@ GOOGLE_TRANSLATE_API_KEY: Final = os.environ.get("GOOGLE_TRANSLATE_API_KEY", "")
 GOOGLE_TRANSLATE_URL: Final = "https://translation.googleapis.com/language/translate/v2"
 CHARACTER_LIMIT: Final = int(os.environ.get("TRANSLATION_CHAR_LIMIT", "1000"))
 REQUESTS_PER_MINUTE: Final = int(os.environ.get("TRANSLATION_REQUESTS_PER_MINUTE", "60"))
-MAX_REQUEST_BYTES: Final = 8 * 1024
+CHARACTERS_PER_DAY: Final = int(os.environ.get("TRANSLATION_CHARACTERS_PER_DAY", "15000"))
+MAX_REQUEST_BYTES: Final = 24 * 1024
 MAX_TRANSLATION_RESPONSE_BYTES: Final = 64 * 1024
 TRANSLATION_TIMEOUT_SECONDS: Final = 10
 RATE_WINDOW_SECONDS: Final = 60
+DAILY_WINDOW_SECONDS: Final = 24 * 60 * 60
+MAX_BATCH_PHRASES: Final = 32
+MAX_BATCH_CHARACTERS: Final = 5_000
 
 GOOGLE_SOURCE_CODES: Final = {
     "ja": "ja",
@@ -36,35 +39,43 @@ GOOGLE_SOURCE_CODES: Final = {
 _inference_slot = BoundedSemaphore(value=1)
 
 
-class SlidingWindowRateLimiter:
-    """Bounds total public work; Traefik is the only direct gateway peer."""
+class SlidingWindowBudget:
+    """Bounds public work without trusting client-controlled forwarding headers."""
 
     def __init__(self, limit: int, window_seconds: int) -> None:
         self._limit = limit
         self._window_seconds = window_seconds
-        self._requests: deque[float] = deque()
+        self._usage: deque[tuple[float, int]] = deque()
+        self._total = 0
         self._lock = Lock()
 
-    def allow(self, now: float) -> bool:
+    def allow(self, now: float, cost: int = 1) -> bool:
         cutoff = now - self._window_seconds
         with self._lock:
-            while self._requests and self._requests[0] <= cutoff:
-                self._requests.popleft()
-            if len(self._requests) >= self._limit:
+            while self._usage and self._usage[0][0] <= cutoff:
+                _, expired_cost = self._usage.popleft()
+                self._total -= expired_cost
+            if cost <= 0 or self._total + cost > self._limit:
                 return False
-            self._requests.append(now)
+            self._usage.append((now, cost))
+            self._total += cost
             return True
 
 
-_rate_limiter = SlidingWindowRateLimiter(REQUESTS_PER_MINUTE, RATE_WINDOW_SECONDS)
+_request_budget = SlidingWindowBudget(REQUESTS_PER_MINUTE, RATE_WINDOW_SECONDS)
+_character_budget = SlidingWindowBudget(CHARACTERS_PER_DAY, DAILY_WINDOW_SECONDS)
 
 
-def translate(source: str, text: str, api_key: str = GOOGLE_TRANSLATE_API_KEY) -> str:
+def translate_batch(
+    source: str,
+    texts: list[str],
+    api_key: str = GOOGLE_TRANSLATE_API_KEY,
+) -> list[str]:
     if not api_key:
         raise ValueError("Google Translation API key is not configured")
     request_body = json.dumps(
         {
-            "q": text,
+            "q": texts,
             "source": GOOGLE_SOURCE_CODES[source],
             "target": "en",
             "format": "text",
@@ -87,10 +98,13 @@ def translate(source: str, text: str, api_key: str = GOOGLE_TRANSLATE_API_KEY) -
     if len(raw_response) > MAX_TRANSLATION_RESPONSE_BYTES:
         raise ValueError("Translation response exceeded the configured limit")
     payload = json.loads(raw_response)
-    translated = unescape(payload["data"]["translations"][0]["translatedText"]).strip()
-    if not translated:
-        raise ValueError("Google returned an empty translation")
-    return translated
+    translations = [
+        unescape(item["translatedText"]).strip()
+        for item in payload["data"]["translations"]
+    ]
+    if len(translations) != len(texts) or any(not text for text in translations):
+        raise ValueError("Google returned an incomplete translation batch")
+    return translations
 
 
 class TranslationHandler(BaseHTTPRequestHandler):
@@ -106,15 +120,15 @@ class TranslationHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"status": "unconfigured"})
 
     def do_POST(self) -> None:  # noqa: N802 - required by BaseHTTPRequestHandler
-        if self.path != "/translate":
+        if self.path != "/translate-batch":
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
             return
-        if not _rate_limiter.allow(time.monotonic()):
+        if not _request_budget.allow(time.monotonic()):
             self._send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Rate limit exceeded"})
             return
 
         content_type = self.headers.get("Content-Type", "").partition(";")[0].strip().lower()
-        if content_type != "application/x-www-form-urlencoded":
+        if content_type != "application/json":
             self._send_json(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, {"error": "Unsupported body"})
             return
         try:
@@ -126,45 +140,58 @@ class TranslationHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            fields = parse_qs(
-                self.rfile.read(content_length).decode("utf-8"),
-                strict_parsing=True,
-                max_num_fields=4,
-            )
-            if set(fields) != {"q", "source", "target", "format"}:
+            fields = json.loads(self.rfile.read(content_length).decode("utf-8"))
+            if not isinstance(fields, dict) or set(fields) != {"q", "source", "target", "format"}:
                 raise ValueError("Unexpected translation fields")
-            if any(len(values) != 1 for values in fields.values()):
-                raise ValueError("Repeated translation field")
-            text = fields["q"][0].strip()
-            source = fields["source"][0]
+            raw_texts = fields["q"]
+            if not isinstance(raw_texts, list) or not 1 <= len(raw_texts) <= MAX_BATCH_PHRASES:
+                raise ValueError("Invalid translation batch")
+            if any(not isinstance(text, str) for text in raw_texts):
+                raise ValueError("Invalid phrase type")
+            texts = [text.strip() for text in raw_texts]
+            source = fields["source"]
             if source not in GOOGLE_SOURCE_CODES:
                 raise ValueError("Unsupported source language")
-            if fields["target"][0] != "en" or fields["format"][0] != "text":
+            if fields["target"] != "en" or fields["format"] != "text":
                 raise ValueError("Unsupported translation request")
-            if not text or len(text) > CHARACTER_LIMIT:
+            if (
+                any(not text or len(text) > CHARACTER_LIMIT for text in texts)
+                or sum(map(len, texts)) > MAX_BATCH_CHARACTERS
+            ):
                 raise ValueError("Invalid phrase length")
-        except (UnicodeDecodeError, ValueError):
+        except (UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError):
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Invalid translation request"})
+            return
+        if not _character_budget.allow(time.monotonic(), sum(map(len, texts))):
+            self._send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Daily translation limit reached"})
             return
 
         if not _inference_slot.acquire(blocking=False):
             self._send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Translator busy"})
             return
         try:
-            translated = translate(source, text)
-        except (HTTPError, URLError, TimeoutError, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError):
+            translations = translate_batch(source, texts)
+        except HTTPError as failure:
+            status = (
+                HTTPStatus.TOO_MANY_REQUESTS
+                if failure.code == HTTPStatus.TOO_MANY_REQUESTS
+                else HTTPStatus.SERVICE_UNAVAILABLE
+            )
+            self._send_json(status, {"error": "Translation unavailable"})
+            return
+        except (URLError, TimeoutError, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError):
             self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "Translation unavailable"})
             return
         finally:
             _inference_slot.release()
 
-        self._send_json(HTTPStatus.OK, {"translatedText": translated})
+        self._send_json(HTTPStatus.OK, {"translations": translations})
 
     def log_message(self, message_format: str, *args: object) -> None:
         # Never log the tapped phrase or request body. The default message contains only path/status.
         super().log_message(message_format, *args)
 
-    def _send_json(self, status: HTTPStatus, payload: dict[str, str]) -> None:
+    def _send_json(self, status: HTTPStatus, payload: dict[str, object]) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")

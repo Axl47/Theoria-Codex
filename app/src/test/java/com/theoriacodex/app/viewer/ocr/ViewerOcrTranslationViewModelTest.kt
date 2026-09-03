@@ -117,13 +117,13 @@ class ViewerOcrTranslationViewModelTest {
     }
 
     @Test
-    fun `region tap moves through loading translation and timed success`() = runTest {
+    fun `region tap shares background translation and shows timed success`() = runTest {
         val stageGate = CompletableDeferred<Unit>()
-        val translation = CompletableDeferred<String>()
+        val translation = CompletableDeferred<Map<String, String>>()
         val service = FakeViewerOcrTranslationService().apply {
             nextAnalysis = CompletableDeferred(completedAnalysis("phrase"))
             translationStageGate = stageGate
-            nextTranslation = translation
+            nextTranslations = translation
         }
         val owner = ViewerOcrTranslationViewModel(service, backgroundScope)
         val identity = identity("translate")
@@ -133,13 +133,10 @@ class ViewerOcrTranslationViewModelTest {
 
         owner.onRegionTapped("phrase")
         runCurrent()
-        assertTrue(owner.state.value.translationCard is ViewerTranslationCardState.PreparingTranslator)
-
-        stageGate.complete(Unit)
-        runCurrent()
         assertTrue(owner.state.value.translationCard is ViewerTranslationCardState.Translating)
 
-        translation.complete("Japanese text")
+        stageGate.complete(Unit)
+        translation.complete(mapOf("phrase" to "Japanese text"))
         runCurrent()
         assertEquals(
             ViewerTranslationCardState.Ready("phrase", "Japanese text"),
@@ -156,6 +153,24 @@ class ViewerOcrTranslationViewModelTest {
         runCurrent()
         assertTrue(owner.state.value.translationCard is ViewerTranslationCardState.Ready)
         assertEquals(1, service.translationCallCount)
+    }
+
+    @Test
+    fun `analysis prefetches all detected regions in one batch`() = runTest {
+        val service = FakeViewerOcrTranslationService().apply {
+            nextAnalysis = CompletableDeferred(
+                completedAnalysis("one").copy(regions = listOf(region("one"), region("two"))),
+            )
+        }
+        val owner = ViewerOcrTranslationViewModel(service, backgroundScope)
+        val identity = identity("batch")
+
+        owner.synchronize(identity, configuration())
+        owner.onImageReady(imageReady(identity))
+        runCurrent()
+
+        assertEquals(listOf(listOf("one", "two")), service.translationRequests)
+        assertEquals(setOf("one", "two"), owner.state.value.translations.keys)
     }
 
     @Test
@@ -182,7 +197,7 @@ class ViewerOcrTranslationViewModelTest {
 
         owner.onRegionTapped("phrase")
         runCurrent()
-        assertEquals(2, service.translationCallCount)
+        assertEquals(3, service.translationCallCount)
     }
 
     private fun identity(name: String): ViewerOcrSelectionIdentity {
@@ -244,9 +259,10 @@ private class FakeViewerOcrTranslationService : ViewerOcrTranslationService {
     val analysisRequests = mutableListOf<ViewerOcrAnalysisRequest>()
     var nextAnalysis = CompletableDeferred<ViewerOcrAnalysis?>().apply { complete(null) }
     var translationStageGate: CompletableDeferred<Unit>? = null
-    var nextTranslation = CompletableDeferred("Translated")
+    var nextTranslations: CompletableDeferred<Map<String, String>>? = null
     var translationFailure: Exception? = null
     var translationCallCount = 0
+    val translationRequests = mutableListOf<List<String>>()
 
     override suspend fun analyze(request: ViewerOcrAnalysisRequest): ViewerOcrAnalysis? {
         analysisRequests += request
@@ -254,14 +270,15 @@ private class FakeViewerOcrTranslationService : ViewerOcrTranslationService {
     }
 
     override suspend fun translate(
-        language: ViewerOcrLanguage,
-        text: String,
+        regions: List<ViewerOcrRegion>,
         onStage: (ViewerTranslationStage) -> Unit,
-    ): String {
+    ): Map<String, String> {
         translationCallCount += 1
+        translationRequests += regions.map(ViewerOcrRegion::id)
         translationStageGate?.await()
         onStage(ViewerTranslationStage.TRANSLATING)
         translationFailure?.let { throw it }
-        return nextTranslation.await()
+        return nextTranslations?.await()
+            ?: regions.associate { region -> region.id to "Translated" }
     }
 }
