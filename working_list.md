@@ -11,16 +11,12 @@
 ## Done
 
 - [x] Initialize the task checklist
-  - Replaced the stale Search checklist before implementation, as required by the task-orchestrator workflow.
-- [x] Define the integrated data flow, limits, error paths, and tests
-  - OCR falls back from the original image to Japanese-only overlapping crops and one contrast treatment. Translation resolves durable cache hits, batches misses, shares in-flight work with taps, and rejects stale identities.
-- [x] Add a bounded Japanese OCR recovery pass for stylized text
-  - Verified four overlapping crops, overlap deduplication, Android bitmap preprocessing, and Debug compilation with focused app-logic tests.
-- [x] Add persistent bounded translation cache storage and migration
-  - Verified cache TTL/LRU behavior in core-data and Room, generated schema 8, and confirmed Room stores a 64-character source hash rather than plaintext source text.
-- [x] Add background batch translation through the app and Google gateway
-  - Verified deduplicated batch JSON, bounded splitting, durable cache reuse, one automatic current-image request, in-flight tap sharing, timed cards, and retry behavior in focused JVM/Python tests.
-- [x] Run bounded validation and update the ExecPlan
-  - Focused suites, Room migration, Android-test compilation, affected Detekt tasks, aggregate Kover verification, Debug assembly, hotspot/duplication audits, Compose normalization, HTML parsing, and diff integrity pass. Core-data Detekt retains three unrelated pre-existing findings.
-- [x] Deploy and validate the batch gateway without compatibility endpoints
-  - After explicit production authorization, Dokploy deployed `google-batch-v1`; `/translate-batch` returned ordered Japanese, Chinese, and Korean results in 0.34–0.68 seconds and `/translate` returned the intended 404.
+  - Replaced the completed OCR rollout checklist before editing.
+- [x] Define the settings data flow, UI states, and acceptance checks
+  - Keep the existing opt-in and device OCR model controls; present server translation as always-to-English with no downloadable translation packs, and state the phrase-only privacy boundary.
+- [x] Rebuild the Viewer translation settings around the server-backed flow
+  - Renamed and regrouped the UI around automatic translation, on-device recognition, server-provided English output, and phrase-only data sharing.
+- [x] Update focused presentation coverage
+  - Updated summary and recognition-state assertions for the new user-facing terminology.
+- [x] Run the bounded validation batch
+  - Debug Kotlin compilation and the focused settings presentation suite pass. Detekt reports no finding in the changed settings file; its task remains red on 70 unrelated existing complexity/length findings elsewhere.

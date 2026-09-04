@@ -23,8 +23,8 @@ internal fun ViewerOcrSettingsSection(
 ) {
     val viewerSettings = state.settings.viewer
     SettingsSection(
-        title = "Viewer OCR & Translation",
-        summary = viewerOcrSettingsSummary(
+        title = "Viewer Translation",
+        summary = viewerTranslationSettingsSummary(
             enabled = viewerSettings.automaticTextTranslationEnabled,
             enabledLanguageCount = viewerSettings.enabledOcrLanguages.count { language ->
                 state.ocrLanguageModels[language] == OcrLanguageModelState.Ready
@@ -40,24 +40,22 @@ internal fun ViewerOcrSettingsSection(
             )
         },
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Automatically detect and translate text")
-                Text(
-                    text = "Processes only the current static Viewer image",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(
-                checked = viewerSettings.automaticTextTranslationEnabled,
-                onCheckedChange = {
-                    onAction(SettingsAction.SetAutomaticTextTranslationEnabled(it))
-                },
+        ViewerAutomaticTranslationToggle(
+            enabled = viewerSettings.automaticTextTranslationEnabled,
+            onEnabledChange = {
+                onAction(SettingsAction.SetAutomaticTextTranslationEnabled(it))
+            },
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = "Text recognition",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = "Choose which languages this device can recognize.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -70,9 +68,51 @@ internal fun ViewerOcrSettingsSection(
             )
         }
 
+        ViewerServerTranslationInfo()
+    }
+}
+
+@Composable
+private fun ViewerAutomaticTranslationToggle(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Automatically translate text")
+            Text(
+                text = "Scans only the current static Viewer image",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(
+            checked = enabled,
+            onCheckedChange = onEnabledChange,
+        )
+    }
+}
+
+@Composable
+private fun ViewerServerTranslationInfo() {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
-            text = "OCR runs on this device. Detected phrases not already cached are sent with " +
-                "their source language to translate.axor.dev in one background batch.",
+            text = "English translation",
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Text(
+            text = "Recognized text is translated by Theoria's server, so there are no " +
+                "translation language packs to manage.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = "Only recognized text and its source language are sent. Images and post " +
+                "details stay on your device.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -104,7 +144,7 @@ private fun ViewerOcrLanguageRow(
             OcrLanguageModelState.NotDownloaded -> Row(verticalAlignment = Alignment.CenterVertically) {
                 DisableUnavailableLanguageSwitch(language, enabled, onAction)
                 TextButton(onClick = { onAction(SettingsAction.DownloadOcrLanguage(language)) }) {
-                    Text("Download OCR")
+                    Text("Download")
                 }
             }
             is OcrLanguageModelState.Downloading -> {
@@ -145,9 +185,9 @@ private fun DisableUnavailableLanguageSwitch(
     )
 }
 
-internal fun viewerOcrSettingsSummary(enabled: Boolean, enabledLanguageCount: Int): String {
+internal fun viewerTranslationSettingsSummary(enabled: Boolean, enabledLanguageCount: Int): String {
     val languageLabel = if (enabledLanguageCount == 1) "language" else "languages"
-    return if (!enabled) "Off" else "On · $enabledLanguageCount $languageLabel enabled"
+    return if (!enabled) "Off" else "Automatic · $enabledLanguageCount source $languageLabel"
 }
 
 private fun ViewerOcrLanguage.displayLabel(): String = when (this) {
@@ -158,10 +198,10 @@ private fun ViewerOcrLanguage.displayLabel(): String = when (this) {
 
 internal fun ocrLanguageModelStatusLabel(state: OcrLanguageModelState): String = when (state) {
     OcrLanguageModelState.Checking -> "Checking availability"
-    OcrLanguageModelState.NotDownloaded -> "OCR model needed"
+    OcrLanguageModelState.NotDownloaded -> "Recognition download needed"
     is OcrLanguageModelState.Downloading ->
         state.progressPercent?.let { "Downloading · $it%" } ?: "Downloading"
-    OcrLanguageModelState.Ready -> "OCR available on device"
+    OcrLanguageModelState.Ready -> "Ready to recognize"
     is OcrLanguageModelState.Failed -> state.message
     is OcrLanguageModelState.Unavailable -> state.message
 }

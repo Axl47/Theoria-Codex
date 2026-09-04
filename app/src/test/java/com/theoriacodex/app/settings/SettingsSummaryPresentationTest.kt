@@ -35,16 +35,20 @@ class SettingsSummaryPresentationTest {
     }
 
     @Test
-    fun `Viewer OCR summary reports global state and configured languages`() {
-        assertEquals("Off", viewerOcrSettingsSummary(enabled = false, enabledLanguageCount = 3))
-        assertEquals("On · 1 language enabled", viewerOcrSettingsSummary(true, 1))
-        assertEquals("On · 2 languages enabled", viewerOcrSettingsSummary(true, 2))
+    fun `Viewer translation summary separates automatic mode from recognition languages`() {
+        assertEquals("Off", viewerTranslationSettingsSummary(enabled = false, enabledLanguageCount = 3))
+        assertEquals("Automatic · 1 source language", viewerTranslationSettingsSummary(true, 1))
+        assertEquals("Automatic · 2 source languages", viewerTranslationSettingsSummary(true, 2))
     }
 
     @Test
-    fun `Viewer OCR ready state describes device OCR availability`() {
+    fun `Viewer language states describe recognition rather than translation packs`() {
         assertEquals(
-            "OCR available on device",
+            "Recognition download needed",
+            ocrLanguageModelStatusLabel(OcrLanguageModelState.NotDownloaded),
+        )
+        assertEquals(
+            "Ready to recognize",
             ocrLanguageModelStatusLabel(OcrLanguageModelState.Ready),
         )
     }
