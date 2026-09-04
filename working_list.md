@@ -2,8 +2,7 @@
 
 ## Pending
 
-- [!] Deploy and validate the batch gateway without compatibility endpoints
-  - Production deployment was blocked because the user must explicitly authorize replacing the live `/translate` endpoint with batch-only `/translate-batch`; no live service changed.
+- None.
 
 ## In Progress
 
@@ -23,3 +22,5 @@
   - Verified deduplicated batch JSON, bounded splitting, durable cache reuse, one automatic current-image request, in-flight tap sharing, timed cards, and retry behavior in focused JVM/Python tests.
 - [x] Run bounded validation and update the ExecPlan
   - Focused suites, Room migration, Android-test compilation, affected Detekt tasks, aggregate Kover verification, Debug assembly, hotspot/duplication audits, Compose normalization, HTML parsing, and diff integrity pass. Core-data Detekt retains three unrelated pre-existing findings.
+- [x] Deploy and validate the batch gateway without compatibility endpoints
+  - After explicit production authorization, Dokploy deployed `google-batch-v1`; `/translate-batch` returned ordered Japanese, Chinese, and Korean results in 0.34–0.68 seconds and `/translate` returned the intended 404.

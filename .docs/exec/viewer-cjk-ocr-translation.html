@@ -134,16 +134,16 @@
     <h1>Automatic CJK OCR translation overlays</h1>
     <p>Add opt-in, zero-touch Japanese, Chinese, and Korean text detection to static Viewer images. Enabled on-device OCR recognizers run in a metadata-first sequence after the current image becomes visible; a bounded Japanese crop/contrast fallback recovers difficult stylized text; and uncached detected phrases begin one deduplicated Google NMT batch so highlighted regions are ready when tapped.</p>
     <div class="meta" aria-label="Plan metadata">
-      <span class="pill">Status: Batch implementation validated · production deploy and device acceptance pending</span>
+      <span class="pill">Status: Batch implementation live · device acceptance pending</span>
       <span class="pill">Owner: Codex</span>
       <span class="pill">Created: 2026-09-02</span>
       <span class="pill">Updated: 2026-09-03</span>
       <span class="pill">Plan: .docs/exec/viewer-cjk-ocr-translation.html</span>
     </div>
     <div class="dashboard">
-      <div class="card"><strong>Next action</strong>After explicit production authorization, deploy batch-only <code>/translate-batch</code>; then install only <code>com.theoriacodex.debug</code> after separate device authorization and validate the attached stylized sample.</div>
+      <div class="card"><strong>Next action</strong>After separate device authorization, install only <code>com.theoriacodex.debug</code> and validate the attached stylized sample plus instant/cache-hit taps.</div>
       <div class="card"><strong>Main risk</strong>Crop/contrast fallback improves ML Kit inputs but cannot guarantee recognition of heavily illustrated sound effects; device evidence remains required.</div>
-      <div class="card"><strong>Validation</strong>Fallback geometry/deduplication, Room cache/migration, batch transport, cache reuse, background prefetch, shared tap work, Debug compilation, and gateway unit tests pass. Live batch and device acceptance remain.</div>
+      <div class="card"><strong>Validation</strong>Fallback geometry/deduplication, Room cache/migration, batch transport, cache reuse, background prefetch, shared tap work, Debug assembly, aggregate coverage, gateway tests, and live batch-only CJK acceptance pass. Device acceptance remains.</div>
       <div class="card"><strong>Affected areas</strong><code>core-data</code> cache contract, Room schema 8, <code>app-logic</code> OCR fallback policy, Android ML Kit integration, Settings disclosure, Viewer owner, and Google gateway.</div>
     </div>
   </header>
@@ -176,9 +176,9 @@
       <h2>Current Status</h2>
       <table class="status-table">
         <tbody>
-          <tr><td>Plan state</td><td>The fallback OCR, Room schema 8 cache, background batch owner, and batch-only gateway are implemented and host-validated. Production batch deployment requires explicit authorization; isolated Debug-device acceptance follows separately.</td></tr>
+          <tr><td>Plan state</td><td>The fallback OCR, Room schema 8 cache, background batch owner, and batch-only Google gateway are implemented, host-validated, and live. Isolated Debug-device acceptance follows separately.</td></tr>
           <tr><td>Repository state</td><td>Settings authorizes detection plus prefetch; Viewer checks the durable cache and batches only misses; the unreleased single-phrase protocol is removed.</td></tr>
-          <tr><td>Next implementation action</td><td>Deploy <code>/translate-batch</code> after explicit production authorization, then validate the isolated Debug app after its package identity and install are separately authorized.</td></tr>
+          <tr><td>Next implementation action</td><td>Validate the isolated Debug app after its package identity and install are separately authorized.</td></tr>
           <tr><td>Open product choice</td><td>English is the fixed translation target for the first version. A target-language picker is explicitly deferred.</td></tr>
           <tr><td>Estimated scope</td><td>Medium: approximately 5–8 focused implementation days including tests, safe device validation, and manga accuracy tuning.</td></tr>
         </tbody>
@@ -532,7 +532,7 @@ ViewerOcrTranslationViewModel &lt;──── identity-bound results ───�
         <li>[x] 2026-09-03 — The project owner obtained written Google approval for the adult-content use and attribution exception. Replaced Hy-MT2 with Cloud Translation's standard NMT model behind the unchanged gateway contract, kept the key encrypted in Dokploy and restricted to one host IP plus the Translation API, and mapped app code <code>zh-Hans</code> to Google NMT's <code>zh-CN</code>. Live Japanese, Chinese, and Korean responses completed in 0.44–0.60 seconds.</li>
         <li>[x] 2026-09-03 — A stylized sound-effect sample produced no ML Kit regions. Implemented a Japanese-only empty-result recovery pass with four overlapping crops, bounded upscaling, one high-contrast grayscale retry, original-image coordinate mapping, and overlap-aware deduplication. Pure policy tests and Debug compilation pass.</li>
         <li>[x] 2026-09-03 — Implemented unreleased batch prefetch end to end: Room schema 8 stores up to 1,000 90-day translations keyed by backend/language/source hash; current-image misses deduplicate into bounded JSON batches; analysis starts prefetch; taps reuse ready/in-flight work; failures remain silent until a relevant tap and retry on demand. Cache, migration, transport, owner, and Python gateway tests pass.</li>
-        <li>[!] 2026-09-03 — Batch-only production deployment was rejected by the execution approval boundary because the user must explicitly authorize replacing live <code>/translate</code> with <code>/translate-batch</code>. The existing single-phrase Google gateway remains live and healthy.</li>
+        <li>[x] 2026-09-04 — After explicit production authorization, built <code>theoriacodex/translation-gateway:google-batch-v1</code> and deployed it through Dokploy's normal Raw Compose webhook. Health returns 200, old <code>/translate</code> returns the intended 404, and ordered Japanese, Simplified Chinese, and Korean batches return 200 in 0.34–0.68 seconds with the key remaining injected only by Dokploy.</li>
         <li>[ ] Human acceptance: download real OCR models in the isolated Debug app and record manga accuracy, OEM translator behavior, and numeric timing/memory evidence.</li>
       </ul>
 
@@ -574,7 +574,7 @@ ViewerOcrTranslationViewModel &lt;──── identity-bound results ───�
       </ul>
 
       <h3>Outcomes And Retrospective</h3>
-      <p>The repository now has one coherent automatic path: ordinary on-device OCR, a Japanese-only empty-result recovery pass, immediate highlights, durable hash-keyed cache lookup, and one background Google batch for current-image misses. Taps reuse ready or in-flight work and retain stale-session rejection. Host validation is complete; the live gateway remains on its prior single-phrase protocol until explicit production replacement is authorized, and device acceptance on the stylized sample remains.</p>
+      <p>The feature now has one coherent automatic path: ordinary on-device OCR, a Japanese-only empty-result recovery pass, immediate highlights, durable hash-keyed cache lookup, and one background Google batch for current-image misses. Taps reuse ready or in-flight work and retain stale-session rejection. Host validation and the live batch-only gateway are complete; device acceptance on the stylized sample remains.</p>
     </section>
 
     <section id="recovery">
