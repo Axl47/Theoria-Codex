@@ -10,14 +10,13 @@ import com.theoriacodex.data.repository.CodexProfileDeleteResult
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.InMemoryCodexRepository
 import com.theoriacodex.data.repository.InMemoryLikesRepository
-import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.flow.first
 
 /** Storage-independent transaction fake for app workflow tests. */
 class InMemoryCodexLikesTransactions(
     val codices: CodexRepository = InMemoryCodexRepository(),
-    val likes: LikesRepository = InMemoryLikesRepository(),
+    val likes: InMemoryLikesRepository = InMemoryLikesRepository(),
 ) : CodexLikesTransactions {
     override suspend fun importCodex(
         codexId: String,
@@ -121,7 +120,5 @@ class InMemoryCodexLikesTransactions(
         )
     }
 
-    override suspend fun clearAllContent() {
-        codices.observeCodices().first().forEach { codex -> codices.deleteCodex(codex.codexId) }
-    }
+
 }

@@ -3,6 +3,7 @@ package com.theoriacodex.app.viewer.ocr
 import com.theoriacodex.app.viewer.ViewerOcrRegion
 import com.theoriacodex.data.repository.ViewerTranslationCacheKey
 import com.theoriacodex.data.repository.ViewerTranslationCacheRepository
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 
 internal interface ViewerRegionTranslator {
     suspend fun translate(
@@ -15,6 +16,7 @@ internal interface ViewerRegionTranslator {
 internal class CachedViewerRegionTranslator(
     private val remote: ViewerTextTranslator,
     private val cache: ViewerTranslationCacheRepository,
+    private val recordTranslationUsage: suspend (phraseCount: Long, sourceCharacterCount: Long) -> Unit = { _, _ -> },
 ) : ViewerRegionTranslator {
     override suspend fun translate(
         regions: List<ViewerOcrRegion>,
@@ -45,6 +47,14 @@ internal class CachedViewerRegionTranslator(
                 }
         }
         cache.putAll(fetched)
+        if (fetched.isNotEmpty()) {
+            runCatchingPreservingCancellation {
+                recordTranslationUsage(
+                    fetched.size.toLong(),
+                    fetched.keys.sumOf { key -> key.sourceText.length.toLong() },
+                )
+            }
+        }
         val resolved = cached + fetched
         return keysByRegion.mapNotNull { (regionId, key) ->
             resolved[key]?.let { translated -> regionId to translated }

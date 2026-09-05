@@ -30,8 +30,6 @@ internal sealed interface ViewerAction {
     data object TogglePlayback : ViewerAction
     data object RestartPlayback : ViewerAction
     data class SetPlaybackRate(val rate: Float) : ViewerAction
-    data class TimelineProgressChanged(val positionMs: Long, val durationMs: Long?) : ViewerAction
-    data class FrameProgressChanged(val frameIndex: Int, val frameCount: Int) : ViewerAction
 
     data object RequestCurrentPageResolution : ViewerAction
     data class ResolutionStarted(

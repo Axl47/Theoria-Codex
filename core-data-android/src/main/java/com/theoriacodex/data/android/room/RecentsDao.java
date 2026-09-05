@@ -21,6 +21,8 @@ public interface RecentsDao {
     @Query("UPDATE recent_watched SET max_viewed_media_number = MAX(max_viewed_media_number, :viewedMediaNumber) WHERE source = :source AND source_post_id = :postId AND section = :section")
     int updateWatchedMediaProgress(String source, String postId, String section, int viewedMediaNumber);
     @Query("SELECT COALESCE(MAX(sort_sequence), 0) + 1 FROM recent_watched") long nextWatchedSequence();
+    @Query("SELECT source, source_post_id FROM recent_watched ORDER BY viewed_at_epoch_ms DESC, sort_sequence DESC, source ASC, source_post_id ASC, section ASC LIMIT -1 OFFSET :limit")
+    List<PostIdentityRow> watchedBeyondLimit(int limit);
     @Query("DELETE FROM recent_watched WHERE (source, source_post_id, section) IN (SELECT source, source_post_id, section FROM recent_watched ORDER BY viewed_at_epoch_ms DESC, sort_sequence DESC, source ASC, source_post_id ASC, section ASC LIMIT -1 OFFSET :limit)")
     int trimWatched(int limit);
     @Query("DELETE FROM recent_watched") int deleteWatched();

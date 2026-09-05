@@ -5,6 +5,7 @@ import com.theoriacodex.app.testing.InMemoryCodexLikesTransactions
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.CodexSortMode
+import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.InMemoryCacheRepository
 import com.theoriacodex.data.repository.InMemoryCodexRepository
 import com.theoriacodex.domain.adapter.SourceAdapter
@@ -21,6 +22,61 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CodexTransferServiceTest {
+    @Test
+    fun `storage failures during import and export are typed outcomes`() = runTest {
+        val repository = InMemoryCodexRepository()
+        repository.ensureCodex("source", "Saved")
+        repository.addItem("source", testPost())
+        val transactions = InMemoryCodexLikesTransactions(codices = repository)
+        val exporter = CodexTransferService(repository, transactions, InMemoryCacheRepository(), emptyRegistry())
+        val payload = (exporter.export("source") as CodexExportResult.Success).payload.json
+        val broken = object : CodexRepository by repository {
+            override fun observeCodex(codexId: String) = error("storage unavailable")
+        }
+        val failingTransactions = object : com.theoriacodex.data.repository.CodexLikesTransactions by transactions {
+            override suspend fun importCodex(codexId: String, name: String, posts: List<Post>) = error("storage unavailable")
+        }
+        val service = CodexTransferService(broken, failingTransactions, InMemoryCacheRepository(), emptyRegistry())
+
+        assertEquals(CodexExportResult.Failure, service.export("source"))
+        assertEquals(CodexImportResult.Failure, service.import(payload, "target"))
+    }
+
+    @Test
+    fun `direct multi save commits all posts before any cache work and continues after cache failure`() = runTest {
+        val repository = InMemoryCodexRepository()
+        repository.ensureCodex("target", "Saved")
+        val posts = listOf(testPost(sourcePostId = "one"), testPost(sourcePostId = "two"))
+        val cached = mutableListOf<String>()
+        val cache = object : CacheRepository by InMemoryCacheRepository() {
+            override suspend fun cacheThumbnail(post: Post) {
+                assertEquals(2, repository.observeCodexItems("target").first().size)
+                cached += post.id.sourcePostId
+                if (post == posts.first()) error("cache unavailable")
+            }
+        }
+        val service = CodexTransferService(repository, InMemoryCodexLikesTransactions(codices = repository), cache, emptyRegistry())
+
+        assertEquals(CodexSaveResult.Success(2, 1), service.save("target", posts + posts.first(), false))
+        assertEquals(listOf("one", "two"), cached)
+        assertEquals(CodexSaveResult.Success(0, 1), service.save("target", posts, false))
+    }
+
+    @Test
+    fun `failed durable save is typed and never starts caching`() = runTest {
+        val repository = object : CodexRepository by InMemoryCodexRepository() {
+            override suspend fun addItems(codexId: String, posts: List<Post>): Int = error("storage unavailable")
+        }
+        var cacheCalls = 0
+        val cache = object : CacheRepository by InMemoryCacheRepository() {
+            override suspend fun cacheThumbnail(post: Post) { cacheCalls++ }
+        }
+        val service = CodexTransferService(repository, InMemoryCodexLikesTransactions(), cache, emptyRegistry())
+
+        assertTrue(service.save("target", listOf(testPost()), false) is CodexSaveResult.Failure)
+        assertEquals(0, cacheCalls)
+    }
+
     @Test
     fun `export and import round trip snapshots without a live provider`() = runTest {
         val source = InMemoryCodexRepository()

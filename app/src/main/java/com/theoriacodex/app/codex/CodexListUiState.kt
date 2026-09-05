@@ -86,6 +86,9 @@ internal data class CodexListPresentation(
     val searchSourceOptions: Map<String, List<CodexSearchSourceOption>>,
     val searchTagOptions: Map<String, Map<SourceKey, List<CodexSearchTagOption>>>,
     val likesCodexId: String,
+    val actionLoading: Boolean = false,
+    val actionFailed: Boolean = false,
+    val retryActionOptions: () -> Unit = {},
 )
 
 internal data class CodexListActions(

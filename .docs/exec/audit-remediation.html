@@ -1,0 +1,101 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ExecPlan: Audit remediation</title><style>body{font:15px/1.55 system-ui;max-width:1150px;margin:auto;padding:24px;background:#f7f7f4;color:#202124}nav{position:sticky;top:0;background:white;padding:12px}nav a{margin-right:14px}section{background:white;padding:20px;margin:18px 0;border:1px solid #ddd;border-radius:8px}table{border-collapse:collapse;width:100%}td,th{padding:9px;text-align:left;vertical-align:top;border-bottom:1px solid #ddd}code{overflow-wrap:anywhere}pre{white-space:pre-wrap}a{color:#08786b}.dashboard{display:flex;gap:20px;flex-wrap:wrap}@media print{nav{position:static}}</style></head><body>
+<header><h1>Audit remediation</h1><p>Safer collection saves, responsive collection browsing and transfers, bounded filtered pagination, cheaper recommendations, smaller Viewer state, and removal of verified dead APIs.</p><p>Owner: Codex · Created/updated: 2026-09-04 · Status: Implementation complete; host validated</p><div class="dashboard"><p><strong>Remaining validation:</strong> connected UI tests and physical benchmarks require Android hardware.</p><p><strong>Risk:</strong> storage semantics and canonical paging.</p><p><strong>Validation:</strong> focused JVM/Room tests, quality gates, isolated device proof.</p></div></header><nav><a href="#purpose">Purpose</a><a href="#context">Context</a><a href="#phases">Phases</a><a href="#work">Work plan</a><a href="#validation">Validation</a><a href="#log">Living log</a><a href="#recovery">Recovery</a></nav><main>
+<section id="purpose"><h2>Purpose / big picture</h2><p>A sparse feed card must not erase resolved saved media. Multi-save commits the complete selection before optional caching. Collection tiles load counts and at most eight cover posts each, scoped to the active profile; tags load only for the selected action sheet. Local filters advance past hidden pages within a finite budget and offer Continue afterward. Recommendation attempts reuse one prepared model. Animation progress remains local to playback.</p></section>
+<section id="context"><h2>Context and orientation</h2><p>A canonical Post is identified by source and provider ID. Room stores it once while Codex (saved collection), Likes and Recents hold independent memberships. Sparse means unresolved fields, not authoritative deletion. A route owner is a navigation-scoped ViewModel. Provider continuation tokens remain independent from local filtering.</p><table><tr><th>Owner</th><th>Files</th></tr><tr><td>Storage agent</td><td><code>core-data/src/main/kotlin/com/theoriacodex/data/repository/Repositories.kt</code>, <code>RepositoryPolicies.kt</code>, matching fixtures; <code>core-data-android/src/main/{kotlin,java}/com/theoriacodex/data/android/room/</code>, schema/storage tests.</td></tr><tr><td>Media agent</td><td><code>app/src/main/java/com/theoriacodex/app/viewer/</code>, matching tests and selected media architecture assertions. Preserve OCR edits.</td></tr><tr><td>Recommendation agent</td><td><code>app/src/main/java/com/theoriacodex/app/recommend/ForYouCoordinator.kt</code>, <code>core-domain/src/main/kotlin/com/theoriacodex/domain/recommendation/</code>, <code>app-logic/src/main/kotlin/com/theoriacodex/app/recommend/TagAssociation.kt</code>, matching tests.</td></tr><tr><td>Root</td><td>Shared feed-demand policy and Search/Creator/ForYou screens, <code>app/src/main/java/com/theoriacodex/app/ui/routes/DestinationStateBoundaries.kt</code>, Codex workflows, <code>ui/TheoriaApp.kt</code>, integration, quality configuration and documentation.</td></tr></table><p>Preserve pre-existing statistics edits, concurrent visible autoplay, canonical scroll anchors, legacy durable decoding, transactional Likes, and production-package guards.</p></section>
+<section id="phases"><h2>Phases</h2><table><tr><th>Phase</th><th>Changes and acceptance</th></tr><tr><td>1 · Backend / logic</td><td>Shared Post writer, atomic addItems, bounded summaries, targeted cleanup/index migration; remove unused Likes/reset APIs and fixture-only production algorithms. Prepare recommendations once. Rich→sparse tests preserve media; summary hydration is bounded; migration retains rows; random seed sequences remain deterministic.</td></tr><tr><td>2 · Viewer</td><td>Remove unused progress/capability/metadata/overview projections and deduplicate SavedState writes. Preserve controls, seeking, overview, reconstruction and prefetch. Replace relevant implementation-text assertions with behavioral coverage.</td></tr><tr><td>3 · Feeds / collections</td><td>Shared pure policy handles filtered empty/sparse pages with finite auto-page budget and Continue. Summaries replace all-post overview hydration; selected sheet alone loads tags. Save/transfer workflow owns dispatcher and error boundaries; shell retains Android intents.</td></tr><tr><td>4 · Evidence</td><td>Focused behavior suites and compilation, then lint/Detekt/hotspot/duplication/coverage and integration review. Verify packaged isolated IDs and host-only task graph before any connected work. Never claim unmeasured speedup.</td></tr></table></section>
+<section id="work"><h2>Work plan</h2><ol><li>Preserve original diff and initialize working_list.md before code edits.</li><li>Storage implements <code>CodexRepository.addItems(codexId, posts)</code> returning newly inserted membership count, <code>observeCodexSummaries(codexIds, coverLimit)</code> returning count and bounded cover Posts, and <code>observeSavedPostIds(codexIds)</code>. Root consumes these APIs.</li><li>Run disjoint storage, media and recommendation lanes alongside root UI integration. Agents do not edit plan/configuration or start concurrent Gradle processes.</li><li>Root reviews integration, replaces selected brittle tests, tightens reduced baseline budgets, updates important ownership guidance.</li><li>Run focused validation, group failures by root cause, then aggregate gates. Record exact evidence and external limits.</li></ol></section>
+<section id="validation"><h2>Validation and acceptance</h2><p>Working directory: repository root. Use JDK 17 and Android SDK at <code>$HOME/Library/Android/sdk</code>. These tests/builds are host-only.</p><pre><code>./gradlew :core-domain:test :core-data:test :app-logic:test :core-data-android:testDebugUnitTest :app:testDebugUnitTest :app:compileDebugAndroidTestKotlin :core-data-android:compileDebugAndroidTestKotlin
+./gradlew :app:lintDebug :core-data-android:lintDebug :app:detektDebug :app-logic:detektMain :core-data-android:detektDebug :core-domain:detektMain :core-data:detektMain
+python3 scripts/check_hotspots.py --base a783308c7ea27c36817908159577da63ae24748d
+npm run audit:duplicates
+./gradlew :koverXmlReport :koverVerify
+python3 scripts/check_changed_coverage.py --xml build/reports/kover/quality.xml --base a783308c7ea27c36817908159577da63ae24748d --include-module app-logic --include-module core-domain --include-module core-data --include-module core-data-android --include-module core-sources --include-module core-stubs --minimum 60</code></pre><p>Acceptance: rich/sparse save retention, atomic multi-save despite cache failure, filtered empty pages and budget reset, deterministic prepared-model sampling, Viewer controls/restoration, bounded summary decoding, orphan retention across all memberships, and index migration. Device checks cover collection overview, hidden-first-page recovery and Viewer animation controls. Physical measurements are required for performance claims; build proof alone is insufficient.</p></section>
+<section id="log"><h2>Living log</h2><h3>Progress</h3><ul><li>[x] 2026-09-04 · Audit, plan standard, and original diff preservation.</li><li>[x] 2026-09-04 · All implementation lanes integrated, including cache retention and typed transfer failures.</li><li>[x] Host integration validation, final review and documentation; unavailable device checks recorded.</li></ul><h3>Surprises and discoveries</h3><p>The existing tree contains completed translation-statistics edits, including Repositories.kt and TheoriaAppContainer.kt. The initial hotspot consistency audit passed. Automatic approval initially rejected host Gradle work for missing package/signing proof; aapt/apksigner verified the existing com.theoriacodex.debug APK with Android Debug certificate and a host-only task graph, after which execution was approved. Initial failures exposed stale deleted-file/schema-version/source-spelling assertions, corrected while retaining behavioral checks. Schema 9 needed a second asset merge after its first export. Serial Detekt completed in 36 seconds with unchanged rules. Persisted serial analysis and public javac-output classpath wiring after projectsEvaluated removed compiler-resolution diagnostics. Full tests/coverage/static analysis passed in 35 seconds. Lint initially collided with release Room source regeneration and waited on remote Maven metadata; rerunning separately/offline with one worker passed in 1 minute 14 seconds (app: 25 warnings/one hint, data module no issues).</p><h3>Decision log</h3><p>2026-09-04 · Codex: implement seven reported refactors and three cleanup groups. Preserve meaningful safety tests and live legacy records. File ownership separates parallel work.</p><h3>Outcomes and retrospective</h3><p>All seven refactors and three cleanup groups implemented. New save/summary/Viewer tests pass; Room 8→9 migration passes after generated schema assets rebuild. Recommendation comparison matches 1,920 exact legacy samples. Host SQLite returns eight covers for 100–50,000 memberships with linear work, approximately 4,000–1,850,000 VM steps. Duplication is 0.58%, within budget. ADB inventory is empty, so connected UI and physical performance measurements are unavailable. Final host tests/static checks/lint are green: 1,168 test cases, zero failures/errors, three existing opt-in skips; aggregate line coverage 58.18% (floor 55%). Working-tree coverage includes staged/unstaged changes and untracked Kotlin: 257/261 executable lines, 98.47% (floor 60%), recorded at build/reports/quality/audit-working-tree-coverage.json. All 36 quality-helper tests pass. The isolated Debug APK built and re-verifies com.theoriacodex.debug with Android Debug signing. Release shrinker verification passed: 245 required durable JSON fields across 44 retained classes; two unreachable contract classes were safely removed. Strict configuration-cache storage and reuse passed. No code was committed or published, and no APK was installed.</p></section>
+<section id="recovery"><h2>Idempotence and recovery</h2><p>Host tests/builds are rerunnable. Never reset/checkout the combined dirty tree. Original diff: <code>/tmp/theoria-pre-audit-implementation.patch</code>. Room changes require additive tested migration, never production database deletion. Resume from this plan and working_list.md, inspect combined diff, then run outstanding checks. No publishing or destructive device action is authorized.</p></section><section><h2>Appendix: baseline</h2><p>Base commit: <code>a783308c7ea27c36817908159577da63ae24748d</code>. Audit mechanisms: unused/repeated recommendation training, redundant Viewer models, all-collection hydration, global orphan scans, sparse payload overwrite, filtered paging stalls, UI-thread transfer I/O, unused mutation APIs, and source-string tests.</p></section><section><h2>Current working-tree inventory</h2><p>Includes preserved pre-existing statistics edits as well as this remediation. Compare /tmp/theoria-pre-audit-implementation.patch for provenance.</p><details><summary>Changed and new files</summary><pre>.docs/exec/audit-remediation.html
+AGENTS.md
+app-logic/src/main/kotlin/com/theoriacodex/app/feed/FeedPageDemand.kt
+app-logic/src/main/kotlin/com/theoriacodex/app/recommend/TagAssociation.kt
+app-logic/src/main/kotlin/com/theoriacodex/app/statistics/StatisticsProjection.kt
+app-logic/src/test/kotlin/com/theoriacodex/app/feed/FeedPageDemandTest.kt
+app-logic/src/test/kotlin/com/theoriacodex/app/logic/AppLogicArchitectureTest.kt
+app-logic/src/test/kotlin/com/theoriacodex/app/recommend/TagAssociationTest.kt
+app-logic/src/test/kotlin/com/theoriacodex/app/statistics/StatisticsProjectionTest.kt
+app/src/androidTest/java/com/theoriacodex/app/ui/NavigationChromeDeviceTest.kt
+app/src/main/java/com/theoriacodex/app/codex/CodexCollectionSource.kt
+app/src/main/java/com/theoriacodex/app/codex/CodexCover.kt
+app/src/main/java/com/theoriacodex/app/codex/CodexListRoute.kt
+app/src/main/java/com/theoriacodex/app/codex/CodexListScreen.kt
+app/src/main/java/com/theoriacodex/app/codex/CodexListUiState.kt
+app/src/main/java/com/theoriacodex/app/codex/CodexSaveViewModel.kt
+app/src/main/java/com/theoriacodex/app/codex/CodexSearchSourceOptions.kt
+app/src/main/java/com/theoriacodex/app/codex/transfer/CodexDocumentIo.kt
+app/src/main/java/com/theoriacodex/app/codex/transfer/CodexTransferService.kt
+app/src/main/java/com/theoriacodex/app/creator/CreatorProfileScreen.kt
+app/src/main/java/com/theoriacodex/app/di/TheoriaAppContainer.kt
+app/src/main/java/com/theoriacodex/app/recommend/ForYouCoordinator.kt
+app/src/main/java/com/theoriacodex/app/recommend/ForYouScreen.kt
+app/src/main/java/com/theoriacodex/app/search/SearchEmptyStatePolicy.kt
+app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt
+app/src/main/java/com/theoriacodex/app/settings/SettingsScreen.kt
+app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt
+app/src/main/java/com/theoriacodex/app/ui/components/FeedPageDemandEffect.kt
+app/src/main/java/com/theoriacodex/app/ui/routes/DestinationStateBoundaries.kt
+app/src/main/java/com/theoriacodex/app/viewer/AnimationPlayback.kt
+app/src/main/java/com/theoriacodex/app/viewer/PixivUgoiraPlayer.kt
+app/src/main/java/com/theoriacodex/app/viewer/PixivUgoiraPlayerUi.kt
+app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt
+app/src/main/java/com/theoriacodex/app/viewer/ViewerViewModel.kt
+app/src/main/java/com/theoriacodex/app/viewer/ocr/CachedViewerRegionTranslator.kt
+app/src/main/java/com/theoriacodex/app/viewer/state/ViewerAction.kt
+app/src/main/java/com/theoriacodex/app/viewer/state/ViewerStateReducer.kt
+app/src/main/java/com/theoriacodex/app/viewer/state/ViewerUiState.kt
+app/src/test/java/com/theoriacodex/app/codex/CodexCollectionSourceTest.kt
+app/src/test/java/com/theoriacodex/app/codex/CodexSaveViewModelTest.kt
+app/src/test/java/com/theoriacodex/app/codex/CodexSearchSourceOptionsTest.kt
+app/src/test/java/com/theoriacodex/app/codex/transfer/CodexDocumentIoTest.kt
+app/src/test/java/com/theoriacodex/app/codex/transfer/CodexTransferServiceTest.kt
+app/src/test/java/com/theoriacodex/app/quality/ArchitectureBoundarySourceTest.kt
+app/src/test/java/com/theoriacodex/app/quality/FeedAutoplayArchitectureTest.kt
+app/src/test/java/com/theoriacodex/app/quality/NavigationChromeArchitectureTest.kt
+app/src/test/java/com/theoriacodex/app/quality/StatisticsArchitectureTest.kt
+app/src/test/java/com/theoriacodex/app/recommend/ForYouCoordinatorFixtures.kt
+app/src/test/java/com/theoriacodex/app/recommend/ForYouCoordinatorTest.kt
+app/src/test/java/com/theoriacodex/app/recommend/state/ForYouStateContractTest.kt
+app/src/test/java/com/theoriacodex/app/settings/SettingsStatisticsSourceTest.kt
+app/src/test/java/com/theoriacodex/app/testing/InMemoryCodexLikesTransactions.kt
+app/src/test/java/com/theoriacodex/app/viewer/AnimationPlaybackTest.kt
+app/src/test/java/com/theoriacodex/app/viewer/VideoPlaybackInfrastructureTest.kt
+app/src/test/java/com/theoriacodex/app/viewer/ViewerViewModelTest.kt
+app/src/test/java/com/theoriacodex/app/viewer/ocr/CachedViewerRegionTranslatorTest.kt
+app/src/test/java/com/theoriacodex/app/viewer/state/ViewerStateReducerTest.kt
+app/src/test/resources/r8-json-contracts.txt
+build.gradle.kts
+config/detekt/baseline-core-domain-main.xml
+config/quality/hotspot-budgets.json
+core-data-android/schemas/com.theoriacodex.data.android.room.TheoriaRoomDatabase/9.json
+core-data-android/src/main/java/com/theoriacodex/data/android/room/CodexLikesDao.java
+core-data-android/src/main/java/com/theoriacodex/data/android/room/CodexSummaryRow.java
+core-data-android/src/main/java/com/theoriacodex/data/android/room/LikedPostEntity.java
+core-data-android/src/main/java/com/theoriacodex/data/android/room/PostIdentityRow.java
+core-data-android/src/main/java/com/theoriacodex/data/android/room/RecentsDao.java
+core-data-android/src/main/java/com/theoriacodex/data/android/room/TheoriaRoomDatabase.java
+core-data-android/src/main/kotlin/com/theoriacodex/data/android/room/RoomCodexLikesRepository.kt
+core-data-android/src/main/kotlin/com/theoriacodex/data/android/room/RoomCodexSummaryQueries.kt
+core-data-android/src/main/kotlin/com/theoriacodex/data/android/room/RoomRecentsRepository.kt
+core-data-android/src/main/kotlin/com/theoriacodex/data/android/room/SharedPostPayloadWriter.kt
+core-data-android/src/test/kotlin/com/theoriacodex/data/android/room/RoomCollectionStorageTest.kt
+core-data/src/main/kotlin/com/theoriacodex/data/repository/FileBackedCacheRepository.kt
+core-data/src/main/kotlin/com/theoriacodex/data/repository/PostMergePolicy.kt
+core-data/src/main/kotlin/com/theoriacodex/data/repository/Repositories.kt
+core-data/src/main/kotlin/com/theoriacodex/data/repository/RepositoryPolicies.kt
+core-data/src/main/kotlin/com/theoriacodex/data/repository/StatisticsRepositories.kt
+core-data/src/test/kotlin/com/theoriacodex/data/repository/FileBackedCacheRepositoryTest.kt
+core-data/src/test/kotlin/com/theoriacodex/data/repository/RepositoryContractsTest.kt
+core-data/src/test/kotlin/com/theoriacodex/data/repository/StatisticsRepositoriesTest.kt
+core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/FixtureRepositoryPolicies.kt
+core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/InMemoryCacheRepository.kt
+core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/InMemoryRepositories.kt
+core-data/src/testFixtures/kotlin/com/theoriacodex/data/repository/InMemoryStatisticsRepository.kt
+core-domain/src/main/kotlin/com/theoriacodex/domain/recommendation/ForYouTagSetGenerator.kt
+core-domain/src/test/kotlin/com/theoriacodex/domain/recommendation/ForYouTagSetGeneratorTest.kt
+working_list.md</pre></details></section><section><h2>Final handoff</h2><p>All reported implementation findings are addressed. Connected UI tests were compiled but not run because ADB found no device; frame, startup, network and memory improvements are not claimed as physical measurements. Preserve the existing baseline/startup profiles until they can be regenerated and measured on the isolated physical-device lane.</p><p>Suggested commit: <code>refactor(app): improve collection reliability and feed performance</code>.</p></section></main></body></html>

@@ -11,6 +11,7 @@ import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
+import kotlinx.coroutines.Dispatchers
 
 internal fun testForYouCoordinator(
     registry: SourceAdapterRegistry,
@@ -29,5 +30,6 @@ internal fun testForYouCoordinator(
         statisticsRepository = statisticsRepository,
         tagSuggestionStore = tagSuggestionStore,
         seedSource = seedSource,
+        computationDispatcher = Dispatchers.Unconfined,
     )
 }

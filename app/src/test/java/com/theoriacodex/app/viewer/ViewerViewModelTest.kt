@@ -26,11 +26,33 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ViewerViewModelTest {
+    @Test
+    fun `equivalent reconstruction identity retains existing saved values`() = runTest {
+        val handle = SavedStateHandle()
+        val owner = ViewerViewModel(handle, scopeOverride = this)
+        val original = session("retained", listOf(post("first")))
+        owner.replaceSession(original)
+        val savedSessionId = handle.get<String>(AppRouteSavedStateKeys.VIEWER_SESSION_ID)
+        val savedQueryHash = handle.get<String>(ViewerSavedStateKeys.QUERY_HASH)
+        val equivalent = session(String(original.sessionId.toCharArray()), original.posts)
+        assertNotSame(original.sessionId, equivalent.sessionId)
+        assertNotSame(original.context.queryHash, equivalent.context.queryHash)
+
+        owner.replaceSession(equivalent)
+
+        assertSame(savedSessionId, handle.get<String>(AppRouteSavedStateKeys.VIEWER_SESSION_ID))
+        assertSame(savedQueryHash, handle.get<String>(ViewerSavedStateKeys.QUERY_HASH))
+        owner.replaceSession(session("changed", original.posts))
+        assertEquals("changed", handle.get<String>(AppRouteSavedStateKeys.VIEWER_SESSION_ID))
+    }
+
     @Test
     fun `session replacement resets route state and persists only new reconstruction identity`() = runTest {
         val handle = SavedStateHandle()

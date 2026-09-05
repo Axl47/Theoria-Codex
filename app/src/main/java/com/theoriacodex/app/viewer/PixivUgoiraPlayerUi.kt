@@ -4,8 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -22,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 
 @Composable
 fun PixivUgoiraPlayer(
@@ -42,7 +40,6 @@ fun PixivUgoiraPlayer(
     loadGeneration: Long = 0L,
     onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
     onTogglePlayback: (() -> Unit)? = null,
-    onProgressChanged: (Long, Long?) -> Unit = { _, _ -> },
     onDurationKnown: (Long) -> Unit = {},
     onError: (String) -> Unit = {},
 ) {
@@ -50,16 +47,12 @@ fun PixivUgoiraPlayer(
         mutableStateOf(client.cached(postId, sizeBucket))
     }
     var errorMessage by remember(postId, loadGeneration) { mutableStateOf<String?>(null) }
-    var frameIndex by remember(postId, loadGeneration) { mutableIntStateOf(0) }
-    var elapsedInLoopMs by remember(postId, loadGeneration) { mutableLongStateOf(0L) }
     var isScrubbing by remember(postId, loadGeneration) { mutableStateOf(false) }
     var playbackPaused by remember(postId, loadGeneration) { mutableStateOf(false) }
     val effectivePlaybackRate = playbackRate.coerceAtLeast(0.1f)
     val effectivePlaybackPaused = isPlaying?.not() ?: playbackPaused
 
     LaunchedEffect(postId, client, sizeBucket, isActive, loadGeneration) {
-        frameIndex = 0
-        elapsedInLoopMs = 0L
         isScrubbing = false
         playbackPaused = false
         errorMessage = null
@@ -79,37 +72,40 @@ fun PixivUgoiraPlayer(
         return
     }
 
-    val totalDurationMs = remember(activePlayback) {
-        activePlayback.frames.sumOf { it.delayMs.coerceAtLeast(16) }.coerceAtLeast(1)
+    val frameEndsMs = remember(activePlayback) {
+        var endMs = 0L
+        LongArray(activePlayback.frames.size) { index ->
+            endMs += activePlayback.frames[index].delayMs.coerceAtLeast(16)
+            endMs
+        }
     }
-    LaunchedEffect(postId, totalDurationMs) { onDurationKnown(totalDurationMs.toLong()) }
-    val maxSeekablePositionMs = remember(totalDurationMs) { (totalDurationMs - 1).coerceAtLeast(0).toLong() }
+    val totalDurationMs = frameEndsMs.last()
+    val animation = remember(postId, loadGeneration, activePlayback) {
+        AnimationPlaybackState(totalDurationMs)
+    }
+    val frameIndex by remember(animation, frameEndsMs) {
+        derivedStateOf { animationFrameIndexAt(animation.positionMs, frameEndsMs) }
+    }
+    LaunchedEffect(postId, totalDurationMs) { onDurationKnown(totalDurationMs) }
+    val maxSeekablePositionMs = totalDurationMs - 1L
 
     fun seekToPosition(targetMs: Long) {
-        val clamped = targetMs.coerceIn(0L, maxSeekablePositionMs)
-        elapsedInLoopMs = clamped
-        frameIndex = activePlayback.frameIndexAt(clamped)
+        animation.seekTo(targetMs.coerceIn(0L, maxSeekablePositionMs))
     }
 
-    LaunchedEffect(restartRequest) {
-        if (restartRequest > 0L) seekToPosition(0L)
+    LaunchedEffect(restartRequest, animation, isActive) {
+        if (restartRequest > 0L || !isActive) seekToPosition(0L)
     }
     LaunchedEffect(seekJumpSerial, seekJumpDeltaMs, maxSeekablePositionMs, isScrubbing, isActive) {
         if (seekJumpSerial > 0 && seekJumpDeltaMs != 0L && !isScrubbing && isActive) {
-            seekToPosition(elapsedInLoopMs + seekJumpDeltaMs)
+            seekToPosition(animation.positionMs + seekJumpDeltaMs)
         }
     }
-    LaunchedEffect(activePlayback, frameIndex, isScrubbing, effectivePlaybackPaused, isActive, effectivePlaybackRate) {
-        if (isScrubbing || effectivePlaybackPaused || !isActive) return@LaunchedEffect
-        val delayMs = activePlayback.frames[frameIndex].delayMs.toLong().coerceAtLeast(16L)
-        delay((delayMs / effectivePlaybackRate).toLong().coerceAtLeast(1L))
-        val nextIndex = (frameIndex + 1) % activePlayback.frames.size
-        frameIndex = nextIndex
-        elapsedInLoopMs = if (nextIndex == 0) 0L else {
-            (elapsedInLoopMs + delayMs).coerceAtMost(totalDurationMs.toLong())
-        }
-        onProgressChanged(elapsedInLoopMs, totalDurationMs.toLong())
-    }
+    AnimatePlayback(
+        state = animation,
+        enabled = isActive && !isScrubbing && !effectivePlaybackPaused,
+        rate = effectivePlaybackRate,
+    )
 
     val frame = activePlayback.frames[frameIndex]
     if (!showProgressBar) {
@@ -137,8 +133,8 @@ fun PixivUgoiraPlayer(
                 },
             )
             MediaTimelineBar(
-                positionMs = elapsedInLoopMs,
-                durationMs = totalDurationMs.toLong(),
+                positionMs = animation.positionMs,
+                durationMs = totalDurationMs,
                 onSeekStarted = { isScrubbing = true },
                 onSeekChanged = ::seekToPosition,
                 onSeekFinished = { target ->
@@ -165,14 +161,4 @@ private fun UgoiraLoadingState(errorMessage: String?, modifier: Modifier) {
             )
         }
     }
-}
-
-private fun UgoiraPlayback.frameIndexAt(positionMs: Long): Int {
-    var accumulated = 0L
-    frames.forEachIndexed { index, frame ->
-        val next = accumulated + frame.delayMs.toLong().coerceAtLeast(16L)
-        if (positionMs < next || index == frames.lastIndex) return index
-        accumulated = next
-    }
-    return 0
 }

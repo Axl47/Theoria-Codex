@@ -29,9 +29,9 @@ internal sealed interface CodexCoverCandidate {
 internal fun resolveCodexCoverCandidates(
     storageDirectory: File,
     posts: List<Post>,
+    thumbnailFiles: List<File> = storageDirectory.resolve("cache/thumbnails").listFiles().orEmpty().toList(),
 ): List<CodexCoverCandidate> {
     val thumbnailDirectory = storageDirectory.resolve("cache/thumbnails")
-    val thumbnailFiles = thumbnailDirectory.listFiles().orEmpty().toList()
     return buildList {
         posts.take(MAX_CODEX_COVER_POSTS).forEach { post ->
             addAll(

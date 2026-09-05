@@ -9,17 +9,18 @@ internal fun buildEmptySearchMessage(
     loadingMore: Boolean,
     canLoadMore: Boolean,
 ): String? {
-    if (sourceResults.isEmpty()) return null
+    if (sourceResults.isEmpty()) return if (loadingMore) "Loading more pages..." else null
     if (!visibilityFilters.animatedDurationRange.isFullRange) {
-        if (loadingMore || canLoadMore) {
-            return "No animated media in the selected duration range yet. Retrying with more pages..."
+        if (loadingMore) {
+            return "No animated media in the selected duration range yet. Loading more pages..."
         }
         return "No animated media found in the selected duration range."
     }
-    if (visibilityFilters.animatedOnly && (loadingMore || canLoadMore)) {
-        return "No animated media yet. Retrying with more pages..."
+    if (visibilityFilters.animatedOnly && loadingMore) {
+        return "No animated media yet. Loading more pages..."
     }
-    return visibilityFilterMessage(visibilityFilters)
+    val message = visibilityFilterMessage(visibilityFilters)
+    return if (canLoadMore && message != null) "$message More pages are available." else message
 }
 
 private fun visibilityFilterMessage(filters: SearchVisibilityFilters): String? {

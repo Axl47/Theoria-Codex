@@ -43,6 +43,11 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import com.theoriacodex.app.codex.CodexSaveViewModel
+import com.theoriacodex.app.codex.transfer.readCodexDocument
+import com.theoriacodex.app.codex.transfer.writeCodexDocument
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -285,12 +290,6 @@ internal fun TheoriaAppContent(
             }
         }
     }
-    suspend fun recordForYouSaveIfNeeded(shouldRecord: Boolean) {
-        if (!shouldRecord) return
-        runCatchingPreservingCancellation {
-            dataDependencies.statisticsRepository.recordForYouSave()
-        }
-    }
     val snackbarHostState = remember { SnackbarHostState() }
     val recentsClearWorkflow = remember(dataDependencies.recentsRepository) {
         RecentsClearWorkflow(dataDependencies.recentsRepository)
@@ -310,6 +309,21 @@ internal fun TheoriaAppContent(
     val updateDependencies = appContainer.updates
     val featureDependencies = appContainer.features
     val workflowDependencies = appContainer.workflows
+    val codexSaveOwner = viewModel<CodexSaveViewModel>(
+        key = "codex-save-owner",
+        factory = viewModelFactory {
+            initializer {
+                CodexSaveViewModel(
+                    workflowDependencies.codexTransfer,
+                    dataDependencies.codexRepository,
+                    dataDependencies.statisticsRepository,
+                )
+            }
+        },
+    )
+    LaunchedEffect(codexSaveOwner) {
+        codexSaveOwner.effects.collect { message -> snackbarHostState.showSnackbar(message) }
+    }
     val appUsageTracker = featureDependencies.appUsageTracker
     DisposableEffect(appUsageTracker) {
         val processLifecycle = ProcessLifecycleOwner.get().lifecycle
@@ -412,13 +426,6 @@ internal fun TheoriaAppContent(
         pendingSavePosts = emptyList()
         pendingSaveFromForYou = false
         excludedCodexIdsForSave = emptySet()
-    }
-    suspend fun savePostsToCodex(codexId: String, posts: List<Post>, cacheFullImage: Boolean) {
-        posts.forEach { post ->
-            dataDependencies.codexRepository.addItem(codexId, post)
-            dataDependencies.cacheRepository.cacheThumbnail(post)
-            if (cacheFullImage) dataDependencies.cacheRepository.cacheFull(post)
-        }
     }
     var homeTabRoute by rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
     LaunchedEffect(homeTabRoute) {
@@ -699,15 +706,15 @@ internal fun TheoriaAppContent(
     suspend fun shareCodex(codexId: String) {
         val export = workflowDependencies.codexTransfer.export(codexId)
         if (export !is CodexExportResult.Success) {
-            Toast.makeText(appContext, "Codex not found", Toast.LENGTH_SHORT).show()
+            val message = if (export is CodexExportResult.NotFound) "Codex not found" else "Could not export codex"
+            Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
             return
         }
         val payload = export.payload
 
-        val exportsDirectory = dataDependencies.storageDirectory.resolve("exports").apply { mkdirs() }
-        val exportFile = exportsDirectory.resolve(payload.fileName)
-        runCatching {
-            exportFile.writeText(payload.json)
+        val exportsDirectory = dataDependencies.storageDirectory.resolve("exports")
+        runCatchingPreservingCancellation {
+            val exportFile = writeCodexDocument(exportsDirectory, payload)
             val contentUri = FileProvider.getUriForFile(
                 appContext,
                 "${appContext.packageName}.fileprovider",
@@ -730,10 +737,8 @@ internal fun TheoriaAppContent(
     }
 
     suspend fun importCodexFromUri(uri: Uri) {
-        val raw = runCatching {
-            appContext.contentResolver.openInputStream(uri)
-                ?.bufferedReader()
-                ?.use { it.readText() }
+        val raw = runCatchingPreservingCancellation {
+            readCodexDocument { appContext.contentResolver.openInputStream(uri) }
         }.getOrNull()
         if (raw.isNullOrBlank()) {
             Toast.makeText(appContext, "Could not read codex file", Toast.LENGTH_SHORT).show()
@@ -749,6 +754,9 @@ internal fun TheoriaAppContent(
                 ),
             )
         ) {
+            CodexImportResult.Failure -> {
+                Toast.makeText(appContext, "Could not import codex. Please try again.", Toast.LENGTH_SHORT).show()
+            }
             CodexImportResult.Unreadable -> {
                 Toast.makeText(appContext, "Could not read codex file", Toast.LENGTH_SHORT).show()
             }
@@ -1729,8 +1737,7 @@ internal fun TheoriaAppContent(
                                         codices = state.visibleCodices,
                                         itemCounts = state.itemCounts,
                                         codexCoverCandidates = state.coverCandidates,
-                                        codexSearchSourceOptions = state.searchSourceOptions,
-                                        codexSearchTagOptions = state.searchTagOptions,
+                                        observeActionOptions = state.observeActionOptions,
                                         onOpenCodex = { codexId ->
                                             navController.navigate(AppRoute.codexDetail(codexId))
                                         },
@@ -2191,31 +2198,22 @@ internal fun TheoriaAppContent(
                 codexCoverCandidates = state.coverCandidates,
                 excludedCodexIds = excludedCodexIdsForSave,
                 onCreateCodex = { profileId, name ->
-                    val recordForYouSave = pendingSaveFromForYou
-                    scope.launch {
-                        val codex = dataDependencies.codexRepository.ensureCodex(
-                            codexId = profileScopedCodexId(profileId),
-                            name = name,
-                        )
-                        savePostsToCodex(
-                            codexId = codex.codexId,
-                            posts = posts,
-                            cacheFullImage = state.settings.cache.cacheFullImageOnSave,
-                        )
-                        recordForYouSaveIfNeeded(recordForYouSave)
-                    }
+                    codexSaveOwner.save(
+                        codexId = profileScopedCodexId(profileId),
+                        posts = posts,
+                        cacheFullImage = state.settings.cache.cacheFullImageOnSave,
+                        fromForYou = pendingSaveFromForYou,
+                        newCollectionName = name,
+                    )
                     clearPendingCodexSave()
                 },
                 onSelectCodex = { codexId ->
-                    val recordForYouSave = pendingSaveFromForYou
-                    scope.launch {
-                        savePostsToCodex(
-                            codexId = codexId,
-                            posts = posts,
-                            cacheFullImage = state.settings.cache.cacheFullImageOnSave,
-                        )
-                        recordForYouSaveIfNeeded(recordForYouSave)
-                    }
+                    codexSaveOwner.save(
+                        codexId = codexId,
+                        posts = posts,
+                        cacheFullImage = state.settings.cache.cacheFullImageOnSave,
+                        fromForYou = pendingSaveFromForYou,
+                    )
                     clearPendingCodexSave()
                 },
                 onDismiss = ::clearPendingCodexSave,

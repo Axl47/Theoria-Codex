@@ -43,6 +43,8 @@ data class StatisticsSummary(
     val searchCount: Long = 0L,
     val searchSources: List<SourceStatistic> = emptyList(),
     val forYouSearchCount: Long = 0L,
+    val translatedPhraseCount: Long = 0L,
+    val translatedSourceCharacterCount: Long = 0L,
     val topWatchedTags: List<TagStatistic> = emptyList(),
     val topSavedTags: List<TagStatistic> = emptyList(),
     val mostUsedCodex: CodexUsageStatistic? = null,
@@ -91,6 +93,8 @@ object StatisticsProjection {
             searchCount = lifetime.searchCount,
             searchSources = sourceRows(lifetime.searchesBySource, lifetime.searchCount),
             forYouSearchCount = lifetime.forYouSearchCount,
+            translatedPhraseCount = lifetime.translatedPhraseCount,
+            translatedSourceCharacterCount = lifetime.translatedSourceCharacterCount,
             topWatchedTags = tagRows(lifetime.watchedByTag, lifetime.watchedPostCount),
             topSavedTags = tagRows(savedTagCounts, savedCount),
             mostUsedCodex = codexUsage.sortedWith(

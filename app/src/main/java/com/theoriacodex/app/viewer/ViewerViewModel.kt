@@ -281,13 +281,19 @@ internal class ViewerViewModel(
             clearSavedState()
             return
         }
-        savedStateHandle[AppRouteSavedStateKeys.VIEWER_SESSION_ID] = session.value
-        savedStateHandle[ViewerSavedStateKeys.QUERY_HASH] = session.queryHash
-        savedStateHandle[ViewerSavedStateKeys.STREAM_KEY] = session.streamKey
-        savedStateHandle[ViewerSavedStateKeys.PAGE_INDEX] = current.currentPageIndex
-        savedStateHandle[ViewerSavedStateKeys.MEDIA_INDEX] = current.currentPage?.selectedMediaIndex ?: 0
+        saveIfChanged(AppRouteSavedStateKeys.VIEWER_SESSION_ID, session.value)
+        saveIfChanged(ViewerSavedStateKeys.QUERY_HASH, session.queryHash)
+        saveIfChanged(ViewerSavedStateKeys.STREAM_KEY, session.streamKey)
+        saveIfChanged(ViewerSavedStateKeys.PAGE_INDEX, current.currentPageIndex)
+        saveIfChanged(ViewerSavedStateKeys.MEDIA_INDEX, current.currentPage?.selectedMediaIndex ?: 0)
         restoredPageIndex = current.currentPageIndex
         restoredMediaIndex = current.currentPage?.selectedMediaIndex ?: 0
+    }
+
+    private fun <T> saveIfChanged(key: String, value: T) {
+        if (!savedStateHandle.contains(key) || savedStateHandle.get<T>(key) != value) {
+            savedStateHandle[key] = value
+        }
     }
 
     private fun clearSavedState() {

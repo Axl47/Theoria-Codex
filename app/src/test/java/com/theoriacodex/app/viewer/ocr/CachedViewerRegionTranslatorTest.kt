@@ -13,9 +13,13 @@ class CachedViewerRegionTranslatorTest {
     @Test
     fun `deduplicates phrases and reuses durable cache without another remote call`() = runTest {
         val remote = FakeViewerTextTranslator()
+        val recordedUsage = mutableListOf<Pair<Long, Long>>()
         val translator = CachedViewerRegionTranslator(
             remote = remote,
             cache = InMemoryViewerTranslationCacheRepository(),
+            recordTranslationUsage = { phrases, characters ->
+                recordedUsage += phrases to characters
+            },
         )
         val regions = listOf(region("one", "ガッ"), region("two", "ガッ"), region("three", "あっ"))
 
@@ -28,6 +32,21 @@ class CachedViewerRegionTranslatorTest {
         )
         assertEquals(first, second)
         assertEquals(listOf(listOf("ガッ", "あっ")), remote.requests)
+        assertEquals(listOf(2L to 4L), recordedUsage)
+    }
+
+    @Test
+    fun `statistics failure does not turn a successful translation into a failure`() = runTest {
+        val translator = CachedViewerRegionTranslator(
+            remote = FakeViewerTextTranslator(),
+            cache = InMemoryViewerTranslationCacheRepository(),
+            recordTranslationUsage = { _, _ -> error("Statistics unavailable") },
+        )
+
+        assertEquals(
+            mapOf("one" to "Gah!"),
+            translator.translate(listOf(region("one", "ガッ"))) {},
+        )
     }
 
     private fun region(id: String, text: String) = ViewerOcrRegion(

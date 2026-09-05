@@ -6,6 +6,8 @@ import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.AppSettings
+import com.theoriacodex.data.repository.LikedPost
+import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.data.repository.SourceRuntimeSettings
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.defaultRecommendationProfiles
@@ -22,11 +24,13 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
+import com.theoriacodex.domain.orchestration.SourceRunState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -37,6 +41,54 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ForYouCoordinatorTest {
+    @Test
+    fun `blacklist retries train each source once and a new root retrains`() = runTest {
+        val profileId = defaultRecommendationProfiles().first().profileId
+        val tagsBySource = listOf(SourceKey.GELBOORU, SourceKey.PIXIV)
+            .associateWith { CountingTags(listOf("only_seed")) }
+        val likes = object : LikesRepository by InMemoryLikesRepository() {
+            override fun observeLikes(profileId: String) = flowOf(tagsBySource.map { (source, tags) ->
+                LikedPost(profileId, PostId(source, "liked"), 1L, tags)
+            })
+        }
+        val settings = InMemorySettingsRepository()
+        tagsBySource.keys.forEach { source ->
+            settings.addForYouBlacklistEntry(profileId, source, listOf("only_seed"))
+        }
+        val coordinator = testForYouCoordinator(
+            registry = registryOf(FakeAdapter(SourceKey.GELBOORU, "gelbooru"), FakeAdapter(SourceKey.PIXIV, "pixiv")),
+            settingsRepository = settings,
+            likesRepository = likes,
+        )
+        coordinator.initialize()
+
+        coordinator.refresh(shuffle = false)
+
+        assertTrue(coordinator.results.isEmpty())
+        assertEquals(listOf(1, 1), tagsBySource.values.map(CountingTags::reads))
+
+        coordinator.refresh(shuffle = false)
+
+        assertEquals(listOf(2, 2), tagsBySource.values.map(CountingTags::reads))
+    }
+
+    @Test
+    fun `usable likes do not request trending before a successful personalized search`() = runTest {
+        val adapter = FakeAdapter(SourceKey.PIXIV, "pixiv").apply {
+            trendingCancellation = CancellationException("unused fallback must not block personalized search")
+        }
+        val likes = InMemoryLikesRepository()
+        likes.toggleLike(defaultRecommendationProfiles().first().profileId, PostId(SourceKey.PIXIV, "liked"), listOf("cloud"))
+        val coordinator = testForYouCoordinator(registry = registryOf(adapter), likesRepository = likes)
+        coordinator.initialize()
+
+        coordinator.refresh(shuffle = false)
+
+        assertEquals(listOf("cloud"), adapter.lastSearchQuery?.includeTags)
+        assertEquals(0, adapter.trendingRequests)
+        assertTrue(coordinator.results.isNotEmpty())
+    }
+
     @Test
     fun `accepted recommendation root records one FYP search and pagination records none`() = runTest {
         val recents = InMemoryRecentsRepository(clock = { 100L })
@@ -223,6 +275,29 @@ class ForYouCoordinatorTest {
     }
 
     @Test
+    fun `failed page continuation retires while healthy source posts are retained`() = runTest {
+        val healthy = FakeAdapter(SourceKey.PIXIV, "healthy")
+        val failing = FakeAdapter(SourceKey.GELBOORU, "failing", failPaging = true)
+        val likes = InMemoryLikesRepository()
+        val profileId = defaultRecommendationProfiles().first().profileId
+        likes.toggleLike(profileId, PostId(SourceKey.PIXIV, "liked"), listOf("cloud"))
+        likes.toggleLike(profileId, PostId(SourceKey.GELBOORU, "liked"), listOf("cloud"))
+        val coordinator = testForYouCoordinator(registry = registryOf(healthy, failing), likesRepository = likes)
+        coordinator.initialize()
+        coordinator.refresh(shuffle = false)
+
+        coordinator.loadNextPage()
+        coordinator.loadNextPage()
+
+        assertEquals(1, failing.pageAttempts)
+        assertEquals(1, healthy.pageAttempts)
+        assertEquals(3, coordinator.results.size)
+        assertEquals(SourceRunState.FAILED, coordinator.statuses.single { it.source == SourceKey.GELBOORU }.state)
+        assertEquals(SourceRunState.SUCCESS, coordinator.statuses.single { it.source == SourceKey.PIXIV }.state)
+        assertFalse(coordinator.canLoadMore)
+    }
+
+    @Test
     fun `cancellation while loading fallback tags propagates without replacing current posts`() = runTest {
         val adapter = FakeAdapter(SourceKey.PIXIV, "pixiv-post")
         val likesRepository = InMemoryLikesRepository()
@@ -230,13 +305,14 @@ class ForYouCoordinatorTest {
         likesRepository.toggleLike(
             profileId = profileId,
             postId = PostId(SourceKey.PIXIV, "liked-pixiv"),
-            tags = listOf("pixiv favorite"),
+            tags = listOf("100users入り"),
         )
         val coordinator = testForYouCoordinator(
             registry = registryOf(adapter),
             settingsRepository = InMemorySettingsRepository(),
             likesRepository = likesRepository,
         )
+        adapter.trendingCandidates = listOf(TagSuggestion(text = "favorite", type = null, count = 1))
         coordinator.initialize()
         coordinator.refresh(shuffle = false)
         val postsBeforeCancellation = coordinator.results
@@ -373,10 +449,21 @@ class ForYouCoordinatorTest {
         }
     }
 
+    private class CountingTags(private val values: List<String>) : AbstractList<String>() {
+        var reads = 0
+            private set
+        override val size: Int get() = values.size
+        override fun get(index: Int): String {
+            reads += 1
+            return values[index]
+        }
+    }
+
     private class FakeAdapter(
         override val sourceKey: SourceKey,
         postId: String,
         private val failSearch: Boolean = false,
+        private val failPaging: Boolean = false,
         private val searchStarted: CompletableDeferred<Unit>? = null,
         private val searchRelease: CompletableDeferred<Unit>? = null,
     ) : SourceAdapter {
@@ -406,8 +493,15 @@ class ForYouCoordinatorTest {
             private set
         val requestedPageTokens = mutableListOf<String?>()
         var trendingCancellation: CancellationException? = null
+        var trendingCandidates: List<TagSuggestion> = emptyList()
+        var trendingRequests = 0
+        var pageAttempts = 0
 
         override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+            if (pageToken != null) {
+                pageAttempts += 1
+                if (failPaging) error("$sourceKey page failed")
+            }
             if (failSearch) error("$sourceKey failed")
             searchStarted?.complete(Unit)
             searchRelease?.let { gate ->
@@ -427,8 +521,9 @@ class ForYouCoordinatorTest {
         }
 
         override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
+            trendingRequests += 1
             trendingCancellation?.let { error -> throw error }
-            return emptyList()
+            return trendingCandidates
         }
 
         override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = emptyList()

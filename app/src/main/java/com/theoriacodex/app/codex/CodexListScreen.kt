@@ -70,42 +70,8 @@ import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.SourceKey
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun CodexListScreen(
-    codices: List<Codex>,
-    itemCounts: Map<String, Int>,
-    codexCoverCandidates: Map<String, List<CodexCoverCandidate>>,
-    codexSearchSourceOptions: Map<String, List<CodexSearchSourceOption>>,
-    codexSearchTagOptions: Map<String, Map<SourceKey, List<CodexSearchTagOption>>>,
-    onOpenCodex: (String) -> Unit,
-    onImportCodex: () -> Unit,
-    onDownloadCodex: (String) -> Unit,
-    onShareCodex: (String) -> Unit,
-    onSearchFromCodex: (String, SourceKey, List<String>) -> Unit,
-    onCommitReorder: (List<String>) -> Unit,
-    onCreateCodex: (String) -> Unit,
-    onRenameCodex: (String, String) -> Unit,
-    onSetAutomaticTag: (String, CodexAutomaticTag, Boolean) -> Unit,
-    onDeleteCodex: (String) -> Unit,
-    likesCodexId: String,
-) {
-    val state = remember { CodexListUiState(codices) }
-    val presentation = CodexListPresentation(
-        codices, itemCounts, codexCoverCandidates, codexSearchSourceOptions,
-        codexSearchTagOptions, likesCodexId,
-    )
-    val actions = CodexListActions(
-        onOpenCodex, onImportCodex, onDownloadCodex, onShareCodex, onSearchFromCodex,
-        onCommitReorder, onCreateCodex, onRenameCodex, onSetAutomaticTag, onDeleteCodex,
-    )
-    LaunchedEffect(codices, state.reorderMode) { state.synchronizeCodices(codices) }
-    CodexListContent(presentation, state, actions)
-    CodexListOverlays(presentation, state, actions)
-}
-
-@Composable
-private fun CodexListContent(
+internal fun CodexListContent(
     presentation: CodexListPresentation,
     state: CodexListUiState,
     actions: CodexListActions,
@@ -292,7 +258,7 @@ private fun CodexGrid(
 }
 
 @Composable
-private fun CodexListOverlays(
+internal fun CodexListOverlays(
     presentation: CodexListPresentation,
     state: CodexListUiState,
     actions: CodexListActions,
@@ -416,7 +382,11 @@ private fun CodexActionSheet(
                 overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
-            CodexAutomaticTagContent(
+            if (presentation.actionLoading) {
+                Text("Loading collection tags…")
+            } else if (presentation.actionFailed) {
+                TextButton(onClick = presentation.retryActionOptions) { Text("Could not load tags. Retry") }
+            } else CodexAutomaticTagContent(
                 isLikesCodex = isLikesCodex,
                 automaticTags = codex.automaticTags,
                 tagOptionsBySource = presentation.searchTagOptions[codex.codexId].orEmpty(),

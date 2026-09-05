@@ -247,6 +247,9 @@ internal class DefaultTheoriaAppContainer(
         translator = CachedViewerRegionTranslator(
             remote = GoogleViewerTextTranslator(),
             cache = viewerTranslationCacheRepository,
+            recordTranslationUsage = { phraseCount, sourceCharacterCount ->
+                statisticsRepository.recordTranslationUsage(phraseCount, sourceCharacterCount)
+            },
         ),
     )
 

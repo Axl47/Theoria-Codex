@@ -59,16 +59,6 @@ internal fun Post.toViewerPageState(
         media = mappedMedia,
         selectedMediaIndex = safeMediaIndex,
         resolution = resolution,
-        metadata = ViewerMetadataState(
-            title = title,
-            authorName = authorName,
-            creators = creatorProfiles.toList(),
-            taxonomy = taxonomy.toList(),
-            width = width,
-            height = height,
-            durationMs = durationMs,
-            pageUrl = pageUrl,
-        ),
     )
 }
 
@@ -80,8 +70,6 @@ internal fun ImageRef.toViewerMediaState(post: Post, mediaIndex: Int): ViewerMed
         ref = copy(progressiveUrls = progressiveUrls.toList()),
         kind = kind,
         displayLocation = location,
-        downloadable = !url.isNullOrBlank() || !localPath.isNullOrBlank(),
-        shareable = location != null || !post.pageUrl.isNullOrBlank(),
     )
 }
 
@@ -155,12 +143,6 @@ internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): View
         )
         ViewerAction.RestartPlayback -> ViewerReduction(state.restartPlayback())
         is ViewerAction.SetPlaybackRate -> ViewerReduction(state.setPlaybackRate(action.rate))
-        is ViewerAction.TimelineProgressChanged -> ViewerReduction(
-            state.updateTimelineProgress(action.positionMs, action.durationMs),
-        )
-        is ViewerAction.FrameProgressChanged -> ViewerReduction(
-            state.updateFrameProgress(action.frameIndex, action.frameCount),
-        )
         ViewerAction.RequestCurrentPageResolution -> state.requestResolution(session)
         is ViewerAction.ResolutionStarted -> state.ifCurrentSession(action.session) {
             updateResolution(action.postId) { current ->
@@ -321,17 +303,11 @@ private fun ViewerUiState.setPlaying(playing: Boolean): ViewerUiState {
 private fun ViewerUiState.restartPlayback(): ViewerUiState {
     val playback = controls.playback
     if (!playback.available) return this
-    val resetProgress = when (val progress = playback.progress) {
-        ViewerPlaybackProgress.None -> ViewerPlaybackProgress.None
-        is ViewerPlaybackProgress.Timeline -> progress.copy(positionMs = 0L)
-        is ViewerPlaybackProgress.Frames -> progress.copy(frameIndex = 0)
-    }
     return copy(
         controls = controls.copy(
             playback = playback.copy(
                 playing = true,
                 restartRequest = playback.restartRequest + 1L,
-                progress = resetProgress,
             ),
         ),
     )
@@ -341,34 +317,6 @@ private fun ViewerUiState.setPlaybackRate(rate: Float): ViewerUiState {
     if (!controls.playback.available || rate <= 0f) return this
     return copy(
         controls = controls.copy(playback = controls.playback.copy(playbackRate = rate)),
-    )
-}
-
-private fun ViewerUiState.updateTimelineProgress(positionMs: Long, durationMs: Long?): ViewerUiState {
-    if (controls.playback.progress !is ViewerPlaybackProgress.Timeline) return this
-    val safeDuration = durationMs?.coerceAtLeast(0L)
-    val safePosition = positionMs.coerceAtLeast(0L).let { value ->
-        safeDuration?.let(value::coerceAtMost) ?: value
-    }
-    return copy(
-        controls = controls.copy(
-            playback = controls.playback.copy(
-                progress = ViewerPlaybackProgress.Timeline(safePosition, safeDuration),
-            ),
-        ),
-    )
-}
-
-private fun ViewerUiState.updateFrameProgress(frameIndex: Int, frameCount: Int): ViewerUiState {
-    if (controls.playback.progress !is ViewerPlaybackProgress.Frames) return this
-    val safeCount = frameCount.coerceAtLeast(0)
-    val safeIndex = if (safeCount == 0) 0 else frameIndex.coerceIn(0, safeCount - 1)
-    return copy(
-        controls = controls.copy(
-            playback = controls.playback.copy(
-                progress = ViewerPlaybackProgress.Frames(safeIndex, safeCount),
-            ),
-        ),
     )
 }
 
@@ -522,24 +470,22 @@ private fun playbackControlsFor(
     media: ViewerMediaState?,
     playbackRate: Float = 1f,
 ): ViewerPlaybackControlsState {
-    val progress = when (media?.kind) {
-        ViewerMediaKind.ANIMATED_WEBP -> ViewerPlaybackProgress.Frames()
+    val available = when (media?.kind) {
+        ViewerMediaKind.ANIMATED_WEBP,
         ViewerMediaKind.VIDEO,
         ViewerMediaKind.GIF,
         ViewerMediaKind.ANIMATED_IMAGE,
         ViewerMediaKind.UGOIRA,
-        -> ViewerPlaybackProgress.Timeline()
+        -> true
         ViewerMediaKind.IMAGE,
         ViewerMediaKind.UNKNOWN,
         null,
-        -> ViewerPlaybackProgress.None
+        -> false
     }
-    val available = progress !is ViewerPlaybackProgress.None
     return ViewerPlaybackControlsState(
         available = available,
         playing = available,
         playbackRate = playbackRate,
-        progress = progress,
     )
 }
 
@@ -547,26 +493,8 @@ private fun overviewFor(
     page: ViewerPageState?,
     visible: Boolean = false,
 ): ViewerOverviewState {
-    if (page == null) return ViewerOverviewState()
-    val items = page.media.map { media ->
-        ViewerOverviewItemState(
-            mediaKey = media.key,
-            kind = media.kind,
-            posterLocation = when (media.kind) {
-                ViewerMediaKind.IMAGE,
-                ViewerMediaKind.ANIMATED_WEBP,
-                ViewerMediaKind.GIF,
-                ViewerMediaKind.ANIMATED_IMAGE,
-                -> media.displayLocation
-                ViewerMediaKind.VIDEO,
-                ViewerMediaKind.UGOIRA,
-                ViewerMediaKind.UNKNOWN,
-                -> page.post.preview.bestViewerLocation()
-            },
-            selected = media.key.mediaIndex == page.selectedMediaIndex,
-        )
-    }
-    return ViewerOverviewState(visible = visible && items.size > 1, items = items)
+    val available = (page?.media?.size ?: 0) > 1
+    return ViewerOverviewState(visible = visible && available, available = available)
 }
 
 private fun ImageRef.bestViewerLocation(): String? {

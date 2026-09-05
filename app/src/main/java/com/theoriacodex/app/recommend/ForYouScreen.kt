@@ -34,7 +34,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,11 +44,15 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.feed.FeedPageDemandInput
+import com.theoriacodex.app.ui.components.rememberFeedPageDemand
+import com.theoriacodex.app.ui.components.FeedContinueLoading
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.recommend.state.ForYouAction
+import com.theoriacodex.app.recommend.state.ForYouEmptyReason
 import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
 import com.theoriacodex.app.search.SearchResultCard
@@ -77,7 +80,6 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.Flow
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -135,7 +137,6 @@ fun ForYouScreen(
     val animatedDurationFilterActive = durationFilter.active
     val unknownAnimatedDurationPolicy = durationFilter.unknownPolicy
     val acquiredDurations = durationFilter.knownDurationMsByPostId
-    val durationDecisionStates = durationFilter.stateByPostId
     val durationReadiness = durationFilter.readiness
     val visibleResults = remember(
         state.results,
@@ -170,56 +171,25 @@ fun ForYouScreen(
     }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
 
-    LaunchedEffect(
-        animatedOnly,
-        visibleResults.size,
-        state.isRefreshing,
-        state.isPaging,
-        state.canLoadMore,
-        animatedDurationFilterActive,
-        durationReadiness.pendingCount,
-        feedProjection,
-    ) {
-        snapshotFlow {
-            val visibleIndices = gridState.layoutInfo.visibleItemsInfo.map { item -> item.index }
-            feedProjection.greatestVisibleCanonicalIndex(visibleIndices) to state.isPaging
-        }.collect { (lastVisibleCanonicalIndex, loadingMoreState) ->
-            if (loadingMoreState) return@collect
-            if (state.isRefreshing || state.isPaging || !state.canLoadMore) return@collect
-            if (durationReadiness.isResolving) return@collect
-            if (visibleResults.isEmpty() || lastVisibleCanonicalIndex == null) {
-                if (animatedDurationFilterActive && state.results.isNotEmpty()) {
-                    onAction(ForYouAction.LoadNextPage)
-                }
-                return@collect
-            }
-
-            val triggerIndex = ((state.results.lastIndex.coerceAtLeast(0)) * FOR_YOU_PREFETCH_RATIO)
-                .toInt()
-                .coerceAtLeast(0)
-            if (lastVisibleCanonicalIndex >= triggerIndex) {
-                onAction(ForYouAction.LoadNextPage)
-            }
-        }
-    }
-
-    LaunchedEffect(
-        animatedOnly,
-        visibleResults.size,
-        state.results.size,
-        state.isRefreshing,
-        state.isPaging,
-        state.canLoadMore,
-        animatedDurationFilterActive,
-        durationReadiness.pendingCount,
-    ) {
-        if (!animatedOnly && !animatedDurationFilterActive) return@LaunchedEffect
-        if (visibleResults.isNotEmpty()) return@LaunchedEffect
-        if (state.results.isEmpty()) return@LaunchedEffect
-        if (state.isRefreshing || state.isPaging || !state.canLoadMore) return@LaunchedEffect
-        if (durationReadiness.isResolving) return@LaunchedEffect
-        onAction(ForYouAction.LoadNextPage)
-    }
+    val pageDemand = rememberFeedPageDemand(
+        input = FeedPageDemandInput(
+            contextKey = "${state.activeProfileId}:${state.selectedSource}:${state.sortMode}:${state.seedId}",
+            completedGeneration = state.nextRequestGeneration,
+            canonicalCount = state.results.size,
+            visibleCount = visibleResults.size,
+            canLoadMore = state.canLoadMore,
+            ready = state.seedSummaryBySource.isNotEmpty(),
+            refreshing = state.isRefreshing,
+            paging = state.isPaging,
+            failed = state.errorMessage != null,
+            resolvingDurations = durationReadiness.isResolving,
+        ),
+        filters = visibilityFilters,
+        gridState = gridState,
+        presentedItemCount = feedProjection.entries.size,
+        canonicalIndexForVisibleItems = feedProjection::greatestVisibleCanonicalIndex,
+        onLoadNextPage = { onAction(ForYouAction.LoadNextPage) },
+    )
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -297,8 +267,9 @@ fun ForYouScreen(
             }
         }
 
+        FeedContinueLoading(pageDemand)
         when {
-            state.activeProfileLikesCount == 0 -> {
+            state.emptyReason == ForYouEmptyReason.NO_LIKES -> {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier
@@ -334,7 +305,7 @@ fun ForYouScreen(
                 FeedEmptyTile(
                     message = if (durationReadiness.isResolving) {
                             "Resolving durations…"
-                        } else if (animatedOnly && state.results.isNotEmpty()) {
+                        } else if ((animatedOnly || animatedDurationFilterActive) && state.results.isNotEmpty()) {
                             if (!visibilityFilters.animatedDurationRange.isFullRange) {
                                 "No animated media found in the selected duration range."
                             } else {
@@ -524,7 +495,6 @@ internal fun ForYouSourceSelector(
     }
 }
 
-private const val FOR_YOU_PREFETCH_RATIO = 0.8f
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

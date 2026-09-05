@@ -27,12 +27,6 @@ class StatisticsArchitectureTest {
             "URL-copy stats must run only inside the successful clipboard branch",
             actions.indexOf("if (copyPostUrlToClipboard(context, post))") < actions.indexOf("onPostUrlCopied(post)"),
         )
-        val successfulSave = shell.substringAfter("onSelectCodex = { codexId ->").substringBefore("onDismiss = {")
-        assertTrue(
-            "FYP saves must record only after Codex persistence returns",
-            successfulSave.indexOf("codexRepository.addItem(codexId, post)") <
-                successfulSave.indexOf("recordForYouSaveIfNeeded(recordForYouSave)"),
-        )
         assertTrue("Codex entries must be route-owned", "recordCodexEntry(codexId)" in shell)
     }
 

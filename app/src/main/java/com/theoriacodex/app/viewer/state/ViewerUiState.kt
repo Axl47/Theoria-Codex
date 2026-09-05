@@ -1,10 +1,8 @@
 package com.theoriacodex.app.viewer.state
 
-import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
-import com.theoriacodex.domain.model.PostTaxonomyTerm
 
 /** Stable identity used to reject late work from a replaced Viewer session. */
 internal data class ViewerSessionIdentity(
@@ -41,8 +39,6 @@ internal data class ViewerMediaState(
     val ref: ImageRef,
     val kind: ViewerMediaKind,
     val displayLocation: String?,
-    val downloadable: Boolean,
-    val shareable: Boolean,
     val loadGeneration: Long = 0L,
 ) {
     init {
@@ -70,47 +66,14 @@ internal data class ViewerResolutionState(
     }
 }
 
-internal data class ViewerMetadataState(
-    val title: String?,
-    val authorName: String?,
-    val creators: List<CreatorProfile>,
-    val taxonomy: List<PostTaxonomyTerm>,
-    val width: Int?,
-    val height: Int?,
-    val durationMs: Long?,
-    val pageUrl: String?,
-)
-
 internal data class ViewerPageState(
     val post: Post,
     val media: List<ViewerMediaState>,
     val selectedMediaIndex: Int = 0,
     val resolution: ViewerResolutionState = ViewerResolutionState(),
-    val metadata: ViewerMetadataState,
 ) {
     val selectedMedia: ViewerMediaState?
         get() = media.getOrNull(selectedMediaIndex)
-}
-
-internal sealed interface ViewerPlaybackProgress {
-    data object None : ViewerPlaybackProgress
-
-    data class Timeline(
-        val positionMs: Long = 0L,
-        val durationMs: Long? = null,
-    ) : ViewerPlaybackProgress
-
-    data class Frames(
-        val frameIndex: Int = 0,
-        val frameCount: Int = 0,
-    ) : ViewerPlaybackProgress {
-        val fraction: Float
-            get() = if (frameCount <= 1) {
-                0f
-            } else {
-                frameIndex.coerceIn(0, frameCount - 1).toFloat() / (frameCount - 1).toFloat()
-            }
-    }
 }
 
 internal data class ViewerPlaybackControlsState(
@@ -118,7 +81,6 @@ internal data class ViewerPlaybackControlsState(
     val playing: Boolean = false,
     val playbackRate: Float = 1f,
     val restartRequest: Long = 0L,
-    val progress: ViewerPlaybackProgress = ViewerPlaybackProgress.None,
 ) {
     init {
         require(playbackRate > 0f) { "Viewer playback rate must be positive" }
@@ -134,20 +96,10 @@ internal data class ViewerControlsState(
     val playback: ViewerPlaybackControlsState = ViewerPlaybackControlsState(),
 )
 
-internal data class ViewerOverviewItemState(
-    val mediaKey: ViewerMediaKey,
-    val kind: ViewerMediaKind,
-    val posterLocation: String?,
-    val selected: Boolean,
-)
-
 internal data class ViewerOverviewState(
     val visible: Boolean = false,
-    val items: List<ViewerOverviewItemState> = emptyList(),
-) {
-    val available: Boolean
-        get() = items.size > 1
-}
+    val available: Boolean = false,
+)
 
 internal data class ViewerPrefetchState(
     val queued: Set<ViewerMediaKey> = emptySet(),
@@ -205,9 +157,6 @@ internal data class ViewerUiState(
 
     val currentMedia: ViewerMediaState?
         get() = currentPage?.selectedMedia
-
-    val currentMetadata: ViewerMetadataState?
-        get() = currentPage?.metadata
 
     companion object {
         val Empty = ViewerUiState()

@@ -33,9 +33,6 @@ public interface CodexLikesDao {
     @Query("DELETE FROM codices WHERE codex_id = :codexId")
     int deleteCodex(String codexId);
 
-    @Query("DELETE FROM codices")
-    int deleteAllCodices();
-
     @Query("SELECT * FROM codex_automatic_tags ORDER BY codex_id ASC, source ASC, group_index ASC, tag_key ASC")
     Flow<List<CodexAutomaticTagEntity>> observeAutomaticTags();
 
@@ -82,6 +79,25 @@ public interface CodexLikesDao {
             + "ORDER BY posts.source ASC, codex_items.saved_at_epoch_ms DESC, posts.source_post_id ASC")
     Flow<List<CodexPostRow>> observeCodexPostsBySource(String codexId);
 
+    @Query("SELECT codices.codex_id, "
+            + "(SELECT COUNT(*) FROM codex_items WHERE codex_id = codices.codex_id) AS item_count, "
+            + "posts.source, posts.source_post_id, posts.payload_json "
+            + "FROM codices LEFT JOIN codex_items AS cover ON cover.codex_id = codices.codex_id "
+            + "AND (cover.source, cover.source_post_id) IN "
+            + "(SELECT source, source_post_id FROM codex_items WHERE codex_id = codices.codex_id "
+            + "ORDER BY saved_at_epoch_ms DESC, source ASC, source_post_id ASC LIMIT :coverLimit) "
+            + "LEFT JOIN posts ON posts.source = cover.source AND posts.source_post_id = cover.source_post_id "
+            + "WHERE codices.codex_id IN (:codexIds) "
+            + "ORDER BY codices.display_order ASC, codices.created_at_epoch_ms ASC, codices.codex_id ASC, "
+            + "cover.saved_at_epoch_ms DESC, cover.source ASC, cover.source_post_id ASC")
+    Flow<List<CodexSummaryRow>> observeCodexSummaries(List<String> codexIds, int coverLimit);
+
+    @Query("SELECT DISTINCT source, source_post_id FROM codex_items WHERE codex_id IN (:codexIds)")
+    Flow<List<PostIdentityRow>> observeSavedPostIds(List<String> codexIds);
+
+    @Query("SELECT * FROM codex_items WHERE codex_id = :codexId")
+    List<CodexItemEntity> itemsForCodex(String codexId);
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     long insertCodexItem(CodexItemEntity entity);
 
@@ -112,6 +128,18 @@ public interface CodexLikesDao {
     @Query("SELECT * FROM posts ORDER BY source ASC, source_post_id ASC")
     List<PostEntity> posts();
 
+    @Query("DELETE FROM posts WHERE source = :source AND source_post_id = :sourcePostId AND "
+            + "NOT EXISTS (SELECT 1 FROM codex_items "
+            + "WHERE codex_items.source = posts.source "
+            + "AND codex_items.source_post_id = posts.source_post_id) "
+            + "AND NOT EXISTS (SELECT 1 FROM liked_posts "
+            + "WHERE liked_posts.source = posts.source "
+            + "AND liked_posts.source_post_id = posts.source_post_id) "
+            + "AND NOT EXISTS (SELECT 1 FROM recent_watched "
+            + "WHERE recent_watched.source = posts.source "
+            + "AND recent_watched.source_post_id = posts.source_post_id)")
+    int deleteOrphanPost(String source, String sourcePostId);
+
     @Query("DELETE FROM posts WHERE "
             + "NOT EXISTS (SELECT 1 FROM codex_items "
             + "WHERE codex_items.source = posts.source "
@@ -123,9 +151,6 @@ public interface CodexLikesDao {
             + "WHERE recent_watched.source = posts.source "
             + "AND recent_watched.source_post_id = posts.source_post_id)")
     int deleteOrphanPosts();
-
-    @Query("DELETE FROM posts")
-    int deleteAllPosts();
 
     @Query("SELECT * FROM liked_posts WHERE profile_id = :profileId "
             + "ORDER BY liked_at_epoch_ms DESC, source ASC, source_post_id ASC")
@@ -162,9 +187,6 @@ public interface CodexLikesDao {
 
     @Query("DELETE FROM liked_posts WHERE profile_id = :profileId")
     int deleteLikes(String profileId);
-
-    @Query("DELETE FROM liked_posts")
-    int deleteAllLikes();
 
     @Query("SELECT * FROM migration_metadata WHERE migration_key = :migrationKey LIMIT 1")
     MigrationMetadataEntity migrationMetadata(String migrationKey);

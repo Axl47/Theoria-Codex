@@ -90,24 +90,24 @@ class FileBackedCacheRepository(
         localPath: String?,
         fallbackUrl: String?,
     ) {
-        targetDirectory
-            .listFiles()
-            .orEmpty()
+        val existing = targetDirectory.listFiles().orEmpty()
             .filter { file -> file.isFile && file.name.startsWith("$key.") }
-            .forEach(File::delete)
-
-        if (localPath != null) {
-            val localFile = File(localPath)
-            if (localFile.exists()) {
-                val extension = localFile.extension.takeIf { it.isNotBlank() } ?: "bin"
-                val output = targetDirectory.resolve("$key.$extension")
+        val localFile = localPath?.let(::File)?.takeIf(::hasUsableBytes)
+        val retained = if (localFile != null) {
+            val extension = localFile.extension.takeIf { it.isNotBlank() } ?: "bin"
+            targetDirectory.resolve("$key.$extension").also { output ->
+                // Copy before removing old variants; copying an existing cache file to itself is a no-op.
                 Files.copy(localFile.toPath(), output.toPath(), REPLACE_EXISTING)
-                return
             }
+        } else {
+            // A sparse route snapshot must not replace downloaded bytes with a remote pointer.
+            existing.firstOrNull { file -> file.extension != "url" && hasUsableBytes(file) }
+                ?: targetDirectory.resolve("$key.url").also { it.writeText(fallbackUrl.orEmpty()) }
         }
-
-        targetDirectory.resolve("$key.url").writeText(fallbackUrl.orEmpty())
+        existing.filterNot { it == retained }.forEach(File::delete)
     }
+
+    private fun hasUsableBytes(file: File): Boolean = file.isFile && file.canRead() && file.length() > 0
 
     private fun currentSnapshot(): CacheSnapshot {
         return CacheSnapshot(

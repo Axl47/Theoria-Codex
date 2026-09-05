@@ -165,22 +165,6 @@ class CodexSearchSourceOptionsTest {
         )
     }
 
-    @Test
-    fun `source scoped top tag helper delegates to codex search tag options`() {
-        val posts = listOf(
-            post(source = SourceKey.PIXIV, sourcePostId = "p1", tags = listOf("zeta", "alpha")),
-            post(source = SourceKey.PIXIV, sourcePostId = "p2", tags = listOf("zeta")),
-        )
-
-        val tags = buildSourceScopedCodexSearchTags(
-            posts = posts,
-            source = SourceKey.PIXIV,
-            limit = 1,
-        )
-
-        assertEquals(listOf("zeta"), tags)
-    }
-
     private fun post(
         source: SourceKey,
         sourcePostId: String,

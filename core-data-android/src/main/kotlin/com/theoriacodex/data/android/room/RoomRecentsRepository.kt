@@ -110,8 +110,7 @@ class RoomRecentsRepository(
                     ),
                 )
             )
-            dao.trimWatched(watchedLimit)
-            contentDao.deleteOrphanPosts()
+            trimWatchedInside()
         }
     }
 
@@ -144,8 +143,7 @@ class RoomRecentsRepository(
                         normalizedMediaNumber,
                     )
                 )
-                dao.trimWatched(watchedLimit)
-                contentDao.deleteOrphanPosts()
+                trimWatchedInside()
             }
         }
     }
@@ -213,23 +211,24 @@ class RoomRecentsRepository(
                     )
                 }
             }
-            dao.trimWatched(watchedLimit)
+            trimWatchedInside()
             dao.trimSearches(searchLimit)
-            contentDao.deleteOrphanPosts()
         }
     }
 
     override suspend fun clearWatchedPosts() {
         database.withTransaction {
+            val removed = dao.watched()
             dao.deleteWatched()
-            contentDao.deleteOrphanPosts()
+            cleanupWatchedPostsInside(removed)
         }
     }
 
     override suspend fun clearWatchedPosts(section: RecentPostSection) {
         database.withTransaction {
+            val removed = dao.watched().filter { it.section == section.name }
             dao.deleteWatchedSection(section.name)
-            contentDao.deleteOrphanPosts()
+            cleanupWatchedPostsInside(removed)
         }
     }
 
@@ -241,9 +240,26 @@ class RoomRecentsRepository(
 
     override suspend fun clearAll() {
         database.withTransaction {
+            val removed = dao.watched()
             dao.deleteWatched()
             dao.deleteSearches()
-            contentDao.deleteOrphanPosts()
+            cleanupWatchedPostsInside(removed)
         }
     }
+
+    private fun trimWatchedInside() {
+        val removed = dao.watchedBeyondLimit(watchedLimit)
+        if (removed.isEmpty()) return
+        dao.trimWatched(watchedLimit)
+        removed.distinctBy { it.source to it.sourcePostId }.forEach { row ->
+            contentDao.deleteOrphanPost(row.source, row.sourcePostId)
+        }
+    }
+
+    private fun cleanupWatchedPostsInside(removed: List<RecentWatchedEntity>) {
+        removed.distinctBy { it.source to it.sourcePostId }.forEach { row ->
+            contentDao.deleteOrphanPost(row.source, row.sourcePostId)
+        }
+    }
+
 }

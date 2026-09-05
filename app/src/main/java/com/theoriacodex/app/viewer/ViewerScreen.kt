@@ -180,7 +180,7 @@ internal fun ViewerScreen(
     onOpenCreatorFallback: ((Post) -> Unit)? = null,
     playbackDiagnosticsEnabled: Boolean = false,
 ) {
-    val posts = uiState.pages.map { page -> page.post }
+    val posts = remember(uiState.pages) { uiState.pages.map { page -> page.post } }
     if (posts.isEmpty()) {
         Box(
             modifier = Modifier
@@ -840,9 +840,6 @@ internal fun ViewerScreen(
                                     loadGeneration = loadGeneration,
                                     onTimelineInteractionActiveChanged = ::onTimelineInteractionChanged,
                                     onTogglePlayback = { onAction(ViewerAction.TogglePlayback) },
-                                    onProgressChanged = { positionMs, durationMs ->
-                                        onAction(ViewerAction.TimelineProgressChanged(positionMs, durationMs))
-                                    },
                                     onDurationKnown = { durationMs ->
                                         onAuthoritativeDurationKnown(post, durationMs)
                                     },
@@ -870,9 +867,6 @@ internal fun ViewerScreen(
                                 loadGeneration = loadGeneration,
                                 onTimelineInteractionActiveChanged = ::onTimelineInteractionChanged,
                                 onTogglePlayback = { onAction(ViewerAction.TogglePlayback) },
-                                onProgressChanged = { positionMs, durationMs ->
-                                    onAction(ViewerAction.TimelineProgressChanged(positionMs, durationMs))
-                                },
                                 onDurationKnown = { durationMs ->
                                     if (isAuthoritativeDurationMedia(post, media)) {
                                         onAuthoritativeDurationKnown(post, durationMs)
@@ -898,9 +892,6 @@ internal fun ViewerScreen(
                                 loadGeneration = loadGeneration,
                                 onTimelineInteractionActiveChanged = ::onTimelineInteractionChanged,
                                 onTogglePlayback = { onAction(ViewerAction.TogglePlayback) },
-                                onProgressChanged = { positionMs, durationMs ->
-                                    onAction(ViewerAction.TimelineProgressChanged(positionMs, durationMs))
-                                },
                                 onDurationKnown = { durationMs ->
                                     if (isAuthoritativeDurationMedia(post, media)) {
                                         onAuthoritativeDurationKnown(post, durationMs)
@@ -924,9 +915,6 @@ internal fun ViewerScreen(
                                 loadGeneration = loadGeneration,
                                 onTogglePlayback = { onAction(ViewerAction.TogglePlayback) },
                                 onRestartPlayback = { onAction(ViewerAction.RestartPlayback) },
-                                onFrameProgressChanged = { frameIndex, frameCount ->
-                                    onAction(ViewerAction.FrameProgressChanged(frameIndex, frameCount))
-                                },
                                 onLoading = {
                                     imageLoading = true
                                 },
@@ -1563,7 +1551,6 @@ private fun ViewerVideoPlayer(
     loadGeneration: Long = 0L,
     onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
     onTogglePlayback: (() -> Unit)? = null,
-    onProgressChanged: (Long, Long?) -> Unit = { _, _ -> },
     onDurationKnown: (Long) -> Unit = {},
     onError: (String) -> Unit = {},
 ) {
@@ -1787,7 +1774,6 @@ private fun ViewerVideoPlayer(
                 } else {
                     nextPosition.coerceAtLeast(0L)
                 }
-                onProgressChanged(positionMs, durationMs.takeIf { it > 0L })
             }
         }
     }
@@ -1960,7 +1946,6 @@ private fun ViewerAnimatedWebPPlayer(
     loadGeneration: Long = 0L,
     onTogglePlayback: (() -> Unit)? = null,
     onRestartPlayback: (() -> Unit)? = null,
-    onFrameProgressChanged: (Int, Int) -> Unit = { _, _ -> },
     onLoading: () -> Unit = {},
     onSuccess: () -> Unit = {},
     onError: (Throwable) -> Unit = {},
@@ -2006,7 +1991,6 @@ private fun ViewerAnimatedWebPPlayer(
         frameCount = activeDrawable.frameSeqDecoder.frameCount
         while (isActive) {
             frameIndex = activeDrawable.frameSeqDecoder.frameIndex.coerceAtLeast(0)
-            onFrameProgressChanged(frameIndex, frameCount)
             delay(100L)
         }
     }
@@ -2102,7 +2086,6 @@ private fun ViewerGifPlayer(
     loadGeneration: Long = 0L,
     onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
     onTogglePlayback: (() -> Unit)? = null,
-    onProgressChanged: (Long, Long?) -> Unit = { _, _ -> },
     onDurationKnown: (Long) -> Unit = {},
     onError: (String) -> Unit = {},
 ) {
@@ -2111,7 +2094,6 @@ private fun ViewerGifPlayer(
     var loading by remember(locations, loadGeneration) { mutableStateOf(true) }
     var fallbackCandidateIndex by remember(locations, loadGeneration) { mutableIntStateOf(0) }
     var fallbackFailed by remember(locations, loadGeneration) { mutableStateOf(false) }
-    var positionMs by remember(locations, loadGeneration) { mutableLongStateOf(0L) }
     var isScrubbing by remember(locations, loadGeneration) { mutableStateOf(false) }
     var playbackPaused by remember(locations, loadGeneration) { mutableStateOf(false) }
     val effectivePlaybackRate = playbackRate.coerceAtLeast(MIN_PLAYBACK_RATE)
@@ -2121,7 +2103,6 @@ private fun ViewerGifPlayer(
         loading = true
         fallbackCandidateIndex = 0
         fallbackFailed = false
-        positionMs = 0L
         playbackPaused = false
         var loadedMovie: Movie? = null
         for (attempt in 1..GIF_MOVIE_LOAD_ATTEMPTS) {
@@ -2188,31 +2169,22 @@ private fun ViewerGifPlayer(
         onDurationKnown(durationMs)
     }
 
-    LaunchedEffect(restartRequest) {
-        if (restartRequest > 0L) positionMs = 0L
+    val animation = remember(activeMovie, durationMs) { AnimationPlaybackState(durationMs) }
+    AnimatePlayback(
+        state = animation,
+        enabled = isActive && !isScrubbing && !effectivePlaybackPaused,
+        rate = effectivePlaybackRate,
+    )
+
+    LaunchedEffect(restartRequest, animation) {
+        if (restartRequest > 0L) animation.seekTo(0L)
     }
 
     LaunchedEffect(seekJumpSerial, seekJumpDeltaMs, durationMs, isScrubbing, isActive) {
         if (seekJumpSerial <= 0 || seekJumpDeltaMs == 0L || isScrubbing || !isActive) {
             return@LaunchedEffect
         }
-        val target = (positionMs + seekJumpDeltaMs).coerceIn(0L, durationMs)
-        positionMs = target
-    }
-
-    LaunchedEffect(activeMovie, durationMs, isScrubbing, effectivePlaybackPaused, isActive, effectivePlaybackRate) {
-        if (isScrubbing || effectivePlaybackPaused || !isActive) return@LaunchedEffect
-        while (true) {
-            delay(16L)
-            positionMs = if (durationMs <= 0L) {
-                0L
-            } else {
-                val frameDelayMs = 16L
-                val next = positionMs + (frameDelayMs * effectivePlaybackRate).toLong().coerceAtLeast(1L)
-                if (next >= durationMs) 0L else next
-            }
-            onProgressChanged(positionMs, durationMs)
-        }
+        animation.seekTo(animation.positionMs + seekJumpDeltaMs)
     }
 
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
@@ -2233,7 +2205,7 @@ private fun ViewerGifPlayer(
                 val nativeCanvas = canvas.nativeCanvas
                 nativeCanvas.withTranslation(offsetX, offsetY) {
                     scale(movieScale, movieScale)
-                    activeMovie.setTime(positionMs.toInt())
+                    activeMovie.setTime(animation.positionMs.toInt())
                     activeMovie.draw(this, 0f, 0f)
                 }
             }
@@ -2261,16 +2233,16 @@ private fun ViewerGifPlayer(
                         },
                     )
                     MediaTimelineBar(
-                        positionMs = positionMs.coerceIn(0L, durationMs),
+                        positionMs = animation.positionMs,
                         durationMs = durationMs,
                         onSeekStarted = {
                             isScrubbing = true
                         },
                         onSeekChanged = { target ->
-                            positionMs = target.coerceIn(0L, durationMs)
+                            animation.seekTo(target)
                         },
                         onSeekFinished = { target ->
-                            positionMs = target.coerceIn(0L, durationMs)
+                            animation.seekTo(target)
                             isScrubbing = false
                         },
                         onInteractionActiveChanged = onTimelineInteractionActiveChanged,

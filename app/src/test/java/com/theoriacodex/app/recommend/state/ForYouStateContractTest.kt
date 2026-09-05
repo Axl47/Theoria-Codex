@@ -143,6 +143,23 @@ class ForYouStateContractTest {
     }
 
     @Test
+    fun `historical seed remains pageable without current likes`() {
+        val historical = snapshot(
+            likesCount = 0,
+            seedId = "PIXIV:saved seed",
+            results = listOf(testPost()),
+            canLoadMore = true,
+        ).toUiState()
+
+        val transition = historical.reduce(ForYouAction.LoadNextPage)
+
+        assertNull(historical.emptyReason)
+        assertTrue(historical.seedSummaryBySource.isNotEmpty())
+        assertTrue(transition.state.isPaging)
+        assertTrue(transition.effect is ForYouEffect.LoadNextPage)
+    }
+
+    @Test
     fun `seed blacklist undo carries the exact profile and entries into refresh`() {
         val entry = ForYouBlacklistEntry(SourceKey.PIXIV, listOf("sky", "night"))
         val state = snapshot(likesCount = 2, seedId = "PIXIV:sky+night").toUiState()

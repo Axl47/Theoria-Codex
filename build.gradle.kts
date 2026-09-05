@@ -1,5 +1,6 @@
 import dev.detekt.gradle.Detekt
 import dev.detekt.gradle.extensions.DetektExtension
+import org.gradle.api.tasks.compile.JavaCompile
 
 plugins {
     alias(libs.plugins.kover)
@@ -48,7 +49,8 @@ subprojects {
             baseline.set(rootProject.layout.projectDirectory.file("config/detekt/baseline-${project.name}.xml"))
             basePath.set(rootProject.layout.projectDirectory)
             buildUponDefaultConfig.set(true)
-            parallel.set(true)
+            // Kotlin FIR/PSI analysis must not traverse the same source tree concurrently.
+            parallel.set(false)
             autoCorrect.set(false)
             ignoreFailures.set(false)
         }
@@ -61,6 +63,22 @@ subprojects {
                 checkstyle.required.set(false)
                 markdown.required.set(false)
             }
+        }
+    }
+
+}
+
+// AGP registers Java compilation after project evaluation; wire its public output once all
+// variant tasks exist so typed analysis can resolve this module's BuildConfig and Room types.
+gradle.projectsEvaluated {
+    subprojects.filter { module ->
+        module.plugins.hasPlugin("dev.detekt") &&
+            (module.plugins.hasPlugin("com.android.application") || module.plugins.hasPlugin("com.android.library"))
+    }.forEach { module ->
+        val javaCompilation = module.tasks.named<JavaCompile>("compileDebugJavaWithJavac")
+        module.tasks.named<Detekt>("detektDebug") {
+            dependsOn(javaCompilation)
+            classpath.from(javaCompilation.flatMap { it.destinationDirectory })
         }
     }
 }

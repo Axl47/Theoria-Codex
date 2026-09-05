@@ -15,9 +15,9 @@
     "production": 900,
     "test": 700,
     "productionExceptions": {
-      "app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt": 2612,
-      "app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt": 2420,
-      "app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt": 1958,
+      "app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt": 2488,
+      "app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt": 2290,
+      "app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt": 1913,
       "core-sources/src/main/kotlin/com/theoriacodex/sources/hitomi/HitomiSourceAdapter.kt": 1760,
       "core-sources/src/main/kotlin/com/theoriacodex/sources/nhentai/NhentaiSourceAdapter.kt": 1196,
       "app/src/main/java/com/theoriacodex/app/search/SearchViewModel.kt": 1100
@@ -39,7 +39,7 @@
     },
     "config/detekt/baseline-core-domain-main.xml": {
       "CognitiveComplexMethod": 1,
-      "LongMethod": 2
+      "LongMethod": 1
     },
     "config/detekt/baseline-core-sources-main.xml": {
       "CognitiveComplexMethod": 4,

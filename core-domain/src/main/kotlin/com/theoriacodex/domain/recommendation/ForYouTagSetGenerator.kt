@@ -5,12 +5,11 @@ import kotlin.math.pow
 import kotlin.random.Random
 
 object ForYouTagSetGenerator {
-    fun generate(
+    /** Train once for a source, then sample repeatedly without rereading the liked documents. */
+    fun prepare(
         source: SourceKey,
         likedDocuments: List<List<String>>,
-        fallbackCandidates: List<String>,
-        random: Random = Random.Default,
-    ): List<String> {
+    ): Prepared {
         val normalizedDocuments = likedDocuments
             .map { document ->
                 RecommendationTagNormalization.normalizeDistinct(
@@ -21,69 +20,71 @@ object ForYouTagSetGenerator {
             }
             .filter { it.isNotEmpty() }
 
-        if (normalizedDocuments.isEmpty()) {
-            return fallbackTag(source, fallbackCandidates, random)?.let(::listOf).orEmpty()
-        }
-
         val stats = TagAffinityBuilder.build(
             documents = normalizedDocuments,
             maxTagsPerDocument = MAX_TAGS_PER_DOCUMENT,
         )
-        if (stats.totalDocuments == 0) {
-            return fallbackTag(source, fallbackCandidates, random)?.let(::listOf).orEmpty()
-        }
+        return Prepared(source, stats)
+    }
 
-        val minTagCount = minTagCount(stats.totalDocuments)
-        val eligible = stats.tagDocumentCounts
-            .filterValues { count -> count >= minTagCount }
+    class Prepared internal constructor(
+        private val source: SourceKey,
+        private val stats: TagAffinityStats,
+    ) {
+        private val eligible = stats.tagDocumentCounts
+            .filterValues { count -> count >= minTagCount(stats.totalDocuments) }
             .ifEmpty { stats.tagDocumentCounts }
-        if (eligible.isEmpty()) {
-            return fallbackTag(source, fallbackCandidates, random)?.let(::listOf).orEmpty()
+        private val anchors = eligible.map { (tag, count) ->
+            WeightedTag(tag = tag, weight = count.toDouble().pow(0.7))
         }
+        val needsFallback: Boolean get() = anchors.isEmpty()
 
-        val anchor = weightedPick(
-            random = random,
-            weightedItems = eligible.map { (tag, count) ->
-                WeightedTag(tag = tag, weight = count.toDouble().pow(0.7))
-            },
-        ) ?: return fallbackTag(source, fallbackCandidates, random)?.let(::listOf).orEmpty()
+        fun sample(
+            fallbackCandidates: List<String> = emptyList(),
+            random: Random = Random.Default,
+        ): List<String> {
+            val anchor = weightedPick(
+                random = random,
+                weightedItems = anchors,
+            ) ?: return fallbackTag(source, fallbackCandidates, random)?.let(::listOf).orEmpty()
 
-        if (stats.totalDocuments < MIN_LIKES_FOR_PAIRS) {
-            return listOf(anchor)
-        }
-
-        if (random.nextDouble() > secondTagProbability(stats.totalDocuments)) {
-            return listOf(anchor)
-        }
-
-        val anchorCount = stats.tagDocumentCounts[anchor] ?: return listOf(anchor)
-        val minPairCount = minPairCount(stats.totalDocuments)
-        val pairCandidates = eligible.keys
-            .asSequence()
-            .filter { candidate -> !candidate.equals(anchor, ignoreCase = true) }
-            .mapNotNull { candidate ->
-                val candidateCount = stats.tagDocumentCounts[candidate] ?: return@mapNotNull null
-                val pairCount = stats.pairCount(anchor, candidate)
-                if (pairCount < minPairCount) return@mapNotNull null
-
-                val confidence = (pairCount + 1.0) / (anchorCount + 2.0)
-                val lift = ((pairCount + 1.0) * (stats.totalDocuments + 1.0)) /
-                    ((anchorCount + 1.0) * (candidateCount + 1.0))
-                if (confidence < MIN_CONFIDENCE && lift < MIN_LIFT) return@mapNotNull null
-
-                WeightedTag(
-                    tag = candidate,
-                    weight = maxOf(0.001, confidence * lift),
-                )
+            if (stats.totalDocuments < MIN_LIKES_FOR_PAIRS) {
+                return listOf(anchor)
             }
-            .toList()
 
-        val second = weightedPick(
-            random = random,
-            weightedItems = pairCandidates,
-        ) ?: return listOf(anchor)
+            if (random.nextDouble() > secondTagProbability(stats.totalDocuments)) {
+                return listOf(anchor)
+            }
 
-        return listOf(anchor, second)
+            val anchorCount = stats.tagDocumentCounts[anchor] ?: return listOf(anchor)
+            val minPairCount = minPairCount(stats.totalDocuments)
+            val pairCandidates = eligible.keys
+                .asSequence()
+                .filter { candidate -> !candidate.equals(anchor, ignoreCase = true) }
+                .mapNotNull { candidate ->
+                    val candidateCount = stats.tagDocumentCounts[candidate] ?: return@mapNotNull null
+                    val pairCount = stats.pairCount(anchor, candidate)
+                    if (pairCount < minPairCount) return@mapNotNull null
+
+                    val confidence = (pairCount + 1.0) / (anchorCount + 2.0)
+                    val lift = ((pairCount + 1.0) * (stats.totalDocuments + 1.0)) /
+                        ((anchorCount + 1.0) * (candidateCount + 1.0))
+                    if (confidence < MIN_CONFIDENCE && lift < MIN_LIFT) return@mapNotNull null
+
+                    WeightedTag(
+                        tag = candidate,
+                        weight = maxOf(0.001, confidence * lift),
+                    )
+                }
+                .toList()
+
+            val second = weightedPick(
+                random = random,
+                weightedItems = pairCandidates,
+            ) ?: return listOf(anchor)
+
+            return listOf(anchor, second)
+        }
     }
 
     private fun fallbackTag(

@@ -66,7 +66,6 @@ class AppLogicArchitectureTest {
             "DurationFilterReadiness.kt",
             "PostMediaPolicy.kt",
             "TrainingTags.kt",
-            "TagAssociation.kt",
         ).forEach { owner ->
             assertTrue("$owner must exist in app-logic", File(root, "app-logic/src/main").walk().any { it.name == owner })
             assertFalse("$owner reappeared in app", appSources.any { it.name == owner })

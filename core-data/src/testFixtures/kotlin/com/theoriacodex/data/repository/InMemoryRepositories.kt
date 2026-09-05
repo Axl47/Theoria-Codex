@@ -36,7 +36,7 @@ class InMemoryCodexRepository : CodexRepository {
         return mutex.withLock {
             val current = codices.value
             val existing = current.firstOrNull { it.codexId == codexId }
-            val resolvedName = RepositoryPolicies.resolveUniqueCodexName(
+            val resolvedName = CodexLikesPolicy.resolveUniqueCodexName(
                 requestedName = name,
                 existingCodices = current,
                 excludeCodexId = codexId,
@@ -65,7 +65,7 @@ class InMemoryCodexRepository : CodexRepository {
 
     override suspend fun createCodex(name: String): Codex {
         return mutex.withLock {
-            val resolvedName = RepositoryPolicies.resolveUniqueCodexName(
+            val resolvedName = CodexLikesPolicy.resolveUniqueCodexName(
                 requestedName = name,
                 existingCodices = codices.value,
             )
@@ -81,7 +81,7 @@ class InMemoryCodexRepository : CodexRepository {
 
     override suspend fun reorderCodex(codexId: String, targetIndex: Int) {
         mutex.withLock {
-            codices.value = RepositoryPolicies.reorderCodices(
+            codices.value = FixtureRepositoryPolicies.reorderCodices(
                 codices = codices.value,
                 codexId = codexId,
                 targetIndex = targetIndex,
@@ -93,7 +93,7 @@ class InMemoryCodexRepository : CodexRepository {
         mutex.withLock {
             val current = codices.value
             val existing = current.firstOrNull { it.codexId == codexId } ?: return@withLock
-            val resolvedName = RepositoryPolicies.resolveUniqueCodexName(
+            val resolvedName = CodexLikesPolicy.resolveUniqueCodexName(
                 requestedName = name,
                 existingCodices = current,
                 excludeCodexId = codexId,
@@ -139,7 +139,7 @@ class InMemoryCodexRepository : CodexRepository {
             val pairs = items[codexId].orEmpty().mapNotNull { item ->
                 posts[item.postId]?.let { post -> item to post }
             }
-            RepositoryPolicies.sortCodexPairs(pairs, sort).map { it.second }
+            FixtureRepositoryPolicies.sortCodexPairs(pairs, sort).map { it.second }
         }
     }
 
@@ -147,37 +147,53 @@ class InMemoryCodexRepository : CodexRepository {
         return postsById.value[postId]
     }
 
-    override suspend fun addItem(codexId: String, post: Post) {
-        mutex.withLock {
-            if (codices.value.none { it.codexId == codexId }) return@withLock
+    override suspend fun addItems(codexId: String, posts: List<Post>): Int {
+        return mutex.withLock {
+            check(codices.value.any { it.codexId == codexId }) { "The selected Codex no longer exists" }
             val existing = itemsByCodex.value[codexId].orEmpty()
-            val updated = RepositoryPolicies.addCodexItem(
-                items = existing,
-                codexId = codexId,
-                postId = post.id,
-                savedAtEpochMs = System.currentTimeMillis(),
-            )
-            val postChanged = postsById.value[post.id] != post
-            if (postChanged) {
-                postsById.value = postsById.value + (post.id to post)
+            val existingIds = existing.mapTo(mutableSetOf(), CodexItem::postId)
+            val uniquePosts = posts.distinctBy(Post::id)
+            val additions = uniquePosts.filter { it.id !in existingIds }.map { post ->
+                CodexItem(codexId, post.id, System.currentTimeMillis())
             }
-            if (updated != existing) {
-                itemsByCodex.value = itemsByCodex.value + (codexId to updated)
+            val updatedPosts = postsById.value.toMutableMap()
+            uniquePosts.forEach { post ->
+                updatedPosts[post.id] = updatedPosts[post.id]?.let { mergeSparsePost(it, post) } ?: post
             }
+            postsById.value = updatedPosts
+            itemsByCodex.value = itemsByCodex.value + (codexId to (existing + additions))
+            additions.size
         }
     }
+
+    override fun observeCodexSummaries(codexIds: Set<String>, coverLimit: Int): Flow<List<CodexSummary>> =
+        combine(codices, itemsByCodex, postsById) { allCodices, items, posts ->
+            allCodices.filter { it.codexId in codexIds }.map { codex ->
+                val members = items[codex.codexId].orEmpty()
+                val covers = members.sortedWith(
+                    compareByDescending<CodexItem> { it.savedAtEpochMs }
+                        .thenBy { it.postId.source.name }.thenBy { it.postId.sourcePostId },
+                ).take(coverLimit.coerceAtLeast(0)).mapNotNull { posts[it.postId] }
+                CodexSummary(codex.codexId, members.size, covers)
+            }
+        }
+
+    override fun observeSavedPostIds(codexIds: Set<String>): Flow<Set<PostId>> =
+        itemsByCodex.map { items ->
+            items.filterKeys { it in codexIds }.values.flatten().mapTo(linkedSetOf(), CodexItem::postId)
+        }
 
     override suspend fun updatePost(post: Post) {
         mutex.withLock {
             if (post.id !in postsById.value) return@withLock
-            postsById.value = postsById.value + (post.id to post)
+            postsById.value = postsById.value + (post.id to mergeSparsePost(postsById.value.getValue(post.id), post))
         }
     }
 
     override suspend fun removeItem(codexId: String, sourceKey: SourceKey, sourcePostId: String) {
         mutex.withLock {
             val targetPostId = PostId(source = sourceKey, sourcePostId = sourcePostId)
-            val updated = RepositoryPolicies.removeCodexItem(
+            val updated = FixtureRepositoryPolicies.removeCodexItem(
                 items = itemsByCodex.value[codexId].orEmpty(),
                 postId = targetPostId,
             )
@@ -255,7 +271,7 @@ class InMemoryRecentsRepository(
 
     override fun observeActivity(): Flow<List<RecentActivityEntry>> {
         return combine(watched, searches) { watchedPosts, searchEntries ->
-            RepositoryPolicies.mergeRecentActivity(watchedPosts, searchEntries)
+            FixtureRepositoryPolicies.mergeRecentActivity(watchedPosts, searchEntries)
         }
     }
 
@@ -286,7 +302,7 @@ class InMemoryRecentsRepository(
                     viewedMediaNumber.coerceAtLeast(1),
                 ),
             )
-            watched.value = RepositoryPolicies.normalizeRecentWatched(
+            watched.value = FixtureRepositoryPolicies.normalizeRecentWatched(
                 entries = listOf(replacement) + watched.value.filterNot { entry ->
                     entry.post.id == post.id && entry.section == section
                 },
@@ -316,7 +332,7 @@ class InMemoryRecentsRepository(
                     section = section,
                     maxViewedMediaNumber = normalizedMediaNumber,
                 )
-                RepositoryPolicies.normalizeRecentWatched(
+                FixtureRepositoryPolicies.normalizeRecentWatched(
                     entries = listOf(inserted) + watched.value,
                     limit = watchedLimit,
                 )
@@ -347,7 +363,7 @@ class InMemoryRecentsRepository(
         val normalizedHash = queryHash.trim()
         if (normalizedHash.isBlank()) return
         mutex.withLock {
-            searches.value = RepositoryPolicies.recordSearch(
+            searches.value = FixtureRepositoryPolicies.recordSearch(
                 entries = searches.value,
                 entry = RecentSearchEntry(
                     query = query,
@@ -367,11 +383,11 @@ class InMemoryRecentsRepository(
         searches: List<RecentSearchEntry>,
     ) {
         mutex.withLock {
-            watched.value = RepositoryPolicies.normalizeRecentWatched(
+            watched.value = FixtureRepositoryPolicies.normalizeRecentWatched(
                 entries = watched.value + watchedPosts,
                 limit = watchedLimit,
             )
-            this.searches.value = RepositoryPolicies.normalizeRecentSearches(
+            this.searches.value = FixtureRepositoryPolicies.normalizeRecentSearches(
                 entries = this.searches.value + searches,
                 limit = searchLimit,
             )
@@ -556,9 +572,9 @@ class InMemoryLikesRepository(
         }
     }
 
-    override suspend fun toggleLike(profileId: String, postId: PostId, tags: List<String>): Boolean {
+    suspend fun toggleLike(profileId: String, postId: PostId, tags: List<String>): Boolean {
         return mutex.withLock {
-            val result = RepositoryPolicies.toggleLike(
+            val result = FixtureRepositoryPolicies.toggleLike(
                 likesByProfile = likesByProfile.value,
                 profileId = profileId,
                 postId = postId,
@@ -570,56 +586,10 @@ class InMemoryLikesRepository(
         }
     }
 
-    override suspend fun clearLikes(profileId: String) {
+    suspend fun clearLikes(profileId: String) {
         mutex.withLock {
             likesByProfile.value = likesByProfile.value - RepositoryPolicies.normalizeProfileId(profileId)
         }
-    }
-}
-
-class InMemoryCacheRepository : CacheRepository {
-    private val mutex = Mutex()
-    private val thumbnailCache = mutableSetOf<PostId>()
-    private val fullCache = mutableSetOf<PostId>()
-    private val snapshot = MutableStateFlow(CacheSnapshot(thumbnailCount = 0, fullImageCount = 0))
-
-    override fun observeSnapshot(): Flow<CacheSnapshot> {
-        return snapshot
-    }
-
-    override suspend fun cacheThumbnail(post: Post) {
-        mutex.withLock {
-            thumbnailCache += post.id
-            emitSnapshot()
-        }
-    }
-
-    override suspend fun cacheFull(post: Post) {
-        mutex.withLock {
-            fullCache += post.id
-            emitSnapshot()
-        }
-    }
-
-    override suspend fun clearThumbnailCache() {
-        mutex.withLock {
-            thumbnailCache.clear()
-            emitSnapshot()
-        }
-    }
-
-    override suspend fun clearFullImageCache() {
-        mutex.withLock {
-            fullCache.clear()
-            emitSnapshot()
-        }
-    }
-
-    private fun emitSnapshot() {
-        snapshot.value = CacheSnapshot(
-            thumbnailCount = thumbnailCache.size,
-            fullImageCount = fullCache.size,
-        )
     }
 }
 

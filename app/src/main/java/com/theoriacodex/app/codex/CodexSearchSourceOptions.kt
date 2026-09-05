@@ -36,17 +36,6 @@ fun codexSearchSourceOptions(
         }
 }
 
-fun buildSourceScopedCodexSearchTags(
-    posts: List<Post>,
-    source: SourceKey,
-    limit: Int,
-): List<String> {
-    if (limit <= 0) return emptyList()
-    return codexSearchTagOptions(posts = posts, source = source)
-        .take(limit)
-        .map { option -> option.tag }
-}
-
 fun codexSearchTagOptions(
     posts: List<Post>,
     source: SourceKey,

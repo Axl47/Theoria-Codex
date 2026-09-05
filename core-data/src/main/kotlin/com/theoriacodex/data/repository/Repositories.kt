@@ -24,12 +24,25 @@ interface CodexRepository {
     fun observeCodexItems(codexId: String): Flow<List<CodexItem>>
     fun observeCodexPosts(codexId: String, sort: CodexSortMode): Flow<List<Post>>
     suspend fun getPost(postId: com.theoriacodex.domain.model.PostId): Post?
-    suspend fun addItem(codexId: String, post: Post)
+    /** Commits the unique selection atomically; missing collections fail, duplicates return zero. */
+    suspend fun addItems(codexId: String, posts: List<Post>): Int
+    suspend fun addItem(codexId: String, post: Post) {
+        addItems(codexId, listOf(post))
+    }
+    /** Counts every membership but hydrates only the newest bounded covers of selected collections. */
+    fun observeCodexSummaries(codexIds: Set<String>, coverLimit: Int = 8): Flow<List<CodexSummary>>
+    fun observeSavedPostIds(codexIds: Set<String>): Flow<Set<PostId>>
     suspend fun updatePost(post: Post)
     suspend fun removeItem(codexId: String, sourceKey: SourceKey, sourcePostId: String)
     suspend fun removeItems(codexId: String, postIds: Set<PostId>)
     suspend fun restoreItems(items: List<CodexItem>, posts: List<Post>)
 }
+
+data class CodexSummary(
+    val codexId: String,
+    val itemCount: Int,
+    val coverPosts: List<Post>,
+)
 
 enum class CodexSortMode {
     NEWEST_SAVED,
@@ -174,6 +187,8 @@ data class LifetimeStatistics(
     val forYouSaveCount: Long = 0L,
     val postUrlCopyCount: Long = 0L,
     val codexEntryCounts: Map<String, Long> = emptyMap(),
+    val translatedPhraseCount: Long = 0L,
+    val translatedSourceCharacterCount: Long = 0L,
 )
 
 /** Local-only cumulative statistics. Feature data remains authoritative for current library composition. */
@@ -187,6 +202,7 @@ interface StatisticsRepository {
     suspend fun recordForYouSave()
     suspend fun recordPostUrlCopy()
     suspend fun recordCodexEntry(codexId: String)
+    suspend fun recordTranslationUsage(phraseCount: Long, sourceCharacterCount: Long)
 }
 
 data class LikedPost(
@@ -199,8 +215,6 @@ data class LikedPost(
 interface LikesRepository {
     fun observeLikes(profileId: String): Flow<List<LikedPost>>
     fun observeLikedPostIds(profileId: String): Flow<Set<PostId>>
-    suspend fun toggleLike(profileId: String, postId: PostId, tags: List<String>): Boolean
-    suspend fun clearLikes(profileId: String)
 }
 
 data class CodexBulkImportResult(
@@ -240,7 +254,7 @@ data class CodexProfileDeleteResult(
  * Optional repository capability for operations that cross Codex and Likes ownership.
  *
  * Implementations must commit each method atomically. Ordinary [CodexRepository] and
- * [LikesRepository] remain the narrow read/write contracts for callers touching one aggregate.
+ * [LikesRepository] expose collection operations and Likes observation respectively.
  * Callers can opt into this capability when both repositories are backed by one transactional
  * store, without making Room or another database part of the domain-facing API.
  */
@@ -278,8 +292,6 @@ interface CodexLikesTransactions {
         systemCodexId: String,
     ): CodexProfileDeleteResult
 
-    /** Destructive reset used only by an explicit whole-content recovery flow. */
-    suspend fun clearAllContent()
 }
 
 private val DEFAULT_SOURCE_WEIGHTS: Map<SourceKey, Double> = mapOf(

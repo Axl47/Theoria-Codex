@@ -495,7 +495,7 @@ class RepositoryContractTest(
         return InMemorySettingsRepository()
     }
 
-    private fun createLikesRepository(clock: () -> Long): LikesRepository {
+    private fun createLikesRepository(clock: () -> Long): InMemoryLikesRepository {
         return InMemoryLikesRepository(clock = clock)
     }
 

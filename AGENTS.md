@@ -2,6 +2,8 @@
 
 ## Development Rules
 
+Keep Detekt's own `parallel` setting disabled: concurrent Kotlin 2.4 FIR/PSI traversal can hang or report missing declarations. Android Debug analysis receives its module's public `JavaCompile.destinationDirectory` after AGP registers variant tasks, so generated BuildConfig and Room Java types resolve. Run lint after multi-variant coverage/code generation finishes; otherwise lint can read Room-generated Java files while another variant regenerates them. Offline lint retains source checks while avoiding dependency-version network lookups.
+
 *Smallest sufficient implementation:* Prefer the simplest design that satisfies the stated requirements. Do not expand architecture or scope without a concrete requirement.
 
 *First-pass convergence:* Before the initial patch, identify the required data flow, UI states, error paths, acceptance checks, and validation plan. Prefer one coherent implementation pass over speculative partial patches.
@@ -96,6 +98,10 @@ Watched Recents retains one-based multi-media progress as the highest media numb
 
 ## Feed Autoplay Performance
 
+Viewer animation progress belongs to its renderer, not the whole route state. GIF and Ugoira share lifecycle-aware monotonic frame timing; background time must not advance playback on resume. Keep route play/pause/rate/restart commands and compact restoration separate from per-frame state. Recommendation generation prepares one tag model per source and root attempt off Main; blacklist retries sample that model without rebuilding it or fetching unused fallback tags.
+
+Search, For You, and Creator Profile share `FeedPageDemand` through `rememberFeedPageDemand`. It acknowledges settled request generations even when pages add no posts, pauses for loading/duration decisions, and limits automatic draining to three pages between user demands. A reachable Continue action resets the budget. Preserve provider continuation, canonical scroll mapping, partial-source failure isolation, and historical FYP replay without current Likes.
+
 Search, For You, Creator Profile, Recents, and Codex browsing must keep every visibly presented video or animated card autoplaying simultaneously. Performance work may share request, cache, media-source, buffering, and decode infrastructure; keep players stable across recomposition; and pause or release cards only after they are no longer visibly presented or the app lifecycle stops. Do not replace concurrent visible autoplay with a single-active-card policy. Validate this contract with multi-card behavior coverage and numeric frame/network/memory evidence rather than assuming fewer players is acceptable.
 
 Animated-duration enrichment is application-owned work shared by every browsing route. Composables emit typed viewport, filter, lifecycle, and scroll-idle events only. Each navigation-scoped `MediaDurationRouteViewModel` reconciles per-media demand deltas for its current content identity and exposes only that route's metadata subset; it never rewrites the route's `Post` list. `MediaDurationCoordinator` remains the sole acquisition/scheduling owner with cross-route single-flight, bounded durable positive/negative decisions, cancellation isolation, and stale-identity rejection. Keep media keys cached per result snapshot and publish player durations only from one-shot authoritative full-media callbacks; do not reintroduce result-list resolve/probe effects or progress-cadence publication.
@@ -138,7 +144,7 @@ Baseline-profile collection installs both the isolated target APK and a self-ins
 
 `StatisticsRepository` owns forward-only, on-device lifetime counters; it must not duplicate current Codex library state. Saved post, saved source, saved tag, and top-Codex-source statistics are live projections of the active profile's visible Codices, deduplicated by canonical `Post.id`. Lifetime counters begin when the statistics store is introduced and are not backfilled from clearable Recents data.
 
-Record events only at their authoritative outcome: accepted root Search and For You executions, one-shot Viewer page visibility, successful post-URL clipboard copies, completed Codex saves originating from For You, and Codex detail route entries. Pagination, failed or stale work, browser opens, tag copies, and recomposition do not count. Unified and Multi-Search source rows describe participation and may therefore sum above the overall search total. Watched and saved tags remain source-aware.
+Record events only at their authoritative outcome: accepted root Search and For You executions, one-shot Viewer page visibility, successful post-URL clipboard copies, completed Codex saves originating from For You, Codex detail route entries, and successful uncached server translation results. Translation usage counts unique phrases sent to the server plus their exact source-character total; cache hits and failed batches do not count. Pagination, failed or stale work, browser opens, tag copies, and recomposition do not count. Unified and Multi-Search source rows describe participation and may therefore sum above the overall search total. Watched and saved tags remain source-aware.
 
 Foreground timing uses process lifecycle plus monotonic elapsed time. Total app time includes every foreground route, while Browsing, Watching, and Codex are mutually exclusive route categories; Settings remains total-only. Statistics writes are best-effort side effects and must never turn a successful user action into a feature failure. Keep the typed store schema, R8/Gson wire manifest, repository tests, and projection tests synchronized whenever the durable aggregate changes.
 
@@ -149,6 +155,10 @@ Codex detail, Creator Profile, Viewer, and future secondary routes use `Secondar
 FAB filter/sort restore state lives in `UiRestoreRepository` and is loaded by the app-shell `FeedFabRestoreRegistry` before a feed route renders. Search and For You use separate top-level keys; Creator Profile keys include source plus creator identity; Codex detail keys include the Codex ID. Keep query-owned Search sort/date/score state in the Search query owner rather than duplicating it in FAB restore storage. New FAB contexts must receive their own stable key so switching tabs or relaunching never leaks controls between feeds.
 
 ## Codex Collection Actions
+
+Collection saves use `CodexRepository.addItems` for one atomic membership transaction before best-effort caching. `CodexSaveViewModel` owns direct-save jobs and typed completion feedback outside sheet composition. Routine Post updates share `mergeSharedPostPayload`; sparse snapshots cannot erase resolved media, and sparse cache writes must preserve usable existing offline bytes. `LikesRepository` is observation-only; production Like mutations use `CodexLikesTransactions` to keep the system Codex consistent.
+
+Collection overview uses `observeCodexSummaries` for selected-profile counts and bounded cover Posts; full tag options load only for the open collection action sheet through `CodexCollectionSource`. Keep JSON projection and cover filesystem work off Main. Live orphan cleanup checks only membership IDs removed by the transaction; the global sweep is reserved for legacy migration. Room schema 9 adds the reverse Likes lookup index without changing stored payloads.
 
 `CodexListScreen` owns one collection-action sheet reached by both the compact tile overflow affordance and tile long-press; keep export/share, search, rename, and delete behavior in that shared surface rather than creating divergent entry-point logic. `CodexDetailScreen` owns explicit multi-post edit selection through `CodexEditSelection`, while long-press retains the full single-post action sheet. Do not add permanent overflow controls to individual feed or Codex post cards to expose these actions.
 

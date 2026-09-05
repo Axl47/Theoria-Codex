@@ -12,8 +12,6 @@ import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.defaultRecommendationProfiles
-import com.theoriacodex.data.repository.ViewerLaunchContext
-import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -28,14 +26,16 @@ import com.theoriacodex.domain.orchestration.SourceRunStatus
 import com.theoriacodex.domain.orchestration.SourceWeightNormalization
 import com.theoriacodex.domain.orchestration.UnifiedSearchResult
 import com.theoriacodex.domain.recommendation.ForYouTagSetGenerator
-import com.theoriacodex.domain.recommendation.TagAffinityStats
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
 class ForYouCoordinator(
@@ -46,6 +46,7 @@ class ForYouCoordinator(
     private val statisticsRepository: StatisticsRepository,
     private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
     private val seedSource: () -> Long = System::currentTimeMillis,
+    private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
     private val initializationMutex = Mutex()
     private val feedRequestLock = Any()
@@ -58,7 +59,6 @@ class ForYouCoordinator(
     private var activeFeedRequest: FeedRequest? = null
     private var nextPageTokens: Map<SourceKey, String?> = emptyMap()
     private var queryOverridesBySource: Map<SourceKey, Query> = emptyMap()
-    private var affinityStatsBySource: Map<SourceKey, TagAffinityStats> = emptyMap()
 
     var results: List<Post> = emptyList()
         private set
@@ -228,7 +228,6 @@ class ForYouCoordinator(
         seedId = "empty"
         nextPageTokens = emptyMap()
         queryOverridesBySource = emptyMap()
-        affinityStatsBySource = emptyMap()
     }
 
     suspend fun loadNextPage() {
@@ -251,6 +250,7 @@ class ForYouCoordinator(
             results = mergeForYouResults(results, pageResult.items)
             statuses = pageResult.statuses.sortedBy { it.source.name }
             nextPageTokens = nextPageTokens.toMutableMap().apply {
+                pageableSources.forEach { source -> put(source, null) }
                 putAll(pageResult.nextPageTokens)
             }
             canLoadMore = nextPageTokens.values.any { token -> !token.isNullOrBlank() }
@@ -264,18 +264,6 @@ class ForYouCoordinator(
         } finally {
             finishRequest(request)
         }
-    }
-
-    fun buildViewerLaunchContext(
-        startIndex: Int,
-        scrollOffsetHint: Int,
-    ): ViewerLaunchContext {
-        return ViewerLaunchContext(
-            queryHash = "for_you:$seedId",
-            startIndex = startIndex,
-            streamSource = ViewerStreamSource.FOR_YOU,
-            scrollOffsetHint = scrollOffsetHint,
-        )
     }
 
     suspend fun resolvePostForFeed(postId: PostId): Post? {
@@ -308,7 +296,6 @@ class ForYouCoordinator(
                 }
                 sortMode = historicalSort ?: sortMode
                 selectedSource = historicalSeed.keys.singleOrNull()
-                affinityStatsBySource = emptyMap()
                 val historicalResult = runFeedSeed(request, historicalSeed)
                 ensureCurrent(request)
                 applyFeedResult(seed = historicalSeed, result = historicalResult)
@@ -319,17 +306,12 @@ class ForYouCoordinator(
             val likes = likesRepository.observeLikes(activeProfileId).first()
             ensureCurrent(request)
             activeProfileLikesCount = likes.size
-            affinityStatsBySource = buildAffinityBySource(
-                likes = likes,
-                enabledSources = enabledSources,
-            )
 
             if (enabledSources.isEmpty()) {
                 results = emptyList()
                 queryOverridesBySource = emptyMap()
                 seedSummaryBySource = emptyMap()
                 seedId = "empty-enabled"
-                affinityStatsBySource = emptyMap()
                 return
             }
 
@@ -384,7 +366,6 @@ class ForYouCoordinator(
                 results = emptyList()
                 queryOverridesBySource = emptyMap()
                 seedSummaryBySource = emptyMap()
-                affinityStatsBySource = emptyMap()
                 canLoadMore = false
                 errorMessage = error.message ?: "Could not load recommendations"
             }
@@ -542,21 +523,21 @@ class ForYouCoordinator(
             Random(0L)
         }
 
+        val preparedBySource = withContext(computationDispatcher) {
+            likes.asSequence()
+                .filter { liked -> liked.postId.source in enabledSources }
+                .groupBy { liked -> liked.postId.source }
+                .mapValues { (source, sourceLikes) ->
+                    ForYouTagSetGenerator.prepare(source, sourceLikes.map(LikedPost::tags))
+                }
+        }
         return enabledSources
             .sortedBy { it.name }
             .mapNotNull { source ->
-                val documents = likes
-                    .asSequence()
-                    .filter { liked -> liked.postId.source == source }
-                    .map { liked -> liked.tags }
-                    .toList()
-                if (documents.isEmpty()) {
-                    return@mapNotNull null
-                }
-                val fallbackTags = fallbackTagsForSource(source)
+                val prepared = preparedBySource[source] ?: return@mapNotNull null
+                val fallbackTags = if (prepared.needsFallback) fallbackTagsForSource(source) else emptyList()
                 val includeTags = selectAllowedSeed(
-                    source = source,
-                    likedDocuments = documents,
+                    prepared = prepared,
                     fallbackCandidates = fallbackTags,
                     random = random,
                     blockedKeys = blacklistedSeedKeys[source].orEmpty(),
@@ -575,8 +556,7 @@ class ForYouCoordinator(
             .mapNotNull { source ->
                 val fallbackTags = fallbackTagsForSource(source)
                 val includeTags = selectAllowedSeed(
-                    source = source,
-                    likedDocuments = emptyList(),
+                    prepared = ForYouTagSetGenerator.prepare(source, emptyList()),
                     fallbackCandidates = fallbackTags,
                     random = Random(source.name.hashCode()),
                     blockedKeys = blacklistedSeedKeys[source].orEmpty(),
@@ -586,28 +566,25 @@ class ForYouCoordinator(
             .toMap()
     }
 
-    private fun selectAllowedSeed(
-        source: SourceKey,
-        likedDocuments: List<List<String>>,
+    private suspend fun selectAllowedSeed(
+        prepared: ForYouTagSetGenerator.Prepared,
         fallbackCandidates: List<String>,
         random: Random,
         blockedKeys: Set<String>,
-    ): List<String> {
+    ): List<String> = withContext(computationDispatcher) {
         repeat(FOR_YOU_SEED_ATTEMPTS) {
-            val includeTags = ForYouTagSetGenerator.generate(
-                source = source,
-                likedDocuments = likedDocuments,
+            val includeTags = prepared.sample(
                 fallbackCandidates = fallbackCandidates,
                 random = random,
             )
             if (includeTags.isEmpty()) {
-                return emptyList()
+                return@withContext emptyList()
             }
             if (seedKey(includeTags) !in blockedKeys) {
-                return includeTags
+                return@withContext includeTags
             }
         }
-        return emptyList()
+        emptyList()
     }
 
     private suspend fun fallbackTagsForSource(source: SourceKey): List<String> {
@@ -659,22 +636,6 @@ class ForYouCoordinator(
             dateRange = null,
             minScore = null,
         )
-    }
-
-    private fun buildAffinityBySource(
-        likes: List<LikedPost>,
-        enabledSources: Set<SourceKey>,
-    ): Map<SourceKey, TagAffinityStats> {
-        val documentsBySource = enabledSources
-            .associateWith { source ->
-                likes
-                    .asSequence()
-                    .filter { liked -> liked.postId.source == source }
-                    .map { liked -> liked.tags }
-                    .toList()
-            }
-            .filterValues { documents -> documents.isNotEmpty() }
-        return buildSourceTagAffinity(documentsBySource = documentsBySource)
     }
 
     private fun blacklistedSeedKeysBySource(): Map<SourceKey, Set<String>> {

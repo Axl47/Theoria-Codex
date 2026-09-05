@@ -94,6 +94,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.imageLoader
 import coil.request.SuccessResult
 import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.feed.FeedPageDemandInput
+import com.theoriacodex.app.ui.components.rememberFeedPageDemand
+import com.theoriacodex.app.ui.components.FeedContinueLoading
 import com.theoriacodex.app.media.isAuthoritativeDurationMedia
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
@@ -157,7 +160,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -379,47 +381,25 @@ fun SearchScreen(
         queryHash, animatedFilterActive, feedProjection, gridState, onAction,
     )
 
-    LaunchedEffect(
-        queryHash,
-        visibleResults.size,
-        state.content.results.size,
-        state.content.canLoadMore,
-        state.loading,
-        state.loadingMore,
-        animatedFilterActive,
-        animatedDurationFilterActive,
-        durationReadiness.pendingCount,
-        feedProjection,
-    ) {
-        snapshotFlow {
-            val visibleIndices = gridState.layoutInfo.visibleItemsInfo.map { item -> item.index }
-            feedProjection.greatestVisibleCanonicalIndex(visibleIndices) to state.loadingMore
-        }.collect { (lastVisibleCanonicalIndex, loadingMoreState) ->
-            if (loadingMoreState) return@collect
-            if (state.loading || state.loadingMore || !state.content.canLoadMore) return@collect
-            if (durationReadiness.isResolving) return@collect
-
-            val totalCanonical = displayResults.size
-            val shouldTriggerByThreshold = if (totalCanonical > 0 && lastVisibleCanonicalIndex != null) {
-                val triggerIndex = ((totalCanonical - 1) * PAGINATION_PREFETCH_RATIO)
-                    .toInt()
-                    .coerceAtLeast(0)
-                lastVisibleCanonicalIndex >= triggerIndex
-            } else {
-                false
-            }
-
-            // Keep filling animated feed when the filtered set is still too small.
-            val shouldTriggerForAnimatedBuffer =
-                (animatedFilterActive || animatedDurationFilterActive) &&
-                    visibleResults.size < ANIMATED_PREFETCH_MIN_VISIBLE &&
-                    state.content.results.isNotEmpty()
-
-            if (shouldTriggerByThreshold || shouldTriggerForAnimatedBuffer) {
-                onAction(SearchAction.LoadNextPage)
-            }
-        }
-    }
+    val pageDemand = rememberFeedPageDemand(
+        input = FeedPageDemandInput(
+            contextKey = queryHash,
+            completedGeneration = state.execution.lastCompletedRequestId ?: 0L,
+            canonicalCount = displayResults.size,
+            visibleCount = visibleResults.size,
+            canLoadMore = state.content.canLoadMore,
+            ready = state.content.hasExecutedSearch,
+            refreshing = state.loading,
+            paging = state.loadingMore,
+            failed = state.content.error != null,
+            resolvingDurations = durationReadiness.isResolving,
+        ),
+        filters = visibilityFilters,
+        gridState = gridState,
+        presentedItemCount = feedProjection.entries.size,
+        canonicalIndexForVisibleItems = feedProjection::greatestVisibleCanonicalIndex,
+        onLoadNextPage = { onAction(SearchAction.LoadNextPage) },
+    )
 
     LaunchedEffect(searchFieldFocused) {
         if (!searchFieldFocused) return@LaunchedEffect
@@ -649,6 +629,7 @@ fun SearchScreen(
                 }
             }
 
+            FeedContinueLoading(pageDemand)
             when {
                 state.loading -> {
                     FeedLoadingState(
@@ -1930,6 +1911,3 @@ private fun Post.hasActionableTags(): Boolean {
     return canonicalTags.any { tag -> tag.isNotBlank() } ||
         rawTags.any { tag -> tag.isNotBlank() }
 }
-
-private const val PAGINATION_PREFETCH_RATIO = 0.8f
-private const val ANIMATED_PREFETCH_MIN_VISIBLE = 12

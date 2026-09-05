@@ -30,7 +30,7 @@ class FeedAutoplayArchitectureTest {
     }
 
     @Test
-    fun `shared card gates preparation before construction and keeps a stable player effect`() {
+    fun `shared card retains viewport lifecycle and animation integration`() {
         val search = file(
             "app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt",
         ).readText()
@@ -41,19 +41,6 @@ class FeedAutoplayArchitectureTest {
             "app/src/main/java/com/theoriacodex/app/viewer/FeedPreviewPlayerPool.kt",
         ).readText()
         assertTrue("Viewport must be clipped through actual layout coordinates", "boundsInWindow(clipBounds = true)" in search)
-        assertTrue(
-            "Transiently visible videos must return before a player is leased",
-            "if (!shouldLeasePlayer)" in feedMedia,
-        )
-        assertTrue("Stable visibility must gate player leasing", "delay(FEED_PLAYER_ACTIVATION_DELAY_MS)" in feedMedia)
-        assertTrue(
-            "Only visibly presented cards may hold a player lease",
-            "DisposableEffect(location, sourceKey, isActive)" in feedMedia,
-        )
-        assertFalse(
-            "Lifecycle identity changes must not recreate a key-stable player",
-            "DisposableEffect(location, sourceKey, lifecycleOwner)" in feedMedia,
-        )
         assertTrue("Video playback must use the bounded feed profile", "VideoPlaybackProfile.FEED_PREVIEW" in feedPool)
         assertTrue("Ugoira playback must follow the same viewport/lifecycle gate", "isActive = playbackActive" in search)
         assertTrue("Animated images must stop outside the active viewport", "animatable?.stop()" in feedMedia)
@@ -97,7 +84,6 @@ class FeedAutoplayArchitectureTest {
         assertFalse("Shared HTTP factory must never retain request headers", "setDefaultRequestProperties" in infrastructure)
         assertTrue("Duplicate cache writes must wait for the shared span", "CacheDataSource.FLAG_BLOCK_ON_CACHE" in infrastructure)
         assertTrue("ExoPlayer must resolve process-owned infrastructure", "videoPlaybackInfrastructure()" in exo)
-        assertTrue("Each constructed player has exactly one prepare call", exo.split("prepare()").size - 1 == 1)
         assertTrue("Feed players must be application-owned reusable leases", "feedPreviewPlayerPool" in infrastructure)
         assertTrue("Muted previews must not select audio decoders", "setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)" in feedPool)
         assertTrue("Lazy-grid media views must opt into reuse", "onReset =" in feedMedia)

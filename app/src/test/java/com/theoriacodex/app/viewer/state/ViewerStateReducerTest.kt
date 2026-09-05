@@ -29,9 +29,9 @@ class ViewerStateReducerTest {
 
         assertEquals(ViewerMediaKind.IMAGE, imageState.selectedMedia?.kind)
         assertEquals(ViewerMediaKind.VIDEO, videoState.currentMedia?.kind)
-        assertTrue(videoState.controls.playback.progress is ViewerPlaybackProgress.Timeline)
+        assertTrue(videoState.controls.playback.available)
         assertEquals(ViewerMediaKind.ANIMATED_WEBP, webPState.currentMedia?.kind)
-        assertTrue(webPState.controls.playback.progress is ViewerPlaybackProgress.Frames)
+        assertTrue(webPState.controls.playback.available)
         assertTrue(
             ViewerUiState::class.java.declaredFields.none { field ->
                 field.type.name.contains("android.") ||
@@ -105,13 +105,13 @@ class ViewerStateReducerTest {
 
         assertTrue(requested.effects.single() is ViewerEffect.ResolvePost)
         assertEquals(ViewerResolutionStatus.RESOLVED, completed.currentPage?.resolution?.status)
-        assertEquals("Resolved title", completed.currentMetadata?.title)
+        assertEquals("Resolved title", completed.currentPage?.post?.title)
         assertEquals(2, completed.currentPage?.media?.size)
         assertEquals(0, completed.currentPage?.selectedMediaIndex)
     }
 
     @Test
-    fun `video controls implement pause play restart rate and timeline progress`() {
+    fun `video controls implement pause play restart and rate`() {
         val state = createViewerUiState(
             session("video-controls"),
             listOf(samplePost("video", media = listOf(media("video/mp4", "video.mp4")))),
@@ -119,23 +119,17 @@ class ViewerStateReducerTest {
 
         val paused = reduceViewerState(state, ViewerAction.Pause).state
         val played = reduceViewerState(paused, ViewerAction.Play).state
-        val progressed = reduceViewerState(
-            played,
-            ViewerAction.TimelineProgressChanged(positionMs = 800L, durationMs = 1_000L),
-        ).state
-        val rated = reduceViewerState(progressed, ViewerAction.SetPlaybackRate(1.5f)).state
+        val rated = reduceViewerState(played, ViewerAction.SetPlaybackRate(1.5f)).state
         val restarted = reduceViewerState(rated, ViewerAction.RestartPlayback).state
 
         assertFalse(paused.controls.playback.playing)
         assertTrue(played.controls.playback.playing)
-        assertEquals(ViewerPlaybackProgress.Timeline(800L, 1_000L), progressed.controls.playback.progress)
         assertEquals(1.5f, restarted.controls.playback.playbackRate)
         assertEquals(1L, restarted.controls.playback.restartRequest)
-        assertEquals(ViewerPlaybackProgress.Timeline(0L, 1_000L), restarted.controls.playback.progress)
     }
 
     @Test
-    fun `animated WebP frame progress is bounded and restart returns to first frame`() {
+    fun `animated WebP restart command resumes paused playback without changing media`() {
         val state = createViewerUiState(
             session("webp-controls"),
             listOf(
@@ -146,19 +140,11 @@ class ViewerStateReducerTest {
             ),
         )
 
-        val progressed = reduceViewerState(
-            state,
-            ViewerAction.FrameProgressChanged(frameIndex = 99, frameCount = 8),
-        ).state
-        val progress = progressed.controls.playback.progress as ViewerPlaybackProgress.Frames
-        val restarted = reduceViewerState(progressed, ViewerAction.RestartPlayback).state
-        val reset = restarted.controls.playback.progress as ViewerPlaybackProgress.Frames
+        val paused = reduceViewerState(state, ViewerAction.Pause).state
+        val restarted = reduceViewerState(paused, ViewerAction.RestartPlayback).state
 
-        assertEquals(7, progress.frameIndex)
-        assertEquals(8, progress.frameCount)
-        assertEquals(1f, progress.fraction)
-        assertEquals(0, reset.frameIndex)
-        assertEquals(8, reset.frameCount)
+        assertEquals(state.currentMedia, restarted.currentMedia)
+        assertEquals(1L, restarted.controls.playback.restartRequest)
         assertTrue(restarted.controls.playback.playing)
     }
 
@@ -186,7 +172,7 @@ class ViewerStateReducerTest {
         assertEquals(ViewerMediaKind.ANIMATED_WEBP, selected.currentMedia?.kind)
         assertEquals(2, selected.currentPage?.selectedMediaIndex)
         assertFalse(selected.overview.visible)
-        assertEquals(2, selected.overview.items.single { it.selected }.mediaKey.mediaIndex)
+        assertTrue(selected.overview.available)
     }
 
     @Test

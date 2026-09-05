@@ -8,7 +8,10 @@ import androidx.room.Index;
 @Entity(
         tableName = "liked_posts",
         primaryKeys = {"profile_id", "source", "source_post_id"},
-        indices = @Index(value = {"profile_id", "liked_at_epoch_ms"})
+        indices = {
+                @Index(value = {"profile_id", "liked_at_epoch_ms"}),
+                @Index(value = {"source", "source_post_id"})
+        }
 )
 public final class LikedPostEntity {
     @NonNull

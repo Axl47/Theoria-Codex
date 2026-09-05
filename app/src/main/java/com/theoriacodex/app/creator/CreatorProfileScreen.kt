@@ -32,7 +32,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -40,6 +39,9 @@ import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.creator.state.CreatorUiState
 import com.theoriacodex.app.media.AnimatedDurationRange
+import com.theoriacodex.app.feed.FeedPageDemandInput
+import com.theoriacodex.app.ui.components.rememberFeedPageDemand
+import com.theoriacodex.app.ui.components.FeedContinueLoading
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.noMediaDurationStateForPost
@@ -68,7 +70,6 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.Flow
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -129,7 +130,6 @@ fun CreatorProfileScreen(
     val animatedDurationFilterActive = durationFilter.active
     val unknownAnimatedDurationPolicy = durationFilter.unknownPolicy
     val acquiredDurations = durationFilter.knownDurationMsByPostId
-    val durationDecisionStates = durationFilter.stateByPostId
     val durationReadiness = durationFilter.readiness
     val visibleResults = remember(
         state.results,
@@ -153,43 +153,28 @@ fun CreatorProfileScreen(
     }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
 
-    LaunchedEffect(
-        visibleResults.size,
-        state.results.size,
-        state.isRefreshing,
-        state.isPaging,
-        state.canLoadMore,
-        animatedOnly,
-        animatedDurationFilterActive,
-        durationReadiness.pendingCount,
-    ) {
-        snapshotFlow {
-            (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1) to state.isPaging
-        }.collect { (lastVisibleIndex, loadingMoreState) ->
-            if (loadingMoreState) return@collect
-            if (state.isRefreshing || state.isPaging || !state.canLoadMore) return@collect
-            if (durationReadiness.isResolving) return@collect
-
-            val totalVisible = visibleResults.size
-            val shouldTriggerByThreshold = if (totalVisible > 0 && lastVisibleIndex >= 0) {
-                val triggerIndex = ((totalVisible - 1) * CREATOR_PROFILE_PREFETCH_RATIO)
-                    .toInt()
-                    .coerceAtLeast(0)
-                lastVisibleIndex >= triggerIndex
-            } else {
-                false
-            }
-
-            val shouldTriggerForAnimatedBuffer =
-                (animatedOnly || animatedDurationFilterActive) &&
-                    totalVisible < CREATOR_PROFILE_ANIMATED_PREFETCH_MIN_VISIBLE &&
-                    state.results.isNotEmpty()
-
-            if (shouldTriggerByThreshold || shouldTriggerForAnimatedBuffer) {
-                onAction(CreatorAction.LoadNextPage)
-            }
-        }
+    val visibleCanonicalIndices = remember(state.results, visibleResults) {
+        val indexById = state.results.withIndex().associate { it.value.id to it.index }
+        visibleResults.map { indexById.getValue(it.id) }
     }
+    val pageDemand = rememberFeedPageDemand(
+        input = FeedPageDemandInput(
+            contextKey = state.queryHash.orEmpty(),
+            completedGeneration = state.nextRequestGeneration,
+            canonicalCount = state.results.size,
+            visibleCount = visibleResults.size,
+            canLoadMore = state.canLoadMore,
+            ready = creator != null && state.queryHash != null,
+            refreshing = state.isRefreshing,
+            paging = state.isPaging,
+            failed = state.errorMessage != null,
+            resolvingDurations = durationReadiness.isResolving,
+        ),
+        filters = visibilityFilters,
+        gridState = gridState,
+        canonicalIndexForVisibleItems = { indices -> indices.mapNotNull(visibleCanonicalIndices::getOrNull).maxOrNull() },
+        onLoadNextPage = { onAction(CreatorAction.LoadNextPage) },
+    )
 
     if (creator == null) {
         Box(
@@ -263,6 +248,7 @@ fun CreatorProfileScreen(
                 }
             }
 
+            FeedContinueLoading(pageDemand)
             when {
                 state.isRefreshing && visibleResults.isEmpty() -> {
                     FeedLoadingState()
@@ -284,6 +270,8 @@ fun CreatorProfileScreen(
                                 !visibilityFilters.animatedDurationRange.isFullRange
                             ) {
                                 "No animated media found in the selected duration range."
+                            } else if (state.results.isNotEmpty()) {
+                                "No uploads match the current filters."
                             } else {
                                 "No uploads found for this creator."
                             },
@@ -417,6 +405,3 @@ private fun copyCreatorProfile(context: Context, profileUrl: String) {
         Toast.makeText(context, "Could not copy creator link", Toast.LENGTH_SHORT).show()
     }
 }
-
-private const val CREATOR_PROFILE_PREFETCH_RATIO = 0.7f
-private const val CREATOR_PROFILE_ANIMATED_PREFETCH_MIN_VISIBLE = 6

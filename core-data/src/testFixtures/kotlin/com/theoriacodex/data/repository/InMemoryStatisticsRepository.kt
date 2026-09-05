@@ -38,6 +38,11 @@ class InMemoryStatisticsRepository(
         StatisticsPolicies.recordCodexEntry(current, codexId)
     }
 
+    override suspend fun recordTranslationUsage(phraseCount: Long, sourceCharacterCount: Long) =
+        mutate { current ->
+            StatisticsPolicies.recordTranslationUsage(current, phraseCount, sourceCharacterCount)
+        }
+
     private suspend fun mutate(transform: (LifetimeStatistics) -> LifetimeStatistics) {
         mutex.withLock {
             mutableStatistics.value = StatisticsPolicies.normalize(transform(mutableStatistics.value))

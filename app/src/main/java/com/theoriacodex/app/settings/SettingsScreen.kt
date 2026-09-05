@@ -617,6 +617,7 @@ private fun StatisticsContent(
     AppStatisticsGroup(statistics)
     PostStatisticsGroup(statistics)
     SearchStatisticsGroup(statistics)
+    TranslationStatisticsGroup(statistics)
     TagStatisticsGroup(statistics)
     CodexStatisticsGroup(statistics)
 }
@@ -660,6 +661,16 @@ private fun SearchStatisticsGroup(statistics: StatisticsSummary) {
         emptyMessage = "No search-source data yet.",
     )
     StatisticValueRow("For You Searches Done", statistics.forYouSearchCount.toString())
+}
+
+@Composable
+private fun TranslationStatisticsGroup(statistics: StatisticsSummary) {
+    StatisticsGroupTitle("Translation Stats")
+    StatisticValueRow("Phrases Translated", statistics.translatedPhraseCount.toString())
+    StatisticValueRow(
+        "Source Characters Translated",
+        statistics.translatedSourceCharacterCount.toString(),
+    )
 }
 
 @Composable

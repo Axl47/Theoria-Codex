@@ -111,6 +111,26 @@ class VideoPlaybackInfrastructureTest {
     }
 
     @Test
+    fun `late return from a forgotten card cannot recycle a newer visible lease`() {
+        val pool = ReusableVideoSlotPool<PreviewResource, String>(
+            maxIdleResources = 1,
+            idleTimeoutMs = 30_000L,
+            clock = { 0L },
+            createResource = { PreviewResource(0) },
+        )
+        val oldCard = pool.acquire("old")
+        assertTrue(pool.recycle(oldCard, retainBinding = false))
+        val visibleCard = pool.acquire("new")
+
+        assertSame(oldCard.resource, visibleCard.resource)
+        assertTrue(visibleCard.requiresBinding)
+        assertFalse(pool.recycle(oldCard))
+        assertTrue(pool.isActive(visibleCard))
+        assertEquals(1, pool.activeResourceCount)
+        assertEquals(null, pool.pollExpired())
+    }
+
+    @Test
     fun `idle retention bound never caps simultaneous visible players`() {
         var nextResource = 0
         val pool = ReusableVideoSlotPool<PreviewResource, String>(

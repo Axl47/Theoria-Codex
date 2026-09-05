@@ -31,6 +31,7 @@ class SettingsStatisticsSourceTest {
         codexRepository.addItem(altCodex.codexId, post(SourceKey.GELBOORU, "alt"))
         statisticsRepository.recordWatchedPost(SourceKey.HITOMI, setOf("watched"))
         statisticsRepository.recordCodexEntry(mainCodex.codexId)
+        statisticsRepository.recordTranslationUsage(phraseCount = 2L, sourceCharacterCount = 9L)
         val tracker = AppUsageTracker(
             repository = statisticsRepository,
             scope = backgroundScope,
@@ -49,6 +50,8 @@ class SettingsStatisticsSourceTest {
         assertEquals(SourceKey.PIXIV, main.savedSources.single().source)
         assertEquals("Main collection", main.mostUsedCodex?.name)
         assertEquals(1L, main.watchedPostCount)
+        assertEquals(2L, main.translatedPhraseCount)
+        assertEquals(9L, main.translatedSourceCharacterCount)
         assertEquals(SourceKey.GELBOORU, alt.savedSources.single().source)
         assertEquals("Alt collection", alt.mostUsedCodex?.name)
         assertEquals(0L, alt.mostUsedCodex?.entryCount)

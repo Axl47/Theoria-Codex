@@ -3,24 +3,19 @@ package com.theoriacodex.app.ui.routes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.core.net.toUri
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.repeatOnLifecycle
 import com.theoriacodex.app.appshell.PendingIncomingUri
+import com.theoriacodex.app.codex.CodexCollectionSource
+import com.theoriacodex.app.codex.CodexCollectionPresentation
+import com.theoriacodex.app.codex.CodexActionOptions
+import kotlinx.coroutines.flow.Flow
 import com.theoriacodex.app.codex.CodexCoverCandidate
-import com.theoriacodex.app.codex.CodexSearchSourceOption
-import com.theoriacodex.app.codex.CodexSearchTagOption
 import com.theoriacodex.app.codex.codexBelongsToProfile
-import com.theoriacodex.app.codex.codexSearchSourceOptions
-import com.theoriacodex.app.codex.codexSearchTagOptions
-import com.theoriacodex.app.codex.resolveCodexCoverCandidates
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
 import com.theoriacodex.app.search.UnknownAnimatedDurationPolicy
@@ -44,11 +39,8 @@ import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.launch
 
 internal data class BrowsingDestinationState(
     val settings: AppSettings,
@@ -84,8 +76,7 @@ internal data class CodexDestinationState(
     val activeProfile: RecommendationProfile,
     val itemCounts: Map<String, Int>,
     val coverCandidates: Map<String, List<CodexCoverCandidate>>,
-    val searchSourceOptions: Map<String, List<CodexSearchSourceOption>>,
-    val searchTagOptions: Map<String, Map<SourceKey, List<CodexSearchTagOption>>>,
+    val observeActionOptions: (String) -> Flow<CodexActionOptions>,
 )
 
 internal data class CodexDetailDestinationState(
@@ -104,13 +95,6 @@ internal data class SaveToCodexDestinationState(
     val codicesByProfile: Map<String, List<Codex>>,
     val itemCounts: Map<String, Int>,
     val coverCandidates: Map<String, List<CodexCoverCandidate>>,
-)
-
-private data class CodexCollectionState(
-    val itemCounts: Map<String, Int>,
-    val coverCandidates: Map<String, List<CodexCoverCandidate>>,
-    val searchSourceOptions: Map<String, List<CodexSearchSourceOption>>,
-    val searchTagOptions: Map<String, Map<SourceKey, List<CodexSearchTagOption>>>,
 )
 
 internal data class ViewerDestinationState(
@@ -221,32 +205,33 @@ internal fun CodexDestinationStateBoundary(
     content: @Composable (CodexDestinationState) -> Unit,
 ) {
     val settingsState = data.settingsRepository.observeSettings()
-        .collectAsStateWithLifecycle(initialValue = AppSettings())
+        .collectAsStateWithLifecycle(initialValue = null)
+    val settings = settingsState.value ?: return
     val codicesState = data.codexRepository.observeCodices()
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val availableSourcesState = sources.availableSources.collectAsStateWithLifecycle()
     val codices = codicesState.value
     val availableSources = availableSourcesState.value
-    val collection = rememberCodexCollectionState(
-        data = data,
-        codices = codices,
-        availableSources = availableSources,
-        refreshKey = thumbnailCacheGeneration,
-    )
-
-    DestinationStateBoundary(settingsState) { settings ->
+    val source = remember(data.codexRepository, data.storageDirectory) {
+        CodexCollectionSource(data.codexRepository, data.storageDirectory)
+    }
+    DestinationStateBoundary(settingsState) {
         val profile = settings.activeRecommendationProfile()
+        val visible = remember(codices, profile.profileId) {
+            codices.filter { codexBelongsToProfile(it.codexId, profile.profileId) }
+        }
+        val collection = rememberCodexCollectionState(data, visible, thumbnailCacheGeneration)
+        val observeActions = remember(source, availableSources) {
+            { id: String -> source.observeActionOptions(id, availableSources) }
+        }
         content(
             CodexDestinationState(
                 allCodices = codices,
-                visibleCodices = remember(codices, profile.profileId) {
-                    codices.filter { codexBelongsToProfile(it.codexId, profile.profileId) }
-                },
+                visibleCodices = visible,
                 activeProfile = profile,
                 itemCounts = collection.itemCounts,
                 coverCandidates = collection.coverCandidates,
-                searchSourceOptions = collection.searchSourceOptions,
-                searchTagOptions = collection.searchTagOptions,
+                observeActionOptions = observeActions,
             ),
         )
     }
@@ -406,80 +391,21 @@ internal fun AppSettings.activeRecommendationProfile(): RecommendationProfile {
 private fun rememberCodexCollectionState(
     data: DataDependencies,
     codices: List<Codex>,
-    availableSources: Set<SourceKey>? = null,
     refreshKey: Any? = Unit,
-): CodexCollectionState {
-    val itemCounts = remember { mutableStateMapOf<String, Int>() }
-    val coverCandidates = remember { mutableStateMapOf<String, List<CodexCoverCandidate>>() }
-    val sourceOptions = remember { mutableStateMapOf<String, List<CodexSearchSourceOption>>() }
-    val tagOptions = remember { mutableStateMapOf<String, Map<SourceKey, List<CodexSearchTagOption>>>() }
-    val lifecycleOwner = LocalLifecycleOwner.current
-    LaunchedEffect(lifecycleOwner, codices.map(Codex::codexId), availableSources, refreshKey) {
-        val activeIds = codices.map(Codex::codexId).toSet()
-        itemCounts.keys.filterNot(activeIds::contains).toList().forEach(itemCounts::remove)
-        coverCandidates.keys.filterNot(activeIds::contains).toList().forEach(coverCandidates::remove)
-        sourceOptions.keys.filterNot(activeIds::contains).toList().forEach(sourceOptions::remove)
-        tagOptions.keys.filterNot(activeIds::contains).toList().forEach(tagOptions::remove)
-        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            coroutineScope {
-                codices.forEach { codex ->
-                    launch {
-                        data.codexRepository.observeCodexItems(codex.codexId).collect { items ->
-                            itemCounts[codex.codexId] = items.size
-                        }
-                    }
-                    launch {
-                        data.codexRepository.observeCodexPosts(codex.codexId, CodexSortMode.NEWEST_SAVED)
-                            .collect { posts ->
-                                coverCandidates[codex.codexId] = resolveCodexCoverCandidates(
-                                    storageDirectory = data.storageDirectory,
-                                    posts = posts,
-                                )
-                                if (availableSources != null) {
-                                    val options = codexSearchSourceOptions(posts, availableSources)
-                                    sourceOptions[codex.codexId] = options
-                                    tagOptions[codex.codexId] = options.associate { option ->
-                                        option.source to codexSearchTagOptions(posts, option.source)
-                                    }
-                                }
-                            }
-                    }
-                }
-            }
-        }
+): CodexCollectionPresentation {
+    val ids = remember(codices) { codices.mapTo(linkedSetOf(), Codex::codexId) }
+    val summaries = remember(data.codexRepository, ids, refreshKey) {
+        CodexCollectionSource(data.codexRepository, data.storageDirectory).observe(ids)
     }
-    return remember(itemCounts, coverCandidates, sourceOptions, tagOptions) {
-        CodexCollectionState(
-            itemCounts = itemCounts,
-            coverCandidates = coverCandidates,
-            searchSourceOptions = sourceOptions,
-            searchTagOptions = tagOptions,
-        )
+    return key(ids, refreshKey) {
+        summaries.collectAsStateWithLifecycle(initialValue = CodexCollectionPresentation()).value
     }
 }
 
 @Composable
 private fun rememberSavedPostIds(data: DataDependencies): Set<PostId> {
-    val codicesState = data.codexRepository.observeCodices()
-        .collectAsStateWithLifecycle(initialValue = emptyList())
-    val savedByCodex = remember { mutableStateMapOf<String, Set<PostId>>() }
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val codices = codicesState.value
-    LaunchedEffect(lifecycleOwner, codices.map(Codex::codexId)) {
-        val activeIds = codices.map(Codex::codexId).toSet()
-        savedByCodex.keys.filterNot(activeIds::contains).toList().forEach(savedByCodex::remove)
-        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            coroutineScope {
-                codices.forEach { codex ->
-                    launch {
-                        data.codexRepository.observeCodexItems(codex.codexId).collect { items ->
-                            savedByCodex[codex.codexId] = items.mapTo(linkedSetOf()) { it.postId }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    val saved by remember { derivedStateOf { savedByCodex.values.flatten().toSet() } }
-    return saved
+    val codices by data.codexRepository.observeCodices().collectAsStateWithLifecycle(initialValue = emptyList())
+    val ids = remember(codices) { codices.mapTo(linkedSetOf(), Codex::codexId) }
+    val saved = remember(data.codexRepository, ids) { data.codexRepository.observeSavedPostIds(ids) }
+    return saved.collectAsStateWithLifecycle(initialValue = emptySet()).value
 }
