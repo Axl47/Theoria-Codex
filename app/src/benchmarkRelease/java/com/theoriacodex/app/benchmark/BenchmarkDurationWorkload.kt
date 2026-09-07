@@ -8,6 +8,7 @@ import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.os.Trace
 import com.theoriacodex.app.R
+import com.theoriacodex.app.viewer.videoPlaybackInfrastructure
 import com.theoriacodex.app.media.DurationDemand
 import com.theoriacodex.app.media.DurationDemandPriority
 import com.theoriacodex.app.media.DurationDemandReason
@@ -27,8 +28,11 @@ import kotlinx.coroutines.withContext
 /** Explicit benchmark-only signal; the production app never registers this receiver. */
 class BenchmarkDurationStartReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == ACTION_BENCHMARK_DURATION_START) {
-            BenchmarkDurationStartSignal.request()
+        when (intent.action) {
+            ACTION_BENCHMARK_DURATION_START -> BenchmarkDurationStartSignal.request()
+            ACTION_BENCHMARK_PLAYBACK_SNAPSHOT -> if (isOrderedBroadcast) {
+                resultData = context.videoPlaybackInfrastructure().feedPreviewPlayerPool.activePlayerCount().toString()
+            }
         }
     }
 }
@@ -159,6 +163,8 @@ private fun endDurationBatchTrace() {
 
 internal const val ACTION_BENCHMARK_DURATION_START =
     "com.theoriacodex.action.BENCHMARK_DURATION_START"
+internal const val ACTION_BENCHMARK_PLAYBACK_SNAPSHOT =
+    "com.theoriacodex.action.BENCHMARK_PLAYBACK_SNAPSHOT"
 internal const val DURATION_STATUS_TAG = "benchmark_duration_status"
 internal const val DURATION_SETTLED_DESCRIPTION = "Settled 24/24"
 internal const val TRACE_DURATION_DEMAND = "TheoriaDurationDemand"

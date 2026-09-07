@@ -7,6 +7,7 @@ import argparse
 import ast
 import collections
 import dataclasses
+import fnmatch
 import os
 import pathlib
 import re
@@ -173,6 +174,7 @@ def is_production_kotlin_path(path: pathlib.PurePosixPath) -> bool:
 def production_changed_lines(
     changed: Mapping[pathlib.PurePosixPath, set[int]],
     included_modules: frozenset[str] | None = None,
+    included_paths: Sequence[str] = (),
 ) -> ChangedLines:
     return {
         path: set(lines)
@@ -180,8 +182,9 @@ def production_changed_lines(
         if lines
         and is_production_kotlin_path(path)
         and (
-            included_modules is None
-            or (path.parts and path.parts[0] in included_modules)
+            (included_modules is None and not included_paths)
+            or (path.parts and path.parts[0] in (included_modules or ()))
+            or any(fnmatch.fnmatchcase(path.as_posix(), pattern) for pattern in included_paths)
         )
     }
 
@@ -253,8 +256,9 @@ def calculate_changed_coverage(
     changed: Mapping[pathlib.PurePosixPath, set[int]],
     report: Mapping[SourceKey, Mapping[int, bool]],
     included_modules: frozenset[str] | None = None,
+    included_paths: Sequence[str] = (),
 ) -> CoverageResult:
-    production_changes = production_changed_lines(changed, included_modules)
+    production_changes = production_changed_lines(changed, included_modules, included_paths)
     source_index = build_source_index(repo)
     executable_locations: list[tuple[pathlib.PurePosixPath, int]] = []
     uncovered_locations: list[tuple[pathlib.PurePosixPath, int]] = []
@@ -299,7 +303,7 @@ def calculate_changed_coverage(
     )
 
 
-def git_diff_text(repo: pathlib.Path, base: str) -> str:
+def git_diff_text(repo: pathlib.Path, base: str, working_tree: bool = False) -> str:
     command = [
         "git",
         "-c",
@@ -307,7 +311,7 @@ def git_diff_text(repo: pathlib.Path, base: str) -> str:
         "diff",
         "--unified=0",
         "--no-color",
-        f"{base}...HEAD",
+        base if working_tree else f"{base}...HEAD",
         "--",
         "*.kt",
     ]
@@ -322,6 +326,19 @@ def git_diff_text(repo: pathlib.Path, base: str) -> str:
         detail = completed.stderr.strip() or "Git diff failed without an error message"
         raise CoverageCheckError(f"could not diff {base}...HEAD: {detail}")
     return completed.stdout
+
+
+def untracked_production_lines(repo: pathlib.Path) -> ChangedLines:
+    completed = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard", "-z"],
+        cwd=repo, check=True, capture_output=True,
+    )
+    changed: ChangedLines = {}
+    for name in completed.stdout.decode().split("\0"):
+        path = pathlib.PurePosixPath(name)
+        if name and is_production_kotlin_path(path):
+            changed[path] = set(range(1, len((repo / path).read_text().splitlines()) + 1))
+    return changed
 
 
 def _print_uncovered(result: CoverageResult) -> None:
@@ -343,6 +360,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--xml", required=True, help="Kover/JaCoCo XML report path.")
     parser.add_argument("--base", default=None, help="Base revision to diff against HEAD.")
     parser.add_argument(
+        "--working-tree", action="store_true",
+        help="Compare the current checkout to base, including untracked production sources (local pre-commit check).",
+    )
+    parser.add_argument(
         "--minimum",
         type=float,
         default=DEFAULT_MINIMUM,
@@ -359,8 +380,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=None,
         help=(
             "Top-level module eligible for the coverage gate. Repeat for multiple modules; "
-            "when omitted, all production Kotlin modules are eligible."
+            "when neither module nor path filters are supplied, all production Kotlin is eligible."
         ),
+    )
+    parser.add_argument(
+        "--include-path", action="append", default=[],
+        help="Additional repository-relative source glob (shell quoted); * matches nested paths.",
     )
     args = parser.parse_args(argv)
     if not 0.0 <= args.minimum <= 100.0:
@@ -376,6 +401,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                 "--include-module must name a top-level repository module: "
                 + ", ".join(invalid_modules)
             )
+    for pattern in args.include_path:
+        path = pathlib.PurePosixPath(pattern)
+        if not pattern or path.is_absolute() or ".." in path.parts or "\\" in pattern:
+            parser.error("--include-path must be a nonempty repository-relative glob without traversal")
     return args
 
 
@@ -404,14 +433,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"coverage XML is missing for base {base}: {xml_path}"
             )
         report = parse_coverage_xml(xml_path)
-        changed = parse_git_diff(git_diff_text(repo, base))
+        changed = parse_git_diff(git_diff_text(repo, base, args.working_tree))
+        if args.working_tree:
+            changed.update(untracked_production_lines(repo))
         result = calculate_changed_coverage(
             repo,
             changed,
             report,
             included_modules=included_modules,
+            included_paths=args.include_path,
         )
-    except CoverageCheckError as error:
+    except (CoverageCheckError, OSError, subprocess.CalledProcessError) as error:
         print(f"Changed-line coverage check failed: {error}", file=sys.stderr)
         return 2
 
@@ -435,6 +467,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     if included_modules is not None:
         summary += f" Eligible modules: {', '.join(sorted(included_modules))}."
+    if args.include_path:
+        summary += f" Additional source patterns: {', '.join(args.include_path)}."
     if result.ignored_lines:
         summary += (
             f" {result.ignored_lines} changed production lines had no executable XML entry "

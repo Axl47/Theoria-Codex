@@ -12,8 +12,10 @@ class DeviceValidationWorkflowTest(unittest.TestCase):
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
 
     def test_connected_lane_executes_and_retains_both_instrumentation_owners(self) -> None:
-        self.assertIn(":app:connectedDebugAndroidTest", self.workflow)
-        self.assertIn(":core-data-android:connectedDebugAndroidTest", self.workflow)
+        self.assertIn("script: scripts/verify_debug_device.sh all", self.workflow)
+        lane = (REPOSITORY_ROOT / "scripts/verify_debug_device.sh").read_text(encoding="utf-8")
+        self.assertIn(":app:connectedDebugAndroidTest", lane)
+        self.assertIn(":core-data-android:connectedDebugAndroidTest", lane)
         self.assertIn(
             "core-data-android/build/outputs/androidTest-results/connected/",
             self.workflow,

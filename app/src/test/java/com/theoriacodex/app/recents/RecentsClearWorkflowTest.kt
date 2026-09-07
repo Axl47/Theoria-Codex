@@ -1,6 +1,9 @@
 package com.theoriacodex.app.recents
 
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
+import com.theoriacodex.data.repository.RecentPostEntry
+import com.theoriacodex.data.repository.RecentSearchEntry
+import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchKind
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -40,6 +43,8 @@ class RecentsClearWorkflowTest {
             fypSearches = searches.filter { it.kind == RecentSearchKind.FYP },
             showActionableFeedback = { message, action ->
                 feedback += message to action
+                assertEquals(emptyList<RecentPostEntry>(), repository.observeWatchedPosts().first())
+                assertEquals(emptyList<RecentSearchEntry>(), repository.observeSearches().first())
                 true
             },
         )
@@ -101,11 +106,53 @@ class RecentsClearWorkflowTest {
             showActionableFeedback = { message, action ->
                 assertEquals("FYP history cleared", message)
                 assertEquals("Undo", action)
+                assertEquals(searches.filterNot { it.kind == RecentSearchKind.FYP }, repository.observeSearches().first())
                 true
             },
         )
 
         assertEquals(searches, repository.observeSearches().first())
+    }
+
+    @Test
+    fun `failed clear and failed Undo retry without clearing unrelated activity`() = runTest {
+        var now = 100L
+        val stored = InMemoryRecentsRepository(clock = { now++ })
+        stored.recordSearch(recentQuery(), "manual")
+        stored.recordSearch(recentQuery(), "for_you:seed", RecentSearchKind.FYP, listOf(SourceKey.PIXIV))
+        val original = stored.observeSearches().first()
+        val manual = original.filter { it.kind != RecentSearchKind.FYP }
+        var clears = 0
+        var restores = 0
+        val repository = object : RecentsRepository by stored {
+            override suspend fun clearSearches(queryHashPrefix: String?) {
+                clears++
+                if (clears == 1) error("storage unavailable")
+                stored.clearSearches(queryHashPrefix)
+            }
+            override suspend fun restoreEntries(watchedPosts: List<RecentPostEntry>, searches: List<RecentSearchEntry>) {
+                restores++
+                if (restores == 1) error("storage unavailable")
+                stored.restoreEntries(watchedPosts, searches)
+            }
+        }
+        val messages = mutableListOf<Pair<String, String>>()
+        RecentsClearWorkflow(repository).clear(
+            RecentsClearTarget.FYP, emptyList(), emptyList(), manual,
+            original.filter { it.kind == RecentSearchKind.FYP },
+        ) { message, action ->
+            messages += message to action
+            val expected = if (clears == 1) original else manual
+            assertEquals(expected, stored.observeSearches().first())
+            true
+        }
+        assertEquals(
+            listOf("Could not clear FYP history" to "Retry", "FYP history cleared" to "Undo",
+                "Could not restore FYP history" to "Retry"), messages,
+        )
+        assertEquals(2, clears)
+        assertEquals(2, restores)
+        assertEquals(original, stored.observeSearches().first())
     }
 
     private fun recentQuery(): Query = Query(

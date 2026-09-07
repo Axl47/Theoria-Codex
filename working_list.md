@@ -1,44 +1,40 @@
-# Audit remediation working list
+# Testing audit remediation
 
-## Completed implementation (2026-09-04)
+- [~] Plan and coordinate all twelve findings; maintain `.docs/exec/testing-audit-remediation.html`.
+- [x] F01 Real app journeys: Search/Viewer/restoration, Recents Multi-Search/FYP, collection controls.
+- [x] F02 Profile create/switch/delete isolation, cancellation, last-profile and failure behavior.
+- [!] F03 Physical performance comparator and realistic feed/duration workloads, metric documentation.
+- [x] F04 Pre-install packaged identity/signature validation and host-only harness tests.
+- [x] F05 Real-provider uniqueness, complete request journeys, missing adapter operations.
+- [x] F06 Strengthen Undo/order/request/batch assertions and targeted mutation evidence.
+- [x] F07 Replace brittle behavior-shaped source assertions and clarify test scope.
+- [x] F08 On-disk production Room migration chain and close/reopen.
+- [x] F09 Actual OCR coordinator/recognizer/crop pipeline and transport boundaries.
+- [x] F10 Translation gateway handler boundary/failure/concurrency tests and CI execution.
+- [x] F11 App behavior coverage gate, device triggers, minified runtime acceptance.
+- [x] F12 Adverse grouped fallback pagination, ordering, deduplication, cancellation.
+- [x] Host validation, sequential lint/static/coverage checks, package safety checks, functional device and minified acceptance passed.
+- [~] Evidence and developer guidance updated; physical benchmark validation/calibration remains pending.
 
-The previous completed translation-statistics checklist remains below. Its original diff is preserved at `/tmp/theoria-pre-audit-implementation.patch`.
+## Ownership
+- providers_storage: core-domain, core-sources, core-data-android tests/production repairs only; F05/F08/F12 + ordering assertion.
+- user_flows: app Search/Recents/Codex/Settings/navigation production/test files and integrated journey fixture; F01/F02/Undo. Do not edit Gradle/workflows/quality files.
+- media_performance: app media/viewer production/tests, app-logic media policy tests, macrobenchmark and benchmark fixture files; F03/F09/batching/media guards. Do not edit Gradle/workflows/scripts.
+- root: scripts, gateway, Gradle/workflows, remaining structural guards, docs/plans and combined validation.
 
-- [x] Plan and execute `.docs/exec/audit-remediation.html` with disjoint file ownership.
-- [x] Storage: shared payload merge, atomic batch save, bounded summaries, targeted orphan cleanup/index.
-- [x] Cleanup: observation-only Likes, unused reset removal, fixture-only policies.
-- [x] Recommendations: remove unused affinity and prepare training once off Main.
-- [x] Viewer: remove unused projections/progress propagation, deduplicate restore writes.
-- [x] Feeds: bounded shared filtered pagination and explicit Continue.
-- [x] Collections: profile-scoped summaries, deferred tags, main-safe transfer/save workflow.
-- [x] Quality: behavioral replacements for selected source-string tests and unused helper removal.
-- [x] Focused and aggregate host validation, final review and documentation; device limitation recorded.
+No live services or production package operations. Connected work requires host-only graph and packaged identity/signature evidence first. Physical performance claims require fresh comparable runs; an unavailable device is an explicit evidence gap, not a pass.
 
-Validation: new save/summary/Viewer tests passed; Room migration passes after schema9 assets rebuild. Domain sampling matched 1,920 prior outputs. Pure paging tests pass. Host summary SQL returns eight covers at up to 50,000 memberships with linear work. Final tests/static analysis/lint pass: 1,168 cases, zero failures, three opt-in skips; 58.18% aggregate and 98.47% working-tree changed-line coverage; 36 quality-helper tests pass. Debug APK built/verified. Release JSON verification preserved 245 required fields across 44 retained classes. Strict configuration-cache storage and reuse passed. No Android device is connected; physical performance and connected UI validation are unavailable.
+## Verified phase evidence
+- Gateway: 14 HTTP/upstream tests passed; 63 Python helper tests passed (including comparator, scope and pre-install rejection).
+- Domain/provider/Room host suites passed after realistic repeated-ID fixture correction and production-factory upgrade tests.
+- Profile/Undo and actual translation transport cancellation focused tests now pass. OCR coordinator fixture decode cause remains under investigation; bounded tests fail rather than hang.
+- All Android/benchmark/acceptance Kotlin sources compiled; packaged assembly underway before device preflight.
 
-# Previous completed work
+- Repaired app device subset: 14/16 passed, then remaining Search/FYP journeys 4/4 passed after real per-session Viewer recording fix and bounded sheet readiness wait. All real CJK corpus cases including unchanged Latin watermark now pass.
+- Three compile-preserving core mutants (ordering, deduplication, filtered-page continuation) were caught by assertions; both production files restored byte-for-byte.
 
-## Pending
-
-- None.
-
-## In Progress
-
-- None.
-
-## Done
-
-- [x] Initialize the task checklist
-  - Replaced the completed translation-settings checklist before editing.
-- [x] Define the translation statistics boundary and acceptance checks
-  - Count successful uncached server phrases and their exact source characters; exclude cache hits and failures, and keep statistics writes best-effort.
-- [x] Add durable translation usage counters
-  - Added normalized, saturating phrase and character totals with backward-compatible schema-1 defaults and DataStore round-trip coverage.
-- [x] Record successful uncached server translations
-  - The cache owner records deduplicated fetched keys after cache persistence; callback failures do not fail translation.
-- [x] Project and render translation statistics in Settings
-  - Added a Translation Stats group with phrase and source-character totals.
-- [x] Update focused tests and durable contracts
-  - Updated repository, projection, coordinator, Settings source, Gson/R8 manifest, and durable developer guidance; focused tests pass.
-- [x] Run the bounded validation batch
-  - Repository, projection, cache-owner, Settings-source, and Gson contract tests pass with Debug compilation. App-logic Detekt passes; app and core-data Detekt contain only their existing 70 and 3 unrelated findings, with none in changed files.
+## Remaining external dependency (2026-09-07)
+- ADB no longer lists the authorized phone. The performance wrapper rejected preflight before starting any benchmark. User was asked to reconnect.
+- F03 code and seven-scenario minified artifact are ready, but the new physical workloads have NOT yet been validated or calibrated. Need three distinct full same-artifact baseline runs and one fresh comparison; fix any revealed workload problems before claiming completion.
+- Profiles regenerated on the phone successfully (3m33s); final minified APKs built with no missing-startup-entry warnings. Minified acceptance passed write/read across actual process restart. Lint and Detekt passed.
+- Final host reports: 1,179 cases, 0 failures/errors, 3 intentional live-source skips. Python: 64 helper and14 gateway tests passed. Changed executable coverage:118/122 (96.72%). Six deliberately broken core/gateway behaviors were caught and source restored.

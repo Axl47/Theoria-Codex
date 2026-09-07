@@ -24,6 +24,11 @@ android {
         unitTests.isIncludeAndroidResources = true
     }
 
+    sourceSets {
+        getByName("test").kotlin.directories.add("src/sharedTest/kotlin")
+        getByName("androidTest").kotlin.directories.add("src/sharedTest/kotlin")
+    }
+
     sourceSets.named("androidTest") {
         assets.srcDir("$projectDir/schemas")
     }

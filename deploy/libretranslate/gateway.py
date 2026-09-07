@@ -98,10 +98,13 @@ def translate_batch(
     if len(raw_response) > MAX_TRANSLATION_RESPONSE_BYTES:
         raise ValueError("Translation response exceeded the configured limit")
     payload = json.loads(raw_response)
-    translations = [
-        unescape(item["translatedText"]).strip()
-        for item in payload["data"]["translations"]
-    ]
+    records = payload["data"]["translations"]
+    if not isinstance(records, list) or any(
+        not isinstance(item, dict) or not isinstance(item.get("translatedText"), str)
+        for item in records
+    ):
+        raise ValueError("Google returned a malformed translation batch")
+    translations = [unescape(item["translatedText"]).strip() for item in records]
     if len(translations) != len(texts) or any(not text for text in translations):
         raise ValueError("Google returned an incomplete translation batch")
     return translations
@@ -140,7 +143,10 @@ class TranslationHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            fields = json.loads(self.rfile.read(content_length).decode("utf-8"))
+            body = self.rfile.read(content_length)
+            if len(body) != content_length:
+                raise ValueError("Incomplete request body")
+            fields = json.loads(body.decode("utf-8"))
             if not isinstance(fields, dict) or set(fields) != {"q", "source", "target", "format"}:
                 raise ValueError("Unexpected translation fields")
             raw_texts = fields["q"]
@@ -162,14 +168,14 @@ class TranslationHandler(BaseHTTPRequestHandler):
         except (UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError):
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Invalid translation request"})
             return
-        if not _character_budget.allow(time.monotonic(), sum(map(len, texts))):
-            self._send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Daily translation limit reached"})
-            return
-
         if not _inference_slot.acquire(blocking=False):
             self._send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Translator busy"})
             return
         try:
+            # Busy retries are not translation work and must not consume the daily allowance.
+            if not _character_budget.allow(time.monotonic(), sum(map(len, texts))):
+                self._send_json(HTTPStatus.TOO_MANY_REQUESTS, {"error": "Daily translation limit reached"})
+                return
             translations = translate_batch(source, texts)
         except HTTPError as failure:
             status = (

@@ -1,24 +1,15 @@
 package com.theoriacodex.app.settings
 
 import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
-import com.theoriacodex.app.sourceauth.CredentialStoreUnavailableException
-import com.theoriacodex.app.statistics.AppUsageTracker
-import com.theoriacodex.app.viewer.ocr.OcrLanguageModelSource
 import com.theoriacodex.app.viewer.ocr.OcrLanguageModelState
-import com.theoriacodex.data.repository.InMemoryCacheRepository
-import com.theoriacodex.data.repository.InMemoryCodexRepository
-import com.theoriacodex.data.repository.InMemoryLikesRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
-import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.data.repository.ViewerOcrLanguage
 import com.theoriacodex.sources.credentials.GelbooruCredentials
-import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -39,7 +30,7 @@ class SettingsViewModelTest {
                 )
             )
         }
-        val owner = owner(uiRestoreRepository = restoreRepository)
+        val owner = settingsOwner(uiRestoreRepository = restoreRepository)
         runCurrent()
 
         assertFalse(owner.state.value.sectionExpansion[SettingsSectionKey.SOURCE_ACCOUNTS])
@@ -59,12 +50,12 @@ class SettingsViewModelTest {
 
     @Test
     fun `first open starts collapsed without overriding explicit restored choices`() = runTest {
-        val firstOpen = owner()
+        val firstOpen = settingsOwner()
         runCurrent()
 
         assertTrue(SettingsSectionKey.entries.none { firstOpen.state.value.sectionExpansion[it] })
 
-        val restored = owner(
+        val restored = settingsOwner(
             uiRestoreRepository = InMemoryUiRestoreRepository().apply {
                 setSettingsSectionExpansion(
                     SettingsSectionKey.entries.associate { section ->
@@ -82,7 +73,7 @@ class SettingsViewModelTest {
     @Test
     fun `preference actions mutate repositories and return through owner state`() = runTest {
         val settingsRepository = InMemorySettingsRepository()
-        val owner = owner(settingsRepository = settingsRepository)
+        val owner = settingsOwner(settingsRepository = settingsRepository)
         runCurrent()
 
         owner.onAction(SettingsAction.SetCacheFullImageOnSave(true))
@@ -105,7 +96,7 @@ class SettingsViewModelTest {
                 ViewerOcrLanguage.KOREAN to OcrLanguageModelState.NotDownloaded,
             ),
         )
-        val owner = owner(settingsRepository = settingsRepository, ocrLanguageModels = models)
+        val owner = settingsOwner(settingsRepository = settingsRepository, ocrLanguageModels = models)
         runCurrent()
 
         owner.onAction(SettingsAction.SetOcrLanguageEnabled(ViewerOcrLanguage.JAPANESE, true))
@@ -123,7 +114,7 @@ class SettingsViewModelTest {
     @Test
     fun `entering Settings refreshes OCR model availability`() = runTest {
         val models = FakeOcrLanguageModelSource()
-        val owner = owner(ocrLanguageModels = models)
+        val owner = settingsOwner(ocrLanguageModels = models)
         runCurrent()
 
         owner.onAction(SettingsAction.SettingsEntered)
@@ -136,7 +127,7 @@ class SettingsViewModelTest {
     fun `late source availability appears and toggle persists from the live source set`() = runTest {
         val settingsRepository = InMemorySettingsRepository()
         val availableSources = MutableStateFlow(setOf(SourceKey.PIXIV))
-        val owner = owner(
+        val owner = settingsOwner(
             settingsRepository = settingsRepository,
             availableSources = availableSources,
         )
@@ -166,7 +157,7 @@ class SettingsViewModelTest {
     @Test
     fun `verified legacy recovery is presented by the Settings owner`() = runTest {
         val recoveries = MutableStateFlow<List<CorruptionRecovery>>(emptyList())
-        val owner = owner(legacyJsonRecoveries = recoveries)
+        val owner = settingsOwner(legacyJsonRecoveries = recoveries)
         runCurrent()
 
         val recovery = CorruptionRecovery(
@@ -189,7 +180,7 @@ class SettingsViewModelTest {
         val accounts = FakeSettingsAccountGateway(
             gelbooru = GelbooruCredentials(userId = "42", apiKey = storedSecret),
         )
-        val owner = owner(accounts = accounts)
+        val owner = settingsOwner(accounts = accounts)
         runCurrent()
 
         assertEquals("42", owner.state.value.accounts.gelbooruUserIdInput)
@@ -201,7 +192,7 @@ class SettingsViewModelTest {
     @Test
     fun `blank unconfigured save keeps missing input visible and never writes`() = runTest {
         val accounts = FakeSettingsAccountGateway()
-        val owner = owner(accounts = accounts)
+        val owner = settingsOwner(accounts = accounts)
         runCurrent()
 
         owner.onAction(SettingsAction.SetGelbooruUserId("42"))
@@ -218,7 +209,7 @@ class SettingsViewModelTest {
         val accounts = FakeSettingsAccountGateway(
             gelbooru = GelbooruCredentials(userId = "42", apiKey = "stored-key"),
         )
-        val owner = owner(accounts = accounts)
+        val owner = settingsOwner(accounts = accounts)
         runCurrent()
 
         owner.onAction(SettingsAction.SetGelbooruUserId("84"))
@@ -238,7 +229,7 @@ class SettingsViewModelTest {
         ).apply {
             failGelbooruSaveWithRecovery = CredentialStoreRecoveryState.TemporarilyUnavailable
         }
-        val owner = owner(accounts = accounts)
+        val owner = settingsOwner(accounts = accounts)
         runCurrent()
 
         owner.onAction(SettingsAction.SetGelbooruApiKey("replacement"))
@@ -254,118 +245,4 @@ class SettingsViewModelTest {
         assertFalse(owner.state.value.accounts.mutationsEnabled)
     }
 
-    private fun kotlinx.coroutines.test.TestScope.owner(
-        settingsRepository: InMemorySettingsRepository = InMemorySettingsRepository(),
-        uiRestoreRepository: InMemoryUiRestoreRepository = InMemoryUiRestoreRepository(),
-        accounts: FakeSettingsAccountGateway = FakeSettingsAccountGateway(),
-        legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>> = MutableStateFlow(emptyList()),
-        availableSources: StateFlow<Set<SourceKey>> = MutableStateFlow(setOf(SourceKey.PIXIV)),
-        ocrLanguageModels: OcrLanguageModelSource = FakeOcrLanguageModelSource(),
-    ): SettingsViewModel {
-        val statisticsRepository = InMemoryStatisticsRepository()
-        return SettingsViewModel(
-            dependencies = SettingsOwnerDependencies(
-                settingsRepository = settingsRepository,
-                cacheRepository = InMemoryCacheRepository(),
-                uiRestoreRepository = uiRestoreRepository,
-                likesRepository = InMemoryLikesRepository(),
-                codexRepository = InMemoryCodexRepository(),
-                statisticsRepository = statisticsRepository,
-                appUsageTracker = AppUsageTracker(
-                    repository = statisticsRepository,
-                    scope = backgroundScope,
-                    elapsedRealtime = { 0L },
-                    tickIntervalMs = 0L,
-                ),
-                profileMutations = NoOpSettingsProfileMutations,
-                accounts = accounts,
-                ocrLanguageModels = ocrLanguageModels,
-                availableSources = availableSources,
-                legacyJsonRecoveries = legacyJsonRecoveries,
-            ),
-            coroutineScope = backgroundScope,
-        )
-    }
-}
-
-private class FakeOcrLanguageModelSource(
-    initial: Map<ViewerOcrLanguage, OcrLanguageModelState> =
-        ViewerOcrLanguage.entries.associateWith { OcrLanguageModelState.NotDownloaded },
-) : OcrLanguageModelSource {
-    private val mutableStates = MutableStateFlow(initial)
-    override val states: StateFlow<Map<ViewerOcrLanguage, OcrLanguageModelState>> = mutableStates
-    val downloads = mutableMapOf<ViewerOcrLanguage, Int>()
-    var refreshCount = 0
-
-    override suspend fun refresh() {
-        refreshCount += 1
-    }
-
-    override suspend fun download(language: ViewerOcrLanguage): Boolean {
-        downloads[language] = downloads.getOrDefault(language, 0) + 1
-        mutableStates.value = mutableStates.value + (language to OcrLanguageModelState.Ready)
-        return true
-    }
-}
-
-private class FakeSettingsAccountGateway(
-    gelbooru: GelbooruCredentials? = null,
-    rule34Xxx: Rule34XxxCredentials? = null,
-) : SettingsAccountGateway {
-    private val mutableRecovery = MutableStateFlow<CredentialStoreRecoveryState>(
-        CredentialStoreRecoveryState.Ready,
-    )
-    override val recoveryState: StateFlow<CredentialStoreRecoveryState> = mutableRecovery
-    private var gelbooruCredential = gelbooru
-    private var rule34XxxCredential = rule34Xxx
-    var savedGelbooru: GelbooruCredentials? = null
-    var gelbooruSaveCount = 0
-    var failGelbooruSaveWithRecovery: CredentialStoreRecoveryState? = null
-
-    override suspend fun loadSnapshot(): SettingsAccountSnapshot {
-        if (mutableRecovery.value != CredentialStoreRecoveryState.Ready) {
-            throw CredentialStoreUnavailableException()
-        }
-        return SettingsAccountSnapshot(
-            pixivStatusLabel = "Not connected",
-            pixivConnected = false,
-            gelbooruUserId = gelbooruCredential?.userId.orEmpty(),
-            gelbooruConfigured = gelbooruCredential != null,
-            rule34XxxUserId = rule34XxxCredential?.userId.orEmpty(),
-            rule34XxxConfigured = rule34XxxCredential != null,
-        )
-    }
-
-    override suspend fun startPixivAuthorization(): String = "https://example.test/pixiv"
-    override suspend fun disconnectPixiv() = Unit
-    override suspend fun currentGelbooruApiKey(): String? = gelbooruCredential?.apiKey
-    override suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials) {
-        gelbooruSaveCount += 1
-        failGelbooruSaveWithRecovery?.let { recovery ->
-            mutableRecovery.value = recovery
-            throw CredentialStoreUnavailableException()
-        }
-        savedGelbooru = credentials
-        gelbooruCredential = credentials
-    }
-    override suspend fun clearGelbooruCredentials() {
-        gelbooruCredential = null
-    }
-    override suspend fun currentRule34XxxApiKey(): String? = rule34XxxCredential?.apiKey
-    override suspend fun saveRule34XxxCredentials(credentials: Rule34XxxCredentials) {
-        rule34XxxCredential = credentials
-    }
-    override suspend fun clearRule34XxxCredentials() {
-        rule34XxxCredential = null
-    }
-    override suspend fun resetAfterReconnectRequired(): Boolean {
-        mutableRecovery.value = CredentialStoreRecoveryState.Ready
-        gelbooruCredential = null
-        rule34XxxCredential = null
-        return true
-    }
-}
-
-private data object NoOpSettingsProfileMutations : SettingsProfileMutations {
-    override suspend fun removeProfileData(profileId: String) = Unit
 }

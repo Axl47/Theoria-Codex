@@ -20,6 +20,7 @@ import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.asLongOrNull
 import com.theoriacodex.sources.common.asStringOrNull
+import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.elementsOrEmpty
 import com.theoriacodex.sources.common.intValue
@@ -99,7 +100,7 @@ class PixivSourceAdapter(
         }.orEmpty()
         val normalizedPosts = if (query.sort == SortMode.RANDOM) posts.shuffled() else posts
         val nextToken = parseNextOffset(root.stringValue("next_url"))
-        return Page(items = normalizedPosts, nextPageToken = nextToken)
+        return canonicalPostPage(items = normalizedPosts, nextPageToken = nextToken)
     }
 
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
@@ -182,10 +183,10 @@ class PixivSourceAdapter(
         creator: CreatorProfile,
         pageToken: String?,
     ): Page<Post> {
-        if (creator.source != SourceKey.PIXIV) return Page(items = emptyList(), nextPageToken = null)
+        if (creator.source != SourceKey.PIXIV) return canonicalPostPage(items = emptyList(), nextPageToken = null)
         val userId = creator.uploadsQuery?.trim().takeIf { !it.isNullOrBlank() }
             ?: creator.profileId?.trim().takeIf { !it.isNullOrBlank() }
-            ?: return Page(items = emptyList(), nextPageToken = null)
+            ?: return canonicalPostPage(items = emptyList(), nextPageToken = null)
         val offset = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
         val params = linkedMapOf(
             "user_id" to userId,
@@ -205,7 +206,7 @@ class PixivSourceAdapter(
                 element.takeIf { it.isJsonObject }?.asJsonObject?.let(::parseIllust)
             }
             .orEmpty()
-        return Page(
+        return canonicalPostPage(
             items = posts,
             nextPageToken = parseNextOffset(root.stringValue("next_url")),
         )

@@ -32,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.post.displayTitleOrNull
@@ -454,6 +455,7 @@ private fun RecentSearchRow(
     val presentation = recentSearchPresentation(entry)
     Card(
         modifier = Modifier
+            .testTag("Recent search:${entry.queryHash}")
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
     ) {

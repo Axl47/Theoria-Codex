@@ -39,20 +39,28 @@ class GoogleViewerTextTranslatorTest {
     }
 
     @Test
-    fun `large translation sets split on phrase and character limits`() = runTest {
-        val transport = RecordingTranslationTransport { body ->
-            val count = JsonParser.parseString(body).asJsonObject.getAsJsonArray("q").size()
-            ViewerTranslationHttpResponse(
-                200,
-                """{"translations":[${List(count) { "\"translated-$it\"" }.joinToString()}]}""",
-            )
+    fun `phrase and character boundaries preserve every phrase exactly once`() = runTest {
+        val cases = listOf(
+            List(32) { "語-$it" } to listOf(32),
+            List(33) { "語-$it" } to listOf(32, 1),
+            List(5) { "${it}" + "語".repeat(999) } to listOf(5),
+            List(6) { "${it}" + "語".repeat(999) } to listOf(5, 1),
+        )
+        cases.forEach { (phrases, sizes) ->
+            val transport = RecordingTranslationTransport { body ->
+                val batch = JsonParser.parseString(body).asJsonObject.getAsJsonArray("q")
+                ViewerTranslationHttpResponse(200, """{"translations":$batch}""")
+            }
+            val result = GoogleViewerTextTranslator("https://translate.axor.dev", transport)
+                .translateBatch(ViewerOcrLanguage.KOREAN, phrases + phrases.first()) {}
+            val batches = transport.bodies.map { body ->
+                JsonParser.parseString(body).asJsonObject.getAsJsonArray("q").map { it.asString }
+            }
+            assertEquals(sizes, batches.map(List<String>::size))
+            assertEquals(phrases, batches.flatten())
+            assertTrue(batches.all { it.size <= 32 && it.sumOf(String::length) <= 5_000 })
+            assertEquals(phrases.associateWith { it }, result)
         }
-        val translator = GoogleViewerTextTranslator("https://translate.axor.dev", transport)
-        val phrases = List(MAX_TRANSLATION_PHRASES_PER_BATCH + 1) { index -> "phrase-$index" }
-
-        translator.translateBatch(ViewerOcrLanguage.KOREAN, phrases) {}
-
-        assertEquals(2, transport.bodies.size)
     }
 
     @Test

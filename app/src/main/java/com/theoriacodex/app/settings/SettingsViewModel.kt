@@ -446,8 +446,13 @@ internal class SettingsViewModel(
             val canRemove = state.value.settings.recommendationProfiles.size > 1 &&
                 state.value.settings.recommendationProfiles.any { it.profileId == profileId }
             if (!canRemove) return@launchMutation
-            dependencies.profileMutations.removeProfileData(profileId)
-            dependencies.settingsRepository.removeRecommendationProfile(profileId)
+            val removed = runCatchingPreservingCancellation {
+                dependencies.profileMutations.removeProfileData(profileId)
+                dependencies.settingsRepository.removeRecommendationProfile(profileId)
+            }
+            if (removed.isFailure) {
+                effectChannel.send(SettingsEffect.ShowMessage("Could not remove profile. Please try again."))
+            }
         }
     }
 

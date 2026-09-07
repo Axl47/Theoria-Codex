@@ -135,6 +135,7 @@ android {
         // Created and finalized by the Baseline Profile plugin. It retains release R8/resource
         // behavior while using the debug key for connected profile collection and measurement.
         create("benchmarkRelease") {
+            initWith(getByName("release"))
             signingConfig = signingConfigs.getByName("debug")
             applicationIdSuffix = ".benchmark"
             matchingFallbacks += "release"
@@ -167,6 +168,15 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+    }
+
+    // Controlled provider/container fixtures are shared by real-screen tests and benchmarks.
+    // They are never compiled into the production or release-acceptance APK.
+    sourceSets {
+        getByName("debug").kotlin.directories.add("src/fixtures/java")
+        getByName("debug").res.directories.add("src/fixtures/res")
+        getByName("benchmarkRelease").kotlin.directories.add("src/fixtures/java")
+        getByName("benchmarkRelease").res.directories.add("src/fixtures/res")
     }
 }
 
@@ -203,9 +213,14 @@ androidComponents {
         variant.sources.manifests.addStaticManifestFile(
             "src/benchmarkRelease/AndroidManifest.xml",
         )
+        val mapping = variant.artifacts.get(SingleArtifact.OBFUSCATION_MAPPING_FILE)
+        tasks.named("verifyBenchmarkFixtureArtifact").configure {
+            // A required AGP-owned mapping proves this measurement lane actually ran R8.
+            inputs.file(mapping).withPropertyName("benchmarkR8Mapping")
+        }
     }
 
-    setOf("release", "releaseAcceptance").forEach { buildType ->
+    setOf("release", "releaseAcceptance", "benchmarkRelease").forEach { buildType ->
         onVariants(selector().withBuildType(buildType)) { variant ->
             val capitalizedVariant = variant.name.replaceFirstChar(Char::uppercaseChar)
             val verification = tasks.register<VerifyR8JsonContractsTask>(
@@ -284,6 +299,7 @@ dependencies {
     testImplementation(testFixtures(project(":core-data")))
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.androidx.test.uiautomator)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)

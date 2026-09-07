@@ -138,7 +138,6 @@ import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.app.viewer.PixivUgoiraPlayer
 import com.theoriacodex.app.viewer.UgoiraSizeBucket
-import com.theoriacodex.app.viewer.mediaTestTagPart
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -471,6 +470,7 @@ fun SearchScreen(
         ) {
             OutlinedTextField(
                 modifier = Modifier
+                    .testTag("Search query input")
                     .fillMaxWidth()
                     .onFocusChanged { state ->
                         searchFieldFocused = state.isFocused
@@ -728,7 +728,7 @@ fun SearchScreen(
                         TwoColumnProjectedPostStaggeredGrid(
                             projection = feedProjection,
                             state = gridState,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).testTag("Search results"),
                             showPagingTile = state.loadingMore,
                             footerMessage = if (durationReadiness.isResolving) {
                                 "Resolving durations…"
@@ -1154,6 +1154,7 @@ fun SearchResultCard(
 
         Box(
             modifier = Modifier
+                .testTag(searchMediaTestTag(post.id))
                 .fillMaxWidth()
                 .aspectRatio(ratio),
         ) {
@@ -1430,10 +1431,6 @@ private fun resolveCardVideoRef(post: Post): ImageRef? {
 internal fun allowsInlineAutoplayInSearch(post: Post): Boolean {
     return post.id.source != SourceKey.IWARA && post.id.source != SourceKey.HITOMI
 }
-
-internal fun searchCardTestTag(postId: PostId): String = "search_card_${postId.mediaTestTagPart()}"
-
-internal fun searchVideoTestTag(postId: PostId): String = "search_video_${postId.mediaTestTagPart()}"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

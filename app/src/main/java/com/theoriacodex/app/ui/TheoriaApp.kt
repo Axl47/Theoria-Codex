@@ -2131,13 +2131,7 @@ internal fun TheoriaAppContent(
                                     }
                                 },
                                 onVisiblePostChanged = { post, viewedMediaNumber, session ->
-                                    scope.launch {
-                                        viewerRouteWorkflow.recordVisiblePost(
-                                            post,
-                                            viewedMediaNumber,
-                                            session,
-                                        )
-                                    }
+                                    viewerRouteWorkflow.recordVisiblePost(post, viewedMediaNumber, session)
                                 },
                                 onVisibleMediaChanged = { post, viewedMediaNumber, session ->
                                     scope.launch {

@@ -1,4 +1,5 @@
 import pathlib
+import re
 import unittest
 
 
@@ -34,7 +35,10 @@ class R8JsonContractBuildTest(unittest.TestCase):
     def test_both_public_verifiers_are_variant_owned_and_assembly_finalized(self) -> None:
         build = APP_BUILD.read_text(encoding="utf-8")
 
-        self.assertIn('setOf("release", "releaseAcceptance")', build)
+        declaration = re.search(r"setOf\(([^)]*)\)\.forEach \{ buildType ->", build)
+        self.assertIsNotNone(declaration)
+        variants = set(re.findall(r'"([^"]+)"', declaration.group(1)))
+        self.assertTrue({"release", "releaseAcceptance", "benchmarkRelease"}.issubset(variants))
         self.assertIn('"verify${capitalizedVariant}JsonContracts"', build)
         self.assertIn('task.name == "assemble$capitalizedVariant"', build)
         self.assertIn("finalizedBy(verification)", build)

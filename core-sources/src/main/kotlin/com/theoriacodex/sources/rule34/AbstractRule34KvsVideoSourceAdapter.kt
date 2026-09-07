@@ -16,6 +16,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.sourceNetworkFailure
@@ -53,7 +54,7 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
         val url = pageToken ?: initialSearchUrl(queryText)
         val body = request(url)
         val document = Jsoup.parse(body, baseUrl)
-        return Page(
+        return canonicalPostPage(
             items = parseSearchPage(document, query.includeTags),
             nextPageToken = nextPageToken(document, queryText),
         )
@@ -181,7 +182,7 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
                 title = title,
             )
         }
-        return Page(items = items, nextPageToken = null)
+        return canonicalPostPage(items = items, nextPageToken = null)
     }
 
     protected fun searchPost(

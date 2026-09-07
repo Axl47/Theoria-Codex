@@ -165,6 +165,9 @@ jobs:
       - name: Verify quality helper tests
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 
+      - name: Verify translation gateway HTTP and upstream contracts
+        run: python3 -m unittest discover -s deploy/libretranslate -p 'test_*.py'
+
       - name: Enforce production complexity and coroutine rules
         run: >-
           ./gradlew
@@ -198,6 +201,14 @@ jobs:
             --include-module core-data-android \
             --include-module core-sources \
             --include-module core-stubs \
+            --include-path 'app/src/main/**/*ViewModel.kt' \
+            --include-path 'app/src/main/**/*Coordinator.kt' \
+            --include-path 'app/src/main/**/*Workflow.kt' \
+            --include-path 'app/src/main/**/*Repository.kt' \
+            --include-path 'app/src/main/**/*Service.kt' \
+            --include-path 'app/src/main/**/*Store.kt' \
+            --include-path 'app/src/main/**/*Translator.kt' \
+            --include-path 'app/src/main/**/*Probe.kt' \
             --minimum 60
 
       - name: Upload maintainability reports

@@ -60,6 +60,25 @@ class ViewerOcrPolicyTest {
     }
 
     @Test
+    fun `cropped Latin watermark artifacts cannot qualify as CJK phrases`() {
+        listOf("三RMARK 2026", "SAMP口LE", "WATERMAR丨").forEach { noise ->
+            assertFalse(noise, containsScriptEvidence(noise, ViewerOcrLanguage.JAPANESE, fromFallbackCrop = true))
+        }
+        assertTrue(containsScriptEvidence("新WINDOWS", ViewerOcrLanguage.JAPANESE))
+    }
+
+    @Test
+    fun `single CJK glyphs and meaningful mixed labels remain eligible`() {
+        listOf("三", "あ", "AIの力", "PC版", "iPhone版", "Googleさん", "HDMI用", "USB接続", "愛 LOVE", "新iPhone", "愛:LOVE").forEach { phrase ->
+            assertTrue(phrase, containsScriptEvidence(phrase, ViewerOcrLanguage.JAPANESE))
+            assertTrue(phrase, containsScriptEvidence(phrase, ViewerOcrLanguage.JAPANESE, fromFallbackCrop = true))
+        }
+        assertTrue(containsScriptEvidence("Hello世界", ViewerOcrLanguage.CHINESE))
+        assertTrue(containsScriptEvidence("한", ViewerOcrLanguage.KOREAN))
+        assertTrue(containsScriptEvidence("USB 케이블", ViewerOcrLanguage.KOREAN))
+    }
+
+    @Test
     fun `normalization clamps coordinates and rejects degenerate polygons`() {
         val polygon = normalizeOcrPolygon(
             points = listOf(

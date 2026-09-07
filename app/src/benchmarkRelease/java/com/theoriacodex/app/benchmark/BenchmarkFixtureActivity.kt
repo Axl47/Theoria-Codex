@@ -1,8 +1,14 @@
 package com.theoriacodex.app.benchmark
 
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.ViewModelProvider
+import com.theoriacodex.app.appshell.AppShellViewModel
+import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -44,9 +50,27 @@ import com.theoriacodex.domain.model.SourceKey
 
 /** Exists only in benchmarkRelease and never initializes production repositories or providers. */
 class BenchmarkFixtureActivity : ComponentActivity() {
+    private var journey: BenchmarkAppJourney? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val scenario = intent?.getStringExtra(EXTRA_SCENARIO)
+        if (scenario == "journey_mixed" || scenario == "journey_duration") {
+            BenchmarkDurationStartSignal.reset()
+            lifecycleScope.launch {
+                val session = BenchmarkAppJourney.create(this@BenchmarkFixtureActivity, lifecycleScope)
+                journey = session
+                val viewer = ViewModelProvider(this@BenchmarkFixtureActivity)[ViewerSessionRetentionViewModel::class.java]
+                val shell = ViewModelProvider(this@BenchmarkFixtureActivity)[AppShellViewModel::class.java]
+                setContent {
+                    TheoriaNightTheme {
+                        BenchmarkAppJourneyContent(session, this@BenchmarkFixtureActivity, viewer, shell,
+                            durationEnabled = scenario == "journey_duration")
+                    }
+                }
+            }
+            return
+        }
         if (scenario == SCENARIO_SEARCH_DURATION) BenchmarkDurationStartSignal.reset()
         val mediaUri = "android.resource://$packageName/${R.raw.benchmark_loop}".toUri().toString()
         setContent {
@@ -65,6 +89,12 @@ class BenchmarkFixtureActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        journey?.close()
+        journey = null
     }
 
     private companion object {

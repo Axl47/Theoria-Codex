@@ -98,9 +98,12 @@ Main-channel releases are deliberate, not made for every push to `main`. A relea
 From the project root, run the deterministic test lane:
 
 ```sh
-./gradlew :core-domain:test :core-data:test :core-stubs:test :core-sources:test
-./gradlew :core-data-android:testDebugUnitTest :core-data-android:lintDebug
-./gradlew :app:testDebugUnitTest :app:lint :app:compileDebugAndroidTestKotlin
+./gradlew :app:testDebugUnitTest :app-logic:test :core-domain:test :core-data:test \
+  :core-data-android:testDebugUnitTest :core-stubs:test :core-sources:test
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+python3 -m unittest discover -s deploy/libretranslate -p 'test_*.py'
+./gradlew :app:compileDebugAndroidTestKotlin :core-data-android:compileDebugAndroidTestKotlin
+./gradlew :app:lint :core-data-android:lintDebug --offline
 ```
 
 Run the maintainability lane:
@@ -120,28 +123,71 @@ cache entry and immediately reuses it; when diagnosing build logic, keep
 `--configuration-cache-problems=fail` enabled rather than allowing incompatible tasks to fall back
 silently. Use `--no-configuration-cache` only for an intentional comparison or diagnosis.
 
-CI holds total line coverage at 55%, requires at least 60% changed-line coverage in the explicitly listed JVM/core modules, caps test files and new production hotspots, freezes existing production-hotspot growth, and requires exact non-growing Detekt baseline debt per module. These gates fail closed for missing configuration or eligible sources. Android/Compose behavior is runtime-validated separately so instrumentation-only code is not mislabeled as uncovered JVM code.
+CI holds total line coverage at 55% and requires at least 60% changed-line coverage in the core
+modules, `app-logic`, and app-owned ViewModels, coordinators, workflows, repositories, services,
+stores, translators and probes. The explicit `--include-path` patterns in `verify.yml` select those
+app boundaries; they do not apply a JVM threshold to every Composable. Missing eligible report
+entries fail the gate. Pass `--working-tree` to `scripts/check_changed_coverage.py` for a local
+pre-commit check that includes untracked production files. Test-only fixture packages are excluded
+from production coverage. Hotspot, duplication and non-growing Detekt debt budgets remain enforced.
+
+The fixture-backed device journeys use actual screens, navigation, owners, Room and DataStore.
+They cover grouped Search, Viewer return, Activity recreation, cold graph reopen, exact Multi-Search
+and FYP Recents replay, collection actions, Undo, related shelves and Creator navigation. Cold graph
+reopen creates fresh application dependencies over the same files; it is distinct from killing the
+instrumented process. External provider responses and local media are controlled. Structural tests
+are reserved for narrow architecture and packaged-artifact boundaries, not counted as feature proof.
 
 Build before installing or running on a device/emulator:
 
 ```sh
-./gradlew assembleDebug
-./gradlew installDebug
+./gradlew :app:installDebug --dry-run
+./gradlew :app:assembleDebug
+python3 scripts/verify_device_apk.py app/build/outputs/apk/debug/app-debug.apk \
+  --package com.theoriacodex.debug
+./gradlew :app:installDebug
 ```
 
-Compile the device-backed Compose smoke test when the app shell changes:
+Compile the device journeys and platform tests when app behavior changes:
 
 ```sh
 ./gradlew :app:compileDebugAndroidTestKotlin
 ```
 
-Run it only when an Android target is attached:
+The canonical connected lane builds, verifies every APK, and runs app and data tests serially:
 
 ```sh
-./gradlew :app:connectedDebugAndroidTest
+ANDROID_SERIAL=YOUR_DEVICE_SERIAL scripts/verify_debug_device.sh all
+# Focus a failure without repeating the other owner:
+ANDROID_SERIAL=YOUR_DEVICE_SERIAL DEVICE_TEST_CLASS=com.theoriacodex.app.journeys.SearchNavigationJourneyTest \
+  scripts/verify_debug_device.sh app
 ```
 
-Android-related pull requests and main pushes run the deterministic suite on API 35 while the app continues to compile and target SDK 37. The scheduled/manual extended workflow also runs API 27 plus the minified release-acceptance cold-start/callback check on API 35. Provider-live instrumentation remains opt-in and is not part of the deterministic device result.
+Use `data` to run only the Room device owner. The wrapper retains its task graph and build log under
+`build/reports/device-preflight/` and delegates all packaged checks to `scripts/verify_device_apk.py`.
+
+Android-related pull requests and main pushes, including `app-logic` changes, run device tests on
+API 35 while the app compiles and targets SDK 37. Scheduled/manual runs also cover API 27. Tagged
+releases require both Verify and Device Validation, including isolated minified acceptance. That
+lane verifies package ID, debuggability and the actual debug signing certificate before install,
+then checks startup/callback and persisted JSON data across two separate process launches.
+Provider-live instrumentation remains opt-in. OCR corpus tests use actual ready ML Kit models and
+explicitly skip missing models without downloading them; report those skips separately from passes.
+
+Physical performance validation has its own evidence-producing command:
+
+```sh
+ANDROID_SERIAL=YOUR_PHONE_SERIAL scripts/verify_performance_device.sh calibrate /path/to/new-baseline-evidence
+ANDROID_SERIAL=YOUR_PHONE_SERIAL scripts/verify_performance_device.sh compare \
+  /path/to/new-baseline-evidence/baseline.json /path/to/new-candidate-evidence
+```
+
+Calibration runs the full workload three times on the same APK/device. Comparison requires a new
+complete run with the same fixture code/assets, runner, device, OS and compilation mode. It fails on
+regressed startup, frame-tail, peak-memory, player-churn or transport metrics, and rejects incomplete
+or incompatible evidence. Limits derive from observed baseline dispersion, not a fixed percentage.
+Keep each complete evidence directory, including all Perfetto traces, for future comparisons. See
+[macrobenchmark/README.md](macrobenchmark/README.md) for workload and metric meanings.
 
 Opt-in live provider health report:
 

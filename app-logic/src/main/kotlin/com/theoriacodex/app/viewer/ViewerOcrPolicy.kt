@@ -89,8 +89,15 @@ fun orderedOcrLanguages(
     }
 }
 
-fun containsScriptEvidence(text: String, language: ViewerOcrLanguage): Boolean {
+/** Recovery crops require stronger evidence when a lone CJK glyph appears inside an all-caps Latin word. */
+fun containsScriptEvidence(
+    text: String,
+    language: ViewerOcrLanguage,
+    fromFallbackCrop: Boolean = false,
+): Boolean {
     var offset = 0
+    var hasMatchingScript = false
+    var cjkCount = 0
     while (offset < text.length) {
         val codePoint = Character.codePointAt(text, offset)
         val script = Character.UnicodeScript.of(codePoint)
@@ -101,10 +108,29 @@ fun containsScriptEvidence(text: String, language: ViewerOcrLanguage): Boolean {
             ViewerOcrLanguage.CHINESE -> script == Character.UnicodeScript.HAN
             ViewerOcrLanguage.KOREAN -> script == Character.UnicodeScript.HANGUL
         }
-        if (matches) return true
+        if (matches && !fromFallbackCrop) return true
+        hasMatchingScript = hasMatchingScript || matches
+        if (script in CJK_SCRIPTS) cjkCount++
         offset += Character.charCount(codePoint)
     }
-    return false
+    return hasMatchingScript && (cjkCount > 1 || !hasLatinDominatedOcrToken(text))
+}
+
+private fun hasLatinDominatedOcrToken(text: String): Boolean {
+    return OCR_WORDS.findAll(text).any { match ->
+        var latinCount = 0
+        var hasCjk = false
+        var hasLowercaseLatin = false
+        match.value.codePoints().forEach { codePoint ->
+            val script = Character.UnicodeScript.of(codePoint)
+            hasCjk = hasCjk || script in CJK_SCRIPTS
+            if (script == Character.UnicodeScript.LATIN) {
+                latinCount++
+                hasLowercaseLatin = hasLowercaseLatin || !Character.isUpperCase(codePoint)
+            }
+        }
+        hasCjk && latinCount >= MIN_NOISY_LATIN_LETTERS && !hasLowercaseLatin
+    }
 }
 
 fun normalizeOcrPolygon(
@@ -244,3 +270,14 @@ private val OCR_FALLBACK_ORDER = listOf(
 )
 private const val MIN_POLYGON_POINTS = 3
 private const val MIN_NORMALIZED_EXTENT = 0.0001f
+
+// Keep standalone CJK, normal acronyms (USB/HDMI), mixed-case brands and multi-glyph phrases.
+// Cropped Latin watermarks can instead turn one letter into a Han/Kana glyph, e.g. 三RMARK.
+private const val MIN_NOISY_LATIN_LETTERS = 5
+private val OCR_WORDS = Regex("[\\p{L}\\p{N}]+")
+private val CJK_SCRIPTS = setOf(
+    Character.UnicodeScript.HAN,
+    Character.UnicodeScript.HIRAGANA,
+    Character.UnicodeScript.KATAKANA,
+    Character.UnicodeScript.HANGUL,
+)

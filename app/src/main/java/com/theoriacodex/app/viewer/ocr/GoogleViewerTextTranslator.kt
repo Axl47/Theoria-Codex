@@ -10,8 +10,7 @@ import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import java.nio.charset.StandardCharsets
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.theoriacodex.sources.http.executeCancellableHttpConnection
 
 internal data class ViewerTranslationHttpResponse(
     val statusCode: Int,
@@ -75,34 +74,31 @@ internal class HttpUrlConnectionTranslationTransport(
     private val connectTimeoutMs: Int = CONNECT_TIMEOUT_MS,
     private val readTimeoutMs: Int = READ_TIMEOUT_MS,
 ) : ViewerTranslationHttpTransport {
-    override suspend fun postJson(endpoint: String, body: String): ViewerTranslationHttpResponse =
-        withContext(Dispatchers.IO) {
-            val connection = URI(endpoint).toURL().openConnection() as HttpURLConnection
-            try {
-                connection.requestMethod = "POST"
-                connection.connectTimeout = connectTimeoutMs
-                connection.readTimeout = readTimeoutMs
-                connection.instanceFollowRedirects = false
-                connection.doOutput = true
-                connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-                connection.setRequestProperty("Accept", "application/json")
-                connection.outputStream.use { output ->
-                    output.write(body.toByteArray(StandardCharsets.UTF_8))
-                }
-                val statusCode = connection.responseCode
-                val responseStream = if (statusCode in HTTP_SUCCESS_RANGE) {
-                    connection.inputStream
-                } else {
-                    connection.errorStream
-                }
-                ViewerTranslationHttpResponse(
-                    statusCode = statusCode,
-                    body = responseStream?.use(::readBoundedUtf8).orEmpty(),
-                )
-            } finally {
-                connection.disconnect()
+    override suspend fun postJson(endpoint: String, body: String): ViewerTranslationHttpResponse {
+        val connection = URI(endpoint).toURL().openConnection() as HttpURLConnection
+        return executeCancellableHttpConnection(connection) {
+            connection.requestMethod = "POST"
+            connection.connectTimeout = connectTimeoutMs
+            connection.readTimeout = readTimeoutMs
+            connection.instanceFollowRedirects = false
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+            connection.setRequestProperty("Accept", "application/json")
+            connection.outputStream.use { output ->
+                output.write(body.toByteArray(StandardCharsets.UTF_8))
             }
+            val statusCode = connection.responseCode
+            val responseStream = if (statusCode in HTTP_SUCCESS_RANGE) {
+                connection.inputStream
+            } else {
+                connection.errorStream
+            }
+            ViewerTranslationHttpResponse(
+                statusCode = statusCode,
+                body = responseStream?.use(::readBoundedUtf8).orEmpty(),
+            )
         }
+    }
 }
 
 internal interface ViewerTextTranslator {

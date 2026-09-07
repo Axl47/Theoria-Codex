@@ -26,6 +26,11 @@ dependencies {
 
 kover {
     reports {
+        filters {
+            excludes {
+                packages("com.theoriacodex.app.fixtures", "com.theoriacodex.app.benchmark", "com.theoriacodex.app.acceptance")
+            }
+        }
         total {
             xml {
                 xmlFile.set(layout.buildDirectory.file("reports/kover/quality.xml"))

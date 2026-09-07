@@ -12,8 +12,13 @@ jobs:
   verify:
     uses: ./.github/workflows/verify.yml
 
+  device-validation:
+    uses: ./.github/workflows/device-validation.yml
+    with:
+      release-acceptance: true
+
   build-and-publish:
-    needs: verify
+    needs: [verify, device-validation]
     runs-on: ubuntu-latest
 
     steps:

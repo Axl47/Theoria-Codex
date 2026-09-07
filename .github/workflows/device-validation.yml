@@ -1,29 +1,46 @@
 name: Device Validation
 
 on:
+  workflow_call:
+    inputs:
+      release-acceptance:
+        type: boolean
+        default: false
   pull_request:
     branches:
       - main
     paths:
       - 'app/**'
+      - 'app-logic/**'
+      - 'macrobenchmark/**'
       - 'core-*/**'
       - 'baseline-profile/**'
       - 'gradle/**'
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
+      - 'gradle.properties'
       - 'scripts/verify_release_acceptance_device.sh'
+      - 'scripts/verify_device_apk.py'
+      - 'scripts/verify_debug_device.sh'
+      - 'scripts/device_validation_common.sh'
       - '.github/workflows/device-validation.yml'
   push:
     branches:
       - main
     paths:
       - 'app/**'
+      - 'app-logic/**'
+      - 'macrobenchmark/**'
       - 'core-*/**'
       - 'baseline-profile/**'
       - 'gradle/**'
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
+      - 'gradle.properties'
       - 'scripts/verify_release_acceptance_device.sh'
+      - 'scripts/verify_device_apk.py'
+      - 'scripts/verify_debug_device.sh'
+      - 'scripts/device_validation_common.sh'
       - '.github/workflows/device-validation.yml'
   schedule:
     - cron: '23 07 * * 6'
@@ -82,11 +99,7 @@ jobs:
             -gpu swiftshader_indirect
             -noaudio
             -no-boot-anim
-          script: >-
-            ./gradlew
-            :app:connectedDebugAndroidTest
-            :core-data-android:connectedDebugAndroidTest
-            --stacktrace
+          script: scripts/verify_debug_device.sh all
 
       - name: Upload connected-test reports
         if: always()
@@ -103,7 +116,7 @@ jobs:
 
   release-acceptance:
     name: R8 release acceptance (API 35)
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: inputs.release-acceptance || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 75
 

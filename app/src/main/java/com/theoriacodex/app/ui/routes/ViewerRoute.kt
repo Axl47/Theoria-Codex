@@ -153,7 +153,7 @@ internal data class ViewerRouteEffectCallbacks(
 internal data class ViewerRouteScreenCallbacks(
     val onOwnerChanged: (ViewerRouteOwnerHandle?) -> Unit = {},
     val onInvertMultiImageScrollDirectionChange: (Boolean) -> Unit = {},
-    val onVisiblePostChanged: (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
+    val onVisiblePostChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onVisibleMediaChanged: (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onOpenInBrowser: (Post) -> Unit,
     val onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
@@ -450,11 +450,10 @@ internal fun ViewerRoute(
             }
         },
         onVisiblePostChanged = { post, viewedMediaNumber ->
-            viewerOwner.session.value?.let { currentSession ->
-                latestScreenCallbacks.value.onVisiblePostChanged(
-                    post,
-                    viewedMediaNumber,
-                    currentSession,
+            viewerState.session?.let { identity ->
+                viewerOwner.recordVisiblePost(
+                    identity, post, viewedMediaNumber,
+                    latestScreenCallbacks.value.onVisiblePostChanged,
                 )
             }
         },

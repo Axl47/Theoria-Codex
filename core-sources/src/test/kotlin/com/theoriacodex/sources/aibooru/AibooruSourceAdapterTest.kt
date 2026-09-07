@@ -8,7 +8,6 @@ import com.theoriacodex.sources.http.SourceHttpResponse
 import com.theoriacodex.sources.testing.FakeHttpClient
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -36,7 +35,7 @@ class AibooruSourceAdapterTest {
 
         assertEquals(40, page.items.size)
         assertEquals("2", page.nextPageToken)
-        assertNotNull(httpClient.lastGet?.query?.get("tags"))
+        assertEquals("landscape -comic score:>=100 order:score", httpClient.lastGet?.query?.get("tags"))
     }
 
     @Test

@@ -19,6 +19,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.ambiguousDurationFieldMs
+import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.durationFieldMs
 import com.theoriacodex.sources.common.firstDurationMs
@@ -75,7 +76,7 @@ class GelbooruSourceAdapter(
         val rawPosts = parsePostItems(response)
         val posts = rawPosts.mapNotNull { parsePost(it) }
         val next = if (rawPosts.size >= limit) (pageIndex + 1).toString() else null
-        return Page(items = posts, nextPageToken = next)
+        return canonicalPostPage(items = posts, nextPageToken = next)
     }
 
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
@@ -180,9 +181,9 @@ class GelbooruSourceAdapter(
         creator: CreatorProfile,
         pageToken: String?,
     ): Page<Post> {
-        if (creator.source != SourceKey.GELBOORU) return Page(items = emptyList(), nextPageToken = null)
+        if (creator.source != SourceKey.GELBOORU) return canonicalPostPage(items = emptyList(), nextPageToken = null)
         val uploadsQuery = creator.uploadsQuery?.trim().takeIf { !it.isNullOrBlank() }
-            ?: return Page(items = emptyList(), nextPageToken = null)
+            ?: return canonicalPostPage(items = emptyList(), nextPageToken = null)
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
         val limit = 40
         val response = request(
@@ -197,7 +198,7 @@ class GelbooruSourceAdapter(
         val rawPosts = parsePostItems(response)
         val posts = rawPosts.mapNotNull(::parsePost)
         val next = if (rawPosts.size >= limit) (pageIndex + 1).toString() else null
-        return Page(items = posts, nextPageToken = next)
+        return canonicalPostPage(items = posts, nextPageToken = next)
     }
 
     private suspend fun request(query: Map<String, String>): String {

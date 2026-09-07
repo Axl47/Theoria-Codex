@@ -30,6 +30,7 @@ import com.theoriacodex.sources.common.asBooleanOrNull
 import com.theoriacodex.sources.common.asIntOrNull
 import com.theoriacodex.sources.common.asLongOrNull
 import com.theoriacodex.sources.common.asStringOrNull
+import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.elementsOrEmpty
 import com.theoriacodex.sources.common.isSuccessful
@@ -90,7 +91,7 @@ class NhentaiSourceAdapter(
                     sourcePostId = directGalleryId,
                 )
             )
-            return Page(
+            return canonicalPostPage(
                 items = listOfNotNull(resolved),
                 nextPageToken = null,
             )
@@ -148,7 +149,7 @@ class NhentaiSourceAdapter(
             null
         }
 
-        return Page(
+        return canonicalPostPage(
             items = normalizedPosts,
             nextPageToken = nextPageToken,
         )

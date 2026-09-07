@@ -19,6 +19,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.durationFieldMs
 import com.theoriacodex.sources.common.firstDurationMs
@@ -190,10 +191,10 @@ class IwaraSourceAdapter(
         creator: CreatorProfile,
         pageToken: String?,
     ): Page<Post> {
-        if (creator.source != SourceKey.IWARA) return Page(emptyList(), null)
+        if (creator.source != SourceKey.IWARA) return canonicalPostPage(emptyList(), null)
         val userId = creator.uploadsQuery?.trim().takeUnless { it.isNullOrBlank() }
             ?: creator.profileId?.trim().takeUnless { it.isNullOrBlank() }
-            ?: return Page(emptyList(), null)
+            ?: return canonicalPostPage(emptyList(), null)
         val pageIndex = pageToken?.toIntOrNull()?.coerceAtLeast(0) ?: 0
         val response = requestJsonObject(
             url = "$IWARA_API_BASE/videos",
@@ -376,7 +377,7 @@ class IwaraSourceAdapter(
         val count = root.intValue("count") ?: 0
         val items = parseResultItems(root).mapNotNull(::parseVideoPost)
         val hasMore = limit > 0 && ((page + 1) * limit) < count
-        return Page(
+        return canonicalPostPage(
             items = items,
             nextPageToken = if (hasMore) (page + 1).toString() else null,
         )

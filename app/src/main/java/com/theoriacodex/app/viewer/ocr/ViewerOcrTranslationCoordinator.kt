@@ -192,6 +192,7 @@ internal class ViewerOcrTranslationCoordinator(
                         candidate = candidate,
                         original = original,
                         language = ViewerOcrLanguage.JAPANESE,
+                        fromFallbackCrop = true,
                     ),
                 )
             } finally {
@@ -205,11 +206,12 @@ internal class ViewerOcrTranslationCoordinator(
         candidate: OcrBitmapCandidate,
         original: Bitmap,
         language: ViewerOcrLanguage,
+        fromFallbackCrop: Boolean = false,
     ): List<ViewerOcrRegion> {
         val input = InputImage.fromBitmap(candidate.bitmap, 0)
         return recognizer.process(input).await().textBlocks.mapIndexedNotNull { index, block ->
             val sourceText = block.text.trim().takeIf(String::isNotBlank) ?: return@mapIndexedNotNull null
-            if (!containsScriptEvidence(sourceText, language)) return@mapIndexedNotNull null
+            if (!containsScriptEvidence(sourceText, language, fromFallbackCrop)) return@mapIndexedNotNull null
             val candidatePoints = block.cornerPoints
                 ?.map { point -> ViewerOcrPoint(point.x.toFloat(), point.y.toFloat()) }
                 ?: block.boundingBox?.toViewerOcrPoints()

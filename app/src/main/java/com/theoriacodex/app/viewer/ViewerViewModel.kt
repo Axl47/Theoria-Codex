@@ -20,6 +20,7 @@ import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.app.viewer.state.reduceViewerState
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CancellationException
@@ -62,6 +63,7 @@ internal class ViewerViewModel(
     private val workScope = scopeOverride ?: viewModelScope
     private val effectChannel = Channel<ViewerEffect>(capacity = Channel.BUFFERED)
     private val sessionJobs = mutableMapOf<ViewerWorkKey, Job>()
+    private val recordedVisiblePosts = mutableSetOf<PostId>()
     private val prefetchSemaphore = Semaphore(VIEWER_PREFETCH_MAX_CONCURRENCY)
     private var desiredPrefetchKeys = emptySet<ViewerMediaKey>()
     private var restoredPageIndex = savedStateHandle[ViewerSavedStateKeys.PAGE_INDEX] ?: 0
@@ -80,6 +82,7 @@ internal class ViewerViewModel(
     override fun onAction(action: ViewerAction) {
         val reduction = synchronized(lock) {
             if (action is ViewerAction.ReplaceSession) {
+                if (action.session != mutableState.value.session) recordedVisiblePosts.clear()
                 cancelSessionJobs()
             }
             val restoresSavedSelection = action is ViewerAction.ReplaceSession &&
@@ -129,9 +132,30 @@ internal class ViewerViewModel(
         }
     }
 
+    /** Retains one-shot visibility admission and its write across renderer/Activity reattachment. */
+    fun recordVisiblePost(
+        identity: ViewerSessionIdentity,
+        post: Post,
+        viewedMediaNumber: Int,
+        record: suspend (Post, Int, ViewerSession) -> Unit,
+    ) {
+        val current = synchronized(lock) {
+            val active = mutableSession.value ?: return
+            if (active.toViewerSessionIdentity() != identity ||
+                active.posts.none { it.id == post.id } || !recordedVisiblePosts.add(post.id)
+            ) return
+            active
+        }
+        workScope.launch {
+            // A partial best-effort write must not become a duplicate lifetime event on reattachment.
+            runCatchingPreservingCancellation { record(post, viewedMediaNumber, current) }
+        }
+    }
+
     fun clearSession() {
         synchronized(lock) {
             cancelSessionJobs()
+            recordedVisiblePosts.clear()
             mutableSession.value = null
             mutableState.value = ViewerUiState.Empty
             restoredPageIndex = 0

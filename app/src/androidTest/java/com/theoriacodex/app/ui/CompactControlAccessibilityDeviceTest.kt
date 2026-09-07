@@ -135,7 +135,8 @@ class CompactControlAccessibilityDeviceTest {
         val header = composeRule.onNode(hasText("Updates") and hasClickAction())
         header.assertRole(Role.Button)
         header.assertStateDescription("Expanded")
-        header.assertTouchHeightIsEqualTo(48.dp)
+        // Text scaling can grow the header; its clickable row promises a minimum, not a fixed size.
+        header.assertHeightIsAtLeast(48.dp)
         assertTrue(header.fetchSemanticsNode().config.contains(SemanticsActions.Collapse))
         assertFalse(header.fetchSemanticsNode().config.contains(SemanticsActions.Expand))
 

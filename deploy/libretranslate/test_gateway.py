@@ -3,12 +3,12 @@ import json
 import unittest
 from unittest.mock import patch
 
-from gateway import GOOGLE_TRANSLATE_URL, SlidingWindowBudget, translate_batch
+from gateway import GOOGLE_TRANSLATE_URL, MAX_TRANSLATION_RESPONSE_BYTES, SlidingWindowBudget, translate_batch
 
 
 class FakeResponse:
-    def __init__(self, payload: dict[str, object]) -> None:
-        self._body = BytesIO(json.dumps(payload).encode("utf-8"))
+    def __init__(self, payload: dict[str, object] | bytes) -> None:
+        self._body = BytesIO(payload if isinstance(payload, bytes) else json.dumps(payload).encode("utf-8"))
 
     def __enter__(self) -> "FakeResponse":
         return self
@@ -67,6 +67,28 @@ class GoogleTranslationTest(unittest.TestCase):
     def test_rejects_translation_without_a_server_credential(self) -> None:
         with self.assertRaisesRegex(ValueError, "not configured"):
             translate_batch("ko", ["안녕하세요"], api_key="")
+
+    def test_rejects_malformed_incomplete_and_empty_upstream_batches(self) -> None:
+        for records in [{"translatedText": "Hello"}, [None], [{"translatedText": []}],
+                        [{"translatedText": " "}], [], [{"translatedText": "One"}] * 2]:
+            with self.subTest(records=records):
+                response = FakeResponse({"data": {"translations": records}})
+                with patch("gateway.urlopen", return_value=response):
+                    with self.assertRaises(ValueError):
+                        translate_batch("ja", ["こんにちは"], api_key="test-key")
+
+    def test_response_byte_limit_accepts_exact_bound_and_rejects_one_more_byte(self) -> None:
+        payload = json.dumps({"data": {"translations": [{"translatedText": "Hello"}]}}).encode()
+        for size, accepted in [(MAX_TRANSLATION_RESPONSE_BYTES, True),
+                               (MAX_TRANSLATION_RESPONSE_BYTES + 1, False)]:
+            response = FakeResponse(payload + b" " * (size - len(payload)))
+            with patch("gateway.urlopen", return_value=response) as request:
+                if accepted:
+                    self.assertEqual(["Hello"], translate_batch("ja", ["こんにちは"], api_key="test-key"))
+                else:
+                    with self.assertRaisesRegex(ValueError, "exceeded"):
+                        translate_batch("ja", ["こんにちは"], api_key="test-key")
+                self.assertEqual(10, request.call_args.kwargs["timeout"])
 
 
 class SlidingWindowBudgetTest(unittest.TestCase):

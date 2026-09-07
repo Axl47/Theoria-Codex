@@ -15,6 +15,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.intValue
 import com.theoriacodex.sources.common.isSuccessful
@@ -64,7 +65,7 @@ class Rule34XxxSourceAdapter(
         val rawPosts = jsonArrayOfObjects(response, gson, "rule34.xxx posts")
         val posts = rawPosts.mapNotNull(::parsePost)
         val next = if (rawPosts.size >= limit) (pageIndex + 1).toString() else null
-        return Page(items = posts, nextPageToken = next)
+        return canonicalPostPage(items = posts, nextPageToken = next)
     }
 
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> {

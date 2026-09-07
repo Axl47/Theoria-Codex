@@ -16,6 +16,7 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.common.asStringOrNull
+import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.isSuccessful
 import com.theoriacodex.sources.common.parseJsonArray
@@ -57,7 +58,7 @@ class Rule34PahealSourceAdapter(
             } else {
                 "$RULE34PAHEAL_BASE_URL/rss/images/${encodePathSegment(normalizedQuery)}/1"
             }
-        val body = request(url) ?: return Page(items = emptyList(), nextPageToken = null)
+        val body = request(url) ?: return canonicalPostPage(items = emptyList(), nextPageToken = null)
         return if (body.trimStart().startsWith("<?xml") || body.contains("<rss")) {
             parseRssPage(body, limit = 40)
         } else {
@@ -198,7 +199,7 @@ class Rule34PahealSourceAdapter(
                 )
             }
         val next = document.selectFirst("channel > atom|link[rel=next]")?.attr("abs:href")?.takeIf(String::isNotBlank)
-        return Page(items = items, nextPageToken = next)
+        return canonicalPostPage(items = items, nextPageToken = next)
     }
 
     private fun parseHtmlSearchPage(body: String): Page<Post> {
@@ -247,7 +248,7 @@ class Rule34PahealSourceAdapter(
             .firstOrNull { link -> link.text().trim().equals("Next", ignoreCase = true) }
             ?.attr("abs:href")
             ?.takeIf(String::isNotBlank)
-        return Page(items = posts, nextPageToken = next)
+        return canonicalPostPage(items = posts, nextPageToken = next)
     }
 
     private fun parsePostDocument(document: Document, sourcePostId: String): Post? {

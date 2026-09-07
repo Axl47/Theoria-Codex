@@ -118,7 +118,7 @@ class UnifiedSearchOrchestratorTest {
                 SourceKey.GELBOORU to FakeAdapter(
                     sourceKey = SourceKey.GELBOORU,
                     capabilities = supportedCapabilities(),
-                    posts = listOf(post(SourceKey.GELBOORU, "g1")),
+                    posts = listOf(post(SourceKey.GELBOORU, "g1"), post(SourceKey.GELBOORU, "g2")),
                 ),
             )
         )
@@ -130,8 +130,10 @@ class UnifiedSearchOrchestratorTest {
             weights = mapOf(SourceKey.PIXIV to 0.75, SourceKey.GELBOORU to 0.25),
         )
 
-        assertEquals(4, result.items.size)
-        assertEquals(SourceKey.PIXIV, result.items.first().id.source)
+        assertEquals(
+            listOf("p1", "g1", "p2", "p3", "g2"),
+            result.items.map { it.id.sourcePostId },
+        )
         assertEquals(2, result.statuses.count { it.state == SourceRunState.SUCCESS })
     }
 

@@ -198,6 +198,43 @@ class TheoriaMacrobenchmark {
         }
     }
 
+    @Test
+    fun mixedMediaFiveFeedJourney() = measureAppFeedJourney(durationEnabled = false)
+
+    @Test
+    fun durationAcquisitionFiveFeedJourney() = measureAppFeedJourney(durationEnabled = true)
+
+    private fun measureAppFeedJourney(durationEnabled: Boolean) = benchmarkRule.measureRepeated(
+        packageName = TARGET_PACKAGE,
+        metrics = buildList {
+            add(fixtureFrameTimingMetric())
+            add(fixtureMemoryUsageMetric())
+            add(countMetric("TheoriaPreviewPlayerCreate", "previewPlayerCreate"))
+            add(countMetric("TheoriaPreviewPlayerPrepare", "previewPlayerPrepare"))
+            add(countMetric("TheoriaPreviewPlayerRebind", "previewPlayerRebind"))
+            add(countMetric("TheoriaPreviewPlayerCool", "previewPlayerCool"))
+            add(countMetric("TheoriaPreviewPlayerRelease", "previewPlayerRelease"))
+            add(countMetric(TRACE_MEDIA_LOAD, "mediaLoad"))
+            if (durationEnabled) {
+                add(countMetric("TheoriaFixtureByteRange", "fixtureByteRange"))
+                add(TraceSectionMetric("TheoriaJourneyDurationBatch", TraceSectionMetric.Mode.Sum,
+                    label = "journeyDurationBatch", targetPackageOnly = false))
+            }
+        },
+        compilationMode = COMPILATION_MODE,
+        startupMode = null,
+        iterations = INTERACTION_ITERATIONS,
+        setupBlock = {
+            pressHome()
+            startActivityAndWait(fixtureIntent(if (durationEnabled) "journey_duration" else "journey_mixed"))
+            device.requireMovingFeedPreviews("Search setup")
+        },
+    ) {
+        if (durationEnabled) sendDurationStartSignal()
+        device.completeFiveFeedJourney()
+        if (durationEnabled) device.requireIntegratedDurationSettled()
+    }
+
     private fun fixtureIntent(scenario: String): Intent {
         return Intent(ACTION_BENCHMARK_FIXTURE)
             .setComponent(ComponentName(TARGET_PACKAGE, FIXTURE_ACTIVITY))

@@ -17,6 +17,7 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SourceHttpClient
+import com.theoriacodex.sources.common.canonicalPostPage
 import com.theoriacodex.sources.common.classifyHttpFailure
 import com.theoriacodex.sources.common.intValue
 import com.theoriacodex.sources.common.isSuccessful
@@ -62,7 +63,7 @@ class AibooruSourceAdapter(
             element.takeIf(JsonElement::isJsonObject)?.asJsonObject?.let(::parsePost)
         }
         val nextPageToken = if (rawItems.size() >= limit) (page + 1).toString() else null
-        return Page(items = items, nextPageToken = nextPageToken)
+        return canonicalPostPage(items = items, nextPageToken = nextPageToken)
     }
 
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> {

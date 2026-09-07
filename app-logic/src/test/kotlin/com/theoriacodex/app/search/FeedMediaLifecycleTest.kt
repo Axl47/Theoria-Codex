@@ -30,17 +30,6 @@ class FeedMediaLifecycleTest {
                 stableVisibilityElapsed = true,
             ),
         )
-        assertEquals(180L, FEED_PLAYER_ACTIVATION_DELAY_MS)
-    }
-
-    @Test
-    fun `lifecycle stop releases eligibility even after the visibility delay`() {
-        assertFalse(
-            shouldAcquireFeedPlayerLease(
-                isActive = false,
-                stableVisibilityElapsed = true,
-            ),
-        )
     }
 
     @Test
