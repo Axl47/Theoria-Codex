@@ -199,12 +199,13 @@ fun SearchScreen(
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
 ) {
     val input = state.suggestions.input
-    val animatedOnly = fabRestoreState.animatedOnly
+    val animationRestoreState = fabRestoreState.searchAnimationFilter(state.query.draft.mode)
+    val animatedOnly = animationRestoreState.animatedOnly
     val hideLiked = fabRestoreState.hideLiked
     val hideSaved = fabRestoreState.hideSaved
     val hideWatched = fabRestoreState.hideWatched
-    val durationMinBucket = fabRestoreState.durationMinBucket
-    val durationMaxBucket = fabRestoreState.durationMaxBucket
+    val durationMinBucket = animationRestoreState.durationMinBucket
+    val durationMaxBucket = animationRestoreState.durationMaxBucket
     var searchFieldFocused by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var showFavoriteTagSheet by remember { mutableStateOf(false) }
@@ -891,15 +892,21 @@ fun SearchScreen(
             onAction = onAction,
             animatedOnly = animatedOnly,
             onAnimatedOnlyChange = { enabled ->
-                onFabRestoreStateChange(fabRestoreState.copy(animatedOnly = enabled))
+                onFabRestoreStateChange(
+                    fabRestoreState.withSearchAnimationFilter(state.query.draft.mode) { restoreState ->
+                        restoreState.copy(animatedOnly = enabled)
+                    },
+                )
             },
             animatedDurationRange = animatedDurationRange,
             onAnimatedDurationRangeChange = { range ->
                 onFabRestoreStateChange(
-                    fabRestoreState.copy(
-                        durationMinBucket = range.normalizedMinBucket,
-                        durationMaxBucket = range.normalizedMaxBucket,
-                    ),
+                    fabRestoreState.withSearchAnimationFilter(state.query.draft.mode) { restoreState ->
+                        restoreState.copy(
+                            durationMinBucket = range.normalizedMinBucket,
+                            durationMaxBucket = range.normalizedMaxBucket,
+                        )
+                    },
                 )
             },
             showAnimatedOnlyFilter = !isNhentaiSourceMode,

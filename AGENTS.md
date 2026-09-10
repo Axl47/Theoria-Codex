@@ -144,6 +144,8 @@ Codex detail, Creator Profile, Viewer, and future secondary routes use `Secondar
 
 FAB filter/sort restore state lives in `UiRestoreRepository` and is loaded by the app-shell `FeedFabRestoreRegistry` before a feed route renders. Search and For You use separate top-level keys; Creator Profile keys include source plus creator identity; Codex detail keys include the Codex ID. Keep query-owned Search sort/date/score state in the Search query owner rather than duplicating it in FAB restore storage. New FAB contexts must receive their own stable key so switching tabs or relaunching never leaks controls between feeds.
 
+Search keeps its Animated-only and animated-duration controls scoped by the selected source (with Unified as its own scope) inside the Search FAB state. Shared visibility controls such as Liked, Saved, and Watched remain route-wide; never let an animation choice made for one provider filter another provider's results.
+
 ## Codex Collection Actions
 
 Collection saves use `CodexRepository.addItems` for one atomic membership transaction before best-effort caching. `CodexSaveViewModel` owns direct-save jobs and typed completion feedback outside sheet composition. Routine Post updates share `mergeSharedPostPayload`; sparse snapshots cannot erase resolved media, and sparse cache writes must preserve usable existing offline bytes. `LikesRepository` is observation-only; production Like mutations use `CodexLikesTransactions` to keep the system Codex consistent.

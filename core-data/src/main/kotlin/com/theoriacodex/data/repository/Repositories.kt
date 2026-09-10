@@ -484,6 +484,14 @@ data class FeedFabRestoreState(
     @field:SerializedName("source") val source: String? = null,
     @field:SerializedName("language") val language: String? = null,
     @field:SerializedName("fullColorOnly") val fullColorOnly: Boolean = false,
+    @field:SerializedName("searchAnimationByScope")
+    val searchAnimationByScope: Map<String, SearchAnimationFilterRestoreState> = emptyMap(),
+)
+
+data class SearchAnimationFilterRestoreState(
+    @field:SerializedName("animatedOnly") val animatedOnly: Boolean = false,
+    @field:SerializedName("durationMinBucket") val durationMinBucket: Int = 0,
+    @field:SerializedName("durationMaxBucket") val durationMaxBucket: Int = 25,
 )
 
 interface UiRestoreRepository {
