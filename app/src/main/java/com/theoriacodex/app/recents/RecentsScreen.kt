@@ -212,8 +212,10 @@ fun RecentsScreen(
             onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
             onGoToSearch = onGoToSearch,
             onPostUrlCopied = onPostUrlCopied,
-            tagContent = {
+            tagContent = { header, footer ->
                 PostTagActionSection(
+                    header = header,
+                    footer = footer,
                     post = post,
                     tagVideoCountProvider = tagVideoCountProvider,
                     fetchTagVideoCounts = fetchTagVideoCounts,

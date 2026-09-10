@@ -40,8 +40,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.OpenInBrowser
@@ -1080,132 +1078,130 @@ internal fun ViewerScreen(
             onDismissRequest = { setInfoSheetVisible(false) },
             dragHandle = null,
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("Info", style = MaterialTheme.typography.titleMedium)
-                    Row {
-                        IconButton(onClick = {
-                            onAction(ViewerAction.Save)
-                            setInfoSheetVisible(false)
-                        }) {
-                            Icon(
-                                imageVector = Icons.Default.BookmarkAdd,
-                                contentDescription = "Save to Codex",
+            PostTagActionSection(
+                header = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Info", style = MaterialTheme.typography.titleMedium)
+                            Row {
+                                IconButton(onClick = {
+                                    onAction(ViewerAction.Save)
+                                    setInfoSheetVisible(false)
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.BookmarkAdd,
+                                        contentDescription = "Save to Codex",
+                                    )
+                                }
+                                IconButton(onClick = {
+                                    setPlaybackEnabled(false)
+                                    onGoToSearch()
+                                    setInfoSheetVisible(false)
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = "Go to Search",
+                                    )
+                                }
+                                IconButton(onClick = {
+                                    onAction(ViewerAction.Share)
+                                    setInfoSheetVisible(false)
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Share,
+                                        contentDescription = "Share",
+                                    )
+                                }
+                                if (!post.pageUrl.isNullOrBlank()) {
+                                    IconButton(onClick = {
+                                        onOpenInBrowser(post)
+                                        setInfoSheetVisible(false)
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.Default.OpenInBrowser,
+                                            contentDescription = "Open in browser",
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        post.displayTitleOrNull()?.let { title ->
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center,
                             )
                         }
-                        IconButton(onClick = {
+                        Text(
+                            text = "${post.id.source.displayName()} • ${post.id.sourcePostId}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (onOpenCreatorFallback != null) {
+                            CreatorProfileActionButton(
+                                post = post,
+                                creatorBrowsingSources = creatorBrowsingSources,
+                                onOpenProfile = { profile ->
+                                    setPlaybackEnabled(false)
+                                    onAction(ViewerAction.OpenCreator(profile))
+                                    setInfoSheetVisible(false)
+                                },
+                                onOpenLegacyPost = {
+                                    setPlaybackEnabled(false)
+                                    onOpenCreatorFallback(post)
+                                    setInfoSheetVisible(false)
+                                },
+                            )
+                        }
+
+                    }
+                },
+                footer = {
+
+                    TextButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
                             setPlaybackEnabled(false)
                             onGoToSearch()
                             setInfoSheetVisible(false)
-                        }) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = "Go to Search",
-                            )
-                        }
-                        IconButton(onClick = {
-                            onAction(ViewerAction.Share)
-                            setInfoSheetVisible(false)
-                        }) {
-                            Icon(
-                                imageVector = Icons.Default.Share,
-                                contentDescription = "Share",
-                            )
-                        }
-                        if (!post.pageUrl.isNullOrBlank()) {
-                            IconButton(onClick = {
-                                onOpenInBrowser(post)
-                                setInfoSheetVisible(false)
-                            }) {
-                                Icon(
-                                    imageVector = Icons.Default.OpenInBrowser,
-                                    contentDescription = "Open in browser",
-                                )
-                            }
-                        }
+                        },
+                    ) {
+                        Text("Go to Search")
                     }
-                }
-
-                post.displayTitleOrNull()?.let { title ->
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center,
-                    )
-                }
-                Text(
-                    text = "${post.id.source.displayName()} • ${post.id.sourcePostId}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (onOpenCreatorFallback != null) {
-                    CreatorProfileActionButton(
-                        post = post,
-                        creatorBrowsingSources = creatorBrowsingSources,
-                        onOpenProfile = { profile ->
-                            setPlaybackEnabled(false)
-                            onAction(ViewerAction.OpenCreator(profile))
-                            setInfoSheetVisible(false)
-                        },
-                        onOpenLegacyPost = {
-                            setPlaybackEnabled(false)
-                            onOpenCreatorFallback(post)
-                            setInfoSheetVisible(false)
-                        },
-                    )
-                }
-
-                PostTagActionSection(
-                    post = post,
-                    tagVideoCountProvider = tagVideoCountProvider,
-                    fetchTagVideoCounts = fetchTagVideoCounts,
-                    onAddIncludeTerm = { term ->
-                        onAction(
-                            ViewerAction.IncludeTag(
-                                PostTaxonomyTerm(term.value, term.facet, term.sourceNamespace)
-                            )
+                },
+                post = post,
+                tagVideoCountProvider = tagVideoCountProvider,
+                fetchTagVideoCounts = fetchTagVideoCounts,
+                onAddIncludeTerm = { term ->
+                    onAction(
+                        ViewerAction.IncludeTag(
+                            PostTaxonomyTerm(term.value, term.facet, term.sourceNamespace)
                         )
-                        true
-                    },
-                    onAddExcludeTerm = { term ->
-                        onAction(
-                            ViewerAction.ExcludeTag(
-                                PostTaxonomyTerm(term.value, term.facet, term.sourceNamespace)
-                            )
+                    )
+                    true
+                },
+                onAddExcludeTerm = { term ->
+                    onAction(
+                        ViewerAction.ExcludeTag(
+                            PostTaxonomyTerm(term.value, term.facet, term.sourceNamespace)
                         )
-                        true
-                    },
-                    onRemoveIncludeTerm = { term -> onRemoveIncludeTerm(post, term) },
-                    onRemoveExcludeTerm = { term -> onRemoveExcludeTerm(post, term) },
-                    onFavoriteTagLongPress = onFavoriteTagLongPress,
-                )
-
-                TextButton(
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                    onClick = {
-                        setPlaybackEnabled(false)
-                        onGoToSearch()
-                        setInfoSheetVisible(false)
-                    },
-                ) {
-                    Text("Go to Search")
-                }
-            }
+                    )
+                    true
+                },
+                onRemoveIncludeTerm = { term -> onRemoveIncludeTerm(post, term) },
+                onRemoveExcludeTerm = { term -> onRemoveExcludeTerm(post, term) },
+                onFavoriteTagLongPress = onFavoriteTagLongPress,
+            )
         }
     }
 

@@ -5,6 +5,9 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +30,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.theoriacodex.app.search.searchScopeLabel
 import com.theoriacodex.app.search.searchTermChipLabel
 import com.theoriacodex.domain.adapter.FacetedSearchScope
@@ -38,6 +43,9 @@ import com.theoriacodex.domain.model.SourceKey
 @Composable
 fun PostTagActionSection(
     post: Post,
+    header: @Composable () -> Unit = {},
+    footer: @Composable () -> Unit = {},
+    loading: Boolean = false,
     tagVideoCountProvider: (SourceKey, String) -> Int? = { _, _ -> null },
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
     onAddIncludeTerm: (SearchTerm) -> Boolean,
@@ -46,7 +54,6 @@ fun PostTagActionSection(
     onRemoveExcludeTerm: (SearchTerm) -> Unit,
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
 ) {
-    Text("Search terms", style = MaterialTheme.typography.titleSmall)
     val termGroups = remember(post.taxonomy, post.canonicalTags, post.rawTags) {
         postActionTermGroups(post)
     }
@@ -57,65 +64,78 @@ fun PostTagActionSection(
     var tagSelections by remember(post.id.source, post.id.sourcePostId) {
         mutableStateOf<Map<TagActionSelection, Set<SearchTerm>>>(emptyMap())
     }
-    var tagVideoCounts by remember(post.id.source, generalTags) {
-        mutableStateOf(
-            generalTags.associateWith { tag ->
-                tagVideoCountProvider(post.id.source, tag)
-            }
-        )
+    var tagVideoCounts by remember(post.id, generalTags) {
+        mutableStateOf<Map<String, Int?>>(emptyMap())
     }
-    LaunchedEffect(post.id.source, generalTags) {
+    LaunchedEffect(post.id, generalTags) {
+        // Cache lookup can scan the provider lexicon; keep it out of composition and off Main.
+        tagVideoCounts = withContext(Dispatchers.Default) {
+            generalTags.associateWith { tag -> tagVideoCountProvider(post.id.source, tag) }
+        }
         val missingTags = generalTags.filter { tag -> tagVideoCounts[tag] == null }
         if (missingTags.isEmpty()) return@LaunchedEffect
-        val fetchedCounts = fetchTagVideoCounts(post.id.source, missingTags)
-        if (fetchedCounts.isNotEmpty()) {
-            tagVideoCounts = tagVideoCounts + fetchedCounts
+        val fetchedCounts = withContext(Dispatchers.IO) {
+            fetchTagVideoCounts(post.id.source, missingTags)
         }
+        if (fetchedCounts.isNotEmpty()) tagVideoCounts = tagVideoCounts + fetchedCounts
     }
 
-    TagActionGrid(
-        groups = termGroups,
-        videoCounts = tagVideoCounts,
-        includedTerms = tagSelections[TagActionSelection.INCLUDE].orEmpty(),
-        excludedTerms = tagSelections[TagActionSelection.EXCLUDE].orEmpty(),
-        onFavoriteTagLongPress = if (onFavoriteTagLongPress != null) {
-            { tag -> onFavoriteTagLongPress(post.id.source, tag) }
+    LazyColumn(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        item(key = "header") { header() }
+        item(key = "search-terms") { Text("Search terms", style = MaterialTheme.typography.titleSmall) }
+        if (loading) {
+            item(key = "loading") { Text("Loading tags...", style = MaterialTheme.typography.bodySmall) }
         } else {
-            null
-        },
-        onIncludeTerm = { term ->
-            val included = tagSelections[TagActionSelection.INCLUDE].orEmpty()
-            val excluded = tagSelections[TagActionSelection.EXCLUDE].orEmpty()
-            if (term in included) {
-                onRemoveIncludeTerm(term)
-                tagSelections = tagSelections.removeSelectedTerm(TagActionSelection.INCLUDE, term)
-            } else {
-                val accepted = onAddIncludeTerm(term)
-                if (accepted && term in excluded) onRemoveExcludeTerm(term)
-                tagSelections = tagSelections.afterSelectionAttempt(
-                    target = TagActionSelection.INCLUDE,
-                    term = term,
-                    accepted = accepted,
-                )
-            }
-        },
-        onExcludeTerm = { term ->
-            val included = tagSelections[TagActionSelection.INCLUDE].orEmpty()
-            val excluded = tagSelections[TagActionSelection.EXCLUDE].orEmpty()
-            if (term in excluded) {
-                onRemoveExcludeTerm(term)
-                tagSelections = tagSelections.removeSelectedTerm(TagActionSelection.EXCLUDE, term)
-            } else {
-                val accepted = onAddExcludeTerm(term)
-                if (accepted && term in included) onRemoveIncludeTerm(term)
-                tagSelections = tagSelections.afterSelectionAttempt(
-                    target = TagActionSelection.EXCLUDE,
-                    term = term,
-                    accepted = accepted,
-                )
-            }
-        },
-    )
+            tagActionGrid(
+                groups = termGroups,
+                videoCounts = tagVideoCounts,
+                includedTerms = tagSelections[TagActionSelection.INCLUDE].orEmpty(),
+                excludedTerms = tagSelections[TagActionSelection.EXCLUDE].orEmpty(),
+                onFavoriteTagLongPress = if (onFavoriteTagLongPress != null) {
+                    { tag -> onFavoriteTagLongPress(post.id.source, tag) }
+                } else {
+                    null
+                },
+                onIncludeTerm = { term ->
+                    val included = tagSelections[TagActionSelection.INCLUDE].orEmpty()
+                    val excluded = tagSelections[TagActionSelection.EXCLUDE].orEmpty()
+                    if (term in included) {
+                        onRemoveIncludeTerm(term)
+                        tagSelections = tagSelections.removeSelectedTerm(TagActionSelection.INCLUDE, term)
+                    } else {
+                        val accepted = onAddIncludeTerm(term)
+                        if (accepted && term in excluded) onRemoveExcludeTerm(term)
+                        tagSelections = tagSelections.afterSelectionAttempt(
+                            target = TagActionSelection.INCLUDE,
+                            term = term,
+                            accepted = accepted,
+                        )
+                    }
+                },
+                onExcludeTerm = { term ->
+                    val included = tagSelections[TagActionSelection.INCLUDE].orEmpty()
+                    val excluded = tagSelections[TagActionSelection.EXCLUDE].orEmpty()
+                    if (term in excluded) {
+                        onRemoveExcludeTerm(term)
+                        tagSelections = tagSelections.removeSelectedTerm(TagActionSelection.EXCLUDE, term)
+                    } else {
+                        val accepted = onAddExcludeTerm(term)
+                        if (accepted && term in included) onRemoveIncludeTerm(term)
+                        tagSelections = tagSelections.afterSelectionAttempt(
+                            target = TagActionSelection.EXCLUDE,
+                            term = term,
+                            accepted = accepted,
+                        )
+                    }
+                },
+            )
+        }
+        item(key = "footer") { footer() }
+    }
 }
 
 @Composable
@@ -206,8 +226,7 @@ private fun TagActionSelection.opposite(): TagActionSelection {
     }
 }
 
-@Composable
-private fun TagActionGrid(
+private fun LazyListScope.tagActionGrid(
     groups: List<PostActionTermGroup>,
     videoCounts: Map<String, Int?>,
     includedTerms: Set<SearchTerm>,
@@ -217,21 +236,27 @@ private fun TagActionGrid(
     onExcludeTerm: (SearchTerm) -> Unit,
 ) {
     if (groups.isEmpty()) {
-        Text(
-            text = "No search terms",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        item(key = "empty") {
+            Text(
+                text = "No search terms",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         return
     }
 
-    groups.forEach { group ->
-        Text(
-            text = group.label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        group.terms.chunked(3).forEach { rowTerms ->
+    groups.forEachIndexed { groupIndex, group ->
+        item(key = "group:$groupIndex", contentType = "group") {
+            Text(
+                text = group.label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        val rows = group.terms.chunked(3)
+        items(rows.size, key = { "row:$groupIndex:$it" }, contentType = { "tags" }) { rowIndex ->
+            val rowTerms = rows[rowIndex]
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -292,13 +317,12 @@ private fun TagActionCell(
                 Modifier
             },
         )
-        if (videoCount != null) {
-            Text(
-                text = videoCount.toString(),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
-            )
-        }
+        // Reserve the count line so asynchronous metadata cannot resize rows mid-scroll.
+        Text(
+            text = videoCount?.toString().orEmpty(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),

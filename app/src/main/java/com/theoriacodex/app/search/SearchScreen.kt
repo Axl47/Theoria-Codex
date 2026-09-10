@@ -805,31 +805,26 @@ fun SearchScreen(
             onOpenCreatorProfile = onOpenCreatorProfile,
             onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
             onPostUrlCopied = onPostUrlCopied,
-            tagContent = {
-                if (selectedActionPostResolving && !post.hasActionableTags()) {
-                    Text(
-                        text = "Loading tags...",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    PostTagActionSection(
-                        post = post,
-                        tagVideoCountProvider = tagVideoCountProvider,
-                        fetchTagVideoCounts = fetchTagVideoCounts,
-                        onAddIncludeTerm = { term ->
-                            onAction(SearchAction.AddPostIncludeTerm(post, term))
-                            true
-                        },
-                        onAddExcludeTerm = { term ->
-                            onAction(SearchAction.AddPostExcludeTerm(post, term))
-                            true
-                        },
-                        onRemoveIncludeTerm = { term -> onAction(SearchAction.RemoveIncludeTerm(term)) },
-                        onRemoveExcludeTerm = { term -> onAction(SearchAction.RemoveExcludeTerm(term)) },
-                        onFavoriteTagLongPress = onAddFavoriteTag,
-                    )
-                }
+            tagContent = { header, footer ->
+                PostTagActionSection(
+                    loading = selectedActionPostResolving && !post.hasActionableTags(),
+                    header = header,
+                    footer = footer,
+                    post = post,
+                    tagVideoCountProvider = tagVideoCountProvider,
+                    fetchTagVideoCounts = fetchTagVideoCounts,
+                    onAddIncludeTerm = { term ->
+                        onAction(SearchAction.AddPostIncludeTerm(post, term))
+                        true
+                    },
+                    onAddExcludeTerm = { term ->
+                        onAction(SearchAction.AddPostExcludeTerm(post, term))
+                        true
+                    },
+                    onRemoveIncludeTerm = { term -> onAction(SearchAction.RemoveIncludeTerm(term)) },
+                    onRemoveExcludeTerm = { term -> onAction(SearchAction.RemoveExcludeTerm(term)) },
+                    onFavoriteTagLongPress = onAddFavoriteTag,
+                )
             },
         )
     }

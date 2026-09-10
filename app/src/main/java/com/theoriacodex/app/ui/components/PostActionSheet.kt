@@ -6,9 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.ContentCopy
@@ -57,7 +54,7 @@ fun PostActionSheet(
     onOpenLegacyCreatorProfile: (() -> Unit)? = null,
     onGoToSearch: (() -> Unit)? = null,
     onPostUrlCopied: (Post) -> Unit = {},
-    tagContent: @Composable () -> Unit,
+    tagContent: @Composable (@Composable () -> Unit, @Composable () -> Unit) -> Unit,
 ) {
     require((onOpenCreatorProfile == null) == (onOpenLegacyCreatorProfile == null)) {
         "Creator profile callbacks must be supplied together"
@@ -73,95 +70,99 @@ fun PostActionSheet(
         onDismissRequest = onDismiss,
         dragHandle = null,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                IconButton(onClick = { dismissThen(onSaveToDevice) }) {
-                    Icon(
-                        imageVector = Icons.Default.Download,
-                        contentDescription = "Save to device",
-                    )
-                }
-                onSaveToCodex?.let { save ->
-                    IconButton(onClick = { dismissThen(save) }) {
-                        Icon(
-                            imageVector = Icons.Default.BookmarkAdd,
-                            contentDescription = saveToCodexContentDescription,
+        tagContent(
+            {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        IconButton(onClick = { dismissThen(onSaveToDevice) }) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = "Save to device",
+                            )
+                        }
+                        onSaveToCodex?.let { save ->
+                            IconButton(onClick = { dismissThen(save) }) {
+                                Icon(
+                                    imageVector = Icons.Default.BookmarkAdd,
+                                    contentDescription = saveToCodexContentDescription,
+                                )
+                            }
+                        }
+                        onRemoveFromCodex?.let { remove ->
+                            IconButton(onClick = { dismissThen(remove) }) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Remove from Codex",
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = {
+                                copyPostTagsWithFeedback(context, post)
+                                onDismiss()
+                            },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy tags",
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                copyPostUrlWithFeedback(context, post, onPostUrlCopied)
+                                onDismiss()
+                            },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "Share",
+                            )
+                        }
+                    }
+                    post.displayTitleOrNull()?.let { title ->
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center,
                         )
                     }
-                }
-                onRemoveFromCodex?.let { remove ->
-                    IconButton(onClick = { dismissThen(remove) }) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Remove from Codex",
+                    if (onOpenCreatorProfile != null && onOpenLegacyCreatorProfile != null) {
+                        CreatorProfileActionButton(
+                            post = post,
+                            creatorBrowsingSources = creatorBrowsingSources,
+                            onOpenProfile = { profile -> dismissThen { onOpenCreatorProfile(profile) } },
+                            onOpenLegacyPost = { dismissThen(onOpenLegacyCreatorProfile) },
                         )
                     }
+                    HorizontalDivider()
                 }
-                IconButton(
-                    onClick = {
-                        copyPostTagsWithFeedback(context, post)
-                        onDismiss()
-                    },
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ContentCopy,
-                        contentDescription = "Copy tags",
-                    )
+            },
+            {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    onGoToSearch?.let { goToSearch ->
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { dismissThen(goToSearch) },
+                        ) {
+                            Text("Go to Search")
+                        }
+                    }
+                    TextButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onDismiss,
+                    ) {
+                        Text("Cancel")
+                    }
                 }
-                IconButton(
-                    onClick = {
-                        copyPostUrlWithFeedback(context, post, onPostUrlCopied)
-                        onDismiss()
-                    },
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Share,
-                        contentDescription = "Share",
-                    )
-                }
-            }
-            post.displayTitleOrNull()?.let { title ->
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center,
-                )
-            }
-            if (onOpenCreatorProfile != null && onOpenLegacyCreatorProfile != null) {
-                CreatorProfileActionButton(
-                    post = post,
-                    creatorBrowsingSources = creatorBrowsingSources,
-                    onOpenProfile = { profile -> dismissThen { onOpenCreatorProfile(profile) } },
-                    onOpenLegacyPost = { dismissThen(onOpenLegacyCreatorProfile) },
-                )
-            }
-            HorizontalDivider()
-            tagContent()
-            onGoToSearch?.let { goToSearch ->
-                TextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { dismissThen(goToSearch) },
-                ) {
-                    Text("Go to Search")
-                }
-            }
-            TextButton(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onDismiss,
-            ) {
-                Text("Cancel")
-            }
-        }
+            },
+        )
     }
 }
 

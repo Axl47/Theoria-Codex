@@ -393,8 +393,10 @@ fun ForYouScreen(
             onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
             onGoToSearch = onGoToSearch,
             onPostUrlCopied = onPostUrlCopied,
-            tagContent = {
+            tagContent = { header, footer ->
                 PostTagActionSection(
+                    header = header,
+                    footer = footer,
                     post = post,
                     onAddIncludeTerm = { term -> onAddIncludeTerm(post, term) },
                     onAddExcludeTerm = { term -> onAddExcludeTerm(post, term) },

@@ -146,6 +146,8 @@ FAB filter/sort restore state lives in `UiRestoreRepository` and is loaded by th
 
 Search keeps its Animated-only and animated-duration controls scoped by the selected source (with Unified as its own scope) inside the Search FAB state. Shared visibility controls such as Liked, Saved, and Watched remain route-wide; never let an animation choice made for one provider filter another provider's results.
 
+Post action menus and Viewer Info share the lazy list owned by `PostTagActionSection`; pass their header and footer into that list rather than wrapping it in another vertical scroller. Keep tag-count cache scans and provider enrichment off Main, and reserve the count line so arriving counts do not resize tag rows.
+
 ## Codex Collection Actions
 
 Collection saves use `CodexRepository.addItems` for one atomic membership transaction before best-effort caching. `CodexSaveViewModel` owns direct-save jobs and typed completion feedback outside sheet composition. Routine Post updates share `mergeSharedPostPayload`; sparse snapshots cannot erase resolved media, and sparse cache writes must preserve usable existing offline bytes. `LikesRepository` is observation-only; production Like mutations use `CodexLikesTransactions` to keep the system Codex consistent.
