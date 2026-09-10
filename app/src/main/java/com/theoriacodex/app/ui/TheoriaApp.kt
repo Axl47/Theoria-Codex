@@ -2033,8 +2033,6 @@ internal fun TheoriaAppContent(
                                     prefetchViewerMedia(appContext, media)
                                 },
                                 mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
-                                ocrLanguageModels = featureDependencies.ocrLanguageModels,
-                                ocrTranslationService = featureDependencies.viewerOcrTranslation,
                                 restoreSession = viewerRouteWorkflow::restoreSession,
                             ),
                             renderConfig = ViewerRouteRenderConfig(
@@ -2045,9 +2043,6 @@ internal fun TheoriaAppContent(
                                     state.browsing.settings.viewer.invertMultiImageScrollDirection,
                                 likedPostIds = state.browsing.likedPostIds,
                                 creatorBrowsingSources = state.browsing.creatorBrowsingSources,
-                                automaticTextTranslationEnabled =
-                                    state.browsing.settings.viewer.automaticTextTranslationEnabled,
-                                enabledOcrLanguages = state.browsing.settings.viewer.enabledOcrLanguages,
                             ),
                             liveSourceState = ViewerRouteLiveSourceState(
                                 search = ViewerRouteLiveSourceSnapshot(

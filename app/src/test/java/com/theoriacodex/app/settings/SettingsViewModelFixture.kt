@@ -3,8 +3,6 @@ package com.theoriacodex.app.settings
 import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
 import com.theoriacodex.app.sourceauth.CredentialStoreUnavailableException
 import com.theoriacodex.app.statistics.AppUsageTracker
-import com.theoriacodex.app.viewer.ocr.OcrLanguageModelSource
-import com.theoriacodex.app.viewer.ocr.OcrLanguageModelState
 import com.theoriacodex.data.repository.InMemoryCacheRepository
 import com.theoriacodex.data.repository.InMemoryCodexRepository
 import com.theoriacodex.data.repository.InMemoryLikesRepository
@@ -13,7 +11,6 @@ import com.theoriacodex.data.repository.InMemoryStatisticsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.data.repository.ViewerOcrLanguage
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +22,6 @@ internal fun kotlinx.coroutines.test.TestScope.settingsOwner(
     accounts: FakeSettingsAccountGateway = FakeSettingsAccountGateway(),
     legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>> = MutableStateFlow(emptyList()),
     availableSources: StateFlow<Set<SourceKey>> = MutableStateFlow(setOf(SourceKey.PIXIV)),
-    ocrLanguageModels: OcrLanguageModelSource = FakeOcrLanguageModelSource(),
     likesRepository: com.theoriacodex.data.repository.LikesRepository = InMemoryLikesRepository(),
     codexRepository: com.theoriacodex.data.repository.CodexRepository = InMemoryCodexRepository(),
     profileMutations: SettingsProfileMutations = NoOpSettingsProfileMutations,
@@ -47,32 +43,11 @@ internal fun kotlinx.coroutines.test.TestScope.settingsOwner(
             ),
             profileMutations = profileMutations,
             accounts = accounts,
-            ocrLanguageModels = ocrLanguageModels,
             availableSources = availableSources,
             legacyJsonRecoveries = legacyJsonRecoveries,
         ),
         coroutineScope = backgroundScope,
     )
-}
-
-internal class FakeOcrLanguageModelSource(
-    initial: Map<ViewerOcrLanguage, OcrLanguageModelState> =
-        ViewerOcrLanguage.entries.associateWith { OcrLanguageModelState.NotDownloaded },
-) : OcrLanguageModelSource {
-    private val mutableStates = MutableStateFlow(initial)
-    override val states: StateFlow<Map<ViewerOcrLanguage, OcrLanguageModelState>> = mutableStates
-    val downloads = mutableMapOf<ViewerOcrLanguage, Int>()
-    var refreshCount = 0
-
-    override suspend fun refresh() {
-        refreshCount += 1
-    }
-
-    override suspend fun download(language: ViewerOcrLanguage): Boolean {
-        downloads[language] = downloads.getOrDefault(language, 0) + 1
-        mutableStates.value = mutableStates.value + (language to OcrLanguageModelState.Ready)
-        return true
-    }
 }
 
 internal class FakeSettingsAccountGateway(

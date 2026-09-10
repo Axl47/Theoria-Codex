@@ -1,7 +1,6 @@
 package com.theoriacodex.app.settings
 
 import com.theoriacodex.data.repository.ScenarioPreset
-import com.theoriacodex.app.viewer.ocr.OcrLanguageModelState
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -32,25 +31,6 @@ class SettingsSummaryPresentationTest {
         assertEquals("Partial failure", scenarioLabel(ScenarioPreset.PARTIAL_FAILURE))
         assertEquals("Empty results", scenarioLabel(ScenarioPreset.EMPTY_RESULTS))
         assertEquals("Slow network", scenarioLabel(ScenarioPreset.SLOW_NETWORK))
-    }
-
-    @Test
-    fun `Viewer translation summary separates automatic mode from recognition languages`() {
-        assertEquals("Off", viewerTranslationSettingsSummary(enabled = false, enabledLanguageCount = 3))
-        assertEquals("Automatic · 1 source language", viewerTranslationSettingsSummary(true, 1))
-        assertEquals("Automatic · 2 source languages", viewerTranslationSettingsSummary(true, 2))
-    }
-
-    @Test
-    fun `Viewer language states describe recognition rather than translation packs`() {
-        assertEquals(
-            "Recognition download needed",
-            ocrLanguageModelStatusLabel(OcrLanguageModelState.NotDownloaded),
-        )
-        assertEquals(
-            "Ready to recognize",
-            ocrLanguageModelStatusLabel(OcrLanguageModelState.Ready),
-        )
     }
 
     @Test

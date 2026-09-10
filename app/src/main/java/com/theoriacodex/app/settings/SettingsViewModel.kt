@@ -17,15 +17,12 @@ import com.theoriacodex.app.sourceauth.SourceAccountStore
 import com.theoriacodex.app.sourceauth.parseGelbooruCredentialInput
 import com.theoriacodex.app.sourceauth.parseRule34XxxCredentialInput
 import com.theoriacodex.app.ui.state.RouteStateOwner
-import com.theoriacodex.app.viewer.ocr.OcrLanguageModelSource
-import com.theoriacodex.app.viewer.ocr.OcrLanguageModelState
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
-import com.theoriacodex.data.repository.ViewerOcrLanguage
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -181,7 +178,6 @@ internal data class SettingsOwnerDependencies(
     val appUsageTracker: AppUsageTracker,
     val profileMutations: SettingsProfileMutations,
     val accounts: SettingsAccountGateway,
-    val ocrLanguageModels: OcrLanguageModelSource,
     val availableSources: StateFlow<Set<SourceKey>>,
     val legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>> = MutableStateFlow(emptyList()),
     val showDeveloperScenarios: Boolean = false,
@@ -269,11 +265,6 @@ internal class SettingsViewModel(
             }
         }
         ownerScope.launch {
-            dependencies.ocrLanguageModels.states.collect { models ->
-                updateState { copy(ocrLanguageModels = models) }
-            }
-        }
-        ownerScope.launch {
             dependencies.accounts.recoveryState.collect { recovery ->
                 if (recovery == CredentialStoreRecoveryState.Ready) {
                     refreshAccounts()
@@ -329,11 +320,6 @@ internal class SettingsViewModel(
             is SettingsAction.SetResolveUnknownAnimatedDurations -> launchMutation {
                 dependencies.settingsRepository.setResolveUnknownAnimatedDurations(action.enabled)
             }
-            is SettingsAction.SetAutomaticTextTranslationEnabled -> launchMutation {
-                dependencies.settingsRepository.setAutomaticTextTranslationEnabled(action.enabled)
-            }
-            is SettingsAction.SetOcrLanguageEnabled -> setOcrLanguageEnabled(action)
-            is SettingsAction.DownloadOcrLanguage -> downloadOcrLanguage(action.language)
             is SettingsAction.SetScenarioPreset -> launchMutation {
                 dependencies.settingsRepository.setScenarioPreset(action.preset)
             }
@@ -395,7 +381,6 @@ internal class SettingsViewModel(
             SettingsAction.SettingsEntered -> {
                 updateAccounts { copy(gelbooruApiKeyInput = "", rule34XxxApiKeyInput = "") }
                 refreshAccounts()
-                refreshOcrLanguageModels()
             }
             else -> error("Settings action was routed to the wrong owner handler")
         }
@@ -414,29 +399,6 @@ internal class SettingsViewModel(
         val name = requestedName.trim()
         if (name.isBlank()) return
         launchMutation { dependencies.settingsRepository.addRecommendationProfile(name) }
-    }
-
-    private fun setOcrLanguageEnabled(action: SettingsAction.SetOcrLanguageEnabled) {
-        if (
-            action.enabled &&
-            dependencies.ocrLanguageModels.states.value[action.language] != OcrLanguageModelState.Ready
-        ) {
-            return
-        }
-        launchMutation {
-            dependencies.settingsRepository.setOcrLanguageEnabled(action.language, action.enabled)
-        }
-    }
-
-    private fun downloadOcrLanguage(language: ViewerOcrLanguage) {
-        ownerScope.launch {
-            if (!dependencies.ocrLanguageModels.download(language)) return@launch
-            dependencies.settingsRepository.setOcrLanguageEnabled(language, true)
-        }
-    }
-
-    private fun refreshOcrLanguageModels() {
-        ownerScope.launch { dependencies.ocrLanguageModels.refresh() }
     }
 
     private fun removeRequestedProfile() {
@@ -709,7 +671,6 @@ internal class SettingsViewModel(
                             pixivAuthApi = container.sources.pixivAuthApi,
                             pixivAuthController = container.sources.pixivAuthController,
                         ),
-                        ocrLanguageModels = container.features.ocrLanguageModels,
                         availableSources = container.sources.availableSources,
                         legacyJsonRecoveries = container.data.legacyJsonRecoveries,
                     )

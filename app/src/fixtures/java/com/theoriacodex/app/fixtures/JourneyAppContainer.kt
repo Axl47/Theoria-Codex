@@ -106,8 +106,6 @@ class JourneyAppContainer(
             durationRepository = durations, parentScope = ownerScope,
         ),
         appUsageTracker = AppUsageTracker(statistics, ownerScope),
-        ocrLanguageModels = JourneyOcrModels,
-        viewerOcrTranslation = JourneyNoOcr,
     )
     override val workflows = WorkflowDependencies(
         LikesCodexSyncService(content, content), CodexTransferService(content, content, data.cacheRepository, registry),

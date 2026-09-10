@@ -24,22 +24,12 @@ import com.theoriacodex.app.viewer.ViewerPostResolver
 import com.theoriacodex.app.viewer.ViewerScreen
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerViewModel
-import com.theoriacodex.app.viewer.ocr.OcrLanguageModelSource
-import com.theoriacodex.app.viewer.ocr.OcrLanguageModelState
-import com.theoriacodex.app.viewer.ocr.ViewerOcrConfiguration
-import com.theoriacodex.app.viewer.ocr.ViewerOcrImageReady
-import com.theoriacodex.app.viewer.ocr.ViewerOcrSelectionIdentity
-import com.theoriacodex.app.viewer.ocr.ViewerOcrTranslationService
-import com.theoriacodex.app.viewer.ocr.ViewerOcrTranslationViewModel
-import com.theoriacodex.app.viewer.state.ViewerMediaKind
-import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.mergeViewerPosts
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerEffect
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.data.repository.ViewerStreamSource
-import com.theoriacodex.data.repository.ViewerOcrLanguage
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -57,8 +47,6 @@ internal data class ViewerRouteDependencies(
     val postResolver: ViewerPostResolver,
     val mediaPrefetcher: ViewerMediaPrefetcher,
     val mediaDurationCoordinator: MediaDurationCoordinator,
-    val ocrLanguageModels: OcrLanguageModelSource,
-    val ocrTranslationService: ViewerOcrTranslationService,
     val restoreSession: suspend (ViewerSessionIdentity) -> ViewerSession?,
 )
 
@@ -72,8 +60,6 @@ internal data class ViewerRouteRenderConfig(
     val invertMultiImageScrollDirection: Boolean = false,
     val likedPostIds: Set<PostId> = emptySet(),
     val creatorBrowsingSources: Set<SourceKey>,
-    val automaticTextTranslationEnabled: Boolean = false,
-    val enabledOcrLanguages: Set<ViewerOcrLanguage> = emptySet(),
 )
 
 /** Immutable source-owner snapshot consumed by a live Viewer session. */
@@ -216,10 +202,6 @@ internal fun ViewerRoute(
         )
     }
     val viewerOwner = viewModel<ViewerViewModel>(factory = ownerFactory)
-    val ocrOwner = viewModel<ViewerOcrTranslationViewModel>(
-        key = "viewer-ocr-translation-owner",
-        factory = ViewerOcrTranslationViewModel.factory(dependencies.ocrTranslationService),
-    )
     val durationOwner = viewModel<MediaDurationRouteViewModel>(
         key = "viewer-duration-owner",
         factory = MediaDurationRouteViewModel.factory(
@@ -229,15 +211,9 @@ internal fun ViewerRoute(
     )
     val ownerHandle = remember(viewerOwner) { ViewerRouteOwnerHandle(viewerOwner) }
     val viewerState by viewerOwner.state.collectAsStateWithLifecycle()
-    val ocrState by ocrOwner.state.collectAsStateWithLifecycle()
-    val ocrModelStates by dependencies.ocrLanguageModels.states.collectAsStateWithLifecycle()
     val session by viewerOwner.session.collectAsStateWithLifecycle()
     val claimedSessionId = remember(viewerOwner) {
         dependencies.sessionRetentionOwner.session.value?.sessionId
-    }
-
-    LaunchedEffect(dependencies.ocrLanguageModels) {
-        dependencies.ocrLanguageModels.refresh()
     }
 
     DisposableEffect(viewerOwner) {
@@ -394,40 +370,8 @@ internal fun ViewerRoute(
             resolveInBackground = false,
         )
     }
-    val currentOcrIdentity = viewerState.session?.let { identity ->
-        viewerState.currentMedia
-            ?.takeIf { media -> media.kind == ViewerMediaKind.IMAGE }
-            ?.let { media ->
-                ViewerOcrSelectionIdentity(
-                    session = identity,
-                    mediaKey = media.key,
-                    loadGeneration = media.loadGeneration,
-                )
-            }
-    }
-    val readyOcrLanguages = ocrModelStates
-        .filterValues { state -> state == OcrLanguageModelState.Ready }
-        .keys
-    LaunchedEffect(
-        ocrOwner,
-        currentOcrIdentity,
-        renderConfig.automaticTextTranslationEnabled,
-        renderConfig.enabledOcrLanguages,
-        readyOcrLanguages,
-    ) {
-        ocrOwner.synchronize(
-            identity = currentOcrIdentity,
-            nextConfiguration = ViewerOcrConfiguration(
-                automaticDetectionEnabled = renderConfig.automaticTextTranslationEnabled,
-                enabledLanguages = renderConfig.enabledOcrLanguages,
-                readyLanguages = readyOcrLanguages,
-            ),
-        )
-    }
-
     ViewerScreen(
         uiState = viewerState,
-        ocrState = ocrState,
         creatorBrowsingSources = renderConfig.creatorBrowsingSources,
         onAction = viewerOwner::onAction,
         pixivUgoiraClient = renderConfig.pixivUgoiraClient,
@@ -467,25 +411,6 @@ internal fun ViewerRoute(
             }
         },
         onAuthoritativeDurationKnown = durationOwner::publishPlayerDuration,
-        onStaticImageReady = { post, mediaIndex, loadGeneration, location ->
-            val currentState = viewerOwner.state.value
-            val sessionIdentity = currentState.session ?: return@ViewerScreen
-            val mediaKey = ViewerMediaKey(post.id, mediaIndex)
-            if (currentState.currentMedia?.key != mediaKey) return@ViewerScreen
-            ocrOwner.onImageReady(
-                ViewerOcrImageReady(
-                    identity = ViewerOcrSelectionIdentity(
-                        session = sessionIdentity,
-                        mediaKey = mediaKey,
-                        loadGeneration = loadGeneration,
-                    ),
-                    source = post.id.source,
-                    location = location,
-                    taxonomy = post.taxonomy,
-                ),
-            )
-        },
-        onOcrRegionTapped = ocrOwner::onRegionTapped,
         onOpenInBrowser = screenCallbacks.onOpenInBrowser,
         onRemoveIncludeTerm = screenCallbacks.onRemoveIncludeTerm,
         onRemoveExcludeTerm = screenCallbacks.onRemoveExcludeTerm,

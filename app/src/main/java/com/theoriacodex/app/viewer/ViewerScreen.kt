@@ -128,9 +128,7 @@ import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaError
-import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerUiState
-import com.theoriacodex.app.viewer.ocr.ViewerOcrTranslationUiState
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -155,7 +153,6 @@ import kotlin.math.abs
 @Composable
 internal fun ViewerScreen(
     uiState: ViewerUiState,
-    ocrState: ViewerOcrTranslationUiState = ViewerOcrTranslationUiState(),
     creatorBrowsingSources: Set<SourceKey>,
     onAction: (ViewerAction) -> Unit,
     pixivUgoiraClient: PixivUgoiraClient? = null,
@@ -170,8 +167,6 @@ internal fun ViewerScreen(
     onVisiblePostChanged: ((Post, Int) -> Unit)? = null,
     onVisibleMediaChanged: ((Post, Int) -> Unit)? = null,
     onAuthoritativeDurationKnown: (Post, Long) -> Unit = { _, _ -> },
-    onStaticImageReady: (Post, Int, Long, String) -> Unit = { _, _, _, _ -> },
-    onOcrRegionTapped: (String) -> Unit = {},
     onOpenInBrowser: (Post) -> Unit,
     onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
     onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
@@ -542,20 +537,6 @@ internal fun ViewerScreen(
                 val isControlledAnimatedWebP = post.id.source == SourceKey.HITOMI &&
                     isAnimatedImageMediaRef(media)
                 val showUgoira = isPixivUgoira(post, media) && pixivUgoiraClient != null
-                val isStaticImageMedia = !isVideoMedia &&
-                    !isGifMedia &&
-                    !isControlledAnimatedWebP &&
-                    !showUgoira &&
-                    !isAnimatedImageMediaRef(media)
-                val viewerMediaKey = ViewerMediaKey(post.id, mediaPage)
-                val pageOcrState = ocrState.takeIf { state ->
-                    val identity = state.identity
-                    isStaticImageMedia &&
-                        identity != null &&
-                        identity.session == uiState.session &&
-                        identity.mediaKey == viewerMediaKey &&
-                        identity.loadGeneration == loadGeneration
-                }
                 val isCurrentMediaPage =
                     postPage == postPagerState.currentPage &&
                         mediaPage == mediaPagerState.currentPage
@@ -571,7 +552,6 @@ internal fun ViewerScreen(
                     isVideoMedia || isGifMedia || showUgoira || isControlledAnimatedWebP -> 0.dp
                     else -> 16.dp
                 }
-                val mediaContainerPaddingPx = with(density) { mediaContainerPadding.toPx() }
                 val mediaAspectRatio = remember(post.width, post.height) {
                     val width = post.width?.takeIf { it > 0 }
                     val height = post.height?.takeIf { it > 0 }
@@ -585,11 +565,7 @@ internal fun ViewerScreen(
                 val mediaGestureModifier = Modifier.pointerInput(
                     postPage,
                     mediaPage,
-                    pageOcrState?.regions,
-                    pageOcrState?.imageWidth,
-                    pageOcrState?.imageHeight,
                     viewerTransform,
-                    mediaContainerPaddingPx,
                 ) {
                     detectTapGestures(
                         onDoubleTap = { offset ->
@@ -621,29 +597,9 @@ internal fun ViewerScreen(
                                 markInteraction()
                             }
                         },
-                        onTap = { offset ->
-                            val region = pageOcrState?.let { state ->
-                                val transform = viewerOcrTransform(
-                                    viewportWidth = size.width.toFloat(),
-                                    viewportHeight = size.height.toFloat(),
-                                    imageWidth = state.imageWidth,
-                                    imageHeight = state.imageHeight,
-                                    viewerTransform = viewerTransform,
-                                    contentPaddingPx = mediaContainerPaddingPx,
-                                ) ?: return@let null
-                                selectOcrRegionAtTap(
-                                    regions = state.regions,
-                                    transform = transform,
-                                    tap = ViewerOcrPoint(offset.x, offset.y),
-                                    hitExpansionPx = with(density) { OCR_HIT_EXPANSION.toPx() },
-                                )
-                            }
-                            if (region == null) {
-                                onAction(ViewerAction.ToggleChrome)
-                                interactionSerial += 1
-                            } else {
-                                onOcrRegionTapped(region.id)
-                            }
+                        onTap = {
+                            onAction(ViewerAction.ToggleChrome)
+                            interactionSerial += 1
                         },
                         onLongPress = {
                             setInfoSheetVisible(true)
@@ -742,9 +698,6 @@ internal fun ViewerScreen(
                     var hasVisibleImage by remember(postPage, mediaPage, loadGeneration) {
                         mutableStateOf(false)
                     }
-                    var ocrReadyLocation by remember(postPage, mediaPage, loadGeneration) {
-                        mutableStateOf<String?>(null)
-                    }
                     val activeImageCandidate = imageCandidates.getOrNull(displayedCandidateIndex)
                     val activeImageUrl = activeImageCandidate?.location
                     val imageModel = remember(context, activeImageUrl, post.id.source, loadGeneration) {
@@ -753,28 +706,6 @@ internal fun ViewerScreen(
                     LaunchedEffect(imageCandidates, loadGeneration) {
                         displayedCandidateIndex = 0
                         maxPreparedCandidateIndex = 0
-                        ocrReadyLocation = null
-                    }
-                    val resolutionStatus = uiState.pages.getOrNull(postPage)?.resolution?.status
-                    val metadataReadyForOcr = resolutionStatus !in setOf(
-                        com.theoriacodex.app.viewer.state.ViewerResolutionStatus.IDLE,
-                        com.theoriacodex.app.viewer.state.ViewerResolutionStatus.REQUESTED,
-                        com.theoriacodex.app.viewer.state.ViewerResolutionStatus.RESOLVING,
-                    )
-                    LaunchedEffect(
-                        isCurrentMediaPage,
-                        isStaticImageMedia,
-                        ocrReadyLocation,
-                        metadataReadyForOcr,
-                        post,
-                        mediaPage,
-                        loadGeneration,
-                        uiState.currentMedia?.key,
-                    ) {
-                        val location = ocrReadyLocation ?: return@LaunchedEffect
-                        if (isCurrentMediaPage && isStaticImageMedia && metadataReadyForOcr) {
-                            onStaticImageReady(post, mediaPage, loadGeneration, location)
-                        }
                     }
                     LaunchedEffect(
                         imageCandidates,
@@ -972,7 +903,6 @@ internal fun ViewerScreen(
                                         imageLoading = false
                                         hasVisibleImage = true
                                         activeImageUrl?.let { loadedMediaUrls[it] = true }
-                                        if (isStaticImageMedia) ocrReadyLocation = activeImageUrl
                                         if (isCurrentMediaPage) {
                                             onAction(ViewerAction.ClearMediaError)
                                         }
@@ -1008,13 +938,6 @@ internal fun ViewerScreen(
                                         }
                                     },
                                 )
-                                pageOcrState?.let { state ->
-                                    ViewerOcrHighlightLayer(
-                                        state = state,
-                                        onRegionActivated = onOcrRegionTapped,
-                                        modifier = Modifier.matchParentSize(),
-                                    )
-                                }
                             }
                             if (imageLoading && !hasVisibleImage) {
                                 CircularProgressIndicator()
@@ -1040,13 +963,6 @@ internal fun ViewerScreen(
                                     AssistChip(onClick = {}, label = { Text("#$tag") })
                                 }
                             }
-                        }
-                        pageOcrState?.let { state ->
-                            ViewerTranslationCardOverlay(
-                                state = state,
-                                viewerTransform = viewerTransform,
-                                modifier = Modifier.matchParentSize(),
-                            )
                         }
                         FittedSeekJumpFeedbackOverlay(
                             feedback = seekFeedback,
@@ -2484,5 +2400,4 @@ private const val VIEWER_HORIZONTAL_SWIPE_MIN_DISTANCE_PX = 48f
 private const val VIEWER_HORIZONTAL_SWIPE_WIDTH_RATIO = 0.12f
 private const val VIEWER_HORIZONTAL_SWIPE_SLOP_FRACTION = 0.35f
 private const val VIEWER_HORIZONTAL_SWIPE_AXIS_RATIO = 1.25f
-private val OCR_HIT_EXPANSION = 6.dp
 private const val MIN_PLAYBACK_RATE = 0.1f

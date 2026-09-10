@@ -1,12 +1,10 @@
 package com.theoriacodex.app.settings
 
 import com.theoriacodex.app.sourceauth.CredentialStoreRecoveryState
-import com.theoriacodex.app.viewer.ocr.OcrLanguageModelState
 import com.theoriacodex.data.repository.InMemorySettingsRepository
 import com.theoriacodex.data.repository.InMemoryUiRestoreRepository
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.data.repository.ViewerOcrLanguage
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -84,43 +82,6 @@ class SettingsViewModelTest {
         assertTrue(owner.state.value.settings.cache.cacheFullImageOnSave)
         assertFalse(owner.state.value.settings.contentFilters.resolveUnknownAnimatedDurations)
         assertEquals(setOf(SourceKey.PIXIV), owner.state.value.settings.runtime.enabledSources)
-    }
-
-    @Test
-    fun `OCR language downloads enable only ready requested models`() = runTest {
-        val settingsRepository = InMemorySettingsRepository()
-        val models = FakeOcrLanguageModelSource(
-            initial = mapOf(
-                ViewerOcrLanguage.JAPANESE to OcrLanguageModelState.NotDownloaded,
-                ViewerOcrLanguage.CHINESE to OcrLanguageModelState.Ready,
-                ViewerOcrLanguage.KOREAN to OcrLanguageModelState.NotDownloaded,
-            ),
-        )
-        val owner = settingsOwner(settingsRepository = settingsRepository, ocrLanguageModels = models)
-        runCurrent()
-
-        owner.onAction(SettingsAction.SetOcrLanguageEnabled(ViewerOcrLanguage.JAPANESE, true))
-        owner.onAction(SettingsAction.SetOcrLanguageEnabled(ViewerOcrLanguage.CHINESE, true))
-        owner.onAction(SettingsAction.DownloadOcrLanguage(ViewerOcrLanguage.JAPANESE))
-        runCurrent()
-
-        assertEquals(1, models.downloads[ViewerOcrLanguage.JAPANESE])
-        assertEquals(
-            setOf(ViewerOcrLanguage.JAPANESE, ViewerOcrLanguage.CHINESE),
-            settingsRepository.observeSettings().first().viewer.enabledOcrLanguages,
-        )
-    }
-
-    @Test
-    fun `entering Settings refreshes OCR model availability`() = runTest {
-        val models = FakeOcrLanguageModelSource()
-        val owner = settingsOwner(ocrLanguageModels = models)
-        runCurrent()
-
-        owner.onAction(SettingsAction.SettingsEntered)
-        runCurrent()
-
-        assertEquals(1, models.refreshCount)
     }
 
     @Test

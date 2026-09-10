@@ -1,5 +1,7 @@
 # Viewer CJK OCR Translation Follow-up
 
+> Retired 2026-09-10: the user requested removal of this feature. Remaining acceptance work below is historical and cancelled. See [removal plan](remove-viewer-translation.html).
+
 ## In Progress
 
 - [!] Repeat device acceptance against the live Google NMT service using representative vertical manga OCR.

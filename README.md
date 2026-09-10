@@ -171,8 +171,7 @@ API 35 while the app compiles and targets SDK 37. Scheduled/manual runs also cov
 releases require both Verify and Device Validation, including isolated minified acceptance. That
 lane verifies package ID, debuggability and the actual debug signing certificate before install,
 then checks startup/callback and persisted JSON data across two separate process launches.
-Provider-live instrumentation remains opt-in. OCR corpus tests use actual ready ML Kit models and
-explicitly skip missing models without downloading them; report those skips separately from passes.
+Provider-live instrumentation remains opt-in. Viewer OCR and translation have been retired.
 
 Physical performance validation has its own evidence-producing command:
 

@@ -1,7 +1,6 @@
 package com.theoriacodex.app.di
 
 import android.content.Context
-import coil.imageLoader
 import com.theoriacodex.app.BuildConfig
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.media.BoundedMediaDurationProbe
@@ -30,14 +29,6 @@ import com.theoriacodex.app.update.StartupUpdater
 import com.theoriacodex.app.update.UpdateFeedClient
 import com.theoriacodex.app.update.UpdateStateStore
 import com.theoriacodex.app.viewer.PixivUgoiraClient
-import com.theoriacodex.app.viewer.ocr.CachedViewerRegionTranslator
-import com.theoriacodex.app.viewer.ocr.DefaultOcrLanguageModelManager
-import com.theoriacodex.app.viewer.ocr.GoogleViewerTextTranslator
-import com.theoriacodex.app.viewer.ocr.GooglePlayOcrLanguageModuleGateway
-import com.theoriacodex.app.viewer.ocr.MlKitCjkTextRecognizerFactory
-import com.theoriacodex.app.viewer.ocr.OcrLanguageModelSource
-import com.theoriacodex.app.viewer.ocr.ViewerOcrTranslationCoordinator
-import com.theoriacodex.app.viewer.ocr.ViewerOcrTranslationService
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexLikesTransactions
@@ -61,7 +52,6 @@ import com.theoriacodex.data.android.room.LegacyJsonMigrationException
 import com.theoriacodex.data.android.room.RoomCodexLikesRepository
 import com.theoriacodex.data.android.room.RoomLegacyJsonImporter
 import com.theoriacodex.data.android.room.RoomMediaDurationRepository
-import com.theoriacodex.data.android.room.RoomViewerTranslationCacheRepository
 import com.theoriacodex.data.android.room.RecentsImportResult
 import com.theoriacodex.data.android.room.RoomRecentsLegacyImporter
 import com.theoriacodex.data.android.room.RoomRecentsRepository
@@ -118,8 +108,6 @@ data class FeatureDependencies(
     val creatorProfile: CreatorProfileCoordinator,
     val mediaDurationCoordinator: MediaDurationCoordinator,
     val appUsageTracker: AppUsageTracker,
-    val ocrLanguageModels: OcrLanguageModelSource,
-    val viewerOcrTranslation: ViewerOcrTranslationService,
 )
 
 data class WorkflowDependencies(
@@ -189,8 +177,6 @@ internal class DefaultTheoriaAppContainer(
     )
     private val contentDatabase = TheoriaRoomDatabase.create(appContext)
     private val mediaDurationRepository = RoomMediaDurationRepository(contentDatabase)
-    private val viewerTranslationCacheRepository =
-        RoomViewerTranslationCacheRepository(contentDatabase)
     private val boundedMediaDurationProbe = BoundedMediaDurationProbe(sourceHttpClient)
     private val mediaDurationAcquisitionEngine = MediaDurationAcquisitionEngine(
         registry = sourceRegistry,
@@ -233,26 +219,6 @@ internal class DefaultTheoriaAppContainer(
         repository = statisticsRepository,
         scope = durableStoreScope,
     )
-    private val cjkTextRecognizerFactory = MlKitCjkTextRecognizerFactory()
-    private val ocrLanguageModels = DefaultOcrLanguageModelManager(
-        gateway = GooglePlayOcrLanguageModuleGateway(
-            context = appContext,
-            recognizerFactory = cjkTextRecognizerFactory,
-        ),
-    )
-    private val viewerOcrTranslation = ViewerOcrTranslationCoordinator(
-        context = appContext,
-        imageLoader = appContext.imageLoader,
-        recognizerFactory = cjkTextRecognizerFactory,
-        translator = CachedViewerRegionTranslator(
-            remote = GoogleViewerTextTranslator(),
-            cache = viewerTranslationCacheRepository,
-            recordTranslationUsage = { phraseCount, sourceCharacterCount ->
-                statisticsRepository.recordTranslationUsage(phraseCount, sourceCharacterCount)
-            },
-        ),
-    )
-
     private val updateStateStore = FileBackedUpdateStateStore(
         file = File(storageDirectory, "update_state.json"),
         recoveryRegistry = legacyJsonRecoveryRegistry,
@@ -328,8 +294,6 @@ internal class DefaultTheoriaAppContainer(
         creatorProfile = CreatorProfileCoordinator(registry = sourceRegistry),
         mediaDurationCoordinator = mediaDurationCoordinator,
         appUsageTracker = appUsageTracker,
-        ocrLanguageModels = ocrLanguageModels,
-        viewerOcrTranslation = viewerOcrTranslation,
     )
 
     override val workflows = WorkflowDependencies(
