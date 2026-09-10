@@ -9,6 +9,7 @@ import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.CacheWriter
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
@@ -157,7 +158,7 @@ internal class VideoPlaybackInfrastructure(
                 .setLength(VIEWER_VIDEO_PREFETCH_BYTES)
                 .setFlags(DataSpec.FLAG_ALLOW_CACHE_FRAGMENTATION)
                 .build()
-            val dataSource = cacheDataSourceFactory(bound, headers).createDataSource()
+            val dataSource = cacheDataSourceFactory(bound, headers, blockOnCache = true).createDataSource()
             val writer = CacheWriter(dataSource, dataSpec, null, null)
             writer.cacheCancellable()
             currentCoroutineContext().ensureActive()
@@ -180,20 +181,28 @@ internal class VideoPlaybackInfrastructure(
     private fun cacheDataSourceFactory(
         bound: BoundVideoResource<SharedVideoFactories>,
         headers: Map<String, String>,
+        blockOnCache: Boolean = false,
     ): CacheDataSource.Factory {
         val immutableHeaders = headers.toMap()
         val requestScopedUpstream = ResolvingDataSource.Factory(bound.sharedResource.http) { dataSpec ->
             dataSpec.withAdditionalHeaders(immutableHeaders)
         }
-        return CacheDataSource.Factory()
-            .setCache(bound.sharedResource.cache)
-            .setUpstreamDataSourceFactory(requestScopedUpstream)
-            .setFlags(
-                CacheDataSource.FLAG_BLOCK_ON_CACHE or
-                    CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR,
-            )
+        return videoCacheDataSourceFactory(bound.sharedResource.cache, requestScopedUpstream, blockOnCache)
     }
 }
+
+/** Playback bypasses occupied cache ranges; only background writers may wait for another writer. */
+internal fun videoCacheDataSourceFactory(
+    cache: Cache,
+    upstream: DataSource.Factory,
+    blockOnCache: Boolean = false,
+): CacheDataSource.Factory = CacheDataSource.Factory()
+    .setCache(cache)
+    .setUpstreamDataSourceFactory(upstream)
+    .setFlags(
+        CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR or
+            (if (blockOnCache) CacheDataSource.FLAG_BLOCK_ON_CACHE else 0),
+    )
 
 private suspend fun CacheWriter.cacheCancellable() {
     suspendCancellableCoroutine<Unit> { continuation ->
