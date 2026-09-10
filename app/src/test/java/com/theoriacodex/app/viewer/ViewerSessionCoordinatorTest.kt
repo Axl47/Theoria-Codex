@@ -29,6 +29,22 @@ class ViewerSessionCoordinatorTest {
     }
 
     @Test
+    fun `saved NHentai previews and incomplete galleries resolve across Viewer entry points`() {
+        val preview = samplePost(SourceKey.NHENTAI, full = null, media = emptyList())
+        val firstPage = ImageRef("https://i.nhentai.net/galleries/1/1.jpg", null, "image/jpeg")
+        val incomplete = preview.copy(full = firstPage, media = listOf(firstPage), mediaCount = 60)
+        val complete = incomplete.copy(media = List(60) { index ->
+            firstPage.copy(url = "https://i.nhentai.net/galleries/1/${index + 1}.jpg")
+        })
+
+        ViewerStreamSource.entries.forEach { source ->
+            assertTrue(requiresViewerPostResolution(preview, source))
+            assertTrue(requiresViewerPostResolution(incomplete, source))
+            assertFalse(requiresViewerPostResolution(complete, source))
+        }
+    }
+
+    @Test
     fun `any route opens a Hitomi preview before resolving the full gallery`() {
         val previewOnly = samplePost(source = SourceKey.HITOMI, full = null, media = emptyList())
 

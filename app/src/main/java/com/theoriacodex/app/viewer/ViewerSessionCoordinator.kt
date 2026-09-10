@@ -36,14 +36,15 @@ private val REFRESHABLE_REMOTE_MEDIA_SOURCES = setOf(
 )
 
 internal fun requiresViewerPostResolution(post: Post, streamSource: ViewerStreamSource): Boolean {
+    if (requiresLazyMediaResolution(post)) return true
     if (
         streamSource == ViewerStreamSource.CODEX ||
         streamSource == ViewerStreamSource.RECENTS
     ) {
         return post.id.source in REFRESHABLE_REMOTE_MEDIA_SOURCES &&
-            (hasRemoteViewerMedia(post) || requiresLazyMediaResolution(post))
+            hasRemoteViewerMedia(post)
     }
-    return requiresLazyMediaResolution(post)
+    return false
 }
 
 internal fun requiresPrelaunchViewerPostResolution(post: Post): Boolean {
@@ -74,6 +75,9 @@ internal fun requiresLazyMediaResolution(post: Post): Boolean {
         return true
     }
     if (post.id.source !in LAZY_MEDIA_RESOLUTION_SOURCES) return false
+    if (post.id.source == SourceKey.NHENTAI &&
+        (post.mediaCount ?: 0) > post.media.size.coerceAtLeast(if (post.full != null) 1 else 0)
+    ) return true
     return mediaRefs.none { ref ->
         !ref.url.isNullOrBlank()
     }
