@@ -32,6 +32,11 @@ data class SearchUiState(
     val loading: Boolean
         get() = execution.activeKind != null && execution.activeKind != SearchRequestKind.PAGE
 
+    /** A new query/source must have its own loading surface. */
+    val retainsResultsWhileRefreshing: Boolean
+        get() = loading && content.results.isNotEmpty() && execution.submittedQuery == query.applied &&
+            query.draftSourceScope == query.appliedSourceScope
+
     val loadingMore: Boolean
         get() = execution.activeKind == SearchRequestKind.PAGE
 

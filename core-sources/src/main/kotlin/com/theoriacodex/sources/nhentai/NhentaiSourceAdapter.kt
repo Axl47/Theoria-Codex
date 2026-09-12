@@ -15,6 +15,7 @@ import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -174,7 +175,7 @@ class NhentaiSourceAdapter(
             .distinct()
             .take(NHENTAI_TRENDING_GALLERY_SAMPLE_SIZE)
             .toList()
-        val detailedGalleries = galleryIds.mapNotNull { galleryId ->
+        val detailedGalleries = galleryIds.mapConcurrent { galleryId ->
             requestJsonObject(
                 url = "$NHENTAI_GALLERY_URL_PREFIX/$galleryId",
                 query = emptyMap(),
@@ -182,7 +183,7 @@ class NhentaiSourceAdapter(
             )
         }
         return collectTagSuggestions(
-            galleries = detailedGalleries,
+            galleries = detailedGalleries.filterNotNull(),
             prefix = null,
             limit = limit,
         )

@@ -91,6 +91,7 @@ internal abstract class SearchViewModelTestFixture {
             uiRestoreRepository = uiRestoreRepository,
             recentsRepository = recentsRepository,
             tagSuggestionStore = tagSuggestionStore,
+            computationDispatcher = mainDispatcherRule.dispatcher,
         )
         return SearchViewModel(
             coordinator = coordinator,
@@ -98,6 +99,7 @@ internal abstract class SearchViewModelTestFixture {
             executionService = executionService?.invoke(coordinator) ?: coordinator,
             relatedPostsLoader = relatedPostsLoader,
             autocompleteDelayMs = autocompleteDelayMs,
+            suggestionDispatcher = mainDispatcherRule.dispatcher,
             rootRequestTimeoutMs = rootRequestTimeoutMs,
             scrollPersistenceDelayMs = scrollPersistenceDelayMs,
             scrollPersistenceDispatcher = scrollPersistenceDispatcher,

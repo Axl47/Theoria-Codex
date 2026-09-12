@@ -72,6 +72,10 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
+-keepclassmembers class com.theoriacodex.data.repository.SearchAnimationFilterRestoreState {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}
 -keepclassmembers class com.theoriacodex.data.repository.LegacySearchScrollStateRecord {
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;

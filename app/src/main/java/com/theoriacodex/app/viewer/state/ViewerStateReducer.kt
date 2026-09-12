@@ -143,7 +143,11 @@ internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): View
         )
         ViewerAction.RestartPlayback -> ViewerReduction(state.restartPlayback())
         is ViewerAction.SetPlaybackRate -> ViewerReduction(state.setPlaybackRate(action.rate))
-        ViewerAction.RequestCurrentPageResolution -> state.requestResolution(session)
+        ViewerAction.RequestCurrentPageResolution -> state.requestResolution(session, state.currentPage?.post?.id)
+        is ViewerAction.RequestPageResolution -> state.requestResolution(session, action.postId)
+        is ViewerAction.ResolutionCancelled -> state.ifCurrentSession(action.session) {
+            updateResolution(action.postId) { it.copy(status = ViewerResolutionStatus.IDLE) }
+        }
         is ViewerAction.ResolutionStarted -> state.ifCurrentSession(action.session) {
             updateResolution(action.postId) { current ->
                 current.copy(
@@ -320,8 +324,8 @@ private fun ViewerUiState.setPlaybackRate(rate: Float): ViewerUiState {
     )
 }
 
-private fun ViewerUiState.requestResolution(session: ViewerSessionIdentity): ViewerReduction {
-    val page = currentPage ?: return ViewerReduction(this)
+private fun ViewerUiState.requestResolution(session: ViewerSessionIdentity, postId: PostId?): ViewerReduction {
+    val page = pages.firstOrNull { it.post.id == postId } ?: return ViewerReduction(this)
     if (page.resolution.status !in setOf(ViewerResolutionStatus.IDLE, ViewerResolutionStatus.FAILED)) {
         return ViewerReduction(this)
     }
@@ -351,9 +355,17 @@ private fun ViewerUiState.replaceResolvedPost(post: Post): ViewerUiState {
         ),
     )
     val updatedPages = pages.toMutableList().also { values -> values[pageIndex] = replacement }
-    if (pageIndex != currentPageIndex) return copy(pages = updatedPages)
+    val invalidatedPrefetch = prefetch.copy(
+        queued = prefetch.queued.filterNotTo(mutableSetOf()) { it.postId == post.id },
+        inFlight = prefetch.inFlight.filterNotTo(mutableSetOf()) { it.postId == post.id },
+        warmed = prefetch.warmed.filterKeys { it.postId != post.id },
+        skipped = prefetch.skipped.filterNotTo(mutableSetOf()) { it.postId == post.id },
+        failed = prefetch.failed.filterNotTo(mutableSetOf()) { it.postId == post.id },
+    )
+    if (pageIndex != currentPageIndex) return copy(pages = updatedPages, prefetch = invalidatedPrefetch)
     return copy(
         pages = updatedPages,
+        prefetch = invalidatedPrefetch,
         controls = controls.copy(
             playback = playbackControlsFor(
                 media = replacement.selectedMedia,

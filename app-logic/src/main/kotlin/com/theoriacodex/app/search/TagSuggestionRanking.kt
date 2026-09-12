@@ -38,12 +38,11 @@ fun rankUnifiedTagSuggestions(
     if (limit <= 0) return emptyList()
     val accepted = mutableListOf<TagSuggestion>()
     val seen = mutableSetOf<String>()
+    val rankedBySource = suggestionsBySource.map { (_, suggestions) ->
+        rankTagSuggestions(suggestions, prefix, suggestions.size).groupBy { it.matchQuality(prefix) }
+    }
     MatchQuality.entries.forEach { quality ->
-        val queues = suggestionsBySource.map { (_, suggestions) ->
-            rankTagSuggestions(suggestions, prefix, suggestions.size)
-                .filter { suggestion -> suggestion.matchQuality(prefix) == quality }
-                .toMutableList()
-        }
+        val queues = rankedBySource.map { bands -> ArrayDeque(bands[quality].orEmpty()) }
         while (accepted.size < limit && queues.any(List<TagSuggestion>::isNotEmpty)) {
             queues.forEach { queue ->
                 val suggestion = queue.removeFirstOrNull() ?: return@forEach

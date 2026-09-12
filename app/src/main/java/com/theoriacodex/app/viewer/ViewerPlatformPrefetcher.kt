@@ -25,6 +25,10 @@ internal suspend fun prefetchViewerMedia(
         ?: media.ref.localPath
         ?: media.ref.url
         ?: return ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED)
+    if (media.kind == ViewerMediaKind.GIF && location.startsWith("http", ignoreCase = true)) {
+        val bytes = loadRemoteViewerGifBytes(context, media.key.postId.source, location)
+        return ViewerPrefetchResult(ViewerPrefetchOutcome.WARMED, bytes.size.toLong())
+    }
     val request = MediaRequestFactory.imageRequest(
         context = context,
         url = location,

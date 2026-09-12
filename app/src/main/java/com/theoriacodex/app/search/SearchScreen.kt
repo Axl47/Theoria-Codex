@@ -631,8 +631,9 @@ fun SearchScreen(
             }
 
             FeedContinueLoading(pageDemand)
+            if (state.retainsResultsWhileRefreshing) SearchRefreshProgress()
             when {
-                state.loading -> {
+                state.loading && !state.retainsResultsWhileRefreshing -> {
                     FeedLoadingState(
                         modifier = Modifier
                             .weight(1f)

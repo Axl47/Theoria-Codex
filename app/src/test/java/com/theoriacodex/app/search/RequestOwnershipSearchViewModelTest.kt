@@ -227,6 +227,7 @@ internal class RequestOwnershipSearchViewModelTest : SearchViewModelTestFixture(
             viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
 
             viewModel.onAction(SearchAction.AutocompleteChanged("hatsune"))
+            runCurrent()
 
             assertEquals(
                 listOf("初音ミク"),

@@ -2,7 +2,7 @@
 
 ## Development Rules
 
-Keep Detekt's own `parallel` setting disabled: concurrent Kotlin 2.4 FIR/PSI traversal can hang or report missing declarations. Android Debug analysis receives its module's public `JavaCompile.destinationDirectory` after AGP registers variant tasks, so generated BuildConfig and Room Java types resolve. Run lint after multi-variant coverage/code generation finishes; otherwise lint can read Room-generated Java files while another variant regenerates them. Offline lint retains source checks while avoiding dependency-version network lookups.
+Keep Detekt's own `parallel` setting disabled: concurrent Kotlin 2.4 FIR/PSI traversal can hang or report missing declarations. Android Debug analysis receives its module's public `JavaCompile.destinationDirectory` after AGP registers variant tasks, so generated BuildConfig and Room Java types resolve. Run lint after multi-variant coverage/code generation finishes; otherwise lint can read Room-generated Java files while another variant regenerates them. Offline lint retains source checks while avoiding dependency-version network lookups. If a reused daemon reports a Kotlin FIR/UAST internal resolver crash after other analysis/build work, finish code generation and retry lint alone with `./gradlew :app:lintDebug --offline --no-daemon`; the fresh-process lane retains every source check and passed the loading-remediation audit without suppressions.
 
 *Smallest sufficient implementation:* Prefer the simplest design that satisfies the stated requirements. Do not expand architecture or scope without a concrete requirement.
 
@@ -53,6 +53,14 @@ Search autocomplete is local-first: query the complete bounded tag lexicon befor
 Suggestion origins are storage policy, not user-facing taxonomy. Keep active Trending membership separate from seed, autocomplete, seen, featured, and count-lookup knowledge; replacing Trending must not delete another origin for the same tag. Never display raw cache labels such as `seed`, `seen`, or `pixiv_tags_page`.
 
 Pixiv suggestion identity is its native tag text. A provider translation is an alternate match/display label only, and selecting the suggestion must still submit the native value. Request Pixiv's current locale, retain its authoritative response order when counts are absent, and persist native/alternate pairs without learning them as two independent recommendation interests.
+
+## Loading Responsiveness
+
+Unified provider execution has a 15-second source-local deadline, including query preparation. Gelbooru compatibility lookups belong inside its provider job, use a bounded expiring mapping cache, and must never hold back another source. Continuations retain the exact prepared query, including exclusions enforced locally. Grouped fallback branches overlap with at most two requests; cold recommendation-tag acquisition is bounded and concurrent while preserving deterministic source and branch ordering.
+
+Search publishes local autocomplete from background work before the network debounce, then admits incremental remote improvements through the same generation guard. Cache normalization and lookup snapshots are process-only; do not add derived fields to durable JSON. Same-query refresh keeps existing grid nodes attached. Required applied-query and scroll commits precede result acceptance; the two applied-query keys commit together, while admitted Recents/statistics bookkeeping follows publication and survives cancellation of the completed root job.
+
+Viewer resolves only its current and immediately following post; leaving that window cancels obsolete resolution and resets its pending state without a user-facing failure. Replacing media invalidates both active and completed preview-prefetch work for that post. GIF prefetch, Movie decoding, and decoder fallback share the bounded raw-byte store (128 MiB / 64 files, 64 MiB per GIF); acquisition uses the cancellable source transport and request-scoped headers. Cache writes are best-effort. Cached loading previews must match the selected gallery page and must not start additional network downloads.
 
 ## Search Scroll Restoration
 

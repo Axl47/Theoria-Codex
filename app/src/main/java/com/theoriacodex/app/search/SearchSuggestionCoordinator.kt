@@ -16,6 +16,8 @@ import com.theoriacodex.domain.tags.normalizeMatchToken
 import java.util.LinkedHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -31,7 +33,7 @@ internal class SearchSuggestionCoordinator(
     private val supportedSearchScopes: (QueryMode) -> List<FacetedSearchScope>,
     private val effectiveEnabledSources: (SearchSourceScope) -> Set<SourceKey>,
 ) {
-    private val lastTrendingRefreshAtBySource = mutableMapOf<SourceKey, Long>()
+    private val lastTrendingRefreshAtBySource = java.util.concurrent.ConcurrentHashMap<SourceKey, Long>()
     private val autocompleteRefreshLock = Any()
     private val lastAutocompleteRefreshAtByKey =
         LinkedHashMap<AutocompleteFetchKey, Long>(32, 0.75f, true)
@@ -42,6 +44,7 @@ internal class SearchSuggestionCoordinator(
         selectedScope: FacetedSearchScope,
         input: String,
         trending: List<TagSuggestion>,
+        onUpdate: suspend (SearchAutocompleteResult) -> Unit = {},
     ): SearchAutocompleteResult {
         val request = resolveAutocompleteRequest(query, selectedScope, input)
         request.validationMessage?.let { message ->
@@ -49,7 +52,7 @@ internal class SearchSuggestionCoordinator(
         }
         if (request.prefix.isBlank()) return fetchFeaturedAutocomplete(query, request.scope, input)
         return when (val mode = query.mode) {
-            QueryMode.Unified -> fetchUnifiedAutocomplete(sourceScope, request.scope, input, request.prefix)
+            QueryMode.Unified -> fetchUnifiedAutocomplete(sourceScope, request.scope, input, request.prefix, onUpdate)
             is QueryMode.Source -> fetchSourceAutocomplete(mode, request.scope, input, request.prefix, trending)
         }
     }
@@ -106,22 +109,28 @@ internal class SearchSuggestionCoordinator(
         selectedScope: FacetedSearchScope,
         input: String,
         prefix: String,
+        onUpdate: suspend (SearchAutocompleteResult) -> Unit,
     ): SearchAutocompleteResult = coroutineScope {
         val enabled = effectiveEnabledSources(sourceScope)
-        val fetchedBySource = enabled.map { source ->
-            async { source to fetchUnifiedSuggestionsForSource(source, prefix) }
-        }.awaitAll().toMap()
-        val candidatesBySource = enabled.map { source ->
-            source to (
-                fetchedBySource[source].orEmpty() +
-                    cachedUnifiedSuggestionsForSource(source, prefix)
+        val updates = Mutex()
+        val fetched = mutableMapOf<SourceKey, List<TagSuggestion>>()
+        var result = cachedUnifiedAutocomplete(sourceScope, selectedScope, input, prefix)
+        enabled.map { source -> async {
+            val suggestions = fetchUnifiedSuggestionsForSource(source, prefix)
+            updates.withLock {
+                fetched[source] = suggestions
+                result = SearchAutocompleteResult(
+                    input = input,
+                    selectedScope = selectedScope,
+                    autocomplete = rankUnifiedTagSuggestions(
+                        enabled.map { key -> key to (fetched[key].orEmpty() + cachedUnifiedSuggestionsForSource(key, prefix)) },
+                        prefix, AUTOCOMPLETE_RESULT_LIMIT,
+                    ),
                 )
-        }
-        SearchAutocompleteResult(
-            input = input,
-            selectedScope = selectedScope,
-            autocomplete = rankUnifiedTagSuggestions(candidatesBySource, prefix, AUTOCOMPLETE_RESULT_LIMIT),
-        )
+                onUpdate(result)
+            }
+        } }.awaitAll()
+        result
     }
 
     private fun cachedUnifiedAutocomplete(

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material3.AssistChip
@@ -48,5 +49,12 @@ internal fun ErrorBlock(
         title = title,
         actionLabel = actionLabel,
         onRetry = onRetry,
+    )
+}
+
+@Composable
+internal fun SearchRefreshProgress() {
+    androidx.compose.material3.LinearProgressIndicator(
+        modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
     )
 }

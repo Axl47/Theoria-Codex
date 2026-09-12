@@ -18,7 +18,6 @@ import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedSearchSourceAdapter
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
-import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceFailureReason
@@ -46,6 +45,8 @@ import com.theoriacodex.domain.tags.sourceTagKey
 import com.theoriacodex.domain.tags.sourceTagsMatch
 import java.util.LinkedHashMap
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -71,8 +72,9 @@ class SearchCoordinator(
     private val statisticsRepository: StatisticsRepository,
     private val tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val computationDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : SearchExecutionService {
-    private var runtimeSettings = AppSettings()
+    @Volatile private var runtimeSettings = AppSettings()
     private var availableSourcesSnapshot = registry.availableSources()
     private val suggestionCoordinator = SearchSuggestionCoordinator(
         registry = registry,
@@ -83,6 +85,7 @@ class SearchCoordinator(
     )
     private val resolvedPostsByExecution = linkedMapOf<String, LinkedHashMap<PostId, Post>>()
     private val resolveFailuresByExecution = mutableMapOf<String, MutableMap<PostId, ResolveFailureRecord>>()
+    private val queryPreparation = UnifiedQueryPreparation(clock)
     private val appliedPersistenceMutex = Mutex()
     private val scrollPersistenceMutex = Mutex()
     private val persistedScrollStateByQuery = mutableMapOf<String, SearchScrollState>()
@@ -218,6 +221,11 @@ class SearchCoordinator(
             pageTokens = emptyMap(),
             weights = weights,
             queryOverridesBySource = overrides,
+            prepareQuery = { source, sourceQuery ->
+                if (source == SourceKey.GELBOORU) {
+                    queryPreparation.prepareGelbooru(requireNotNull(registry.adapterFor(source)), sourceQuery)
+                } else sourceQuery
+            },
         )
         currentCoroutineContext().ensureActive()
         val statuses = mergeStatuses(excluded, result.statuses)
@@ -236,7 +244,7 @@ class SearchCoordinator(
             continuation = continuation(
                 executionKey, query, sourceScope, enabledSources, availableSources, weights,
                 unifiedPageTokens = result.nextPageTokens,
-                unifiedQueryOverrides = overrides,
+                unifiedQueryOverrides = result.queriesBySource,
             ),
         )
     }
@@ -381,32 +389,22 @@ class SearchCoordinator(
     ) {
         appliedPersistenceMutex.withLock {
             currentCoroutineContext().ensureActive()
-            val searchKind = when (sourceScope) {
-                SearchSourceScope.GlobalUnified -> RecentSearchKind.UNIFIED
-                is SearchSourceScope.Single -> RecentSearchKind.SOURCE
-                is SearchSourceScope.Temporary -> RecentSearchKind.MULTI_SEARCH
-            }
-            val searchedSources = effectiveEnabledSources(sourceScope).inPresentationOrder()
-            if (sourceScope is SearchSourceScope.Temporary) {
-                recentsRepository.recordSearch(query, executionKey, searchKind, searchedSources)
-                recordAcceptedSearch(searchedSources)
-                return@withLock
-            }
-            queryRepository.upsertAppliedQuery(modeKey(query.mode), query)
-            currentCoroutineContext().ensureActive()
-            queryRepository.upsertAppliedQuery(LAST_ACTIVE_QUERY_KEY, query)
+            if (sourceScope is SearchSourceScope.Temporary) return@withLock
+            queryRepository.upsertAppliedQueries(mapOf(modeKey(query.mode) to query, LAST_ACTIVE_QUERY_KEY to query))
             currentCoroutineContext().ensureActive()
             uiRestoreRepository.setSearchScrollState(executionKey, SearchScrollState(0, 0))
-            currentCoroutineContext().ensureActive()
-            recentsRepository.recordSearch(query, executionKey, searchKind, searchedSources)
-            recordAcceptedSearch(searchedSources)
         }
     }
 
-    private suspend fun recordAcceptedSearch(sources: List<SourceKey>) {
-        runCatchingPreservingCancellation {
-            statisticsRepository.recordSearch(sources.toSet())
+    override suspend fun recordAcceptedSearch(query: Query, sourceScope: SearchSourceScope, executionKey: String) {
+        val kind = when (sourceScope) {
+            SearchSourceScope.GlobalUnified -> RecentSearchKind.UNIFIED
+            is SearchSourceScope.Single -> RecentSearchKind.SOURCE
+            is SearchSourceScope.Temporary -> RecentSearchKind.MULTI_SEARCH
         }
+        val sources = effectiveEnabledSources(sourceScope).inPresentationOrder()
+        runCatchingPreservingCancellation { recentsRepository.recordSearch(query, executionKey, kind, sources) }
+        runCatchingPreservingCancellation { statisticsRepository.recordSearch(sources.toSet()) }
     }
 
     internal suspend fun fetchAutocomplete(
@@ -415,12 +413,14 @@ class SearchCoordinator(
         selectedScope: FacetedSearchScope,
         input: String,
         trending: List<TagSuggestion>,
+        onUpdate: suspend (SearchAutocompleteResult) -> Unit = {},
     ): SearchAutocompleteResult = suggestionCoordinator.fetchAutocomplete(
         query,
         sourceScope,
         selectedScope,
         input,
         trending,
+        onUpdate,
     )
 
     internal fun cachedAutocomplete(
@@ -579,19 +579,6 @@ class SearchCoordinator(
             .filter(SearchTermGroup::isPortableGeneralTagGroup)
         val exclude = query.excludeTerms.filter(SearchTerm::isPortableGeneralTag)
         val overrides = mutableMapOf<SourceKey, Query>()
-        registry.adapterFor(SourceKey.GELBOORU)?.takeIf { SourceKey.GELBOORU in enabledSources }
-            ?.let { adapter ->
-                val groups = includeGroups.map { group ->
-                    SearchTermGroup(
-                        resolveGelbooruCompatibilityTags(adapter, group.terms.map(SearchTerm::value))
-                            .map(::SearchTerm)
-                    )
-                }
-                overrides[SourceKey.GELBOORU] = query.withIncludeTermGroups(groups).copy(
-                    excludeTerms = resolveGelbooruCompatibilityTags(adapter, exclude.map(SearchTerm::value))
-                        .map(::SearchTerm),
-                )
-            }
         if (SourceKey.PIXIV in enabledSources) {
             val groups = includeGroups.map { group ->
                 SearchTermGroup(
@@ -603,34 +590,6 @@ class SearchCoordinator(
             )
         }
         return overrides
-    }
-
-    private suspend fun resolveGelbooruCompatibilityTags(
-        adapter: SourceAdapter,
-        tags: List<String>,
-    ): List<String> {
-        val cache = mutableMapOf<String, String>()
-        val resolved = mutableListOf<String>()
-        tags.forEach { raw ->
-            currentCoroutineContext().ensureActive()
-            val normalized = raw.trim()
-            if (normalized.isBlank()) return@forEach
-            val mapped = cache.getOrPut(normalized.lowercase()) {
-                val suggestions = runCatchingPreservingCancellation {
-                    adapter.autocompleteTags(autocompletePrefixForSource(SourceKey.GELBOORU, normalized), 1)
-                }.getOrDefault(emptyList())
-                if (suggestions.isNotEmpty()) {
-                    tagSuggestionStore.put(
-                        SourceKey.GELBOORU,
-                        suggestions,
-                        TagSuggestionOrigin.AUTOCOMPLETE,
-                    )
-                }
-                suggestions.firstOrNull()?.text?.trim().takeUnless { it.isNullOrBlank() } ?: normalized
-            }
-            if (mapped !in resolved) resolved += mapped
-        }
-        return resolved
     }
 
     private fun resolvePixivCompatibilityTags(tags: List<String>): List<String> {
@@ -645,7 +604,7 @@ class SearchCoordinator(
         }
     }
 
-    private fun rememberSeenTags(posts: List<Post>) {
+    private suspend fun rememberSeenTags(posts: List<Post>) = withContext(computationDispatcher) {
         posts.groupBy { it.id.source }.forEach { (source, sourcePosts) ->
             val suggestions = sourcePosts.asSequence()
                 .flatMap { post -> recommendationTaxonomyFor(post).asSequence() }

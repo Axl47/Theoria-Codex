@@ -53,6 +53,9 @@ enum class CodexSortMode {
 interface QueryRepository {
     fun observeAppliedQuery(modeKey: String): Flow<Query?>
     suspend fun upsertAppliedQuery(modeKey: String, query: Query)
+    suspend fun upsertAppliedQueries(queries: Map<String, Query>) {
+        queries.forEach { (key, query) -> upsertAppliedQuery(key, query) }
+    }
 }
 
 enum class RecentPostSection {

@@ -21,6 +21,9 @@ interface SearchExecutionService {
 
     suspend fun executePage(continuation: SearchContinuation): SearchPageResult
 
+    suspend fun recordAcceptedSearch(query: Query, sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
+        executionKey: String) = Unit
+
     suspend fun persistAppliedSearch(
         query: Query,
         sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,

@@ -45,9 +45,11 @@ class FileBackedQueryRepository(
     }
 
     override suspend fun upsertAppliedQuery(modeKey: String, query: Query) {
-        mutex.withLock {
-            commitMutation { queriesFlow.value = queriesFlow.value + (modeKey to query) }
-        }
+        upsertAppliedQueries(mapOf(modeKey to query))
+    }
+
+    override suspend fun upsertAppliedQueries(queries: Map<String, Query>) {
+        mutex.withLock { commitMutation { queriesFlow.value = queriesFlow.value + queries } }
     }
 
     private suspend inline fun <T> commitMutation(mutate: () -> T): T {

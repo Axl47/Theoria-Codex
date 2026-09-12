@@ -18,13 +18,82 @@ import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.CapabilityExclusionReason
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class UnifiedSearchOrchestratorTest {
+    @Test
+    fun `prepared continuation retains client side exclusions`() = runTest {
+        val adapter = FakeAdapter(SourceKey.PIXIV, supportedCapabilities().copy(supportsExcludeTagsServerSide = false),
+            listOf(post(SourceKey.PIXIV, "allowed"), post(SourceKey.PIXIV, "blocked", listOf("blocked"))))
+        val orchestrator = UnifiedSearchOrchestrator(mapOf(adapter.sourceKey to adapter))
+        val query = sampleQuery().copy(excludeTerms = listOf(SearchTerm("blocked")))
+        val initial = orchestrator.search(query, setOf(adapter.sourceKey), emptyMap(), emptyMap())
+        val continued = orchestrator.search(query, setOf(adapter.sourceKey), emptyMap(), emptyMap(), initial.queriesBySource)
+        assertEquals(listOf("allowed"), continued.items.map { it.id.sourcePostId })
+        assertEquals(listOf("blocked"), continued.queriesBySource[adapter.sourceKey]?.excludeTags)
+    }
+
+    @Test
+    fun `slow provider times out without discarding a completed source`() = runTest {
+        val fast = FakeAdapter(SourceKey.GELBOORU, supportedCapabilities(), listOf(post(SourceKey.GELBOORU, "ready")))
+        var cancelled = false
+        val slow = object : SourceAdapter by FakeAdapter(SourceKey.PIXIV, supportedCapabilities(), emptyList()) {
+            override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+                try { delay(10_000L) } finally { cancelled = true }
+                return Page(emptyList(), null)
+            }
+        }
+        val result = UnifiedSearchOrchestrator(mapOf(fast.sourceKey to fast, slow.sourceKey to slow), 500L)
+            .search(sampleQuery(), setOf(fast.sourceKey, slow.sourceKey), emptyMap(), emptyMap())
+        assertEquals(500L, currentTime)
+        assertTrue(cancelled)
+        assertEquals(listOf("ready"), result.items.map { it.id.sourcePostId })
+        assertEquals(SourceRunState.FAILED, result.statuses.first { it.source == slow.sourceKey }.state)
+    }
+
+    @Test
+    fun `query preparation overlaps other providers and retains the prepared continuation query`() = runTest {
+        val pixiv = FakeAdapter(SourceKey.PIXIV, supportedCapabilities(), emptyList())
+        val gelbooru = FakeAdapter(SourceKey.GELBOORU, supportedCapabilities(), emptyList())
+        val result = UnifiedSearchOrchestrator(mapOf(pixiv.sourceKey to pixiv, gelbooru.sourceKey to gelbooru))
+            .search(sampleQuery(), setOf(gelbooru.sourceKey, pixiv.sourceKey), emptyMap(), emptyMap(),
+                prepareQuery = { source, query ->
+                    if (source == SourceKey.GELBOORU) {
+                        delay(100L)
+                        assertTrue(pixiv.lastSearchQuery != null)
+                        query.copy(excludeTerms = listOf(SearchTerm("mapped")))
+                    } else query
+                })
+        assertEquals(listOf("mapped"), result.queriesBySource[SourceKey.GELBOORU]?.excludeTags)
+    }
+
+    @Test
+    fun `grouped branches overlap with at most two requests and retain input order`() = runTest {
+        var active = 0
+        var peak = 0
+        val adapter = object : SourceAdapter by FakeAdapter(SourceKey.PIXIV, supportedCapabilities(), emptyList()) {
+            override suspend fun search(query: Query, pageToken: String?): Page<Post> {
+                active++
+                peak = maxOf(peak, active)
+                try { delay(100L) } finally { active-- }
+                return Page(listOf(post(SourceKey.PIXIV, query.includeTags.single(), query.includeTags)), null)
+            }
+        }
+        val query = sampleQuery().withIncludeTermGroups(listOf(SearchTermGroup(listOf("a", "b", "c").map(::SearchTerm))))
+        val result = UnifiedSearchOrchestrator(mapOf(adapter.sourceKey to adapter)).searchSource(adapter, query, null)
+        assertEquals(2, peak)
+        assertEquals(200L, currentTime)
+        assertEquals(listOf("a", "b", "c"), result.items.map { it.id.sourcePostId })
+    }
+
     @Test
     fun `fallback branches one OR group filters canonically and retains branch continuation`() = runTest {
         val required = SearchTerm("landscape")

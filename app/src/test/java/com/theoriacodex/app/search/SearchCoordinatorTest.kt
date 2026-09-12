@@ -199,6 +199,7 @@ class SearchCoordinatorTest {
 
         val result = coordinator.executeInitial(query, scope) as SearchExecutionResult.Success
         coordinator.persistAppliedSearch(result.query, result.sourceScope, result.executionKey)
+        coordinator.recordAcceptedSearch(result.query, result.sourceScope, result.executionKey)
         coordinator.executePage(result.continuation)
 
         assertEquals(2, pixiv.searchedTags.size)
@@ -228,6 +229,7 @@ class SearchCoordinatorTest {
 
         first.persistAppliedSearch(result.query, result.sourceScope, result.executionKey)
         first.persistAppliedSearch(result.query, result.sourceScope, result.executionKey)
+        first.recordAcceptedSearch(result.query, result.sourceScope, result.executionKey)
         val restarted = coordinator(queryRepository, InMemorySettingsRepository(), restore, recents, adapter).initializeRoute()
 
         assertEquals(applied, restarted.query)

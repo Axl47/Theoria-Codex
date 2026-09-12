@@ -14,6 +14,7 @@ import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.defaultRecommendationProfiles
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.coroutines.mapConcurrent
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -35,6 +36,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
@@ -531,11 +533,13 @@ class ForYouCoordinator(
                     ForYouTagSetGenerator.prepare(source, sourceLikes.map(LikedPost::tags))
                 }
         }
+        val fallbackBySource = preparedBySource.filterValues { it.needsFallback }.keys
+            .mapConcurrent { source -> source to fallbackTagsForSource(source) }.toMap()
         return enabledSources
             .sortedBy { it.name }
             .mapNotNull { source ->
                 val prepared = preparedBySource[source] ?: return@mapNotNull null
-                val fallbackTags = if (prepared.needsFallback) fallbackTagsForSource(source) else emptyList()
+                val fallbackTags = fallbackBySource[source].orEmpty()
                 val includeTags = selectAllowedSeed(
                     prepared = prepared,
                     fallbackCandidates = fallbackTags,
@@ -553,7 +557,7 @@ class ForYouCoordinator(
     ): Map<SourceKey, List<String>> {
         return enabledSources
             .sortedBy { it.name }
-            .mapNotNull { source ->
+            .mapConcurrent { source ->
                 val fallbackTags = fallbackTagsForSource(source)
                 val includeTags = selectAllowedSeed(
                     prepared = ForYouTagSetGenerator.prepare(source, emptyList()),
@@ -563,7 +567,7 @@ class ForYouCoordinator(
                 )
                 includeTags.takeIf { it.isNotEmpty() }?.let { tags -> source to tags }
             }
-            .toMap()
+            .filterNotNull().toMap()
     }
 
     private suspend fun selectAllowedSeed(
@@ -596,10 +600,12 @@ class ForYouCoordinator(
         }
 
         val fetched = runCatchingPreservingCancellation {
-            registry.adapterFor(source)?.trendingTags(limit = TRENDING_FALLBACK_LIMIT).orEmpty()
+            withTimeoutOrNull(4_000L) {
+                registry.adapterFor(source)?.trendingTags(limit = TRENDING_FALLBACK_LIMIT).orEmpty()
+            }.orEmpty()
         }.getOrDefault(emptyList())
         if (fetched.isNotEmpty()) {
-            tagSuggestionStore.replaceTrending(source, fetched)
+            withContext(computationDispatcher) { tagSuggestionStore.replaceTrending(source, fetched) }
         }
         val fallback = fetched.ifEmpty {
             tagSuggestionStore.get(source = source, limit = TRENDING_FALLBACK_LIMIT)

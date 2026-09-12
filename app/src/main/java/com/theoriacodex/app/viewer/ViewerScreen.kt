@@ -748,6 +748,7 @@ internal fun ViewerScreen(
                             .padding(mediaContainerPadding),
                         contentAlignment = Alignment.Center,
                     ) {
+                        if (!hasVisibleImage && !showUgoira && !isVideoMedia) ViewerLoadingPreview(post, media, mediaTransformModifier)
                         if (showUgoira) {
                             Box(
                                 modifier = Modifier
@@ -826,6 +827,7 @@ internal fun ViewerScreen(
                                         onAuthoritativeDurationKnown(post, durationMs)
                                     }
                                 },
+                                onReady = { hasVisibleImage = true },
                                 onError = { message ->
                                     if (isCurrentMediaPage) reportRouteMediaFailure(message)
                                 },
@@ -1999,11 +2001,13 @@ private fun ViewerGifPlayer(
     onTimelineInteractionActiveChanged: (Boolean) -> Unit = {},
     onTogglePlayback: (() -> Unit)? = null,
     onDurationKnown: (Long) -> Unit = {},
+    onReady: () -> Unit = {},
     onError: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     var movie by remember(locations, loadGeneration) { mutableStateOf<Movie?>(null) }
     var loading by remember(locations, loadGeneration) { mutableStateOf(true) }
+    var fallbackLocations by remember(locations, loadGeneration) { mutableStateOf(locations) }
     var fallbackCandidateIndex by remember(locations, loadGeneration) { mutableIntStateOf(0) }
     var fallbackFailed by remember(locations, loadGeneration) { mutableStateOf(false) }
     var isScrubbing by remember(locations, loadGeneration) { mutableStateOf(false) }
@@ -2027,13 +2031,15 @@ private fun ViewerGifPlayer(
             if (loadedMovie != null) break
             if (attempt < GIF_MOVIE_LOAD_ATTEMPTS) delay(GIF_MOVIE_RETRY_DELAY_MS)
         }
+        fallbackLocations = locations.map { cachedViewerGifLocation(context, sourceKey, it) }
         movie = loadedMovie
         loading = false
+        if (loadedMovie != null) onReady()
     }
 
     val activeMovie = movie
     if (activeMovie == null) {
-        val fallbackLocation = locations.getOrNull(fallbackCandidateIndex)
+        val fallbackLocation = fallbackLocations.getOrNull(fallbackCandidateIndex)
         Box(modifier = modifier, contentAlignment = Alignment.Center) {
             if (loading) {
                 CircularProgressIndicator()
@@ -2048,6 +2054,7 @@ private fun ViewerGifPlayer(
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize().then(mediaModifier),
                     contentScale = ContentScale.Fit,
+                    onSuccess = { onReady() },
                     onError = { state ->
                         Log.w(
                             GIF_LOG_TAG,

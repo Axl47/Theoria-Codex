@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -99,6 +100,7 @@ internal class ViewerViewModel(
             }
         }
         reduction.effects.forEach(::handleEffect)
+        if (action is ViewerAction.SelectPage || action is ViewerAction.ReplaceSession) reconcileResolutionLookahead()
     }
 
     /** Bridges the existing process-local shell handoff into the route contract. */
@@ -124,6 +126,8 @@ internal class ViewerViewModel(
         val current = mutableSession.value ?: return
         val index = current.posts.indexOfFirst { candidate -> candidate.id == post.id }
         if (index < 0) return
+        sessionJobs.keys.filterIsInstance<ViewerWorkKey.Prefetch>().filter { it.mediaKey.postId == post.id }
+            .forEach { key -> sessionJobs.remove(key)?.cancel() }
         mutableSession.value = current.copy(
             posts = current.posts.toMutableList().apply { this[index] = post },
         )
@@ -197,11 +201,30 @@ internal class ViewerViewModel(
         }
     }
 
+    /** Current-page work wins; only the immediately following post may resolve speculatively. */
+    private fun reconcileResolutionLookahead() {
+        if (postResolver == null) return
+        val current = state.value
+        val session = current.session ?: return
+        val next = current.pages.getOrNull(current.currentPageIndex + 1)
+        val desired = setOfNotNull(current.currentPage?.post?.id, next?.post?.id)
+        val obsolete = sessionJobs.keys.filterIsInstance<ViewerWorkKey.Resolution>().filter { it.postId !in desired }
+        obsolete.forEach { key ->
+            sessionJobs.remove(key)?.cancel()
+            onAction(ViewerAction.ResolutionCancelled(session, key.postId))
+        }
+        if (next?.resolution?.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.IDLE) {
+            onAction(ViewerAction.RequestPageResolution(next.post.id))
+        }
+    }
+
     private fun launchResolution(effect: ViewerEffect.ResolvePost, resolver: ViewerPostResolver) {
         launchSessionJob(ViewerWorkKey.Resolution(effect.postId)) {
             onAction(ViewerAction.ResolutionStarted(effect.session, effect.postId))
             try {
-                val resolved = resolver.resolve(effect.session, effect.postId)
+                val outcome = withTimeoutOrNull(15_000L) { Result.success(resolver.resolve(effect.session, effect.postId)) }
+                    ?: throw java.io.IOException("Post resolution timed out")
+                val resolved = outcome.getOrThrow()
                 coroutineContext.ensureActive()
                 if (resolved == null) {
                     onAction(

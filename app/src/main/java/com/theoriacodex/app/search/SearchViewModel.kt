@@ -73,6 +73,7 @@ internal class SearchViewModel(
     private val savedStateHandle: SavedStateHandle,
     private val executionService: SearchExecutionService = coordinator,
     private val relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
+    private val suggestionDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val autocompleteDelayMs: Long = DEFAULT_AUTOCOMPLETE_DELAY_MS,
     private val rootRequestTimeoutMs: Long = DEFAULT_ROOT_REQUEST_TIMEOUT_MS,
     scrollPersistenceDelayMs: Long = DEFAULT_SCROLL_PERSISTENCE_DELAY_MS,
@@ -647,8 +648,12 @@ internal class SearchViewModel(
         if (persistAcceptedResult) executionService.persistAppliedSearch(
             result.query, result.sourceScope, result.executionKey,
         )
-        if (completeRequest(requestId, result, expectedExecutionKey)) onSuccess()
+        val succeeded = completeRequest(requestId, result, expectedExecutionKey)
         persistDraftQuery()
+        if (persistAcceptedResult) withContext(NonCancellable) {
+            executionService.recordAcceptedSearch(result.query, result.sourceScope, result.executionKey)
+        }
+        if (succeeded) onSuccess()
     }
 
     private fun completeRequest(
@@ -774,13 +779,11 @@ internal class SearchViewModel(
             reduce(SearchStateChange.RequestCancelled(requestId))
         }
     }
-
     private fun cancelRequestIfCurrent(requestId: Long) {
         if (mutableState.value.execution.activeRequestId == requestId) {
             reduce(SearchStateChange.RequestCancelled(requestId))
         }
     }
-
     private fun failRequestIfCurrent(requestId: Long, message: String) {
         if (mutableState.value.execution.activeRequestId == requestId) {
             reduce(SearchStateChange.RequestFailed(requestId, message))
@@ -796,26 +799,24 @@ internal class SearchViewModel(
         updateSuggestionInput(input)
         val generation = ++nextAutocompleteGeneration
         val localState = mutableState.value
-        publishAutocompleteIfCurrent(
-            generation = generation,
-            result = coordinator.cachedAutocomplete(
-                query = localState.query.draft,
-                sourceScope = localState.query.draftSourceScope,
-                selectedScope = localState.query.selectedScope,
-                input = input,
-                trending = localState.suggestions.trending,
-            ),
-        )
         autocompleteJob = viewModelScope.launch {
+            val cached = withContext(suggestionDispatcher) {
+                coordinator.cachedAutocomplete(
+                    localState.query.draft, localState.query.draftSourceScope,
+                    localState.query.selectedScope, input, localState.suggestions.trending,
+                )
+            }
+            publishAutocompleteIfCurrent(generation, cached)
             if (autocompleteDelayMs > 0) delay(autocompleteDelayMs)
-            val requestState = mutableState.value
-            val result = coordinator.fetchAutocomplete(
-                query = requestState.query.draft,
-                sourceScope = requestState.query.draftSourceScope,
-                selectedScope = requestState.query.selectedScope,
-                input = input,
-                trending = requestState.suggestions.trending,
-            )
+            val result = withContext(suggestionDispatcher) {
+                coordinator.fetchAutocomplete(
+                    localState.query.draft, localState.query.draftSourceScope,
+                    localState.query.selectedScope, input, localState.suggestions.trending,
+                    onUpdate = { update ->
+                        withContext(Dispatchers.Main.immediate) { publishAutocompleteIfCurrent(generation, update) }
+                    },
+                )
+            }
             coroutineContext.ensureActive()
             publishAutocompleteIfCurrent(generation, result)
         }
@@ -835,18 +836,14 @@ internal class SearchViewModel(
     private fun refreshTrending() {
         trendingJob?.cancel(CancellationException("Trending refresh superseded"))
         val requestState = mutableState.value
-        val cached = coordinator.cachedTrending(
-            query = requestState.query.draft,
-            sourceScope = requestState.query.draftSourceScope,
-        )
-        if (cached.isNotEmpty()) {
-            mutableState.value = requestState.withTrendingSuggestions(cached)
-        }
         trendingJob = viewModelScope.launch {
-            val trending = coordinator.fetchTrending(
-                query = requestState.query.draft,
-                sourceScope = requestState.query.draftSourceScope,
-            )
+            val cached = withContext(suggestionDispatcher) {
+                coordinator.cachedTrending(requestState.query.draft, requestState.query.draftSourceScope)
+            }
+            if (cached.isNotEmpty()) mutableState.value = mutableState.value.withTrendingSuggestions(cached)
+            val trending = withContext(suggestionDispatcher) {
+                coordinator.fetchTrending(requestState.query.draft, requestState.query.draftSourceScope)
+            }
             coroutineContext.ensureActive()
             val current = mutableState.value
             if (current.query.draft != requestState.query.draft ||

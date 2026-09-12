@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ExecPlan: Faster Search and Viewer loading</title>
+<style>
+:root{color-scheme:light dark}body{font:15px/1.6 system-ui;max-width:1100px;margin:auto;padding:24px}nav{position:sticky;top:0;background:Canvas;padding:12px;border-bottom:1px solid GrayText}nav a{margin-right:18px}section{margin:26px 0;padding:18px;border:1px solid GrayText;border-radius:8px}table{border-collapse:collapse;width:100%}td,th{text-align:left;vertical-align:top;padding:9px;border-bottom:1px solid GrayText}code{font-size:13px}pre{overflow:auto} .dashboard{display:flex;gap:24px;flex-wrap:wrap}@media print{nav{position:static}section{break-inside:avoid}}
+</style></head><body>
+<header><h1>Faster Search and Viewer loading</h1><p>Remove unnecessary network and storage waits, preserve visible content during refresh, and reuse media acquisition when opening and swiping through Viewer.</p>
+<p>Owner: Codex · Created/updated: 2026-09-12 · Base: <code>5aa6ae0</code></p>
+<div class="dashboard"><p><b>Status:</b> Complete</p><p><b>Next:</b> Review changes; physical calibration when a phone is available</p><p><b>Risk:</b> Cancellation, ordering, persistence admission</p><p><b>Validation:</b> Host behavior tests, compilation, Detekt and hotspot checks</p></div></header>
+<nav><a href="#purpose">Purpose</a><a href="#context">Context</a><a href="#phases">Phases</a><a href="#work">Work plan</a><a href="#validation">Validation</a><a href="#log">Living log</a><a href="#recovery">Recovery</a></nav>
+<section id="purpose"><h2>Purpose / big picture</h2><p>All nine findings from the read-only audit are in scope. Unified searches must start independent providers immediately and retain successful providers when another times out. Typing must not scan the tag lexicon on Main (the Android UI thread). Same-query refresh must keep its cards visible. Viewer must reuse prefetched GIF bytes, show matching previews, and resolve the next sparse post before a swipe. Completed results must not wait for best-effort caching or statistics.</p></section>
+<section id="context"><h2>Context and orientation</h2><p>A root search starts a new result generation; a continuation contains provider tokens for subsequent pages. Unified combines independent providers using deterministic weighted interleaving. Query-owned ordering and post identity must remain stable: this plan uses bounded provider deadlines, not arrival-order feed insertion. Autocomplete may publish multiple updates inside its existing stale-generation guard.</p>
+<table><tr><th>Paths relative to repository root</th><th>Responsibility</th></tr>
+<tr><td><code>core-domain/src/main/kotlin/com/theoriacodex/domain/orchestration/UnifiedSearchOrchestrator.kt</code></td><td>Provider deadlines, source-local query preparation, bounded grouped branches</td></tr>
+<tr><td><code>app/src/main/java/com/theoriacodex/app/search/{SearchCoordinator,SearchSuggestionCoordinator,SearchViewModel,SearchScreen,TagSuggestionStore}.kt</code></td><td>Mapping cache, background suggestions, progressive autocomplete, refresh display, accepted persistence</td></tr>
+<tr><td><code>core-data/src/main/kotlin/com/theoriacodex/data/repository/{Repositories,FileBackedQueryRepository}.kt</code></td><td>Atomic batch of applied-query keys</td></tr>
+<tr><td><code>app/src/main/java/com/theoriacodex/app/viewer/{ViewerMediaLoading,ViewerPlatformPrefetcher,ViewerViewModel,ViewerScreen}.kt</code><br><code>app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRouteWorkflow.kt</code></td><td>Shared GIF bytes, preview display, lookahead, detached accepted caching</td></tr>
+<tr><td><code>app/src/main/java/com/theoriacodex/app/recommend/ForYouCoordinator.kt</code><br><code>core-sources/src/main/kotlin/com/theoriacodex/sources/nhentai/NhentaiSourceAdapter.kt</code></td><td>Concurrent bounded fallback-tag acquisition</td></tr></table>
+<p>Preserve canonical deduplication after hydration, raw-record pagination, grouped tag semantics, Pixiv native identity, route-specific scroll, and all simultaneously visible autoplay. No production APK, private data, live provider, or device mutation is required for implementation.</p></section>
+<section id="phases"><h2>Phases</h2><table><tr><th>Phase</th><th>Edits and acceptance</th></tr>
+<tr><td>1 · Search execution (F1/F2/F7/F9)</td><td>Bound each provider independently; prepare Gelbooru mappings in its own job with bounded reusable cache; fetch grouped branches and cold recommendation tags concurrently with a small shared concurrency limit. Fake delayed providers prove overlap, failure isolation, ordering and cancellation.</td></tr>
+<tr><td>2 · Responsiveness (F3/F4/F6)</td><td>Run tag lookup/ranking and writes on background dispatchers; publish incremental remote suggestions; retain same-query cards during refresh; batch query persistence and publish admitted content without awaiting best-effort work. Tests prove local-before-network publication, stale rejection, retained content and persistence ordering.</td></tr>
+<tr><td>3 · Viewer (F5/F6/F8)</td><td>Unify GIF raw-byte acquisition with prefetch; retain decoder fallback and bounded/cancellable transport; resolve one adjacent sparse post and cancel superseded work; display matching page previews; keep cache side effects out of the resolution response. Tests prove cache reuse, cancellation and lookahead identity.</td></tr>
+<tr><td>4 · Integration</td><td>Run the focused host batch, quality checks, and compile Debug. Record actual evidence and limitations. Physical performance numbers remain separate from host behavior evidence.</td></tr></table></section>
+<section id="work"><h2>Work plan</h2><ol><li>Implement source execution policy and extract compatibility mapping from SearchCoordinator to keep hotspot budgets stable.</li><li>Implement background autocomplete, immutable normalized lookup snapshots where beneficial, and streamed provider improvements using the existing generation boundary.</li><li>Separate admitted UI results from ordered durable writes; batch the two applied-query keys. Keep failure feedback and final-write ownership explicit.</li><li>Retain same-query grid composition and show lightweight refresh progress. Different-query loading keeps the existing clear transition.</li><li>Introduce a shared GIF acquisition seam used by prefetch and Movie decoding, with a matching preview beneath loading content.</li><li>Add bounded Viewer resolution lookahead and remove durable thumbnail caching from the resolver's return path.</li><li>Add focused behavior tests for new concurrency, timeouts, persistence, loading and media boundaries. Run the final validation batch and update this document and AGENTS.md with important contracts.</li></ol></section>
+<section id="validation"><h2>Validation and acceptance</h2><p>Run from <code>/Users/axel/Desktop/Code_Projects/Personal/Apps/Theoria Codex</code>. Host-only tasks do not install or launch APKs.</p><pre><code>./gradlew :core-domain:test :core-data:test :core-sources:test :app-logic:test :app:testDebugUnitTest :app:assembleDebug
+./gradlew detekt :app:detektDebug
+python3 scripts/check_hotspots.py --base 5aa6ae0
+git diff --check</code></pre><p>Use focused test filters during root-cause repair; do not rerun already-passing unrelated suites. Lint, if run, follows all variant generation. No device task is allowed without packaged application-ID/signing proof. Existing macrobenchmark acceptance requires physical hardware; host delays prove scheduling behavior, never percentage speedups. Manual acceptance on an isolated build: refresh a populated Search, type rapidly with a full cache, swipe through sparse galleries and GIFs, and confirm every visible animated card continues playing.</p></section>
+<section id="log"><h2>Living log</h2><h3>Progress</h3><ul><li>[x] 2026-09-12 — Read audit, current code and plan standard; working tree clean.</li><li>[x] Provider execution and fallback acquisition.</li><li>[x] Suggestion, refresh and persistence changes.</li><li>[x] Viewer acquisition and lookahead.</li><li>[x] Behavior validation and final quality checks.</li></ul>
+<h3>Surprises and discoveries</h3><p>Full-suite verification exposed a pre-existing stale FeedFabRestoreState wire manifest: searchAnimationByScope and its nested restore type were missing. The manifest and nested R8 keep rule now match the existing schema. Async tests now inject the same test scheduler used by their route owner; local suggestions remain before debounce, but no longer execute on the input callback stack. Viewer resolution must invalidate old prefetch keys before warming full media. Prepared continuations must retain client-side exclusions. </p><p>Search state already retains old content during a root request; the screen alone hides it. Query persistence writes one JSON file twice. GIF Movie transport bypasses Coil's disk cache.</p>
+<p>Lint initially lacked lint-gradle:32.1.1 in the offline dependency cache. After dependency resolution it crashed inside Kotlin FIR/UAST while analyzing ViewerScreen.kt; the final isolated offline retry with --no-daemon passed after code generation completed. No lint suppression or relaxed configuration-cache policy was added. Final command: LINT_PRINT_STACKTRACE=true ./gradlew :app:lintDebug --offline --no-daemon --console=plain; BUILD SUCCESSFUL. Both final Release and Release Acceptance R8 verifications proved 249 durable fields across 45 retained classes (2 additional contract classes were proven unreachable). The final Viewer and real Search refresh test rerun, Debug assembly and app Detekt passed after the GIF-ready placeholder handoff was tightened.</p><h3>Decision log</h3><p>2026-09-12 · Codex: Use per-source deadlines for feed results to preserve weighted ordering; use incremental publication only for autocomplete. Preserve durable-write ownership rather than launching unowned fire-and-forget jobs.</p>
+<h3>Outcomes and retrospective</h3><p>All nine code changes are implemented. Final host results: 1,156 tests, zero failures, three skipped (1,153 passed). This includes the real Search-screen node-retention test and prepared-continuation exclusion coverage. Debug assembly and affected Detekt tasks passed. Aggregate Kover line coverage is 62.24% (55% floor); eligible changed-line coverage is 122/141 = 86.52% (60% floor). Hotspot and whitespace checks passed. ADB reports no attached devices, so physical performance calibration cannot run in this environment; no speedup percentages are claimed.</p></section>
+<section id="recovery"><h2>Idempotence and recovery</h2><p>All changes are source edits and host builds. Resume from git diff and this plan. Rerun failed focused tests after grouped fixes. Do not reset unrelated work or uninstall/clear any application. No data migrations or destructive cleanup are planned. No connected device was found during the final read-only inventory.</p></section>
+<section id="appendix"><h2>Appendix: evidence</h2><p>Host evidence is scheduling/behavior evidence. Virtual-time tests demonstrate 100 ms autocomplete publication while another provider takes 2 seconds; three grouped branches finish in two 100 ms waves with maximum concurrency two; two cold FYP fallback providers finish in one 1-second wave. Loopback HTTP tests prove one GIF acquisition across cache consumers and cancellation within a 2-second test deadline. These are controlled test parameters, not measured device latency.</p><p>Logs: /tmp/theoria-loading-final-artifacts.log (passing final artifacts and Viewer tests); /tmp/theoria-loading-isolated-lint.log (fresh offline lint); /tmp/theoria-loading-release-lint.log (minified serialization verification and lint); /tmp/theoria-loading-compile.log; /tmp/theoria-loading-tests.log (initial interrupted failing batch); /tmp/theoria-loading-focused.log; /tmp/theoria-loading-validation.log (passing full suite/build/Detekt); /tmp/theoria-loading-coverage.log (final coverage run).</p><details><summary>Complete changed-file inventory</summary><pre><code>.docs/exec/loading-performance-remediation.html
+AGENTS.md
+app-logic/src/main/kotlin/com/theoriacodex/app/search/SearchExecutionContract.kt
+app-logic/src/main/kotlin/com/theoriacodex/app/search/TagSuggestionRanking.kt
+app-logic/src/main/kotlin/com/theoriacodex/app/search/state/SearchContract.kt
+app/proguard-rules.pro
+app/src/main/java/com/theoriacodex/app/recommend/ForYouCoordinator.kt
+app/src/main/java/com/theoriacodex/app/search/SearchCoordinator.kt
+app/src/main/java/com/theoriacodex/app/search/SearchScreen.kt
+app/src/main/java/com/theoriacodex/app/search/SearchStateComponents.kt
+app/src/main/java/com/theoriacodex/app/search/SearchSuggestionCoordinator.kt
+app/src/main/java/com/theoriacodex/app/search/SearchViewModel.kt
+app/src/main/java/com/theoriacodex/app/search/TagSuggestionStore.kt
+app/src/main/java/com/theoriacodex/app/search/UnifiedQueryPreparation.kt
+app/src/main/java/com/theoriacodex/app/ui/TheoriaApp.kt
+app/src/main/java/com/theoriacodex/app/ui/routes/ViewerRouteWorkflow.kt
+app/src/main/java/com/theoriacodex/app/viewer/ViewerGifBytes.kt
+app/src/main/java/com/theoriacodex/app/viewer/ViewerLoadingPreview.kt
+app/src/main/java/com/theoriacodex/app/viewer/ViewerMediaLoading.kt
+app/src/main/java/com/theoriacodex/app/viewer/ViewerPlatformPrefetcher.kt
+app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt
+app/src/main/java/com/theoriacodex/app/viewer/ViewerViewModel.kt
+app/src/main/java/com/theoriacodex/app/viewer/state/ViewerAction.kt
+app/src/main/java/com/theoriacodex/app/viewer/state/ViewerStateReducer.kt
+app/src/test/java/com/theoriacodex/app/recommend/ForYouCoordinatorTest.kt
+app/src/test/java/com/theoriacodex/app/search/RequestOwnershipSearchViewModelTest.kt
+app/src/test/java/com/theoriacodex/app/search/SearchCoordinatorFixtures.kt
+app/src/test/java/com/theoriacodex/app/search/SearchCoordinatorTest.kt
+app/src/test/java/com/theoriacodex/app/search/SearchLoadingResponsivenessTest.kt
+app/src/test/java/com/theoriacodex/app/search/SearchRefreshPresentationTest.kt
+app/src/test/java/com/theoriacodex/app/search/SearchSuggestionCoordinatorTest.kt
+app/src/test/java/com/theoriacodex/app/search/SearchViewModelTestFixture.kt
+app/src/test/java/com/theoriacodex/app/search/UnifiedQueryPreparationTest.kt
+app/src/test/java/com/theoriacodex/app/viewer/ViewerGifByteStoreTest.kt
+app/src/test/java/com/theoriacodex/app/viewer/ViewerGifTransportTest.kt
+app/src/test/java/com/theoriacodex/app/viewer/ViewerScreenImagePipelineTest.kt
+app/src/test/java/com/theoriacodex/app/viewer/ViewerViewModelTest.kt
+app/src/test/resources/r8-json-contracts.txt
+core-data/src/main/kotlin/com/theoriacodex/data/repository/FileBackedQueryRepository.kt
+core-data/src/main/kotlin/com/theoriacodex/data/repository/Repositories.kt
+core-domain/src/main/kotlin/com/theoriacodex/domain/coroutines/MapConcurrent.kt
+core-domain/src/main/kotlin/com/theoriacodex/domain/orchestration/UnifiedSearchOrchestrator.kt
+core-domain/src/test/kotlin/com/theoriacodex/domain/orchestration/UnifiedSearchOrchestratorTest.kt
+core-sources/src/main/kotlin/com/theoriacodex/sources/nhentai/NhentaiSourceAdapter.kt</code></pre></details></section>
+</body></html>

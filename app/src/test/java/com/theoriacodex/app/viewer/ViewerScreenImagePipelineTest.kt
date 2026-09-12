@@ -13,6 +13,16 @@ import org.junit.Test
 
 class ViewerScreenImagePipelineTest {
     @Test
+    fun `loading preview never substitutes a cover for another gallery page`() {
+        val cover = ImageRef("https://example.test/cover.jpg", null, "image/jpeg")
+        val first = ImageRef("https://example.test/first.jpg", null, "image/jpeg")
+        val second = ImageRef("https://example.test/second.jpg", null, "image/jpeg")
+        val post = samplePost(SourceKey.PIXIV, cover, first, listOf(first, second))
+        assertEquals(cover.url, viewerLoadingPreviewLocation(post, first))
+        assertEquals(null, viewerLoadingPreviewLocation(post, second))
+    }
+
+    @Test
     fun `pixiv viewer candidates prefer progressive urls before canonical url`() {
         val media = ImageRef(
             url = "https://i.pximg.net/original.jpg",

@@ -22,6 +22,8 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
@@ -33,6 +35,7 @@ import kotlinx.coroutines.flow.first
  */
 internal class ViewerRouteWorkflow(
     private val data: DataDependencies,
+    private val cacheScope: CoroutineScope,
     private val sources: SourceDependencies,
     private val searchOwner: () -> SearchRouteOwnerHandle?,
     private val forYouOwner: () -> ForYouRouteOwnerHandle?,
@@ -57,9 +60,11 @@ internal class ViewerRouteWorkflow(
             ViewerStreamSource.CODEX,
             ViewerStreamSource.RECENTS,
             -> {
-                data.codexRepository.updatePost(post)
-                runCatchingPreservingCancellation {
-                    data.cacheRepository.cacheThumbnail(post)
+                cacheScope.launch {
+                    runCatchingPreservingCancellation {
+                        data.codexRepository.updatePost(post)
+                        data.cacheRepository.cacheThumbnail(post)
+                    }
                 }
             }
         }

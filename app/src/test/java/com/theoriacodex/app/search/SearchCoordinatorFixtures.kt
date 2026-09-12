@@ -21,6 +21,7 @@ internal fun testSearchCoordinator(
     statisticsRepository: StatisticsRepository = InMemoryStatisticsRepository(),
     tagSuggestionStore: TagSuggestionStore = NoOpTagSuggestionStore,
     clock: () -> Long = System::currentTimeMillis,
+    computationDispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.Default,
 ): SearchCoordinator {
     return SearchCoordinator(
         registry = registry,
@@ -31,5 +32,6 @@ internal fun testSearchCoordinator(
         statisticsRepository = statisticsRepository,
         tagSuggestionStore = tagSuggestionStore,
         clock = clock,
+        computationDispatcher = computationDispatcher,
     )
 }

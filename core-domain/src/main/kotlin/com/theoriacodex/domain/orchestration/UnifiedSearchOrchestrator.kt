@@ -16,6 +16,9 @@ import java.nio.charset.StandardCharsets
 import java.util.Base64
 import com.theoriacodex.domain.query.CapabilityExclusionReason
 import com.theoriacodex.domain.query.SourceCapabilityGate
+import com.theoriacodex.domain.coroutines.mapConcurrent
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -38,10 +41,12 @@ data class UnifiedSearchResult(
     val items: List<Post>,
     val nextPageTokens: Map<SourceKey, String?>,
     val statuses: List<SourceRunStatus>,
+    val queriesBySource: Map<SourceKey, Query> = emptyMap(),
 )
 
 class UnifiedSearchOrchestrator(
     private val adaptersBySource: Map<SourceKey, SourceAdapter>,
+    private val sourceTimeoutMs: Long = 15_000L,
 ) {
     suspend fun search(
         query: Query,
@@ -49,7 +54,9 @@ class UnifiedSearchOrchestrator(
         pageTokens: Map<SourceKey, String?>,
         weights: Map<SourceKey, Double>,
         queryOverridesBySource: Map<SourceKey, Query> = emptyMap(),
+        prepareQuery: suspend (SourceKey, Query) -> Query = { _, sourceQuery -> sourceQuery },
     ): UnifiedSearchResult = coroutineScope {
+        val preparedQueries = ConcurrentHashMap<SourceKey, Query>()
         val portableQuery = query.portableTermsForUnified()
         val candidateAdapters = enabledSources.mapNotNull { source ->
             adaptersBySource[source]?.let { source to it }
@@ -94,7 +101,14 @@ class UnifiedSearchOrchestrator(
                         sourceBaseQuery
                     }
                     source to runCatchingPreservingCancellation {
-                        searchSource(adapter, sourceQuery, pageTokens[source]).let { page ->
+                        val page = withTimeoutOrNull(sourceTimeoutMs) {
+                            val prepared = prepareQuery(source, sourceQuery)
+                            preparedQueries[source] = if (source in clientSideExcludeSources) {
+                                prepared.copy(excludeTerms = sourceBaseQuery.excludeTerms)
+                            } else prepared
+                            searchSource(adapter, prepared, pageTokens[source])
+                        } ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Source timed out")
+                        page.let { page ->
                             if (source in clientSideExcludeSources) {
                                 page.copy(
                                     items = applyClientSideExcludeFilter(
@@ -148,6 +162,7 @@ class UnifiedSearchOrchestrator(
             items = interleaved,
             nextPageTokens = succeededPages.mapValues { it.value.nextPageToken },
             statuses = statuses.sortedBy { it.source.name },
+            queriesBySource = preparedQueries.toMap(),
         )
     }
 
@@ -175,7 +190,7 @@ class UnifiedSearchOrchestrator(
         } else {
             decodeGroupedPageToken(pageToken, branchQueries.size)
         }
-        val pages = branchQueries.mapIndexed { index, branchQuery ->
+        val pages = branchQueries.withIndex().mapConcurrent(concurrency = 2) { (index, branchQuery) ->
             val branchToken = incomingTokens[index]
             if (!initial && branchToken == null) {
                 Page(items = emptyList(), nextPageToken = null)

@@ -34,6 +34,47 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class ViewerViewModelTest {
     @Test
+    fun `lookahead resolves only the next sparse post and swipe reuses active resolution`() = runTest {
+        val started = mutableListOf<PostId>()
+        val release = CompletableDeferred<Unit>()
+        val posts = listOf(post("first"), post("next", SourceKey.HITOMI, emptyList()),
+            post("third", SourceKey.HITOMI, emptyList()))
+        val owner = ViewerViewModel(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
+            started += id
+            if (id == posts[1].id) release.await()
+            post(id.sourcePostId, id.source)
+        }, scopeOverride = this)
+        owner.replaceSession(session("lookahead", posts))
+        runCurrent()
+        assertEquals(listOf(posts[1].id), started)
+        owner.onAction(ViewerAction.SelectPage(1))
+        owner.onAction(ViewerAction.RequestCurrentPageResolution)
+        release.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(1, started.count { it == posts[1].id })
+        assertEquals(ViewerResolutionStatus.RESOLVED, owner.state.value.currentPage?.resolution?.status)
+        assertEquals(1, owner.state.value.currentPage?.media?.size)
+        assertEquals(posts[2].id, started.last())
+    }
+
+    @Test
+    fun `jump cancels obsolete resolution without showing a timeout error`() = runTest {
+        val cancelled = mutableListOf<PostId>()
+        val posts = (0..3).map { post("$it", SourceKey.HITOMI, emptyList()) }
+        val owner = ViewerViewModel(SavedStateHandle(), postResolver = ViewerPostResolver { _, id ->
+            try { awaitCancellation() } finally { cancelled += id }
+        }, scopeOverride = this)
+        owner.replaceSession(session("jump", posts))
+        runCurrent()
+        owner.onAction(ViewerAction.SelectPage(3))
+        runCurrent()
+        assertEquals(listOf(posts[1].id), cancelled)
+        assertNull(owner.state.value.mediaError)
+        assertEquals(ViewerResolutionStatus.IDLE, owner.state.value.pages[1].resolution.status)
+        owner.clearSession()
+    }
+
+    @Test
     fun `equivalent reconstruction identity retains existing saved values`() = runTest {
         val handle = SavedStateHandle()
         val owner = ViewerViewModel(handle, scopeOverride = this)

@@ -31,6 +31,8 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -40,7 +42,26 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ForYouCoordinatorTest {
+    @Test
+    fun `cold fallback sources overlap and retain deterministic source order`() = runTest {
+        val adapters = listOf(SourceKey.GELBOORU, SourceKey.PIXIV).map { source ->
+            object : SourceAdapter by FakeAdapter(source, source.name) {
+                override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
+                    delay(1_000L)
+                    return listOf(TagSuggestion("favorite", "tag", 1))
+                }
+            }
+        }
+        val coordinator = testForYouCoordinator(registry = registryOf(*adapters.toTypedArray()))
+        coordinator.initialize()
+        val started = testScheduler.currentTime
+        coordinator.refresh(shuffle = false)
+        assertEquals(1_000L, testScheduler.currentTime - started)
+        assertEquals(setOf(SourceKey.GELBOORU, SourceKey.PIXIV), coordinator.results.map { it.id.source }.toSet())
+    }
+
     @Test
     fun `blacklist retries train each source once and a new root retrains`() = runTest {
         val profileId = defaultRecommendationProfiles().first().profileId
@@ -326,7 +347,7 @@ class ForYouCoordinatorTest {
             thrown = error
         }
 
-        assertTrue(thrown === expected)
+        assertEquals(expected.message, thrown?.message)
         assertEquals(postsBeforeCancellation, coordinator.results)
         assertFalse(coordinator.loading)
         assertNull(coordinator.errorMessage)

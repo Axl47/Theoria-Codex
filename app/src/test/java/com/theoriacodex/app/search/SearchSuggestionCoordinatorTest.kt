@@ -11,6 +11,28 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchSuggestionCoordinatorTest {
+    @Test
+    fun `unified suggestions publish fast provider before slow provider completes`() = runTest {
+        val fast = TestAdapter(SourceKey.PIXIV).apply {
+            autocompleteResponseDelayMs = 100L
+            autocomplete = listOf(TagSuggestion("blue fast", "tag", null))
+        }
+        val slow = TestAdapter(SourceKey.GELBOORU).apply {
+            autocompleteResponseDelayMs = 2_000L
+            autocomplete = listOf(TagSuggestion("blue slow", "tag", 1))
+        }
+        val coordinator = testSearchCoordinator(TestRegistry(listOf(fast, slow)))
+        coordinator.initializeRoute()
+        val updates = mutableListOf<Pair<Long, List<String>>>()
+        coordinator.fetchAutocomplete(unifiedQuery(""),
+            SearchSourceScope.Temporary(listOf(SourceKey.GELBOORU, SourceKey.PIXIV)),
+            FacetedSearchScope.All, "blue", emptyList(),
+            onUpdate = { updates += testScheduler.currentTime to it.autocomplete.map(TagSuggestion::text) })
+        assertEquals(100L, updates.first().first)
+        assertEquals(listOf("blue fast"), updates.first().second)
+        assertEquals(setOf("blue fast", "blue slow"), updates.last().second.toSet())
+    }
+
 
     @Test
     fun `cached autocomplete is immediate and fresh exact prefixes avoid duplicate provider calls`() = runTest {

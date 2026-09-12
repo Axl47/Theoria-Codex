@@ -10,6 +10,7 @@ import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.tags.normalizeMatchToken
 import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
@@ -198,17 +199,15 @@ internal class FileBackedTagSuggestionStore(
 
     override fun find(source: SourceKey, prefix: String, limit: Int): List<TagSuggestion> {
         if (limit <= 0 || prefix.isBlank()) return emptyList()
-        return synchronized(lock) {
-            inMemory[source]
-                .orEmpty()
-                .asSequence()
-                .filter(CachedSuggestion::isRecommendationTag)
-                .map(CachedSuggestion::toLegacySuggestion)
-                .filter { suggestion -> tagSuggestionMatches(suggestion, prefix) }
-                .distinctBy { suggestion -> suggestion.text.lowercase(Locale.ROOT) }
-                .take(limit)
-                .toList()
-        }
+        val normalizedPrefix = normalizeMatchToken(prefix)
+        val snapshot = synchronized(lock) { inMemory[source].orEmpty().toList() }
+        return snapshot.asSequence()
+            .filter(CachedSuggestion::isRecommendationTag)
+            .filter { it.normalizedText.contains(normalizedPrefix) || it.normalizedAlternate?.contains(normalizedPrefix) == true }
+            .distinctBy { it.normalizedText }
+            .take(limit)
+            .map(CachedSuggestion::toLegacySuggestion)
+            .toList()
     }
 
     override fun getTrending(source: SourceKey, limit: Int): List<TagSuggestion> {
@@ -291,26 +290,16 @@ internal class FileBackedTagSuggestionStore(
     }
 
     override fun findFaceted(
-        source: SourceKey,
-        prefix: String,
-        limit: Int,
-        scope: FacetedSearchScope,
+        source: SourceKey, prefix: String, limit: Int, scope: FacetedSearchScope,
     ): List<FacetedTagSuggestion> {
         if (limit <= 0 || prefix.isBlank()) return emptyList()
-        val normalizedPrefix = com.theoriacodex.domain.tags.normalizeMatchToken(prefix)
-        return synchronized(lock) {
-            inMemory[source]
-                .orEmpty()
-                .asSequence()
-                .filter { suggestion -> suggestion.matches(scope) }
-                .filter { suggestion ->
-                    com.theoriacodex.domain.tags.normalizeMatchToken(suggestion.text)
-                        .contains(normalizedPrefix)
-                }
-                .take(limit)
-                .map(CachedSuggestion::toFacetedSuggestion)
-                .toList()
-        }
+        val normalizedPrefix = normalizeMatchToken(prefix)
+        val snapshot = synchronized(lock) { inMemory[source].orEmpty().toList() }
+        return snapshot.asSequence()
+            .filter { it.matches(scope) && it.normalizedText.contains(normalizedPrefix) }
+            .take(limit)
+            .map(CachedSuggestion::toFacetedSuggestion)
+            .toList()
     }
 
     override fun putFaceted(source: SourceKey, suggestions: List<FacetedTagSuggestion>) {
@@ -588,6 +577,9 @@ private data class CachedSuggestion(
     val alternateText: String?,
     val origins: Set<TagSuggestionOrigin>,
 ) {
+    val normalizedText = normalizeMatchToken(text)
+    val normalizedAlternate = alternateText?.let(::normalizeMatchToken)
+
     val isRecommendationTag: Boolean
         get() = facet == SearchFacet.TAG
 

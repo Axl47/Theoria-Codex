@@ -15,15 +15,12 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import coil.request.ImageRequest
 import com.theoriacodex.app.media.MediaRequestFactory
-import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -54,7 +51,7 @@ internal suspend fun loadFirstGifMovie(
 ): Movie? {
     locations.forEachIndexed { index, location ->
         val result = runCatchingPreservingCancellation {
-            loadGifMovie(context, location, sourceKey.requestHeaders())
+            loadGifMovie(context, location, sourceKey)
         }
         val outcome = result.getOrNull()
         if (outcome?.movie != null) return outcome.movie
@@ -73,9 +70,9 @@ internal suspend fun loadFirstGifMovie(
 private suspend fun loadGifMovie(
     context: Context,
     location: String,
-    headers: Map<String, String>,
+    sourceKey: SourceKey,
 ): GifMovieLoadResult = withContext(Dispatchers.IO) {
-    val bytesResult = loadGifBytes(context, location, headers)
+    val bytesResult = loadGifBytes(context, location, sourceKey)
     val bytes = bytesResult.bytes
         ?: return@withContext GifMovieLoadResult(failure = bytesResult.failure ?: "media unavailable")
     val decoded = Movie.decodeByteArray(bytes, 0, bytes.size)
@@ -85,37 +82,18 @@ private suspend fun loadGifMovie(
     )
 }
 
-private fun loadGifBytes(
+private suspend fun loadGifBytes(
     context: Context,
     location: String,
-    headers: Map<String, String>,
+    sourceKey: SourceKey,
 ): GifBytesLoadResult = when {
     location.startsWith("http://", ignoreCase = true) ||
-        location.startsWith("https://", ignoreCase = true) -> loadRemoteGifBytes(location, headers)
+        location.startsWith("https://", ignoreCase = true) -> GifBytesLoadResult(bytes = loadRemoteViewerGifBytes(context, sourceKey, location))
     location.startsWith("content://", ignoreCase = true) -> {
         val bytes = context.contentResolver.openInputStream(location.toUri())?.use(InputStream::readBoundedGifBytes)
         GifBytesLoadResult(bytes = bytes, failure = if (bytes == null) "content unavailable" else null)
     }
     else -> loadLocalGifBytes(location)
-}
-
-private fun loadRemoteGifBytes(location: String, headers: Map<String, String>): GifBytesLoadResult {
-    val connection = URL(location).openConnection() as? HttpURLConnection
-        ?: return GifBytesLoadResult(failure = "unsupported connection")
-    return try {
-        connection.instanceFollowRedirects = true
-        connection.connectTimeout = 12_000
-        connection.readTimeout = 18_000
-        headers.forEach { (name, value) -> connection.setRequestProperty(name, value) }
-        val statusCode = connection.responseCode
-        if (statusCode in 200..299) {
-            GifBytesLoadResult(bytes = connection.inputStream.use(InputStream::readBoundedGifBytes))
-        } else {
-            GifBytesLoadResult(failure = "HTTP $statusCode")
-        }
-    } finally {
-        connection.disconnect()
-    }
 }
 
 private fun loadLocalGifBytes(location: String): GifBytesLoadResult {

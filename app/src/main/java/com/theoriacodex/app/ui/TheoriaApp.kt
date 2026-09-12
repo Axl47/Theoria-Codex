@@ -373,6 +373,7 @@ internal fun TheoriaAppContent(
     val viewerRouteWorkflow = remember(dataDependencies, sourceDependencies) {
         ViewerRouteWorkflow(
             data = dataDependencies,
+            cacheScope = scope,
             sources = sourceDependencies,
             searchOwner = { searchRouteOwner },
             forYouOwner = { forYouRouteOwner },
