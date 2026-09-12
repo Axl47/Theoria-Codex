@@ -368,6 +368,9 @@ fun SettingsScreen(
             }
         }
 
+        Button(onClick = { onAction(SettingsAction.OpenFollowedCreators) }) {
+            Text("Followed creators (${state.settings.followedCreators.size})")
+        }
         MediaPreferencesSection(state, onAction)
 
         SettingsSection(

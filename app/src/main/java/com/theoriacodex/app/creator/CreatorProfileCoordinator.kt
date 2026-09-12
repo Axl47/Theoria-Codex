@@ -14,6 +14,7 @@ import kotlinx.coroutines.ensureActive
 
 class CreatorProfileCoordinator(
     private val registry: SourceAdapterRegistry,
+    private val follows: com.theoriacodex.data.repository.CreatorFollowsRepository? = null,
 ) {
     private val requestLock = Any()
     private var nextPageToken: String? = null
@@ -99,6 +100,10 @@ class CreatorProfileCoordinator(
             val page = adapter.searchCreatorPosts(creator = creator, pageToken = null)
             ensureCurrent(request)
             results = page.items.distinctBy(Post::id)
+            if (follows != null) com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation {
+                follows.recordVisit(creator, results)
+            }
+            ensureCurrent(request)
             nextPageToken = page.nextPageToken
             canLoadMore = !page.nextPageToken.isNullOrBlank()
         } catch (error: CancellationException) {

@@ -11,6 +11,8 @@ internal const val SHARED_SOURCE_CATALOG_VERSION = 2
  * drifting away from the repository that originally wrote the file.
  */
 internal data class LegacySettingsStoreRecord(
+    @field:SerializedName("followedCreators")
+    val followedCreators: List<FollowedCreatorRecord>? = null,
     @field:SerializedName("sourceCatalogVersion")
     val sourceCatalogVersion: Int? = null,
     @field:SerializedName("enabledSources")
@@ -77,6 +79,7 @@ internal data class LegacySettingsStoreRecord(
             ?: profiles.first().profileId
         return RepositoryPolicies.normalizeSettings(
             AppSettings(
+                followedCreators = followedCreators.orEmpty().mapNotNull { it.toDomain() }.distinctBy { it.creator.followKey() }.take(MAX_FOLLOWED_CREATORS),
                 runtime = runtime,
                 cache = CacheSettings(
                     cacheFullImageOnSave = cacheFullImageOnSave,
@@ -139,6 +142,7 @@ internal data class LegacySettingsStoreRecord(
     companion object {
         fun fromDomain(settings: AppSettings): LegacySettingsStoreRecord {
             return LegacySettingsStoreRecord(
+                followedCreators = settings.followedCreators.map(FollowedCreatorRecord::fromDomain),
                 sourceCatalogVersion = SHARED_SOURCE_CATALOG_VERSION,
                 enabledSources = settings.runtime.enabledSources.map { it.name },
                 sourceWeights = settings.runtime.sourceWeights.mapKeys { it.key.name },

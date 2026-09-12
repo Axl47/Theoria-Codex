@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 /** App-level inputs rendered by Creator or used to reconcile source capability. */
 internal data class CreatorRouteConfig(
     val activeCreator: CreatorProfile?,
+    val followed: Boolean = false,
     val availableSources: Set<SourceKey>,
     val likedPostIds: Set<PostId>,
     val savedPostIds: Set<PostId>,
@@ -42,6 +43,7 @@ internal data class CreatorRouteCallbacks(
     val onRequestSaveToCodex: (Post) -> Unit,
     val onSaveToDevice: (Post) -> Unit,
     val onPostUrlCopied: (Post) -> Unit = {},
+    val onToggleFollow: (CreatorProfile, List<Post>) -> Unit = { _, _ -> },
     val onOpenUrl: (String) -> Unit,
     val onAddIncludeTerm: (Post, SearchTerm) -> Boolean,
     val onAddExcludeTerm: (Post, SearchTerm) -> Boolean,
@@ -146,6 +148,8 @@ private fun CreatorRouteContent(
     callbacks: CreatorRouteCallbacks,
 ) {
     CreatorProfileScreen(
+        followed = config.followed,
+        onToggleFollow = { state.creator?.let { callbacks.onToggleFollow(it, state.results) } },
         state = state,
         likedPostIds = config.likedPostIds,
         savedPostIds = config.savedPostIds,

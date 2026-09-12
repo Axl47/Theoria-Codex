@@ -76,6 +76,8 @@ import kotlinx.coroutines.flow.Flow
 @Composable
 fun CreatorProfileScreen(
     state: CreatorUiState,
+    followed: Boolean = false,
+    onToggleFollow: () -> Unit = {},
     likedPostIds: Set<PostId>,
     savedPostIds: Set<PostId>,
     pixivUgoiraClient: PixivUgoiraClient? = null,
@@ -209,6 +211,9 @@ fun CreatorProfileScreen(
                 subtitle = creator.source.displayName(),
                 onBack = { onAction(CreatorAction.Back) },
             ) {
+                androidx.compose.material3.TextButton(onClick = onToggleFollow, enabled = !state.isRefreshing) {
+                    Text(if (followed) "Following" else "Follow")
+                }
                 creator.profileUrl?.takeIf { it.isNotBlank() }?.let { profileUrl ->
                     IconButton(onClick = { onOpenUrl(profileUrl) }) {
                         Icon(

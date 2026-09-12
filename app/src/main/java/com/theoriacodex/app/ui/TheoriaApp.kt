@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.data.repository.followKey
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
@@ -345,6 +346,13 @@ internal fun TheoriaAppContent(
         key = "settings-route-owner",
         factory = SettingsViewModel.factory(appContainer),
     )
+
+    val followsOwner = viewModel<com.theoriacodex.app.creator.CreatorFollowsViewModel>(
+        key = "creator-follows",
+        factory = com.theoriacodex.app.creator.CreatorFollowsViewModel.factory(
+            dataDependencies.settingsRepository, sourceDependencies.registry),
+    )
+    var showFollowedCreators by remember { mutableStateOf(false) }
 
     var searchRouteOwner by remember { mutableStateOf<SearchRouteOwnerHandle?>(null) }
     var forYouRouteOwner by remember { mutableStateOf<ForYouRouteOwnerHandle?>(null) }
@@ -1111,6 +1119,16 @@ internal fun TheoriaAppContent(
     val bottomBarHeight = bottomNavigationSizing.totalHeightDp.dp
     val bottomBarIconSize = bottomNavigationSizing.iconSizeDp.dp
 
+    if (showFollowedCreators) {
+        com.theoriacodex.app.creator.FollowedCreatorsSheet(
+            owner = followsOwner,
+            onDismiss = { showFollowedCreators = false },
+            onOpen = { creator -> showFollowedCreators = false; scope.launch { openCreatorProfile(creator) } },
+        )
+    }
+    CollectRouteEffects(followsOwner.messages) { message ->
+        Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
+    }
     CollectRouteEffects(settingsOwner.effects) { effect ->
         when (effect) {
             is SettingsEffect.OpenExternalUri -> openInBrowser(appContext, effect.uri)
@@ -1137,6 +1155,7 @@ internal fun TheoriaAppContent(
                 }
             }
             SettingsEffect.ThumbnailCacheCleared -> thumbnailCacheGeneration += 1
+            SettingsEffect.ShowFollowedCreators -> showFollowedCreators = true
             SettingsEffect.NavigateToSettings -> {
                 pendingTopLevelRoute = TopLevelDestination.Settings.route
                 homeTabRoute = TopLevelDestination.Settings.route
@@ -1967,6 +1986,7 @@ internal fun TheoriaAppContent(
                             mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
                             pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                             config = CreatorRouteConfig(
+                                followed = state.settings.followedCreators.any { it.creator.followKey() == creator.followKey() },
                                 activeCreator = creator,
                                 availableSources = state.availableSources,
                                 likedPostIds = state.likedPostIds,
@@ -1979,6 +1999,7 @@ internal fun TheoriaAppContent(
                                 feedFabRestoreRegistry.update(fabContext, updated)
                             },
                             callbacks = CreatorRouteCallbacks(
+                                onToggleFollow = followsOwner::toggle,
                                 onOpenViewer = { effect ->
                                     val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
                                         effect.posts,

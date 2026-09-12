@@ -248,3 +248,8 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
+
+-keepclassmembers class com.theoriacodex.data.repository.FollowedCreatorRecord {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}

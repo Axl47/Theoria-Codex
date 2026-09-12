@@ -63,6 +63,7 @@ internal fun normalizeDataStoreSettings(settings: AppSettings): AppSettings {
     val retainedProfileIds = profiles.mapTo(mutableSetOf()) { profile -> profile.profileId }
     return RepositoryPolicies.normalizeSettings(
         normalized.copy(
+            followedCreators = normalized.followedCreators.distinctBy { it.creator.followKey() }.take(MAX_FOLLOWED_CREATORS),
             recommendationProfiles = profiles,
             favoriteTagsByProfile = normalized.favoriteTagsByProfile
                 .filterKeys { profileId -> profileId in retainedProfileIds }

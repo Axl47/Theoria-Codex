@@ -291,7 +291,8 @@ internal class DefaultTheoriaAppContainer(
             tagSuggestionStore = tagSuggestionStore,
         ),
         relatedPosts = RelatedPostsLoader(sourceRegistry),
-        creatorProfile = CreatorProfileCoordinator(registry = sourceRegistry),
+        creatorProfile = CreatorProfileCoordinator(registry = sourceRegistry,
+            follows = com.theoriacodex.data.repository.CreatorFollowsRepository(settingsRepository)),
         mediaDurationCoordinator = mediaDurationCoordinator,
         appUsageTracker = appUsageTracker,
     )
