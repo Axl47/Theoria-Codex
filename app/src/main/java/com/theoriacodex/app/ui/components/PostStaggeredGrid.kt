@@ -1,5 +1,9 @@
 package com.theoriacodex.app.ui.components
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridScope
+import com.theoriacodex.app.ui.adaptiveFeedColumns
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridItemScope
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
@@ -15,7 +19,7 @@ import com.theoriacodex.app.related.RelatedFeedEntry
 import com.theoriacodex.app.related.RelatedFeedProjection
 import com.theoriacodex.app.related.requestOrNull
 
-/** Shared two-column feed geometry; each route still owns card behavior and paging policy. */
+/** Shared adaptive feed geometry (two columns on phones); each route still owns card behavior and paging policy. */
 @Composable
 fun TwoColumnPostStaggeredGrid(
     posts: List<Post>,
@@ -25,13 +29,7 @@ fun TwoColumnPostStaggeredGrid(
     footerMessage: String? = null,
     itemContent: @Composable LazyStaggeredGridItemScope.(index: Int, post: Post) -> Unit,
 ) {
-    LazyVerticalStaggeredGrid(
-        columns = StaggeredGridCells.Fixed(2),
-        state = state,
-        modifier = modifier,
-        verticalItemSpacing = 6.dp,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
+    AdaptivePostGrid(state = state, modifier = modifier) {
         itemsIndexed(
             items = posts,
             key = { _, post -> "${post.id.source.name}:${post.id.sourcePostId}" },
@@ -54,13 +52,7 @@ fun TwoColumnProjectedPostStaggeredGrid(
     postContent: @Composable LazyStaggeredGridItemScope.(canonicalIndex: Int, post: Post) -> Unit,
     shelfContent: @Composable LazyStaggeredGridItemScope.(RelatedFeedEntry.ShelfEntry) -> Unit,
 ) {
-    LazyVerticalStaggeredGrid(
-        columns = StaggeredGridCells.Fixed(2),
-        state = state,
-        modifier = modifier,
-        verticalItemSpacing = 6.dp,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
+    AdaptivePostGrid(state = state, modifier = modifier) {
         itemsIndexed(
             items = projection.entries,
             key = { _, entry ->
@@ -88,5 +80,23 @@ fun TwoColumnProjectedPostStaggeredGrid(
         if (showPagingTile || footerMessage != null) {
             item(span = StaggeredGridItemSpan.FullLine) { FeedPagingTile(message = footerMessage) }
         }
+    }
+}
+
+@Composable
+private fun AdaptivePostGrid(
+    state: LazyStaggeredGridState,
+    modifier: Modifier,
+    content: LazyStaggeredGridScope.() -> Unit,
+) {
+    BoxWithConstraints(modifier = modifier) {
+        LazyVerticalStaggeredGrid(
+            columns = StaggeredGridCells.Fixed(adaptiveFeedColumns(maxWidth.value)),
+            state = state,
+            modifier = Modifier.fillMaxSize(),
+            verticalItemSpacing = 6.dp,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            content = content,
+        )
     }
 }

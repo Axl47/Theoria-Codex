@@ -69,15 +69,8 @@ internal fun TheoriaBottomNavigation(
                 selected = selectedIndex == index,
                 onClick = { onDestinationSelected(destination) },
                 icon = {
-                    val icon = when (destination) {
-                        TopLevelDestination.Search -> Icons.Default.Search
-                        TopLevelDestination.Recents -> Icons.Default.History
-                        TopLevelDestination.ForYou -> Icons.Default.Favorite
-                        TopLevelDestination.Codex -> Icons.Default.Collections
-                        TopLevelDestination.Settings -> Icons.Default.Settings
-                    }
                     Icon(
-                        imageVector = icon,
+                        imageVector = destination.icon(),
                         contentDescription = destination.label,
                         modifier = Modifier.size(iconSize),
                     )
@@ -87,4 +80,12 @@ internal fun TheoriaBottomNavigation(
             )
         }
     }
+}
+
+internal fun TopLevelDestination.icon() = when (this) {
+    TopLevelDestination.Search -> Icons.Default.Search
+    TopLevelDestination.Recents -> Icons.Default.History
+    TopLevelDestination.ForYou -> Icons.Default.Favorite
+    TopLevelDestination.Codex -> Icons.Default.Collections
+    TopLevelDestination.Settings -> Icons.Default.Settings
 }

@@ -3,6 +3,7 @@ package com.theoriacodex.app.settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -62,8 +63,10 @@ fun SettingsScreen(
     val recommendationProfilesExpanded =
         state.sectionExpansion[SettingsSectionKey.RECOMMENDATION_PROFILES]
 
+    androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
         modifier = Modifier
+            .widthIn(max = 800.dp)
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -530,6 +533,7 @@ fun SettingsScreen(
                 },
             )
         }
+    }
     }
 }
 

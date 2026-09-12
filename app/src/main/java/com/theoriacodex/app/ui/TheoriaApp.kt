@@ -1360,16 +1360,14 @@ internal fun TheoriaAppContent(
                 }
             }
         } else {
-            Scaffold(
-                snackbarHost = { SnackbarHost(snackbarHostState) },
-                bottomBar = {
-                    if (showBottomBar) {
-                        TheoriaBottomNavigation(
-                            selectedIndex = selectedTopLevelIndex,
-                            height = bottomBarHeight,
-                            iconSize = bottomBarIconSize,
-                            windowInsets = bottomBarWindowInsets,
-                            onDestinationSelected = { destination ->
+            TheoriaAdaptiveScaffold(
+                navigationVisible = showBottomBar,
+                selectedIndex = selectedTopLevelIndex,
+                bottomBarHeight = bottomBarHeight,
+                bottomBarIconSize = bottomBarIconSize,
+                bottomBarWindowInsets = bottomBarWindowInsets,
+                snackbarHostState = snackbarHostState,
+                onDestinationSelected = { destination ->
                                 homeTabRoute = destination.route
                                 val targetIndex = TopLevelDestination.entries.indexOf(destination)
                                 scope.launch {
@@ -1386,15 +1384,12 @@ internal fun TheoriaAppContent(
                                         topLevelPagerState.scrollToPage(targetIndex)
                                     }
                                 }
-                            },
-                        )
-                    }
                 },
-            ) { innerPadding ->
+            ) { contentModifier ->
                 NavHost(
                     navController = navController,
                     startDestination = AppRoute.Home,
-                    modifier = Modifier.padding(innerPadding),
+                    modifier = contentModifier,
                 ) {
                     composable(AppRoute.Home) {
                         HorizontalPager(

@@ -1120,10 +1120,7 @@ internal fun ViewerScreen(
 
     if (showInfoSheet) {
         val post = selectedPost
-        ModalBottomSheet(
-            onDismissRequest = { setInfoSheetVisible(false) },
-            dragHandle = null,
-        ) {
+        AdaptiveViewerInfo(onDismiss = { setInfoSheetVisible(false) }) {
             PostTagActionSection(
                 header = {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1269,8 +1266,7 @@ private fun ViewerMediaOverviewGrid(
     val gridState = rememberLazyGridState(
         initialFirstVisibleItemIndex = selectedOverviewIndex,
     )
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(2),
+    com.theoriacodex.app.ui.components.AdaptiveMediaGrid(
         state = gridState,
         modifier = modifier
             .background(MaterialTheme.colorScheme.background)
