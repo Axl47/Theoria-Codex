@@ -179,6 +179,8 @@ internal fun ViewerScreen(
     onOpenCreatorFallback: ((Post) -> Unit)? = null,
     playbackDiagnosticsEnabled: Boolean = false,
 ) {
+    val activity = LocalContext.current.viewerActivity()
+    val inPictureInPicture = activity?.viewerPictureInPictureActive == true
     var quality by remember(videoQuality) { mutableStateOf(videoQuality) }
     var qualityHeight by remember(uiState.currentMedia?.key) { mutableStateOf<Int?>(null) }
     val posts = remember(uiState.pages) { uiState.pages.map { page -> page.post } }
@@ -234,14 +236,14 @@ internal fun ViewerScreen(
     } == true
     val selectedMediaOverviewItems = remember(selectedPost) { viewerMediaOverviewItems(selectedPost) }
     val mediaOverviewAvailable = viewerMediaOverviewAvailable(selectedMediaOverviewItems)
-    val chromeVisible = uiState.controls.chromeVisible
-    val showInfoSheet = uiState.controls.metadataVisible
+    val chromeVisible = uiState.controls.chromeVisible && !inPictureInPicture
+    val showInfoSheet = uiState.controls.metadataVisible && !inPictureInPicture
     val mediaPlaybackEnabled = uiState.controls.playback.playing
     val playbackRestartRequest = uiState.controls.playback.restartRequest
     val playbackRate = closestViewerPlaybackRate(uiState.controls.playback.playbackRate)
     val actionsMenuExpanded = uiState.controls.actionsMenuVisible
     val playbackSettingsExpanded = uiState.controls.playbackSettingsVisible
-    val mediaOverviewVisible = uiState.overview.visible
+    val mediaOverviewVisible = uiState.overview.visible && !inPictureInPicture
 
     fun setInfoSheetVisible(visible: Boolean) {
         onAction(if (visible) ViewerAction.ShowMetadata else ViewerAction.HideMetadata)
@@ -798,6 +800,7 @@ internal fun ViewerScreen(
                             }
                         } else if (isVideoMedia) {
                             ViewerVideoPlayer(
+                                onPlaybackIntentChanged = { playing -> onAction(if (playing) ViewerAction.Play else ViewerAction.Pause) },
                                     loopPlayback = loopPlayback,
                                     onPlaybackCompleted = completePlayback,
                                 media = media,
@@ -1044,6 +1047,14 @@ internal fun ViewerScreen(
 
         if (chromeVisible) {
             ViewerChrome(
+                onPictureInPicture = if (selectedCurrentMedia?.let(::isVideoMediaRef) == true &&
+                    activity?.supportsViewerPictureInPicture() == true && uiState.mediaError == null) {
+                    {
+                        if (!activity.enterViewerPictureInPicture(selectedPost.width, selectedPost.height)) {
+                            android.widget.Toast.makeText(activity, "Picture-in-picture is unavailable", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } else null,
                 playbackMode = uiState.controls.playbackMode,
                 onPlaybackModeSelected = { onAction(ViewerAction.SetPlaybackMode(it)) },
                 quality = quality,
@@ -1481,6 +1492,7 @@ private fun SeekJumpFeedbackOverlay(
 
 @Composable
 private fun ViewerVideoPlayer(
+    onPlaybackIntentChanged: (Boolean) -> Unit = {},
     loopPlayback: Boolean = true,
     onPlaybackCompleted: () -> Unit = {},
     media: ImageRef,
@@ -1522,6 +1534,7 @@ private fun ViewerVideoPlayer(
     }
     var resumePosition by remember(postId, media.url) { mutableLongStateOf(0L) }
     val latestCompletion by rememberUpdatedState(onPlaybackCompleted)
+    val latestPlaybackIntent by rememberUpdatedState(onPlaybackIntentChanged)
     if (playbackLocation.isNullOrBlank()) {
         LaunchedEffect(media, loadGeneration) {
             onError("Video unavailable")
@@ -1575,6 +1588,10 @@ private fun ViewerVideoPlayer(
                 profile = VideoPlaybackProfile.VIEWER,
             )
         }
+        val sessionBinding = attachViewerMediaSession(lifecycleOwner.lifecycle) {
+            val session = createViewerMediaSession(context, player) { latestPlaybackIntent(it) }
+            java.io.Closeable { session.release() }
+        }
         if (resumePosition > 0L) player.seekTo(resumePosition)
         val firstFrameTraceGate = FirstFrameTraceGate()
         player.playbackParameters = PlaybackParameters(effectivePlaybackRate)
@@ -1602,6 +1619,12 @@ private fun ViewerVideoPlayer(
                 firstFrameTraceGate.recordOnce(MediaTraceSections.VIEWER_FIRST_FRAME)
             }
 
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY) {
+                    latestPlaybackIntent(false)
+                }
+            }
+
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 isActuallyPlaying = isPlaying
             }
@@ -1615,6 +1638,7 @@ private fun ViewerVideoPlayer(
             }
         }
         onDispose {
+            sessionBinding.close()
             resumePosition = player.currentPosition.coerceAtLeast(0L)
             player.removeListener(listener)
             if (playerRef === player) {
@@ -1699,7 +1723,10 @@ private fun ViewerVideoPlayer(
                     }
                 }
 
-                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
+                Lifecycle.Event.ON_PAUSE -> {
+                    if (context.viewerActivity()?.keepViewerPlayingOnPause != true) player.pause()
+                }
+                Lifecycle.Event.ON_STOP -> {
                     runCatching {
                         player.playWhenReady = false
                         player.pause()

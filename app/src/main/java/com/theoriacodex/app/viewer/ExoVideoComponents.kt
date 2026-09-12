@@ -44,6 +44,10 @@ internal fun createLoopingExoPlayer(
             repeatMode = Player.REPEAT_MODE_ONE
             setSeekParameters(SeekParameters.EXACT)
             volume = if (muted) 0f else 1f
+            if (!muted) {
+                setAudioAttributes(androidx.media3.common.AudioAttributes.DEFAULT, true)
+                setHandleAudioBecomingNoisy(true)
+            }
             setMediaItem(request.mediaItem)
             prepare()
         }

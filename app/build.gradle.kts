@@ -281,6 +281,7 @@ dependencies {
     }
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
+    implementation(libs.androidx.media3.session)
     implementation(libs.androidx.profileinstaller)
     implementation(libs.gson)
 

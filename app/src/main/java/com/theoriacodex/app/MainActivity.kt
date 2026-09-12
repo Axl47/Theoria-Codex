@@ -12,6 +12,25 @@ import androidx.compose.runtime.setValue
 import com.theoriacodex.app.ui.TheoriaApp
 
 class MainActivity : ComponentActivity() {
+    var viewerPictureInPictureActive by mutableStateOf(false)
+        private set
+    private var enteringViewerPictureInPicture = false
+    val keepViewerPlayingOnPause: Boolean
+        get() = enteringViewerPictureInPicture || isInPictureInPictureMode
+
+    fun requestViewerPictureInPicture(params: android.app.PictureInPictureParams): Boolean {
+        enteringViewerPictureInPicture = true
+        val entered = runCatching { enterPictureInPictureMode(params) }.getOrDefault(false)
+        if (!entered) enteringViewerPictureInPicture = false
+        return entered
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        viewerPictureInPictureActive = isInPictureInPictureMode
+        enteringViewerPictureInPicture = false
+    }
+
     private var incomingUri by mutableStateOf<Uri?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {

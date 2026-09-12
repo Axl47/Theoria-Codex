@@ -66,6 +66,7 @@ internal fun ViewerChrome(
     onInfo: () -> Unit,
     modifier: Modifier = Modifier,
     onToggleLike: (() -> Unit)? = null,
+    onPictureInPicture: (() -> Unit)? = null,
     quality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
     playbackMode: com.theoriacodex.app.viewer.state.ViewerPlaybackMode = com.theoriacodex.app.viewer.state.ViewerPlaybackMode.LOOP,
     onPlaybackModeSelected: (com.theoriacodex.app.viewer.state.ViewerPlaybackMode) -> Unit = {},
@@ -109,6 +110,7 @@ internal fun ViewerChrome(
             downloadEnabled = downloadEnabled,
             onDownload = onDownload,
             onInfo = onInfo,
+            onPictureInPicture = onPictureInPicture,
         )
     }
 }
@@ -233,6 +235,7 @@ private fun PlaybackRateMenuItem(
 
 @Composable
 private fun ViewerActionsMenu(
+    onPictureInPicture: (() -> Unit)?,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     invertScrollOptionVisible: Boolean,
@@ -264,6 +267,12 @@ private fun ViewerActionsMenu(
                 enabled = downloadEnabled,
                 leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) },
             )
+            if (onPictureInPicture != null) {
+                DropdownMenuItem(text = { Text("Picture-in-picture") }, onClick = {
+                    onExpandedChange(false)
+                    onPictureInPicture()
+                })
+            }
             if (invertScrollOptionVisible) {
                 DropdownMenuItem(
                     text = { Text("Invert scroll direction") },
