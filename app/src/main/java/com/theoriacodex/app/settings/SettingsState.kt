@@ -111,6 +111,7 @@ sealed interface SettingsAction {
     data class PixivCallbackCompleted(val errorMessage: String? = null) : SettingsAction
     data object DismissCredentialRecovery : SettingsAction
     data object ResetCredentialStore : SettingsAction
+    data object OpenSourceAccounts : SettingsAction
     data object SettingsEntered : SettingsAction
 }
 

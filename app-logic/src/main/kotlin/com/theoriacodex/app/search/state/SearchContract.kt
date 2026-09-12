@@ -191,6 +191,7 @@ sealed interface SearchAction {
     ) : SearchAction
     data object ResetDraft : SearchAction
     data object ClearDraft : SearchAction
+    data class RetrySource(val source: SourceKey) : SearchAction
     data object Retry : SearchAction
     data object LoadNextPage : SearchAction
     data object CancelActiveRequest : SearchAction

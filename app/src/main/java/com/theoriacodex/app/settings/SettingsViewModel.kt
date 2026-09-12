@@ -378,6 +378,10 @@ internal class SettingsViewModel(
             is SettingsAction.PixivCallbackCompleted -> handlePixivCallback(action.errorMessage)
             SettingsAction.DismissCredentialRecovery -> updateAccounts { copy(showRecoveryDialog = false) }
             SettingsAction.ResetCredentialStore -> resetCredentialStore()
+            SettingsAction.OpenSourceAccounts -> {
+                onAction(SettingsAction.SetSectionExpanded(SettingsSectionKey.SOURCE_ACCOUNTS, true))
+                effectChannel.trySend(SettingsEffect.NavigateToSettings)
+            }
             SettingsAction.SettingsEntered -> {
                 updateAccounts { copy(gelbooruApiKeyInput = "", rule34XxxApiKeyInput = "") }
                 refreshAccounts()

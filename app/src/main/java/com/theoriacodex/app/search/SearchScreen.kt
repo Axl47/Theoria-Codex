@@ -193,6 +193,7 @@ fun SearchScreen(
     onRequestSaveToCodex: (Post) -> Unit,
     onSaveToDevice: (Post) -> Unit,
     onPostUrlCopied: (Post) -> Unit = {},
+    onOpenSourceAccounts: () -> Unit = {},
     onAddFavoriteTag: (SourceKey, String) -> Unit = { _, _ -> },
     onRemoveFavoriteTag: (SourceKey, String) -> Unit = { _, _ -> },
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
@@ -602,7 +603,12 @@ fun SearchScreen(
                         state.query.appliedSourceScope !is SearchSourceScope.Single &&
                         sourceStatusChips.isNotEmpty()
                     ) {
-                        StatusRow(statuses = sourceStatusChips)
+                        StatusRow(
+                            statuses = sourceStatusChips,
+                            retryEnabled = state.execution.activeRequestId == null,
+                            onRetrySource = { onAction(SearchAction.RetrySource(it)) },
+                            onOpenAccounts = onOpenSourceAccounts,
+                        )
                     }
 
                     Row(

@@ -229,6 +229,8 @@ internal class SearchViewModel(
                 SearchDraftReducer.clearDraft(it).state
             }
 
+            is SearchAction.RetrySource -> retrySource(action.source)
+
             SearchAction.Retry -> mutableState.value.let { current ->
                 launchRootSearch(
                     kind = SearchRequestKind.RETRY,
@@ -716,6 +718,37 @@ internal class SearchViewModel(
     ): Boolean {
         return mutableState.value.execution.activeRequestId == requestId &&
             result.executionKey == expectedExecutionKey
+    }
+
+    private fun retrySource(source: SourceKey) {
+        val current = mutableState.value
+        if (current.execution.activeRequestId != null || current.content.statuses.none {
+            it.source == source && it.state == com.theoriacodex.domain.orchestration.SourceRunState.FAILED
+        }) return
+        val continuation = activeContinuation
+        val requestId = ++nextRequestId
+        reduce(SearchStateChange.BeginRequest(requestId, SearchRequestKind.PAGE, current.query.applied))
+        val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
+            try {
+                val result = coordinator.retrySource(
+                    current.query.applied, current.query.appliedSourceScope, continuation, source,
+                )
+                coroutineContext.ensureActive()
+                if (mutableState.value.execution.activeRequestId == requestId &&
+                    mutableState.value.query.appliedQueryHash == result.executionKey) {
+                    completePageRequest(requestId, result)
+                } else cancelRequestIfCurrent(requestId)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                failRequestIfCurrent(requestId, error.message ?: "Could not retry source")
+            } finally {
+                if (!isActive) cancelRequestIfCurrent(requestId)
+            }
+        }
+        activeRequestJob = job
+        job.invokeOnCompletion { if (activeRequestJob === job) activeRequestJob = null }
+        job.start()
     }
 
     private fun launchPage(continuation: SearchContinuation) {

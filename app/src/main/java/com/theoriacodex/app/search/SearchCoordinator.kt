@@ -188,7 +188,11 @@ class SearchCoordinator(
                 executionKey = key,
                 query = sanitized,
                 sourceScope = sourceScope,
-                statuses = emptyList(),
+                statuses = (sanitized.mode as? QueryMode.Source)?.let { mode ->
+                    listOf(SourceRunStatus(mode.source, SourceRunState.FAILED,
+                        failureReason = (error as? SourceAdapterException)?.reason ?: SourceFailureReason.UNKNOWN,
+                        errorMessage = error.message))
+                }.orEmpty(),
                 message = if (isPixivUnknownError(error, sanitized)) {
                     PIXIV_UNKNOWN_RETRY_MESSAGE
                 } else error.message ?: "Unknown error",
@@ -293,6 +297,53 @@ class SearchCoordinator(
         )
     }
 
+    /** Retries only the failed provider at its exact page, retaining every other continuation. */
+    internal suspend fun retrySource(
+        query: Query,
+        scope: SearchSourceScope,
+        previous: SearchContinuation?,
+        source: SourceKey,
+    ): SearchPageResult {
+        val enabled = effectiveEnabledSources(scope)
+        val base = previous ?: continuation(
+            executionKey(query, scope), query, scope, enabled, availableSources, effectiveWeights(enabled),
+        )
+        if (source !in enabled) return SearchPageResult.Failure(
+            base.executionKey, emptyList(), "Source is no longer available",
+        )
+        val token = if (query.mode is QueryMode.Source) base.sourcePageToken else base.unifiedPageTokens[source]
+        val overrides = base.unifiedQueryOverrides.ifEmpty { buildUnifiedQueryOverrides(query, enabled) }
+        val result = registry.unifiedOrchestrator().search(
+            query = query,
+            enabledSources = setOf(source),
+            pageTokens = mapOf(source to token),
+            weights = mapOf(source to 1.0),
+            queryOverridesBySource = overrides.filterKeys { it == source },
+            prepareQuery = { key, prepared ->
+                if (key == SourceKey.GELBOORU && key !in base.unifiedQueryOverrides) {
+                    queryPreparation.prepareGelbooru(requireNotNull(registry.adapterFor(key)), prepared)
+                } else prepared
+            },
+        )
+        currentCoroutineContext().ensureActive()
+        if (result.statuses.none { it.state == SourceRunState.SUCCESS }) {
+            return SearchPageResult.Failure(
+                base.executionKey, result.statuses, buildSourceFailureMessage(result.statuses)
+                    ?: buildSourceAuthErrorMessage(result.statuses) ?: "Source could not be retried",
+            )
+        }
+        rememberSeenTags(result.items)
+        val updated = if (query.mode is QueryMode.Source) {
+            base.copy(sourcePageToken = result.nextPageTokens[source])
+        } else {
+            base.copy(
+                unifiedPageTokens = base.unifiedPageTokens + result.nextPageTokens,
+                unifiedQueryOverrides = base.unifiedQueryOverrides + result.queriesBySource,
+            )
+        }
+        return SearchPageResult.Success(base.executionKey, result.items, result.statuses, updated)
+    }
+
     override suspend fun executePage(continuation: SearchContinuation): SearchPageResult {
         currentCoroutineContext().ensureActive()
         return try {
@@ -346,7 +397,8 @@ class SearchCoordinator(
         }
         rememberSeenTags(result.items)
         val nextTokens = continuation.unifiedPageTokens.toMutableMap().apply {
-            pageable.forEach { source -> put(source, null) }
+            val failed = result.statuses.filter { it.state == SourceRunState.FAILED }.map { it.source }.toSet()
+            pageable.filterNot { it in failed }.forEach { source -> put(source, null) }
             putAll(result.nextPageTokens)
         }
         return SearchPageResult.Success(

@@ -56,6 +56,7 @@ internal data class SearchRouteCallbacks(
     val onRequestSaveToCodex: (Post) -> Unit,
     val onSaveToDevice: (Post) -> Unit,
     val onPostUrlCopied: (Post) -> Unit = {},
+    val onOpenSourceAccounts: () -> Unit = {},
     val onAddFavoriteTag: (SourceKey, String) -> Unit,
     val onRemoveFavoriteTag: (SourceKey, String) -> Unit,
 )
@@ -376,6 +377,7 @@ private fun SearchRouteContent(
         onRequestSaveToCodex = callbacks.onRequestSaveToCodex,
         onSaveToDevice = callbacks.onSaveToDevice,
         onPostUrlCopied = callbacks.onPostUrlCopied,
+        onOpenSourceAccounts = callbacks.onOpenSourceAccounts,
         onAddFavoriteTag = callbacks.onAddFavoriteTag,
         onRemoveFavoriteTag = callbacks.onRemoveFavoriteTag,
         fabRestoreState = fabRestoreState,

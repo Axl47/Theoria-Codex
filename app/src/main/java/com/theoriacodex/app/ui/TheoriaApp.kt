@@ -1408,6 +1408,7 @@ internal fun TheoriaAppContent(
                                             feedFabRestoreRegistry.update(SEARCH_FEED_FAB_CONTEXT, updated)
                                         },
                                         callbacks = SearchRouteCallbacks(
+                                            onOpenSourceAccounts = { settingsOwner.onAction(SettingsAction.OpenSourceAccounts) },
                                             onOpenViewer = { effect ->
                                                 val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
                                                     effect.posts,

@@ -48,6 +48,47 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchCoordinatorTest {
     @Test
+    fun `retry source preserves other continuation and retries exact failed page`() = runTest {
+        val pixiv = TestAdapter(SourceKey.PIXIV)
+        val gelbooru = TestAdapter(SourceKey.GELBOORU)
+        val owner = coordinator(pixiv, gelbooru)
+        owner.initializeRoute()
+        val query = unifiedQuery("retry")
+        val initial = owner.executeInitial(query, SearchSourceScope.GlobalUnified) as SearchExecutionResult.Success
+        gelbooru.failure = SourceAdapterException(SourceFailureReason.NETWORK, "offline")
+        val page = owner.executePage(initial.continuation) as SearchPageResult.Success
+        assertEquals("next", page.continuation.unifiedPageTokens[SourceKey.GELBOORU])
+        assertEquals(null, page.continuation.unifiedPageTokens[SourceKey.PIXIV])
+        val successfulCalls = pixiv.searchedTags.size
+        gelbooru.failure = null
+        val retry = owner.retrySource(query, SearchSourceScope.GlobalUnified, page.continuation,
+            SourceKey.GELBOORU) as SearchPageResult.Success
+        assertEquals(successfulCalls, pixiv.searchedTags.size)
+        assertEquals(listOf("retry-1"), retry.posts.map { it.id.sourcePostId })
+        assertEquals(initial.executionKey, retry.executionKey)
+        assertFalse(retry.continuation.canLoadMore)
+    }
+
+    @Test
+    fun `retry initially failed source retains successful sources next page`() = runTest {
+        val pixiv = TestAdapter(SourceKey.PIXIV)
+        val gelbooru = TestAdapter(SourceKey.GELBOORU).apply {
+            failure = SourceAdapterException(SourceFailureReason.AUTH_REQUIRED, "account")
+        }
+        val owner = coordinator(pixiv, gelbooru)
+        owner.initializeRoute()
+        val query = unifiedQuery("retry")
+        val initial = owner.executeInitial(query, SearchSourceScope.GlobalUnified) as SearchExecutionResult.Success
+        gelbooru.failure = null
+        val result = owner.retrySource(query, SearchSourceScope.GlobalUnified, initial.continuation,
+            SourceKey.GELBOORU) as SearchPageResult.Success
+        assertEquals("next", result.continuation.unifiedPageTokens[SourceKey.PIXIV])
+        assertEquals("next", result.continuation.unifiedPageTokens[SourceKey.GELBOORU])
+        assertEquals(1, pixiv.searchedTags.size)
+        assertEquals(listOf("retry-0"), result.posts.map { it.id.sourcePostId })
+    }
+
+    @Test
     fun `initial execution returns immutable posts status and continuation`() = runTest {
         val coordinator = coordinator(TestAdapter(SourceKey.PIXIV))
         coordinator.initializeRoute()
