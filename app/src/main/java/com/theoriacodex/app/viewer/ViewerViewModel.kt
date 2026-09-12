@@ -94,13 +94,20 @@ internal class ViewerViewModel(
             if (restoresSavedSelection && restoredMediaIndex > 0) {
                 result = reduceViewerState(result.state, ViewerAction.SelectMedia(restoredMediaIndex))
             }
+            if (restoresSavedSelection) {
+                val mode = com.theoriacodex.app.viewer.state.ViewerPlaybackMode.entries.firstOrNull {
+                    it.name == savedStateHandle.get<String>(ViewerSavedStateKeys.PLAYBACK_MODE)
+                } ?: com.theoriacodex.app.viewer.state.ViewerPlaybackMode.LOOP
+                result = reduceViewerState(result.state, ViewerAction.SetPlaybackMode(mode))
+            }
             result.also {
                 mutableState.value = result.state
                 persist(result.state)
             }
         }
         reduction.effects.forEach(::handleEffect)
-        if (action is ViewerAction.SelectPage || action is ViewerAction.ReplaceSession) reconcileResolutionLookahead()
+        if (action is ViewerAction.SelectPage || action is ViewerAction.ReplaceSession ||
+            action is ViewerAction.PlaybackCompleted) reconcileResolutionLookahead()
     }
 
     /** Bridges the existing process-local shell handoff into the route contract. */
@@ -333,6 +340,7 @@ internal class ViewerViewModel(
         saveIfChanged(ViewerSavedStateKeys.STREAM_KEY, session.streamKey)
         saveIfChanged(ViewerSavedStateKeys.PAGE_INDEX, current.currentPageIndex)
         saveIfChanged(ViewerSavedStateKeys.MEDIA_INDEX, current.currentPage?.selectedMediaIndex ?: 0)
+        saveIfChanged(ViewerSavedStateKeys.PLAYBACK_MODE, current.controls.playbackMode.name)
         restoredPageIndex = current.currentPageIndex
         restoredMediaIndex = current.currentPage?.selectedMediaIndex ?: 0
     }
@@ -349,6 +357,7 @@ internal class ViewerViewModel(
         savedStateHandle.remove<String>(ViewerSavedStateKeys.STREAM_KEY)
         savedStateHandle.remove<Int>(ViewerSavedStateKeys.PAGE_INDEX)
         savedStateHandle.remove<Int>(ViewerSavedStateKeys.MEDIA_INDEX)
+        savedStateHandle.remove<String>(ViewerSavedStateKeys.PLAYBACK_MODE)
     }
 
     override fun onCleared() {
@@ -387,6 +396,7 @@ internal object ViewerSavedStateKeys {
     const val STREAM_KEY = "viewer_stream_key"
     const val PAGE_INDEX = "viewer_page_index"
     const val MEDIA_INDEX = "viewer_media_index"
+    const val PLAYBACK_MODE = "viewer_playback_mode"
 }
 
 internal fun ViewerSession.toViewerSessionIdentity(): ViewerSessionIdentity {

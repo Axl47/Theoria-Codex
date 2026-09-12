@@ -66,6 +66,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -141,6 +142,8 @@ import java.io.File
 import java.io.IOException
 import com.theoriacodex.app.media.isMediaNetworkMetered
 import com.theoriacodex.app.media.withVideoQuality
+import coil.request.repeatCount
+import coil.request.onAnimationEnd
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -687,6 +690,14 @@ internal fun ViewerScreen(
                     modifier = Modifier
                         .fillMaxSize()
                 ) {
+                    val loopPlayback = uiState.controls.playbackMode == com.theoriacodex.app.viewer.state.ViewerPlaybackMode.LOOP
+                    val completePlayback = {
+                        uiState.session?.let { session ->
+                            onAction(ViewerAction.PlaybackCompleted(session,
+                                com.theoriacodex.app.viewer.state.ViewerMediaKey(post.id, mediaPage), loadGeneration))
+                        }
+                        Unit
+                    }
                     val imageDeliveryPlan = remember(post, media, isVideoMedia, loadGeneration) {
                         if (isVideoMedia) null else viewerMediaDeliveryPlan(post, media)
                     }
@@ -761,6 +772,8 @@ internal fun ViewerScreen(
                                     .then(mediaTransformModifier),
                             ) {
                                 PixivUgoiraPlayer(
+                                    loopPlayback = loopPlayback,
+                                    onPlaybackCompleted = completePlayback,
                                     postId = post.id.sourcePostId,
                                     client = requireNotNull(pixivUgoiraClient),
                                     contentDescription = post.title ?: post.id.sourcePostId,
@@ -785,6 +798,8 @@ internal fun ViewerScreen(
                             }
                         } else if (isVideoMedia) {
                             ViewerVideoPlayer(
+                                    loopPlayback = loopPlayback,
+                                    onPlaybackCompleted = completePlayback,
                                 media = media,
                                 quality = quality,
                                 qualityHeight = qualityHeight,
@@ -815,6 +830,8 @@ internal fun ViewerScreen(
                             )
                         } else if (isGifMedia && gifLocations.isNotEmpty()) {
                             ViewerGifPlayer(
+                                    loopPlayback = loopPlayback,
+                                    onPlaybackCompleted = completePlayback,
                                 sourceKey = post.id.source,
                                 locations = gifLocations,
                                 modifier = Modifier.fillMaxSize(),
@@ -841,6 +858,8 @@ internal fun ViewerScreen(
                             )
                         } else if (isControlledAnimatedWebP && activeImageUrl != null) {
                             ViewerAnimatedWebPPlayer(
+                                loopPlayback = loopPlayback,
+                                onPlaybackCompleted = completePlayback,
                                 sourceKey = post.id.source,
                                 location = activeImageUrl,
                                 contentDescription = post.title ?: post.id.sourcePostId,
@@ -1025,6 +1044,8 @@ internal fun ViewerScreen(
 
         if (chromeVisible) {
             ViewerChrome(
+                playbackMode = uiState.controls.playbackMode,
+                onPlaybackModeSelected = { onAction(ViewerAction.SetPlaybackMode(it)) },
                 quality = quality,
                 qualityHeight = qualityHeight,
                 videoVariants = uiState.currentMedia?.ref?.videoVariants.orEmpty(),
@@ -1048,13 +1069,14 @@ internal fun ViewerScreen(
                 },
                 playbackSettingsExpanded = playbackSettingsExpanded,
                 onPlaybackSettingsExpandedChange = { expanded ->
-                    setPlaybackSettingsExpanded(expanded && currentIsSeekableMedia)
-                    if (expanded && currentIsSeekableMedia) {
+                    setPlaybackSettingsExpanded(expanded && uiState.controls.playback.available)
+                    if (expanded && uiState.controls.playback.available) {
                         setActionsMenuExpanded(false)
                         markInteraction()
                     }
                 },
-                playbackSettingsEnabled = currentIsSeekableMedia,
+                playbackSettingsEnabled = uiState.controls.playback.available,
+                playbackRateEnabled = currentIsSeekableMedia,
                 playbackRate = playbackRate,
                 onPlaybackRateSelected = { selectedRate ->
                     onAction(ViewerAction.SetPlaybackRate(selectedRate.speed))
@@ -1459,6 +1481,8 @@ private fun SeekJumpFeedbackOverlay(
 
 @Composable
 private fun ViewerVideoPlayer(
+    loopPlayback: Boolean = true,
+    onPlaybackCompleted: () -> Unit = {},
     media: ImageRef,
     quality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
     qualityHeight: Int? = null,
@@ -1497,6 +1521,7 @@ private fun ViewerVideoPlayer(
         resolveViewerVideoPlaybackLocation(media.withVideoQuality(quality, metered, qualityHeight))
     }
     var resumePosition by remember(postId, media.url) { mutableLongStateOf(0L) }
+    val latestCompletion by rememberUpdatedState(onPlaybackCompleted)
     if (playbackLocation.isNullOrBlank()) {
         LaunchedEffect(media, loadGeneration) {
             onError("Video unavailable")
@@ -1558,6 +1583,7 @@ private fun ViewerVideoPlayer(
                 if (playerRef !== player) return
                 runCatching {
                     loading = playbackState == Player.STATE_IDLE || playbackState == Player.STATE_BUFFERING
+                    if (playbackState == Player.STATE_ENDED) latestCompletion()
                     val duration = player.duration.takeIf { it > 0L }
                     if (duration != null) {
                         durationMs = duration
@@ -1607,6 +1633,10 @@ private fun ViewerVideoPlayer(
             }
             playerViewRef = null
         }
+    }
+
+    LaunchedEffect(playerRef, loopPlayback) {
+        playerRef?.repeatMode = if (loopPlayback) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
     }
 
     LaunchedEffect(playerRef, effectivePlaybackRate) {
@@ -1865,6 +1895,8 @@ private fun ViewerMediaErrorOverlay(
 
 @Composable
 private fun ViewerAnimatedWebPPlayer(
+    loopPlayback: Boolean = true,
+    onPlaybackCompleted: () -> Unit = {},
     sourceKey: SourceKey,
     location: String,
     contentDescription: String,
@@ -1897,6 +1929,20 @@ private fun ViewerAnimatedWebPPlayer(
     var frameIndex by remember(location, loadGeneration) { mutableIntStateOf(0) }
     var frameCount by remember(location, loadGeneration) { mutableIntStateOf(0) }
     val effectivePaused = isPlaying?.not() ?: paused
+    val latestCompletion by rememberUpdatedState(onPlaybackCompleted)
+    val animationScope = rememberCoroutineScope()
+    DisposableEffect(drawable, loopPlayback) {
+        val active = drawable
+        active?.setLoopLimit(if (loopPlayback) 0 else 1)
+        val callback = object : androidx.vectordrawable.graphics.drawable.Animatable2Compat.AnimationCallback() {
+            override fun onAnimationEnd(drawable: android.graphics.drawable.Drawable) {
+                if (!loopPlayback) animationScope.launch { latestCompletion() }
+            }
+        }
+        active?.registerAnimationCallback(callback)
+        onDispose { active?.unregisterAnimationCallback(callback) }
+    }
+
 
     DisposableEffect(drawable, lifecycleOwner, isActive, effectivePaused) {
         val activeDrawable = drawable
@@ -2003,6 +2049,8 @@ private tailrec fun android.graphics.drawable.Drawable.unwrapWebPDrawable(): Web
 @Suppress("DEPRECATION") // Movie is the API 26-compatible controllable GIF timeline backend.
 @Composable
 private fun ViewerGifPlayer(
+    loopPlayback: Boolean = true,
+    onPlaybackCompleted: () -> Unit = {},
     sourceKey: SourceKey,
     locations: List<String>,
     modifier: Modifier = Modifier,
@@ -2067,7 +2115,11 @@ private fun ViewerGifPlayer(
                         url = fallbackLocation,
                         sourceKey = sourceKey,
                         crossfade = false,
-                    ),
+                    ).newBuilder(context)
+                        .repeatCount(if (loopPlayback) -1 else 0)
+                        .onAnimationEnd { if (!loopPlayback) onPlaybackCompleted() }
+                        .setParameter("viewerRestart", restartRequest)
+                        .build(),
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize().then(mediaModifier),
                     contentScale = ContentScale.Fit,
@@ -2110,6 +2162,8 @@ private fun ViewerGifPlayer(
         state = animation,
         enabled = isActive && !isScrubbing && !effectivePlaybackPaused,
         rate = effectivePlaybackRate,
+        loop = loopPlayback,
+        onCompleted = onPlaybackCompleted,
     )
 
     LaunchedEffect(restartRequest, animation) {

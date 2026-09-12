@@ -25,6 +25,8 @@ internal sealed interface ViewerAction {
     data object ShowPlaybackSettings : ViewerAction
     data object HidePlaybackSettings : ViewerAction
 
+    data class SetPlaybackMode(val mode: ViewerPlaybackMode) : ViewerAction
+    data class PlaybackCompleted(val session: ViewerSessionIdentity, val key: ViewerMediaKey, val loadGeneration: Long) : ViewerAction
     data object Play : ViewerAction
     data object Pause : ViewerAction
     data object TogglePlayback : ViewerAction

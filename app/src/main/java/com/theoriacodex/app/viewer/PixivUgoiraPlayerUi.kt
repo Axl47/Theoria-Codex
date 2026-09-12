@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun PixivUgoiraPlayer(
+    loopPlayback: Boolean = true,
+    onPlaybackCompleted: () -> Unit = {},
     postId: String,
     client: PixivUgoiraClient,
     modifier: Modifier = Modifier,
@@ -105,6 +107,8 @@ fun PixivUgoiraPlayer(
         state = animation,
         enabled = isActive && !isScrubbing && !effectivePlaybackPaused,
         rate = effectivePlaybackRate,
+        loop = loopPlayback,
+        onCompleted = onPlaybackCompleted,
     )
 
     val frame = activePlayback.frames[frameIndex]

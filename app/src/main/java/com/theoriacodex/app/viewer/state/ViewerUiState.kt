@@ -81,6 +81,7 @@ internal data class ViewerPlaybackControlsState(
     val playing: Boolean = false,
     val playbackRate: Float = 1f,
     val restartRequest: Long = 0L,
+    val completed: Boolean = false,
 ) {
     init {
         require(playbackRate > 0f) { "Viewer playback rate must be positive" }
@@ -88,7 +89,10 @@ internal data class ViewerPlaybackControlsState(
     }
 }
 
+internal enum class ViewerPlaybackMode(val label: String) { LOOP("Loop"), ONCE("Play once"), NEXT("Next in queue") }
+
 internal data class ViewerControlsState(
+    val playbackMode: ViewerPlaybackMode = ViewerPlaybackMode.LOOP,
     val chromeVisible: Boolean = true,
     val actionsMenuVisible: Boolean = false,
     val playbackSettingsVisible: Boolean = false,

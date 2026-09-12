@@ -136,6 +136,10 @@ internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): View
         ViewerAction.HidePlaybackSettings -> ViewerReduction(
             state.copy(controls = state.controls.copy(playbackSettingsVisible = false)),
         )
+        is ViewerAction.SetPlaybackMode -> ViewerReduction(state.copy(
+            controls = state.controls.copy(playbackMode = action.mode),
+        ))
+        is ViewerAction.PlaybackCompleted -> state.completePlayback(action)
         ViewerAction.Play -> ViewerReduction(state.setPlaying(true))
         ViewerAction.Pause -> ViewerReduction(state.setPlaying(false))
         ViewerAction.TogglePlayback -> ViewerReduction(
@@ -295,8 +299,23 @@ private fun ViewerUiState.toggleChrome(): ViewerUiState {
     )
 }
 
+private fun ViewerUiState.completePlayback(action: ViewerAction.PlaybackCompleted): ViewerReduction {
+    if (session != action.session || currentMedia?.key != action.key ||
+        currentMedia?.loadGeneration != action.loadGeneration || !controls.playback.playing ||
+        controls.playbackMode == ViewerPlaybackMode.LOOP) return ViewerReduction(this)
+    if (controls.playbackMode == ViewerPlaybackMode.NEXT) {
+        val page = currentPage ?: return ViewerReduction(this)
+        if (page.selectedMediaIndex < page.media.lastIndex) return selectMedia(page.selectedMediaIndex + 1)
+        if (currentPageIndex < pages.lastIndex) return selectPage(currentPageIndex + 1)
+    }
+    return ViewerReduction(copy(controls = controls.copy(
+        playback = controls.playback.copy(playing = false, completed = true),
+    )))
+}
+
 private fun ViewerUiState.setPlaying(playing: Boolean): ViewerUiState {
     if (!controls.playback.available) return this
+    if (playing && controls.playback.completed) return restartPlayback()
     return copy(
         controls = controls.copy(
             playback = controls.playback.copy(playing = playing),
@@ -312,6 +331,7 @@ private fun ViewerUiState.restartPlayback(): ViewerUiState {
             playback = playback.copy(
                 playing = true,
                 restartRequest = playback.restartRequest + 1L,
+                completed = false,
             ),
         ),
     )

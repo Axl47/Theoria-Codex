@@ -52,6 +52,7 @@ internal fun ViewerChrome(
     playbackSettingsExpanded: Boolean,
     onPlaybackSettingsExpandedChange: (Boolean) -> Unit,
     playbackSettingsEnabled: Boolean,
+    playbackRateEnabled: Boolean = true,
     playbackRate: ViewerPlaybackRate,
     onPlaybackRateSelected: (ViewerPlaybackRate) -> Unit,
     mediaOverviewAvailable: Boolean,
@@ -66,6 +67,8 @@ internal fun ViewerChrome(
     modifier: Modifier = Modifier,
     onToggleLike: (() -> Unit)? = null,
     quality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
+    playbackMode: com.theoriacodex.app.viewer.state.ViewerPlaybackMode = com.theoriacodex.app.viewer.state.ViewerPlaybackMode.LOOP,
+    onPlaybackModeSelected: (com.theoriacodex.app.viewer.state.ViewerPlaybackMode) -> Unit = {},
     qualityHeight: Int? = null,
     videoVariants: List<com.theoriacodex.domain.model.VideoVariant> = emptyList(),
     onQualitySelected: (com.theoriacodex.domain.model.VideoQuality, Int?) -> Unit = { _, _ -> },
@@ -90,7 +93,9 @@ internal fun ViewerChrome(
                 expanded = playbackSettingsExpanded,
                 onExpandedChange = onPlaybackSettingsExpandedChange,
                 playbackRate = playbackRate,
+                playbackRateEnabled = playbackRateEnabled,
                 onPlaybackRateSelected = onPlaybackRateSelected,
+                playbackMode = playbackMode, onPlaybackModeSelected = onPlaybackModeSelected,
                 quality = quality, qualityHeight = qualityHeight, videoVariants = videoVariants,
                 onQualitySelected = onQualitySelected,
             )
@@ -149,6 +154,9 @@ private fun ViewerOverviewAction(
 
 @Composable
 private fun PlaybackSettingsMenu(
+    playbackRateEnabled: Boolean,
+    playbackMode: com.theoriacodex.app.viewer.state.ViewerPlaybackMode,
+    onPlaybackModeSelected: (com.theoriacodex.app.viewer.state.ViewerPlaybackMode) -> Unit,
     quality: com.theoriacodex.domain.model.VideoQuality,
     qualityHeight: Int?,
     videoVariants: List<com.theoriacodex.domain.model.VideoVariant>,
@@ -163,6 +171,13 @@ private fun PlaybackSettingsMenu(
             Icon(Icons.Default.Settings, contentDescription = "Playback settings")
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
+            com.theoriacodex.app.viewer.state.ViewerPlaybackMode.entries.forEach { mode ->
+                DropdownMenuItem(
+                    text = { Text(mode.label) },
+                    leadingIcon = { if (playbackMode == mode) Icon(Icons.Default.Check, null) },
+                    onClick = { onPlaybackModeSelected(mode); onExpandedChange(false) },
+                )
+            }
             if (videoVariants.isNotEmpty()) {
                 com.theoriacodex.domain.model.VideoQuality.entries.forEach { option ->
                     DropdownMenuItem(
@@ -179,7 +194,7 @@ private fun PlaybackSettingsMenu(
                     )
                 }
             }
-            ViewerPlaybackRate.entries.forEach { rate ->
+            if (playbackRateEnabled) ViewerPlaybackRate.entries.forEach { rate ->
                 PlaybackRateMenuItem(
                     rate = rate,
                     selected = rate == playbackRate,

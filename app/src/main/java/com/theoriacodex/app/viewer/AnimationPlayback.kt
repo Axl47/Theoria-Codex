@@ -14,6 +14,7 @@ import kotlinx.coroutines.isActive
 /** Local animation time; pausing never includes the elapsed time spent off screen. */
 internal class LoopingAnimationClock(private val durationMs: Long) {
     private var position = 0.0
+    private var completed = false
     private var previousFrameNanos: Long? = null
 
     init {
@@ -24,7 +25,8 @@ internal class LoopingAnimationClock(private val durationMs: Long) {
         get() = position.toLong()
 
     fun seekTo(positionMs: Long) {
-        position = positionMs.coerceIn(0L, durationMs).toDouble()
+        position = positionMs.coerceIn(0L, durationMs - 1).toDouble()
+        completed = false
         resetFrameTime()
     }
 
@@ -32,14 +34,20 @@ internal class LoopingAnimationClock(private val durationMs: Long) {
         previousFrameNanos = null
     }
 
-    fun advanceTo(frameNanos: Long, rate: Float) {
+    fun advanceTo(frameNanos: Long, rate: Float, loop: Boolean = true): Boolean {
         require(rate.isFinite() && rate > 0f)
+        if (completed && !loop) return false
         val previous = previousFrameNanos
         previousFrameNanos = frameNanos
         if (previous != null) {
             val elapsedMs = (frameNanos - previous).coerceAtLeast(0L) / NANOS_PER_MILLISECOND
-            position = (position + elapsedMs * rate) % durationMs
+            val next = position + elapsedMs * rate
+            if (!loop && next >= durationMs) {
+                position = (durationMs - 1).toDouble()
+                if (!completed) { completed = true; return true }
+            } else { position = next % durationMs; completed = false }
         }
+        return false
     }
 }
 
@@ -56,9 +64,10 @@ internal class AnimationPlaybackState(durationMs: Long) {
 
     fun resetFrameTime() = clock.resetFrameTime()
 
-    fun advanceTo(frameNanos: Long, rate: Float) {
-        clock.advanceTo(frameNanos, rate)
+    fun advanceTo(frameNanos: Long, rate: Float, loop: Boolean = true): Boolean {
+        val completed = clock.advanceTo(frameNanos, rate, loop)
         positionMs = clock.positionMs
+        return completed
     }
 }
 
@@ -67,11 +76,14 @@ internal fun AnimatePlayback(
     state: AnimationPlaybackState,
     enabled: Boolean,
     rate: Float,
+    loop: Boolean = true,
+    onCompleted: () -> Unit = {},
 ) {
+    val latestCompletion by androidx.compose.runtime.rememberUpdatedState(onCompleted)
     val lifecycleOwner = LocalLifecycleOwner.current
-    LaunchedEffect(state, lifecycleOwner, enabled, rate) {
+    LaunchedEffect(state, lifecycleOwner, enabled, rate, loop) {
         if (!enabled) return@LaunchedEffect
-        animatePlaybackWhileStarted(state, lifecycleOwner.lifecycle, rate)
+        animatePlaybackWhileStarted(state, lifecycleOwner.lifecycle, rate, loop) { latestCompletion() }
     }
 }
 
@@ -79,11 +91,13 @@ internal suspend fun animatePlaybackWhileStarted(
     state: AnimationPlaybackState,
     lifecycle: Lifecycle,
     rate: Float,
+    loop: Boolean = true,
+    onCompleted: () -> Unit = {},
 ) {
     lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
         state.resetFrameTime()
         while (isActive) {
-            withFrameNanos { frameNanos -> state.advanceTo(frameNanos, rate) }
+            if (withFrameNanos { frameNanos -> state.advanceTo(frameNanos, rate, loop) }) onCompleted()
         }
     }
 }

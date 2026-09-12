@@ -15,6 +15,32 @@ import org.junit.Test
 
 class ViewerStateReducerTest {
     @Test
+    fun `completion modes preserve order stop at queue end and reject obsolete media`() {
+        val first = samplePost("first", media = listOf(media("video/mp4", "one.mp4"), media("video/mp4", "two.mp4")))
+        val second = samplePost("second", media = listOf(media("video/mp4", "three.mp4")))
+        var state = createViewerUiState(session("queue"), listOf(first, second))
+        fun ended() = ViewerAction.PlaybackCompleted(requireNotNull(state.session), requireNotNull(state.currentMedia).key,
+            requireNotNull(state.currentMedia).loadGeneration)
+        assertEquals(state, reduceViewerState(state, ended()).state)
+        state = reduceViewerState(state, ViewerAction.SetPlaybackMode(ViewerPlaybackMode.ONCE)).state
+        state = reduceViewerState(state, ended()).state
+        assertFalse(state.controls.playback.playing)
+        state = reduceViewerState(state, ViewerAction.Play).state
+        assertTrue(state.controls.playback.playing)
+        assertEquals(1L, state.controls.playback.restartRequest)
+        state = reduceViewerState(state, ViewerAction.SetPlaybackMode(ViewerPlaybackMode.NEXT)).state
+        val obsolete = ended()
+        state = reduceViewerState(state, obsolete).state
+        assertEquals(1, state.currentPage?.selectedMediaIndex)
+        assertEquals(state, reduceViewerState(state, obsolete).state)
+        state = reduceViewerState(state, ended()).state
+        assertEquals(1, state.currentPageIndex)
+        assertEquals(ViewerPlaybackMode.NEXT, state.controls.playbackMode)
+        state = reduceViewerState(state, ended()).state
+        assertFalse(state.controls.playback.playing)
+    }
+
+    @Test
     fun `mapping distinguishes image video and animated WebP without platform handles`() {
         val image = samplePost("image", media = listOf(media("image/jpeg", "image.jpg")))
         val video = samplePost("video", media = listOf(media("video/mp4", "video.mp4")))

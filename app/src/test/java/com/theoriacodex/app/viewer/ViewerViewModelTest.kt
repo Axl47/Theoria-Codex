@@ -125,6 +125,7 @@ class ViewerViewModelTest {
         firstOwner.replaceSession(session)
         firstOwner.onAction(ViewerAction.SelectPage(1))
         firstOwner.onAction(ViewerAction.SelectMedia(1))
+        firstOwner.onAction(ViewerAction.SetPlaybackMode(com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT))
 
         assertEquals(
             setOf(
@@ -133,6 +134,7 @@ class ViewerViewModelTest {
                 ViewerSavedStateKeys.STREAM_KEY,
                 ViewerSavedStateKeys.PAGE_INDEX,
                 ViewerSavedStateKeys.MEDIA_INDEX,
+                ViewerSavedStateKeys.PLAYBACK_MODE,
             ),
             handle.keys(),
         )
@@ -145,6 +147,7 @@ class ViewerViewModelTest {
 
         assertNull(recreated.pendingRestoration)
         assertEquals(1, recreated.state.value.currentPageIndex)
+        assertEquals(com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT, recreated.state.value.controls.playbackMode)
         assertEquals(1, recreated.state.value.currentPage?.selectedMediaIndex)
         assertEquals("second", recreated.state.value.currentPage?.post?.id?.sourcePostId)
     }

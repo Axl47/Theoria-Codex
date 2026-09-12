@@ -20,6 +20,18 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class AnimationPlaybackTest {
     @Test
+    fun `play once completes exactly once and seeking allows replay`() {
+        val clock = LoopingAnimationClock(1_000L)
+        assertFalse(clock.advanceTo(0L, 1f, false))
+        assertTrue(clock.advanceTo(2_000_000_000L, 1f, false))
+        assertEquals(999L, clock.positionMs)
+        assertFalse(clock.advanceTo(3_000_000_000L, 1f, false))
+        clock.seekTo(0L)
+        assertFalse(clock.advanceTo(4_000_000_000L, 1f, false))
+        assertTrue(clock.advanceTo(5_000_000_000L, 1f, false))
+    }
+
+    @Test
     fun `late frames retain elapsed time and loop remainder`() {
         val clock = LoopingAnimationClock(1_000L)
         clock.advanceTo(0L, 1f)
