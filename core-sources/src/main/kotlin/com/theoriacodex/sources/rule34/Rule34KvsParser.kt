@@ -41,7 +41,9 @@ internal fun parseRule34KvsConfig(document: Document): Rule34KvsConfig {
     return Rule34KvsConfig(values)
 }
 
-internal fun Rule34KvsConfig.bestVideoUrl(): String? {
+internal fun Rule34KvsConfig.bestVideoUrl(): String? = videoVariants().maxByOrNull { it.height ?: 0 }?.url
+
+internal fun Rule34KvsConfig.videoVariants(): List<com.theoriacodex.domain.model.VideoVariant> {
     val candidates = values.entries
         .filter { (key, value) ->
             value.isNotBlank() && (key == "video_url" || RULE34_ALT_VIDEO_KEY_REGEX.matches(key))
@@ -55,7 +57,8 @@ internal fun Rule34KvsConfig.bestVideoUrl(): String? {
                 )
             )
         }
-    return candidates.maxByOrNull(VideoCandidate::score)?.url
+    return candidates.map { com.theoriacodex.domain.model.VideoVariant(it.url, it.score.takeIf { score -> score > 0 }) }
+        .distinctBy { it.url }
 }
 
 internal fun Rule34KvsConfig.previewImageUrl(): String? {

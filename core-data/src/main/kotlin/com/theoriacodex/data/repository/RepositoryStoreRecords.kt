@@ -17,6 +17,10 @@ internal data class LegacySettingsStoreRecord(
     val enabledSources: List<String> = SourceKey.entries.map { it.name },
     @field:SerializedName("sourceWeights")
     val sourceWeights: Map<String, Double> = SourceRuntimeSettings().sourceWeights.mapKeys { it.key.name },
+    @field:SerializedName("videoQuality") val videoQuality: String? = null,
+    @field:SerializedName("downloadQuality") val downloadQuality: String? = null,
+    @field:SerializedName("downloadsOverMetered") val downloadsOverMetered: Boolean? = null,
+    @field:SerializedName("downloadsOverRoaming") val downloadsOverRoaming: Boolean? = null,
     @field:SerializedName("cacheFullImageOnSave")
     val cacheFullImageOnSave: Boolean = false,
     @field:SerializedName("resolveUnknownAnimatedDurations")
@@ -74,7 +78,12 @@ internal data class LegacySettingsStoreRecord(
         return RepositoryPolicies.normalizeSettings(
             AppSettings(
                 runtime = runtime,
-                cache = CacheSettings(cacheFullImageOnSave = cacheFullImageOnSave),
+                cache = CacheSettings(
+                    cacheFullImageOnSave = cacheFullImageOnSave,
+                    downloadQuality = decodeVideoQuality(downloadQuality, com.theoriacodex.domain.model.VideoQuality.BEST),
+                    downloadsOverMetered = downloadsOverMetered ?: true,
+                    downloadsOverRoaming = downloadsOverRoaming ?: false,
+                ),
                 contentFilters = ContentFilterSettings(
                     resolveUnknownAnimatedDurations = resolveUnknownAnimatedDurations,
                 ),
@@ -106,6 +115,7 @@ internal data class LegacySettingsStoreRecord(
 
     private fun toViewerSettings(): ViewerSettings {
         return ViewerSettings(
+            videoQuality = decodeVideoQuality(videoQuality, com.theoriacodex.domain.model.VideoQuality.AUTO),
             invertMultiImageScrollDirection = invertMultiImageScrollDirection,
             automaticTextTranslationEnabled = viewerAutomaticTextTranslationEnabled,
             enabledOcrLanguages = viewerEnabledOcrLanguages.mapNotNullTo(linkedSetOf()) { name ->
@@ -133,6 +143,10 @@ internal data class LegacySettingsStoreRecord(
                 enabledSources = settings.runtime.enabledSources.map { it.name },
                 sourceWeights = settings.runtime.sourceWeights.mapKeys { it.key.name },
                 cacheFullImageOnSave = settings.cache.cacheFullImageOnSave,
+                videoQuality = settings.viewer.videoQuality.name,
+                downloadQuality = settings.cache.downloadQuality.name,
+                downloadsOverMetered = settings.cache.downloadsOverMetered,
+                downloadsOverRoaming = settings.cache.downloadsOverRoaming,
                 resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
                 invertMultiImageScrollDirection = settings.viewer.invertMultiImageScrollDirection,
                 viewerAutomaticTextTranslationEnabled = settings.viewer.automaticTextTranslationEnabled,
@@ -424,3 +438,6 @@ internal fun parseLegacyProfileId(
         else -> "profile-main"
     }
 }
+
+private fun decodeVideoQuality(value: String?, fallback: com.theoriacodex.domain.model.VideoQuality) =
+    com.theoriacodex.domain.model.VideoQuality.entries.firstOrNull { it.name == value } ?: fallback

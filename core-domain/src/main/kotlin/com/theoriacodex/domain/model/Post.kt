@@ -29,12 +29,18 @@ data class CreatorProfile(
     val uploadsQuery: String? = null,
 )
 
+/** Alternate full-video renditions of one media item; previews never belong here. */
+data class VideoVariant(val url: String, val height: Int? = null, val original: Boolean = false)
+
+enum class VideoQuality { AUTO, DATA_SAVER, BEST }
+
 data class ImageRef(
     val url: String?,
     val localPath: String?,
     val mime: String?,
     val progressiveUrls: List<String> = emptyList(),
     val isAnimated: Boolean = false,
+    val videoVariants: List<VideoVariant> = emptyList(),
 )
 
 data class PostTaxonomyTerm(

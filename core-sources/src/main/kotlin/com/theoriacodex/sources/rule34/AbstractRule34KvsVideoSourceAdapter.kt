@@ -132,7 +132,7 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
                 reason = SourceFailureReason.PARSE,
                 message = "${sourceKey.name} page missing playable video URL",
             )
-        val videoRef = ImageRef(url = videoUrl, localPath = null, mime = "video/mp4")
+        val videoRef = ImageRef(url = videoUrl, localPath = null, mime = "video/mp4", videoVariants = config.videoVariants())
 
         return Post(
             id = PostId(source = sourceKey, sourcePostId = id.sourcePostId),

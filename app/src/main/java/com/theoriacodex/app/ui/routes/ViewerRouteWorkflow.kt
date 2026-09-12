@@ -225,6 +225,7 @@ internal suspend fun downloadViewerMediaMessage(
     context: Context,
     sources: SourceDependencies,
     request: ViewerDownloadRequest?,
+    settings: com.theoriacodex.data.repository.CacheSettings = com.theoriacodex.data.repository.CacheSettings(),
 ): String = when {
     request == null -> "Media unavailable"
     isPixivUgoiraPost(request.post) -> sources.pixivUgoiraClient
@@ -245,6 +246,7 @@ internal suspend fun downloadViewerMediaMessage(
         media = request.media,
         pageIndex = request.pageIndex,
         totalPages = request.totalPages,
+        settings = settings,
     ) -> "Download started"
     else -> "Media unavailable"
 }

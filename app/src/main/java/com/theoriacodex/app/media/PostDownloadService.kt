@@ -9,8 +9,11 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 
 object PostDownloadService {
-    fun enqueuePostDownload(context: Context, post: Post): Boolean {
+    fun enqueuePostDownload(context: Context, post: Post,
+        settings: com.theoriacodex.data.repository.CacheSettings = com.theoriacodex.data.repository.CacheSettings(),
+    ): Boolean {
         val candidate = postDownloadMediaCandidate(post) ?: return false
+        val media = candidate.ref.withVideoQuality(settings.downloadQuality, context.isMediaNetworkMetered())
         val fileName = buildDownloadFileName(
             post = post,
             media = candidate.ref,
@@ -20,11 +23,12 @@ object PostDownloadService {
         )
         return enqueueDownload(
             context = context,
-            url = candidate.url,
+            url = media.url ?: candidate.url,
             mime = candidate.ref.mime,
             headers = candidate.requestHeaders,
             fileName = fileName,
             description = post.pageUrl ?: DOWNLOAD_DESCRIPTION,
+            settings = settings,
         )
     }
 
@@ -34,8 +38,10 @@ object PostDownloadService {
         media: ImageRef,
         pageIndex: Int,
         totalPages: Int,
+        settings: com.theoriacodex.data.repository.CacheSettings = com.theoriacodex.data.repository.CacheSettings(),
     ): Boolean {
-        val url = media.url?.takeIf(String::isNotBlank) ?: return false
+        val selected = media.withVideoQuality(settings.downloadQuality, context.isMediaNetworkMetered())
+        val url = selected.url?.takeIf(String::isNotBlank) ?: return false
         val fileName = buildDownloadFileName(
             post = post,
             media = media,
@@ -50,6 +56,7 @@ object PostDownloadService {
             headers = post.id.source.requestHeaders(),
             fileName = fileName,
             description = post.pageUrl ?: DOWNLOAD_DESCRIPTION,
+            settings = settings,
         )
     }
 
@@ -80,10 +87,11 @@ object PostDownloadService {
         headers: Map<String, String>,
         fileName: String,
         description: String,
+        settings: com.theoriacodex.data.repository.CacheSettings,
     ): Boolean {
         val request = DownloadManager.Request(url.toUri())
-            .setAllowedOverMetered(true)
-            .setAllowedOverRoaming(true)
+            .setAllowedOverMetered(settings.downloadsOverMetered)
+            .setAllowedOverRoaming(settings.downloadsOverRoaming)
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
         if (!mime.isNullOrBlank()) {
             request.setMimeType(mime)

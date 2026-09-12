@@ -41,6 +41,9 @@ private fun mergeImageRef(existing: ImageRef, incoming: ImageRef): ImageRef = in
     localPath = incoming.localPath.presentOr(existing.localPath),
     mime = incoming.mime.presentOr(existing.mime),
     progressiveUrls = mergeStableValues(existing.progressiveUrls, incoming.progressiveUrls),
+    videoVariants = incoming.videoVariants.ifEmpty {
+        existing.videoVariants.takeIf { incoming.url.isNullOrBlank() || incoming.url == existing.url }.orEmpty()
+    },
     isAnimated = incoming.isAnimated || existing.isAnimated,
 )
 

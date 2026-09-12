@@ -7,6 +7,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.PostTaxonomyTerm
 import com.theoriacodex.domain.model.SearchFacet
+import com.theoriacodex.domain.model.VideoVariant
 import com.theoriacodex.domain.model.SourceKey
 
 const val CURRENT_POST_STORAGE_SCHEMA_VERSION: Int = 1
@@ -41,6 +42,8 @@ data class PostStorageRecord(
     val fullMime: String? = null,
     @field:SerializedName("fullProgressiveUrls")
     val fullProgressiveUrls: List<String>? = null,
+    @field:SerializedName("fullVideoVariants")
+    val fullVideoVariants: List<VideoVariantRecord>? = null,
     @field:SerializedName("fullIsAnimated")
     val fullIsAnimated: Boolean? = null,
     @field:SerializedName("pageUrl")
@@ -99,6 +102,21 @@ data class CreatorProfileStorageRecord(
     val uploadsQuery: String? = null,
 )
 
+data class VideoVariantRecord(
+    @field:SerializedName("url") val url: String? = null,
+    @field:SerializedName("height") val height: Int? = null,
+    @field:SerializedName("original") val original: Boolean = false,
+)
+
+private fun List<VideoVariantRecord>?.decodeVideoVariants(): List<VideoVariant> = orEmpty().mapNotNull {
+    val url = it.url?.takeIf(String::isNotBlank) ?: return@mapNotNull null
+    VideoVariant(url, it.height?.takeIf { height -> height > 0 }, it.original)
+}.distinctBy(VideoVariant::url)
+
+private fun List<VideoVariant>.encodeVideoVariants(): List<VideoVariantRecord> = map {
+    VideoVariantRecord(it.url, it.height, it.original)
+}
+
 data class ImageRefStorageRecord(
     @field:SerializedName("url")
     val url: String? = null,
@@ -108,6 +126,8 @@ data class ImageRefStorageRecord(
     val mime: String? = null,
     @field:SerializedName("progressiveUrls")
     val progressiveUrls: List<String>? = null,
+    @field:SerializedName("videoVariants")
+    val videoVariants: List<VideoVariantRecord>? = null,
     @field:SerializedName("isAnimated")
     val isAnimated: Boolean? = null,
 )
@@ -128,6 +148,7 @@ object PostStorageCodec {
             fullMime = post.full?.mime,
             fullProgressiveUrls = post.full?.progressiveUrls,
             fullIsAnimated = post.full?.isAnimated,
+            fullVideoVariants = post.full?.videoVariants?.encodeVideoVariants(),
             pageUrl = post.pageUrl,
             width = post.width,
             height = post.height,
@@ -177,6 +198,7 @@ object PostStorageCodec {
                     mime = record.fullMime,
                     progressiveUrls = record.fullProgressiveUrls.orEmpty(),
                     isAnimated = record.fullIsAnimated ?: false,
+                    videoVariants = record.fullVideoVariants.decodeVideoVariants(),
                 )
             },
             pageUrl = record.pageUrl,
@@ -207,6 +229,7 @@ object PostStorageCodec {
             mime = ref.mime,
             progressiveUrls = ref.progressiveUrls,
             isAnimated = ref.isAnimated,
+            videoVariants = ref.videoVariants.encodeVideoVariants(),
         )
     }
 
@@ -236,6 +259,7 @@ private fun ImageRefStorageRecord.toDomain(): ImageRef {
         mime = mime,
         progressiveUrls = progressiveUrls.orEmpty(),
         isAnimated = isAnimated ?: false,
+        videoVariants = videoVariants.decodeVideoVariants(),
     )
 }
 

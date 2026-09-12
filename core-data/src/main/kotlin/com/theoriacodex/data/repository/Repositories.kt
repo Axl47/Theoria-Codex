@@ -337,6 +337,9 @@ data class ProviderHealthSnapshot(
 
 data class CacheSettings(
     val cacheFullImageOnSave: Boolean = false,
+    val downloadQuality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.BEST,
+    val downloadsOverMetered: Boolean = true,
+    val downloadsOverRoaming: Boolean = false,
 )
 
 data class ContentFilterSettings(
@@ -350,6 +353,7 @@ enum class ViewerOcrLanguage {
 }
 
 data class ViewerSettings(
+    val videoQuality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
     val invertMultiImageScrollDirection: Boolean = false,
     val automaticTextTranslationEnabled: Boolean = false,
     val enabledOcrLanguages: Set<ViewerOcrLanguage> = emptySet(),

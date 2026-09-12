@@ -368,6 +368,8 @@ fun SettingsScreen(
             }
         }
 
+        MediaPreferencesSection(state, onAction)
+
         SettingsSection(
             title = "Storage & Caching",
             summary = cacheSummary(state.cacheSnapshot.thumbnailCount, state.cacheSnapshot.fullImageCount),

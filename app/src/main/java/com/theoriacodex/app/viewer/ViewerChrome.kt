@@ -65,6 +65,10 @@ internal fun ViewerChrome(
     onInfo: () -> Unit,
     modifier: Modifier = Modifier,
     onToggleLike: (() -> Unit)? = null,
+    quality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
+    qualityHeight: Int? = null,
+    videoVariants: List<com.theoriacodex.domain.model.VideoVariant> = emptyList(),
+    onQualitySelected: (com.theoriacodex.domain.model.VideoQuality, Int?) -> Unit = { _, _ -> },
 ) {
     SecondaryScreenAppBar(
         modifier = modifier,
@@ -87,6 +91,8 @@ internal fun ViewerChrome(
                 onExpandedChange = onPlaybackSettingsExpandedChange,
                 playbackRate = playbackRate,
                 onPlaybackRateSelected = onPlaybackRateSelected,
+                quality = quality, qualityHeight = qualityHeight, videoVariants = videoVariants,
+                onQualitySelected = onQualitySelected,
             )
         }
         ViewerActionsMenu(
@@ -143,6 +149,10 @@ private fun ViewerOverviewAction(
 
 @Composable
 private fun PlaybackSettingsMenu(
+    quality: com.theoriacodex.domain.model.VideoQuality,
+    qualityHeight: Int?,
+    videoVariants: List<com.theoriacodex.domain.model.VideoVariant>,
+    onQualitySelected: (com.theoriacodex.domain.model.VideoQuality, Int?) -> Unit,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     playbackRate: ViewerPlaybackRate,
@@ -153,6 +163,22 @@ private fun PlaybackSettingsMenu(
             Icon(Icons.Default.Settings, contentDescription = "Playback settings")
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
+            if (videoVariants.isNotEmpty()) {
+                com.theoriacodex.domain.model.VideoQuality.entries.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text("Quality: " + com.theoriacodex.app.media.videoQualityLabel(option)) },
+                        leadingIcon = { if (qualityHeight == null && quality == option) Icon(Icons.Default.Check, null) },
+                        onClick = { onQualitySelected(option, null); onExpandedChange(false) },
+                    )
+                }
+                videoVariants.mapNotNull { it.height }.distinct().sortedDescending().forEach { height ->
+                    DropdownMenuItem(
+                        text = { Text("${height}p") },
+                        leadingIcon = { if (qualityHeight == height) Icon(Icons.Default.Check, null) },
+                        onClick = { onQualitySelected(quality, height); onExpandedChange(false) },
+                    )
+                }
+            }
             ViewerPlaybackRate.entries.forEach { rate ->
                 PlaybackRateMenuItem(
                     rate = rate,

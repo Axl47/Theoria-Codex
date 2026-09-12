@@ -139,6 +139,8 @@ import kotlinx.coroutines.delay
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
+import com.theoriacodex.app.media.isMediaNetworkMetered
+import com.theoriacodex.app.media.withVideoQuality
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -158,6 +160,7 @@ internal fun ViewerScreen(
     fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ -> emptyMap() },
     canLoadMoreFromSource: Boolean = false,
     loadingMoreFromSource: Boolean = false,
+    videoQuality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
     invertMultiImageScrollDirection: Boolean = false,
     onInvertMultiImageScrollDirectionChange: (Boolean) -> Unit = {},
     likedPostIds: Set<PostId> = emptySet(),
@@ -173,6 +176,8 @@ internal fun ViewerScreen(
     onOpenCreatorFallback: ((Post) -> Unit)? = null,
     playbackDiagnosticsEnabled: Boolean = false,
 ) {
+    var quality by remember(videoQuality) { mutableStateOf(videoQuality) }
+    var qualityHeight by remember(uiState.currentMedia?.key) { mutableStateOf<Int?>(null) }
     val posts = remember(uiState.pages) { uiState.pages.map { page -> page.post } }
     if (posts.isEmpty()) {
         Box(
@@ -781,6 +786,8 @@ internal fun ViewerScreen(
                         } else if (isVideoMedia) {
                             ViewerVideoPlayer(
                                 media = media,
+                                quality = quality,
+                                qualityHeight = qualityHeight,
                                 postId = post.id,
                                 sourceKey = post.id.source,
                                 playbackDiagnosticsEnabled = playbackDiagnosticsEnabled,
@@ -1018,6 +1025,10 @@ internal fun ViewerScreen(
 
         if (chromeVisible) {
             ViewerChrome(
+                quality = quality,
+                qualityHeight = qualityHeight,
+                videoVariants = uiState.currentMedia?.ref?.videoVariants.orEmpty(),
+                onQualitySelected = { selected, height -> quality = selected; qualityHeight = height },
                 modifier = Modifier.align(Alignment.TopCenter),
                 source = selectedPost.id.source.displayName(),
                 indexLabel = "${selectedMediaIndex + 1} / ${selectedPostMedia.size}",
@@ -1449,6 +1460,8 @@ private fun SeekJumpFeedbackOverlay(
 @Composable
 private fun ViewerVideoPlayer(
     media: ImageRef,
+    quality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
+    qualityHeight: Int? = null,
     postId: PostId,
     sourceKey: SourceKey,
     playbackDiagnosticsEnabled: Boolean,
@@ -1479,9 +1492,11 @@ private fun ViewerVideoPlayer(
         }
         return
     }
-    val playbackLocation = remember(media.localPath, media.url, media.mime) {
-        resolveViewerVideoPlaybackLocation(media)
+    val metered = context.isMediaNetworkMetered()
+    val playbackLocation = remember(media, quality, qualityHeight, metered) {
+        resolveViewerVideoPlaybackLocation(media.withVideoQuality(quality, metered, qualityHeight))
     }
+    var resumePosition by remember(postId, media.url) { mutableLongStateOf(0L) }
     if (playbackLocation.isNullOrBlank()) {
         LaunchedEffect(media, loadGeneration) {
             onError("Video unavailable")
@@ -1535,6 +1550,7 @@ private fun ViewerVideoPlayer(
                 profile = VideoPlaybackProfile.VIEWER,
             )
         }
+        if (resumePosition > 0L) player.seekTo(resumePosition)
         val firstFrameTraceGate = FirstFrameTraceGate()
         player.playbackParameters = PlaybackParameters(effectivePlaybackRate)
         val listener = object : Player.Listener {
@@ -1573,6 +1589,7 @@ private fun ViewerVideoPlayer(
             }
         }
         onDispose {
+            resumePosition = player.currentPosition.coerceAtLeast(0L)
             player.removeListener(listener)
             if (playerRef === player) {
                 playerRef = null

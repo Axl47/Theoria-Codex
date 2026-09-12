@@ -243,3 +243,8 @@
     <init>();
     @com.google.gson.annotations.SerializedName <fields>;
 }
+
+-keepclassmembers class com.theoriacodex.data.storage.VideoVariantRecord {
+    <init>();
+    @com.google.gson.annotations.SerializedName <fields>;
+}

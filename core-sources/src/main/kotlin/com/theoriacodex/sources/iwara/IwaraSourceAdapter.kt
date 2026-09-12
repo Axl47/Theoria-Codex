@@ -352,6 +352,13 @@ class IwaraSourceAdapter(
             url = selected.url,
             localPath = null,
             mime = selected.mime ?: fallbackMime ?: inferMimeFromUrl(selected.url),
+            videoVariants = variants.filter { variantPriority(it) >= 0 }.map { variant ->
+                com.theoriacodex.domain.model.VideoVariant(
+                    url = variant.url,
+                    height = variantPriority(variant).takeIf { it in 1 until Int.MAX_VALUE },
+                    original = variantPriority(variant) == Int.MAX_VALUE,
+                )
+            }.distinctBy { it.url },
         )
     }
 

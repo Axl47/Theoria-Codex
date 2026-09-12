@@ -57,6 +57,7 @@ internal data class ViewerRouteRenderConfig(
     val fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ ->
         emptyMap()
     },
+    val videoQuality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
     val invertMultiImageScrollDirection: Boolean = false,
     val likedPostIds: Set<PostId> = emptySet(),
     val creatorBrowsingSources: Set<SourceKey>,
@@ -380,6 +381,7 @@ internal fun ViewerRoute(
         canLoadMoreFromSource = canLoadMoreFromSource,
         loadingMoreFromSource = matchingSourceState?.loadingMore == true,
         invertMultiImageScrollDirection = renderConfig.invertMultiImageScrollDirection,
+        videoQuality = renderConfig.videoQuality,
         onInvertMultiImageScrollDirectionChange =
             screenCallbacks.onInvertMultiImageScrollDirectionChange,
         likedPostIds = renderConfig.likedPostIds,

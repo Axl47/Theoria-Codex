@@ -314,6 +314,18 @@ internal class SettingsViewModel(
             is SettingsAction.SetSourceWeights -> launchMutation {
                 dependencies.settingsRepository.setSourceWeights(action.weights)
             }
+            is SettingsAction.SetVideoQuality -> launchMutation {
+                dependencies.settingsRepository.updateSettings { it.copy(viewer = it.viewer.copy(videoQuality = action.quality)) }
+            }
+            is SettingsAction.SetDownloadQuality -> launchMutation {
+                dependencies.settingsRepository.updateSettings { it.copy(cache = it.cache.copy(downloadQuality = action.quality)) }
+            }
+            is SettingsAction.SetDownloadsOverMetered -> launchMutation {
+                dependencies.settingsRepository.updateSettings { it.copy(cache = it.cache.copy(downloadsOverMetered = action.enabled)) }
+            }
+            is SettingsAction.SetDownloadsOverRoaming -> launchMutation {
+                dependencies.settingsRepository.updateSettings { it.copy(cache = it.cache.copy(downloadsOverRoaming = action.enabled)) }
+            }
             is SettingsAction.SetCacheFullImageOnSave -> launchMutation {
                 dependencies.settingsRepository.setCacheFullImageOnSave(action.enabled)
             }

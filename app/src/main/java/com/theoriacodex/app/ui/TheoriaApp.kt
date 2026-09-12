@@ -515,7 +515,8 @@ internal fun TheoriaAppContent(
                         }
                     }
                 }
-                if (postToDownload != null && PostDownloadService.enqueuePostDownload(appContext, postToDownload)) {
+                if (postToDownload != null && PostDownloadService.enqueuePostDownload(appContext, postToDownload,
+                        dataDependencies.settingsRepository.observeSettings().first().cache)) {
                     "Download queued"
                 } else {
                     "Could not queue download"
@@ -2038,6 +2039,7 @@ internal fun TheoriaAppContent(
                                 restoreSession = viewerRouteWorkflow::restoreSession,
                             ),
                             renderConfig = ViewerRouteRenderConfig(
+                                videoQuality = state.browsing.settings.viewer.videoQuality,
                                 pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                 tagVideoCountProvider = featureDependencies.search::tagVideoCount,
                                 fetchTagVideoCounts = featureDependencies.search::fetchTagVideoCounts,
@@ -2088,6 +2090,7 @@ internal fun TheoriaAppContent(
                                 },
                                 onDownloadMedia = { request ->
                                     val message = downloadViewerMediaMessage(
+                                        settings = dataDependencies.settingsRepository.observeSettings().first().cache,
                                         context = appContext,
                                         sources = sourceDependencies,
                                         request = request,
