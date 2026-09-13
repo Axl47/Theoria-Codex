@@ -1,6 +1,5 @@
 package com.theoriacodex.app.search
 
-import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -21,21 +20,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -45,11 +40,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -104,11 +96,7 @@ import com.theoriacodex.app.media.durationFilterReadiness
 import com.theoriacodex.app.media.durationFilterMetadata
 import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.observedMediaDurationMs
-import com.theoriacodex.app.media.animatedDurationBucketLabel
 import com.theoriacodex.app.media.animatedDurationLabel
-import com.theoriacodex.app.media.animatedDurationMs
-import com.theoriacodex.app.media.animatedDurationRangeLabel
-import com.theoriacodex.app.media.isAnimatedPost
 import com.theoriacodex.app.media.isHttpNotFound
 import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.MediaDeliveryActivation
@@ -132,7 +120,6 @@ import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchRestorationUiState
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.SearchUiState
-import com.theoriacodex.app.tags.FavoriteTagActionGrid
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.data.repository.FeedFabRestoreState
@@ -150,20 +137,14 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
-import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
-import com.theoriacodex.domain.orchestration.SourceRunState
-import com.theoriacodex.domain.orchestration.SourceRunStatus
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
-import kotlin.math.abs
-import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -603,12 +584,7 @@ fun SearchScreen(
                         state.query.appliedSourceScope !is SearchSourceScope.Single &&
                         sourceStatusChips.isNotEmpty()
                     ) {
-                        StatusRow(
-                            statuses = sourceStatusChips,
-                            retryEnabled = state.execution.activeRequestId == null,
-                            onRetrySource = { onAction(SearchAction.RetrySource(it)) },
-                            onOpenAccounts = onOpenSourceAccounts,
-                        )
+                        SourceStatusActions(state, onAction, onOpenSourceAccounts)
                     }
 
                     Row(

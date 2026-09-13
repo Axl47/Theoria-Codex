@@ -208,3 +208,15 @@ feat(recents): add durable watched and search history
 - fix(viewer): preserve lazy media resolution across multi-page posts
 - docs(readme): document current navigation and persistence model
 ```
+
+## Source Recovery And Watching Controls
+
+Search source retries preserve the applied query identity, accepted grid order, and other providers' continuation. Keep failed Unified page tokens available for retry; a single-source retry uses its exact native query, including facets, rather than the portable Unified query. Retrying must not record another root Search/Recents event.
+
+`ImageRef.videoVariants` contains alternate full-video renditions of one gallery item. It must not add gallery pages or replace canonical media used by duration fingerprints. Viewer and downloads select independently, carry the selected MIME, and retain request-scoped source headers. Sparse updates may retain variants only for the same media identity. Animation exports use application transport and must honor the same download network preferences as DownloadManager requests.
+
+Creator follows are local, bounded Settings memberships. Manual checks use two concurrent provider calls with a 15-second deadline per creator. Durable check results must match the membership ID that started the request, so unfollowing/re-following cannot admit an older request. New-post counts describe the provider's latest page; accepted creator visits acknowledge visible canonical IDs without a remote follow or notification subscription.
+
+Viewer completion events carry session, media key, and load generation. Next in queue advances through the current gallery and then the loaded post stream; it stops at its end. MediaSession belongs only to the current Viewer player. Preserve playback during an explicit PiP transition and while PiP is visible, but close the session and pause playback when the Activity stops. Feed preview players never own MediaSessions.
+
+Adaptive navigation retains one content slot across bottom-bar/rail changes, and feed lanes derive from available pane width while preserving canonical indices and simultaneous visible autoplay. Build and Robolectric evidence do not establish live PiP transitions or hardware playback performance; device acceptance still requires the isolated packaged-ID preflight.

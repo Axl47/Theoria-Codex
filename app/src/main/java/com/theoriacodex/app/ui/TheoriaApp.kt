@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.media.animationExportNetworkBlock
 import com.theoriacodex.data.repository.followKey
 import android.content.ClipData
 import android.content.Context
@@ -11,28 +12,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.NavigationBarDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
@@ -60,7 +48,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -96,9 +83,7 @@ import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.appshell.IncomingUriKind
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.creator.browseableCreatorProfile
-import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.di.TheoriaAppContainer
-import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.recommend.trainingTagsFor
 import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.recents.RecentsScreen
@@ -108,7 +93,6 @@ import com.theoriacodex.app.recents.RecentsClearWorkflow
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.source.ExternalCreatorDeepLink
-import com.theoriacodex.app.source.ExternalPostDeepLink
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsEffect
 import com.theoriacodex.app.settings.SettingsViewModel
@@ -161,20 +145,17 @@ import com.theoriacodex.app.ui.components.SEARCH_FEED_FAB_CONTEXT
 import com.theoriacodex.app.ui.components.codexFeedFabContext
 import com.theoriacodex.app.ui.components.creatorFeedFabContext
 import com.theoriacodex.app.ui.components.rememberFeedFabRestoreRegistry
-import com.theoriacodex.app.update.ChangelogSection
 import com.theoriacodex.app.update.RemoteUpdate
 import com.theoriacodex.app.update.PendingPostInstallChangelog
 import com.theoriacodex.app.update.StartupUpdateOutcome
 import com.theoriacodex.app.update.StartupUpdateState
 import com.theoriacodex.app.update.StartupUpdateWorkflowEvent
 import com.theoriacodex.app.update.StartupUpdateWorkflowEffect
-import com.theoriacodex.app.update.UnknownSourcesPermissionRequiredException
 import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
 import com.theoriacodex.app.viewer.ViewerPostResolver
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.prefetchViewerMedia
 import com.theoriacodex.app.viewer.requiresLazyMediaResolution
-import com.theoriacodex.app.viewer.requiresViewerPostResolution
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.RecentPostSection
@@ -205,7 +186,7 @@ enum class TopLevelDestination(val route: String, val label: String) {
     Settings("settings", "Settings"),
 }
 
-private object AppRoute {
+internal object AppRoute {
     const val Home = "home"
     const val CreatorProfile = "creator-profile"
     const val Viewer = "viewer"
@@ -502,7 +483,9 @@ internal fun TheoriaAppContent(
 
     fun requestSaveToDevice(post: Post) {
         scope.launch {
-            val resultLabel = if (isPixivUgoiraPost(post)) {
+            val cacheSettings = dataDependencies.settingsRepository.observeSettings().first().cache
+            val blocked = if (isPixivUgoiraPost(post)) appContext.animationExportNetworkBlock(cacheSettings) else null
+            val resultLabel = if (blocked != null) blocked else if (isPixivUgoiraPost(post)) {
                 sourceDependencies.pixivUgoiraClient.exportToMp4(
                     context = appContext,
                     postId = post.id.sourcePostId,
@@ -524,7 +507,7 @@ internal fun TheoriaAppContent(
                     }
                 }
                 if (postToDownload != null && PostDownloadService.enqueuePostDownload(appContext, postToDownload,
-                        dataDependencies.settingsRepository.observeSettings().first().cache)) {
+                        cacheSettings)) {
                     "Download queued"
                 } else {
                     "Could not queue download"
@@ -1368,22 +1351,8 @@ internal fun TheoriaAppContent(
                 bottomBarWindowInsets = bottomBarWindowInsets,
                 snackbarHostState = snackbarHostState,
                 onDestinationSelected = { destination ->
-                                homeTabRoute = destination.route
-                                val targetIndex = TopLevelDestination.entries.indexOf(destination)
-                                scope.launch {
-                                    if (currentRoute != AppRoute.Home) {
-                                        navController.navigate(AppRoute.Home) {
-                                            popUpTo(navController.graph.findStartDestination().id) {
-                                                saveState = true
-                                            }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                        topLevelPagerState.scrollToPage(targetIndex)
-                                    } else if (topLevelPagerState.currentPage != targetIndex) {
-                                        topLevelPagerState.scrollToPage(targetIndex)
-                                    }
-                                }
+                    homeTabRoute = destination.route
+                    scope.launch { navigateTopLevelDestination(navController, topLevelPagerState, destination) }
                 },
             ) { contentModifier ->
                 NavHost(

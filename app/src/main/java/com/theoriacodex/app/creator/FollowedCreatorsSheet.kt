@@ -40,19 +40,29 @@ internal fun FollowedCreatorsSheet(owner: CreatorFollowsViewModel, onDismiss: ()
             }
             if (follows.isEmpty()) item { Text("Open a creator page and tap Follow to save them here.") }
             items(follows, key = { it.membershipId }) { follow ->
+                FollowedCreatorRow(follow, errors[follow.creator.followKey()], onOpen, owner::unfollow)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FollowedCreatorRow(
+    follow: com.theoriacodex.data.repository.FollowedCreator,
+    error: String?,
+    onOpen: (CreatorProfile) -> Unit,
+    onUnfollow: (CreatorProfile) -> Unit,
+) {
                 Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(modifier = Modifier.weight(1f).clickable { onOpen(follow.creator) }.padding(vertical = 8.dp)) {
                         Text(follow.creator.displayName, style = MaterialTheme.typography.titleMedium)
                         Text(follow.creator.source.displayName())
-                        Text(errors[follow.creator.followKey()] ?: when {
+                        Text(error ?: when {
                             follow.newPostCount > 0 -> "${follow.newPostCount} new in latest page"
                             follow.checkedAtEpochMs == null -> "Not checked yet"
                             else -> "No new posts in latest check"
                         }, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    TextButton(onClick = { owner.unfollow(follow.creator) }) { Text("Unfollow") }
+                    TextButton(onClick = { onUnfollow(follow.creator) }) { Text("Unfollow") }
                 }
-            }
-        }
-    }
 }

@@ -173,29 +173,8 @@ private fun PlaybackSettingsMenu(
             Icon(Icons.Default.Settings, contentDescription = "Playback settings")
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
-            com.theoriacodex.app.viewer.state.ViewerPlaybackMode.entries.forEach { mode ->
-                DropdownMenuItem(
-                    text = { Text(mode.label) },
-                    leadingIcon = { if (playbackMode == mode) Icon(Icons.Default.Check, null) },
-                    onClick = { onPlaybackModeSelected(mode); onExpandedChange(false) },
-                )
-            }
-            if (videoVariants.isNotEmpty()) {
-                com.theoriacodex.domain.model.VideoQuality.entries.forEach { option ->
-                    DropdownMenuItem(
-                        text = { Text("Quality: " + com.theoriacodex.app.media.videoQualityLabel(option)) },
-                        leadingIcon = { if (qualityHeight == null && quality == option) Icon(Icons.Default.Check, null) },
-                        onClick = { onQualitySelected(option, null); onExpandedChange(false) },
-                    )
-                }
-                videoVariants.mapNotNull { it.height }.distinct().sortedDescending().forEach { height ->
-                    DropdownMenuItem(
-                        text = { Text("${height}p") },
-                        leadingIcon = { if (qualityHeight == height) Icon(Icons.Default.Check, null) },
-                        onClick = { onQualitySelected(quality, height); onExpandedChange(false) },
-                    )
-                }
-            }
+            PlaybackModeChoices(playbackMode, onPlaybackModeSelected, onExpandedChange)
+            VideoQualityChoices(videoVariants, quality, qualityHeight, onQualitySelected, onExpandedChange)
             if (playbackRateEnabled) ViewerPlaybackRate.entries.forEach { rate ->
                 PlaybackRateMenuItem(
                     rate = rate,
@@ -286,4 +265,45 @@ private fun ViewerActionsMenu(
             }
         }
     }
+}
+
+@Composable
+private fun PlaybackModeChoices(
+    playbackMode: com.theoriacodex.app.viewer.state.ViewerPlaybackMode,
+    onPlaybackModeSelected: (com.theoriacodex.app.viewer.state.ViewerPlaybackMode) -> Unit,
+    onExpandedChange: (Boolean) -> Unit,
+) {
+            com.theoriacodex.app.viewer.state.ViewerPlaybackMode.entries.forEach { mode ->
+                DropdownMenuItem(
+                    text = { Text(mode.label) },
+                    leadingIcon = { if (playbackMode == mode) Icon(Icons.Default.Check, null) },
+                    onClick = { onPlaybackModeSelected(mode); onExpandedChange(false) },
+                )
+            }
+}
+
+@Composable
+private fun VideoQualityChoices(
+    videoVariants: List<com.theoriacodex.domain.model.VideoVariant>,
+    quality: com.theoriacodex.domain.model.VideoQuality,
+    qualityHeight: Int?,
+    onQualitySelected: (com.theoriacodex.domain.model.VideoQuality, Int?) -> Unit,
+    onExpandedChange: (Boolean) -> Unit,
+) {
+            if (videoVariants.isNotEmpty()) {
+                com.theoriacodex.domain.model.VideoQuality.entries.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text("Quality: " + com.theoriacodex.app.media.videoQualityLabel(option)) },
+                        leadingIcon = { if (qualityHeight == null && quality == option) Icon(Icons.Default.Check, null) },
+                        onClick = { onQualitySelected(option, null); onExpandedChange(false) },
+                    )
+                }
+                videoVariants.mapNotNull { it.height }.distinct().sortedDescending().forEach { height ->
+                    DropdownMenuItem(
+                        text = { Text("${height}p") },
+                        leadingIcon = { if (qualityHeight == height) Icon(Icons.Default.Check, null) },
+                        onClick = { onQualitySelected(quality, height); onExpandedChange(false) },
+                    )
+                }
+            }
 }

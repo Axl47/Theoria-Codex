@@ -48,5 +48,5 @@ com.theoriacodex.app.codex.CodexShareTaxonomyTerm|value,facet,sourceNamespace
 com.theoriacodex.app.codex.CodexShareCreatorProfile|source,displayName,profileId,profileUrl,uploadsQuery
 com.theoriacodex.sources.hitomi.HitomiPageToken|version,queryHash,primaryKey,primaryOffset,randomSeed,randomSnapshotFingerprint,randomPermutationVersion,globalIndexVersion
 
-com.theoriacodex.data.storage.VideoVariantRecord|url,height,original
+com.theoriacodex.data.storage.VideoVariantRecord|url,height,original,mime
 com.theoriacodex.data.repository.FollowedCreatorRecord|source,name,profileId,profileUrl,uploadsQuery,membershipId,seenPostIds,latestPostIds,checkedAtEpochMs

@@ -1,5 +1,6 @@
 package com.theoriacodex.app.recommend
 
+import com.theoriacodex.app.media.replacingPostSnapshot
 import com.theoriacodex.app.search.NoOpTagSuggestionStore
 import com.theoriacodex.app.search.TagSuggestionStore
 import com.theoriacodex.app.source.inPresentationOrder
@@ -276,11 +277,7 @@ class ForYouCoordinator(
     }
 
     fun rememberResolvedPost(post: Post) {
-        val index = results.indexOfFirst { current -> current.id == post.id }
-        if (index < 0) return
-        results = results.toMutableList().apply {
-            this[index] = post
-        }
+        results = results.replacingPostSnapshot(post)
     }
 
     private suspend fun executeFeed(

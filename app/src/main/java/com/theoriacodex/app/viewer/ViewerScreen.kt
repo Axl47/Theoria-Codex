@@ -1,12 +1,10 @@
 package com.theoriacodex.app.viewer
 
 import android.content.res.Configuration
-import android.content.Context
 import android.graphics.Movie
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.graphics.withTranslation
-import androidx.core.net.toUri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -36,8 +34,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
@@ -54,7 +50,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -106,7 +101,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import coil.drawable.ScaleDrawable
 import coil.imageLoader
-import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.github.penfeizhou.animation.webp.WebPDrawable
 import com.theoriacodex.app.creator.CreatorProfileActionButton
@@ -137,19 +131,11 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.app.media.isAuthoritativeDurationMedia
 import kotlinx.coroutines.delay
-import java.io.ByteArrayOutputStream
-import java.io.File
-import java.io.IOException
 import com.theoriacodex.app.media.isMediaNetworkMetered
 import com.theoriacodex.app.media.withVideoQuality
 import coil.request.repeatCount
 import coil.request.onAnimationEnd
-import java.io.InputStream
-import java.net.HttpURLConnection
-import java.net.URL
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -693,13 +679,7 @@ internal fun ViewerScreen(
                         .fillMaxSize()
                 ) {
                     val loopPlayback = uiState.controls.playbackMode == com.theoriacodex.app.viewer.state.ViewerPlaybackMode.LOOP
-                    val completePlayback = {
-                        uiState.session?.let { session ->
-                            onAction(ViewerAction.PlaybackCompleted(session,
-                                com.theoriacodex.app.viewer.state.ViewerMediaKey(post.id, mediaPage), loadGeneration))
-                        }
-                        Unit
-                    }
+                    val completePlayback = uiState.completionAction(post.id, mediaPage, loadGeneration, onAction)
                     val imageDeliveryPlan = remember(post, media, isVideoMedia, loadGeneration) {
                         if (isVideoMedia) null else viewerMediaDeliveryPlan(post, media)
                     }
@@ -1047,14 +1027,7 @@ internal fun ViewerScreen(
 
         if (chromeVisible) {
             ViewerChrome(
-                onPictureInPicture = if (selectedCurrentMedia?.let(::isVideoMediaRef) == true &&
-                    activity?.supportsViewerPictureInPicture() == true && uiState.mediaError == null) {
-                    {
-                        if (!activity.enterViewerPictureInPicture(selectedPost.width, selectedPost.height)) {
-                            android.widget.Toast.makeText(activity, "Picture-in-picture is unavailable", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                } else null,
+                onPictureInPicture = viewerPictureInPictureAction(activity, selectedPost, selectedCurrentMedia, uiState.mediaError != null),
                 playbackMode = uiState.controls.playbackMode,
                 onPlaybackModeSelected = { onAction(ViewerAction.SetPlaybackMode(it)) },
                 quality = quality,

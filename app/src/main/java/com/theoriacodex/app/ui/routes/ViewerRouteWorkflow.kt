@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui.routes
 
+import com.theoriacodex.app.media.animationExportNetworkBlock
 import android.content.Context
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
@@ -226,8 +227,11 @@ internal suspend fun downloadViewerMediaMessage(
     sources: SourceDependencies,
     request: ViewerDownloadRequest?,
     settings: com.theoriacodex.data.repository.CacheSettings = com.theoriacodex.data.repository.CacheSettings(),
-): String = when {
+): String {
+    val blocked = if (request != null && isPixivUgoiraPost(request.post)) context.animationExportNetworkBlock(settings) else null
+    return when {
     request == null -> "Media unavailable"
+    blocked != null -> blocked
     isPixivUgoiraPost(request.post) -> sources.pixivUgoiraClient
         .exportToMp4(
             context = context,
@@ -249,4 +253,6 @@ internal suspend fun downloadViewerMediaMessage(
         settings = settings,
     ) -> "Download started"
     else -> "Media unavailable"
+}
+
 }

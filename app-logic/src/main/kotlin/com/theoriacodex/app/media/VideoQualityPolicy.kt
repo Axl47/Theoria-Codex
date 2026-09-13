@@ -19,5 +19,9 @@ fun ImageRef.withVideoQuality(quality: VideoQuality, metered: Boolean, height: I
             ?: sized.minByOrNull { requireNotNull(it.height) }
             ?: variants.firstOrNull()
     }
-    return selected?.let { copy(url = it.url) } ?: this
+    return selected?.let { copy(url = it.url, mime = it.mime ?: mime) } ?: this
 }
+
+fun blockedAnimationExport(
+    settings: com.theoriacodex.data.repository.CacheSettings, metered: Boolean, roaming: Boolean,
+): Boolean = metered && !settings.downloadsOverMetered || roaming && !settings.downloadsOverRoaming

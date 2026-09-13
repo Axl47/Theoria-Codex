@@ -16,15 +16,15 @@ object PostDownloadService {
         val media = candidate.ref.withVideoQuality(settings.downloadQuality, context.isMediaNetworkMetered())
         val fileName = buildDownloadFileName(
             post = post,
-            media = candidate.ref,
-            fallbackUrl = candidate.url,
+            media = media,
+            fallbackUrl = media.url ?: candidate.url,
             pageIndex = null,
             totalPages = 1,
         )
         return enqueueDownload(
             context = context,
             url = media.url ?: candidate.url,
-            mime = candidate.ref.mime,
+            mime = media.mime,
             headers = candidate.requestHeaders,
             fileName = fileName,
             description = post.pageUrl ?: DOWNLOAD_DESCRIPTION,
@@ -44,7 +44,7 @@ object PostDownloadService {
         val url = selected.url?.takeIf(String::isNotBlank) ?: return false
         val fileName = buildDownloadFileName(
             post = post,
-            media = media,
+            media = selected,
             fallbackUrl = url,
             pageIndex = pageIndex,
             totalPages = totalPages,
@@ -52,7 +52,7 @@ object PostDownloadService {
         return enqueueDownload(
             context = context,
             url = url,
-            mime = media.mime,
+            mime = selected.mime,
             headers = post.id.source.requestHeaders(),
             fileName = fileName,
             description = post.pageUrl ?: DOWNLOAD_DESCRIPTION,

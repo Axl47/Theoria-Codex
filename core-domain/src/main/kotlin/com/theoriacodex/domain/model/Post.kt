@@ -30,7 +30,7 @@ data class CreatorProfile(
 )
 
 /** Alternate full-video renditions of one media item; previews never belong here. */
-data class VideoVariant(val url: String, val height: Int? = null, val original: Boolean = false)
+data class VideoVariant(val url: String, val height: Int? = null, val original: Boolean = false, val mime: String? = null)
 
 enum class VideoQuality { AUTO, DATA_SAVER, BEST }
 

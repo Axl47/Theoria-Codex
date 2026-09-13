@@ -231,3 +231,12 @@ python3 scripts/update_tag_store.py --source PIXIV --input /path/to/tags.txt
 python3 scripts/update_tag_store.py --source PIXIV --pixiv-tags-url
 python3 scripts/update_tag_store.py --source PIXIV --pixiv-tags-html /path/to/pixiv-tags-page.html
 ```
+
+## Source And Watching Controls
+
+- Search failure chips open source details with account setup, provider website, and an isolated retry that preserves successful results.
+- Viewer offers Auto, Data saver, Best available, and provider-supplied video resolutions. Quality switches retain the current position. Settings has independent playback/download quality and metered/roaming download preferences.
+- Creator pages offer local Follow/Following. Settings > Followed creators opens the saved list and a cancellable manual check for new posts in each creator's latest page.
+- Playback settings offer Loop, Play once, and Next in queue. The queue follows the current gallery and loaded Viewer post stream and stops at its end.
+- Video Viewer offers Picture-in-picture from More actions and accepts headset play/pause commands. Ordinary backgrounding pauses playback; external controls end when Viewer stops.
+- Wide windows use a labeled navigation rail, additional bounded media-grid columns, constrained Settings content, and a Viewer Info side panel.

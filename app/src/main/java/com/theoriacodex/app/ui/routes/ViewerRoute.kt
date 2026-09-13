@@ -25,7 +25,6 @@ import com.theoriacodex.app.viewer.ViewerScreen
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.mergeViewerPosts
-import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerEffect
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.ViewerUiState

@@ -102,3 +102,17 @@ internal fun SearchRefreshProgress() {
         modifier = androidx.compose.ui.Modifier.fillMaxWidth(),
     )
 }
+
+@Composable
+internal fun SourceStatusActions(
+    state: com.theoriacodex.app.search.state.SearchUiState,
+    onAction: (com.theoriacodex.app.search.state.SearchAction) -> Unit,
+    onOpenAccounts: () -> Unit,
+) {
+    StatusRow(
+        statuses = visibleSourceStatusChipStatuses(state.content.statuses),
+        retryEnabled = state.execution.activeRequestId == null,
+        onRetrySource = { onAction(com.theoriacodex.app.search.state.SearchAction.RetrySource(it)) },
+        onOpenAccounts = onOpenAccounts,
+    )
+}

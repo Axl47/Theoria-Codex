@@ -21,6 +21,16 @@ class VideoQualityPolicyTest {
         assertEquals(media.videoVariants, media.withVideoQuality(VideoQuality.DATA_SAVER, true).videoVariants)
     }
 
+    @Test fun `selection carries rendition mime and animation exports obey network choices`() {
+        val alternate = media.copy(videoVariants = listOf(VideoVariant("small.webm", 360, mime = "video/webm")))
+        assertEquals("video/webm", alternate.withVideoQuality(VideoQuality.DATA_SAVER, true).mime)
+        val settings = com.theoriacodex.data.repository.CacheSettings(downloadsOverMetered = false, downloadsOverRoaming = false)
+        assertEquals(true, blockedAnimationExport(settings, true, false))
+        assertEquals(true, blockedAnimationExport(settings, false, true))
+        assertEquals(false, blockedAnimationExport(settings, false, false))
+        assertEquals(false, blockedAnimationExport(settings.copy(downloadsOverMetered = true, downloadsOverRoaming = true), true, true))
+    }
+
     @Test fun `offline media and unavailable resolution retain usable media`() {
         val local = media.copy(localPath = "/offline/video.mp4")
         assertEquals(local, local.withVideoQuality(VideoQuality.DATA_SAVER, true))

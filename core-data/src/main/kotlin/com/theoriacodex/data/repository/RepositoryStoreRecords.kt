@@ -81,12 +81,7 @@ internal data class LegacySettingsStoreRecord(
             AppSettings(
                 followedCreators = followedCreators.orEmpty().mapNotNull { it.toDomain() }.distinctBy { it.creator.followKey() }.take(MAX_FOLLOWED_CREATORS),
                 runtime = runtime,
-                cache = CacheSettings(
-                    cacheFullImageOnSave = cacheFullImageOnSave,
-                    downloadQuality = decodeVideoQuality(downloadQuality, com.theoriacodex.domain.model.VideoQuality.BEST),
-                    downloadsOverMetered = downloadsOverMetered ?: true,
-                    downloadsOverRoaming = downloadsOverRoaming ?: false,
-                ),
+                cache = toCacheSettings(),
                 contentFilters = ContentFilterSettings(
                     resolveUnknownAnimatedDurations = resolveUnknownAnimatedDurations,
                 ),
@@ -115,6 +110,13 @@ internal data class LegacySettingsStoreRecord(
     fun requiresSourceCatalogMigration(): Boolean {
         return sourceSchemaVersion() < SHARED_SOURCE_CATALOG_VERSION
     }
+
+    private fun toCacheSettings() = CacheSettings(
+        cacheFullImageOnSave = cacheFullImageOnSave,
+        downloadQuality = decodeVideoQuality(downloadQuality, com.theoriacodex.domain.model.VideoQuality.BEST),
+        downloadsOverMetered = downloadsOverMetered ?: true,
+        downloadsOverRoaming = downloadsOverRoaming ?: false,
+    )
 
     private fun toViewerSettings(): ViewerSettings {
         return ViewerSettings(

@@ -357,6 +357,7 @@ class IwaraSourceAdapter(
                     url = variant.url,
                     height = variantPriority(variant).takeIf { it in 1 until Int.MAX_VALUE },
                     original = variantPriority(variant) == Int.MAX_VALUE,
+                    mime = variant.mime ?: inferMimeFromUrl(variant.url),
                 )
             }.distinctBy { it.url },
         )

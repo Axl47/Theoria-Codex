@@ -1,5 +1,6 @@
 package com.theoriacodex.app.ui
 
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -63,4 +64,20 @@ internal fun TheoriaAdaptiveScaffold(
             }
         }
     }
+}
+
+internal suspend fun navigateTopLevelDestination(
+    navController: androidx.navigation.NavHostController,
+    pager: androidx.compose.foundation.pager.PagerState,
+    destination: TopLevelDestination,
+) {
+    val target = TopLevelDestination.entries.indexOf(destination)
+    if (navController.currentBackStackEntry?.destination?.route != AppRoute.Home) {
+        navController.navigate(AppRoute.Home) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+        pager.scrollToPage(target)
+    } else if (pager.currentPage != target) pager.scrollToPage(target)
 }

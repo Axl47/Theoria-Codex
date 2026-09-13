@@ -112,3 +112,8 @@ sealed interface SearchPageResult {
         val message: String,
     ) : SearchPageResult
 }
+
+fun com.theoriacodex.app.search.state.SearchUiState.admitsPage(
+    requestId: Long, result: SearchPageResult, executionKey: String,
+): Boolean = execution.activeRequestId == requestId && result.executionKey == executionKey &&
+    query.appliedQueryHash == executionKey

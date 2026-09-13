@@ -69,7 +69,6 @@ import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchTerm
-import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
 
 @OptIn(ExperimentalMaterial3Api::class)

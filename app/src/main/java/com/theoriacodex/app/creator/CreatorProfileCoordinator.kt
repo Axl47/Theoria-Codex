@@ -1,5 +1,6 @@
 package com.theoriacodex.app.creator
 
+import com.theoriacodex.app.media.replacingPostSnapshot
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
@@ -238,11 +239,7 @@ class CreatorProfileCoordinator(
     }
 
     fun rememberResolvedPost(post: Post) {
-        val index = results.indexOfFirst { current -> current.id == post.id }
-        if (index < 0) return
-        results = results.toMutableList().apply {
-            this[index] = post
-        }
+        results = results.replacingPostSnapshot(post)
     }
 
     private fun adapterFor(creator: CreatorProfile): CreatorPostsSourceAdapter? {

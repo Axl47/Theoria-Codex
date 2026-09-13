@@ -32,7 +32,6 @@ import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
-import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
@@ -311,7 +310,8 @@ class SearchCoordinator(
         if (source !in enabled) return SearchPageResult.Failure(
             base.executionKey, emptyList(), "Source is no longer available",
         )
-        val token = if (query.mode is QueryMode.Source) base.sourcePageToken else base.unifiedPageTokens[source]
+        if (query.mode is QueryMode.Source) return retrySingleSource(base, source)
+        val token = base.unifiedPageTokens[source]
         val overrides = base.unifiedQueryOverrides.ifEmpty { buildUnifiedQueryOverrides(query, enabled) }
         val result = registry.unifiedOrchestrator().search(
             query = query,
@@ -333,16 +333,32 @@ class SearchCoordinator(
             )
         }
         rememberSeenTags(result.items)
-        val updated = if (query.mode is QueryMode.Source) {
-            base.copy(sourcePageToken = result.nextPageTokens[source])
-        } else {
-            base.copy(
-                unifiedPageTokens = base.unifiedPageTokens + result.nextPageTokens,
-                unifiedQueryOverrides = base.unifiedQueryOverrides + result.queriesBySource,
-            )
-        }
+        val updated = base.copy(
+            unifiedPageTokens = base.unifiedPageTokens + result.nextPageTokens,
+            unifiedQueryOverrides = base.unifiedQueryOverrides + result.queriesBySource,
+        )
         return SearchPageResult.Success(base.executionKey, result.items, result.statuses, updated)
     }
+
+    private suspend fun retrySingleSource(base: SearchContinuation, source: SourceKey): SearchPageResult = try {
+        val adapter = requireNotNull(registry.adapterFor(source))
+        val page = kotlinx.coroutines.withTimeoutOrNull(15_000L) {
+            registry.unifiedOrchestrator().searchSource(adapter, base.query, base.sourcePageToken)
+        } ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Source timed out")
+        rememberSeenTags(page.items)
+        SearchPageResult.Success(base.executionKey, page.items, listOf(SourceRunStatus(source, SourceRunState.SUCCESS)),
+            base.copy(sourcePageToken = page.nextPageToken))
+    } catch (error: CancellationException) { throw error }
+    catch (error: Exception) {
+        SearchPageResult.Failure(base.executionKey, listOf(sourceFailureStatus(source, error)),
+            error.message ?: "Could not retry source")
+    }
+
+    private fun sourceFailureStatus(source: SourceKey, error: Throwable) = SourceRunStatus(
+        source, SourceRunState.FAILED,
+        failureReason = (error as? SourceAdapterException)?.reason ?: SourceFailureReason.UNKNOWN,
+        errorMessage = error.message,
+    )
 
     override suspend fun executePage(continuation: SearchContinuation): SearchPageResult {
         currentCoroutineContext().ensureActive()
@@ -356,7 +372,8 @@ class SearchCoordinator(
         } catch (error: Throwable) {
             SearchPageResult.Failure(
                 executionKey = continuation.executionKey,
-                statuses = emptyList(),
+                statuses = (continuation.query.mode as? QueryMode.Source)
+                    ?.let { listOf(sourceFailureStatus(it.source, error)) }.orEmpty(),
                 message = if (isPixivUnknownError(error, continuation.query)) {
                     PIXIV_UNKNOWN_RETRY_MESSAGE
                 } else error.message ?: "Could not load more results",

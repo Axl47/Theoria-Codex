@@ -40,7 +40,6 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
@@ -53,9 +52,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 
@@ -725,41 +721,22 @@ internal class SearchViewModel(
         if (current.execution.activeRequestId != null || current.content.statuses.none {
             it.source == source && it.state == com.theoriacodex.domain.orchestration.SourceRunState.FAILED
         }) return
-        val continuation = activeContinuation
-        val requestId = ++nextRequestId
-        reduce(SearchStateChange.BeginRequest(requestId, SearchRequestKind.PAGE, current.query.applied))
-        val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
-            try {
-                val result = coordinator.retrySource(
-                    current.query.applied, current.query.appliedSourceScope, continuation, source,
-                )
-                coroutineContext.ensureActive()
-                if (mutableState.value.execution.activeRequestId == requestId &&
-                    mutableState.value.query.appliedQueryHash == result.executionKey) {
-                    completePageRequest(requestId, result)
-                } else cancelRequestIfCurrent(requestId)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                failRequestIfCurrent(requestId, error.message ?: "Could not retry source")
-            } finally {
-                if (!isActive) cancelRequestIfCurrent(requestId)
-            }
-        }
-        activeRequestJob = job
-        job.invokeOnCompletion { if (activeRequestJob === job) activeRequestJob = null }
-        job.start()
+        launchPage(activeContinuation, source)
     }
 
-    private fun launchPage(continuation: SearchContinuation) {
+    private fun launchPage(continuation: SearchContinuation?, retrySource: SourceKey? = null) {
+        val current = mutableState.value
+        val query = continuation?.query ?: current.query.applied
+        val executionKey = continuation?.executionKey ?: current.query.appliedQueryHash
         cancelActiveRequest()
         val requestId = ++nextRequestId
-        reduce(SearchStateChange.BeginRequest(requestId, SearchRequestKind.PAGE, continuation.query))
+        reduce(SearchStateChange.BeginRequest(requestId, SearchRequestKind.PAGE, query))
         val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
             try {
-                val result = executionService.executePage(continuation)
+                val result = if (retrySource == null) executionService.executePage(requireNotNull(continuation))
+                else coordinator.retrySource(query, current.query.appliedSourceScope, continuation, retrySource)
                 coroutineContext.ensureActive()
-                if (!isAdmittedPage(requestId, result, continuation)) {
+                if (!mutableState.value.admitsPage(requestId, result, executionKey)) {
                     cancelRequestIfCurrent(requestId)
                     return@launch
                 }
@@ -776,14 +753,6 @@ internal class SearchViewModel(
         job.invokeOnCompletion { if (activeRequestJob === job) activeRequestJob = null }
         job.start()
     }
-
-    private fun isAdmittedPage(
-        requestId: Long,
-        result: SearchPageResult,
-        continuation: SearchContinuation,
-    ): Boolean = mutableState.value.execution.activeRequestId == requestId &&
-        result.executionKey == continuation.executionKey &&
-        mutableState.value.query.appliedQueryHash == continuation.executionKey
 
     private fun completePageRequest(requestId: Long, result: SearchPageResult) {
         when (result) {
@@ -1120,10 +1089,4 @@ internal class SearchViewModel(
         private const val SEARCH_SCROLL_PERSISTENCE_KEY = "search-scroll-persistence"
         private const val ROOT_REQUEST_TIMEOUT_MESSAGE = "Search timed out. Check your connection and try again."
     }
-}
-
-private fun SavedStateHandle.savedSearchScrollState(): SearchScrollState? {
-    val index = get<Int>(SearchSavedStateKeys.SCROLL_INDEX) ?: return null
-    val offset = get<Int>(SearchSavedStateKeys.SCROLL_OFFSET) ?: 0
-    return SearchScrollState(index.coerceAtLeast(0), offset.coerceAtLeast(0))
 }

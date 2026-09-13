@@ -110,3 +110,9 @@ internal object SearchSavedQueryCodec {
         return String(Base64.getUrlDecoder().decode(value), StandardCharsets.UTF_8)
     }
 }
+
+internal fun androidx.lifecycle.SavedStateHandle.savedSearchScrollState(): com.theoriacodex.data.repository.SearchScrollState? {
+    val index = get<Int>(SearchSavedStateKeys.SCROLL_INDEX) ?: return null
+    val offset = get<Int>(SearchSavedStateKeys.SCROLL_OFFSET) ?: 0
+    return com.theoriacodex.data.repository.SearchScrollState(index.coerceAtLeast(0), offset.coerceAtLeast(0))
+}

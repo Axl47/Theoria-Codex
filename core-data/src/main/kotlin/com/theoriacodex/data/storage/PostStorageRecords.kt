@@ -106,15 +106,16 @@ data class VideoVariantRecord(
     @field:SerializedName("url") val url: String? = null,
     @field:SerializedName("height") val height: Int? = null,
     @field:SerializedName("original") val original: Boolean = false,
+    @field:SerializedName("mime") val mime: String? = null,
 )
 
 private fun List<VideoVariantRecord>?.decodeVideoVariants(): List<VideoVariant> = orEmpty().mapNotNull {
     val url = it.url?.takeIf(String::isNotBlank) ?: return@mapNotNull null
-    VideoVariant(url, it.height?.takeIf { height -> height > 0 }, it.original)
+    VideoVariant(url, it.height?.takeIf { height -> height > 0 }, it.original, it.mime)
 }.distinctBy(VideoVariant::url)
 
 private fun List<VideoVariant>.encodeVideoVariants(): List<VideoVariantRecord> = map {
-    VideoVariantRecord(it.url, it.height, it.original)
+    VideoVariantRecord(it.url, it.height, it.original, it.mime)
 }
 
 data class ImageRefStorageRecord(

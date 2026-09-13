@@ -3,7 +3,6 @@ package com.theoriacodex.data.repository
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 

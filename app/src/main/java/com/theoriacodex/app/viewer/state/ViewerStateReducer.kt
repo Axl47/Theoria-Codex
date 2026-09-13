@@ -306,7 +306,7 @@ private fun ViewerUiState.completePlayback(action: ViewerAction.PlaybackComplete
     if (controls.playbackMode == ViewerPlaybackMode.NEXT) {
         val page = currentPage ?: return ViewerReduction(this)
         if (page.selectedMediaIndex < page.media.lastIndex) return selectMedia(page.selectedMediaIndex + 1)
-        if (currentPageIndex < pages.lastIndex) return selectPage(currentPageIndex + 1)
+        if (currentPageIndex < pages.lastIndex) return selectPage(currentPageIndex + 1).state.selectMedia(0)
     }
     return ViewerReduction(copy(controls = controls.copy(
         playback = controls.playback.copy(playing = false, completed = true),

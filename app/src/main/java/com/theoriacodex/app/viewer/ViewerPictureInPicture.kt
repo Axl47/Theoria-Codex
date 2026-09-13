@@ -32,3 +32,18 @@ internal fun MainActivity.enterViewerPictureInPicture(width: Int?, height: Int?)
         .build()
     return requestViewerPictureInPicture(params)
 }
+
+internal fun viewerPictureInPictureAction(
+    activity: MainActivity?,
+    post: com.theoriacodex.domain.model.Post,
+    media: com.theoriacodex.domain.model.ImageRef?,
+    failed: Boolean,
+): (() -> Unit)? {
+    if (activity == null || failed || media?.let { com.theoriacodex.app.media.isVideoMediaRef(it) } != true ||
+        !activity.supportsViewerPictureInPicture()) return null
+    return {
+        if (!activity.enterViewerPictureInPicture(post.width, post.height)) {
+            android.widget.Toast.makeText(activity, "Picture-in-picture is unavailable", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+}
