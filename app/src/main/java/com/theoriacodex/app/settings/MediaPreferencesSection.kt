@@ -23,7 +23,6 @@ internal fun MediaPreferencesSection(state: SettingsUiState, onAction: (Settings
         QualityChoices("Default video quality", state.settings.viewer.videoQuality) {
             onAction(SettingsAction.SetVideoQuality(it))
         }
-        Text("Auto prefers up to 720p on metered networks when available, and the best quality otherwise.")
         QualityChoices("Download quality", state.settings.cache.downloadQuality) {
             onAction(SettingsAction.SetDownloadQuality(it))
         }
