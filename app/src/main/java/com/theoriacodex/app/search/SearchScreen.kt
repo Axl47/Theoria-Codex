@@ -1154,6 +1154,20 @@ fun SearchResultCard(
                     sizeBucket = UgoiraSizeBucket.CARD,
                     isActive = playbackActive,
                     onDurationKnown = onAuthoritativeDurationKnown,
+                    loadingPreview = {
+                        FeedAsyncImage(
+                            model = imageModel,
+                            contentDescription = mediaContentDescription,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                            isActive = false,
+                            onError = {
+                                if (displayedImageCandidateIndex < imageCandidates.lastIndex) {
+                                    displayedImageCandidateIndex += 1
+                                }
+                            },
+                        )
+                    },
                 )
             } else if (videoRef != null && !videoPlaybackFailed) {
                 SearchVideoPreview(

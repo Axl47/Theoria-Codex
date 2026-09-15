@@ -44,6 +44,7 @@ fun PixivUgoiraPlayer(
     onTogglePlayback: (() -> Unit)? = null,
     onDurationKnown: (Long) -> Unit = {},
     onError: (String) -> Unit = {},
+    loadingPreview: (@Composable () -> Unit)? = null,
 ) {
     var playback by remember(postId, client, sizeBucket, loadGeneration) {
         mutableStateOf(client.cached(postId, sizeBucket))
@@ -70,7 +71,7 @@ fun PixivUgoiraPlayer(
 
     val activePlayback = playback
     if (activePlayback == null) {
-        UgoiraLoadingState(errorMessage, modifier)
+        UgoiraLoadingState(errorMessage, modifier, loadingPreview)
         return
     }
 
@@ -153,8 +154,13 @@ fun PixivUgoiraPlayer(
 }
 
 @Composable
-private fun UgoiraLoadingState(errorMessage: String?, modifier: Modifier) {
+private fun UgoiraLoadingState(
+    errorMessage: String?,
+    modifier: Modifier,
+    loadingPreview: (@Composable () -> Unit)?,
+) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        loadingPreview?.invoke()
         if (errorMessage == null) {
             CircularProgressIndicator()
         } else {
