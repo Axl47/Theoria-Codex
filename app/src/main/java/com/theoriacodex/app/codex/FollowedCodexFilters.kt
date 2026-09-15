@@ -3,8 +3,7 @@ package com.theoriacodex.app.codex
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Checkbox
@@ -24,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.data.repository.FeedFabRestoreState
 import com.theoriacodex.data.repository.FollowedCreator
@@ -36,7 +36,7 @@ internal fun FollowedCodexFilters(
     onChange: (FeedFabRestoreState) -> Unit,
     onManage: () -> Unit,
 ) {
-    Text("Source · match any", style = MaterialTheme.typography.titleMedium)
+    Text("Source", style = MaterialTheme.typography.titleMedium)
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             FilterChip(selected = state.followedSources.isEmpty(),
@@ -50,7 +50,7 @@ internal fun FollowedCodexFilters(
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically) {
-        Text("Authors · match any", style = MaterialTheme.typography.titleMedium)
+        Text("Authors", style = MaterialTheme.typography.titleMedium)
         TextButton(onClick = onManage) { Text("Manage") }
     }
     var query by remember { mutableStateOf("") }
@@ -65,19 +65,22 @@ internal fun FollowedCodexFilters(
                 it.creator.displayName.contains(query.trim(), ignoreCase = true)
         }
     }
-    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp)) {
-        if (options.isEmpty()) item { Text("No matching authors") }
-        items(options, key = { it.membershipId }) { follow ->
+    if (options.isEmpty()) Text("No matching authors")
+    // The sheet owns vertical scrolling; author rows must not create a nested scroll surface.
+    FlowRow(Modifier.fillMaxWidth(), maxItemsInEachRow = 2,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEach { follow ->
             val key = follow.creator.followKey()
             val selected = key in state.followedAuthors
-            Row(Modifier.fillMaxWidth().toggleable(value = selected, role = Role.Checkbox,
-                onValueChange = { onChange(state.copy(followedAuthors = state.followedAuthors.toggled(key))) }),
+            Row(Modifier.weight(1f).testTag("followed-author:$key")
+                .toggleable(value = selected, role = Role.Checkbox,
+                    onValueChange = { onChange(state.copy(followedAuthors = state.followedAuthors.toggled(key))) }),
                 verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = selected, onCheckedChange = null)
-                Text("${follow.creator.displayName} · ${follow.creator.source.displayName()}",
-                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(follow.creator.displayName, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
+        if (options.size % 2 != 0) androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
     }
 }
 

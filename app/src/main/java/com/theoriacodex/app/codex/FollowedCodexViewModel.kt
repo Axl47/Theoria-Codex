@@ -9,6 +9,7 @@ import com.theoriacodex.data.repository.FollowedCreator
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.coroutines.mapConcurrent
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.CancellationException
@@ -85,7 +86,7 @@ internal class FollowedCodexViewModel(
                     publish(loading = false)
                     if (cacheCover) {
                         mutableState.value.posts.firstOrNull()?.let { post ->
-                            runCatching { cacheRepository.cacheNamedThumbnail(FOLLOWED_CODEX_ID, post) }
+                            runCatchingPreservingCancellation { cacheRepository.cacheNamedThumbnail(FOLLOWED_CODEX_ID, post) }
                         }
                     }
                 }

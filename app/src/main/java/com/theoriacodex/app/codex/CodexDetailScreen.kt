@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -607,7 +608,7 @@ private fun androidx.compose.foundation.layout.BoxScope.CodexSelectionMarker(sel
 }
 
 @Composable
-private fun CodexFilterSheet(
+internal fun CodexFilterSheet(
     filters: CodexCollectionFilters,
     sourceOptions: List<SourceKey>,
     supportsLanguage: Boolean,
@@ -620,8 +621,9 @@ private fun CodexFilterSheet(
     followedFilters: (@Composable () -> Unit)? = null,
 ) {
     FeedFilterSheet(onDismiss = onDismiss, title = "Codex filters",
-        modifier = Modifier.verticalScroll(rememberScrollState())) {
+        modifier = Modifier.testTag("codex-filter-scroll").verticalScroll(rememberScrollState())) {
         CodexVisibilityFilters(filters, supportsFullColor, onFiltersChange)
+        CodexSortFilters(sortMode, onSortChange)
         if (followedFilters != null) followedFilters()
         else CodexSourceFilters(filters.source, sourceOptions) { source ->
             onFiltersChange(filters.copy(source = source))
@@ -631,7 +633,6 @@ private fun CodexFilterSheet(
                 onFiltersChange(filters.copy(language = language))
             }
         }
-        CodexSortFilters(sortMode, onSortChange)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End,
