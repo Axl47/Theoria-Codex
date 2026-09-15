@@ -431,7 +431,7 @@ private fun FollowedCodexDestinationStateBoundary(
         ?: return
     val available = sources.availableSources.collectAsStateWithLifecycle().value
     val owner = androidx.lifecycle.viewmodel.compose.viewModel<com.theoriacodex.app.codex.FollowedCodexViewModel>(
-        factory = com.theoriacodex.app.codex.FollowedCodexViewModel.factory(sources.registry),
+        factory = com.theoriacodex.app.codex.FollowedCodexViewModel.factory(sources.registry, data.cacheRepository),
     )
     val selected = remember(settings.followedCreators, filters.followedSources, filters.followedAuthors) {
         com.theoriacodex.app.codex.selectFollowedCreators(

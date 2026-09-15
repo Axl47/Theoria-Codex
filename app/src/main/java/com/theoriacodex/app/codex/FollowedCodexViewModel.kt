@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.FollowedCreator
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
@@ -26,7 +27,10 @@ internal data class FollowedFeedState(
 )
 
 /** Navigation-owned live collection. Branch identity includes the durable follow membership. */
-internal class FollowedCodexViewModel(private val registry: SourceAdapterRegistry) : ViewModel() {
+internal class FollowedCodexViewModel(
+    private val registry: SourceAdapterRegistry,
+    private val cacheRepository: CacheRepository,
+) : ViewModel() {
     private val mutableState = MutableStateFlow(FollowedFeedState())
     val state = mutableState.asStateFlow()
     private var follows: List<FollowedCreator> = emptyList()
@@ -49,20 +53,20 @@ internal class FollowedCodexViewModel(private val registry: SourceAdapterRegistr
         generation++
         branches = follows.associateTo(linkedMapOf()) { it.membershipId to CreatorBranch(it) }
         mutableState.value = FollowedFeedState(generation = generation)
-        load(branches.keys.toList())
+        load(branches.keys.toList(), cacheCover = true)
     }
 
     fun loadMore() {
         if (mutableState.value.loading) return
-        load(branches.filterValues { it.error == null && !it.exhausted }.keys.toList())
+        load(branches.filterValues { it.error == null && !it.exhausted }.keys.toList(), cacheCover = false)
     }
 
     fun retry() {
         if (mutableState.value.loading) return
-        load(branches.filterValues { it.error != null }.keys.toList())
+        load(branches.filterValues { it.error != null }.keys.toList(), cacheCover = false)
     }
 
-    private fun load(ids: List<String>) {
+    private fun load(ids: List<String>, cacheCover: Boolean) {
         if (ids.isEmpty()) return
         val admittedGeneration = ++generation
         mutableState.value = mutableState.value.copy(loading = true, generation = generation)
@@ -77,7 +81,14 @@ internal class FollowedCodexViewModel(private val registry: SourceAdapterRegistr
                     }
                 }
             } finally {
-                if (generation == admittedGeneration) publish(loading = false)
+                if (generation == admittedGeneration) {
+                    publish(loading = false)
+                    if (cacheCover) {
+                        mutableState.value.posts.firstOrNull()?.let { post ->
+                            runCatching { cacheRepository.cacheNamedThumbnail(FOLLOWED_CODEX_ID, post) }
+                        }
+                    }
+                }
             }
         }
     }
@@ -124,8 +135,8 @@ internal class FollowedCodexViewModel(private val registry: SourceAdapterRegistr
     )
 
     companion object {
-        fun factory(registry: SourceAdapterRegistry) = viewModelFactory {
-            initializer { FollowedCodexViewModel(registry) }
+        fun factory(registry: SourceAdapterRegistry, cacheRepository: CacheRepository) = viewModelFactory {
+            initializer { FollowedCodexViewModel(registry, cacheRepository) }
         }
     }
 }

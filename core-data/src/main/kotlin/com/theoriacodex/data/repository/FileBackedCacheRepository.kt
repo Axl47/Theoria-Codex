@@ -36,14 +36,27 @@ class FileBackedCacheRepository(
     override fun observeSnapshot(): Flow<CacheSnapshot> = snapshotFlow
 
     override suspend fun cacheThumbnail(post: Post) {
+        cacheThumbnail(post, cacheKey(post.id))
+    }
+
+    override suspend fun cacheNamedThumbnail(name: String, post: Post) {
+        cacheThumbnail(post, "${name}_${post.id.source.name}", replacePrefix = "${name}_")
+    }
+
+    private suspend fun cacheThumbnail(post: Post, key: String, replacePrefix: String? = null) {
         mutex.withLock {
             snapshotFlow.value = withContext(ioDispatcher) {
                 writeCachedEntry(
                     targetDirectory = thumbnailDir,
-                    key = cacheKey(post.id),
+                    key = key,
                     localPath = post.preview.localPath,
                     fallbackUrl = post.preview.url,
                 )
+                if (replacePrefix != null) {
+                    thumbnailDir.listFiles().orEmpty()
+                        .filter { it.isFile && it.name.startsWith(replacePrefix) && !it.name.startsWith("$key.") }
+                        .forEach(File::delete)
+                }
                 currentSnapshot()
             }
         }

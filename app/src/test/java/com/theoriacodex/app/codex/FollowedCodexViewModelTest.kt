@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModelStore
 import com.theoriacodex.app.search.TestAdapter
 import com.theoriacodex.app.search.TestRegistry
 import com.theoriacodex.app.testing.testPost
+import com.theoriacodex.data.repository.CacheRepository
+import com.theoriacodex.data.repository.CacheSnapshot
 import com.theoriacodex.data.repository.FollowedCreator
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
@@ -15,6 +17,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -29,6 +33,25 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FollowedCodexViewModelTest {
+    @Test fun `initial posts cache the first followed cover without pagination replacing it`() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val cache = TrackingCacheRepository()
+            val owner = owner(cache) { _, token ->
+                if (token == null) Page(listOf(testPost(SourceKey.PIXIV, "first")), "next")
+                else Page(listOf(testPost(SourceKey.PIXIV, "second")), null)
+            }
+            store.put("owner", owner)
+            owner.synchronize(listOf(follow("1")), setOf(SourceKey.PIXIV))
+            advanceUntilIdle()
+            owner.loadMore()
+            advanceUntilIdle()
+
+            assertEquals(listOf(FOLLOWED_CODEX_ID to "first"), cache.namedCalls)
+        } finally { store.clear(); Dispatchers.resetMain() }
+    }
+
     @Test fun `empty duplicate pages retain independent continuation and failed creators retry alone`() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
@@ -119,10 +142,25 @@ class FollowedCodexViewModelTest {
         CreatorProfile(SourceKey.PIXIV, "Artist $id", id, uploadsQuery = "user:$id"), "membership:$id",
     )
 
-    private fun owner(fetch: suspend (CreatorProfile, String?) -> Page<Post>): FollowedCodexViewModel {
+    private fun owner(
+        cache: CacheRepository = TrackingCacheRepository(),
+        fetch: suspend (CreatorProfile, String?) -> Page<Post>,
+    ): FollowedCodexViewModel {
         val adapter = object : SourceAdapter by TestAdapter(SourceKey.PIXIV), CreatorPostsSourceAdapter {
             override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?) = fetch(creator, pageToken)
         }
-        return FollowedCodexViewModel(TestRegistry(listOf(adapter)))
+        return FollowedCodexViewModel(TestRegistry(listOf(adapter)), cache)
+    }
+
+    private class TrackingCacheRepository : CacheRepository {
+        val namedCalls = mutableListOf<Pair<String, String>>()
+        override fun observeSnapshot(): Flow<CacheSnapshot> = MutableStateFlow(CacheSnapshot(0, 0))
+        override suspend fun cacheThumbnail(post: Post) = Unit
+        override suspend fun cacheNamedThumbnail(name: String, post: Post) {
+            namedCalls += name to post.id.sourcePostId
+        }
+        override suspend fun cacheFull(post: Post) = Unit
+        override suspend fun clearThumbnailCache() = Unit
+        override suspend fun clearFullImageCache() = Unit
     }
 }

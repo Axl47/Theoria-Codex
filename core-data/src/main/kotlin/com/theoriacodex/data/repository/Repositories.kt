@@ -437,6 +437,9 @@ data class CacheSnapshot(
 interface CacheRepository {
     fun observeSnapshot(): Flow<CacheSnapshot>
     suspend fun cacheThumbnail(post: Post)
+    suspend fun cacheNamedThumbnail(name: String, post: Post) {
+        cacheThumbnail(post)
+    }
     suspend fun cacheFull(post: Post)
     suspend fun clearThumbnailCache()
     suspend fun clearFullImageCache()

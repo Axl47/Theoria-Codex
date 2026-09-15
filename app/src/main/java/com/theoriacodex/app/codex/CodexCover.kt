@@ -47,6 +47,28 @@ internal fun resolveCodexCoverCandidates(
     }.distinct()
 }
 
+internal fun resolveNamedCodexCoverCandidates(
+    storageDirectory: File,
+    name: String,
+): List<CodexCoverCandidate> {
+    val thumbnailDirectory = storageDirectory.resolve("cache/thumbnails")
+    return SourceKey.entries.flatMap { source ->
+        val key = "${name}_${source.name}"
+        buildList {
+            thumbnailDirectory.listFiles().orEmpty()
+                .firstOrNull { file ->
+                    file.isFile && file.name.startsWith("$key.") && file.extension != "url"
+                }
+                ?.let { add(CodexCoverCandidate.LocalFile(it)) }
+            thumbnailDirectory.resolve("$key.url")
+                .takeIf(File::exists)
+                ?.let { runCatching { it.readText().trim() }.getOrNull() }
+                ?.takeIf(String::isNotBlank)
+                ?.let { addLocationCandidate(source, it) }
+        }
+    }
+}
+
 private fun MutableList<CodexCoverCandidate>.addPostCoverCandidates(
     post: Post,
     thumbnailDirectory: File,

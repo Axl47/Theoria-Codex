@@ -230,22 +230,25 @@ private fun CodexGrid(
                 )
             }
             if (codex.codexId == presentation.likesCodexId) {
-                followedCodexItem(presentation.itemCounts[FOLLOWED_CODEX_ID] ?: 0, onOpenCodex)
+                followedCodexItem(presentation, onOpenCodex)
                 followedInserted = true
             }
         }
         if (!followedInserted) {
-            followedCodexItem(presentation.itemCounts[FOLLOWED_CODEX_ID] ?: 0, onOpenCodex)
+            followedCodexItem(presentation, onOpenCodex)
         }
     }
 }
 
-private fun LazyGridScope.followedCodexItem(itemCount: Int, onOpenCodex: (String) -> Unit) {
+private fun LazyGridScope.followedCodexItem(
+    presentation: CodexListPresentation,
+    onOpenCodex: (String) -> Unit,
+) {
     item(key = FOLLOWED_CODEX_ID) {
         CodexGridTile(
             codex = Codex(FOLLOWED_CODEX_ID, "Followed", 0),
-            itemCount = itemCount,
-            coverCandidates = emptyList(),
+            itemCount = presentation.itemCounts[FOLLOWED_CODEX_ID] ?: 0,
+            coverCandidates = presentation.coverCandidates[FOLLOWED_CODEX_ID].orEmpty(),
             onOpen = { onOpenCodex(FOLLOWED_CODEX_ID) },
             onOpenActions = { onOpenCodex(FOLLOWED_CODEX_ID) },
             onLongPress = { onOpenCodex(FOLLOWED_CODEX_ID) },
