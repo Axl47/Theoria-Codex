@@ -11,6 +11,7 @@ import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recommend.state.ForYouCoordinatorSnapshot
 import com.theoriacodex.app.recommend.state.ForYouEffect
 import com.theoriacodex.app.recommend.state.ForYouRequestIdentity
+import com.theoriacodex.app.recommend.state.ForYouRequestKind
 import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.recommend.state.reduce
 import com.theoriacodex.app.recommend.state.toUiState
@@ -166,6 +167,7 @@ internal class ForYouViewModel(
     private var environmentSynchronized = false
     private var sourceAvailabilitySynchronized = false
     private var pendingReplaySearch: ForYouAction.ReplaySearch? = null
+    private val relatedPromotions = mutableListOf<RelatedPromotion>()
 
     private val mutableState = MutableStateFlow(
         engine.snapshot(initialProfiles, emptyList()).toUiState().copy(
@@ -182,6 +184,15 @@ internal class ForYouViewModel(
         loader = relatedPostsLoader,
         currentState = { mutableState.value.relatedPosts },
         canonicalPosts = { mutableState.value.results },
+        promotePost = { post, insertionIndex ->
+            if (relatedPromotions.none { promotion -> promotion.post.id == post.id }) {
+                relatedPromotions += RelatedPromotion(post, insertionIndex)
+            }
+            val current = mutableState.value
+            mutableState.value = current.copy(
+                results = applyRelatedPromotions(current.results),
+            )
+        },
         updateState = { related -> mutableState.value = mutableState.value.copy(relatedPosts = related) },
     )
     override val state: StateFlow<ForYouUiState> = mutableState.asStateFlow()
@@ -210,6 +221,14 @@ internal class ForYouViewModel(
                 relatedPosts.clear()
                 return
             }
+            ForYouAction.ShowPreviousRelatedPosts -> {
+                relatedPosts.showPreviousPage()
+                return
+            }
+            ForYouAction.ShowNextRelatedPosts -> {
+                relatedPosts.showNextPage()
+                return
+            }
             else -> Unit
         }
         if (action is ForYouAction.ReplaySearch && !isReplayReady()) {
@@ -218,7 +237,14 @@ internal class ForYouViewModel(
         }
         val previousRelated = mutableState.value.relatedPosts
         val transition = mutableState.value.reduce(action)
-        mutableState.value = transition.state
+        val startsRootRefresh = transition.state.activeRequest?.kind == ForYouRequestKind.REFRESH &&
+            transition.state.activeRequest != mutableState.value.activeRequest
+        if (startsRootRefresh) {
+            relatedPromotions.clear()
+        }
+        mutableState.value = transition.state.copy(
+            results = applyRelatedPromotions(transition.state.results),
+        )
         if (previousRelated != RelatedPostsUiState.Idle && transition.state.relatedPosts == RelatedPostsUiState.Idle) {
             relatedPosts.clear()
         }
@@ -243,6 +269,7 @@ internal class ForYouViewModel(
         if (activeProfileLikesCount <= 0) {
             cancelActiveReduction()
             relatedPosts.clear()
+            relatedPromotions.clear()
             engine.clear()
             publishSnapshot(activeLikesOverride = 0)
             environmentSynchronized = true
@@ -434,7 +461,9 @@ internal class ForYouViewModel(
     private fun publishSnapshot(activeLikesOverride: Int? = null) {
         val previous = mutableState.value
         val snapshot = snapshot()
-        mutableState.value = snapshot.toUiState().copy(
+        val snapshotState = snapshot.toUiState()
+        mutableState.value = snapshotState.copy(
+            results = applyRelatedPromotions(snapshotState.results),
             activeProfileLikesCount = activeLikesOverride ?: snapshot.activeProfileLikesCount,
             nextRequestGeneration = previous.nextRequestGeneration,
             activeRequest = previous.activeRequest,
@@ -443,6 +472,16 @@ internal class ForYouViewModel(
             relatedPosts = previous.relatedPosts,
         )
         persistRouteInputs(mutableState.value)
+    }
+
+    private fun applyRelatedPromotions(posts: List<Post>): List<Post> {
+        return relatedPromotions.fold(posts) { accumulated, promotion ->
+            com.theoriacodex.app.related.promoteRelatedPost(
+                canonicalPosts = accumulated,
+                post = promotion.post,
+                insertionIndex = promotion.insertionIndex,
+            )
+        }
     }
 
     private fun persistRouteInputs(value: ForYouUiState) {
@@ -489,3 +528,8 @@ internal class ForYouViewModel(
         internal const val KEY_SORT_MODE = "for_you_sort_mode"
     }
 }
+
+private data class RelatedPromotion(
+    val post: Post,
+    val insertionIndex: Int,
+)

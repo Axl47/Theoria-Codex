@@ -39,6 +39,8 @@ internal fun SearchRelatedPostsShelf(
         onLongPress = onLongPress,
         onDismiss = { onAction(SearchAction.DismissRelatedPosts) },
         onRetry = { onAction(SearchAction.RetryRelatedPosts) },
+        onPreviousPage = { onAction(SearchAction.ShowPreviousRelatedPosts) },
+        onNextPage = { onAction(SearchAction.ShowNextRelatedPosts) },
         onViewportChanged = onViewportChanged,
         onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
     )

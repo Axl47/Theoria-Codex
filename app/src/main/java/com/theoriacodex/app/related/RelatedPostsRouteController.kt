@@ -14,6 +14,7 @@ internal class RelatedPostsRouteController(
     private val loader: RelatedPostsLoading,
     private val currentState: () -> RelatedPostsUiState,
     private val canonicalPosts: () -> List<Post>,
+    private val promotePost: (post: Post, insertionIndex: Int) -> Unit = { _, _ -> },
     private val updateState: (RelatedPostsUiState) -> Unit,
     private val requestTimeoutMs: Long = DEFAULT_RELATED_POSTS_TIMEOUT_MS,
 ) {
@@ -34,20 +35,34 @@ internal class RelatedPostsRouteController(
             return
         }
         if (!loader.supports(post.id.source)) return
+        val current = currentState()
         val posts = canonicalPosts()
         val canonicalIndex = posts.indexOfFirst { candidate -> candidate.id == post.id }
-        val anchor = when {
-            canonicalIndex >= 0 -> canonicalIndex
-            currentState().loadedPosts.any { candidate -> candidate.id == post.id } ->
-                currentState().requestOrNull?.anchorCanonicalIndex
-            else -> null
-        } ?: return
-        launch(post, anchor)
+        if (canonicalIndex >= 0) {
+            launch(post, canonicalIndex)
+            return
+        }
+        if (current.loadedPosts.none { candidate -> candidate.id == post.id }) return
+
+        val insertionIndex = (current.requestOrNull?.anchorCanonicalIndex ?: return) + 1
+        val retainedPages = current.withoutPost(post.id).availablePages
+        promotePost(post, insertionIndex)
+        launch(post, insertionIndex, retainedPages)
     }
 
     fun retry() {
         val request = currentState().requestOrNull ?: return
-        launch(request.seed, request.anchorCanonicalIndex)
+        launch(request.seed, request.anchorCanonicalIndex, currentState().availablePages)
+    }
+
+    fun showPreviousPage() {
+        val current = currentState()
+        updateState(current.selectPage(current.currentPageIndex - 1))
+    }
+
+    fun showNextPage() {
+        val current = currentState()
+        updateState(current.selectPage(current.currentPageIndex + 1))
     }
 
     fun clear() {
@@ -55,9 +70,18 @@ internal class RelatedPostsRouteController(
         if (currentState() != RelatedPostsUiState.Idle) updateState(RelatedPostsUiState.Idle)
     }
 
-    private fun launch(seed: Post, anchorCanonicalIndex: Int) {
+    private fun launch(
+        seed: Post,
+        anchorCanonicalIndex: Int,
+        retainedPages: List<RelatedPostsPage> = emptyList(),
+    ) {
         cancelJob("Related-post request replaced")
-        val loading = currentState().begin(seed, anchorCanonicalIndex, ++nextGeneration)
+        val loading = currentState().begin(
+            seed = seed,
+            anchorCanonicalIndex = anchorCanonicalIndex,
+            generation = ++nextGeneration,
+            retainedPages = retainedPages,
+        )
         updateState(loading)
         job = scope.launch {
             try {

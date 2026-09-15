@@ -99,6 +99,19 @@ internal class SearchViewModel(
         loader = relatedPostsLoader,
         currentState = { mutableState.value.relatedPosts },
         canonicalPosts = { mutableState.value.content.results },
+        promotePost = { post, insertionIndex ->
+            val current = mutableState.value
+            mutableState.value = current.copy(
+                content = current.content.copy(
+                    results = com.theoriacodex.app.related.promoteRelatedPost(
+                        current.content.results,
+                        post,
+                        insertionIndex,
+                    ),
+                    displayVersion = current.content.displayVersion + 1,
+                ),
+            )
+        },
         updateState = { related -> mutableState.value = mutableState.value.copy(relatedPosts = related) },
     )
 
@@ -300,6 +313,10 @@ internal class SearchViewModel(
             SearchAction.RetryRelatedPosts -> relatedPosts.retry()
 
             SearchAction.DismissRelatedPosts -> relatedPosts.clear()
+
+            SearchAction.ShowPreviousRelatedPosts -> relatedPosts.showPreviousPage()
+
+            SearchAction.ShowNextRelatedPosts -> relatedPosts.showNextPage()
 
             is SearchAction.OpenRelatedResult -> openRelatedResult(action)
 

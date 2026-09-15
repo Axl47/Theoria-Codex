@@ -10,6 +10,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -28,6 +33,8 @@ import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.availablePages
+import com.theoriacodex.app.related.currentPageIndex
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.search.SearchResultCard
 import com.theoriacodex.app.search.previewAspectRatio
@@ -52,6 +59,8 @@ fun RelatedPostsShelf(
     onLongPress: (Post) -> Unit,
     onDismiss: () -> Unit,
     onRetry: () -> Unit,
+    onPreviousPage: () -> Unit,
+    onNextPage: () -> Unit,
     onViewportChanged: (Post, Boolean) -> Unit,
     onAuthoritativeDurationKnown: (Post, Long) -> Unit,
 ) {
@@ -65,7 +74,14 @@ fun RelatedPostsShelf(
             modifier = Modifier.padding(vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            RelatedShelfHeader(state, request.seed, onDismiss, onRetry)
+            RelatedShelfHeader(
+                state = state,
+                seed = request.seed,
+                onDismiss = onDismiss,
+                onRetry = onRetry,
+                onPreviousPage = onPreviousPage,
+                onNextPage = onNextPage,
+            )
             RelatedShelfBody(
                 state = state,
                 posts = posts,
@@ -90,6 +106,8 @@ private fun RelatedShelfHeader(
     seed: Post,
     onDismiss: () -> Unit,
     onRetry: () -> Unit,
+    onPreviousPage: () -> Unit,
+    onNextPage: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -98,13 +116,30 @@ private fun RelatedShelfHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text("More like this", style = MaterialTheme.typography.titleSmall)
-            Text(
-                text = seed.id.source.displayName(),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(
+                onClick = onPreviousPage,
+                enabled = state.currentPageIndex > 0,
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous related page")
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text("More like this", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text = seed.id.source.displayName(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(
+                onClick = onNextPage,
+                enabled = state.currentPageIndex in 0 until state.availablePages.lastIndex,
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next related page")
+            }
         }
         if (state is RelatedPostsUiState.Failed) {
             TextButton(onClick = onRetry) { Text("Retry") }
@@ -139,6 +174,7 @@ private fun RelatedShelfBody(
         is RelatedPostsUiState.Failed -> ShelfMessage(state.message)
         is RelatedPostsUiState.Loaded -> RelatedPostsRow(
             posts = posts,
+            sizingPosts = (state.pages.flatMap { page -> page.posts } + posts).distinctBy(Post::id),
             likedPostIds = likedPostIds,
             pixivUgoiraClient = pixivUgoiraClient,
             acquiredDurations = acquiredDurations,
@@ -156,6 +192,7 @@ private fun RelatedShelfBody(
 @Composable
 private fun RelatedPostsRow(
     posts: List<Post>,
+    sizingPosts: List<Post>,
     likedPostIds: Set<PostId>,
     pixivUgoiraClient: PixivUgoiraClient?,
     acquiredDurations: Map<PostId, Long>,
@@ -177,9 +214,9 @@ private fun RelatedPostsRow(
     val titleStyle = MaterialTheme.typography.bodyMedium
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
-    val rowHeight = remember(posts, titleStyle, density, textMeasurer) {
+    val rowHeight = remember(sizingPosts, titleStyle, density, textMeasurer) {
         val titleWidthPx = with(density) { (cardWidth - titleHorizontalPadding).roundToPx() }
-        posts.maxOf { post ->
+        sizingPosts.maxOf { post ->
             val mediaHeight = cardWidth / previewAspectRatio(post)
             val titleHeight = post.displayTitleOrNull()?.let { title ->
                 val measuredHeightPx = textMeasurer.measure(

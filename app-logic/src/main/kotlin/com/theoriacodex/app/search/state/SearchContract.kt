@@ -212,6 +212,8 @@ sealed interface SearchAction {
     ) : SearchAction
     data object RetryRelatedPosts : SearchAction
     data object DismissRelatedPosts : SearchAction
+    data object ShowPreviousRelatedPosts : SearchAction
+    data object ShowNextRelatedPosts : SearchAction
     data class OpenRelatedResult(
         val index: Int,
         val visibleResults: List<Post>,

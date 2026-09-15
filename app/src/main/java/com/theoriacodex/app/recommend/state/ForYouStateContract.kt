@@ -98,6 +98,8 @@ sealed interface ForYouAction {
     ) : ForYouAction
     data object RetryRelatedPosts : ForYouAction
     data object DismissRelatedPosts : ForYouAction
+    data object ShowPreviousRelatedPosts : ForYouAction
+    data object ShowNextRelatedPosts : ForYouAction
     data class OpenRelatedResult(
         val index: Int,
         val visibleResults: List<Post>,
@@ -430,6 +432,8 @@ fun ForYouUiState.reduce(action: ForYouAction): ForYouTransition {
         is ForYouAction.RelatedLikeCommitted,
         ForYouAction.RetryRelatedPosts,
         ForYouAction.DismissRelatedPosts,
+        ForYouAction.ShowPreviousRelatedPosts,
+        ForYouAction.ShowNextRelatedPosts,
         -> unchanged()
         is ForYouAction.RefreshCompleted -> {
             if (!accepts(action.request, ForYouRequestKind.REFRESH)) {

@@ -76,6 +76,8 @@ Search and For You may show one transient provider-native related shelf only aft
 
 Related posts are presentation-only: keep them outside canonical Search/FYP results, continuations, statuses, applied queries, recent searches, FYP history, and durable scroll state. Project the full-line shelf onto canonical post indices so Search restoration and both feeds' paging remain stable. A count-only Like change must not regenerate a non-empty FYP feed; the next legitimate root refresh trains from the updated Likes. Related Viewer streams are static `RELATED` sessions with no live paging or process-restored result substitution.
 
+Related shelf pages are transient navigation history, not provider feed pages. Liking a post from the selected shelf page promotes it once into the owning canonical feed immediately before the shelf, removes it from every retained shelf page, advances the shelf anchor to that post, and loads a newly selected page seeded by it. Preserve older non-empty pages for bounded previous/next navigation, reject cross-page duplicate canonical IDs, and keep page changes out of durable feed pagination and scroll state.
+
 A related shelf row is never a persistable Search scroll anchor. Projection changes must not restart scroll observation or replace the latest canonical post position with the shelf seed; if the shelf is first visible, retain the previous valid position. Bound the complete related-post load, including provider retries, to 15 seconds and convert only that deadline into the shelf Retry state. Route replacement, dismissal, and owner cancellation remain true cancellation and must not surface as timeout failures.
 
 ## Retired Viewer Translation
@@ -214,6 +216,8 @@ feat(recents): add durable watched and search history
 Search source retries preserve the applied query identity, accepted grid order, and other providers' continuation. Keep failed Unified page tokens available for retry; a single-source retry uses its exact native query, including facets, rather than the portable Unified query. Retrying must not record another root Search/Recents event.
 
 `ImageRef.videoVariants` contains alternate full-video renditions of one gallery item. It must not add gallery pages or replace canonical media used by duration fingerprints. Viewer and downloads select independently, carry the selected MIME, and retain request-scoped source headers. Sparse updates may retain variants only for the same media identity. Animation exports use application transport and must honor the same download network preferences as DownloadManager requests.
+
+Followed is a virtual Codex with ID `system:followed`, backed by existing local creator memberships rather than saved-post rows. Its source and source-qualified author selections use OR within each set and AND between sets, and persist under its own Codex FAB key. Keep provider continuations independent, reject stale membership/filter generations, and preserve successful branches on failure. Do not expose saved-collection deletion, post removal, export, automatic tags, or save destinations for this virtual collection.
 
 Creator follows are local, bounded Settings memberships. Manual checks use two concurrent provider calls with a 15-second deadline per creator. Durable check results must match the membership ID that started the request, so unfollowing/re-following cannot admit an older request. New-post counts describe the provider's latest page; accepted creator visits acknowledge visible canonical IDs without a remote follow or notification subscription.
 

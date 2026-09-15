@@ -43,6 +43,48 @@ class RelatedPostsStateTest {
         assertSame(failed, failed.clearIfSeed(PostId(SourceKey.PIXIV, "other")))
     }
 
+    @Test
+    fun `completed pages remain selectable while the latest anchor stays fixed`() {
+        val seed = post("seed")
+        val firstLoading = RelatedPostsUiState.Idle.begin(seed, 2, 1)
+        val first = firstLoading.complete(firstLoading.request, listOf(post("one")), emptySet())
+        val secondLoading = first.begin(
+            seed = post("one"),
+            anchorCanonicalIndex = 3,
+            generation = 2,
+            retainedPages = first.availablePages,
+        )
+        val second = secondLoading.complete(secondLoading.request, listOf(post("two")), emptySet())
+
+        assertEquals(1, second.currentPageIndex)
+        assertEquals(listOf("two"), second.loadedPosts.map { it.id.sourcePostId })
+
+        val previous = second.selectPage(0)
+        assertEquals(listOf("one"), previous.loadedPosts.map { it.id.sourcePostId })
+        assertEquals(3, previous.requestOrNull?.anchorCanonicalIndex)
+        assertEquals(listOf("two"), previous.selectPage(1).loadedPosts.map { it.id.sourcePostId })
+    }
+
+    @Test
+    fun `promotion inserts once and removes the promoted card from retained pages`() {
+        val seed = post("seed")
+        val promoted = post("promoted")
+        val sibling = post("sibling")
+        val loading = RelatedPostsUiState.Idle.begin(seed, 0, 1)
+        val loaded = loading.complete(loading.request, listOf(promoted, sibling), emptySet())
+
+        val withoutPromoted = loaded.withoutPost(promoted.id)
+        assertEquals(listOf("sibling"), withoutPromoted.loadedPosts.map { it.id.sourcePostId })
+        assertEquals(
+            listOf("seed", "promoted", "tail"),
+            promoteRelatedPost(listOf(seed, post("tail")), promoted, 1).map { it.id.sourcePostId },
+        )
+        assertEquals(
+            listOf("seed", "promoted"),
+            promoteRelatedPost(listOf(seed, promoted), promoted, 1).map { it.id.sourcePostId },
+        )
+    }
+
     private fun post(id: String): Post = Post(
         id = PostId(SourceKey.PIXIV, id),
         preview = ImageRef("https://example.com/$id.jpg", null, "image/jpeg"),

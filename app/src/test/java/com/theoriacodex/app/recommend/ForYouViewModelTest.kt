@@ -7,6 +7,7 @@ import com.theoriacodex.app.recommend.state.ForYouEffect
 import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.loadedPosts
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.data.repository.AppSettings
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
@@ -73,6 +74,50 @@ class ForYouViewModelTest {
 
         viewModel.onAction(ForYouAction.Refresh(shuffle = true))
         assertEquals(RelatedPostsUiState.Idle, viewModel.state.value.relatedPosts)
+    }
+
+    @Test
+    fun `liking a related post promotes it and retains both shelf pages`() = runTest {
+        val seed = testPost(sourcePostId = "seed")
+        val promoted = testPost(sourcePostId = "promoted")
+        val sibling = testPost(sourcePostId = "sibling")
+        val next = testPost(sourcePostId = "next")
+        val engine = FakeForYouRouteEngine().apply {
+            current = current.copy(activeProfileLikesCount = 1, results = listOf(seed))
+        }
+        val loader = FakeForYouRelatedPostsLoader { id ->
+            when (id) {
+                seed.id -> listOf(promoted, sibling)
+                promoted.id -> listOf(next)
+                else -> emptyList()
+            }
+        }
+        val viewModel = ForYouViewModel(
+            engine = engine,
+            savedStateHandle = SavedStateHandle(),
+            coroutineScope = this,
+            relatedPostsLoader = loader,
+        )
+        advanceUntilIdle()
+
+        viewModel.onAction(ForYouAction.RelatedLikeCommitted(seed, LikeToggleOutcome.LIKED))
+        advanceUntilIdle()
+        viewModel.onAction(ForYouAction.RelatedLikeCommitted(promoted, LikeToggleOutcome.LIKED))
+        advanceUntilIdle()
+
+        assertEquals(listOf("seed", "promoted"), viewModel.state.value.results.map { it.id.sourcePostId })
+        assertEquals(listOf("next"), viewModel.state.value.relatedPosts.loadedPosts.map { it.id.sourcePostId })
+        viewModel.onAction(ForYouAction.ShowPreviousRelatedPosts)
+        assertEquals(listOf("sibling"), viewModel.state.value.relatedPosts.loadedPosts.map { it.id.sourcePostId })
+        viewModel.onAction(ForYouAction.ShowNextRelatedPosts)
+        assertEquals(listOf("next"), viewModel.state.value.relatedPosts.loadedPosts.map { it.id.sourcePostId })
+
+        viewModel.synchronizeEnvironment(AppSettings(), activeProfileLikesCount = 2)
+        assertEquals(listOf("seed", "promoted"), viewModel.state.value.results.map { it.id.sourcePostId })
+
+        viewModel.onAction(ForYouAction.Refresh(shuffle = true))
+        advanceUntilIdle()
+        assertEquals(emptyList<Post>(), viewModel.state.value.results)
     }
 
     @Test
@@ -544,12 +589,14 @@ private class FakeForYouRouteEngine(
 }
 
 private class FakeForYouRelatedPostsLoader(
-    private val posts: List<Post>,
+    private val resultForSeed: (PostId) -> List<Post>,
 ) : RelatedPostsLoading {
+    constructor(posts: List<Post>) : this({ posts })
+
     val requests = mutableListOf<PostId>()
     override fun supports(source: SourceKey): Boolean = source == SourceKey.PIXIV
     override suspend fun load(seed: PostId): List<Post> {
         requests += seed
-        return posts
+        return resultForSeed(seed)
     }
 }

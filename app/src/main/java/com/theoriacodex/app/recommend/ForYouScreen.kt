@@ -372,6 +372,8 @@ fun ForYouScreen(
                             onLongPress = { post -> selectedActionPost = post },
                             onDismiss = { onAction(ForYouAction.DismissRelatedPosts) },
                             onRetry = { onAction(ForYouAction.RetryRelatedPosts) },
+                            onPreviousPage = { onAction(ForYouAction.ShowPreviousRelatedPosts) },
+                            onNextPage = { onAction(ForYouAction.ShowNextRelatedPosts) },
                             onViewportChanged = onDurationPostVisibilityChanged,
                             onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
                         )

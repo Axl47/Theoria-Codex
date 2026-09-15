@@ -58,6 +58,44 @@ class RelatedPostsRouteControllerTest {
         assertEquals(RelatedPostsUiState.Idle, state)
     }
 
+    @Test
+    fun `liking a shelf post promotes it and opens a retained next page`() = runTest {
+        val seed = testPost(sourcePostId = "seed")
+        val promoted = testPost(sourcePostId = "promoted")
+        val sibling = testPost(sourcePostId = "sibling")
+        val next = testPost(sourcePostId = "next")
+        var state: RelatedPostsUiState = RelatedPostsUiState.Idle
+        var canonicalPosts = listOf(seed, testPost(sourcePostId = "tail"))
+        val loader = SequencedRelatedLoader(
+            mapOf(seed.id to listOf(promoted, sibling), promoted.id to listOf(next)),
+        )
+        val controller = RelatedPostsRouteController(
+            scope = this,
+            loader = loader,
+            currentState = { state },
+            canonicalPosts = { canonicalPosts },
+            promotePost = { post, insertionIndex ->
+                canonicalPosts = promoteRelatedPost(canonicalPosts, post, insertionIndex)
+            },
+            updateState = { state = it },
+        )
+
+        controller.onLikeCommitted(seed, LikeToggleOutcome.LIKED)
+        runCurrent()
+        controller.onLikeCommitted(promoted, LikeToggleOutcome.LIKED)
+        runCurrent()
+
+        assertEquals(listOf("seed", "promoted", "tail"), canonicalPosts.map { it.id.sourcePostId })
+        assertEquals(listOf(seed.id, promoted.id), loader.requests)
+        assertEquals(listOf("next"), state.loadedPosts.map { it.id.sourcePostId })
+        assertEquals(1, state.currentPageIndex)
+
+        controller.showPreviousPage()
+        assertEquals(listOf("sibling"), state.loadedPosts.map { it.id.sourcePostId })
+        controller.showNextPage()
+        assertEquals(listOf("next"), state.loadedPosts.map { it.id.sourcePostId })
+    }
+
     private fun kotlinx.coroutines.test.TestScope.controller(
         seed: Post,
         state: () -> RelatedPostsUiState,
@@ -77,4 +115,15 @@ class RelatedPostsRouteControllerTest {
 private object SuspendingRelatedLoader : RelatedPostsLoading {
     override fun supports(source: SourceKey): Boolean = true
     override suspend fun load(seed: PostId): List<Post> = awaitCancellation()
+}
+
+private class SequencedRelatedLoader(
+    private val results: Map<PostId, List<Post>>,
+) : RelatedPostsLoading {
+    val requests = mutableListOf<PostId>()
+    override fun supports(source: SourceKey): Boolean = true
+    override suspend fun load(seed: PostId): List<Post> {
+        requests += seed
+        return results[seed].orEmpty()
+    }
 }
