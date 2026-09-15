@@ -51,7 +51,7 @@ internal fun CodexTileMetadata(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = if (codex.codexId == FOLLOWED_CODEX_ID) "Posts from followed creators" else "$itemCount items",
+                text = if (codex.codexId == FOLLOWED_CODEX_ID) "$itemCount followed" else "$itemCount items",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

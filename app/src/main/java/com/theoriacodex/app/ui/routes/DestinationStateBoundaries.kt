@@ -13,6 +13,7 @@ import com.theoriacodex.app.appshell.PendingIncomingUri
 import com.theoriacodex.app.codex.CodexCollectionSource
 import com.theoriacodex.app.codex.CodexCollectionPresentation
 import com.theoriacodex.app.codex.CodexActionOptions
+import com.theoriacodex.app.codex.FOLLOWED_CODEX_ID
 import kotlinx.coroutines.flow.Flow
 import com.theoriacodex.app.codex.CodexCoverCandidate
 import com.theoriacodex.app.codex.codexBelongsToProfile
@@ -231,7 +232,7 @@ internal fun CodexDestinationStateBoundary(
                 allCodices = codices,
                 visibleCodices = visible,
                 activeProfile = profile,
-                itemCounts = collection.itemCounts,
+                itemCounts = collection.itemCounts + (FOLLOWED_CODEX_ID to settings.followedCreators.size),
                 coverCandidates = collection.coverCandidates,
                 observeActionOptions = observeActions,
             ),

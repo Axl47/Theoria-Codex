@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -217,24 +217,39 @@ private fun CodexGrid(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item(key = FOLLOWED_CODEX_ID) {
-            CodexGridTile(
-                codex = Codex(FOLLOWED_CODEX_ID, "Followed", 0), itemCount = 0,
-                coverCandidates = emptyList(), onOpen = { onOpenCodex(FOLLOWED_CODEX_ID) },
-                onOpenActions = { onOpenCodex(FOLLOWED_CODEX_ID) },
-                onLongPress = { onOpenCodex(FOLLOWED_CODEX_ID) },
-            )
+        var followedInserted = false
+        presentation.codices.forEach { codex ->
+            item(key = codex.codexId) {
+                CodexGridTile(
+                    codex = codex,
+                    itemCount = presentation.itemCounts[codex.codexId] ?: 0,
+                    coverCandidates = presentation.coverCandidates[codex.codexId].orEmpty(),
+                    onOpen = { onOpenCodex(codex.codexId) },
+                    onOpenActions = { state.actionTarget = codex },
+                    onLongPress = { state.actionTarget = codex },
+                )
+            }
+            if (codex.codexId == presentation.likesCodexId) {
+                followedCodexItem(presentation.itemCounts[FOLLOWED_CODEX_ID] ?: 0, onOpenCodex)
+                followedInserted = true
+            }
         }
-        items(presentation.codices, key = Codex::codexId) { codex ->
-            CodexGridTile(
-                codex = codex,
-                itemCount = presentation.itemCounts[codex.codexId] ?: 0,
-                coverCandidates = presentation.coverCandidates[codex.codexId].orEmpty(),
-                onOpen = { onOpenCodex(codex.codexId) },
-                onOpenActions = { state.actionTarget = codex },
-                onLongPress = { state.actionTarget = codex },
-            )
+        if (!followedInserted) {
+            followedCodexItem(presentation.itemCounts[FOLLOWED_CODEX_ID] ?: 0, onOpenCodex)
         }
+    }
+}
+
+private fun LazyGridScope.followedCodexItem(itemCount: Int, onOpenCodex: (String) -> Unit) {
+    item(key = FOLLOWED_CODEX_ID) {
+        CodexGridTile(
+            codex = Codex(FOLLOWED_CODEX_ID, "Followed", 0),
+            itemCount = itemCount,
+            coverCandidates = emptyList(),
+            onOpen = { onOpenCodex(FOLLOWED_CODEX_ID) },
+            onOpenActions = { onOpenCodex(FOLLOWED_CODEX_ID) },
+            onLongPress = { onOpenCodex(FOLLOWED_CODEX_ID) },
+        )
     }
 }
 
