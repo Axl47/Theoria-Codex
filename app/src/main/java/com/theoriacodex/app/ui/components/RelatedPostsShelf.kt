@@ -109,6 +109,7 @@ private fun RelatedShelfHeader(
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
 ) {
+    val showPageNavigation = state.availablePages.size > 1
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -120,11 +121,13 @@ private fun RelatedShelfHeader(
             modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(
-                onClick = onPreviousPage,
-                enabled = state.currentPageIndex > 0,
-            ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous related page")
+            if (showPageNavigation) {
+                IconButton(
+                    onClick = onPreviousPage,
+                    enabled = state.currentPageIndex > 0,
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous related page")
+                }
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text("More like this", style = MaterialTheme.typography.titleSmall)
@@ -134,11 +137,13 @@ private fun RelatedShelfHeader(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            IconButton(
-                onClick = onNextPage,
-                enabled = state.currentPageIndex in 0 until state.availablePages.lastIndex,
-            ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next related page")
+            if (showPageNavigation) {
+                IconButton(
+                    onClick = onNextPage,
+                    enabled = state.currentPageIndex in 0 until state.availablePages.lastIndex,
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next related page")
+                }
             }
         }
         if (state is RelatedPostsUiState.Failed) {
