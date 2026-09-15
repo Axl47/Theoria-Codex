@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
@@ -15,15 +16,21 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.media.MediaDurationState
 import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.observedMediaDurationMs
+import com.theoriacodex.app.post.displayTitleOrNull
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.search.SearchResultCard
+import com.theoriacodex.app.search.previewAspectRatio
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.viewer.PixivUgoiraClient
 import com.theoriacodex.domain.model.ImageRef
@@ -164,7 +171,30 @@ private fun RelatedPostsRow(
         ShelfMessage("No related posts match the current filters")
         return
     }
+    val cardWidth = 180.dp
+    val titleHorizontalPadding = 20.dp
+    val titleVerticalPadding = 16.dp
+    val titleStyle = MaterialTheme.typography.bodyMedium
+    val density = LocalDensity.current
+    val textMeasurer = rememberTextMeasurer()
+    val rowHeight = remember(posts, titleStyle, density, textMeasurer) {
+        val titleWidthPx = with(density) { (cardWidth - titleHorizontalPadding).roundToPx() }
+        posts.maxOf { post ->
+            val mediaHeight = cardWidth / previewAspectRatio(post)
+            val titleHeight = post.displayTitleOrNull()?.let { title ->
+                val measuredHeightPx = textMeasurer.measure(
+                    text = title,
+                    style = titleStyle,
+                    maxLines = 2,
+                    constraints = Constraints(maxWidth = titleWidthPx),
+                ).size.height
+                with(density) { measuredHeightPx.toDp() } + titleVerticalPadding
+            } ?: 0.dp
+            mediaHeight + titleHeight
+        }
+    }
     LazyRow(
+        modifier = Modifier.height(rowHeight),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -172,7 +202,7 @@ private fun RelatedPostsRow(
             items = posts,
             key = { _, post -> "related-card:${post.id.source.name}:${post.id.sourcePostId}" },
         ) { index, post ->
-            Box(modifier = Modifier.width(180.dp)) {
+            Box(modifier = Modifier.width(cardWidth)) {
                 val observedDuration = observedMediaDurationMs(post, durationStateForPost)
                 SearchResultCard(
                     post = post,
