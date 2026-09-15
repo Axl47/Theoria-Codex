@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -109,6 +110,7 @@ fun CodexDetailScreen(
     customFilters: (@Composable (() -> Unit) -> Unit)? = null,
     customFiltersActive: Boolean = false,
     emptyMessage: String? = null,
+    loading: Boolean = false,
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
 ) {
@@ -264,6 +266,7 @@ fun CodexDetailScreen(
             CodexDetailGrid(
                 posts = visiblePosts,
                 collectionIsEmpty = posts.isEmpty(),
+                loading = loading,
                 resolvingDurations = durationReadiness.isResolving,
                 editSelection = editSelection,
                 gridState = gridState,
@@ -478,6 +481,7 @@ private fun CodexDetailHeaderActions(
 private fun CodexDetailGrid(
     posts: List<Post>,
     collectionIsEmpty: Boolean,
+    loading: Boolean,
     resolvingDurations: Boolean,
     editSelection: CodexEditSelection,
     gridState: androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState,
@@ -493,15 +497,30 @@ private fun CodexDetailGrid(
     emptyMessage: String? = null,
 ) {
     if (posts.isEmpty()) {
-        FeedEmptyTile(
-            title = if (collectionIsEmpty) "This codex is empty" else "No matching posts",
-            message = emptyMessage ?: when {
-                collectionIsEmpty -> "Browse and save posts"
-                resolvingDurations -> "Resolving durations…"
-                else -> "Adjust your filters"
-            },
-            contentPadding = 24.dp,
-        )
+        if (loading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text("Loading followed posts…")
+                    CircularProgressIndicator()
+                }
+            }
+        } else {
+            FeedEmptyTile(
+                title = if (collectionIsEmpty) "This codex is empty" else "No matching posts",
+                message = emptyMessage ?: when {
+                    collectionIsEmpty -> "Browse and save posts"
+                    resolvingDurations -> "Resolving durations…"
+                    else -> "Adjust your filters"
+                },
+                contentPadding = 24.dp,
+            )
+        }
         return
     }
     TwoColumnPostStaggeredGrid(

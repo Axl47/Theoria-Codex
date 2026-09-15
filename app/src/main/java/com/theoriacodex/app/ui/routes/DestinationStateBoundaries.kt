@@ -90,6 +90,7 @@ internal data class CodexDetailDestinationState(
     val resolveUnknownAnimatedDurations: Boolean,
     val followedOwner: com.theoriacodex.app.codex.FollowedCodexViewModel? = null,
     val follows: List<com.theoriacodex.data.repository.FollowedCreator> = emptyList(),
+    val loading: Boolean = false,
 )
 
 internal data class SaveToCodexDestinationState(
@@ -454,6 +455,6 @@ private fun FollowedCodexDestinationStateBoundary(
             sources.registry.creatorBrowsingSources().intersect(available)
         },
         resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
-        followedOwner = owner, follows = settings.followedCreators,
+        followedOwner = owner, follows = settings.followedCreators, loading = feed.loading,
     ))
 }

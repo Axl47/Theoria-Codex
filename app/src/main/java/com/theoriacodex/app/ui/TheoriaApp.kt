@@ -1846,6 +1846,7 @@ internal fun TheoriaAppContent(
                             customFiltersActive = state.followedOwner != null &&
                                 (fabRestoreState.followedSources.isNotEmpty() || fabRestoreState.followedAuthors.isNotEmpty()),
                             emptyMessage = state.followedOwner?.let { "Follow a creator or adjust your filters" },
+                            loading = state.loading,
                             posts = state.posts,
                             sortMode = sortMode,
                             availableSources = state.availableSources,

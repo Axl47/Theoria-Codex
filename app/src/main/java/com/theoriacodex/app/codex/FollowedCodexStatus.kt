@@ -43,7 +43,6 @@ internal fun FollowedCodexStatus(
         canonicalIndexForVisibleItems = { indices -> indices.mapNotNull(canonicalIndices::getOrNull).maxOrNull() },
         onLoadNextPage = owner::loadMore,
     )
-    if (state.loading) Text("Loading followed posts…")
     if (state.errors.isNotEmpty()) {
         val failed = follows.filter { it.membershipId in state.errors }
         Text(failed.take(2).joinToString("\n") {
