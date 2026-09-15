@@ -362,7 +362,8 @@ class DataStoreRepositoriesTest {
         val firstScope = newScope()
         val first = DataStoreUiRestoreRepository(directory, firstScope)
         val search = FeedFabRestoreState(animatedOnly = true, hideLiked = true)
-        val codex = FeedFabRestoreState(source = "PIXIV", language = "JAPANESE", sortMode = "OLDEST_SAVED")
+        val codex = FeedFabRestoreState(source = "PIXIV", language = "JAPANESE", sortMode = "OLDEST_SAVED",
+            followedSources = listOf("PIXIV", "IWARA"), followedAuthors = listOf("PIXIV:1", "IWARA:1"))
 
         first.setFeedFabRestoreState("search", search)
         first.setFeedFabRestoreState("codex:one", codex)

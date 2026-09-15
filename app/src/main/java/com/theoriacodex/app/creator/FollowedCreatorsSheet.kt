@@ -32,7 +32,7 @@ internal fun FollowedCreatorsSheet(owner: CreatorFollowsViewModel, onDismiss: ()
     ModalBottomSheet(onDismissRequest = onDismiss) {
         LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 640.dp).padding(horizontal = 20.dp)) {
             item {
-                Text("Followed creators", style = MaterialTheme.typography.titleLarge)
+                Text("Followed authors", style = MaterialTheme.typography.titleLarge)
                 Text("Saved on this device. Check for new posts in each creator’s latest page.")
                 TextButton(enabled = follows.isNotEmpty(), onClick = {
                     if (refreshing) owner.cancelRefresh() else owner.refresh()

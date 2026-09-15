@@ -51,12 +51,12 @@ internal fun CodexTileMetadata(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = "$itemCount items",
+                text = if (codex.codexId == FOLLOWED_CODEX_ID) "Posts from followed creators" else "$itemCount items",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        IconButton(onClick = onOpenActions) {
+        if (codex.codexId != FOLLOWED_CODEX_ID) IconButton(onClick = onOpenActions) {
             Icon(
                 imageVector = Icons.Default.MoreVert,
                 contentDescription = "Actions for ${codex.name}",

@@ -38,6 +38,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
@@ -102,6 +104,11 @@ fun CodexDetailScreen(
     onBack: () -> Unit,
     onDeleteCodex: () -> Unit,
     isLikesCodex: Boolean,
+    customHeader: (@Composable (List<Post>, CodexCollectionFilters, Boolean,
+        androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState) -> Unit)? = null,
+    customFilters: (@Composable (() -> Unit) -> Unit)? = null,
+    customFiltersActive: Boolean = false,
+    emptyMessage: String? = null,
     fabRestoreState: FeedFabRestoreState = FeedFabRestoreState(),
     onFabRestoreStateChange: (FeedFabRestoreState) -> Unit = {},
 ) {
@@ -112,12 +119,9 @@ fun CodexDetailScreen(
     val animatedOnly = fabRestoreState.animatedOnly
     val durationMinBucket = fabRestoreState.durationMinBucket
     val durationMaxBucket = fabRestoreState.durationMaxBucket
-    val selectedSource = fabRestoreState.source?.let { encoded ->
-        SourceKey.entries.firstOrNull { source -> source.name == encoded }
-    }
-    val language = fabRestoreState.language?.let { encoded ->
-        CodexLanguageFilter.entries.firstOrNull { filter -> filter.name == encoded }
-    } ?: CodexLanguageFilter.ANY
+    val selectedSource = SourceKey.entries.firstOrNull { it.name == fabRestoreState.source }
+    val language = CodexLanguageFilter.entries.firstOrNull { it.name == fabRestoreState.language }
+        ?: CodexLanguageFilter.ANY
     val fullColorOnly = fabRestoreState.fullColorOnly
     val gridState = rememberLazyStaggeredGridState()
     val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
@@ -216,7 +220,7 @@ fun CodexDetailScreen(
         floatingActionButton = {
             FeedFilterFab(
                 modifier = Modifier.padding(bottom = 8.dp),
-                active = filters.isActive || sortMode != CodexSortMode.NEWEST_SAVED,
+                active = filters.isActive || customFiltersActive || sortMode != CodexSortMode.NEWEST_SAVED,
                 contentDescription = "Filter Codex collection",
                 onClick = { showFilterSheet = true },
             )
@@ -229,12 +233,14 @@ fun CodexDetailScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            CodexDetailHeader(
+            if (customHeader != null) {
+                customHeader(visiblePosts, filters, durationReadiness.isResolving, gridState)
+            } else CodexDetailHeader(
                 codexName = codexName,
                 itemSummary = codexItemSummary(
                     visibleCount = visiblePosts.size,
                     totalCount = posts.size,
-                    filtersActive = filters.isActive,
+                    filtersActive = filters.isActive || customFiltersActive,
                     selectedCount = editSelection.selectedPostIds.size.takeIf { editSelection.active },
                 ),
                 itemCount = posts.size,
@@ -270,6 +276,7 @@ fun CodexDetailScreen(
                 onOpenViewer = { index -> onOpenViewer(visiblePosts, index) },
                 onToggleSelection = { postId -> editSelection = editSelection.toggle(postId) },
                 onOpenPostActions = { post -> selectedActionPost = post },
+                emptyMessage = emptyMessage,
             )
         }
     }
@@ -289,6 +296,7 @@ fun CodexDetailScreen(
                 onFabRestoreStateChange(FeedFabRestoreState(sortMode = CodexSortMode.NEWEST_SAVED.name))
             },
             onDismiss = { showFilterSheet = false },
+            followedFilters = customFilters?.let { content -> ({ content { showFilterSheet = false } }) },
         )
     }
 
@@ -301,7 +309,7 @@ fun CodexDetailScreen(
             onSaveToDevice = { onSavePostToDevice(post) },
             onSaveToCodex = { onAddPostsToAnotherCodex(listOf(post)) },
             saveToCodexContentDescription = "Add to another Codex",
-            onRemoveFromCodex = { onRemovePosts(listOf(post)) },
+            onRemoveFromCodex = if (customHeader == null) ({ onRemovePosts(listOf(post)) }) else null,
             onOpenCreatorProfile = onOpenCreatorProfile,
             onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
             onGoToSearch = onGoToSearch,
@@ -323,17 +331,16 @@ fun CodexDetailScreen(
         )
     }
 
-    if (showDeleteConfirm) {
-        CodexDeleteConfirmationDialog(
-            codexName = codexName,
-            isLikesCodex = isLikesCodex,
-            onDismiss = { showDeleteConfirm = false },
-            onConfirm = {
-                showDeleteConfirm = false
-                onDeleteCodex()
-            },
-        )
-    }
+    CodexDeleteConfirmationDialog(
+        visible = showDeleteConfirm,
+        codexName = codexName,
+        isLikesCodex = isLikesCodex,
+        onDismiss = { showDeleteConfirm = false },
+        onConfirm = {
+            showDeleteConfirm = false
+            onDeleteCodex()
+        },
+    )
 }
 
 @Composable
@@ -356,11 +363,13 @@ private fun CodexFilterReconciliationEffect(
 
 @Composable
 private fun CodexDeleteConfirmationDialog(
+    visible: Boolean,
     codexName: String,
     isLikesCodex: Boolean,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
+    if (!visible) return
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (isLikesCodex) "Clear Likes?" else "Delete Codex?") },
@@ -481,11 +490,12 @@ private fun CodexDetailGrid(
     onOpenViewer: (Int) -> Unit,
     onToggleSelection: (PostId) -> Unit,
     onOpenPostActions: (Post) -> Unit,
+    emptyMessage: String? = null,
 ) {
     if (posts.isEmpty()) {
         FeedEmptyTile(
             title = if (collectionIsEmpty) "This codex is empty" else "No matching posts",
-            message = when {
+            message = emptyMessage ?: when {
                 collectionIsEmpty -> "Browse and save posts"
                 resolvingDurations -> "Resolving durations…"
                 else -> "Adjust your filters"
@@ -588,10 +598,13 @@ private fun CodexFilterSheet(
     onSortChange: (CodexSortMode) -> Unit,
     onReset: () -> Unit,
     onDismiss: () -> Unit,
+    followedFilters: (@Composable () -> Unit)? = null,
 ) {
-    FeedFilterSheet(onDismiss = onDismiss, title = "Codex filters") {
+    FeedFilterSheet(onDismiss = onDismiss, title = "Codex filters",
+        modifier = Modifier.verticalScroll(rememberScrollState())) {
         CodexVisibilityFilters(filters, supportsFullColor, onFiltersChange)
-        CodexSourceFilters(filters.source, sourceOptions) { source ->
+        if (followedFilters != null) followedFilters()
+        else CodexSourceFilters(filters.source, sourceOptions) { source ->
             onFiltersChange(filters.copy(source = source))
         }
         if (supportsLanguage) {

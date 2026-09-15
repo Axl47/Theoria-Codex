@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -108,22 +107,8 @@ private fun CodexListBody(
     actions: CodexListActions,
 ) {
     when {
-        presentation.codices.isEmpty() -> EmptyCodexList { state.showCreateDialog = true }
         state.reorderMode -> CodexReorderList(presentation, state)
         else -> CodexGrid(presentation, state, actions.openCodex)
-    }
-}
-
-@Composable
-private fun EmptyCodexList(onCreate: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text("No codices yet", style = MaterialTheme.typography.titleMedium)
-            TextButton(onClick = onCreate) { Text("Create codex") }
-        }
     }
 }
 
@@ -232,6 +217,14 @@ private fun CodexGrid(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        item(key = FOLLOWED_CODEX_ID) {
+            CodexGridTile(
+                codex = Codex(FOLLOWED_CODEX_ID, "Followed", 0), itemCount = 0,
+                coverCandidates = emptyList(), onOpen = { onOpenCodex(FOLLOWED_CODEX_ID) },
+                onOpenActions = { onOpenCodex(FOLLOWED_CODEX_ID) },
+                onLongPress = { onOpenCodex(FOLLOWED_CODEX_ID) },
+            )
+        }
         items(presentation.codices, key = Codex::codexId) { codex ->
             CodexGridTile(
                 codex = codex,

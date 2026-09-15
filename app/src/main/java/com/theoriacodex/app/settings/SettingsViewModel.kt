@@ -390,7 +390,6 @@ internal class SettingsViewModel(
             is SettingsAction.PixivCallbackCompleted -> handlePixivCallback(action.errorMessage)
             SettingsAction.DismissCredentialRecovery -> updateAccounts { copy(showRecoveryDialog = false) }
             SettingsAction.ResetCredentialStore -> resetCredentialStore()
-            SettingsAction.OpenFollowedCreators -> effectChannel.trySend(SettingsEffect.ShowFollowedCreators)
             SettingsAction.OpenSourceAccounts -> {
                 onAction(SettingsAction.SetSectionExpanded(SettingsSectionKey.SOURCE_ACCOUNTS, true))
                 effectChannel.trySend(SettingsEffect.NavigateToSettings)

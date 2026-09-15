@@ -87,6 +87,8 @@ internal data class CodexDetailDestinationState(
     val availableSources: Set<SourceKey>,
     val creatorBrowsingSources: Set<SourceKey>,
     val resolveUnknownAnimatedDurations: Boolean,
+    val followedOwner: com.theoriacodex.app.codex.FollowedCodexViewModel? = null,
+    val follows: List<com.theoriacodex.data.repository.FollowedCreator> = emptyList(),
 )
 
 internal data class SaveToCodexDestinationState(
@@ -243,8 +245,13 @@ internal fun CodexDetailDestinationStateBoundary(
     sortMode: CodexSortMode,
     data: DataDependencies,
     sources: SourceDependencies,
+    fabRestoreState: com.theoriacodex.data.repository.FeedFabRestoreState,
     content: @Composable (CodexDetailDestinationState) -> Unit,
 ) {
+    if (codexId == com.theoriacodex.app.codex.FOLLOWED_CODEX_ID) {
+        FollowedCodexDestinationStateBoundary(data, sources, fabRestoreState, sortMode, content)
+        return
+    }
     val codexState = data.codexRepository.observeCodex(codexId)
         .collectAsStateWithLifecycle(initialValue = null)
     val itemsState = data.codexRepository.observeCodexItems(codexId)
@@ -408,4 +415,44 @@ private fun rememberSavedPostIds(data: DataDependencies): Set<PostId> {
     val ids = remember(codices) { codices.mapTo(linkedSetOf(), Codex::codexId) }
     val saved = remember(data.codexRepository, ids) { data.codexRepository.observeSavedPostIds(ids) }
     return saved.collectAsStateWithLifecycle(initialValue = emptySet()).value
+}
+
+@Composable
+private fun FollowedCodexDestinationStateBoundary(
+    data: DataDependencies,
+    sources: SourceDependencies,
+    filters: com.theoriacodex.data.repository.FeedFabRestoreState,
+    sort: CodexSortMode,
+    content: @Composable (CodexDetailDestinationState) -> Unit,
+) {
+    val settings = data.settingsRepository.observeSettings().collectAsStateWithLifecycle(initialValue = null).value
+        ?: return
+    val available = sources.availableSources.collectAsStateWithLifecycle().value
+    val owner = androidx.lifecycle.viewmodel.compose.viewModel<com.theoriacodex.app.codex.FollowedCodexViewModel>(
+        factory = com.theoriacodex.app.codex.FollowedCodexViewModel.factory(sources.registry),
+    )
+    val selected = remember(settings.followedCreators, filters.followedSources, filters.followedAuthors) {
+        com.theoriacodex.app.codex.selectFollowedCreators(
+            settings.followedCreators, filters.followedSources.toSet(), filters.followedAuthors.toSet(),
+        )
+    }
+    androidx.compose.runtime.LaunchedEffect(selected, available) { owner.synchronize(selected, available) }
+    val feed = owner.state.collectAsStateWithLifecycle().value
+    val posts = remember(feed.posts, sort) {
+        when (sort) {
+            CodexSortMode.NEWEST_SAVED -> feed.posts.sortedByDescending { it.createdAtEpochMs }
+            CodexSortMode.OLDEST_SAVED -> feed.posts.sortedBy { it.createdAtEpochMs }
+            CodexSortMode.BY_SOURCE -> feed.posts.sortedBy { it.id.source.ordinal }
+        }
+    }
+    content(CodexDetailDestinationState(
+        codex = Codex(com.theoriacodex.app.codex.FOLLOWED_CODEX_ID, "Followed", 0),
+        items = emptyList(), posts = posts, activeProfile = settings.activeRecommendationProfile(),
+        availableSources = available,
+        creatorBrowsingSources = remember(sources.registry, available) {
+            sources.registry.creatorBrowsingSources().intersect(available)
+        },
+        resolveUnknownAnimatedDurations = settings.contentFilters.resolveUnknownAnimatedDurations,
+        followedOwner = owner, follows = settings.followedCreators,
+    ))
 }

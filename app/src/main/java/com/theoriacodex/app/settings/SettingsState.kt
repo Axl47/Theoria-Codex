@@ -116,7 +116,6 @@ sealed interface SettingsAction {
     data class PixivCallbackCompleted(val errorMessage: String? = null) : SettingsAction
     data object DismissCredentialRecovery : SettingsAction
     data object ResetCredentialStore : SettingsAction
-    data object OpenFollowedCreators : SettingsAction
     data object OpenSourceAccounts : SettingsAction
     data object SettingsEntered : SettingsAction
 }
@@ -126,6 +125,5 @@ sealed interface SettingsEffect {
     data class ShowMessage(val message: String, val long: Boolean = false) : SettingsEffect
     data object LoadChangelog : SettingsEffect
     data object ThumbnailCacheCleared : SettingsEffect
-    data object ShowFollowedCreators : SettingsEffect
     data object NavigateToSettings : SettingsEffect
 }

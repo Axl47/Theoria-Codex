@@ -1,5 +1,7 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.domain.model.SourceKey
+
 import com.google.gson.annotations.SerializedName
 import com.theoriacodex.data.storage.LegacyImportProof
 
@@ -137,6 +139,8 @@ internal fun normalizeUiRestoreState(state: PersistedUiRestoreState): PersistedU
             durationMaxBucket = restoreState.durationMaxBucket.coerceIn(0, 25),
             sortMode = restoreState.sortMode?.trim()?.takeIf(String::isNotBlank),
             source = restoreState.source?.trim()?.takeIf(String::isNotBlank),
+            followedSources = restoreState.followedSources.distinct().take(SourceKey.entries.size),
+            followedAuthors = restoreState.followedAuthors.distinct().take(MAX_FOLLOWED_CREATORS),
             language = restoreState.language?.trim()?.takeIf(String::isNotBlank),
         )
         while (boundedFabStates.size > MAX_PERSISTED_FEED_FAB_STATES) {

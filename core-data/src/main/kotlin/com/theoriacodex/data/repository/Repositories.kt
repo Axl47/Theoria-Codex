@@ -482,6 +482,8 @@ data class SearchScrollState(
 )
 
 data class FeedFabRestoreState(
+    @field:SerializedName("followedSources") val followedSources: List<String> = emptyList(),
+    @field:SerializedName("followedAuthors") val followedAuthors: List<String> = emptyList(),
     @field:SerializedName("animatedOnly") val animatedOnly: Boolean = false,
     @field:SerializedName("hideLiked") val hideLiked: Boolean = false,
     @field:SerializedName("hideSaved") val hideSaved: Boolean = false,

@@ -1138,7 +1138,6 @@ internal fun TheoriaAppContent(
                 }
             }
             SettingsEffect.ThumbnailCacheCleared -> thumbnailCacheGeneration += 1
-            SettingsEffect.ShowFollowedCreators -> showFollowedCreators = true
             SettingsEffect.NavigateToSettings -> {
                 pendingTopLevelRoute = TopLevelDestination.Settings.route
                 homeTabRoute = TopLevelDestination.Settings.route
@@ -1817,6 +1816,7 @@ internal fun TheoriaAppContent(
                         CodexDetailDestinationStateBoundary(
                             codexId = codexId,
                             sortMode = sortMode,
+                            fabRestoreState = fabRestoreState,
                             data = dataDependencies,
                             sources = sourceDependencies,
                         ) { state ->
@@ -1829,6 +1829,23 @@ internal fun TheoriaAppContent(
                             }
                             CodexDetailScreen(
                             codexName = state.codex?.name,
+                            customHeader = state.followedOwner?.let { owner -> ({ visible, filters, resolving, grid ->
+                                com.theoriacodex.app.codex.FollowedCodexHeader(
+                                    owner, state.follows, visible, state.posts, filters, resolving, grid,
+                                    onBack = { navController.popBackStack() },
+                                    onManage = { showFollowedCreators = true },
+                                )
+                            }) },
+                            customFilters = state.followedOwner?.let { ({ dismiss ->
+                                com.theoriacodex.app.codex.FollowedCodexFilters(
+                                    state.follows, fabRestoreState,
+                                    onChange = { feedFabRestoreRegistry.update(fabContext, it) },
+                                    onManage = { dismiss(); showFollowedCreators = true },
+                                )
+                            }) },
+                            customFiltersActive = state.followedOwner != null &&
+                                (fabRestoreState.followedSources.isNotEmpty() || fabRestoreState.followedAuthors.isNotEmpty()),
+                            emptyMessage = state.followedOwner?.let { "Follow a creator or adjust your filters" },
                             posts = state.posts,
                             sortMode = sortMode,
                             availableSources = state.availableSources,
