@@ -233,7 +233,8 @@ internal class ViewerRouteWorkflow(
         recordReadingPosition(post, viewedMediaNumber, session)
         runCatchingPreservingCancellation {
             data.recentsRepository.recordWatchedMediaProgress(
-                post = post,
+                // This callback can create the membership before the visible-post write completes.
+                post = offlineMedia?.withoutOfflineLocations(post) ?: post,
                 origin = origin,
                 originQueryHash = session?.context?.queryHash,
                 section = recentPostSectionForViewer(session?.context),

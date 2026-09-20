@@ -67,6 +67,9 @@ class OfflineViewerWorkflowTest {
             assertCanonicalMedia(sources[1], requireNotNull(graph.content.getPost(sources[1].id)))
 
             val launch = ViewerSession(playback, ViewerLaunchContext("watched-source", 2, ViewerStreamSource.SEARCH, 0))
+            // Media progress can reach storage before the first visible-post write finishes.
+            workflow(graph).recordVisibleMediaProgress(playback[2], 1, launch)
+            assertCanonicalMedia(sources[2], graph.data.recentsRepository.observeWatchedPosts().first().single().post)
             workflow(graph).recordVisiblePost(playback[2], 1, launch)
             val watched = graph.data.recentsRepository.observeWatchedPosts().first().single().post
             assertCanonicalMedia(sources[2], watched)
