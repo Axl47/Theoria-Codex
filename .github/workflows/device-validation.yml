@@ -90,7 +90,8 @@ jobs:
         with:
           api-level: ${{ matrix.api-level }}
           target: google_apis
-          arch: x86_64
+          # Google's API 27 catalog provides x86, while API 35 uses x86_64.
+          arch: ${{ matrix.api-level == 27 && 'x86' || 'x86_64' }}
           profile: pixel_6
           disable-animations: true
           emulator-options: >-
@@ -107,6 +108,7 @@ jobs:
         with:
           name: connected-tests-api-${{ matrix.api-level }}
           path: |
+            build/reports/device-preflight/
             app/build/outputs/androidTest-results/connected/
             app/build/reports/androidTests/connected/
             core-data-android/build/outputs/androidTest-results/connected/

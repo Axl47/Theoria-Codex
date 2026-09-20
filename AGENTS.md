@@ -208,6 +208,8 @@ Compose test v2 `performClick` injects pointer input. Use `performSemanticsActio
 
 `scripts/verify_device_apk.py` verifies the packaged isolated ID, expected debuggability and actual configured debug certificate before installation. Release acceptance additionally executes variant-only JSON write/read checks across separate process launches. Performance changes use `scripts/verify_performance_device.sh`: calibration requires three distinct complete physical runs of one APK; comparison binds fixture code/assets, runner APK, device, OS and compilation mode and preserves every iteration trace. Incomplete, mismatched or thermally throttled evidence is not a passing comparison. The empirical calibration envelope is a regression signal, not a statistical confidence claim.
 
+Debug-key preflight must follow Android's configured preferences directory, including hosted Ubuntu's `XDG_CONFIG_HOME/.android` default, rather than assuming `HOME/.android`. An explicit `ANDROID_DEBUG_KEYSTORE` selects one expected key; never search for a different key to make verification pass. The API 27 Google APIs emulator lane uses `x86` because the catalog does not publish an `x86_64` image for that API. Retain device-preflight task graphs and build logs in CI artifacts so failures before installation remain diagnosable.
+
 ## Final Output
 
 Include a Conventional Commit message after each change. These commit messages feed the version changelog, so make the message user-facing.

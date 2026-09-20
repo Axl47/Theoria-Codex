@@ -46,6 +46,44 @@ def sdk_directory() -> Path:
     raise ValueError("Set ANDROID_HOME or ANDROID_SDK_ROOT to inspect the packaged APK")
 
 
+def debug_keystore() -> Path:
+    """Resolve AGP's Android preferences directory, without searching for another signing key."""
+    explicit = os.environ.get("ANDROID_DEBUG_KEYSTORE")
+    if explicit is not None:
+        keystore = Path(explicit)
+    else:
+        # Android tools common 32.1.1: AbstractAndroidLocations.computeAndroidFolder.
+        # ANDROID_USER_HOME names the directory itself; the older roots name its parent.
+        locations = []
+        for name in ("ANDROID_USER_HOME", "ANDROID_PREFS_ROOT", "ANDROID_SDK_HOME"):
+            value = os.environ.get(name)
+            if value is None:
+                continue
+            path = Path(value)
+            if name == "ANDROID_USER_HOME":
+                locations.append(path)
+            elif path.is_dir():
+                locations.append(path / ".android")
+        distinct = {path.absolute() for path in locations}
+        if len(distinct) > 1:
+            raise ValueError("Conflicting Android preference directories; configure ANDROID_USER_HOME consistently")
+        if distinct:
+            directory = next(iter(distinct))
+        else:
+            # Hosted Ubuntu runners set XDG_CONFIG_HOME; AGP prefers it over the home directory.
+            # A Gradle JVM property override should be paired with ANDROID_DEBUG_KEYSTORE.
+            root = next(
+                (Path(value) for name in ("TEST_TMPDIR", "XDG_CONFIG_HOME")
+                 if (value := os.environ.get(name)) is not None and Path(value).is_dir()),
+                Path.home(),
+            )
+            directory = root / ".android"
+        keystore = directory / "debug.keystore"
+    if not keystore.is_file():
+        raise ValueError(f"Debug signing keystore is missing: {keystore}")
+    return keystore
+
+
 def tools() -> tuple[str, str, str, Path]:
     analyzer = os.environ.get("APKANALYZER")
     signer = os.environ.get("APKSIGNER")
@@ -63,10 +101,7 @@ def tools() -> tuple[str, str, str, Path]:
     keytool = os.environ.get("KEYTOOL") or shutil.which("keytool")
     if not keytool:
         raise ValueError("keytool is required to verify the debug signing certificate")
-    keystore = Path(os.environ.get("ANDROID_DEBUG_KEYSTORE", str(Path.home() / ".android/debug.keystore")))
-    if not keystore.is_file():
-        raise ValueError(f"Debug signing keystore is missing: {keystore}")
-    return analyzer, signer, keytool, keystore
+    return analyzer, signer, keytool, debug_keystore()
 
 
 def run(*command: str) -> bytes:
