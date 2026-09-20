@@ -66,6 +66,7 @@ class PixivUgoiraClient internal constructor(
     private val zipDownloader: ((String, String, File) -> BinaryResponse)? = null,
     private val decode: UgoiraFrameDecoder = ::decodeUgoiraFrames,
     private val operationTimeoutMs: Long = 30_000L,
+    private val offlineArchiveLookup: suspend (String) -> File? = { null },
 ) {
     private val transport = PixivUgoiraTransport()
     private val cacheLock = Any()
@@ -80,6 +81,7 @@ class PixivUgoiraClient internal constructor(
     private val archiveFlights = mutableMapOf<String, SharedUgoiraArchive>()
     private val archiveSlots = Semaphore(3)
     private var decodedCacheBytes = 0L
+    private var offlineCopyConsumers = 0
 
     fun cached(
         postId: String,
@@ -157,6 +159,35 @@ class PixivUgoiraClient internal constructor(
         }
     }
 
+    /** Preserve the validated original archive and timing together for network-free playback. */
+    suspend fun copyArchiveForOffline(postId: String, destination: File) = withContext(Dispatchers.IO) {
+        synchronized(cacheLock) { offlineCopyConsumers++ }
+        try {
+            val archive = archiveFor(postId)
+            archive.file.copyTo(destination, overwrite = true)
+            writeUgoiraFrameMetadata(destination, archive.metadata.frames)
+            check(readUgoiraFrameMetadata(destination) != null) { "Could not save animation timing" }
+        } finally {
+            synchronized(cacheLock) { offlineCopyConsumers-- }
+        }
+    }
+
+    /** Clearing cached archives must not remove an archive while a playback/export consumer is using it. */
+    suspend fun clearDisposableCache(): Boolean = withContext(Dispatchers.IO) {
+        synchronized(cacheLock) {
+            if (loadFlights.isNotEmpty() || archiveFlights.isNotEmpty() || offlineCopyConsumers > 0) return@synchronized false
+            playbackCache.clear()
+            decodedCacheBytes = 0L
+            archiveCache.clear()
+            archiveDirectory.listFiles().orEmpty().forEach(File::delete)
+            true
+        }
+    }
+
+    suspend fun disposableCacheBytes(): Long = withContext(Dispatchers.IO) {
+        archiveDirectory.listFiles().orEmpty().filter(File::isFile).sumOf(File::length)
+    }
+
     private suspend fun loadOrThrow(
         postId: String,
         sizeBucket: UgoiraSizeBucket,
@@ -200,6 +231,12 @@ class PixivUgoiraClient internal constructor(
     }
 
     private suspend fun loadArchiveOrThrow(postId: String): UgoiraArchive {
+        offlineArchiveLookup(postId)?.let { offline ->
+            val frames = readUgoiraFrameMetadata(offline)
+            if (frames != null && isValidArchive(offline, frames)) {
+                return UgoiraArchive(ParsedMetadata(zipUrl = "", frames = frames), offline)
+            }
+        }
         if (!archiveDirectory.isDirectory && !archiveDirectory.mkdirs() && !archiveDirectory.isDirectory) {
             throw IOException("Could not create Pixiv ugoira cache directory")
         }

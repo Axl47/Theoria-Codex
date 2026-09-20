@@ -24,6 +24,40 @@ import org.junit.Test
 
 class SearchStateContractTest {
     @Test
+    fun `resolved posts replace canonical members once while preserving order and query state`() {
+        val first = post("first")
+        val second = post("second")
+        val resolved = first.copy(title = "Resolved title")
+        val state = SearchUiState(
+            query = SearchQueryUiState(appliedQueryHash = "active"),
+            content = SearchContentUiState(results = listOf(first, second), displayVersion = 4, canLoadMore = true),
+        )
+
+        val updated = state.withResolvedPosts("active", listOf(first.copy(title = "Earlier"), post("absent"), resolved))
+
+        assertEquals(listOf(resolved, second), updated.content.results)
+        assertEquals(5, updated.content.displayVersion)
+        assertTrue(updated.content.canLoadMore)
+        assertSame(state.query, updated.query)
+        assertSame(state.execution, updated.execution)
+        assertSame(state.restoration, updated.restoration)
+    }
+
+    @Test
+    fun `stale empty unknown and equal post resolutions retain the same render state`() {
+        val original = post("present")
+        val state = SearchUiState(
+            query = SearchQueryUiState(appliedQueryHash = "active"),
+            content = SearchContentUiState(results = listOf(original)),
+        )
+
+        assertSame(state, state.withResolvedPosts("stale", listOf(original.copy(title = "Wrong query"))))
+        assertSame(state, state.withResolvedPosts("active", emptyList()))
+        assertSame(state, state.withResolvedPosts("active", listOf(post("absent"))))
+        assertSame(state, state.withResolvedPosts("active", listOf(original.copy())))
+    }
+
+    @Test
     fun `initial state is idle platform-free and ready for draft input`() {
         val state = SearchUiState()
 

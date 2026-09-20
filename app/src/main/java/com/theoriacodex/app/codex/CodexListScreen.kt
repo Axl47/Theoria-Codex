@@ -3,7 +3,6 @@ package com.theoriacodex.app.codex
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,7 +19,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Search
@@ -48,7 +46,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -153,7 +150,7 @@ private fun CodexReorderRow(
         ) {
             CodexReorderCover(codex, presentation.coverCandidates[codex.codexId].orEmpty())
             CodexReorderMetadata(codex, presentation.itemCounts[codex.codexId] ?: 0, Modifier.weight(1f))
-            CodexReorderHandle(codex.codexId, index, state)
+            CodexReorderHandle(codex, index, state)
         }
     }
 }
@@ -182,27 +179,6 @@ private fun CodexReorderMetadata(codex: Codex, itemCount: Int, modifier: Modifie
             "$itemCount items", style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-}
-
-@Composable
-private fun CodexReorderHandle(codexId: String, index: Int, state: CodexListUiState) {
-    IconButton(
-        modifier = Modifier.pointerInput(codexId, state.itemHeightPx) {
-            detectDragGestures(
-                onDragStart = { state.startDrag(codexId, index) },
-                onDragCancel = state::resetDrag,
-                onDragEnd = state::resetDrag,
-                onDrag = { change, dragAmount ->
-                    if (state.draggingCodexId != codexId) return@detectDragGestures
-                    change.consume()
-                    state.drag(codexId, index, dragAmount.y)
-                },
-            )
-        },
-        onClick = {},
-    ) {
-        Icon(Icons.Default.DragHandle, contentDescription = "Drag to reorder")
     }
 }
 
@@ -381,6 +357,11 @@ private fun CodexActionSheet(
                 overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
+            actions.makeAvailableOffline?.let { makeOffline ->
+                TextButton(onClick = { state.actionTarget = null; makeOffline(codex.codexId) }) {
+                    Text("Make available offline")
+                }
+            }
             if (presentation.actionLoading) {
                 Text("Loading collection tags…")
             } else if (presentation.actionFailed) {

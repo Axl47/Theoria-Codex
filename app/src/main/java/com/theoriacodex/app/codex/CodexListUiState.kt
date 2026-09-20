@@ -53,6 +53,16 @@ internal class CodexListUiState(initialCodices: List<Codex>) {
         dragOffsetY = 0f
     }
 
+    fun move(codexId: String, offset: Int): Boolean {
+        if (!reorderMode) return false
+        val fromIndex = reorderDraft.indexOfFirst { it.codexId == codexId }
+        val toIndex = fromIndex + offset
+        if (fromIndex !in reorderDraft.indices || toIndex !in reorderDraft.indices || offset == 0) return false
+        resetDrag()
+        reorderDraft = moveCodex(reorderDraft, fromIndex, toIndex)
+        return true
+    }
+
     fun drag(codexId: String, fallbackIndex: Int, deltaY: Float) {
         if (draggingCodexId != codexId) return
         dragOffsetY += deltaY
@@ -102,6 +112,7 @@ internal data class CodexListActions(
     val renameCodex: (String, String) -> Unit,
     val setAutomaticTag: (String, CodexAutomaticTag, Boolean) -> Unit,
     val deleteCodex: (String) -> Unit,
+    val makeAvailableOffline: ((String) -> Unit)? = null,
 )
 
 internal data class CodexSourceSelection(val codex: Codex, val source: SourceKey)

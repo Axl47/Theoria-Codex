@@ -9,10 +9,12 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 
 object PostDownloadService {
-    fun enqueuePostDownload(context: Context, post: Post,
-        settings: com.theoriacodex.data.repository.CacheSettings = com.theoriacodex.data.repository.CacheSettings(),
-    ): Boolean {
-        val candidate = postDownloadMediaCandidate(post) ?: return false
+    internal fun enqueuePostDownloadId(
+        context: Context,
+        post: Post,
+        settings: com.theoriacodex.data.repository.CacheSettings,
+    ): Long? {
+        val candidate = postDownloadMediaCandidate(post) ?: return null
         val media = candidate.ref.withVideoQuality(settings.downloadQuality, context.isMediaNetworkMetered())
         val fileName = buildDownloadFileName(
             post = post,
@@ -32,16 +34,16 @@ object PostDownloadService {
         )
     }
 
-    fun enqueueViewerDownload(
+    internal fun enqueueViewerDownloadId(
         context: Context,
         post: Post,
         media: ImageRef,
         pageIndex: Int,
         totalPages: Int,
-        settings: com.theoriacodex.data.repository.CacheSettings = com.theoriacodex.data.repository.CacheSettings(),
-    ): Boolean {
+        settings: com.theoriacodex.data.repository.CacheSettings,
+    ): Long? {
         val selected = media.withVideoQuality(settings.downloadQuality, context.isMediaNetworkMetered())
-        val url = selected.url?.takeIf(String::isNotBlank) ?: return false
+        val url = selected.url?.takeIf(String::isNotBlank) ?: return null
         val fileName = buildDownloadFileName(
             post = post,
             media = selected,
@@ -88,7 +90,7 @@ object PostDownloadService {
         fileName: String,
         description: String,
         settings: com.theoriacodex.data.repository.CacheSettings,
-    ): Boolean {
+    ): Long? {
         val request = DownloadManager.Request(url.toUri())
             .setAllowedOverMetered(settings.downloadsOverMetered)
             .setAllowedOverRoaming(settings.downloadsOverRoaming)
@@ -114,11 +116,10 @@ object PostDownloadService {
             )
         }
 
-        val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager ?: return false
+        val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager ?: return null
         return runCatching {
             manager.enqueue(request)
-            true
-        }.getOrElse { false }
+        }.getOrNull()
     }
 }
 

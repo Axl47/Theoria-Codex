@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
+    <exclude domain="file" path="theoria_codex/offline_media/" />
+    <exclude domain="file" path="theoria_codex/cache/" />
+    <exclude domain="file" path="theoria_codex/updates/" />
     <exclude
         domain="sharedpref"
         path="theoria_source_credentials.xml" />

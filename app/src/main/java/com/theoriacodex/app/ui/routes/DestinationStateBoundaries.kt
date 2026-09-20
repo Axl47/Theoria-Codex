@@ -314,9 +314,15 @@ internal fun SaveToCodexDestinationStateBoundary(
 }
 
 @Composable
-internal fun SettingsDestinationStateBoundary(owner: SettingsViewModel) {
+internal fun SettingsDestinationStateBoundary(
+    owner: SettingsViewModel,
+    storageSummary: String? = null,
+    storageTools: (@Composable () -> Unit)? = null,
+) {
     val state = owner.state.collectAsStateWithLifecycle()
-    DestinationStateBoundary(state) { SettingsScreen(state = it, onAction = owner::onAction) }
+    DestinationStateBoundary(state) {
+        SettingsScreen(state = it, onAction = owner::onAction, storageSummary = storageSummary, storageTools = storageTools)
+    }
 }
 
 @Composable

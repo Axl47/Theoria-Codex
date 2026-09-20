@@ -1,6 +1,7 @@
 package com.theoriacodex.app.recents
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +53,8 @@ import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
+import com.theoriacodex.data.repository.MAX_SAVED_SEARCH_NAME_LENGTH
+import com.theoriacodex.data.repository.SavedSearchEntry
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -94,10 +97,22 @@ fun RecentsScreen(
     onOpenSearch: (RecentSearchEntry) -> Unit,
     onOpenFypSearch: (RecentSearchEntry) -> Unit,
     onClear: (RecentsClearTarget) -> Unit,
+    savedSearches: List<SavedSearchEntry> = emptyList(),
+    onSaveSearch: ((String, RecentSearchEntry) -> Unit)? = null,
+    onRenameSavedSearch: (String, String) -> Unit = { _, _ -> },
+    onRemoveSavedSearch: (String) -> Unit = {},
+    onStartOver: (Post, RecentPostSection) -> Unit = { _, _ -> },
 ) {
     var filter by rememberSaveable { mutableStateOf(RecentsFilter.WATCHED) }
     val now = remember(watchedPosts, codexPosts, searches, fypSearches, activity) { System.currentTimeMillis() }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
+    var selectedActionSection by remember { mutableStateOf(RecentPostSection.WATCHED) }
+    var showSavedSearches by rememberSaveable { mutableStateOf(false) }
+    var searchToPin by remember { mutableStateOf<RecentSearchEntry?>(null) }
+    var searchToRename by remember { mutableStateOf<SavedSearchEntry?>(null) }
+    val onPinSearch: ((RecentSearchEntry) -> Unit)? = onSaveSearch?.let {
+        { entry: RecentSearchEntry -> searchToPin = entry }
+    }
     val hasContent = when (filter) {
         RecentsFilter.WATCHED -> watchedPosts.isNotEmpty()
         RecentsFilter.CODEX -> codexPosts.isNotEmpty()
@@ -118,6 +133,9 @@ fun RecentsScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Recents", style = MaterialTheme.typography.titleLarge)
+            if (onSaveSearch != null) {
+                TextButton(onClick = { showSavedSearches = true }) { Text("Saved searches") }
+            }
             TextButton(
                 enabled = hasContent,
                 onClick = {
@@ -156,7 +174,10 @@ fun RecentsScreen(
                 onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
                 onToggleLike = onToggleLike,
                 onOpenWatchedPost = onOpenWatchedPost,
-                onLongPress = { selectedActionPost = it },
+                onLongPress = {
+                    selectedActionPost = it
+                    selectedActionSection = RecentPostSection.WATCHED
+                },
                 showMediaProgress = true,
             )
 
@@ -171,7 +192,10 @@ fun RecentsScreen(
                 onAuthoritativeDurationKnown = onAuthoritativeDurationKnown,
                 onToggleLike = onToggleLike,
                 onOpenWatchedPost = onOpenCodexPost,
-                onLongPress = { selectedActionPost = it },
+                onLongPress = {
+                    selectedActionPost = it
+                    selectedActionSection = RecentPostSection.CODEX
+                },
                 emptyMessage = "Posts appear here after you open them from Codex.",
             )
 
@@ -179,6 +203,7 @@ fun RecentsScreen(
                 searches = fypSearches,
                 now = now,
                 onOpenSearch = onOpenFypSearch,
+                onPinSearch = onPinSearch,
                 emptyMessage = "Recommendation searches appear here after For You generates them.",
             )
 
@@ -186,6 +211,7 @@ fun RecentsScreen(
                 searches = searches,
                 now = now,
                 onOpenSearch = onOpenSearch,
+                onPinSearch = onPinSearch,
             )
 
             RecentsFilter.ALL -> ActivityList(
@@ -197,6 +223,7 @@ fun RecentsScreen(
                 onOpenCodexPost = onOpenCodexPost,
                 onOpenSearch = onOpenSearch,
                 onOpenFypSearch = onOpenFypSearch,
+                onPinSearch = onPinSearch,
             )
         }
     }
@@ -212,6 +239,12 @@ fun RecentsScreen(
             onOpenLegacyCreatorProfile = { onOpenLegacyCreatorProfile(post) },
             onGoToSearch = onGoToSearch,
             onPostUrlCopied = onPostUrlCopied,
+            onStartOver = if (maxOf(post.mediaCount ?: 1, post.media.size) > 1) {
+                {
+                    onStartOver(post, selectedActionSection)
+                    selectedActionPost = null
+                }
+            } else null,
             tagContent = { header, footer ->
                 PostTagActionSection(
                     header = header,
@@ -225,6 +258,42 @@ fun RecentsScreen(
                     onRemoveExcludeTerm = { term -> onRemoveExcludeTerm(post, term) },
                     onFavoriteTagLongPress = onFavoriteTagLongPress,
                 )
+            },
+        )
+    }
+
+    if (showSavedSearches) {
+        SavedSearchSheet(
+            searches = savedSearches,
+            onDismiss = { showSavedSearches = false },
+            onOpen = { entry ->
+                showSavedSearches = false
+                if (entry.search.kind == RecentSearchKind.FYP) onOpenFypSearch(entry.search)
+                else onOpenSearch(entry.search)
+            },
+            onRename = { searchToRename = it },
+            onRemove = { onRemoveSavedSearch(it.id) },
+        )
+    }
+    searchToPin?.let { entry ->
+        SavedSearchNameDialog(
+            initialName = recentSearchPresentation(entry).title.take(MAX_SAVED_SEARCH_NAME_LENGTH),
+            renaming = false,
+            onDismiss = { searchToPin = null },
+            onConfirm = { name ->
+                onSaveSearch?.invoke(name, entry)
+                searchToPin = null
+            },
+        )
+    }
+    searchToRename?.let { entry ->
+        SavedSearchNameDialog(
+            initialName = entry.name,
+            renaming = true,
+            onDismiss = { searchToRename = null },
+            onConfirm = { name ->
+                onRenameSavedSearch(entry.id, name)
+                searchToRename = null
             },
         )
     }
@@ -285,6 +354,7 @@ private fun SearchHistoryList(
     searches: List<RecentSearchEntry>,
     now: Long,
     onOpenSearch: ((RecentSearchEntry) -> Unit)?,
+    onPinSearch: ((RecentSearchEntry) -> Unit)?,
     emptyMessage: String = "Searches appear here after you press Apply in Search.",
 ) {
     if (searches.isEmpty()) {
@@ -301,6 +371,7 @@ private fun SearchHistoryList(
                 entry = entry,
                 now = now,
                 onClick = onOpenSearch?.let { open -> { open(entry) } },
+                onLongClick = onPinSearch?.let { pin -> { pin(entry) } },
             )
         }
     }
@@ -316,6 +387,7 @@ private fun ActivityList(
     onOpenCodexPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
     onOpenFypSearch: (RecentSearchEntry) -> Unit,
+    onPinSearch: ((RecentSearchEntry) -> Unit)?,
 ) {
     if (activity.isEmpty()) {
         EmptyRecentState("Recent posts and applied searches appear here.")
@@ -336,6 +408,7 @@ private fun ActivityList(
                 onOpenCodexPost = onOpenCodexPost,
                 onOpenSearch = onOpenSearch,
                 onOpenFypSearch = onOpenFypSearch,
+                onPinSearch = onPinSearch,
             )
         }
     }
@@ -351,6 +424,7 @@ private fun RecentActivityRow(
     onOpenCodexPost: (Int) -> Unit,
     onOpenSearch: (RecentSearchEntry) -> Unit,
     onOpenFypSearch: (RecentSearchEntry) -> Unit,
+    onPinSearch: ((RecentSearchEntry) -> Unit)?,
 ) {
     when (entry) {
         is RecentActivityEntry.Watched -> RecentWatchedRow(
@@ -370,6 +444,7 @@ private fun RecentActivityRow(
         is RecentActivityEntry.Search -> RecentSearchRow(
             entry = entry.entry,
             now = now,
+            onLongClick = onPinSearch?.let { pin -> { pin(entry.entry) } },
             onClick = {
                 if (entry.entry.kind == RecentSearchKind.FYP) {
                     onOpenFypSearch(entry.entry)
@@ -453,13 +528,18 @@ private fun RecentSearchRow(
     entry: RecentSearchEntry,
     now: Long,
     onClick: (() -> Unit)?,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val presentation = recentSearchPresentation(entry)
     Card(
         modifier = Modifier
             .testTag("Recent search:${entry.queryHash}")
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+            .then(if (onClick != null) Modifier.combinedClickable(
+                onClick = onClick,
+                onLongClickLabel = "Pin search",
+                onLongClick = onLongClick,
+            ) else Modifier),
     ) {
         Row(
             modifier = Modifier

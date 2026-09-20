@@ -20,6 +20,15 @@ interface SourceAdapter {
     suspend fun resolvePost(id: PostId): Post?
 }
 
+/** Optional hydration for sources whose search cards do not contain authoritative tag metadata. */
+interface SearchMetadataSourceAdapter {
+    /**
+     * Returns metadata suitable for local search predicates, retaining already complete posts
+     * without another request. Null means the post no longer exists; acquisition failures throw.
+     */
+    suspend fun resolveSearchMetadata(post: Post): Post?
+}
+
 interface CreatorPostsSourceAdapter {
     suspend fun searchCreatorPosts(
         creator: CreatorProfile,

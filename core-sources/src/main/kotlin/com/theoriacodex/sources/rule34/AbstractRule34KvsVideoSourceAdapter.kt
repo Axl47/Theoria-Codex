@@ -3,6 +3,7 @@ package com.theoriacodex.sources.rule34
 import com.google.gson.Gson
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.domain.adapter.QuickQueryKind
+import com.theoriacodex.domain.adapter.SearchMetadataSourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
@@ -29,7 +30,7 @@ import org.jsoup.parser.Parser
 abstract class AbstractRule34KvsVideoSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val gson: Gson = Gson(),
-) : SourceAdapter {
+) : SourceAdapter, SearchMetadataSourceAdapter {
     abstract override val sourceKey: SourceKey
     protected abstract val baseUrl: String
 
@@ -55,7 +56,7 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
         val body = request(url)
         val document = Jsoup.parse(body, baseUrl)
         return canonicalPostPage(
-            items = parseSearchPage(document, query.includeTags),
+            items = parseSearchPage(document),
             nextPageToken = nextPageToken(document, queryText),
         )
     }
@@ -154,11 +155,23 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
         )
     }
 
+    override suspend fun resolveSearchMetadata(post: Post): Post? {
+        if (post.full != null) return post
+        return resolvePost(post.id)?.let { resolved ->
+            resolved.copy(
+                preview = resolved.preview.takeIf { it.url != null } ?: post.preview,
+                title = resolved.title ?: post.title,
+                createdAtEpochMs = resolved.createdAtEpochMs ?: post.createdAtEpochMs,
+                durationMs = resolved.durationMs ?: post.durationMs,
+            )
+        }
+    }
+
     protected abstract fun initialSearchUrl(queryText: String): String
 
     protected abstract fun nextPageToken(document: Document, queryText: String): String?
 
-    protected abstract fun parseSearchPage(document: Document, includeTags: List<String>): List<Post>
+    protected abstract fun parseSearchPage(document: Document): List<Post>
 
     protected fun parseLatestRss(body: String): Page<Post> {
         val document = Jsoup.parse(body, baseUrl, Parser.xmlParser())
@@ -191,7 +204,6 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
         title: String?,
         previewUrl: String?,
         previewVideoUrl: String?,
-        includeTags: List<String>,
         durationMs: Long? = null,
     ): Post {
         return Post(
@@ -204,8 +216,8 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
             pageUrl = pageUrl,
             width = null,
             height = null,
-            canonicalTags = includeTags.map(String::trim).filter(String::isNotBlank).distinctBy(String::lowercase),
-            rawTags = includeTags.map(String::trim).filter(String::isNotBlank).distinctBy(String::lowercase),
+            canonicalTags = emptyList(),
+            rawTags = emptyList(),
             authorName = null,
             createdAtEpochMs = null,
             title = title,

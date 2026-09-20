@@ -58,6 +58,8 @@ import com.theoriacodex.data.storage.CorruptionRecovery
 fun SettingsScreen(
     state: SettingsUiState,
     onAction: (SettingsAction) -> Unit,
+    storageSummary: String? = null,
+    storageTools: (@Composable () -> Unit)? = null,
 ) {
     var showAddProfileDialog by remember { mutableStateOf(false) }
     val recommendationProfilesExpanded =
@@ -375,7 +377,7 @@ fun SettingsScreen(
 
         SettingsSection(
             title = "Storage & Caching",
-            summary = cacheSummary(state.cacheSnapshot.thumbnailCount, state.cacheSnapshot.fullImageCount),
+            summary = storageSummary ?: cacheSummary(state.cacheSnapshot.thumbnailCount, state.cacheSnapshot.fullImageCount),
             expanded = state.sectionExpansion[SettingsSectionKey.STORAGE_AND_CACHING],
             onToggle = {
                 onAction(
@@ -392,7 +394,7 @@ fun SettingsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Cache full image on save")
+                    Text("Keep media offline when saving")
                     Switch(
                         checked = state.settings.cache.cacheFullImageOnSave,
                         onCheckedChange = { onAction(SettingsAction.SetCacheFullImageOnSave(it)) },
@@ -420,8 +422,10 @@ fun SettingsScreen(
                         },
                     )
                 }
-                Text("Thumbnails: ${state.cacheSnapshot.thumbnailCount}")
-                Text("Full images: ${state.cacheSnapshot.fullImageCount}")
+                if (storageTools == null) {
+                    Text("Thumbnails: ${state.cacheSnapshot.thumbnailCount}")
+                    Text("Full images: ${state.cacheSnapshot.fullImageCount}")
+                } else storageTools()
                 if (state.legacyJsonRecoveries.isNotEmpty()) {
                     Text(
                         text = "Recovered legacy storage (${state.legacyJsonRecoveries.size})",
@@ -434,6 +438,7 @@ fun SettingsScreen(
                         )
                     }
                 }
+                if (storageTools == null) {
                 Button(onClick = { onAction(SettingsAction.ToggleClearCacheOptions) }) {
                     Text(if (state.showClearCacheOptions) "Clear cache ▲" else "Clear cache ▼")
                 }
@@ -456,6 +461,7 @@ fun SettingsScreen(
                             Text("Clear full image cache")
                         }
                     }
+                }
                 }
         }
 

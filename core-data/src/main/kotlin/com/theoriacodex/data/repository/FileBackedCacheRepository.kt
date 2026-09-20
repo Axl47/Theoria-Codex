@@ -124,10 +124,14 @@ class FileBackedCacheRepository(
 
     private fun currentSnapshot(): CacheSnapshot {
         return CacheSnapshot(
-            thumbnailCount = thumbnailDir.listFiles()?.count { it.isFile } ?: 0,
-            fullImageCount = fullDir.listFiles()?.count { it.isFile } ?: 0,
+            thumbnailCount = thumbnailDir.listFiles().orEmpty().count(::isMediaFile),
+            fullImageCount = fullDir.listFiles().orEmpty().count(::isMediaFile),
+            thumbnailBytes = thumbnailDir.listFiles().orEmpty().filter(::isMediaFile).sumOf(File::length),
+            fullImageBytes = fullDir.listFiles().orEmpty().filter(::isMediaFile).sumOf(File::length),
         )
     }
+
+    private fun isMediaFile(file: File): Boolean = file.extension != "url" && hasUsableBytes(file)
 
     private fun cacheKey(postId: PostId): String = "${postId.source.name}_${postId.sourcePostId}"
 }

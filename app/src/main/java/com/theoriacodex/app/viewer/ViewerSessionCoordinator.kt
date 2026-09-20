@@ -14,6 +14,7 @@ internal data class ViewerSession(
     val liveSearchBinding: Boolean = false,
     val searchVisibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
     val sessionId: String = UUID.randomUUID().toString(),
+    val initialMediaIndex: Int = 0,
 )
 
 private val LAZY_MEDIA_RESOLUTION_SOURCES = setOf(

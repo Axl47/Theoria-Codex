@@ -23,7 +23,7 @@ class Rule34GenSourceAdapter(
         return document.selectFirst("[data-block-next]")?.attr("data-block-next")?.trim()?.takeIf(String::isNotBlank)
     }
 
-    override fun parseSearchPage(document: Document, includeTags: List<String>) = document
+    override fun parseSearchPage(document: Document) = document
         .select("div.item.thumb a.th[href], div.cards__item a.card[href]")
         .mapNotNull { anchor ->
             val pageUrl = anchor.attr("abs:href").ifBlank { anchor.attr("href") }
@@ -39,7 +39,6 @@ class Rule34GenSourceAdapter(
                 title = anchor.attr("title").trim().ifBlank { null },
                 previewUrl = image?.attr("data-original")?.ifBlank { image.attr("src") },
                 previewVideoUrl = previewVideoUrl ?: image?.attr("data-preview")?.ifBlank { null },
-                includeTags = includeTags,
                 durationMs = parseRule34DurationMs(
                     anchor.selectFirst(".duration, .time, time, [data-duration]")?.let { element ->
                         element.attr("data-duration").ifBlank { element.text() }

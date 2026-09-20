@@ -20,6 +20,19 @@ internal class FileBackedCacheRepositoryTest : FileBackedRepositoryTestFixture()
 
         assertEquals(1, snapshot.thumbnailCount)
         assertEquals(0, snapshot.fullImageCount)
+        assertEquals(sourceFile.length(), snapshot.thumbnailBytes)
+        assertEquals(0L, snapshot.fullImageBytes)
+    }
+
+    @Test
+    fun `legacy URL pointers never count as cached images or bytes`() = runTest {
+        val dir = tempDir("cache-pointers-")
+        val repository = FileBackedCacheRepository(dir)
+        val remote = samplePost("remote", null)
+        repository.cacheThumbnail(remote)
+        repository.cacheFull(remote)
+        val snapshot = repository.observeSnapshot().first()
+        assertEquals(CacheSnapshot(0, 0, 0L, 0L), snapshot)
     }
 
     @Test

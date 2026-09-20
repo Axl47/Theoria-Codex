@@ -20,6 +20,7 @@ import kotlinx.coroutines.withTimeout
 internal class ViewerGifByteStore(private val directory: File) {
     private val locks = List(16) { Mutex() }
     private val writeMutex = Mutex()
+    private var generation = 0L
 
     suspend fun load(key: String, fetch: suspend () -> ByteArray): ByteArray = withContext(Dispatchers.IO) {
         val name = MessageDigest.getInstance("SHA-256").digest(key.toByteArray())
@@ -27,9 +28,11 @@ internal class ViewerGifByteStore(private val directory: File) {
         locks[(name.hashCode() and Int.MAX_VALUE) % locks.size].withLock {
             val destination = File(directory, name)
             read(destination)?.let { return@withLock it }
+            val admittedGeneration = writeMutex.withLock { generation }
             val bytes = fetch()
             require(bytes.size <= MAX_VIEWER_GIF_BYTES) { "GIF exceeds playback byte limit" }
-            runCatchingPreservingCancellation { writeMutex.withLock {
+            runCatchingPreservingCancellation { writeMutex.withLock cacheWrite@ {
+                if (generation != admittedGeneration) return@cacheWrite
                 directory.mkdirs()
                 val temporary = File.createTempFile("gif-", ".tmp", directory)
                 try {
@@ -48,6 +51,17 @@ internal class ViewerGifByteStore(private val directory: File) {
         val name = MessageDigest.getInstance("SHA-256").digest(key.toByteArray())
             .joinToString("") { "%02x".format(it) }
         File(directory, name).takeIf { it.isFile && it.length() in 1..MAX_VIEWER_GIF_BYTES.toLong() }?.path
+    }
+
+    suspend fun clear() = withContext(Dispatchers.IO) {
+        writeMutex.withLock {
+            generation++
+            directory.listFiles().orEmpty().forEach(File::delete)
+        }
+    }
+
+    suspend fun byteCount(): Long = withContext(Dispatchers.IO) {
+        writeMutex.withLock { directory.listFiles().orEmpty().filter(File::isFile).sumOf(File::length) }
     }
 
     private fun read(file: File): ByteArray? {
@@ -93,6 +107,10 @@ internal suspend fun loadRemoteViewerGifBytes(context: Context, source: SourceKe
 
 internal suspend fun cachedViewerGifLocation(context: Context, source: SourceKey, location: String): String =
     gifByteStore(context).cachedLocation("${source.name}:${normalizeMediaUrl(source, location) ?: location}") ?: location
+
+internal suspend fun clearViewerGifCache(context: Context) = gifByteStore(context).clear()
+
+internal suspend fun viewerGifCacheBytes(context: Context): Long = gifByteStore(context).byteCount()
 
 private fun gifByteStore(context: Context): ViewerGifByteStore = synchronized(gifStores) {
     val directory = File(context.cacheDir, "viewer-gif-bytes")

@@ -1,16 +1,26 @@
 package com.theoriacodex.app.ui.routes
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
@@ -23,12 +33,13 @@ import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
 import com.theoriacodex.app.viewer.ViewerPostResolver
 import com.theoriacodex.app.viewer.ViewerScreen
 import com.theoriacodex.app.viewer.ViewerSession
+import com.theoriacodex.app.viewer.ViewerRestorationRequest
 import com.theoriacodex.app.viewer.ViewerViewModel
 import com.theoriacodex.app.viewer.mergeViewerPosts
 import com.theoriacodex.app.viewer.state.ViewerEffect
-import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -46,7 +57,7 @@ internal data class ViewerRouteDependencies(
     val postResolver: ViewerPostResolver,
     val mediaPrefetcher: ViewerMediaPrefetcher,
     val mediaDurationCoordinator: MediaDurationCoordinator,
-    val restoreSession: suspend (ViewerSessionIdentity) -> ViewerSession?,
+    val restoreSession: suspend (ViewerRestorationRequest) -> ViewerSession?,
 )
 
 /** Immutable values consumed by the Viewer renderer. */
@@ -123,7 +134,7 @@ internal data class ViewerDownloadRequest(
 
 /** Side effects emitted by the immutable Viewer reducer and hosted by the destination. */
 internal data class ViewerRouteEffectCallbacks(
-    val onSavePost: (Post) -> Unit,
+    val onSavePost: (Post, ViewerLaunchContext) -> Unit,
     val onSharePost: (Post?) -> Unit,
     val onDownloadMedia: suspend (ViewerDownloadRequest?) -> Unit,
     val onToggleLike: suspend (Post) -> Unit,
@@ -140,7 +151,7 @@ internal data class ViewerRouteScreenCallbacks(
     val onOwnerChanged: (ViewerRouteOwnerHandle?) -> Unit = {},
     val onInvertMultiImageScrollDirectionChange: (Boolean) -> Unit = {},
     val onVisiblePostChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
-    val onVisibleMediaChanged: (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
+    val onVisibleMediaChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onOpenInBrowser: (Post) -> Unit,
     val onRemoveIncludeTerm: (Post, SearchTerm) -> Unit,
     val onRemoveExcludeTerm: (Post, SearchTerm) -> Unit,
@@ -215,6 +226,8 @@ internal fun ViewerRoute(
     val claimedSessionId = remember(viewerOwner) {
         dependencies.sessionRetentionOwner.session.value?.sessionId
     }
+    var restorationAttempt by remember(viewerOwner) { mutableIntStateOf(0) }
+    var restorationFailed by remember(viewerOwner) { mutableStateOf(false) }
 
     DisposableEffect(viewerOwner) {
         latestScreenCallbacks.value.onOwnerChanged(ownerHandle)
@@ -223,14 +236,15 @@ internal fun ViewerRoute(
         }
     }
 
-    LaunchedEffect(viewerOwner, claimedSessionId) {
+    LaunchedEffect(viewerOwner, claimedSessionId, restorationAttempt) {
+        restorationFailed = false
         val currentDependencies = latestDependencies.value
         val handedOff = currentDependencies.sessionRetentionOwner.handoffTo(
             owner = viewerOwner,
             claimedSessionId = claimedSessionId,
         )
         if (!handedOff && viewerOwner.session.value == null) {
-            val pending = viewerOwner.pendingRestoration
+            val pending = viewerOwner.restorationRequest
             val restored = try {
                 pending?.let { identity -> currentDependencies.restoreSession(identity) }
             } catch (error: CancellationException) {
@@ -239,8 +253,7 @@ internal fun ViewerRoute(
                 null
             }
             if (restored == null) {
-                viewerOwner.clearSession()
-                latestEffectCallbacks.value.onRestorationUnavailable()
+                restorationFailed = true
             } else {
                 viewerOwner.replaceSession(restored)
             }
@@ -283,7 +296,9 @@ internal fun ViewerRoute(
             ?.post
 
         when (effect) {
-            is ViewerEffect.SavePost -> post(effect.postId)?.let(callbacks.onSavePost)
+            is ViewerEffect.SavePost -> post(effect.postId)?.let { selected ->
+                viewerOwner.session.value?.context?.let { context -> callbacks.onSavePost(selected, context) }
+            }
 
             is ViewerEffect.ShareMedia -> callbacks.onSharePost(post(effect.postId))
 
@@ -354,7 +369,22 @@ internal fun ViewerRoute(
 
     val activeSession = session
     if (activeSession == null) {
-        Box(modifier = Modifier.fillMaxSize())
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (restorationFailed) {
+                    Text("This viewing session could not be restored.")
+                    if (viewerOwner.pendingRestoration?.streamKey != ViewerStreamSource.RELATED.name) {
+                        TextButton(onClick = { restorationAttempt++ }) { Text("Retry") }
+                    }
+                    TextButton(onClick = {
+                        routeScope.launch { latestEffectCallbacks.value.onRestorationUnavailable() }
+                    }) { Text("Back to browsing") }
+                } else {
+                    CircularProgressIndicator()
+                    Text("Restoring your place…")
+                }
+            }
+        }
         return
     }
 
@@ -403,13 +433,7 @@ internal fun ViewerRoute(
             }
         },
         onVisibleMediaChanged = { post, viewedMediaNumber ->
-            viewerOwner.session.value?.let { currentSession ->
-                latestScreenCallbacks.value.onVisibleMediaChanged(
-                    post,
-                    viewedMediaNumber,
-                    currentSession,
-                )
-            }
+            viewerOwner.recordVisibleMedia(post, viewedMediaNumber, latestScreenCallbacks.value.onVisibleMediaChanged)
         },
         onAuthoritativeDurationKnown = durationOwner::publishPlayerDuration,
         onOpenInBrowser = screenCallbacks.onOpenInBrowser,

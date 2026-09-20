@@ -178,6 +178,15 @@ internal class VideoPlaybackInfrastructure(
         }
     }
 
+    /** Remove entries through Media3's owner; never delete its open database or cache directory. */
+    internal suspend fun clearDisposableCache() = withContext(Dispatchers.IO) {
+        sharedFactories.cache.keys.toList().forEach(sharedFactories.cache::removeResource)
+    }
+
+    internal suspend fun disposableCacheBytes(): Long = withContext(Dispatchers.IO) {
+        sharedFactories.cache.cacheSpace
+    }
+
     private fun cacheDataSourceFactory(
         bound: BoundVideoResource<SharedVideoFactories>,
         headers: Map<String, String>,

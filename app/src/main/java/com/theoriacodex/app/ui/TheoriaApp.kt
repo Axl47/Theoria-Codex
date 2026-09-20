@@ -1,6 +1,5 @@
 package com.theoriacodex.app.ui
 
-import com.theoriacodex.app.media.animationExportNetworkBlock
 import com.theoriacodex.data.repository.followKey
 import android.content.ClipData
 import android.content.Context
@@ -66,8 +65,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
-import com.theoriacodex.app.media.isPixivUgoiraPost
-import com.theoriacodex.app.media.PostDownloadService
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.codex.CodexListScreen
@@ -112,7 +109,6 @@ import com.theoriacodex.app.ui.routes.ViewerRouteOwnerHandle
 import com.theoriacodex.app.ui.routes.ViewerRouteRenderConfig
 import com.theoriacodex.app.ui.routes.ViewerRouteScreenCallbacks
 import com.theoriacodex.app.ui.routes.ViewerRouteWorkflow
-import com.theoriacodex.app.ui.routes.downloadViewerMediaMessage
 import com.theoriacodex.app.ui.routes.shareViewerPostMessage
 import com.theoriacodex.app.ui.routes.SearchRoute
 import com.theoriacodex.app.ui.routes.SearchRouteCallbacks
@@ -155,7 +151,6 @@ import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
 import com.theoriacodex.app.viewer.ViewerPostResolver
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.prefetchViewerMedia
-import com.theoriacodex.app.viewer.requiresLazyMediaResolution
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.RecentPostSection
@@ -273,6 +268,13 @@ internal fun TheoriaAppContent(
         }
     }
     val snackbarHostState = remember { SnackbarHostState() }
+    val libraryTransfers = rememberLibraryTransferTools(appContainer) { snackbarHostState.showSnackbar(it) }
+    val savedSearchOwner = viewModel<com.theoriacodex.app.recents.SavedSearchViewModel>(
+        key = "saved-searches",
+        factory = viewModelFactory { initializer { com.theoriacodex.app.recents.SavedSearchViewModel(dataDependencies.savedSearches) } },
+    )
+    val savedSearches by savedSearchOwner.savedSearches.collectAsStateWithLifecycle()
+    CollectRouteEffects(savedSearchOwner.effects) { snackbarHostState.showSnackbar(it) }
     val recentsClearWorkflow = remember(dataDependencies.recentsRepository) {
         RecentsClearWorkflow(dataDependencies.recentsRepository)
     }
@@ -356,7 +358,9 @@ internal fun TheoriaAppContent(
             creatorRouteOwnerBinding.close()
         }
     }
-    var pendingCreatorProfile by remember { mutableStateOf<CreatorProfile?>(null) }
+    var pendingCreatorProfile by rememberSaveable(
+        stateSaver = com.theoriacodex.app.ui.routes.CreatorProfileStateSaver,
+    ) { mutableStateOf<CreatorProfile?>(null) }
     val pendingSearchActions = remember { PendingRouteActions<SearchAction>() }
     val pendingForYouActions = remember { PendingRouteActions<ForYouAction>() }
     val viewerRouteWorkflow = remember(dataDependencies, sourceDependencies) {
@@ -367,6 +371,7 @@ internal fun TheoriaAppContent(
             searchOwner = { searchRouteOwner },
             forYouOwner = { forYouRouteOwner },
             creatorOwner = { creatorRouteOwner },
+            offlineMedia = featureDependencies.offlineMedia,
         )
     }
     var activeViewerOwner by remember { mutableStateOf<ViewerRouteOwnerHandle?>(null) }
@@ -482,39 +487,8 @@ internal fun TheoriaAppContent(
     }
 
     fun requestSaveToDevice(post: Post) {
-        scope.launch {
-            val cacheSettings = dataDependencies.settingsRepository.observeSettings().first().cache
-            val blocked = if (isPixivUgoiraPost(post)) appContext.animationExportNetworkBlock(cacheSettings) else null
-            val resultLabel = if (blocked != null) blocked else if (isPixivUgoiraPost(post)) {
-                sourceDependencies.pixivUgoiraClient.exportToMp4(
-                    context = appContext,
-                    postId = post.id.sourcePostId,
-                    title = post.title,
-                ).fold(
-                    onSuccess = { "Saved video to device" },
-                    onFailure = { "Could not save video" },
-                )
-            } else {
-                val postToDownload = when {
-                    !requiresLazyMediaResolution(post) -> post
-                    else -> {
-                        val adapter = sourceDependencies.registry.adapterFor(post.id.source)
-                        runCatchingPreservingCancellation {
-                            adapter?.resolvePost(post.id)
-                        }.getOrNull()?.also { resolved ->
-                            dispatchOrQueueSearchAction(SearchAction.RememberResolvedPost(resolved))
-                        }
-                    }
-                }
-                if (postToDownload != null && PostDownloadService.enqueuePostDownload(appContext, postToDownload,
-                        cacheSettings)) {
-                    "Download queued"
-                } else {
-                    "Could not queue download"
-                }
-            }
-            Toast.makeText(appContext, resultLabel, Toast.LENGTH_SHORT).show()
-        }
+        libraryTransfers.downloads.submitPosts(listOf(post))
+        libraryTransfers.showDownloads = true
     }
 
     suspend fun openCreatorProfile(creator: CreatorProfile) {
@@ -686,14 +660,8 @@ internal fun TheoriaAppContent(
             return
         }
 
-        posts.forEach { post ->
-            requestSaveToDevice(post)
-        }
-        Toast.makeText(
-            appContext,
-            "Downloading ${posts.size} posts from codex",
-            Toast.LENGTH_SHORT,
-        ).show()
+        libraryTransfers.downloads.submitPosts(posts, "Codex downloads")
+        libraryTransfers.showDownloads = true
     }
 
     suspend fun shareCodex(codexId: String) {
@@ -1541,10 +1509,12 @@ internal fun TheoriaAppContent(
 
                                 TopLevelDestination.Recents -> {
                                     RecentsDestinationStateBoundary(dataDependencies) { state ->
-                                        val openRecentSection = {
+                                        fun openRecentSection(
                                             entries: List<RecentPostEntry>,
                                             index: Int,
-                                            section: RecentPostSection ->
+                                            section: RecentPostSection,
+                                            startOver: Boolean = false,
+                                        ) {
                                             val posts = entries.map { entry -> entry.post }
                                             if (posts.isNotEmpty()) {
                                                 val context = ViewerLaunchContext(
@@ -1555,17 +1525,12 @@ internal fun TheoriaAppContent(
                                                     recentsSection = section,
                                                 )
                                                 scope.launch {
-                                                    val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
+                                                    val session = viewerRouteWorkflow.prepareRecentSession(
                                                         posts,
                                                         context,
+                                                        startOver = startOver,
                                                     )
-                                                    viewerSessionOwner.retain(
-                                                        ViewerSession(
-                                                            posts = preparedPosts,
-                                                            context = context,
-                                                            liveSearchBinding = false,
-                                                        ),
-                                                    )
+                                                    viewerSessionOwner.retain(session)
                                                     dataDependencies.uiRestoreRepository
                                                         .setViewerLaunchContext(context)
                                                     navController.navigate(AppRoute.Viewer)
@@ -1588,6 +1553,10 @@ internal fun TheoriaAppContent(
                                             )
                                         }
                                         RecentsScreen(
+                                        savedSearches = savedSearches,
+                                        onSaveSearch = savedSearchOwner::save,
+                                        onRenameSavedSearch = savedSearchOwner::rename,
+                                        onRemoveSavedSearch = savedSearchOwner::remove,
                                         watchedPosts = state.watchedPosts,
                                         codexPosts = state.codexPosts,
                                         searches = state.searches,
@@ -1647,6 +1616,11 @@ internal fun TheoriaAppContent(
                                                 index,
                                                 RecentPostSection.CODEX,
                                             )
+                                        },
+                                        onStartOver = { post, section ->
+                                            val entries = if (section == RecentPostSection.CODEX) state.codexPosts else state.watchedPosts
+                                            val index = entries.indexOfFirst { it.post.id == post.id }
+                                            if (index >= 0) openRecentSection(entries, index, section, startOver = true)
                                         },
                                         onOpenSearch = { entry ->
                                             scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -1734,6 +1708,7 @@ internal fun TheoriaAppContent(
                                                 downloadCodex(codexId)
                                             }
                                         },
+                                        onMakeAvailableOffline = libraryTransfers.offline?.let { it::makeAvailableOffline },
                                         onShareCodex = { codexId ->
                                             scope.launch(start = CoroutineStart.UNDISPATCHED) {
                                                 shareCodex(codexId)
@@ -1784,7 +1759,9 @@ internal fun TheoriaAppContent(
                                 }
 
                                 TopLevelDestination.Settings -> {
-                                    SettingsDestinationStateBoundary(settingsOwner)
+                                    SettingsDestinationStateBoundary(settingsOwner, libraryStorageSummary(libraryTransfers)) {
+                                        LibraryTransferSettings(libraryTransfers)
+                                    }
                                 }
                             }
                         }
@@ -2077,11 +2054,10 @@ internal fun TheoriaAppContent(
                                 unknownAnimatedDurationPolicy = state.browsing.unknownAnimatedDurationPolicy,
                             ),
                             effectCallbacks = ViewerRouteEffectCallbacks(
-                                onSavePost = { post ->
+                                onSavePost = { post, context ->
                                     requestSaveToCodex(
                                         post = post,
-                                        fromForYou = viewerSessionOwner.session.value
-                                            ?.context?.streamSource == ViewerStreamSource.FOR_YOU,
+                                        fromForYou = context.streamSource == ViewerStreamSource.FOR_YOU,
                                     )
                                 },
                                 onSharePost = { post ->
@@ -2092,13 +2068,11 @@ internal fun TheoriaAppContent(
                                     }
                                 },
                                 onDownloadMedia = { request ->
-                                    val message = downloadViewerMediaMessage(
-                                        settings = dataDependencies.settingsRepository.observeSettings().first().cache,
-                                        context = appContext,
-                                        sources = sourceDependencies,
-                                        request = request,
-                                    )
-                                    Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
+                                    if (request == null) snackbarHostState.showSnackbar("Media is still loading.")
+                                    else {
+                                        libraryTransfers.downloads.submitViewerMedia(request.post, request.media, request.pageIndex, request.totalPages)
+                                        libraryTransfers.showDownloads = true
+                                    }
                                 },
                                 onToggleLike = { post -> toggleLikeAndSyncCodex(post) },
                                 onOpenCreatorProfile = ::openCreatorProfile,
@@ -2137,13 +2111,7 @@ internal fun TheoriaAppContent(
                                     viewerRouteWorkflow.recordVisiblePost(post, viewedMediaNumber, session)
                                 },
                                 onVisibleMediaChanged = { post, viewedMediaNumber, session ->
-                                    scope.launch {
-                                        viewerRouteWorkflow.recordVisibleMediaProgress(
-                                            post,
-                                            viewedMediaNumber,
-                                            session,
-                                        )
-                                    }
+                                    viewerRouteWorkflow.recordVisibleMediaProgress(post, viewedMediaNumber, session)
                                 },
                                 onOpenInBrowser = { post ->
                                     post.pageUrl?.takeIf { it.isNotBlank() }?.let { url ->
@@ -2244,6 +2212,7 @@ internal fun TheoriaAppContent(
             )
         }
 
+        LibraryTransferDialogs(libraryTransfers)
         CredentialRecoveryOverlay(
             owner = settingsOwner,
             recoveryState = sourceDependencies.accounts.recoveryState,

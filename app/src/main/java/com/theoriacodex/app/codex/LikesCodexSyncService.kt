@@ -68,30 +68,20 @@ private fun likesCodexNameForProfile(profile: RecommendationProfile): String {
 }
 
 internal fun likesCodexIdForProfile(profileId: String): String {
-    return if (profileId == DEFAULT_PROFILE_ID) {
-        LIKES_CODEX_ID_PREFIX
-    } else {
-        "${LIKES_CODEX_ID_PREFIX}_$profileId"
-    }
+    return com.theoriacodex.data.repository.ProfileLibraryIds.likes(profileId)
 }
 
 internal fun profileScopedCodexId(
     profileId: String,
     uniqueId: String = UUID.randomUUID().toString(),
-): String = "${PROFILE_CODEX_ID_PREFIX}_${profileId}_$uniqueId"
+): String = com.theoriacodex.data.repository.ProfileLibraryIds.codex(profileId, uniqueId)
 
 internal fun codexBelongsToProfile(codexId: String, profileId: String): Boolean {
-    if (codexId.startsWith(LIKES_CODEX_ID_PREFIX)) {
-        return codexId == likesCodexIdForProfile(profileId)
-    }
-    if (codexId.startsWith("${PROFILE_CODEX_ID_PREFIX}_")) {
-        return codexId.startsWith("${PROFILE_CODEX_ID_PREFIX}_${profileId}_")
-    }
-    return profileId == DEFAULT_PROFILE_ID
+    return com.theoriacodex.data.repository.ProfileLibraryIds.belongsTo(codexId, profileId)
 }
 
-internal const val PROFILE_CODEX_ID_PREFIX = "profile_codex"
-internal const val LIKES_CODEX_ID_PREFIX = "system_likes_codex"
+internal const val PROFILE_CODEX_ID_PREFIX = com.theoriacodex.data.repository.ProfileLibraryIds.CODEX_PREFIX
+internal const val LIKES_CODEX_ID_PREFIX = com.theoriacodex.data.repository.ProfileLibraryIds.LIKES_PREFIX
 private const val LIKES_CODEX_NAME = "Likes"
 private const val DEFAULT_PROFILE_ID = "profile-main"
 private const val DEFAULT_PROFILE_NAME = "Main"

@@ -53,6 +53,7 @@ fun PostActionSheet(
     onOpenCreatorProfile: ((CreatorProfile) -> Unit)? = null,
     onOpenLegacyCreatorProfile: (() -> Unit)? = null,
     onGoToSearch: (() -> Unit)? = null,
+    onStartOver: (() -> Unit)? = null,
     onPostUrlCopied: (Post) -> Unit = {},
     tagContent: @Composable (@Composable () -> Unit, @Composable () -> Unit) -> Unit,
 ) {
@@ -146,6 +147,14 @@ fun PostActionSheet(
             },
             {
                 Column(modifier = Modifier.fillMaxWidth()) {
+                    onStartOver?.let { startOver ->
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { dismissThen(startOver) },
+                        ) {
+                            Text("Start over")
+                        }
+                    }
                     onGoToSearch?.let { goToSearch ->
                         TextButton(
                             modifier = Modifier.fillMaxWidth(),
