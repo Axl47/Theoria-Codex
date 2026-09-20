@@ -56,6 +56,8 @@ Suggestion origins are storage policy, not user-facing taxonomy. Keep active Tre
 
 Search focus refresh is a parameterless owner event, separate from typed input changes. Focus can return before submission's cleared text recomposes; sending a captured input string from that callback restores the already-committed tag. Read the current ViewModel input when refreshing suggestions instead.
 
+On API 26/27, clearing the native Compose owner's focus can immediately refocus the first editor even in touch mode. Search uses `SearchInputFocus` to transfer focus to a neutral target on its existing page container on those versions; Android 9+ retains ordinary focus clearing. Preserve actual field blur, collapsed applied context, and keyboard Tab re-entry. The API 27 device journey reproduces the native behavior that host-only focus tests can miss.
+
 Pixiv suggestion identity is its native tag text. A provider translation is an alternate match/display label only, and selecting the suggestion must still submit the native value. Request Pixiv's current locale, retain its authoritative response order when counts are absent, and persist native/alternate pairs without learning them as two independent recommendation interests.
 
 ## Loading Responsiveness

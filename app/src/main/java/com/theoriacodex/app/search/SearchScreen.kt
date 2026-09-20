@@ -194,7 +194,7 @@ fun SearchScreen(
     var editingIncludeGroupIndex by remember { mutableStateOf<Int?>(null) }
     var selectedActionPost by remember { mutableStateOf<Post?>(null) }
     var selectedActionPostResolving by remember { mutableStateOf(false) }
-    val focusManager = LocalFocusManager.current
+    val inputFocus = rememberSearchInputFocus()
     val scope = rememberCoroutineScope()
     val gridState = rememberLazyStaggeredGridState()
     val queryHash = state.query.appliedQueryHash
@@ -310,7 +310,7 @@ fun SearchScreen(
     }
     DurationRouteEnvironmentEffect(gridState, onDurationEnvironmentChanged)
     fun openPostActionSheet(post: Post) {
-        focusManager.clearFocus()
+        inputFocus.clear()
         val displayPost = state.content.results.firstOrNull { candidate -> candidate.id == post.id } ?: post
         selectedActionPost = displayPost
         selectedActionPostResolving = false
@@ -388,7 +388,7 @@ fun SearchScreen(
         snapshotFlow { gridState.isScrollInProgress }
             .collectLatest { scrolling ->
                 if (scrolling) {
-                    focusManager.clearFocus()
+                    inputFocus.clear()
                 }
             }
     }
@@ -417,14 +417,14 @@ fun SearchScreen(
         val typed = input.trim()
         if (!state.suggestions.canCommitInput) return
         onAction(SearchAction.CommitTagInput(input))
-        focusManager.clearFocus()
+        inputFocus.clear()
         if (typed.isDigitsOnly()) {
             scope.launch { resetScrollToTop() }
         }
     }
 
     fun applyDraftAndResetScroll() {
-        focusManager.clearFocus(force = true)
+        inputFocus.clear(force = true)
         onAction(SearchAction.ApplyDraft)
         onAction(SearchAction.ClearAutocomplete)
         scope.launch { resetScrollToTop() }
@@ -438,7 +438,7 @@ fun SearchScreen(
                 active = searchFiltersActive,
                 contentDescription = "Filter and sort",
                 onClick = {
-                    focusManager.clearFocus()
+                    inputFocus.clear()
                     showFilterSheet = true
                 },
             )
@@ -446,6 +446,7 @@ fun SearchScreen(
     ) { padding ->
         Column(
             modifier = Modifier
+                .then(inputFocus.rootModifier)
                 .fillMaxSize()
                 .padding(padding)
                 .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp),
@@ -504,7 +505,7 @@ fun SearchScreen(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         TextButton(onClick = {
-                            focusManager.clearFocus()
+                            inputFocus.clear()
                             showFavoriteTagSheet = true
                         }) {
                             Text("List")
@@ -594,7 +595,7 @@ fun SearchScreen(
                     ) {
                         TextButton(
                             onClick = {
-                                focusManager.clearFocus()
+                                inputFocus.clear()
                                 onAction(SearchAction.ClearDraft)
                                 onAction(SearchAction.ClearAutocomplete)
                                 showFilterSheet = false
@@ -624,7 +625,7 @@ fun SearchScreen(
                             .clickable(
                                 interactionSource = clearFocusInteraction,
                                 indication = null,
-                            ) { focusManager.clearFocus() },
+                            ) { inputFocus.clear() },
                     )
                 }
                 state.content.error != null -> {
@@ -635,12 +636,12 @@ fun SearchScreen(
                             .clickable(
                                 interactionSource = clearFocusInteraction,
                                 indication = null,
-                            ) { focusManager.clearFocus() }
+                            ) { inputFocus.clear() }
                     ) {
                         ErrorBlock(
                             message = error.message,
                             onRetry = {
-                                focusManager.clearFocus()
+                                inputFocus.clear()
                                 onAction(SearchAction.Retry)
                             },
                         )
@@ -653,7 +654,7 @@ fun SearchScreen(
                             .clickable(
                                 interactionSource = clearFocusInteraction,
                                 indication = null,
-                            ) { focusManager.clearFocus() }
+                            ) { inputFocus.clear() }
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             sourceAuthErrorMessage?.let { authMessage ->
@@ -666,7 +667,7 @@ fun SearchScreen(
                                 ErrorBlock(
                                     message = failureMessage,
                                     onRetry = {
-                                        focusManager.clearFocus()
+                                        inputFocus.clear()
                                         onAction(SearchAction.Retry)
                                     },
                                 )
@@ -701,7 +702,7 @@ fun SearchScreen(
                             .clickable(
                                 interactionSource = clearFocusInteraction,
                                 indication = null,
-                            ) { focusManager.clearFocus() },
+                            ) { inputFocus.clear() },
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         sourceAuthErrorMessage?.let { authMessage ->
@@ -736,7 +737,7 @@ fun SearchScreen(
                                         recoverPostMedia(failedPost, failedMedia)
                                     },
                                     onClick = {
-                                        focusManager.clearFocus()
+                                        inputFocus.clear()
                                         onAction(SearchAction.OpenResult(
                                             postId = post.id,
                                             visibleResults = visibleResults,
