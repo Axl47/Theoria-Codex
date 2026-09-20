@@ -96,7 +96,8 @@ class PixivUgoiraArchiveTest {
 
         assertTrue(source.contains("archiveFlights"))
         assertTrue(source.contains("loadFlights"))
-        assertTrue(source.contains("ZipFile(archive)"))
+        val decoder = repositoryFile("app/src/main/java/com/theoriacodex/app/viewer/PixivUgoiraFrames.kt").readText()
+        assertTrue(decoder.contains("ZipFile(archive)"))
         assertTrue(search.contains("UgoiraSizeBucket.CARD"))
         assertTrue(source.contains("decodedCacheBytes"))
         assertFalse(source.contains("ZipInputStream(ByteArrayInputStream"))

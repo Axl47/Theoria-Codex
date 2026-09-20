@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.search.FEED_PLAYER_ACTIVATION_DELAY_MS
+import kotlinx.coroutines.delay
 
 @Composable
 fun PixivUgoiraPlayer(
@@ -59,13 +61,15 @@ fun PixivUgoiraPlayer(
         isScrubbing = false
         playbackPaused = false
         errorMessage = null
-        playback = client.cached(postId, sizeBucket)
+        playback = client.cached(postId, sizeBucket) ?: playback?.takeIf { it.isComplete }
         if (playback != null || !isActive) return@LaunchedEffect
-        client.load(postId, sizeBucket).onSuccess { loaded ->
-            playback = loaded
-        }.onFailure { error ->
-            errorMessage = error.message ?: "Could not load animation"
-            onError(errorMessage.orEmpty())
+        if (sizeBucket == UgoiraSizeBucket.CARD) delay(FEED_PLAYER_ACTIVATION_DELAY_MS)
+        client.observeLoad(postId, sizeBucket).collect { result ->
+            result.onSuccess { playback = it }.onFailure { error ->
+                playback = null
+                errorMessage = error.message ?: "Could not load animation"
+                onError(errorMessage.orEmpty())
+            }
         }
     }
 
@@ -75,15 +79,15 @@ fun PixivUgoiraPlayer(
         return
     }
 
-    val frameEndsMs = remember(activePlayback) {
+    val frameEndsMs = remember(activePlayback.frameDelaysMs) {
         var endMs = 0L
-        LongArray(activePlayback.frames.size) { index ->
-            endMs += activePlayback.frames[index].delayMs.coerceAtLeast(16)
+        LongArray(activePlayback.frameDelaysMs.size) { index ->
+            endMs += activePlayback.frameDelaysMs[index].coerceAtLeast(16)
             endMs
         }
     }
     val totalDurationMs = frameEndsMs.last()
-    val animation = remember(postId, loadGeneration, activePlayback) {
+    val animation = remember(postId, client, sizeBucket, loadGeneration, frameEndsMs) {
         AnimationPlaybackState(totalDurationMs)
     }
     val frameIndex by remember(animation, frameEndsMs) {
@@ -110,9 +114,10 @@ fun PixivUgoiraPlayer(
         rate = effectivePlaybackRate,
         loop = loopPlayback,
         onCompleted = onPlaybackCompleted,
+        availableUntilMs = frameEndsMs[activePlayback.frames.lastIndex],
     )
 
-    val frame = activePlayback.frames[frameIndex]
+    val frame = activePlayback.frames[frameIndex.coerceAtMost(activePlayback.frames.lastIndex)]
     if (!showProgressBar) {
         Image(frame.bitmap.asImageBitmap(), contentDescription, modifier, contentScale = contentScale)
         return

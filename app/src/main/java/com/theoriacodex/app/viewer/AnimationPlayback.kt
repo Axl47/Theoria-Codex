@@ -34,7 +34,7 @@ internal class LoopingAnimationClock(private val durationMs: Long) {
         previousFrameNanos = null
     }
 
-    fun advanceTo(frameNanos: Long, rate: Float, loop: Boolean = true): Boolean {
+    fun advanceTo(frameNanos: Long, rate: Float, loop: Boolean = true, availableUntilMs: Long = Long.MAX_VALUE): Boolean {
         require(rate.isFinite() && rate > 0f)
         if (completed && !loop) return false
         val previous = previousFrameNanos
@@ -42,6 +42,12 @@ internal class LoopingAnimationClock(private val durationMs: Long) {
         if (previous != null) {
             val elapsedMs = (frameNanos - previous).coerceAtLeast(0L) / NANOS_PER_MILLISECOND
             val next = position + elapsedMs * rate
+            val availableEnd = availableUntilMs.coerceIn(1L, durationMs)
+            if (availableEnd < durationMs) {
+                // Hold at the decoded boundary; a seek beyond it waits at its requested position.
+                position = maxOf(position, minOf(next, (availableEnd - 1).toDouble()))
+                return false
+            }
             if (!loop && next >= durationMs) {
                 position = (durationMs - 1).toDouble()
                 if (!completed) { completed = true; return true }
@@ -64,8 +70,8 @@ internal class AnimationPlaybackState(durationMs: Long) {
 
     fun resetFrameTime() = clock.resetFrameTime()
 
-    fun advanceTo(frameNanos: Long, rate: Float, loop: Boolean = true): Boolean {
-        val completed = clock.advanceTo(frameNanos, rate, loop)
+    fun advanceTo(frameNanos: Long, rate: Float, loop: Boolean = true, availableUntilMs: Long = Long.MAX_VALUE): Boolean {
+        val completed = clock.advanceTo(frameNanos, rate, loop, availableUntilMs)
         positionMs = clock.positionMs
         return completed
     }
@@ -78,12 +84,18 @@ internal fun AnimatePlayback(
     rate: Float,
     loop: Boolean = true,
     onCompleted: () -> Unit = {},
+    availableUntilMs: Long = Long.MAX_VALUE,
 ) {
     val latestCompletion by androidx.compose.runtime.rememberUpdatedState(onCompleted)
+    val latestAvailableUntilMs by androidx.compose.runtime.rememberUpdatedState(availableUntilMs)
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(state, lifecycleOwner, enabled, rate, loop) {
         if (!enabled) return@LaunchedEffect
-        animatePlaybackWhileStarted(state, lifecycleOwner.lifecycle, rate, loop) { latestCompletion() }
+        animatePlaybackWhileStarted(
+            state, lifecycleOwner.lifecycle, rate, loop,
+            availableUntilMs = { latestAvailableUntilMs },
+            onCompleted = { latestCompletion() },
+        )
     }
 }
 
@@ -92,12 +104,13 @@ internal suspend fun animatePlaybackWhileStarted(
     lifecycle: Lifecycle,
     rate: Float,
     loop: Boolean = true,
+    availableUntilMs: () -> Long = { Long.MAX_VALUE },
     onCompleted: () -> Unit = {},
 ) {
     lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
         state.resetFrameTime()
         while (isActive) {
-            if (withFrameNanos { frameNanos -> state.advanceTo(frameNanos, rate, loop) }) onCompleted()
+            if (withFrameNanos { frameNanos -> state.advanceTo(frameNanos, rate, loop, availableUntilMs()) }) onCompleted()
         }
     }
 }

@@ -20,6 +20,29 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class AnimationPlaybackTest {
     @Test
+    fun `buffering cannot complete early or skip elapsed animation on resume`() {
+        val clock = LoopingAnimationClock(1_000L)
+        clock.advanceTo(0L, 1f, false, availableUntilMs = 200L)
+        assertFalse(clock.advanceTo(2_000_000_000L, 1f, false, availableUntilMs = 200L))
+        assertEquals(199L, clock.positionMs)
+        assertFalse(clock.advanceTo(9_000_000_000L, 1f, false, availableUntilMs = 200L))
+        clock.advanceTo(9_010_000_000L, 1f, false)
+        assertEquals(209L, clock.positionMs)
+        assertTrue(clock.advanceTo(10_010_000_000L, 1f, false))
+    }
+
+    @Test
+    fun `seek beyond buffered frames waits at the requested position`() {
+        val clock = LoopingAnimationClock(1_000L)
+        clock.seekTo(700L)
+        clock.advanceTo(0L, 1f, availableUntilMs = 200L)
+        clock.advanceTo(1_000_000_000L, 1f, availableUntilMs = 200L)
+        assertEquals(700L, clock.positionMs)
+        clock.advanceTo(1_050_000_000L, 1f)
+        assertEquals(750L, clock.positionMs)
+    }
+
+    @Test
     fun `play once completes exactly once and seeking allows replay`() {
         val clock = LoopingAnimationClock(1_000L)
         assertFalse(clock.advanceTo(0L, 1f, false))

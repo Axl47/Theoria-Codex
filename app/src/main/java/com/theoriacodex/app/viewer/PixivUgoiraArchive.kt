@@ -18,6 +18,7 @@ internal data class UgoiraArchiveStats(
 internal fun validateUgoiraArchive(
     archive: File,
     specs: List<UgoiraFrameSpec>,
+    checkCancelled: () -> Unit = {},
 ): UgoiraArchiveStats {
     validateArchiveEnvelope(archive, specs)
     val expectedNames = specs.map(UgoiraFrameSpec::fileName)
@@ -28,7 +29,7 @@ internal fun validateUgoiraArchive(
         validateArchiveEntries(entries.map { entry -> entry.name }, expectedNames)
         UgoiraArchiveStats(
             compressedBytes = archive.length(),
-            expandedBytes = measureExpandedBytes(zip, entries),
+            expandedBytes = measureExpandedBytes(zip, entries, checkCancelled),
             frameCount = specs.size,
         )
     }
@@ -62,10 +63,12 @@ private fun validateArchiveEntries(names: List<String>, expectedNames: List<Stri
 private fun measureExpandedBytes(
     zip: ZipFile,
     entries: List<java.util.zip.ZipEntry>,
+    checkCancelled: () -> Unit,
 ): Long {
     var totalExpandedBytes = 0L
     entries.forEach { entry ->
-        totalExpandedBytes += measureFrameBytes(zip, entry)
+        checkCancelled()
+        totalExpandedBytes += measureFrameBytes(zip, entry, checkCancelled)
         if (totalExpandedBytes > UGOIRA_MAX_TOTAL_EXPANDED_BYTES) {
             throw IOException("Pixiv ugoira archive exceeds expanded-byte limit")
         }
@@ -73,7 +76,7 @@ private fun measureExpandedBytes(
     return totalExpandedBytes
 }
 
-private fun measureFrameBytes(zip: ZipFile, entry: java.util.zip.ZipEntry): Long {
+private fun measureFrameBytes(zip: ZipFile, entry: java.util.zip.ZipEntry, checkCancelled: () -> Unit): Long {
     if (entry.size > UGOIRA_MAX_FRAME_EXPANDED_BYTES) {
         throw IOException("Pixiv ugoira frame exceeds expanded-byte limit")
     }
@@ -81,6 +84,7 @@ private fun measureFrameBytes(zip: ZipFile, entry: java.util.zip.ZipEntry): Long
     zip.getInputStream(entry).use { input ->
         val buffer = ByteArray(UGOIRA_ARCHIVE_BUFFER_BYTES)
         while (true) {
+            checkCancelled()
             val read = input.read(buffer)
             if (read < 0) break
             frameBytes += read
@@ -104,6 +108,5 @@ private fun isSafeUgoiraEntryName(name: String): Boolean {
 internal const val UGOIRA_MAX_COMPRESSED_BYTES = 96L * 1024L * 1024L
 internal const val UGOIRA_MAX_TOTAL_EXPANDED_BYTES = 256L * 1024L * 1024L
 internal const val UGOIRA_MAX_FRAME_EXPANDED_BYTES = 16L * 1024L * 1024L
-internal const val UGOIRA_MAX_FRAME_COUNT = 400
 private const val UGOIRA_MAX_ENTRY_NAME_LENGTH = 160
 private const val UGOIRA_ARCHIVE_BUFFER_BYTES = 32 * 1024
