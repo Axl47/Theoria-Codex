@@ -9,10 +9,17 @@ import com.theoriacodex.app.search.FileBackedTagSuggestionStore
 import com.theoriacodex.app.update.ChangelogSection
 import com.theoriacodex.app.update.PendingPostInstallChangelog
 import com.theoriacodex.app.update.UpdateStateSnapshot
+import com.theoriacodex.data.storage.ImageRefStorageRecord
 import com.theoriacodex.data.storage.LegacyImportProof
+import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
+import com.theoriacodex.data.storage.VideoVariantRecord
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.VideoVariant
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
@@ -48,6 +55,7 @@ class InstalledJsonCompatibilityDeviceTest {
             "fullLocalPath",
             "fullMime",
             "fullProgressiveUrls",
+            "fullVideoVariants",
             "fullIsAnimated",
             "pageUrl",
             "width",
@@ -65,6 +73,11 @@ class InstalledJsonCompatibilityDeviceTest {
             "creatorProfiles",
             "schemaVersion",
         )
+        assertJsonKeys(
+            ImageRefStorageRecord(),
+            "url", "localPath", "mime", "progressiveUrls", "videoVariants", "isAnimated",
+        )
+        assertJsonKeys(VideoVariantRecord(), "url", "height", "original", "mime")
         assertJsonKeys(
             UpdateStateSnapshot(
                 pendingPostInstallChangelog = PendingPostInstallChangelog(
@@ -90,6 +103,59 @@ class InstalledJsonCompatibilityDeviceTest {
             "title",
             "posts",
         )
+    }
+
+    @Test
+    fun fullAndGalleryVideoVariantsRoundTripWithoutChangingThePreview() {
+        val fullVariants = listOf(
+            VideoVariant("https://example.test/original.mp4", original = true),
+            VideoVariant("https://example.test/480.mp4", height = 480, mime = "video/mp4"),
+        )
+        val galleryVariants = listOf(
+            VideoVariant("https://example.test/gallery-720.webm", height = 720, mime = "video/webm"),
+        )
+        val post = Post(
+            id = PostId(SourceKey.IWARA, "video-contract"),
+            preview = ImageRef("https://example.test/preview.mp4", null, "video/mp4", isAnimated = true),
+            full = ImageRef("https://example.test/original.mp4", null, "video/mp4", videoVariants = fullVariants),
+            media = listOf(ImageRef("https://example.test/gallery.webm", null, "video/webm", videoVariants = galleryVariants)),
+            pageUrl = "https://example.test/video-contract",
+            width = 1920,
+            height = 1080,
+            canonicalTags = emptyList(),
+            rawTags = emptyList(),
+            authorName = null,
+            createdAtEpochMs = null,
+        )
+
+        val encoded = gson.toJson(PostStorageCodec.encode(post))
+        val wire = JSONObject(encoded)
+        assertVariantWire(wire.getJSONArray("fullVideoVariants").getJSONObject(0), fullVariants[0])
+        assertVariantWire(wire.getJSONArray("fullVideoVariants").getJSONObject(1), fullVariants[1])
+        assertVariantWire(wire.getJSONArray("media").getJSONObject(0).getJSONArray("videoVariants").getJSONObject(0), galleryVariants[0])
+        assertEquals(post.preview.url, wire.getString("previewUrl"))
+        val restored = requireNotNull(PostStorageCodec.decode(gson.fromJson(encoded, PostStorageRecord::class.java)))
+        assertEquals(post, restored)
+        assertEquals(emptyList<VideoVariant>(), restored.preview.videoVariants)
+        assertEquals(fullVariants, restored.full?.videoVariants)
+        assertEquals(galleryVariants, restored.media.single().videoVariants)
+    }
+
+    @Test
+    fun legacyVideoPostsWithoutVariantFieldsStillDecode() {
+        val legacy = """{
+            "source":"IWARA","sourcePostId":"legacy-video",
+            "previewUrl":"https://example.test/preview.mp4","previewMime":"video/mp4",
+            "fullUrl":"https://example.test/full.mp4","fullMime":"video/mp4",
+            "media":[{"url":"https://example.test/gallery.webm","mime":"video/webm"}]
+        }""".trimIndent()
+        val restored = requireNotNull(PostStorageCodec.decode(gson.fromJson(legacy, PostStorageRecord::class.java)))
+        assertEquals("https://example.test/preview.mp4", restored.preview.url)
+        assertEquals("https://example.test/full.mp4", restored.full?.url)
+        assertEquals("https://example.test/gallery.webm", restored.media.single().url)
+        assertEquals(emptyList<VideoVariant>(), restored.preview.videoVariants)
+        assertEquals(emptyList<VideoVariant>(), restored.full?.videoVariants)
+        assertEquals(emptyList<VideoVariant>(), restored.media.single().videoVariants)
     }
 
     @Test
@@ -124,6 +190,14 @@ class InstalledJsonCompatibilityDeviceTest {
 
     private fun assertJsonKeys(value: Any, vararg keys: String) {
         assertEquals(keys.toSet(), JSONObject(gson.toJson(value)).keySetCompat())
+    }
+
+    private fun assertVariantWire(wire: JSONObject, expected: VideoVariant) {
+        assertEquals(setOf("url", "height", "original", "mime"), wire.keySetCompat())
+        assertEquals(expected.url, wire.getString("url"))
+        assertEquals(expected.height, if (wire.isNull("height")) null else wire.getInt("height"))
+        assertEquals(expected.original, wire.getBoolean("original"))
+        assertEquals(expected.mime, if (wire.isNull("mime")) null else wire.getString("mime"))
     }
 }
 

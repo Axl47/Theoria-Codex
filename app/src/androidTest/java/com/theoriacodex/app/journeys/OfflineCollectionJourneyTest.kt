@@ -1,5 +1,6 @@
 package com.theoriacodex.app.journeys
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -8,7 +9,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipe
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import com.theoriacodex.app.codex.profileScopedCodexId
@@ -56,16 +57,39 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         container.registry.resolveRequests.clear()
         compose.onNodeWithTag(searchCardTestTag(ordered.first().id)).performClick()
         compose.waitUntil(10_000) {
-            compose.onAllNodesWithContentDescription(requireNotNull(ordered.first().title)).fetchSemanticsNodes().isNotEmpty()
+            io { container.data.recentsRepository.observeWatchedPosts().first().any { it.post.id == ordered.first().id } } &&
+                compose.onAllNodesWithContentDescription("Media actions", useUnmergedTree = true)
+                    .fetchSemanticsNodes().size == 1
         }
-        compose.onNodeWithContentDescription(requireNotNull(ordered.first().title)).performTouchInput { swipeLeft() }
+        compose.onNodeWithContentDescription(requireNotNull(ordered.first().title)).assertIsDisplayed()
+        val activeMedia = compose.onNodeWithContentDescription("Media actions", useUnmergedTree = true)
+        activeMedia.assertIsDisplayed()
+        // The active overlay owns the swipe detector; image semantics can exist during route entry.
+        // Stay away from system back-gesture edges while crossing well beyond the 12% paging threshold.
+        activeMedia.performTouchInput {
+            swipe(
+                start = Offset(width * 0.85f, height * 0.5f),
+                end = Offset(width * 0.15f, height * 0.5f),
+                durationMillis = 400L,
+            )
+        }
         compose.waitUntil(10_000) {
             io { container.data.recentsRepository.observeWatchedPosts().first().any { it.post.id == ordered.last().id } }
         }
         compose.onNodeWithContentDescription(requireNotNull(ordered.last().title)).assertIsDisplayed()
         val viewed = io { container.data.recentsRepository.observeWatchedPosts().first() }
         assertEquals(ordered.map { it.id }.toSet(), viewed.map { it.post.id }.toSet())
-        assertTrue(viewed.all { it.post.full?.localPath in localPaths })
+        viewed.forEach { entry ->
+            val original = sourcePosts.single { it.id == entry.post.id }
+            assertEquals(original.full?.mime, entry.post.full?.mime)
+            val persistedMedia = listOfNotNull(entry.post.preview, entry.post.full) + entry.post.media
+            assertTrue(persistedMedia.none { it.localPath in localPaths })
+        }
+        val retainedOffline = requireNotNull(container.features.offlineMedia)
+        assertEquals(localPaths.toSet(), io {
+            sourcePosts.map { requireNotNull(retainedOffline.find(it.id)?.full?.localPath) }.toSet()
+        })
+        assertTrue(localPaths.all { File(it).isFile })
         assertTrue(container.registry.resolveRequests.isEmpty())
     }
 }

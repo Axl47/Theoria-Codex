@@ -11,9 +11,14 @@ import com.theoriacodex.app.codex.CodexShareFile
 import com.theoriacodex.app.codex.CodexSharePost
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
 import com.theoriacodex.app.update.FileBackedUpdateStateStore
+import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.model.ImageRef
+import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.VideoVariant
 import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +54,7 @@ private suspend fun verifyData(directory: File, phase: String) {
     val updateFile = File(directory, "update.json")
     val shareFile = File(directory, "collection.json")
     val postFile = File(directory, "post.json")
+    val legacyPostFile = File(directory, "legacy-post.json")
     val tagsFile = File(directory, "tags.json")
     if (phase == "write") {
         check(directory.mkdirs())
@@ -60,7 +66,8 @@ private suspend fun verifyData(directory: File, phase: String) {
             title = "Acceptance collection",
             posts = listOf(CodexSharePost(source = "PIXIV", sourcePostId = "42")),
         )))
-        postFile.writeText("""{"source":"PIXIV","sourcePostId":"42","schemaVersion":1}""")
+        postFile.writeText(gson.toJson(PostStorageCodec.encode(videoPostFixture())))
+        legacyPostFile.writeText(LEGACY_VIDEO_POST)
         tagsFile.writeText("""{"sources":{"GELBOORU":[{"text":"legacy","type":"trending","count":9}]}}""")
         val tags = FileBackedTagSuggestionStore(tagsFile, persistenceDebounceMs = 0L)
         try {
@@ -79,8 +86,12 @@ private suspend fun verifyData(directory: File, phase: String) {
         check(wire.keySet() == setOf("version", "title", "posts"))
         val share = gson.fromJson(shareFile.readText(), CodexShareFile::class.java)
         check(share.title == "Acceptance collection" && share.posts?.single()?.sourcePostId == "42")
-        val post = gson.fromJson(postFile.readText(), PostStorageRecord::class.java)
-        check(post.source == "PIXIV" && post.sourcePostId == "42")
+        verifyVideoPost(postFile.readText())
+        val legacyPost = requireNotNull(PostStorageCodec.decode(gson.fromJson(legacyPostFile.readText(), PostStorageRecord::class.java)))
+        check(legacyPost.id == PostId(SourceKey.IWARA, "legacy-video"))
+        check(legacyPost.preview.url == "https://example.test/preview.mp4" && legacyPost.preview.videoVariants.isEmpty())
+        check(legacyPost.full?.url == "https://example.test/full.mp4" && legacyPost.full?.videoVariants == emptyList<VideoVariant>())
+        check(legacyPost.media.single().url == "https://example.test/gallery.webm" && legacyPost.media.single().videoVariants.isEmpty())
         val tags = FileBackedTagSuggestionStore(tagsFile, persistenceDebounceMs = 0L)
         try {
             tags.awaitLoaded()
@@ -91,6 +102,46 @@ private suspend fun verifyData(directory: File, phase: String) {
         check(directory.deleteRecursively())
     }
 }
+
+private fun verifyVideoPost(json: String) {
+    val gson = GsonBuilder().serializeNulls().create()
+    val wire = JsonParser.parseString(json).asJsonObject
+    val fullVariants = wire.getAsJsonArray("fullVideoVariants")
+    check(fullVariants.size() == 2)
+    fullVariants.forEach { check(it.asJsonObject.keySet() == setOf("url", "height", "original", "mime")) }
+    val galleryMedia = wire.getAsJsonArray("media").single().asJsonObject
+    check(galleryMedia.keySet() == setOf("url", "localPath", "mime", "progressiveUrls", "videoVariants", "isAnimated"))
+    check(galleryMedia.getAsJsonArray("videoVariants").single().asJsonObject.keySet() == setOf("url", "height", "original", "mime"))
+    val restored = requireNotNull(PostStorageCodec.decode(gson.fromJson(json, PostStorageRecord::class.java)))
+    check(restored == videoPostFixture())
+    check(restored.preview.videoVariants.isEmpty())
+}
+
+private fun videoPostFixture() = Post(
+    id = PostId(SourceKey.IWARA, "video-contract"),
+    preview = ImageRef("https://example.test/preview.mp4", null, "video/mp4", isAnimated = true),
+    full = ImageRef("https://example.test/original.mp4", null, "video/mp4", videoVariants = listOf(
+        VideoVariant("https://example.test/original.mp4", original = true),
+        VideoVariant("https://example.test/480.mp4", height = 480, mime = "video/mp4"),
+    )),
+    media = listOf(ImageRef("https://example.test/gallery.webm", null, "video/webm", videoVariants = listOf(
+        VideoVariant("https://example.test/gallery-720.webm", height = 720, mime = "video/webm"),
+    ))),
+    pageUrl = "https://example.test/video-contract",
+    width = 1920,
+    height = 1080,
+    canonicalTags = emptyList(),
+    rawTags = emptyList(),
+    authorName = null,
+    createdAtEpochMs = null,
+)
+
+private const val LEGACY_VIDEO_POST = """{
+    "source":"IWARA","sourcePostId":"legacy-video",
+    "previewUrl":"https://example.test/preview.mp4","previewMime":"video/mp4",
+    "fullUrl":"https://example.test/full.mp4","fullMime":"video/mp4",
+    "media":[{"url":"https://example.test/gallery.webm","mime":"video/webm"}]
+}"""
 
 private const val RESULT_TAG = "TheoriaReleaseData"
 private const val RELEASE_ID = 42L

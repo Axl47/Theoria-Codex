@@ -1,24 +1,33 @@
 package com.theoriacodex.app.journeys
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
-import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeWithVelocity
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.data.repository.RecentSearchKind
+import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.query.QueryHash
 import kotlinx.coroutines.flow.first
+import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -47,12 +56,12 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         val root = container.registry.requests.single { it.source == SourceKey.PIXIV && it.pageToken == null }
         assertEquals(listOf(listOf("landscape"), listOf("blue", "green")),
             root.query.effectiveIncludeTermGroups.map { group -> group.terms.map { it.value } })
-        compose.onNodeWithTag("Search results", useUnmergedTree = true).performScrollToIndex(18)
+        scrollToFirstVisibleCard(18)
         compose.waitUntil(10_000) { container.registry.requests.any { it.pageToken == "20" } }
-        compose.onNodeWithTag("Search results", useUnmergedTree = true).performScrollToIndex(22)
+        scrollToFirstVisibleCard(22)
         val cardTag = searchCardTestTag(posts.getValue(SourceKey.PIXIV)[22].id)
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
-        val before = compose.onNodeWithTag(cardTag).fetchSemanticsNode().boundsInRoot.top
+        val before = compose.onNodeWithTag(cardTag).fetchSemanticsNode().positionInRoot.y
         compose.onNodeWithTag(cardTag).performClick()
         compose.waitUntil(10_000) {
             io { container.data.statisticsRepository.observeStatistics().first().watchedPostCount == 1L }
@@ -61,14 +70,14 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         compose.onNodeWithContentDescription(requireNotNull(posts.getValue(SourceKey.PIXIV)[22].title)).assertIsDisplayed()
         device.pressBack()
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
-        assertEquals(before, compose.onNodeWithTag(cardTag).fetchSemanticsNode().boundsInRoot.top, 2f)
+        assertEquals(before, compose.onNodeWithTag(cardTag).fetchSemanticsNode().positionInRoot.y, 2f)
         tab("Settings")
         tab("Search")
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
         scenario.recreate()
         compose.waitUntil(10_000) { compose.onAllNodesWithTag(cardTag).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
-        assertEquals(before, compose.onNodeWithTag(cardTag).fetchSemanticsNode().boundsInRoot.top, 2f)
+        assertEquals(before, compose.onNodeWithTag(cardTag).fetchSemanticsNode().positionInRoot.y, 2f)
         assertEquals(1, io { container.data.recentsRepository.observeSearches().first().size })
         assertEquals(1, io { container.data.recentsRepository.observeWatchedPosts().first().size })
         val statistics = io { container.data.statisticsRepository.observeStatistics().first() }
@@ -86,14 +95,17 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         waitForCard(0)
         val applied = container.registry.requests.single { it.source == SourceKey.PIXIV && it.pageToken == null }.query
         val queryHash = QueryHash.from(applied)
-        compose.onNodeWithTag("Search results", useUnmergedTree = true).performScrollToIndex(6)
+        scrollToFirstVisibleCard(6)
         val cardTag = searchCardTestTag(posts.getValue(SourceKey.PIXIV)[6].id)
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
-        val top = compose.onNodeWithTag(cardTag).fetchSemanticsNode().boundsInRoot.top
+        val top = compose.onNodeWithTag(cardTag).fetchSemanticsNode().positionInRoot.y
+        val gridTop = compose.onNodeWithTag("Search results", useUnmergedTree = true).fetchSemanticsNode().positionInRoot.y
+        val expectedScroll = SearchScrollState(6, (gridTop - top).roundToInt())
+        assertTrue("A real drag should retain its nonzero pixel offset", expectedScroll.firstVisibleItemOffsetPx > 0)
         compose.waitUntil(10_000) {
-            io { container.data.uiRestoreRepository.getSearchScrollState(queryHash)?.firstVisibleItemIndex == 6 }
+            io { container.data.uiRestoreRepository.getSearchScrollState(queryHash) == expectedScroll }
         }
-        val savedScroll = io { container.data.uiRestoreRepository.getSearchScrollState(queryHash) }
+        val savedScroll = requireNotNull(io { container.data.uiRestoreRepository.getSearchScrollState(queryHash) })
         val previousDatabase = container.database
         val previousSettings = container.settings
 
@@ -104,7 +116,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         compose.waitUntil(10_000) { compose.onAllNodesWithTag(cardTag).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Pixiv · landscape").assertIsDisplayed()
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
-        assertEquals(top, compose.onNodeWithTag(cardTag).fetchSemanticsNode().boundsInRoot.top, 2f)
+        assertEquals(top, compose.onNodeWithTag(cardTag).fetchSemanticsNode().positionInRoot.y, 2f)
         assertEquals(savedScroll, io { container.data.uiRestoreRepository.getSearchScrollState(queryHash) })
         assertEquals(applied, io { container.data.queryRepository.observeAppliedQuery("source:PIXIV").first() })
         val restoredRequest = container.registry.requests.single { it.pageToken == null }
@@ -144,8 +156,55 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
     }
 
     private fun addSearchTag(value: String) {
-        compose.onNodeWithTag("Search query input").performTextInput(value)
-        compose.onNodeWithTag("Search query input").performImeAction()
+        val input = compose.onNodeWithTag("Search query input")
+        compose.waitUntil(10_000) {
+            input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty()
+        }
+        input.performClick()
+        input.performTextInput(value)
+        // IME Done is ignored until the same admission state enables the visible Add action.
+        compose.waitUntil(10_000) {
+            input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text == value &&
+                compose.onAllNodes(hasText("Add", substring = false) and isEnabled() and hasClickAction())
+                    .fetchSemanticsNodes().isNotEmpty()
+        }
+        input.performImeAction()
+        compose.waitUntil(10_000) {
+            input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty() &&
+                compose.onAllNodes(hasText(value, substring = false) and hasClickAction())
+                    .fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    /** The tagged grid wrapper receives touches; its nested lazy grid owns scroll semantics. */
+    private fun scrollToFirstVisibleCard(index: Int) {
+        val grid = compose.onNodeWithTag("Search results", useUnmergedTree = true)
+        repeat(24) {
+            val viewport = grid.fetchSemanticsNode().boundsInRoot
+            val target = visibleCardBounds(index, viewport)
+            val previous = if (index > 0) visibleCardBounds(index - 1, viewport) else null
+            // Fixture cards have equal heights. The even target starts its row once the preceding
+            // card has left the viewport, leaving a real, nonzero persisted offset to restore.
+            if (target != null && previous == null) {
+                compose.onNodeWithTag(searchCardTestTag(posts.getValue(SourceKey.PIXIV)[index].id)).assertIsDisplayed()
+                return
+            }
+            val distance = if (target == null) viewport.height * 0.45f else {
+                (target.top - viewport.top + viewport.width * 0.08f).coerceAtMost(viewport.height * 0.45f)
+            }
+            grid.performTouchInput {
+                val start = Offset(centerX, height * 0.8f)
+                swipeWithVelocity(start, start - Offset(0f, distance), endVelocity = 0f, durationMillis = 600L)
+            }
+            compose.waitForIdle()
+        }
+        throw AssertionError("Search card $index did not become the first visible fixture row after 24 drags")
+    }
+
+    private fun visibleCardBounds(index: Int, viewport: Rect): Rect? {
+        val tag = searchCardTestTag(posts.getValue(SourceKey.PIXIV)[index].id)
+        return compose.onAllNodesWithTag(tag).fetchSemanticsNodes().singleOrNull()?.boundsInRoot
+            ?.takeIf { bounds -> bounds.height > 0f && bounds.bottom > viewport.top && bounds.top < viewport.bottom }
     }
 
     private fun waitForCard(index: Int) {
