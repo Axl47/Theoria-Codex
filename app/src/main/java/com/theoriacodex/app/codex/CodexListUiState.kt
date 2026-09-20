@@ -53,6 +53,16 @@ internal class CodexListUiState(initialCodices: List<Codex>) {
         dragOffsetY = 0f
     }
 
+    fun move(codexId: String, offset: Int): Boolean {
+        if (!reorderMode) return false
+        val fromIndex = reorderDraft.indexOfFirst { it.codexId == codexId }
+        val toIndex = fromIndex + offset
+        if (fromIndex !in reorderDraft.indices || toIndex !in reorderDraft.indices || offset == 0) return false
+        resetDrag()
+        reorderDraft = moveCodex(reorderDraft, fromIndex, toIndex)
+        return true
+    }
+
     fun drag(codexId: String, fallbackIndex: Int, deltaY: Float) {
         if (draggingCodexId != codexId) return
         dragOffsetY += deltaY

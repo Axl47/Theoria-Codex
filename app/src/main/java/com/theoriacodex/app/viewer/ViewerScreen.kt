@@ -13,7 +13,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.rememberTransformableState
@@ -121,6 +120,7 @@ import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.tags.PostTagActionSection
 import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerMediaError
+import com.theoriacodex.app.viewer.state.ViewerMediaKey
 import com.theoriacodex.app.viewer.state.ViewerUiState
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
@@ -222,7 +222,8 @@ internal fun ViewerScreen(
     } == true
     val selectedMediaOverviewItems = remember(selectedPost) { viewerMediaOverviewItems(selectedPost) }
     val mediaOverviewAvailable = viewerMediaOverviewAvailable(selectedMediaOverviewItems)
-    val chromeVisible = uiState.controls.chromeVisible && !inPictureInPicture
+    val touchExplorationEnabled = rememberViewerTouchExploration()
+    val chromeVisible = (uiState.controls.chromeVisible || touchExplorationEnabled) && !inPictureInPicture
     val showInfoSheet = uiState.controls.metadataVisible && !inPictureInPicture
     val mediaPlaybackEnabled = uiState.controls.playback.playing
     val playbackRestartRequest = uiState.controls.playback.restartRequest
@@ -372,15 +373,14 @@ internal fun ViewerScreen(
         onVisiblePostChanged?.invoke(selectedPost, selectedMediaIndex + 1)
     }
 
-    LaunchedEffect(chromeVisible, interactionSerial, timelineInteractionActive, mediaOverviewVisible) {
-        if (chromeVisible && !timelineInteractionActive && !mediaOverviewVisible) {
-            val serial = interactionSerial
-            delay(VIEWER_CHROME_AUTO_HIDE_DELAY_MS)
-            if (serial == interactionSerial && !timelineInteractionActive && !mediaOverviewVisible) {
-                onAction(ViewerAction.ToggleChrome)
-            }
-        }
-    }
+    ViewerChromeAutoHideEffect(
+        chromeVisible = chromeVisible,
+        interactionSerial = interactionSerial,
+        interactionBlocked = timelineInteractionActive || mediaOverviewVisible || showInfoSheet ||
+            actionsMenuExpanded || playbackSettingsExpanded,
+        touchExplorationEnabled = touchExplorationEnabled,
+        onHide = { onAction(ViewerAction.ToggleChrome) },
+    )
 
     LaunchedEffect(chromeVisible, currentIsSeekableMedia) {
         if (!chromeVisible || !currentIsSeekableMedia) {
@@ -556,51 +556,29 @@ internal fun ViewerScreen(
                     }
                 }
                 val gifLocations = remember(post, media, loadGeneration) { viewerGifLocations(post, media) }
-                val mediaGestureModifier = Modifier.pointerInput(
-                    postPage,
-                    mediaPage,
-                    viewerTransform,
-                ) {
-                    detectTapGestures(
-                        onDoubleTap = { offset ->
-                            val tapRatio = if (size.width > 0) {
-                                offset.x / size.width.toFloat()
-                            } else {
-                                0.5f
-                            }
-                            val isCenterTap = tapRatio > 0.35f && tapRatio < 0.65f
-                            val seekDeltaMs = when {
-                                !isSeekableMedia -> 0L
-                                tapRatio <= 0.35f -> -10_000L
-                                tapRatio >= 0.65f -> 10_000L
-                                else -> 0L
-                            }
-                            if (seekDeltaMs != 0L) {
-                                seekJumpDeltaMs = seekDeltaMs
-                                seekJumpSerial += 1
-                                seekFeedbackSerial += 1
-                                seekFeedback = nextSeekJumpFeedback(
-                                    previous = seekFeedback,
-                                    deltaMs = seekDeltaMs,
-                                    nowElapsedMs = SystemClock.elapsedRealtime(),
-                                    nextSerial = seekFeedbackSerial,
-                                )
-                                markInteraction()
-                            } else if (isCenterTap) {
-                                viewerTransform = viewerTransform.doubleTap()
-                                markInteraction()
-                            }
-                        },
-                        onTap = {
-                            onAction(ViewerAction.ToggleChrome)
-                            interactionSerial += 1
-                        },
-                        onLongPress = {
-                            setInfoSheetVisible(true)
+                val mediaGestureModifier = viewerMediaGestureModifier(
+                    mediaKey = ViewerMediaKey(post.id, mediaPage),
+                    active = isCurrentMediaPage && !inPictureInPicture,
+                    seekable = isSeekableMedia,
+                    zoomed = viewerTransform.isZoomed,
+                    chromeVisible = chromeVisible,
+                    touchExplorationEnabled = touchExplorationEnabled,
+                    actions = ViewerMediaGestureActions(
+                        seek = { deltaMs ->
+                            seekJumpDeltaMs = deltaMs
+                            seekJumpSerial += 1
+                            seekFeedbackSerial += 1
+                            seekFeedback = nextSeekJumpFeedback(
+                                previous = seekFeedback, deltaMs = deltaMs,
+                                nowElapsedMs = SystemClock.elapsedRealtime(), nextSerial = seekFeedbackSerial,
+                            )
                             markInteraction()
                         },
-                    )
-                }
+                        zoom = { viewerTransform = viewerTransform.doubleTap(); markInteraction() },
+                        toggleControls = { onAction(ViewerAction.ToggleChrome); interactionSerial += 1 },
+                        showInfo = { setInfoSheetVisible(true); markInteraction() },
+                    ),
+                )
                 val mediaTransformModifier = Modifier
                     .graphicsLayer {
                         scaleX = viewerTransform.zoom
@@ -2465,7 +2443,6 @@ private val STATIC_OVERVIEW_IMAGE_EXTENSIONS = setOf(
 )
 
 private const val VIEWER_PAGINATION_PREFETCH_RATIO = 0.8f
-private const val VIEWER_CHROME_AUTO_HIDE_DELAY_MS = 5_000L
 private const val VIEWER_HORIZONTAL_SWIPE_MIN_DISTANCE_PX = 48f
 private const val VIEWER_HORIZONTAL_SWIPE_WIDTH_RATIO = 0.12f
 private const val VIEWER_HORIZONTAL_SWIPE_SLOP_FRACTION = 0.35f
