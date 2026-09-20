@@ -41,7 +41,8 @@ internal class ViewerRouteWorkflow(
     private val creatorOwner: () -> CreatorRouteOwnerHandle?,
     private val offlineMedia: com.theoriacodex.app.media.OfflineMediaCoordinator? = null,
 ) {
-    suspend fun persistResolvedPost(post: Post, streamSource: ViewerStreamSource) {
+    suspend fun persistResolvedPost(resolvedPost: Post, streamSource: ViewerStreamSource) {
+        val post = offlineMedia?.withoutOfflineLocations(resolvedPost) ?: resolvedPost
         when (streamSource) {
             ViewerStreamSource.SEARCH -> if (
                 searchOwner()?.dispatch(SearchAction.RememberResolvedPost(post)) != true

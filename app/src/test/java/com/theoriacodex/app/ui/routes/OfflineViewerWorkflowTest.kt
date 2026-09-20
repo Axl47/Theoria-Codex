@@ -6,6 +6,8 @@ import android.graphics.Color
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.app.fixtures.JourneyAppContainer
+import com.theoriacodex.app.codex.transfer.CodexSaveResult
+import com.theoriacodex.app.media.mediaDurationKey
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.viewer.ViewerRestorationRequest
 import com.theoriacodex.app.viewer.ViewerSession
@@ -14,6 +16,7 @@ import com.theoriacodex.app.viewer.state.ViewerAction
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
@@ -21,6 +24,8 @@ import java.io.File
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -33,6 +38,52 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [35])
 class OfflineViewerWorkflowTest {
     @get:Rule val temporary = TemporaryFolder()
+
+    @Test
+    fun `offline rendition metadata stays local while Codex Likes and Watched persist original source media`() = runTest {
+        val sources = listOf("codex-save", "like", "watched").map { id ->
+            testPost(SourceKey.IWARA, id, full = ImageRef("https://source.invalid/$id-original.mp4", null, "video/mp4"))
+        }
+        val graph = JourneyAppContainer(
+            ApplicationProvider.getApplicationContext(), temporary.newFolder(), sources.groupBy { it.id.source }, this,
+        )
+        try {
+            graph.awaitReady()
+            val offline = requireNotNull(graph.features.offlineMedia)
+            val playback = sources.map { source ->
+                val selected = ImageRef("https://source.invalid/${source.id.sourcePostId}-small.webm", null, "video/webm")
+                // These bytes exercise metadata boundaries only; this test makes no decoder/playback claim.
+                offline.store.save(source, listOf(selected), "rendition-metadata") { _, output ->
+                    output.writeText("controlled offline rendition metadata fixture")
+                }
+            }
+            graph.content.ensureCodex("saved-rendition", "Saved rendition")
+            val saved = graph.workflows.codexTransfer.save("saved-rendition", listOf(playback[0]), cacheFullImage = false)
+            assertTrue(saved is CodexSaveResult.Success && saved.inserted == 1)
+            assertCanonicalMedia(sources[0], requireNotNull(graph.content.getPost(sources[0].id)))
+
+            graph.workflows.likesCodexSync.toggle(RecommendationProfile("profile-main", "Main"), playback[1], listOf("landscape"))
+            assertEquals(sources[1].id, graph.data.likesRepository.observeLikes("profile-main").first().single().postId)
+            assertCanonicalMedia(sources[1], requireNotNull(graph.content.getPost(sources[1].id)))
+
+            val launch = ViewerSession(playback, ViewerLaunchContext("watched-source", 2, ViewerStreamSource.SEARCH, 0))
+            workflow(graph).recordVisiblePost(playback[2], 1, launch)
+            val watched = graph.data.recentsRepository.observeWatchedPosts().first().single().post
+            assertCanonicalMedia(sources[2], watched)
+            sources.zip(playback).forEach { (source, selected) ->
+                val ref = requireNotNull(selected.full)
+                assertEquals("video/webm", ref.mime)
+                assertTrue(ref.url!!.endsWith("-small.webm"))
+                assertTrue(File(requireNotNull(ref.localPath)).isFile)
+                assertEquals(1, selected.mediaCount)
+                assertNotEquals(mediaDurationKey(source), mediaDurationKey(selected))
+                assertEquals(mediaDurationKey(source), mediaDurationKey(offline.withoutOfflineLocations(selected)))
+            }
+            assertTrue(graph.registry.resolveRequests.isEmpty())
+        } finally {
+            graph.shutdown()
+        }
+    }
 
     @Test
     fun `offline galleries replace remote Codex snapshots for every Viewer page and cold restoration`() = runTest {
@@ -100,6 +151,16 @@ class OfflineViewerWorkflowTest {
             assertTrue(file.path.startsWith(directory.resolve("offline-media").path))
             assertTrue(file.isFile && file.length() > 0)
         }
+    }
+
+    private fun assertCanonicalMedia(source: Post, persisted: Post) {
+        assertEquals(source.id, persisted.id)
+        assertEquals(source.preview, persisted.preview)
+        assertEquals(source.full?.url, persisted.full?.url)
+        assertEquals("video/mp4", persisted.full?.mime)
+        assertNull(persisted.full?.localPath)
+        assertEquals(source.media, persisted.media)
+        assertEquals(source.mediaCount, persisted.mediaCount)
     }
 
     private fun gallery(id: String, images: List<File>): Post {

@@ -1,6 +1,8 @@
 package com.theoriacodex.data.repository
 
+import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.VideoVariant
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
@@ -142,6 +144,75 @@ internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
         assertEquals(unrelated, clean.media.last())
         assertEquals(post.full?.url, clean.full?.url)
         assertEquals(clean, store.withoutOfflineLocations(clean))
+    }
+
+    @Test
+    fun `selected offline rendition keeps source media through restart ownership changes and removal`() = runTest {
+        val directory = tempDir("video-rendition")
+        val original = ImageRef(
+            url = "https://example.test/original.mp4", localPath = null, mime = "video/mp4",
+            videoVariants = listOf(VideoVariant("https://example.test/small.webm", 480, mime = "video/webm")),
+        )
+        val source = samplePost("video", null).copy(full = original, media = emptyList(), mediaCount = null)
+        val selected = original.copy(url = original.videoVariants.single().url, mime = "video/webm")
+        val firstStore = OfflineMediaStore(directory)
+        val first = firstStore.save(source, listOf(selected), "codex:a") { _, file -> file.writeText("webm bytes") }
+        assertEquals(selected.url, first.full?.url)
+        assertEquals("video/webm", first.full?.mime)
+        assertTrue(File(requireNotNull(first.full?.localPath)).isFile)
+        assertEquals(source, firstStore.withoutOfflineLocations(first))
+        assertEquals(source.copy(title = "Viewer update"), firstStore.withoutOfflineLocations(first.copy(title = "Viewer update")))
+        firstStore.retain(source.id, "codex:b")
+
+        val reopened = OfflineMediaStore(directory)
+        val retained = requireNotNull(reopened.find(source.id))
+        assertEquals(source, reopened.withoutOfflineLocations(retained))
+        reopened.removeOwner("codex:a")
+        val remainingStore = OfflineMediaStore(directory)
+        val afterOwnerRemoval = requireNotNull(remainingStore.find(source.id))
+        assertEquals("video/webm", afterOwnerRemoval.full?.mime)
+        assertEquals(source, remainingStore.withoutOfflineLocations(afterOwnerRemoval))
+        reopened.clear()
+        assertEquals(source, reopened.withoutOfflineLocations(retained.copy()))
+        assertEquals(source, firstStore.withoutOfflineLocations(first))
+        assertNull(reopened.find(source.id))
+    }
+
+    @Test
+    fun `gallery cleanup restores per-page source refs and leaves unrelated local media intact`() = runTest {
+        val directory = tempDir("gallery-rendition")
+        val source = gallery().copy(mediaCount = 2)
+        val selected = source.media.map { it.copy(url = it.url + "?rendition=small", mime = "image/webp") }
+        val store = OfflineMediaStore(directory)
+        val offline = store.save(source, selected, "codex:a") { _, file -> file.writeText("selected") }
+        val secondRead = requireNotNull(store.find(source.id))
+        store.clear()
+        assertEquals(source, store.withoutOfflineLocations(offline))
+        assertEquals(source, store.withoutOfflineLocations(secondRead))
+        val unrelated = selected.last().copy(localPath = File(directory.parentFile, "fixture.webp").path)
+        val mixed = offline.copy(media = offline.media + unrelated)
+        val cleaned = store.withoutOfflineLocations(mixed)
+        assertEquals(source.media + unrelated, cleaned.media)
+        assertEquals(source.preview, cleaned.preview)
+        assertEquals(source.full, cleaned.full)
+    }
+
+    @Test
+    fun `legacy offline manifests without canonical provenance never claim availability`() = runTest {
+        val directory = tempDir("legacy-manifest")
+        val store = OfflineMediaStore(directory)
+        val source = gallery()
+        val offline = store.save(source, source.media, "codex:a") { _, file -> file.writeText("bytes") }
+        val manifest = directory.listFiles().orEmpty().single().resolve("manifest.json")
+        val json = com.google.gson.JsonParser.parseString(manifest.readText()).asJsonObject
+        json.addProperty("version", 1)
+        json.remove("sourcePost")
+        manifest.writeText(json.toString())
+        val reopened = OfflineMediaStore(directory)
+        reopened.refresh()
+        assertNull(reopened.find(source.id))
+        assertEquals(0, reopened.snapshot.value.postCount)
+        assertTrue(offline.media.all { File(it.localPath!!).isFile })
     }
 
     private fun gallery(): Post {

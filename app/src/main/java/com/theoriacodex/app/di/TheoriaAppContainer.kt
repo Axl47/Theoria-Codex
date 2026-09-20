@@ -342,12 +342,14 @@ internal class DefaultTheoriaAppContainer(
         likesCodexSync = LikesCodexSyncService(
             transactions = codexLikesTransactions,
             codexRepository = codexRepository,
+            canonicalizePost = offlineMedia::withoutOfflineLocations,
         ),
         codexTransfer = CodexTransferService(
             codexRepository = codexRepository,
             transactions = codexLikesTransactions,
             cacheRepository = cacheRepository,
             sourceRegistry = sourceRegistry,
+            canonicalizePost = offlineMedia::withoutOfflineLocations,
         ),
         profileBackup = profileBackup,
     )

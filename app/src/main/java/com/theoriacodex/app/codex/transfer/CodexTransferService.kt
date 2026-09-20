@@ -54,6 +54,7 @@ class CodexTransferService internal constructor(
     private val sourceRegistry: SourceAdapterRegistry,
     private val gson: Gson = Gson(),
     private val workerDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val canonicalizePost: (Post) -> Post = { it },
 ) {
     suspend fun export(codexId: String): CodexExportResult = withContext(workerDispatcher) {
         runCatchingPreservingCancellation { exportInside(codexId) }.getOrDefault(CodexExportResult.Failure)
@@ -113,7 +114,7 @@ class CodexTransferService internal constructor(
     /** Commit the selection atomically; optional cache failures cannot truncate durable saves. */
     suspend fun save(codexId: String, posts: List<Post>, cacheFullImage: Boolean): CodexSaveResult =
         withContext(workerDispatcher) {
-            val uniquePosts = posts.distinctBy(Post::id)
+            val uniquePosts = posts.map(canonicalizePost).distinctBy(Post::id)
             val committed = runCatchingPreservingCancellation {
                 codexRepository.addItems(codexId, uniquePosts)
             }.getOrElse { return@withContext CodexSaveResult.Failure("Could not save posts. Please try again.") }

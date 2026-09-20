@@ -2004,6 +2004,7 @@ internal fun TheoriaAppContent(
                             ViewerRoute(
                             dependencies = ViewerRouteDependencies(
                                 sessionRetentionOwner = viewerSessionOwner,
+                                canonicalizePost = { post -> featureDependencies.offlineMedia?.withoutOfflineLocations(post) ?: post },
                                 postResolver = ViewerPostResolver { identity, postId ->
                                     val streamSource = identity.streamKey
                                         ?.let { name ->

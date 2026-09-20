@@ -58,6 +58,7 @@ internal data class ViewerRouteDependencies(
     val mediaPrefetcher: ViewerMediaPrefetcher,
     val mediaDurationCoordinator: MediaDurationCoordinator,
     val restoreSession: suspend (ViewerRestorationRequest) -> ViewerSession?,
+    val canonicalizePost: (Post) -> Post = { it },
 )
 
 /** Immutable values consumed by the Viewer renderer. */
@@ -396,7 +397,7 @@ internal fun ViewerRoute(
     SideEffect {
         durationOwner.synchronize(
             identity = activeSession.sessionId,
-            posts = viewerState.pages.map { page -> page.post },
+            posts = viewerState.pages.map { page -> dependencies.canonicalizePost(page.post) },
             resolveInBackground = false,
         )
     }
@@ -435,7 +436,9 @@ internal fun ViewerRoute(
         onVisibleMediaChanged = { post, viewedMediaNumber ->
             viewerOwner.recordVisibleMedia(post, viewedMediaNumber, latestScreenCallbacks.value.onVisibleMediaChanged)
         },
-        onAuthoritativeDurationKnown = durationOwner::publishPlayerDuration,
+        onAuthoritativeDurationKnown = { post, durationMs ->
+            durationOwner.publishPlayerDuration(latestDependencies.value.canonicalizePost(post), durationMs)
+        },
         onOpenInBrowser = screenCallbacks.onOpenInBrowser,
         onRemoveIncludeTerm = screenCallbacks.onRemoveIncludeTerm,
         onRemoveExcludeTerm = screenCallbacks.onRemoveExcludeTerm,

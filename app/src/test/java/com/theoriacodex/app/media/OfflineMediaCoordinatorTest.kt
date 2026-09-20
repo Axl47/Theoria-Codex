@@ -6,6 +6,8 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.VideoQuality
+import com.theoriacodex.domain.model.VideoVariant
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -139,6 +141,28 @@ class OfflineMediaCoordinatorTest {
             assertNull(coordinator.find(post("queued").id))
             assertTrue(coordinator.jobs.value.isEmpty())
         }
+    }
+
+    @Test
+    fun `offline data saver playback restores original media duration identity`() = runTest {
+        val canonical = ImageRef(
+            "https://example.test/original.mp4", null, "video/mp4",
+            videoVariants = listOf(VideoVariant("https://example.test/small.webm", 480, mime = "video/webm")),
+        )
+        val source = post("video").copy(full = canonical, media = listOf(canonical), mediaCount = null)
+        val store = OfflineMediaStore(temporary.newFolder(), ioDispatcher = StandardTestDispatcher(testScheduler))
+        val coordinator = OfflineMediaCoordinator(store, backgroundScope, { source },
+            { it.media.map { ref -> ref.withVideoQuality(VideoQuality.DATA_SAVER, metered = true) } },
+            { _, _, file -> file.writeText("webm bytes") },
+        )
+        coordinator.makeAvailableOffline("codex:video", listOf(source))
+        coordinator.jobs.first { it["codex:video"]?.isRunning == false }
+        val playback = requireNotNull(coordinator.find(source.id))
+        assertEquals("video/webm", playback.full?.mime)
+        assertEquals("https://example.test/small.webm", playback.full?.url)
+        assertEquals(mediaDurationKey(source), mediaDurationKey(coordinator.withoutOfflineLocations(playback)))
+        coordinator.clear()
+        assertEquals(source, coordinator.withoutOfflineLocations(playback.copy()))
     }
 
     private fun post(id: String): Post {

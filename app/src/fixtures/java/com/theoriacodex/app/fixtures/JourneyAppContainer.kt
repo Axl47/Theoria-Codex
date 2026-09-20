@@ -135,7 +135,8 @@ class JourneyAppContainer(
         offlineMedia = offline,
     )
     override val workflows = WorkflowDependencies(
-        LikesCodexSyncService(content, content), CodexTransferService(content, content, data.cacheRepository, registry),
+        LikesCodexSyncService(content, content, offline::withoutOfflineLocations),
+        CodexTransferService(content, content, data.cacheRepository, registry, canonicalizePost = offline::withoutOfflineLocations),
         profileBackup = ProfileBackupService(settings, RoomProfileBackupStore(database), data.savedSearches,
             data.readingPositions, storageDirectory.resolve("pending_profile_restore.json")),
     )

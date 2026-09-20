@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.first
 class LikesCodexSyncService internal constructor(
     private val transactions: CodexLikesTransactions,
     private val codexRepository: CodexRepository,
+    private val canonicalizePost: (Post) -> Post = { it },
 ) {
     suspend fun toggle(
         profile: RecommendationProfile,
@@ -30,7 +31,7 @@ class LikesCodexSyncService internal constructor(
             profileId = profile.profileId,
             systemCodexId = systemCodexId,
             systemCodexName = likesCodexNameForProfile(profile),
-            post = post,
+            post = canonicalizePost(post),
             tags = trainingTags,
             eligibleAutomaticCodexIds = automaticCodexIds,
         ).nowLiked
