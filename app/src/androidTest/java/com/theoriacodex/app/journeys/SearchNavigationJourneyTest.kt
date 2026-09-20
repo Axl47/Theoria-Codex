@@ -5,17 +5,20 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isDisplayed
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeWithVelocity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import com.theoriacodex.app.search.searchCardTestTag
@@ -44,15 +47,18 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         compose.onNodeWithText("Tag").performTextInput("green")
         activate(compose.onNodeWithText("Add alternative"))
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        repeat(2) {
-            if (compose.onAllNodesWithTag("Include group sheet").fetchSemanticsNodes().isNotEmpty()) {
-                device.pressBack()
-                compose.waitForIdle()
-            }
+        compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.Dismiss), useUnmergedTree = true)
+            .performSemanticsAction(SemanticsActions.Dismiss)
+        compose.waitUntil(conditionDescription = "Include group sheet is fully dismissed", timeoutMillis = 10_000) {
+            compose.onAllNodesWithTag("Include group sheet").fetchSemanticsNodes().isEmpty()
         }
         activate(compose.onNodeWithText("Apply"))
+        val summary = compose.onNodeWithText("Pixiv · landscape AND (blue OR green)")
+        compose.waitUntil(conditionDescription = "Grouped query is applied and its field is collapsed", timeoutMillis = 10_000) {
+            summary.isDisplayed()
+        }
         waitForCard(0)
-        compose.onNodeWithText("Pixiv · landscape AND (blue OR green)").assertIsDisplayed()
+        summary.assertIsDisplayed()
         val root = container.registry.requests.single { it.source == SourceKey.PIXIV && it.pageToken == null }
         assertEquals(listOf(listOf("landscape"), listOf("blue", "green")),
             root.query.effectiveIncludeTermGroups.map { group -> group.terms.map { it.value } })
