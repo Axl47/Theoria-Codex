@@ -106,20 +106,20 @@ class UnifiedSearchOrchestrator(
                             preparedQueries[source] = if (source in clientSideExcludeSources) {
                                 prepared.copy(excludeTerms = sourceBaseQuery.excludeTerms)
                             } else prepared
-                            searchSource(adapter, prepared, pageTokens[source])
-                        } ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Source timed out")
-                        page.let { page ->
+                            val sourcePage = searchSource(adapter, prepared, pageTokens[source])
                             if (source in clientSideExcludeSources) {
-                                page.copy(
+                                val hydrated = listOf(sourcePage).withSearchMetadata(adapter).single()
+                                hydrated.copy(
                                     items = applyClientSideExcludeFilter(
-                                        posts = page.items,
+                                        posts = hydrated.items,
                                         excludeTags = sourceBaseQuery.excludeTags,
                                     )
                                 )
                             } else {
-                                page
+                                sourcePage
                             }
-                        }
+                        } ?: throw SourceAdapterException(SourceFailureReason.NETWORK, "Source timed out")
+                        page
                     }
                 }
             }
@@ -198,7 +198,7 @@ class UnifiedSearchOrchestrator(
                 adapter.search(branchQuery, branchToken)
             }
         }
-        val visibleByBranch = pages.map { page ->
+        val visibleByBranch = pages.withSearchMetadata(adapter).map { page ->
             page.items.filter { post -> post.matchesIncludeTermGroups(query) }
         }
         val merged = mergeBranches(visibleByBranch, query.sort)

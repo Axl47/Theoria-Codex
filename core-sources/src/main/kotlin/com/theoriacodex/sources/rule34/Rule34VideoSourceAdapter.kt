@@ -26,7 +26,7 @@ class Rule34VideoSourceAdapter(
         return "${initialSearchUrl(queryText)}?mode=async&function=get_block&block_id=$blockId&$parameters"
     }
 
-    override fun parseSearchPage(document: Document, includeTags: List<String>) = document
+    override fun parseSearchPage(document: Document) = document
         .select("div.item.thumb a.th[href]")
         .mapNotNull { anchor ->
             val pageUrl = anchor.attr("abs:href").ifBlank { anchor.attr("href") }
@@ -39,7 +39,6 @@ class Rule34VideoSourceAdapter(
                 title = anchor.attr("title").trim().ifBlank { null },
                 previewUrl = image?.attr("data-original")?.ifBlank { image.attr("src") },
                 previewVideoUrl = previewVideoUrl,
-                includeTags = includeTags,
                 durationMs = parseRule34DurationMs(
                     anchor.selectFirst(".duration, .time, time, [data-duration]")?.let { element ->
                         element.attr("data-duration").ifBlank { element.text() }

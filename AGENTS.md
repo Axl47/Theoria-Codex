@@ -46,6 +46,8 @@ Positive Search terms use a shallow Boolean grammar: every group is required wit
 
 Gelbooru supports exact native OR with brace groups such as `{tag1 ~ tag2}`; its older bare-tilde form is not equivalent. Providers without verified native support use the bounded orchestrator fallback with independent branch continuation, post-hydration group verification, and canonical-ID deduplication. Never infer a fallback branch's exhaustion from the locally filtered visible count.
 
+Sparse provider cards must never learn query terms as observed tags. Adapters needing authoritative metadata for local predicates implement `SearchMetadataSourceAdapter`; grouped matching and local exclusions resolve distinct input IDs once per page at concurrency two, deduplicate canonical IDs after hydration, and remain inside the source deadline. Plain searches without local predicates retain lazy resolution.
+
 ## Search Tag Suggestions
 
 Search autocomplete is local-first: query the complete bounded tag lexicon before applying a result limit, publish those matches before the network debounce, and let the bounded provider refresh improve the same generation later. Reuse fresh exact source/prefix/scope requests, keep Unified provider calls concurrent, and preserve cancellation plus stale-generation rejection. Ranking must prefer exact, prefix, then contained matches; compare counts only within one provider/relevance band and fairly interleave Unified sources whose corpus sizes are not comparable.
