@@ -65,7 +65,7 @@ internal fun OfflineStorageSheet(
                     Text("Offline copies", style = MaterialTheme.typography.titleMedium)
                     TextButton(
                         onClick = onClearOffline,
-                        enabled = state.controlsEnabled && state.owners.isNotEmpty(),
+                        enabled = state.controlsEnabled && (state.offline.bytes > 0L || state.owners.isNotEmpty()),
                     ) { Text("Remove all") }
                 }
                 if (state.owners.isEmpty()) Text("No offline copies", style = MaterialTheme.typography.bodyMedium)

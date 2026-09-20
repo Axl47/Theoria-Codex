@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -49,5 +50,13 @@ class OfflineStorageControlsTest {
         compose.runOnIdle { assertEquals(0, offlineRemovals) }
         compose.onNodeWithTag("confirm-offline-removal").performClick()
         compose.runOnIdle { assertEquals(1, offlineRemovals); assertEquals(1, cacheClears) }
+        compose.runOnIdle {
+            state.value = state.value.copy(offline = OfflineMediaSnapshot(bytes = 1_024), owners = emptyList())
+        }
+        compose.onNodeWithText("Remove all").assertIsEnabled().performScrollTo().performClick()
+        compose.onNodeWithText("Remove all offline copies?").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(1, offlineRemovals) }
+        compose.onNodeWithTag("confirm-offline-removal").performClick()
+        compose.runOnIdle { assertEquals(2, offlineRemovals); assertEquals(1, cacheClears) }
     }
 }
