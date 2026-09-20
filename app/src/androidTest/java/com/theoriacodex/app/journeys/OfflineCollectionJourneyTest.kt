@@ -1,5 +1,6 @@
 package com.theoriacodex.app.journeys
 
+import android.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -18,6 +19,7 @@ import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
+import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.first
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -42,12 +44,20 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         val offline = requireNotNull(container.features.offlineMedia)
         compose.waitUntil(10_000) { offline.store.snapshot.value.postCount == 2 }
         compose.onNodeWithText("2 posts available offline").assertIsDisplayed()
+        val localPaths = io { sourcePosts.map { requireNotNull(offline.find(it.id)?.full?.localPath) } }
+        assertTrue(localPaths.all { File(it).isFile })
+        // Remove the per-test originals before clearing caches so only retained offline bytes can render.
+        io {
+            sourcePosts.mapNotNull { it.full?.localPath }.distinct().forEach { path ->
+                assertTrue(path !in localPaths)
+                assertTrue(File(path).delete())
+            }
+        }
         compose.onNodeWithText("Clear disposable cache").performClick()
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText("Disposable cache cleared. Offline copies are still available.")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        val localPaths = io { sourcePosts.map { requireNotNull(offline.find(it.id)?.full?.localPath) } }
         assertTrue(localPaths.all { File(it).isFile })
         UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
         coldGraphRelaunch()
@@ -58,8 +68,7 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         compose.onNodeWithTag(searchCardTestTag(ordered.first().id)).performClick()
         compose.waitUntil(10_000) {
             io { container.data.recentsRepository.observeWatchedPosts().first().any { it.post.id == ordered.first().id } } &&
-                compose.onAllNodesWithContentDescription("Media actions", useUnmergedTree = true)
-                    .fetchSemanticsNodes().size == 1
+                activeMediaShowsFixturePixels()
         }
         compose.onNodeWithContentDescription(requireNotNull(ordered.first().title)).assertIsDisplayed()
         val activeMedia = compose.onNodeWithContentDescription("Media actions", useUnmergedTree = true)
@@ -74,7 +83,8 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
             )
         }
         compose.waitUntil(10_000) {
-            io { container.data.recentsRepository.observeWatchedPosts().first().any { it.post.id == ordered.last().id } }
+            io { container.data.recentsRepository.observeWatchedPosts().first().any { it.post.id == ordered.last().id } } &&
+                activeMediaShowsFixturePixels()
         }
         compose.onNodeWithContentDescription(requireNotNull(ordered.last().title)).assertIsDisplayed()
         val viewed = io { container.data.recentsRepository.observeWatchedPosts().first() }
@@ -91,5 +101,19 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         })
         assertTrue(localPaths.all { File(it).isFile })
         assertTrue(container.registry.resolveRequests.isEmpty())
+    }
+
+    private fun activeMediaShowsFixturePixels(): Boolean {
+        val surface = compose.onAllNodesWithContentDescription("Media actions", useUnmergedTree = true)
+            .fetchSemanticsNodes().singleOrNull() ?: return false
+        val center = surface.boundsInWindow.center
+        val screenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot() ?: return false
+        return try {
+            val x = center.x.roundToInt()
+            val y = center.y.roundToInt()
+            x in 0 until screenshot.width && y in 0 until screenshot.height && screenshot.getPixel(x, y) == Color.CYAN
+        } finally {
+            screenshot.recycle()
+        }
     }
 }
