@@ -9,7 +9,9 @@ import com.theoriacodex.data.repository.CacheSettings
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Owned by the Activity so changing routes or recreating its UI cannot restart a download. */
@@ -19,21 +21,31 @@ internal class PostDownloadsViewModel(
     resolvePost: suspend (Post) -> Post?,
     exportAnimation: suspend (Post) -> Result<Unit>,
 ) : ViewModel() {
+    // Retain the ViewModel Job and serialize commands with worker continuations off Main.
+    private val queueScope = CoroutineScope(viewModelScope.coroutineContext + Dispatchers.IO.limitedParallelism(1))
     private val queue = PostDownloadQueue(
-        scope = viewModelScope,
+        scope = queueScope,
         backend = AndroidPostDownloadBackend(context.applicationContext, readSettings, resolvePost, exportAnimation),
     )
     val batches = queue.batches
 
-    fun submitPosts(posts: List<Post>, title: String = "Save to device"): Long? =
-        queue.submit(title, posts.map { PostDownloadRequest(it) })
+    fun submitPosts(posts: List<Post>, title: String = "Save to device") {
+        queueScope.launch { queue.submit(title, posts.map { PostDownloadRequest(it) }) }
+    }
 
-    fun submitViewerMedia(post: Post, media: ImageRef, pageIndex: Int, totalPages: Int): Long? = queue.submit(
-        "Save to device", listOf(PostDownloadRequest(post, SelectedDownloadMedia(media, pageIndex, totalPages))),
-    )
+    fun submitViewerMedia(post: Post, media: ImageRef, pageIndex: Int, totalPages: Int) {
+        queueScope.launch {
+            queue.submit("Save to device", listOf(PostDownloadRequest(post, SelectedDownloadMedia(media, pageIndex, totalPages))))
+        }
+    }
 
-    fun cancel(batchId: Long) = queue.cancel(batchId)
-    fun retryFailed(batchId: Long) = queue.retryFailed(batchId)
+    fun cancel(batchId: Long) {
+        queueScope.launch { queue.cancel(batchId) }
+    }
+
+    fun retryFailed(batchId: Long) {
+        queueScope.launch { queue.retryFailed(batchId) }
+    }
 }
 
 private class AndroidPostDownloadBackend(
