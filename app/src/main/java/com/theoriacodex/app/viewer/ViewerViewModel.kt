@@ -80,6 +80,20 @@ internal class ViewerViewModel(
     val pendingRestoration: ViewerSessionIdentity?
         get() = state.value.takeIf { current -> current.pages.isEmpty() }?.session
 
+    val restorationRequest: ViewerRestorationRequest?
+        get() = pendingRestoration?.let { identity ->
+            ViewerRestorationRequest(
+                session = identity,
+                selectedPostId = decodeViewerPostId(savedStateHandle[ViewerSavedStateKeys.SELECTED_POST]),
+                orderedPostIds = savedStateHandle.get<ArrayList<String>>(ViewerSavedStateKeys.ORDERED_POSTS)
+                    .orEmpty().mapNotNull(::decodeViewerPostId),
+                selectedMediaIndex = restoredMediaIndex,
+                recentsSection = savedStateHandle.get<String>(ViewerSavedStateKeys.RECENTS_SECTION)?.let { encoded ->
+                    com.theoriacodex.data.repository.RecentPostSection.entries.firstOrNull { it.name == encoded }
+                },
+            )
+        }
+
     override fun onAction(action: ViewerAction) {
         val reduction = synchronized(lock) {
             if (action is ViewerAction.ReplaceSession) {
@@ -112,8 +126,10 @@ internal class ViewerViewModel(
 
     /** Bridges the existing process-local shell handoff into the route contract. */
     fun replaceSession(session: ViewerSession) {
+        val isNewLaunch = state.value.session != session.toViewerSessionIdentity()
         mutableSession.value = session
         onAction(session.toReplaceViewerSessionAction())
+        if (isNewLaunch && session.initialMediaIndex > 0) onAction(ViewerAction.SelectMedia(session.initialMediaIndex))
     }
 
     /** Keeps transient launch metadata and immutable render pages under the same route owner. */
@@ -157,8 +173,21 @@ internal class ViewerViewModel(
             ) return
             active
         }
-        workScope.launch {
+        workScope.launch(start = CoroutineStart.UNDISPATCHED) {
             // A partial best-effort write must not become a duplicate lifetime event on reattachment.
+            runCatchingPreservingCancellation { record(post, viewedMediaNumber, current) }
+        }
+    }
+
+    /** Media-position writes belong to the retained route, not an Activity composition. */
+    fun recordVisibleMedia(
+        post: Post,
+        viewedMediaNumber: Int,
+        record: suspend (Post, Int, ViewerSession) -> Unit,
+    ) {
+        val current = mutableSession.value ?: return
+        if (state.value.currentPage?.post?.id != post.id) return
+        workScope.launch(start = CoroutineStart.UNDISPATCHED) {
             runCatchingPreservingCancellation { record(post, viewedMediaNumber, current) }
         }
     }
@@ -180,7 +209,9 @@ internal class ViewerViewModel(
         val restoresSavedIdentity = mutableState.value.pages.isEmpty() &&
             mutableState.value.session == action.session
         if (!restoresSavedIdentity) return action
-        return action.copy(initialPageIndex = restoredPageIndex)
+        val selectedId = decodeViewerPostId(savedStateHandle[ViewerSavedStateKeys.SELECTED_POST])
+        val selectedIndex = action.posts.indexOfFirst { it.id == selectedId }
+        return action.copy(initialPageIndex = selectedIndex.takeIf { it >= 0 } ?: restoredPageIndex)
     }
 
     private fun handleEffect(effect: ViewerEffect) {
@@ -341,6 +372,15 @@ internal class ViewerViewModel(
         saveIfChanged(ViewerSavedStateKeys.PAGE_INDEX, current.currentPageIndex)
         saveIfChanged(ViewerSavedStateKeys.MEDIA_INDEX, current.currentPage?.selectedMediaIndex ?: 0)
         saveIfChanged(ViewerSavedStateKeys.PLAYBACK_MODE, current.controls.playbackMode.name)
+        current.currentPage?.let { page ->
+            saveIfChanged(ViewerSavedStateKeys.SELECTED_POST, encodeViewerPostId(page.post.id))
+            saveIfChanged(
+                ViewerSavedStateKeys.ORDERED_POSTS,
+                ArrayList(viewerRestorationWindow(current.pages, current.currentPageIndex)
+                    .map { encodeViewerPostId(it.post.id) }),
+            )
+            saveIfChanged(ViewerSavedStateKeys.RECENTS_SECTION, mutableSession.value?.context?.recentsSection?.name)
+        }
         restoredPageIndex = current.currentPageIndex
         restoredMediaIndex = current.currentPage?.selectedMediaIndex ?: 0
     }
@@ -358,6 +398,9 @@ internal class ViewerViewModel(
         savedStateHandle.remove<Int>(ViewerSavedStateKeys.PAGE_INDEX)
         savedStateHandle.remove<Int>(ViewerSavedStateKeys.MEDIA_INDEX)
         savedStateHandle.remove<String>(ViewerSavedStateKeys.PLAYBACK_MODE)
+        savedStateHandle.remove<String>(ViewerSavedStateKeys.SELECTED_POST)
+        savedStateHandle.remove<ArrayList<String>>(ViewerSavedStateKeys.ORDERED_POSTS)
+        savedStateHandle.remove<String>(ViewerSavedStateKeys.RECENTS_SECTION)
     }
 
     override fun onCleared() {
@@ -397,6 +440,9 @@ internal object ViewerSavedStateKeys {
     const val PAGE_INDEX = "viewer_page_index"
     const val MEDIA_INDEX = "viewer_media_index"
     const val PLAYBACK_MODE = "viewer_playback_mode"
+    const val SELECTED_POST = "viewer_selected_post"
+    const val ORDERED_POSTS = "viewer_ordered_posts"
+    const val RECENTS_SECTION = "viewer_recents_section"
 }
 
 internal fun ViewerSession.toViewerSessionIdentity(): ViewerSessionIdentity {

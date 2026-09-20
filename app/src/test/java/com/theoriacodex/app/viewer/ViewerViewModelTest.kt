@@ -135,6 +135,9 @@ class ViewerViewModelTest {
                 ViewerSavedStateKeys.PAGE_INDEX,
                 ViewerSavedStateKeys.MEDIA_INDEX,
                 ViewerSavedStateKeys.PLAYBACK_MODE,
+                ViewerSavedStateKeys.SELECTED_POST,
+                ViewerSavedStateKeys.ORDERED_POSTS,
+                ViewerSavedStateKeys.RECENTS_SECTION,
             ),
             handle.keys(),
         )
@@ -150,6 +153,47 @@ class ViewerViewModelTest {
         assertEquals(com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT, recreated.state.value.controls.playbackMode)
         assertEquals(1, recreated.state.value.currentPage?.selectedMediaIndex)
         assertEquals("second", recreated.state.value.currentPage?.post?.id?.sourcePostId)
+    }
+
+    @Test
+    fun `cold restoration selects canonical post when missing neighbors change its index`() = runTest {
+        val handle = SavedStateHandle()
+        val original = session("filtered-oldest", listOf(post("oldest"), post("removed"), post("selected")))
+        val first = ViewerViewModel(handle, scopeOverride = this)
+        first.replaceSession(original)
+        first.onAction(ViewerAction.SelectPage(2))
+
+        val recreatedHandle = SavedStateHandle(handle.keys().associateWith { handle.get<Any?>(it) })
+        val recreated = ViewerViewModel(recreatedHandle, scopeOverride = this)
+        assertEquals(original.posts[2].id, recreated.restorationRequest?.selectedPostId)
+        assertEquals(original.posts.map(Post::id), recreated.restorationRequest?.orderedPostIds)
+        recreated.replaceSession(original.copy(posts = listOf(original.posts[2], original.posts[0])))
+
+        assertEquals("selected", recreated.state.value.currentPage?.post?.id?.sourcePostId)
+        assertEquals(0, recreated.state.value.currentPageIndex)
+    }
+
+    @Test
+    fun `new recent session opens the last media without changing another session selection`() = runTest {
+        val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this)
+        val gallery = post("gallery", media = listOf(image("1.jpg"), image("2.jpg"), image("3.jpg")))
+        owner.replaceSession(session("recent", listOf(gallery)).copy(initialMediaIndex = 2))
+        assertEquals(2, owner.state.value.currentPage?.selectedMediaIndex)
+        owner.replaceSession(session("new", listOf(gallery)))
+        assertEquals(0, owner.state.value.currentPage?.selectedMediaIndex)
+    }
+
+    @Test
+    fun `restoration window remains bounded and retains the selected identity near either end`() = runTest {
+        val posts = (0..199).map { post("$it") }
+        val handle = SavedStateHandle()
+        val owner = ViewerViewModel(handle, scopeOverride = this)
+        owner.replaceSession(session("large", posts))
+        owner.onAction(ViewerAction.SelectPage(199))
+        val request = requireNotNull(handle.get<ArrayList<String>>(ViewerSavedStateKeys.ORDERED_POSTS))
+            .mapNotNull(::decodeViewerPostId)
+        assertEquals(64, request.size)
+        assertEquals(posts.last().id, request.last())
     }
 
     @Test
