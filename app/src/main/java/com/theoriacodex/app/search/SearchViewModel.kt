@@ -17,6 +17,7 @@ import com.theoriacodex.app.search.state.SearchStateChange
 import com.theoriacodex.app.search.state.SearchStateReducer
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.search.state.withAutocompleteResult
+import com.theoriacodex.app.search.state.withResolvedPosts
 import com.theoriacodex.app.search.state.withSuggestionInput
 import com.theoriacodex.app.search.state.withTrendingSuggestions
 import com.theoriacodex.app.search.state.SearchQueryUiState
@@ -305,7 +306,9 @@ internal class SearchViewModel(
             }
 
             is SearchAction.RememberResolvedPost -> {
-                applyResolvedPosts(mutableState.value.query.appliedQueryHash, listOf(action.post))
+                mutableState.value = mutableState.value.withResolvedPosts(
+                    mutableState.value.query.appliedQueryHash, listOf(action.post),
+                )
             }
 
             is SearchAction.RelatedLikeCommitted -> relatedPosts.onLikeCommitted(action.post, action.outcome)
@@ -1054,29 +1057,6 @@ internal class SearchViewModel(
 
             is SearchEffect.ShowMessage -> effectChannel.trySend(effect)
         }
-    }
-
-    private fun applyResolvedPosts(
-        queryHash: String,
-        posts: List<com.theoriacodex.domain.model.Post>,
-    ) {
-        val current = mutableState.value
-        if (current.query.appliedQueryHash != queryHash) return
-        val replacements = posts.associateBy { post -> post.id }
-        if (replacements.isEmpty()) return
-        var changed = false
-        val updated = current.content.results.map { post ->
-            replacements[post.id]?.also { replacement ->
-                if (replacement != post) changed = true
-            } ?: post
-        }
-        if (!changed) return
-        mutableState.value = current.copy(
-            content = current.content.copy(
-                results = updated,
-                displayVersion = current.content.displayVersion + 1,
-            ),
-        )
     }
 
     override fun onCleared() {
