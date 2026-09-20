@@ -3,16 +3,15 @@ package com.theoriacodex.app.journeys
 import android.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.UiDevice
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.search.searchCardTestTag
 import com.theoriacodex.data.repository.CodexSortMode
@@ -39,8 +38,8 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
         }
         launch()
         tab("Codex")
-        compose.onNodeWithContentDescription("Actions for Offline collection").performClick()
-        compose.onNodeWithText("Make available offline").performClick()
+        activate(compose.onNodeWithContentDescription("Actions for Offline collection"))
+        activate(compose.onNodeWithText("Make available offline"))
         val offline = requireNotNull(container.features.offlineMedia)
         compose.waitUntil(10_000) { offline.store.snapshot.value.postCount == 2 }
         compose.onNodeWithText("2 posts available offline").assertIsDisplayed()
@@ -53,26 +52,30 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
                 assertTrue(File(path).delete())
             }
         }
-        compose.onNodeWithText("Clear disposable cache").performClick()
+        activate(compose.onNodeWithText("Clear disposable cache"))
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText("Disposable cache cleared. Offline copies are still available.")
                 .fetchSemanticsNodes().isNotEmpty()
         }
         assertTrue(localPaths.all { File(it).isFile })
-        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        // Closing the Activity is the cold-start boundary, including an open storage sheet.
         coldGraphRelaunch()
         tab("Codex")
-        compose.onNodeWithText("Offline collection").performClick()
+        activate(compose.onNodeWithText("Offline collection"))
         val ordered = io { container.content.observeCodexPosts(collection.codexId, CodexSortMode.NEWEST_SAVED).first() }
         container.registry.resolveRequests.clear()
-        compose.onNodeWithTag(searchCardTestTag(ordered.first().id)).performClick()
-        compose.waitUntil(10_000) {
-            io { container.data.recentsRepository.observeWatchedPosts().first().any { it.post.id == ordered.first().id } } &&
-                activeMediaShowsFixturePixels()
+        activate(compose.onNodeWithTag(searchCardTestTag(ordered.first().id)))
+        compose.waitUntil(conditionDescription = "Viewer records the first offline post", timeoutMillis = 10_000) {
+            io { container.data.recentsRepository.observeWatchedPosts().first().any { it.post.id == ordered.first().id } }
+        }
+        val activeMedia = compose.onNodeWithContentDescription("Media actions", useUnmergedTree = true)
+        compose.waitUntil(conditionDescription = "Viewer displays the first active media surface", timeoutMillis = 10_000) {
+            activeMedia.isDisplayed()
+        }
+        compose.waitUntil(conditionDescription = "First offline post renders the retained cyan PNG", timeoutMillis = 10_000) {
+            activeMediaShowsFixturePixels()
         }
         compose.onNodeWithContentDescription(requireNotNull(ordered.first().title)).assertIsDisplayed()
-        val activeMedia = compose.onNodeWithContentDescription("Media actions", useUnmergedTree = true)
-        activeMedia.assertIsDisplayed()
         // The active overlay owns the swipe detector; image semantics can exist during route entry.
         // Stay away from system back-gesture edges while crossing well beyond the 12% paging threshold.
         activeMedia.performTouchInput {
@@ -82,9 +85,11 @@ class OfflineCollectionJourneyTest : AppJourneyFixture() {
                 durationMillis = 400L,
             )
         }
-        compose.waitUntil(10_000) {
-            io { container.data.recentsRepository.observeWatchedPosts().first().any { it.post.id == ordered.last().id } } &&
-                activeMediaShowsFixturePixels()
+        compose.waitUntil(conditionDescription = "Viewer swipe records the second offline post", timeoutMillis = 10_000) {
+            io { container.data.recentsRepository.observeWatchedPosts().first().any { it.post.id == ordered.last().id } }
+        }
+        compose.waitUntil(conditionDescription = "Second offline post renders the retained cyan PNG", timeoutMillis = 10_000) {
+            activeMediaShowsFixturePixels()
         }
         compose.onNodeWithContentDescription(requireNotNull(ordered.last().title)).assertIsDisplayed()
         val viewed = io { container.data.recentsRepository.observeWatchedPosts().first() }

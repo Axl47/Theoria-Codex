@@ -4,11 +4,11 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -36,13 +36,13 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
     @Test
     fun groupedSearchPagesReturnsFromViewerAndSurvivesActivityRecreation() {
         launch()
-        compose.onNodeWithTag("Search query input").performClick()
-        compose.onNodeWithContentDescription("Pixiv").performClick()
+        activate(compose.onNodeWithTag("Search query input"))
+        activate(compose.onNodeWithContentDescription("Pixiv"))
         addSearchTag("landscape")
         addSearchTag("blue")
-        compose.onNodeWithText("blue").performClick()
+        activate(compose.onNodeWithText("blue"))
         compose.onNodeWithText("Tag").performTextInput("green")
-        compose.onNodeWithText("Add alternative").performClick()
+        activate(compose.onNodeWithText("Add alternative"))
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         repeat(2) {
             if (compose.onAllNodesWithTag("Include group sheet").fetchSemanticsNodes().isNotEmpty()) {
@@ -50,7 +50,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
                 compose.waitForIdle()
             }
         }
-        compose.onNodeWithText("Apply").performClick()
+        activate(compose.onNodeWithText("Apply"))
         waitForCard(0)
         compose.onNodeWithText("Pixiv · landscape AND (blue OR green)").assertIsDisplayed()
         val root = container.registry.requests.single { it.source == SourceKey.PIXIV && it.pageToken == null }
@@ -62,20 +62,22 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         val cardTag = searchCardTestTag(posts.getValue(SourceKey.PIXIV)[22].id)
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
         val before = cardOffsetInViewport(cardTag)
-        compose.onNodeWithTag(cardTag).performClick()
+        activate(compose.onNodeWithTag(cardTag))
         compose.waitUntil(10_000) {
             io { container.data.statisticsRepository.observeStatistics().first().watchedPostCount == 1L }
         }
         scenario.recreate()
         compose.onNodeWithContentDescription(requireNotNull(posts.getValue(SourceKey.PIXIV)[22].title)).assertIsDisplayed()
         device.pressBack()
+        waitForCard(22)
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
         assertEquals(before, cardOffsetInViewport(cardTag), 2f)
         tab("Settings")
         tab("Search")
+        waitForCard(22)
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
         scenario.recreate()
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag(cardTag).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10_000) { compose.onNodeWithTag(cardTag).isDisplayed() }
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
         assertEquals(before, cardOffsetInViewport(cardTag), 2f)
         assertEquals(1, io { container.data.recentsRepository.observeSearches().first().size })
@@ -88,10 +90,10 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
     @Test
     fun coldGraphRelaunchRestoresAppliedSourceQueryAndCanonicalScrollFromDisk() {
         launch()
-        compose.onNodeWithTag("Search query input").performClick()
-        compose.onNodeWithContentDescription("Pixiv").performClick()
+        activate(compose.onNodeWithTag("Search query input"))
+        activate(compose.onNodeWithContentDescription("Pixiv"))
         addSearchTag("landscape")
-        compose.onNodeWithText("Apply").performClick()
+        activate(compose.onNodeWithText("Apply"))
         waitForCard(0)
         val applied = container.registry.requests.single { it.source == SourceKey.PIXIV && it.pageToken == null }.query
         val queryHash = QueryHash.from(applied)
@@ -112,7 +114,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
 
         org.junit.Assert.assertNotSame(previousDatabase, container.database)
         org.junit.Assert.assertNotSame(previousSettings, container.settings)
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag(cardTag).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10_000) { compose.onNodeWithTag(cardTag).isDisplayed() }
         compose.onNodeWithText("Pixiv · landscape").assertIsDisplayed()
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
         assertEquals(offset, cardOffsetInViewport(cardTag), 2f)
@@ -135,8 +137,8 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         }
         launch()
         tab("Recents")
-        compose.onNodeWithText("Searches").performClick()
-        compose.onNodeWithTag("Recent search:journey:multi").performClick()
+        activate(compose.onNodeWithText("Searches"))
+        activate(compose.onNodeWithTag("Recent search:journey:multi"))
         waitForCard(0)
         val multiRequests = container.registry.requests.filter { it.pageToken == null }
         assertEquals(setOf(SourceKey.GELBOORU, SourceKey.PIXIV), multiRequests.map { it.source }.toSet())
@@ -144,8 +146,8 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         assertTrue(io { container.data.queryRepository.observeAppliedQuery("unified").first() == null })
         container.registry.requests.clear()
         tab("Recents")
-        compose.onNodeWithText("FYP").performClick()
-        compose.onNodeWithTag("Recent search:for_you:journey").performClick()
+        activate(compose.onNodeWithText("FYP"))
+        activate(compose.onNodeWithTag("Recent search:for_you:journey"))
         compose.waitUntil(10_000) { container.registry.requests.count { it.pageToken == null } >= 2 }
         val replay = container.registry.requests.filter { it.pageToken == null }
         assertEquals(sourceTags, replay.associate { it.source to it.query.includeTags })
@@ -159,13 +161,12 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         compose.waitUntil(10_000) {
             input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty()
         }
-        input.performClick()
+        activate(input)
         input.performTextInput(value)
-        // IME Done is ignored until the same admission state enables the visible Add action.
+        val add = hasText("Add", substring = false) and isEnabled() and hasClickAction()
         compose.waitUntil(10_000) {
             input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text == value &&
-                compose.onAllNodes(hasText("Add", substring = false) and isEnabled() and hasClickAction())
-                    .fetchSemanticsNodes().isNotEmpty()
+                compose.onAllNodes(add).fetchSemanticsNodes().isNotEmpty()
         }
         input.performImeAction()
         compose.waitUntil(10_000) {
@@ -215,7 +216,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
 
     private fun waitForCard(index: Int) {
         val tag = searchCardTestTag(posts.getValue(SourceKey.PIXIV)[index].id)
-        compose.waitUntil(10_000) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10_000) { compose.onNodeWithTag(tag).isDisplayed() }
         compose.onNodeWithTag(tag).assertIsDisplayed()
     }
 

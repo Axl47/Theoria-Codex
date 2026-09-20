@@ -2,10 +2,13 @@ package com.theoriacodex.app.journeys
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithContentDescription
-import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import com.theoriacodex.app.fixtures.JourneyAppContainer
@@ -86,8 +89,14 @@ abstract class AppJourneyFixture {
     }
 
     protected fun tab(label: String) {
-        compose.onNodeWithContentDescription(label).performClick()
+        activate(compose.onNodeWithContentDescription(label))
         compose.waitForIdle()
+    }
+
+    /** Exercise the visible control's action without racing its animated touch coordinates. */
+    protected fun activate(node: SemanticsNodeInteraction) {
+        compose.waitUntil(10_000) { node.isDisplayed() }
+        node.performSemanticsAction(SemanticsActions.OnClick)
     }
 
     protected fun <T> io(block: suspend () -> T): T = runBlocking(Dispatchers.IO) { block() }
