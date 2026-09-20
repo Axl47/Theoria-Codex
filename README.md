@@ -7,7 +7,7 @@ Theoria Codex is an Android-first, local-first, tag-driven media browser and col
 The app has five top-level tabs, in bottom-navigation and pager order:
 
 - `Search`: source-specific or Unified search, staged draft/apply behavior, include/exclude terms, source status chips, autocomplete/favorite tag sheets, direct NHentai gallery ID open, and local filters such as `Animated only`, animated duration range, `Hide liked`, and `Hide saved`. Sources with typed taxonomy expose faceted `Tags`, `Artists`, `Characters`, and `Series` scopes, with `Groups`, `Types`, and `Languages` under `More`.
-- `Recents`: local activity history for watched posts and applied searches. Watched posts reopen Viewer as a static recent-post stream; search history entries reapply their saved query in Search. Watched/search/all filters have independent clear actions.
+- `Recents`: independent Watched and Codex activity, applied searches, and exact For You search replay. Galleries resume their last page; Start over preserves the highest-page badge. Name and pin complete searches, rename them, and replay them after clearing history or restarting.
 - `For You`: recommendation browsing from profile-scoped liked posts and source/tag affinity. Users can blacklist the current recommendation seed and manage blacklisted tag sets in Settings.
 - `Codex`: local saved collections. Codices can be created, renamed, reordered, sorted, deleted, downloaded, exported to JSON, imported from JSON, and used as a source-specific tag search launcher.
 - `Settings`: recommendation profiles, source enablement and Unified weights, source accounts, cache controls, provider health snapshots, changelog history, and developer scenario presets in debug builds.
@@ -50,6 +50,7 @@ THEORIA_RULE34XXX_API_KEY
 
 - `app`: Android Compose shell, top-level navigation, viewer/search/codex/settings screens, source account flows, deep links, update UI, and app-level coordinators.
 - `core-domain`: immutable domain models, source adapter contracts, query state, capability gates, unified search orchestration, and recommendation primitives.
+- `app-logic`: platform-free Search reducers, visibility filtering, feed/media policy, recommendation policy, and duration scheduling.
 - `core-data`: storage-independent repository contracts, shared policy, DataStore-backed Settings/UI restore, and the remaining bounded atomic-file repositories.
 - `core-data-android`: Room ownership for Codex membership, versioned post snapshots, and profile Likes, including verified legacy migration.
 - `core-sources`: real source integrations, HTTP infrastructure, source helper policy, media MIME helpers, and opt-in live provider health tooling.
@@ -64,11 +65,14 @@ Search, Viewer, For You, and Creator each have a navigation-scoped ViewModel tha
 
 Runtime state is local-first. The production owners are:
 
-- `databases/theoria_content.db`: Room owns Codices, ordered membership, reusable versioned post snapshots, profile Likes, and cross-boundary transactions.
+- `databases/theoria_content.db`: Room owns Codices, ordered membership, reusable versioned post snapshots, profile Likes, Recents, durable media-duration decisions, and cross-boundary transactions.
 - `theoria_codex/settings_store_v3.json`: typed DataStore file for source settings, profiles, favorites, blacklists, Viewer settings, health snapshots, and cache preferences.
 - `theoria_codex/ui_restore_store_v2.json`: typed DataStore file for the selected tab, Search scroll state, and Viewer launch restoration.
-- `theoria_codex/query_store.json`: applied queries and scroll offsets.
-- `theoria_codex/recents_store.json`: watched posts, applied searches, and combined activity history.
+- `theoria_codex/query_store.json`: applied queries; Search scroll state belongs to UI restore storage.
+- `theoria_codex/pinned_searches.json`: bounded named searches independent of rolling history.
+- `theoria_codex/reading_positions.json`: last gallery page, separate from Recents' highest-page progress.
+- `theoria_codex/offline_media`: verified complete media copies shared across offline collections, separate from disposable playback caches.
+- `theoria_codex/pending_profile_restore.json`: temporary durable intent used to complete an interrupted additive backup restore before opening routes.
 - `theoria_codex/tag_suggestions.json`: learned/cached tag suggestions seeded from the bundled `tag_store.json` asset.
 - `theoria_codex/update_state.json`: startup updater state, ignored/remind-later choices, pending install metadata, and changelog state.
 - `theoria_codex/cache/thumbnails` and `theoria_codex/cache/full`: local media cache folders.
@@ -77,7 +81,11 @@ Legacy `codex_store.json`, `likes_store.json`, `settings_store.json`, and `ui_re
 
 ## Deep Links And Imports
 
-The Android manifest handles Pixiv auth callbacks, source post/profile links for supported providers, and JSON file/content URIs for Codex import. Hitomi routing accepts reader links and gallery paths for anime, CG, doujinshi, manga, artist-CG, game-CG, and image-set posts, plus `artist/<slug>-all.html` creator links. Codex export files contain the title plus source/post IDs, so imports reconstruct collections from source-backed post identities instead of copying the whole local cache.
+The Android manifest handles Pixiv auth callbacks, source post/profile links for supported providers, and JSON file/content URIs for Codex import. Hitomi routing accepts reader links and gallery paths for anime, CG, doujinshi, manga, artist-CG, game-CG, and image-set posts, plus `artist/<slug>-all.html` creator links. Codex sharing includes post identities and portable snapshots so collection metadata can import without a live provider.
+
+Settings > Storage & Caching also exports all profiles, collections, Likes, automatic rules, follows, favorites, named searches, and preferences, with optional Recents and reading positions. Restore previews the archive and adds new profiles alongside existing data; applying global preferences is optional. Credentials, downloaded media, signed media URLs, and device paths are excluded. Interrupted restores resume from a verified intent journal.
+
+Collection actions offer Make available offline. Only complete verified galleries count as available; shared copies are retained until their final collection owner is removed. Manage storage reports bytes, exposes offline progress/retry/cancel, and clears disposable Coil, video, GIF, and Ugoira caches separately from offline copies. Keep media offline when saving queues acquisition after the collection transaction completes. Save to device uses a separate bounded DownloadManager queue with progress, cancellation, and failed-item retry; preparation survives Activity recreation but is not a durable process-restart queue.
 
 ## Releases And Updates
 
