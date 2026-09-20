@@ -432,6 +432,8 @@ interface SettingsRepository {
 data class CacheSnapshot(
     val thumbnailCount: Int,
     val fullImageCount: Int,
+    val thumbnailBytes: Long = 0L,
+    val fullImageBytes: Long = 0L,
 )
 
 interface CacheRepository {

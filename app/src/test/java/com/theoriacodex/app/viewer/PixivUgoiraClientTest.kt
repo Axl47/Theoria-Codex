@@ -218,6 +218,25 @@ class PixivUgoiraClientTest {
         assertEquals(3, calls.get())
     }
 
+    @Test
+    fun `offline archive survives disposable clearing and works without credentials`() = runTest {
+        val original = fixtureClient()
+        val offline = File(temporaryFolder.newFolder("offline"), "animation.zip")
+        original.copyArchiveForOffline("pinned", offline)
+        assertNotNull(readUgoiraFrameMetadata(offline))
+        assertTrue(original.clearDisposableCache())
+        val reopened = PixivUgoiraClient(
+            credentialsProvider = CancellingCredentialsProvider(CancellationException("Network was reached")),
+            httpClient = UnusedHttpClient,
+            archiveDirectory = temporaryFolder.newFolder("empty-cache"),
+            offlineArchiveLookup = { offline },
+        )
+        assertTrue(reopened.load("pinned", UgoiraSizeBucket.CARD).isSuccess)
+        assertTrue(reopened.clearDisposableCache())
+        assertTrue(offline.isFile)
+        assertEquals(0L, reopened.disposableCacheBytes())
+    }
+
     private fun fixtureClient(
         directory: File = temporaryFolder.newFolder(),
         timeoutMs: Long = 30_000L,
