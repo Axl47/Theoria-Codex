@@ -13,6 +13,9 @@ import com.theoriacodex.app.di.WorkflowDependencies
 import com.theoriacodex.app.media.BoundedMediaDurationProbe
 import com.theoriacodex.app.media.MediaDurationAcquisitionEngine
 import com.theoriacodex.app.media.MediaDurationCoordinator
+import com.theoriacodex.app.media.OfflineAwareCacheRepository
+import com.theoriacodex.app.media.OfflineMediaCoordinator
+import com.theoriacodex.app.media.validateOfflineMediaFile
 import com.theoriacodex.app.recommend.ForYouCoordinator
 import com.theoriacodex.app.related.RelatedPostsLoader
 import com.theoriacodex.app.search.FileBackedTagSuggestionStore
@@ -37,6 +40,11 @@ import com.theoriacodex.data.repository.DataStoreStatisticsRepository
 import com.theoriacodex.data.repository.DataStoreUiRestoreRepository
 import com.theoriacodex.data.repository.FileBackedCacheRepository
 import com.theoriacodex.data.repository.FileBackedQueryRepository
+import com.theoriacodex.data.repository.FileBackedReadingPositionRepository
+import com.theoriacodex.data.repository.FileBackedSavedSearchRepository
+import com.theoriacodex.data.repository.ProfileBackupService
+import com.theoriacodex.data.repository.OfflineMediaStore
+import com.theoriacodex.data.android.room.RoomProfileBackupStore
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -78,10 +86,28 @@ class JourneyAppContainer(
         override suspend fun latestMainPrerelease(): Result<RemoteUpdate?> = Result.success(null)
         override suspend fun mainPrereleaseHistory(limit: Int): Result<List<RemoteUpdate>> = Result.success(emptyList())
     }
+    private val offline = OfflineMediaCoordinator(
+        store = OfflineMediaStore(storageDirectory.resolve("offline-media")),
+        scope = ownerScope,
+        resolve = { post -> checkNotNull(registry.adapterFor(post.id.source)?.resolvePost(post.id)) },
+        selectMedia = { post -> post.media.ifEmpty { listOfNotNull(post.full) } },
+        acquire = { _, media, output ->
+            withContext(Dispatchers.IO) {
+                // Journey providers supply real fixture files. Remote transport is deliberately unavailable.
+                val source = File(checkNotNull(media.localPath) { "Fixture offline media must be local" })
+                check(source.isFile && source.length() > 0L) { "Fixture media is missing" }
+                source.copyTo(output, overwrite = true)
+                validateOfflineMediaFile(output)
+            }
+        },
+    )
     override val data = DataDependencies(
         storageDirectory, content, content, FileBackedQueryRepository(storageDirectory),
-        RoomRecentsRepository(database), settings, statistics, FileBackedCacheRepository(storageDirectory),
+        RoomRecentsRepository(database), settings, statistics,
+        OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offline),
         restore, durations, MutableStateFlow(emptyList()),
+        readingPositions = FileBackedReadingPositionRepository(storageDirectory),
+        savedSearches = FileBackedSavedSearchRepository(storageDirectory),
     )
     override val sources = SourceDependencies(
         httpClient, accounts, auth, PixivPkceController(auth, accounts, InMemoryPixivPkceSessionStore()),
@@ -106,14 +132,19 @@ class JourneyAppContainer(
             durationRepository = durations, parentScope = ownerScope,
         ),
         appUsageTracker = AppUsageTracker(statistics, ownerScope),
+        offlineMedia = offline,
     )
     override val workflows = WorkflowDependencies(
         LikesCodexSyncService(content, content), CodexTransferService(content, content, data.cacheRepository, registry),
+        profileBackup = ProfileBackupService(settings, RoomProfileBackupStore(database), data.savedSearches,
+            data.readingPositions, storageDirectory.resolve("pending_profile_restore.json")),
     )
     suspend fun awaitReady() {
         settings.awaitReady()
         restore.awaitReady()
         statistics.awaitReady()
+        workflows.profileBackup?.recoverPendingRestore()
+        offline.store.refresh()
         settings.setEnabledSources(registry.availableSources())
         settings.setResolveUnknownAnimatedDurations(false)
     }

@@ -145,13 +145,14 @@ internal class PostDownloadQueue(
                 }
             }
         } catch (cancelled: CancellationException) {
-            if (currentItem(item.id)?.status == PostDownloadStatus.CANCELLED) {
-                withContext(NonCancellable) { downloadId?.let { backend.cancel(it) } }
-            }
             throw cancelled
         } catch (error: Exception) {
             val message = if (error is DownloadPreparationException) error.message else "Could not save this post. Try again."
             update(item.id) { it.copy(status = PostDownloadStatus.FAILED, message = message) }
+        } finally {
+            if (currentItem(item.id)?.status == PostDownloadStatus.CANCELLED) {
+                withContext(NonCancellable) { downloadId?.let { backend.cancel(it) } }
+            }
         }
     }
 

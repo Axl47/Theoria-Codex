@@ -1,22 +1,19 @@
 package com.theoriacodex.app.ui.routes
 
-import com.theoriacodex.app.media.animationExportNetworkBlock
 import android.content.Context
 import com.theoriacodex.app.di.DataDependencies
 import com.theoriacodex.app.di.SourceDependencies
-import com.theoriacodex.app.media.PostDownloadService
 import com.theoriacodex.app.media.appClipboardConfirmationMessage
 import com.theoriacodex.app.media.copyPostUrlToClipboard
-import com.theoriacodex.app.media.isPixivUgoiraPost
 import com.theoriacodex.app.media.recoverRemoteMedia
 import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.statistics.statisticsTagsForPost
 import com.theoriacodex.app.viewer.ViewerSession
+import com.theoriacodex.app.viewer.ViewerRestorationRequest
 import com.theoriacodex.app.viewer.prepareViewerPostsForLaunch
-import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
-import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.RecentPostSection
+import com.theoriacodex.data.repository.ReadingPosition
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
@@ -27,6 +24,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Bridges Viewer route work to the application-scoped engines and repositories.
@@ -41,6 +39,7 @@ internal class ViewerRouteWorkflow(
     private val searchOwner: () -> SearchRouteOwnerHandle?,
     private val forYouOwner: () -> ForYouRouteOwnerHandle?,
     private val creatorOwner: () -> CreatorRouteOwnerHandle?,
+    private val offlineMedia: com.theoriacodex.app.media.OfflineMediaCoordinator? = null,
 ) {
     suspend fun persistResolvedPost(post: Post, streamSource: ViewerStreamSource) {
         when (streamSource) {
@@ -72,6 +71,7 @@ internal class ViewerRouteWorkflow(
     }
 
     suspend fun resolvePost(postId: PostId, streamSource: ViewerStreamSource): Post? {
+        offlineMedia?.find(postId)?.let { return it }
         val adapter = checkNotNull(sources.registry.adapterFor(postId.source)) {
             "${postId.source.name} is unavailable"
         }
@@ -113,17 +113,25 @@ internal class ViewerRouteWorkflow(
         posts: List<Post>,
         context: ViewerLaunchContext,
     ): List<Post> {
-        return prepareViewerPostsForLaunch(posts, context) { selectedPost ->
+        val offlineIds = offlineMedia?.store?.snapshot?.value?.availablePostIds.orEmpty()
+        val availablePosts = posts.map { post ->
+            val portable = offlineMedia?.withoutOfflineLocations(post) ?: post
+            if (post.id in offlineIds) offlineMedia?.find(post.id) ?: portable else portable
+        }
+        return prepareViewerPostsForLaunch(availablePosts, context) { selectedPost ->
             runCatchingPreservingCancellation {
                 resolvePost(selectedPost.id, context.streamSource)
             }.getOrNull()
         }
     }
 
-    suspend fun restoreSession(identity: ViewerSessionIdentity): ViewerSession? {
+    suspend fun restoreSession(request: ViewerRestorationRequest): ViewerSession? {
+        val identity = request.session
         val streamSource = identity.streamKey
             ?.let { name -> ViewerStreamSource.entries.firstOrNull { source -> source.name == name } }
             ?: return null
+        if (streamSource == ViewerStreamSource.RELATED) return null
+        val selectedId = request.selectedPostId ?: return null
         val restoredContext = data.uiRestoreRepository.observeViewerLaunchContext()
             .first()
             ?.takeIf { context ->
@@ -136,38 +144,61 @@ internal class ViewerRouteWorkflow(
                 streamSource = streamSource,
                 scrollOffsetHint = 0,
             )
-        val posts = when (streamSource) {
-            ViewerStreamSource.SEARCH -> searchOwner()?.currentState()?.content?.results.orEmpty()
-            ViewerStreamSource.FOR_YOU -> forYouOwner()?.currentState()?.results.orEmpty()
-            ViewerStreamSource.CREATOR_PROFILE -> creatorOwner()?.currentState()?.results.orEmpty()
-            ViewerStreamSource.RELATED -> emptyList()
-            ViewerStreamSource.RECENTS -> data.recentsRepository
-                .observeWatchedPosts()
-                .first()
-                .filter { entry ->
-                    restoredContext.recentsSection == null ||
-                        entry.section == restoredContext.recentsSection
-                }
-                .map { entry -> entry.post }
-            ViewerStreamSource.CODEX -> identity.queryHash
-                ?.removePrefix("codex:")
-                ?.takeIf(String::isNotBlank)
-                ?.let { codexId ->
-                    data.codexRepository.observeCodexPosts(codexId, CodexSortMode.NEWEST_SAVED).first()
-                }
-                .orEmpty()
+        val recentPosts = data.recentsRepository.observeWatchedPosts().first().associate { it.post.id to it.post }
+        val orderedIds = request.orderedPostIds.ifEmpty { listOf(selectedId) }.distinct()
+        val restored = linkedMapOf<PostId, Post>()
+        for (postId in orderedIds) {
+            val post = offlineMedia?.find(postId) ?: data.codexRepository.getPost(postId) ?: recentPosts[postId]
+            if (post != null) restored[postId] = post
         }
-        if (posts.isEmpty()) return null
+        val selected = restored[selectedId]
+        if (selected == null || request.selectedMediaIndex >= selected.media.size.coerceAtLeast(1)) {
+            val resolved = resolveRestoredPost(selectedId)
+            if (resolved != null) restored[selectedId] = resolved
+        }
+        if (selectedId !in restored) return null
+        val posts = orderedIds.mapNotNull(restored::get)
+        val selectedIndex = posts.indexOfFirst { it.id == selectedId }
+        if (selectedIndex < 0) return null
         return ViewerSession(
             posts = posts,
-            context = restoredContext,
-            liveSearchBinding = streamSource in setOf(
-                ViewerStreamSource.SEARCH,
-                ViewerStreamSource.FOR_YOU,
-                ViewerStreamSource.CREATOR_PROFILE,
+            context = restoredContext.copy(
+                startIndex = selectedIndex,
+                recentsSection = request.recentsSection ?: restoredContext.recentsSection,
             ),
+            // A cold reconstruction is the saved ordered window, never a fresh/unrelated feed.
+            liveSearchBinding = false,
             sessionId = identity.value,
+            initialMediaIndex = request.selectedMediaIndex,
         )
+    }
+
+    suspend fun prepareRecentSession(
+        posts: List<Post>,
+        context: ViewerLaunchContext,
+        startOver: Boolean = false,
+    ): ViewerSession {
+        val index = context.startIndex.coerceIn(0, posts.lastIndex)
+        val selected = posts[index]
+        val section = recentPostSectionForViewer(context)
+        val mediaNumber = if (startOver) 1 else runCatchingPreservingCancellation {
+            data.readingPositions.get(selected.id, section)?.mediaNumber
+        }.getOrNull() ?: 1
+        val prepared = preparePostsForLaunch(posts, context).toMutableList()
+        if (mediaNumber > prepared[index].media.size.coerceAtLeast(1)) {
+            resolveRestoredPost(selected.id)?.let { prepared[index] = it }
+        }
+        if (startOver) {
+            runCatchingPreservingCancellation {
+                data.readingPositions.record(ReadingPosition(selected.id, section, 1, System.currentTimeMillis()))
+            }
+        }
+        return ViewerSession(posts = prepared, context = context, initialMediaIndex = mediaNumber - 1)
+    }
+
+    private suspend fun resolveRestoredPost(postId: PostId): Post? = withTimeoutOrNull(15_000L) {
+        offlineMedia?.find(postId)
+            ?: runCatchingPreservingCancellation { sources.registry.adapterFor(postId.source)?.resolvePost(postId) }.getOrNull()
     }
 
     suspend fun recordVisiblePost(
@@ -176,6 +207,7 @@ internal class ViewerRouteWorkflow(
         session: ViewerSession?,
     ) {
         val origin = session?.context?.streamSource ?: ViewerStreamSource.SEARCH
+        recordReadingPosition(post, viewedMediaNumber, session)
         runCatchingPreservingCancellation {
             data.statisticsRepository.recordWatchedPost(
                 source = post.id.source,
@@ -183,7 +215,7 @@ internal class ViewerRouteWorkflow(
             )
         }
         data.recentsRepository.recordWatchedPost(
-            post = post,
+            post = offlineMedia?.withoutOfflineLocations(post) ?: post,
             origin = origin,
             originQueryHash = session?.context?.queryHash,
             section = recentPostSectionForViewer(session?.context),
@@ -197,13 +229,24 @@ internal class ViewerRouteWorkflow(
         session: ViewerSession?,
     ) {
         val origin = session?.context?.streamSource ?: ViewerStreamSource.SEARCH
-        data.recentsRepository.recordWatchedMediaProgress(
-            post = post,
-            origin = origin,
-            originQueryHash = session?.context?.queryHash,
-            section = recentPostSectionForViewer(session?.context),
-            viewedMediaNumber = viewedMediaNumber,
-        )
+        recordReadingPosition(post, viewedMediaNumber, session)
+        runCatchingPreservingCancellation {
+            data.recentsRepository.recordWatchedMediaProgress(
+                post = post,
+                origin = origin,
+                originQueryHash = session?.context?.queryHash,
+                section = recentPostSectionForViewer(session?.context),
+                viewedMediaNumber = viewedMediaNumber,
+            )
+        }
+    }
+
+    private suspend fun recordReadingPosition(post: Post, mediaNumber: Int, session: ViewerSession?) {
+        runCatchingPreservingCancellation {
+            data.readingPositions.record(
+                ReadingPosition(post.id, recentPostSectionForViewer(session?.context), mediaNumber, System.currentTimeMillis()),
+            )
+        }
     }
 }
 
@@ -220,39 +263,4 @@ internal fun shareViewerPostMessage(
     val copied = post?.let { copyPostUrlToClipboard(context, it) } == true
     if (copied) onPostUrlCopied()
     return if (copied) appClipboardConfirmationMessage("Post URL copied") else "No post URL available"
-}
-
-internal suspend fun downloadViewerMediaMessage(
-    context: Context,
-    sources: SourceDependencies,
-    request: ViewerDownloadRequest?,
-    settings: com.theoriacodex.data.repository.CacheSettings = com.theoriacodex.data.repository.CacheSettings(),
-): String {
-    val blocked = if (request != null && isPixivUgoiraPost(request.post)) context.animationExportNetworkBlock(settings) else null
-    return when {
-    request == null -> "Media unavailable"
-    blocked != null -> blocked
-    isPixivUgoiraPost(request.post) -> sources.pixivUgoiraClient
-        .exportToMp4(
-            context = context,
-            postId = request.post.id.sourcePostId,
-            title = request.post.title,
-        )
-        .fold(
-            onSuccess = { "Saved MP4 to device" },
-            onFailure = { error ->
-                "Could not export MP4: ${error.message ?: "unknown error"}"
-            },
-        )
-    PostDownloadService.enqueueViewerDownload(
-        context = context,
-        post = request.post,
-        media = request.media,
-        pageIndex = request.pageIndex,
-        totalPages = request.totalPages,
-        settings = settings,
-    ) -> "Download started"
-    else -> "Media unavailable"
-}
-
 }

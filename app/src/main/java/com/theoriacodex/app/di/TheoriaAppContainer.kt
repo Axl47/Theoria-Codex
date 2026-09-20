@@ -6,6 +6,9 @@ import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.media.BoundedMediaDurationProbe
 import com.theoriacodex.app.media.MediaDurationAcquisitionEngine
 import com.theoriacodex.app.media.MediaDurationCoordinator
+import com.theoriacodex.app.media.OfflineAwareCacheRepository
+import com.theoriacodex.app.media.OfflineMediaAcquisition
+import com.theoriacodex.app.media.OfflineMediaCoordinator
 import com.theoriacodex.app.codex.LikesCodexSyncService
 import com.theoriacodex.app.codex.transfer.CodexTransferService
 import com.theoriacodex.app.recommend.ForYouCoordinator
@@ -41,6 +44,14 @@ import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.data.repository.MediaDurationRepository
 import com.theoriacodex.data.repository.QueryRepository
 import com.theoriacodex.data.repository.RecentsRepository
+import com.theoriacodex.data.repository.ReadingPositionRepository
+import com.theoriacodex.data.repository.FileBackedReadingPositionRepository
+import com.theoriacodex.data.repository.InMemoryReadingPositionRepository
+import com.theoriacodex.data.repository.FileBackedSavedSearchRepository
+import com.theoriacodex.data.repository.InMemorySavedSearchRepository
+import com.theoriacodex.data.repository.SavedSearchRepository
+import com.theoriacodex.data.repository.OfflineMediaStore
+import com.theoriacodex.data.repository.ProfileBackupService
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
@@ -55,9 +66,11 @@ import com.theoriacodex.data.android.room.RoomMediaDurationRepository
 import com.theoriacodex.data.android.room.RecentsImportResult
 import com.theoriacodex.data.android.room.RoomRecentsLegacyImporter
 import com.theoriacodex.data.android.room.RoomRecentsRepository
+import com.theoriacodex.data.android.room.RoomProfileBackupStore
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.SourceKey
+import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.sources.RealAdapterRegistry
 import com.theoriacodex.sources.http.DefaultSourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -83,6 +96,8 @@ data class DataDependencies(
     val uiRestoreRepository: UiRestoreRepository,
     val mediaDurationRepository: MediaDurationRepository,
     val legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>>,
+    val readingPositions: ReadingPositionRepository = InMemoryReadingPositionRepository(),
+    val savedSearches: SavedSearchRepository = InMemorySavedSearchRepository(),
 )
 
 data class SourceDependencies(
@@ -108,11 +123,13 @@ data class FeatureDependencies(
     val creatorProfile: CreatorProfileCoordinator,
     val mediaDurationCoordinator: MediaDurationCoordinator,
     val appUsageTracker: AppUsageTracker,
+    val offlineMedia: OfflineMediaCoordinator? = null,
 )
 
 data class WorkflowDependencies(
     val likesCodexSync: LikesCodexSyncService,
     val codexTransfer: CodexTransferService,
+    val profileBackup: ProfileBackupService? = null,
 )
 
 interface TheoriaAppContainer {
@@ -139,6 +156,7 @@ internal class DefaultTheoriaAppContainer(
     private val appContext = context.applicationContext
     private val storageDirectory = File(appContext.filesDir, "theoria_codex")
     private val durableStoreScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val offlineStore = OfflineMediaStore(File(storageDirectory, "offline_media"))
     private val legacyJsonRecoveryRegistry = LegacyJsonRecoveryRegistry()
     private val tagSuggestionStore = FileBackedTagSuggestionStore(
         storeFile = File(storageDirectory, "tag_suggestions.json"),
@@ -164,6 +182,9 @@ internal class DefaultTheoriaAppContainer(
         httpClient = sourceHttpClient,
         tokenCoordinator = pixivTokenCoordinator,
         archiveDirectory = File(appContext.cacheDir, "theoria_codex/pixiv/ugoira"),
+        offlineArchiveLookup = { id ->
+            offlineStore.find(PostId(SourceKey.PIXIV, id))?.full?.localPath?.let(::File)
+        },
     )
     private val allPotentialSourceRegistry = RealAdapterRegistry(
         credentialsProvider = accountStore,
@@ -210,7 +231,24 @@ internal class DefaultTheoriaAppContainer(
         baseDirectory = storageDirectory,
         scope = durableStoreScope,
     )
-    private val cacheRepository = FileBackedCacheRepository(storageDirectory)
+    private val offlineAcquisition = OfflineMediaAcquisition(appContext, sourceRegistry, settingsRepository, pixivUgoiraClient)
+    private val offlineMedia = OfflineMediaCoordinator(
+        store = offlineStore,
+        scope = durableStoreScope,
+        resolve = offlineAcquisition::resolve,
+        selectMedia = offlineAcquisition::selectMedia,
+        acquire = offlineAcquisition::acquire,
+    )
+    private val cacheRepository = OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offlineMedia)
+    private val readingPositions = FileBackedReadingPositionRepository(storageDirectory)
+    private val savedSearches = FileBackedSavedSearchRepository(storageDirectory, recoveryRegistry = legacyJsonRecoveryRegistry)
+    private val profileBackup = ProfileBackupService(
+        settings = settingsRepository,
+        store = RoomProfileBackupStore(contentDatabase),
+        savedSearches = savedSearches,
+        readingPositions = readingPositions,
+        journalFile = File(storageDirectory, "pending_profile_restore.json"),
+    )
     private val uiRestoreRepository = DataStoreUiRestoreRepository(
         baseDirectory = storageDirectory,
         scope = durableStoreScope,
@@ -254,6 +292,8 @@ internal class DefaultTheoriaAppContainer(
         uiRestoreRepository = uiRestoreRepository,
         mediaDurationRepository = mediaDurationRepository,
         legacyJsonRecoveries = legacyJsonRecoveryRegistry.recoveries,
+        readingPositions = readingPositions,
+        savedSearches = savedSearches,
     )
 
     override val sources = SourceDependencies(
@@ -295,6 +335,7 @@ internal class DefaultTheoriaAppContainer(
             follows = com.theoriacodex.data.repository.CreatorFollowsRepository(settingsRepository)),
         mediaDurationCoordinator = mediaDurationCoordinator,
         appUsageTracker = appUsageTracker,
+        offlineMedia = offlineMedia,
     )
 
     override val workflows = WorkflowDependencies(
@@ -308,6 +349,7 @@ internal class DefaultTheoriaAppContainer(
             cacheRepository = cacheRepository,
             sourceRegistry = sourceRegistry,
         ),
+        profileBackup = profileBackup,
     )
 
     /** Complete typed-store migration before any route can observe default placeholder state. */
@@ -320,6 +362,8 @@ internal class DefaultTheoriaAppContainer(
         statisticsReady.await()
         uiRestoreReady.await()
         contentReady.await()
+        profileBackup.recoverPendingRestore()
+        offlineStore.refresh()
     }
 
     private suspend fun awaitContentStore() {

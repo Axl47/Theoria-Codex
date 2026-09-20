@@ -9,10 +9,6 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 
 object PostDownloadService {
-    fun enqueuePostDownload(context: Context, post: Post,
-        settings: com.theoriacodex.data.repository.CacheSettings = com.theoriacodex.data.repository.CacheSettings(),
-    ): Boolean = enqueuePostDownloadId(context, post, settings) != null
-
     internal fun enqueuePostDownloadId(
         context: Context,
         post: Post,
@@ -37,15 +33,6 @@ object PostDownloadService {
             settings = settings,
         )
     }
-
-    fun enqueueViewerDownload(
-        context: Context,
-        post: Post,
-        media: ImageRef,
-        pageIndex: Int,
-        totalPages: Int,
-        settings: com.theoriacodex.data.repository.CacheSettings = com.theoriacodex.data.repository.CacheSettings(),
-    ): Boolean = enqueueViewerDownloadId(context, post, media, pageIndex, totalPages, settings) != null
 
     internal fun enqueueViewerDownloadId(
         context: Context,

@@ -357,6 +357,11 @@ private fun CodexActionSheet(
                 overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
+            actions.makeAvailableOffline?.let { makeOffline ->
+                TextButton(onClick = { state.actionTarget = null; makeOffline(codex.codexId) }) {
+                    Text("Make available offline")
+                }
+            }
             if (presentation.actionLoading) {
                 Text("Loading collection tags…")
             } else if (presentation.actionFailed) {

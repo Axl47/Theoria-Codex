@@ -112,6 +112,7 @@ internal data class CodexListActions(
     val renameCodex: (String, String) -> Unit,
     val setAutomaticTag: (String, CodexAutomaticTag, Boolean) -> Unit,
     val deleteCodex: (String) -> Unit,
+    val makeAvailableOffline: ((String) -> Unit)? = null,
 )
 
 internal data class CodexSourceSelection(val codex: Codex, val source: SourceKey)

@@ -22,6 +22,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 class JourneySourceRegistry(postsBySource: Map<SourceKey, List<Post>>, private val pageSize: Int) : SourceAdapterRegistry {
     data class Request(val source: SourceKey, val query: Query, val pageToken: String?)
     val requests = CopyOnWriteArrayList<Request>()
+    val resolveRequests = CopyOnWriteArrayList<PostId>()
     private val adapters = postsBySource.mapValues { (source, posts) -> FixtureAdapter(source, posts) }
     override fun availableSources() = adapters.keys
     override fun adapterFor(sourceKey: SourceKey): SourceAdapter? = adapters[sourceKey]
@@ -41,7 +42,10 @@ class JourneySourceRegistry(postsBySource: Map<SourceKey, List<Post>>, private v
         }
         override suspend fun searchCreatorPosts(creator: CreatorProfile, pageToken: String?): Page<Post> = page(posts, pageToken)
         override suspend fun relatedPosts(seed: PostId, limit: Int) = posts.filterNot { it.id == seed }.take(limit)
-        override suspend fun resolvePost(id: PostId) = posts.firstOrNull { it.id == id }
+        override suspend fun resolvePost(id: PostId): Post? {
+            resolveRequests += id
+            return posts.firstOrNull { it.id == id }
+        }
         override suspend fun trendingTags(limit: Int) = suggestions().take(limit)
         override suspend fun autocompleteTags(prefix: String, limit: Int) =
             suggestions().filter { it.text.contains(prefix, ignoreCase = true) }.take(limit)
