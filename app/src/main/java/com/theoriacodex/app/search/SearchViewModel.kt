@@ -212,6 +212,8 @@ internal class SearchViewModel(
 
             is SearchAction.AutocompleteChanged -> refreshAutocomplete(action.input)
 
+            SearchAction.RefreshAutocomplete -> refreshAutocomplete(mutableState.value.suggestions.input)
+
             is SearchAction.IncludeSuggestion -> mutateDraft {
                 SearchDraftReducer.addTerm(it, action.suggestion.toSearchTerm(), excluded = false).state
             }

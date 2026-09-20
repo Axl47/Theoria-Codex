@@ -458,7 +458,8 @@ fun SearchScreen(
                     .onFocusChanged { state ->
                         searchFieldFocused = state.isFocused
                         if (state.isFocused) {
-                            onAction(SearchAction.AutocompleteChanged(input))
+                            // Focus can return before the cleared input has recomposed after submission.
+                            onAction(SearchAction.RefreshAutocomplete)
                         } else {
                             onAction(SearchAction.ClearAutocomplete)
                         }

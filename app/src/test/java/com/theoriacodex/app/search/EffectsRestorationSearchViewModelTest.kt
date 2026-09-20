@@ -65,6 +65,26 @@ import org.junit.runner.Description
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class EffectsRestorationSearchViewModelTest : SearchViewModelTestFixture() {
     @Test
+    fun `focus refresh uses owner input and cannot restore a committed tag`() = runTest(mainDispatcherRule.dispatcher) {
+        val viewModel = viewModel(ViewModelSearchAdapter())
+        restore(viewModel)
+        viewModel.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+        viewModel.onAction(SearchAction.AutocompleteChanged("landscape"))
+        viewModel.onAction(SearchAction.RefreshAutocomplete)
+        advanceUntilIdle()
+        assertEquals("landscape", viewModel.state.value.suggestions.input)
+
+        viewModel.onAction(SearchAction.CommitTagInput("landscape"))
+        viewModel.onAction(SearchAction.ClearAutocomplete)
+        viewModel.onAction(SearchAction.RefreshAutocomplete)
+        advanceUntilIdle()
+
+        assertEquals("", viewModel.state.value.suggestions.input)
+        assertEquals(listOf("landscape"), viewModel.state.value.query.draft.includeTags)
+        assertFalse(viewModel.state.value.suggestions.canCommitInput)
+    }
+
+    @Test
     fun `open result emits buffered typed navigation effect`() =
         runTest(mainDispatcherRule.dispatcher) {
             val viewModel = viewModel(ViewModelSearchAdapter())

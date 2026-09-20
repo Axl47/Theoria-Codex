@@ -54,6 +54,8 @@ Search autocomplete is local-first: query the complete bounded tag lexicon befor
 
 Suggestion origins are storage policy, not user-facing taxonomy. Keep active Trending membership separate from seed, autocomplete, seen, featured, and count-lookup knowledge; replacing Trending must not delete another origin for the same tag. Never display raw cache labels such as `seed`, `seen`, or `pixiv_tags_page`.
 
+Search focus refresh is a parameterless owner event, separate from typed input changes. Focus can return before submission's cleared text recomposes; sending a captured input string from that callback restores the already-committed tag. Read the current ViewModel input when refreshing suggestions instead.
+
 Pixiv suggestion identity is its native tag text. A provider translation is an alternate match/display label only, and selecting the suggestion must still submit the native value. Request Pixiv's current locale, retain its authoritative response order when counts are absent, and persist native/alternate pairs without learning them as two independent recommendation interests.
 
 ## Loading Responsiveness
