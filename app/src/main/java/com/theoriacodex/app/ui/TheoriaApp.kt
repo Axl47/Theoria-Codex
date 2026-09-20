@@ -2077,11 +2077,10 @@ internal fun TheoriaAppContent(
                                 unknownAnimatedDurationPolicy = state.browsing.unknownAnimatedDurationPolicy,
                             ),
                             effectCallbacks = ViewerRouteEffectCallbacks(
-                                onSavePost = { post ->
+                                onSavePost = { post, context ->
                                     requestSaveToCodex(
                                         post = post,
-                                        fromForYou = viewerSessionOwner.session.value
-                                            ?.context?.streamSource == ViewerStreamSource.FOR_YOU,
+                                        fromForYou = context.streamSource == ViewerStreamSource.FOR_YOU,
                                     )
                                 },
                                 onSharePost = { post ->
