@@ -5,6 +5,7 @@ import android.graphics.Color
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.isDisplayed
+import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -95,7 +96,7 @@ abstract class AppJourneyFixture {
 
     /** Exercise the visible control's action without racing its animated touch coordinates. */
     protected fun activate(node: SemanticsNodeInteraction) {
-        compose.waitUntil(10_000) { node.isDisplayed() }
+        compose.waitUntil(10_000) { node.isDisplayed() && isEnabled().matches(node.fetchSemanticsNode()) }
         node.performSemanticsAction(SemanticsActions.OnClick)
     }
 

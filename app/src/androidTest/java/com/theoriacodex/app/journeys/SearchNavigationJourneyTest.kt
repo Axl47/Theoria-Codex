@@ -6,11 +6,15 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isEnabled
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -44,24 +48,49 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         addSearchTag("landscape")
         addSearchTag("blue")
         activate(compose.onNodeWithText("blue"))
-        compose.onNodeWithText("Tag").performTextInput("green")
+        val alternativeInput = compose.onNodeWithText("Tag")
+        alternativeInput.performTextInput("green")
+        compose.waitUntil(conditionDescription = "OR alternative input is ready", timeoutMillis = 10_000) {
+            alternativeInput.fetchSemanticsNode().config[SemanticsProperties.EditableText].text == "green"
+        }
         activate(compose.onNodeWithText("Add alternative"))
+        compose.waitUntil(conditionDescription = "Green alternative is committed to the group", timeoutMillis = 10_000) {
+            alternativeInput.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.isEmpty() &&
+                compose.onNodeWithText("green", substring = false).isDisplayed()
+        }
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.Dismiss), useUnmergedTree = true)
             .performSemanticsAction(SemanticsActions.Dismiss)
         compose.waitUntil(conditionDescription = "Include group sheet is fully dismissed", timeoutMillis = 10_000) {
             compose.onAllNodesWithTag("Include group sheet").fetchSemanticsNodes().isEmpty()
         }
-        activate(compose.onNodeWithText("Apply"))
-        val summary = compose.onNodeWithText("Pixiv · landscape AND (blue OR green)")
-        compose.waitUntil(conditionDescription = "Grouped query is applied and its field is collapsed", timeoutMillis = 10_000) {
-            summary.isDisplayed()
+        // This assertion concerns touch-driven focus dismissal, so Apply receives a real tap.
+        var nativeTouchModeBeforeApply = false
+        scenario.onActivity { nativeTouchModeBeforeApply = it.window.decorView.isInTouchMode }
+        compose.onNodeWithText("Apply").performClick()
+        compose.waitUntil(conditionDescription = "Provider receives the grouped search", timeoutMillis = 10_000) {
+            container.registry.requests.any { it.source == SourceKey.PIXIV && it.pageToken == null }
         }
-        waitForCard(0)
-        summary.assertIsDisplayed()
         val root = container.registry.requests.single { it.source == SourceKey.PIXIV && it.pageToken == null }
         assertEquals(listOf(listOf("landscape"), listOf("blue", "green")),
             root.query.effectiveIncludeTermGroups.map { group -> group.terms.map { it.value } })
+        val summary = compose.onNodeWithText("Pixiv · landscape AND (blue OR green)")
+        try {
+            compose.waitUntil(conditionDescription = "Grouped query is applied and its field is collapsed", timeoutMillis = 10_000) {
+                summary.isDisplayed()
+            }
+        } catch (timeout: ComposeTimeoutException) {
+            var nativeTouchModeAfterApply = false
+            scenario.onActivity { nativeTouchModeAfterApply = it.window.decorView.isInTouchMode }
+            throw AssertionError(
+                "Native touch mode: $nativeTouchModeBeforeApply -> $nativeTouchModeAfterApply\n" +
+                    "Provider queries: ${container.registry.requests.map { it.query }}\n" +
+                    compose.onRoot(useUnmergedTree = true).printToString(),
+                timeout,
+            )
+        }
+        waitForCard(0)
+        summary.assertIsDisplayed()
         scrollToFirstVisibleCard(18)
         compose.waitUntil(10_000) { container.registry.requests.any { it.pageToken == "20" } }
         scrollToFirstVisibleCard(22)
