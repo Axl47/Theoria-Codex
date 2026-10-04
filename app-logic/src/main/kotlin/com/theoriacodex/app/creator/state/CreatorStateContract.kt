@@ -106,39 +106,40 @@ fun CreatorUiState.reduce(action: CreatorAction): CreatorTransition = when (acti
     )
     is CreatorAction.OpenResult -> openResult(action)
     CreatorAction.Back -> CreatorTransition(this, CreatorEffect.NavigateBack)
-    is CreatorAction.PageLoaded -> {
-        if (activeRequest != action.request) {
-            unchanged()
-        } else {
-            val posts = mergeFeedPosts(
-                if (action.request.kind == CreatorRequestKind.REFRESH) emptyList() else results,
-                action.page.items,
-            )
-            CreatorTransition(copy(
-                results = posts,
-                nextPageToken = action.page.nextPageToken?.takeIf(String::isNotBlank),
-                isRefreshing = false,
-                isPaging = false,
-                errorMessage = null,
-                failureReason = null,
-                emptyReason = if (posts.isEmpty()) CreatorEmptyReason.NO_RESULTS else null,
-                activeRequest = null,
-            ))
-        }
-    }
+    is CreatorAction.PageLoaded -> pageLoaded(action)
     is CreatorAction.RequestFailed -> {
         if (activeRequest != action.request) unchanged() else CreatorTransition(
             failed(action.message, action.reason, action.request.kind == CreatorRequestKind.REFRESH)
         )
     }
-    is CreatorAction.RequestCancelled -> {
-        if (activeRequest != action.request) unchanged() else CreatorTransition(copy(
-            isRefreshing = false,
-            isPaging = false,
-            activeRequest = null,
-            emptyReason = if (results.isEmpty()) CreatorEmptyReason.NO_RESULTS else null,
-        ))
-    }
+    is CreatorAction.RequestCancelled -> cancelled(action)
+}
+
+private fun CreatorUiState.pageLoaded(action: CreatorAction.PageLoaded): CreatorTransition {
+    if (activeRequest != action.request) return unchanged()
+    val posts = mergeFeedPosts(
+        if (action.request.kind == CreatorRequestKind.REFRESH) emptyList() else results, action.page.items,
+    )
+    return CreatorTransition(copy(
+        results = posts,
+        nextPageToken = action.page.nextPageToken?.takeIf(String::isNotBlank),
+        isRefreshing = false,
+        isPaging = false,
+        errorMessage = null,
+        failureReason = null,
+        emptyReason = if (posts.isEmpty()) CreatorEmptyReason.NO_RESULTS else null,
+        activeRequest = null,
+    ))
+}
+
+private fun CreatorUiState.cancelled(action: CreatorAction.RequestCancelled): CreatorTransition {
+    if (activeRequest != action.request) return unchanged()
+    return CreatorTransition(copy(
+        isRefreshing = false,
+        isPaging = false,
+        activeRequest = null,
+        emptyReason = if (results.isEmpty()) CreatorEmptyReason.NO_RESULTS else null,
+    ))
 }
 
 private fun CreatorUiState.beginRequest(kind: CreatorRequestKind): CreatorTransition {

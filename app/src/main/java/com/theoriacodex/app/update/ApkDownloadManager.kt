@@ -6,6 +6,7 @@ import com.theoriacodex.sources.http.executeCancellableHttpConnection
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.file.Files
@@ -91,25 +92,37 @@ class ApkDownloadManager(
         requestContext.ensureActive()
         connection.inputStream.use { input ->
             FileOutputStream(part).use { output ->
-                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                var downloaded = 0L
-                var lastReported = -2
-                while (true) {
-                    requestContext.ensureActive()
-                    val read = input.read(buffer, 0, minOf(buffer.size.toLong(), limit - downloaded + 1).toInt())
-                    if (read < 0) break
-                    requestContext.ensureActive()
-                    downloaded += read
-                    if (downloaded > limit) throw IOException("Update APK exceeds its expected size")
-                    output.write(buffer, 0, read)
-                    val progress = expected?.let { downloaded.toFloat() / it }
-                    val bucket = progress?.let { (it * 100).toInt() } ?: -1
-                    if (bucket != lastReported) { onProgress(progress); lastReported = bucket }
-                }
-                if (downloaded == 0L || expected != null && downloaded != expected) throw IOException("Update APK download is incomplete")
+                copyApkBytes(input, output, limit, expected, requestContext, onProgress)
                 requestContext.ensureActive()
                 output.fd.sync()
             }
         }
     }
+
+    private fun copyApkBytes(
+        input: InputStream,
+        output: FileOutputStream,
+        limit: Long,
+        expected: Long?,
+        requestContext: CoroutineContext,
+        onProgress: (Float?) -> Unit,
+    ) {
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var downloaded = 0L
+        var lastReported = -2
+        while (true) {
+            requestContext.ensureActive()
+            val read = input.read(buffer, 0, minOf(buffer.size.toLong(), limit - downloaded + 1).toInt())
+            if (read < 0) break
+            requestContext.ensureActive()
+            downloaded += read
+            if (downloaded > limit) throw IOException("Update APK exceeds its expected size")
+            output.write(buffer, 0, read)
+            val progress = expected?.let { downloaded.toFloat() / it }
+            val bucket = progress?.let { (it * 100).toInt() } ?: -1
+            if (bucket != lastReported) { onProgress(progress); lastReported = bucket }
+        }
+        if (downloaded == 0L || expected != null && downloaded != expected) throw IOException("Update APK download is incomplete")
+    }
+
 }

@@ -65,10 +65,19 @@ class StartupUpdater(
             return Result.success(null)
         }
 
-        val snapshot = stateStore.snapshot()
-        if (snapshot.ignoredReleaseId == remote.releaseId) {
+        if (!shouldPromptFor(remote)) {
             onState(StartupUpdateState.NoUpdate)
             return Result.success(null)
+        }
+
+        onState(StartupUpdateState.AwaitingUserChoice(remote))
+        return Result.success(remote)
+    }
+
+    private suspend fun shouldPromptFor(remote: RemoteUpdate): Boolean {
+        val snapshot = stateStore.snapshot()
+        if (snapshot.ignoredReleaseId == remote.releaseId) {
+            return false
         }
 
         val remindLaterReleaseId = snapshot.remindLaterReleaseId
@@ -76,8 +85,7 @@ class StartupUpdater(
         var matchingReminderExpired = false
         if (remindLaterReleaseId == remote.releaseId && remindUntil != null) {
             if (nowProvider() < remindUntil) {
-                onState(StartupUpdateState.NoUpdate)
-                return Result.success(null)
+                return false
             }
             matchingReminderExpired = true
         }
@@ -95,8 +103,7 @@ class StartupUpdater(
             }
         }
 
-        onState(StartupUpdateState.AwaitingUserChoice(remote))
-        return Result.success(remote)
+        return true
     }
 
     override suspend fun installUpdate(

@@ -15,14 +15,7 @@ internal fun CodexImportHost(owner: CodexImportViewModel, snackbar: SnackbarHost
     val state by owner.state.collectAsStateWithLifecycle()
     CollectRouteEffects(owner.effects) { result ->
         val retryable = result == CodexImportResult.Failure || result == CodexImportResult.TimedOut || result == CodexImportResult.Unreadable
-        val message = when (result) {
-            CodexImportResult.Failure -> "Could not import Codex. Please try again."
-            CodexImportResult.TimedOut -> "Import timed out before saving. Please try again."
-            CodexImportResult.Unreadable -> "Could not read Codex file."
-            CodexImportResult.Invalid -> "Unsupported or invalid Codex file. Files must be 32 MiB or smaller."
-            is CodexImportResult.Success -> "Imported ${result.imported} posts" +
-                if (result.skipped > 0) " (${result.skipped} skipped)" else ""
-        }
+        val message = result.feedbackMessage()
         if (snackbar.showSnackbar(message, actionLabel = if (retryable) "Retry" else null) == SnackbarResult.ActionPerformed) owner.retry()
     }
     if (state.running) {
@@ -41,3 +34,12 @@ internal fun CodexImportHost(owner: CodexImportViewModel, snackbar: SnackbarHost
         )
     }
 }
+
+private fun CodexImportResult.feedbackMessage(): String = when (this) {
+            CodexImportResult.Failure -> "Could not import Codex. Please try again."
+            CodexImportResult.TimedOut -> "Import timed out before saving. Please try again."
+            CodexImportResult.Unreadable -> "Could not read Codex file."
+            CodexImportResult.Invalid -> "Unsupported or invalid Codex file. Files must be 32 MiB or smaller."
+            is CodexImportResult.Success -> "Imported ${imported} posts" +
+                if (skipped > 0) " (${skipped} skipped)" else ""
+        }
