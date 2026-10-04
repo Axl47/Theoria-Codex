@@ -20,6 +20,21 @@ import org.junit.Test
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class CodexRemovalWorkflowTest {
+    @Test fun `retained reorder invokes its transaction once and acknowledges completion`() = runTest {
+        val orders = mutableListOf<List<String>>()
+        val owner = CodexCommandViewModel(InMemoryCodexRepository(), {}, { orders += it }, this)
+        val submitted = mutableListOf("b", "a")
+        owner.reorder(submitted)
+        submitted.clear()
+        runCurrent()
+        assertEquals(listOf(listOf("b", "a")), orders)
+        assertEquals("Codices reordered", owner.feedback.value.single().message)
+        owner.acknowledge(owner.feedback.value.single().id, false)
+        runCurrent()
+        assertTrue(owner.feedback.value.isEmpty())
+        assertEquals(1, orders.size)
+    }
+
     @Test
     fun `detached removal retry and Undo preserve exact memberships and unselected posts`() = runTest {
         val stored = InMemoryCodexRepository()

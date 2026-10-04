@@ -50,7 +50,7 @@ internal data class CodexCommandFeedback(
 internal class CodexCommandViewModel(
     private val repository: CodexRepository,
     private val clearLikes: suspend (String) -> Unit,
-    private val reorder: suspend (List<String>) -> Unit,
+    private val commitReorder: suspend (List<String>) -> Unit,
     scopeOverride: CoroutineScope? = null,
 ) : ViewModel() {
     private val scope = scopeOverride ?: viewModelScope
@@ -96,7 +96,7 @@ internal class CodexCommandViewModel(
             is CodexCommand.AutomaticTag -> repository.setAutomaticTag(command.id, command.tag, command.enabled)
             is CodexCommand.Delete -> repository.deleteCodex(command.id)
             is CodexCommand.ClearLikes -> clearLikes(command.profileId)
-            is CodexCommand.Reorder -> reorder(command.visibleIds)
+            is CodexCommand.Reorder -> commitReorder(command.visibleIds)
             is CodexCommand.Remove -> {
                 repository.removeItems(command.id, command.items.mapTo(linkedSetOf()) { it.postId })
                 return CodexCommand.Restore(command.items, command.posts)
