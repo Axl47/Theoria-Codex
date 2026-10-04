@@ -18,6 +18,7 @@ import math
 from pathlib import Path
 import shutil
 import statistics
+import subprocess
 import sys
 from datetime import datetime, timezone
 from typing import Any
@@ -236,6 +237,15 @@ def validate_workload_snapshot(record: dict[str, Any], capture_directory: Path) 
         raise EvidenceError("Duplicate workload manifest paths")
 
 
+def copy_evidence_file(source: str, destination: str) -> str:
+    """Use independent APFS copy-on-write files when available, preserving every evidence byte."""
+    if sys.platform == "darwin":
+        # macOS cp falls back to a regular copy when the filesystem cannot clone the file.
+        subprocess.run(["/bin/cp", "-c", "-p", source, destination], check=True)
+        return destination
+    return shutil.copy2(source, destination)
+
+
 def record_run(report_path: Path, apk: Path, harness_apk: Path, output: Path,
                device_serial: str, device_kind: str, compilation: str,
                contract: dict[str, Any] | None = None, fixture_root: Path | None = None) -> Path:
@@ -260,7 +270,7 @@ def record_run(report_path: Path, apk: Path, harness_apk: Path, output: Path,
     raw_hash = file_hash(report_path)
     # Copy all additional outputs, not just JSON and selected traces. Never remove the originals.
     output.mkdir(parents=True)
-    shutil.copytree(report_path.parent, output / "artifacts")
+    shutil.copytree(report_path.parent, output / "artifacts", copy_function=copy_evidence_file)
     for item in workload["files"]:
         archived_file = output / "workload" / item["path"]
         archived_file.parent.mkdir(parents=True, exist_ok=True)

@@ -117,6 +117,16 @@ class BenchmarkResultsTest(unittest.TestCase):
         self.assertTrue(result["passed"])
         self.assertNotEqual(result["baseline_apk_sha256"], result["candidate_apk_sha256"])
 
+    def test_archived_evidence_survives_source_overwrite_and_removal(self) -> None:
+        raw = self.raw_report()
+        record_path = self.capture(report=raw)
+        recorded = benchmark.load_run(record_path)
+        for trace in raw.parent.glob("*.perfetto-trace"):
+            trace.write_bytes(b"later connected run")
+        shutil.rmtree(raw.parent)
+        self.assertEqual(recorded, benchmark.load_run(record_path))
+        self.assertEqual("additional evidence must survive", (record_path.parent / "artifacts/diagnostics.txt").read_text())
+
     def test_injected_startup_frame_tail_peak_memory_churn_and_transport_regressions_fail_individually(self) -> None:
         baseline = self.calibrated()
         for name, value in {
