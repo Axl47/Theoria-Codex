@@ -13,6 +13,7 @@ import com.theoriacodex.data.storage.GsonDataStoreSerializer
 import com.theoriacodex.data.storage.LegacyImportProof
 import com.theoriacodex.data.storage.UnsupportedStoreSchemaException
 import com.theoriacodex.data.storage.preserveCorruptFile
+import com.theoriacodex.data.storage.updateDataInBackground
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import java.util.UUID
@@ -228,7 +229,7 @@ class DataStoreSettingsRepository(
         policy: (AppSettings) -> RepositoryPolicies.Result<AppSettings, T>,
     ): T {
         var result: MutationValue<T>? = null
-        dataStore.updateData { stored ->
+        dataStore.updateDataInBackground { stored ->
             val current = stored.toDomain()
             val policyResult = policy(current)
             val normalized = RepositoryPolicies.normalizeSettings(policyResult.state).requireSettingsCapacity()
@@ -418,7 +419,7 @@ class DataStoreUiRestoreRepository(
     private suspend fun mutateState(
         transform: (PersistedUiRestoreState) -> PersistedUiRestoreState,
     ): PersistedUiRestoreState {
-        val updated = dataStore.updateData { stored ->
+        val updated = dataStore.updateDataInBackground { stored ->
             val current = stored.toMemoryState()
             val next = normalizeUiRestoreState(transform(current))
             if (next == current) {

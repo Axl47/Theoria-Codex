@@ -13,6 +13,7 @@ import com.theoriacodex.data.storage.DurableStoreStatus
 import com.theoriacodex.data.storage.GsonDataStoreSerializer
 import com.theoriacodex.data.storage.UnsupportedStoreSchemaException
 import com.theoriacodex.data.storage.preserveCorruptFile
+import com.theoriacodex.data.storage.updateDataInBackground
 import com.theoriacodex.domain.model.SourceKey
 import java.io.File
 import kotlinx.coroutines.CancellationException
@@ -363,7 +364,7 @@ class DataStoreStatisticsRepository(
         }
 
     private suspend fun mutate(transform: (LifetimeStatistics) -> LifetimeStatistics) {
-        dataStore.updateData { stored ->
+        dataStore.updateDataInBackground { stored ->
             StatisticsDataStoreFile.fromDomain(transform(stored.toDomain()))
         }
     }
