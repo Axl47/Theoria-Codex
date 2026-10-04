@@ -58,7 +58,7 @@ internal sealed interface AppShellEffect {
 }
 
 /** Activity-scoped owner for system workflows; navigation and Android launchers remain in Compose. */
-internal class AppShellViewModel(
+internal class AppShellViewModel @JvmOverloads constructor(
     private val savedStateHandle: SavedStateHandle,
     scopeOverride: CoroutineScope? = null,
 ) : ViewModel(), RouteStateOwner<AppShellUiState, AppShellAction, AppShellEffect> {
