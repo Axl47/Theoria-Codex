@@ -68,6 +68,13 @@ internal sealed interface ViewerAction {
     data class MediaFailed(
         val session: ViewerSessionIdentity,
         val error: ViewerMediaError,
+        val loadGeneration: Long? = null,
+    ) : ViewerAction
+
+    data class MediaReady(
+        val session: ViewerSessionIdentity,
+        val key: ViewerMediaKey,
+        val loadGeneration: Long,
     ) : ViewerAction
 
     data object ClearMediaError : ViewerAction

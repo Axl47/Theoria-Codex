@@ -195,7 +195,9 @@ internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): View
         }
         is ViewerAction.MediaFailed -> state.ifCurrentSession(action.session) {
             val failedMediaKey = action.error.mediaKey
-            if (failedMediaKey != null && failedMediaKey != currentMedia?.key) {
+            if ((failedMediaKey != null && failedMediaKey != currentMedia?.key) ||
+                (action.loadGeneration != null && action.loadGeneration != currentMedia?.loadGeneration)
+            ) {
                 this
             } else {
                 copy(
@@ -205,6 +207,11 @@ internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): View
                     ),
                 )
             }
+        }
+        is ViewerAction.MediaReady -> state.ifCurrentSession(action.session) {
+            if (currentMedia?.key == action.key && currentMedia?.loadGeneration == action.loadGeneration) {
+                copy(mediaError = null)
+            } else this
         }
         ViewerAction.ClearMediaError -> ViewerReduction(state.copy(mediaError = null))
         ViewerAction.RetryMedia -> state.retryMedia(session)

@@ -11,7 +11,7 @@
 <h1>Audit reliability and maintainability</h1>
 <p>Owner: Codex · Created October 3, 2026 · Base: fe8177cb292cf712ec64ae2975cf9d718fae4b6d · Branch: codex/audit-reliability-and-maintainability</p>
 <div class="status">
-<strong>Status: In progress.</strong> Next: separate Viewer media rendering and finish aggregate plus device validation. All 13 findings and both additional product observations are in scope. Separate conventional commits follow the phases below.</div>
+<strong>Status: In progress.</strong> All implementation phases are complete. Next: finish aggregate coverage, isolated device validation, refreshed profiles and comparable physical captures. All 13 findings and both additional product observations are in scope. Separate conventional commits follow the phases below.</div>
 </header>
 <nav>
 <div>
@@ -167,7 +167,7 @@
 <code>app/src/main/java/com/theoriacodex/app/viewer/ViewerScreen.kt; extracted video/GIF/image renderer files; config/quality/hotspot-budgets.json</code>
 <p>Existing rendering/control and concurrent autoplay tests; ratchet actual file size downward.</p>
 </td>
-<td data-phase="renderers">Pending</td>
+<td data-phase="renderers">Complete</td>
 </tr>
 <tr id="phase-validation">
 <td>validation</td>
@@ -430,6 +430,7 @@ npm run audit:quality
 <h2>Living Log</h2>
 <h3>Progress</h3>
 <ul id="progress">
+<li>2026-10-04: F13 renderer extraction complete. ViewerScreen is 674 lines (previously 2,450), with video, GIF, WebP, image, page interaction and overview responsibilities in focused files. Shared immutable commands retain frame state inside renderers; asynchronous ready/failure/completion events bind to session, media and retry generation. Stale-event, playback, Viewer owner, concurrent feed, updater, import and Creator host tests passed in 51s. Removed the ViewerScreen hotspot exception, lowered TheoriaApp's budget to 1,963 and removed 17 obsolete Detekt baseline entries. Full scripts and quality gates passed; one final overlay helper required a smaller component before app analysis completion.</li>
 <li>2026-10-03: Follow-up command review caught an overloaded-name collision between the public reorder dispatcher and its suspend transaction callback. Renamed the callback to commitReorder and verified the actual owner path invokes it once with a captured copy, then acknowledges completion. Focused command suite passed in 52s.</li>
 <li>2026-10-03: F11 complete. AppShellViewModel owns one startup/check/decision/download/installer-return job and durable-in-memory startup continuation across UI reattachment. Release history uses the source transport with a 4 MiB / 15s bound and a five-minute shared result cache. APK downloads use cancellable connections, 512 MiB / five-minute limits, exact declared lengths, unique staging, restart cleanup and atomic promotion; cancellation never becomes an ordinary failure. Package/signature/version validation and explicit installer choices remain. Update/transport/policy/owner suite passed in 71s; added deadline/stale-stage/atomic-shell checks passed in 48s.</li>
 <li>2026-10-03: Physical follow-up repair: each Viewer MediaSession now has a unique lifetime identity, allowing Compose page handoff to overlap attachment/disposal without Media3 crashing. Host overlapping-session/control/lifecycle tests passed in 11s. Apply the identical fix to the frozen baseline before repeating physical calibration; no workload or autoplay acceptance is relaxed.</li>
@@ -442,6 +443,7 @@ npm run audit:quality
 </ul>
 <h3>Surprises and Discoveries</h3>
 <ul id="discoveries">
+<li>2026-10-04: Disk exhaustion interrupted a baseline APK build and host tests; neither result is accepted. Removed only byte-verified duplicate captures and applied byte-verified transparent filesystem compression to the preserved failed-run evidence. Complete directory paths and logical bytes remain unchanged; the host batch then passed. Physical calibration is paused pending a rebuilt diagnostic-enabled baseline and adequate capture storage. The benchmark recorder now uses independent APFS copy-on-write files on macOS, with ordinary copying elsewhere; original mutation/removal tests pass.</li>
 <li>2026-10-03: A second calibration attempt was invalid because Android keyguard covered every fixture (read-only dumpsys confirmed showing=true). Its full output is preserved under audit-performance-calibration/locked-run. User unlocked the phone; a fresh full calibration is running under audit-performance-calibration-unlocked at baseline cf797e89.</li>
 <li>2026-10-03: Failed physical Viewer logs reveal a production crash: Media3 throws “Session ID must be unique. ID=theoria-viewer” during page handoff. Fix session IDs without changing the workload, then apply the same prerequisite fix to the frozen performance baseline before calibration. Original failed traces remain preserved.</li>
 <li>2026-10-03: Physical baseline capture finished with 4/7 workloads passing and three Viewer-related failures (page playback/visible media). Complete traces, JSON and test logs were copied to build/reports/audit-performance-baseline/failed-run-1. No aggregate comparison can be claimed from this capture; investigate the shared Viewer boundary before repeating.</li>
@@ -454,7 +456,7 @@ npm run audit:quality
 <li>2026-10-03 / Codex: Implement narrow shared policies and retained owners instead of introducing a universal feed framework. Complete cancellation, ordering, replay and persistence contracts before extracting Viewer renderers.</li>
 </ul>
 <h3>Outcomes and Retrospective</h3>
-<p id="outcomes">Storage, accounts, demand, downloads, browsing reads, offline and imports phases are committed with focused validation. Commands, updates, feed ownership/recovery, renderer extraction and final validation remain. Physical calibration is running on the connected isolated benchmark app; Viewer workload failures are retained and must be resolved before comparison.</p>
+<p id="outcomes">All implementation phases have focused behavior evidence: storage, account authority, queued duration work, galleries, shared browsing reads, offline catalogs, imports, retained collection/updater commands, feed ownership/recovery, and renderer boundaries. Aggregate coverage and device/performance acceptance remain in progress. Complete failed physical captures are preserved, with shared MediaSession and benchmark diagnostic causes identified; no accepted performance comparison is claimed yet.</p>
 </section>
 <section id="recovery">
 <h2>Idempotence and Recovery</h2>
