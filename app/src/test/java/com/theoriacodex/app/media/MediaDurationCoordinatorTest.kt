@@ -35,7 +35,7 @@ class MediaDurationCoordinatorTest {
         val key = key(post)
 
         coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = false)
-        assertTrue(coordinator.submit(post, demand("search", key, DurationDemandPriority.BACKGROUND_IDLE)))
+        assertEquals(DurationDemandAdmission.SCHEDULED, coordinator.submit(post, demand("search", key, DurationDemandPriority.BACKGROUND_IDLE)))
         runCurrent()
         assertEquals(0, acquisitions)
         assertEquals(MediaDurationState.Pending, coordinator.states.value[key])
@@ -61,7 +61,7 @@ class MediaDurationCoordinatorTest {
         val key = key(post)
         coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = false)
 
-        assertTrue(coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE)))
+        assertEquals(DurationDemandAdmission.SCHEDULED, coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE)))
         runCurrent()
         assertEquals(0, acquisitions)
         assertEquals(MediaDurationState.Pending, coordinator.states.value[key])
@@ -228,7 +228,7 @@ class MediaDurationCoordinatorTest {
         runCurrent()
         assertEquals(1, acquisitions)
 
-        assertFalse(coordinator.submit(post, demand("creator", key, DurationDemandPriority.VISIBLE)))
+        assertEquals(DurationDemandAdmission.DECIDED, coordinator.submit(post, demand("creator", key, DurationDemandPriority.VISIBLE)))
         coordinator.publishKnown(key, 6_000L, MediaDurationProvenance.ACTIVE_PLAYER)
         runCurrent()
 
@@ -318,7 +318,7 @@ class MediaDurationCoordinatorTest {
         )
         coordinator.updateEnvironment(lifecycleStarted = true, scrollIdle = true)
 
-        assertFalse(coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE)))
+        assertEquals(DurationDemandAdmission.DECIDED, coordinator.submit(post, demand("search", key, DurationDemandPriority.VISIBLE)))
         runCurrent()
 
         assertEquals(0, acquisitions)

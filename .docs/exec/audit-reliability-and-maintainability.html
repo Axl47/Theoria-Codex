@@ -11,7 +11,7 @@
 <h1>Audit reliability and maintainability</h1>
 <p>Owner: Codex · Created October 3, 2026 · Base: fe8177cb292cf712ec64ae2975cf9d718fae4b6d · Branch: codex/audit-reliability-and-maintainability</p>
 <div class="status">
-<strong>Status: In progress.</strong> Next: finish duration demand backlog and shared Hitomi cancellation. All 13 findings and both additional product observations are in scope. Separate conventional commits follow the phases below.</div>
+<strong>Status: In progress.</strong> Next: complete gallery downloads and canonical filenames. All 13 findings and both additional product observations are in scope. Separate conventional commits follow the phases below.</div>
 </header>
 <nav>
 <div>
@@ -79,7 +79,7 @@
 <code>app/src/main/java/com/theoriacodex/app/media/MediaDurationCoordinator.kt; MediaDurationRouteViewModel.kt; core-sources/src/main/kotlin/com/theoriacodex/sources/hitomi/HitomiGalleryManifestStore.kt</code>
 <p>513+ candidates settle across pause, eviction, and multiple routes; last manifest waiter cancels loader.</p>
 </td>
-<td data-phase="demand">Pending</td>
+<td data-phase="demand">Complete</td>
 </tr>
 <tr id="phase-downloads">
 <td>downloads</td>
@@ -426,7 +426,7 @@ npm run audit:quality
 <section id="log">
 <h2>Living Log</h2>
 <h3>Progress</h3>
-<ul id="progress">
+<ul id="progress"><li>2026-10-03: F03/F06 implemented and focused DurationDemand, Hitomi, MediaDuration and DurationBacklogIntegration suites passed (18s). The coordinator retains deferred tickets outside the bounded active queue, preserves evicted consumers, and refills by priority. Filter owners retain decisions for their current snapshot after process-cache eviction. Hitomi flights retain the supplied parent, use reference counts, and convert their own deadline to a provider failure.</li>
 <li>2026-10-03: F02 and callback observation implemented. Pixiv refresh uses a process-local credential session revision and atomic conditional commits, including expired-session clearing. Settings shares the application token coordinator. Callback paths are exact. Pixiv/core and app account/settings tests passed; the added account-owner ABA case passed separately (23s).</li>
 <li>2026-10-03: F01/F04 implemented. Settings mutations and restore preflight reject profile/favorite/blacklist overflow. Restore verifies retained profile IDs. Search resets drain older admitted writes and update the same serialized scroll cache. Focused ProfileCapacity, ProfileBackupService, DataStoreRepositories, SearchCoordinator, SearchScrollReset and ScrollPersistenceSearchViewModel tests passed (15s).</li>
 <li>2026-10-03: Read the audit, verified clean base and created the implementation branch. Planned phases cover all findings and gallery/callback observations.</li>
@@ -437,7 +437,7 @@ npm run audit:quality
 <li>Audit baseline has eight deterministic reproduction scenarios across six defect classes. Existing host tests passed but missed these boundary cases; profile overflow must be tested with real DataStore.</li>
 </ul>
 <h3>Decision Log</h3>
-<ul id="decisions">
+<ul id="decisions"><li>2026-10-03 / Codex: Duration queue capacity bounds executable work, not ownership of still-required requests. Deferred metadata holds references only while routes own it; releasing an owner removes both scheduled and deferred tickets. No UI effect drains provider calls.</li>
 <li>2026-10-03 / Codex: Save-to-device from a post or collection will mean all gallery items; Viewer’s selected-page action remains one item. Use per-media progress and stable canonical filenames.</li>
 <li>2026-10-03 / Codex: Implement narrow shared policies and retained owners instead of introducing a universal feed framework. Complete cancellation, ordering, replay and persistence contracts before extracting Viewer renderers.</li>
 </ul>

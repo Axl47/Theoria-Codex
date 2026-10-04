@@ -6,16 +6,63 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HitomiGalleryManifestStoreTest {
+    @Test
+    fun `only the last departing consumer cancels a shared load`() = runTest {
+        val store = store(scope = backgroundScope)
+        var calls = 0
+        var cancelled = false
+        val loader: suspend () -> HitomiGalleryManifest? = {
+            calls++
+            try { awaitCancellation() } finally { cancelled = true }
+        }
+        val first = launch { store.getOrLoad(1, loader) }
+        val second = launch { store.getOrLoad(1, loader) }
+        runCurrent()
+        first.cancelAndJoin()
+        runCurrent()
+        assertEquals(1, calls)
+        assertFalse(cancelled)
+        second.cancelAndJoin()
+        runCurrent()
+        assertTrue(cancelled)
+        assertEquals(0L, store.snapshot().cachedBytes)
+    }
+
+    @Test
+    fun `supplied owner cancellation stops loaders and a load deadline becomes a provider failure`() = runTest {
+        val parent = CoroutineScope(coroutineContext + SupervisorJob(coroutineContext[Job]))
+        val store = store(scope = parent)
+        var cancelled = false
+        val waiter = launch {
+            store.getOrLoad(1) { try { awaitCancellation() } finally { cancelled = true } }
+        }
+        runCurrent()
+        parent.cancel()
+        waiter.join()
+        assertTrue(cancelled)
+        val bounded = HitomiGalleryManifestStore(4_096L, 1_000L, { 0L }, backgroundScope, loadTimeoutMs = 10L)
+        val failure = runCatching { bounded.getOrLoad(2) { awaitCancellation() } }.exceptionOrNull()
+        assertTrue(failure is com.theoriacodex.domain.adapter.SourceAdapterException)
+    }
+
     @Test
     fun `concurrent consumers single flight one gallery load`() = runTest {
         val gate = CompletableDeferred<Unit>()

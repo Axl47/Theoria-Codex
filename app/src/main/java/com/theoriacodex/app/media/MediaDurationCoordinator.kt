@@ -95,7 +95,7 @@ class MediaDurationCoordinator(
     parentScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val clock: () -> Long = System::currentTimeMillis,
     private val retryDelayMs: Long = DEFAULT_RETRY_DELAY_MS,
-    maxQueuedKeys: Int = DEFAULT_MAX_QUEUED_KEYS,
+    private val maxQueuedKeys: Int = DEFAULT_MAX_QUEUED_KEYS,
     private val maxConcurrentWork: Int = DEFAULT_MAX_CONCURRENT_WORK,
     private val maxRetainedStates: Int = DEFAULT_MAX_RETAINED_STATES,
     private val traceRecorder: MediaDurationTraceRecorder = AndroidMediaDurationTraceRecorder,
@@ -105,6 +105,7 @@ class MediaDurationCoordinator(
     private val coordinationContext = parentScope.coroutineContext.minusKey(Job)
     private val lock = Mutex()
     private val scheduler = DurationDemandScheduler(maxQueuedKeys)
+    private val deferredDemands = DurationDemandBacklog()
     private val posts = mutableMapOf<MediaDurationKey, Post>()
     private val active = mutableMapOf<MediaDurationKey, ActiveWork>()
     private val retainedStates = LinkedHashMap<MediaDurationKey, MediaDurationState>(16, 0.75f, true)
@@ -122,11 +123,11 @@ class MediaDurationCoordinator(
         require(maxRetainedStates > 0) { "Retained duration-state bound must be positive" }
     }
 
-    suspend fun submit(post: Post, demand: DurationDemand): Boolean = withContext(coordinationContext) {
+    suspend fun submit(post: Post, demand: DurationDemand): DurationDemandAdmission = withContext(coordinationContext) {
         submitInContext(post, demand)
     }
 
-    private suspend fun submitInContext(post: Post, demand: DurationDemand): Boolean {
+    private suspend fun submitInContext(post: Post, demand: DurationDemand): DurationDemandAdmission {
         require(demand.key.postId == post.id) { "Duration demand key must match its post" }
         traceRecorder.demand()
 
@@ -136,13 +137,13 @@ class MediaDurationCoordinator(
                 durationMs = durationMs,
                 provenance = MediaDurationProvenance.PROVIDER,
             )
-            return true
+            return DurationDemandAdmission.DECIDED
         }
 
         val shouldLoadStoredState = lock.withLock {
             demand.key !in retainedStates &&
                 demand.key !in active &&
-                !scheduler.contains(demand.key)
+                !scheduler.contains(demand.key) && !deferredDemands.contains(demand.key)
         }
         val storedState = if (shouldLoadStoredState) loadStoredState(demand.key) else null
         return lock.withLock { submitLocked(post, demand, storedState) }
@@ -152,14 +153,14 @@ class MediaDurationCoordinator(
         post: Post,
         demand: DurationDemand,
         storedState: MediaDurationState?,
-    ): Boolean {
+    ): DurationDemandAdmission {
         when (val current = retainedStates[demand.key]) {
             is MediaDurationState.Known,
             is MediaDurationState.Unsupported,
-            -> return false
+            -> return DurationDemandAdmission.DECIDED
 
             is MediaDurationState.RetryableFailure -> {
-                if (clock() < current.retryAtEpochMs) return false
+                if (clock() < current.retryAtEpochMs) return DurationDemandAdmission.DECIDED
                 removeStateLocked(demand.key)
             }
 
@@ -171,34 +172,37 @@ class MediaDurationCoordinator(
         active[demand.key]?.let { work ->
             work.demands[demand.identity] = demand
             work.priority = work.demands.values.minOf(DurationDemand::priority)
-            return true
+            return DurationDemandAdmission.SCHEDULED
         }
 
         if (storedState != null) {
             putStateLocked(demand.key, storedState)
             traceRecorder.publication()
-            return false
+            return DurationDemandAdmission.DECIDED
         }
 
         posts[demand.key] = post
         val submission = scheduler.submit(demand)
         if (submission == DurationDemandSubmission.Rejected) {
-            if (!scheduler.contains(demand.key)) posts.remove(demand.key)
-            return false
+            deferredDemands.put(listOf(demand))
+            hadOutstandingWork = true
+            return DurationDemandAdmission.DEFERRED
         }
         val accepted = submission as DurationDemandSubmission.Accepted
-        accepted.evictedKey?.let(::discardEvictedKeyLocked)
+        deferEvictedDemandsLocked(accepted)
+        deferredDemands.remove(demand.key).forEach(scheduler::submit)
         putStateLocked(demand.key, MediaDurationState.Pending)
         hadOutstandingWork = true
         preemptBackgroundForLocked(demand.priority)
         pumpLocked()
-        return true
+        return DurationDemandAdmission.SCHEDULED
     }
 
     suspend fun releaseIdentity(identity: String) = releaseIdentities(setOf(identity))
 
     suspend fun releaseIdentities(identities: Set<String>) = withContext(coordinationContext) {
         lock.withLock {
+            deferredDemands.removeIdentities(identities).forEach(::discardUnownedPendingKeyLocked)
             identities.forEach { identity ->
                 require(identity.isNotBlank()) { "Duration demand identity must not be blank" }
                 val queuedAffected = scheduler.removeIdentity(identity)
@@ -285,6 +289,7 @@ class MediaDurationCoordinator(
             return false
         }
         scheduler.removeKey(key)
+        deferredDemands.remove(key)
         active[key]?.let { work -> cancelActiveLocked(work, requeue = false) }
         posts.remove(key)
         putStateLocked(key, state)
@@ -305,6 +310,7 @@ class MediaDurationCoordinator(
 
     private fun pumpLocked() {
         while (active.size < maxConcurrentWork) {
+            refillQueueLocked()
             val next = scheduler.takeNext(gate) ?: break
             val post = posts[next.key]
             if (post == null) {
@@ -314,6 +320,14 @@ class MediaDurationCoordinator(
             startWorkLocked(post, next)
         }
         recordSettledIfNeededLocked()
+    }
+
+    private fun refillQueueLocked() {
+        while (scheduler.queuedKeyCount() < maxQueuedKeys) {
+            val demands = deferredDemands.takeNext() ?: break
+            demands.forEach(scheduler::submit)
+            putStateLocked(demands.first().key, MediaDurationState.Pending)
+        }
     }
 
     private fun startWorkLocked(post: Post, scheduled: ScheduledDurationWork) {
@@ -405,9 +419,14 @@ class MediaDurationCoordinator(
                 when (val submission = scheduler.submit(demand)) {
                     is DurationDemandSubmission.Accepted -> {
                         retained = true
-                        submission.evictedKey?.let(::discardEvictedKeyLocked)
+                        deferEvictedDemandsLocked(submission)
+                        deferredDemands.remove(work.key).forEach(scheduler::submit)
                     }
-                    DurationDemandSubmission.Rejected -> Unit
+                    DurationDemandSubmission.Rejected -> {
+                        deferredDemands.put(listOf(demand))
+                        retained = true
+                        removeStateIfPendingLocked(work.key)
+                    }
                 }
             }
             if (!retained) discardUnownedPendingKeyLocked(work.key)
@@ -415,13 +434,13 @@ class MediaDurationCoordinator(
         work.job.cancel(CancellationException("Duration demand no longer executable"))
     }
 
-    private fun discardEvictedKeyLocked(key: MediaDurationKey) {
-        posts.remove(key)
-        removeStateIfPendingLocked(key)
+    private fun deferEvictedDemandsLocked(submission: DurationDemandSubmission.Accepted) {
+        deferredDemands.put(submission.evictedDemands)
+        submission.evictedKey?.let(::removeStateIfPendingLocked)
     }
 
     private fun discardUnownedPendingKeyLocked(key: MediaDurationKey) {
-        if (key !in active && !scheduler.contains(key)) {
+        if (key !in active && !scheduler.contains(key) && !deferredDemands.contains(key)) {
             posts.remove(key)
             removeStateIfPendingLocked(key)
         }
@@ -451,7 +470,7 @@ class MediaDurationCoordinator(
     }
 
     private fun recordSettledIfNeededLocked() {
-        if (hadOutstandingWork && active.isEmpty() && scheduler.queuedKeyCount() == 0) {
+        if (hadOutstandingWork && active.isEmpty() && scheduler.queuedKeyCount() == 0 && deferredDemands.isEmpty()) {
             hadOutstandingWork = false
             traceRecorder.settled()
         }

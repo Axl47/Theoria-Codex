@@ -264,6 +264,7 @@ internal class MediaDurationRouteViewModel(
             val post = candidatesByKey[key] ?: return@forEach
             submit(post, key, demandIdentity(lane, key), priority, reason)
         }
+        // The coordinator retains deferred demand and refills its bounded queue independently.
         return desired
     }
 
@@ -352,6 +353,9 @@ internal class MediaDurationRouteViewModel(
     private fun publishObservedStates(allStates: Map<MediaDurationKey, MediaDurationState>) {
         if (!filterActive) return
         val observed = buildMap {
+            // A long collection can outlive the coordinator's process-cache LRU. Keep decisions
+            // for this snapshot so eviction does not turn a settled filter back into Pending.
+            putAll(mutableStates.value.filterKeys { it in observedKeys })
             observedKeys.forEach { key -> allStates[key]?.let { state -> put(key, state) } }
         }
         if (mutableStates.value != observed) mutableStates.value = observed

@@ -12,7 +12,10 @@ data class ScheduledDurationWork(
 )
 
 sealed interface DurationDemandSubmission {
-    data class Accepted(val evictedKey: MediaDurationKey? = null) : DurationDemandSubmission
+    data class Accepted(
+        val evictedKey: MediaDurationKey? = null,
+        val evictedDemands: List<DurationDemand> = emptyList(),
+    ) : DurationDemandSubmission
     data object Rejected : DurationDemandSubmission
 }
 
@@ -35,6 +38,7 @@ class DurationDemandScheduler(
         }
 
         var evictedKey: MediaDurationKey? = null
+        var evictedDemands = emptyList<DurationDemand>()
         if (entries.size >= maxQueuedKeys) {
             val worst = entries.values.maxWithOrNull(ENTRY_COMPARATOR)
                 ?: return DurationDemandSubmission.Rejected
@@ -42,6 +46,7 @@ class DurationDemandScheduler(
                 return DurationDemandSubmission.Rejected
             }
             evictedKey = worst.key
+            evictedDemands = worst.tickets.values.map(Ticket::demand)
             entries.remove(worst.key)
         }
 
@@ -49,7 +54,7 @@ class DurationDemandScheduler(
             key = demand.key,
             tickets = linkedMapOf(demand.identity to Ticket(demand, nextSequence())),
         )
-        return DurationDemandSubmission.Accepted(evictedKey)
+        return DurationDemandSubmission.Accepted(evictedKey, evictedDemands)
     }
 
     fun takeNext(gate: DurationExecutionGate): ScheduledDurationWork? {
