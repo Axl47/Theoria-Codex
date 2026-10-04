@@ -27,7 +27,7 @@ internal data class SearchScrollPersistenceTarget(
  * the final pending position through the durable repository.
  */
 internal class SearchScrollPersistenceController(
-    dispatcher: CoroutineDispatcher,
+    private val dispatcher: CoroutineDispatcher,
     private val debounceMillis: Long,
     private val persist: suspend (SearchScrollPersistenceTarget) -> Unit,
 ) : AutoCloseable {
@@ -51,8 +51,11 @@ internal class SearchScrollPersistenceController(
         }
     }
 
-    /** Finish an already admitted write before resetting this query; discard its older debounce. */
-    suspend fun reset(queryHash: String, writeReset: suspend () -> Unit) {
+    /**
+     * Finish admitted writes before resetting. Hold the commit lock on the persistence dispatcher,
+     * because synchronous UI teardown may need that same lock for its final flush.
+     */
+    suspend fun reset(queryHash: String, writeReset: suspend () -> Unit) = withContext(dispatcher) {
         val previous = synchronized(lock) {
             if (latest?.queryHash != queryHash) null else {
                 latest = null
