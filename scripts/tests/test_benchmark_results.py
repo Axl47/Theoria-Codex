@@ -14,6 +14,16 @@ import benchmark_results as benchmark
 
 
 class BenchmarkResultsTest(unittest.TestCase):
+    def test_single_workload_contract_retains_every_metric_and_iteration(self) -> None:
+        full = benchmark.default_contract()
+        for scenario, specification in full["scenarios"].items():
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(0, benchmark.main(["contract", "--scenario", scenario]))
+            selected = json.loads(output.getvalue())
+            self.assertEqual({scenario: specification}, selected["scenarios"])
+            self.assertNotEqual(full["version"], selected["version"])
+            benchmark.validate_contract(selected)
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

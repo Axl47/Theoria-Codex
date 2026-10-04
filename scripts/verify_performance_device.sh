@@ -25,6 +25,15 @@ readonly output="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1
 mkdir -p "$output"
 cd "$repo"
 
+test_options=()
+record_options=()
+if [[ -n "${BENCHMARK_SCENARIO:-}" ]]; then
+  # Validate the selector and bind its full metrics/iterations before any device access.
+  python3 scripts/benchmark_results.py contract --scenario "$BENCHMARK_SCENARIO" > "$output/workload-contract.json"
+  test_options+=("-Pandroid.testInstrumentationRunnerArguments.class=com.theoriacodex.macrobenchmark.TheoriaMacrobenchmark#$BENCHMARK_SCENARIO")
+  record_options+=(--contract "$output/workload-contract.json")
+fi
+
 readonly target_apk="app/build/outputs/apk/benchmarkRelease/app-benchmarkRelease.apk"
 readonly runner_apk="macrobenchmark/build/outputs/apk/benchmarkRelease/macrobenchmark-benchmarkRelease.apk"
 readonly results="macrobenchmark/build/outputs/connected_android_test_additional_output/benchmarkRelease/connected"
@@ -36,7 +45,7 @@ require_selected_phone() {
 }
 
 # A dry run is host-only. Actual package manifests and signatures are checked before connected work.
-./gradlew :macrobenchmark:connectedBenchmarkReleaseAndroidTest --dry-run --console=plain > "$output/task-graph.txt" 2>&1
+./gradlew :macrobenchmark:connectedBenchmarkReleaseAndroidTest "${test_options[@]}" --dry-run --console=plain > "$output/task-graph.txt" 2>&1
 ./gradlew :app:assembleBenchmarkRelease :macrobenchmark:assembleBenchmarkRelease --console=plain > "$output/build.log" 2>&1
 if grep -Eq 'Startup (class|method) not found|missing startup classes and methods' "$output/build.log"; then
   echo 'Startup profiles are stale; regenerate in the isolated baseline-profile lane before measurement.' >&2
@@ -51,7 +60,7 @@ run_records=()
 for ((index=1; index<=captures; index++)); do
   require_selected_phone
   printf 'Running complete physical benchmark capture %s/%s.\n' "$index" "$captures"
-  ./gradlew :macrobenchmark:connectedBenchmarkReleaseAndroidTest --console=plain > "$output/run-$index.log" 2>&1
+  ./gradlew :macrobenchmark:connectedBenchmarkReleaseAndroidTest "${test_options[@]}" --console=plain > "$output/run-$index.log" 2>&1
   report="$(python3 - "$results" "$output/device-fingerprint.txt" <<'PY'
 import json, pathlib, sys
 fingerprint = pathlib.Path(sys.argv[2]).read_text().strip()
@@ -69,7 +78,7 @@ PY
     --report "$report" --apk "$target_apk" --harness-apk "$runner_apk" \
     --device-serial "$serial" --device-kind physical \
     --compilation 'Partial(BaselineProfileMode.Require,warmupIterations=0)' \
-    --output "$output/run-$index"
+    --output "$output/run-$index" "${record_options[@]}"
   run_records+=("$output/run-$index/run.json")
 done
 
