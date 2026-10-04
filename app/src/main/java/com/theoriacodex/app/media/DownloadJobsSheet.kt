@@ -41,6 +41,7 @@ internal fun DownloadJobsSheet(
             item {
                 Text("Downloads", style = MaterialTheme.typography.titleLarge)
                 Text("Keep the app open until all items are saved.", style = MaterialTheme.typography.bodyMedium)
+                Text("Post and collection downloads include every gallery page. Existing files are kept.", style = MaterialTheme.typography.bodySmall)
             }
             if (batches.isEmpty()) item { Text("Saved files will appear here and in your device’s Downloads folder.") }
             batches.asReversed().forEach { batch ->
@@ -57,7 +58,9 @@ private fun DownloadBatchHeader(batch: PostDownloadBatch, onCancel: (Long) -> Un
     Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(batch.title, style = MaterialTheme.typography.titleMedium)
         Text(
-            "${batch.savedCount} of ${batch.items.size} saved" + if (batch.failedCount > 0) " · ${batch.failedCount} failed" else "",
+            "${batch.savedCount} of ${batch.items.size} saved" +
+                (if (batch.existingCount > 0) " · ${batch.existingCount} already exist" else "") +
+                (if (batch.failedCount > 0) " · ${batch.failedCount} failed" else ""),
             style = MaterialTheme.typography.bodyMedium,
         )
         if (batch.active) LinearProgressIndicator(
@@ -106,6 +109,7 @@ internal fun downloadItemStatusLabel(item: PostDownloadItem): String = when (ite
     } ?: "${downloadBytesLabel(item.downloadedBytes)} downloaded"
     PostDownloadStatus.WAITING -> item.message ?: "Waiting for a connection"
     PostDownloadStatus.SAVED -> "Saved"
+    PostDownloadStatus.ALREADY_EXISTS -> "File already exists; original kept"
     PostDownloadStatus.FAILED -> item.message ?: "Could not save this post. Try again."
     PostDownloadStatus.CANCELLED -> "Cancelled"
 }

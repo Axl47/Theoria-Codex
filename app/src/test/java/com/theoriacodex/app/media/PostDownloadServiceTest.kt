@@ -26,7 +26,7 @@ class PostDownloadServiceTest {
             totalPages = 1,
         )
 
-        assertEquals("Blue_Sky_Sunset.jpg", fileName)
+        assertEquals("Blue_Sky_Sunset_gelbooru_123.jpg", fileName)
     }
 
     @Test
@@ -46,7 +46,7 @@ class PostDownloadServiceTest {
             totalPages = 3,
         )
 
-        assertEquals("Gallery_p2.webp", fileName)
+        assertEquals("Gallery_nhentai_123_p2.webp", fileName)
     }
 
     @Test
@@ -88,7 +88,7 @@ class PostDownloadServiceTest {
         assertEquals("video/mp4", candidate?.ref?.mime)
         assertEquals("https://hitomi.la/", candidate?.requestHeaders?.get("Referer"))
         assertEquals(
-            "Anime_Episode.mp4",
+            "Anime_Episode_hitomi_123.mp4",
             PostDownloadService.buildDownloadFileName(
                 post = post,
                 media = video,
@@ -97,6 +97,33 @@ class PostDownloadServiceTest {
                 totalPages = 1,
             ),
         )
+    }
+
+    @Test
+    fun `Unicode titles retain their text while canonical identities prevent collisions`() {
+        val media = ImageRef("https://example.test/file.jpg", null, "image/jpeg")
+        fun name(title: String, id: String) = PostDownloadService.buildDownloadFileName(
+            samplePost(title, SourceKey.PIXIV).copy(id = PostId(SourceKey.PIXIV, id)), media, media.url!!, null, 1,
+        )
+        assertEquals("猫_pixiv_1.jpg", name("猫", "1"))
+        assertEquals("犬_pixiv_2.jpg", name("犬", "2"))
+        assertEquals("Same_pixiv_1.jpg", name("Same", "1"))
+        assertEquals("Same_pixiv_2.jpg", name("Same", "2"))
+        assertEquals("pixiv_1.jpg", name(".../", "1"))
+        val longName = name("猫".repeat(200), "id".repeat(100))
+        org.junit.Assert.assertTrue(longName.toByteArray(Charsets.UTF_8).size < 255)
+        org.junit.Assert.assertFalse(longName.contains('/'))
+    }
+
+    @Test
+    fun `gallery requests preserve every resolved page and reject incomplete provider payloads`() {
+        val media = List(3) { ImageRef("https://example.test/$it.jpg", null, "image/jpeg") }
+        val post = samplePost("Gallery", SourceKey.PIXIV).copy(media = media, full = media.first(), mediaCount = 3)
+        val pages = galleryDownloadPages(post)
+        assertEquals(listOf(0, 1, 2), pages.map { it.selectedMedia?.pageIndex })
+        assertEquals(media, pages.map { it.selectedMedia?.media })
+        assertEquals(listOf(3, 3, 3), pages.map { it.selectedMedia?.totalPages })
+        org.junit.Assert.assertTrue(runCatching { galleryDownloadPages(post.copy(mediaCount = 4)) }.isFailure)
     }
 
     private fun samplePost(title: String?, source: SourceKey): Post {

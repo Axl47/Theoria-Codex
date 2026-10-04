@@ -56,17 +56,21 @@ private class AndroidPostDownloadBackend(
 ) : PostDownloadBackend {
     override suspend fun prepare(request: PostDownloadRequest): PreparedPostDownload {
         val settings = readSettings()
-        if (isPixivUgoiraPost(request.post)) {
+        val post = if (request.selectedMedia == null && requiresLazyMediaResolution(request.post)) {
+            resolvePost(request.post) ?: throw DownloadPreparationException("The provider could not load this post's media.")
+        } else request.post
+        if (isPixivUgoiraPost(post)) {
             context.animationExportNetworkBlock(settings)?.let { throw DownloadPreparationException(it) }
-            exportAnimation(request.post).getOrElse {
+            exportAnimation(post).getOrElse {
                 if (it is CancellationException) throw it
                 throw DownloadPreparationException("Could not export this animation. Try again.")
             }
             return PreparedPostDownload.Saved
         }
-        val post = if (request.selectedMedia == null && requiresLazyMediaResolution(request.post)) {
-            resolvePost(request.post) ?: throw DownloadPreparationException("The provider could not load this post's media.")
-        } else request.post
+        if (request.selectedMedia == null) {
+            val pages = galleryDownloadPages(post)
+            if (pages.isNotEmpty()) return PreparedPostDownload.Gallery(pages)
+        }
         return PreparedPostDownload.Transfer {
             val selected = request.selectedMedia
             if (selected == null) PostDownloadService.enqueuePostDownloadId(context, post, settings)
@@ -94,7 +98,9 @@ private class AndroidPostDownloadBackend(
 
     override suspend fun cancel(downloadId: Long) = withContext(Dispatchers.IO) {
         val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
-        if (manager != null && snapshot(downloadId).status != PostDownloadStatus.SAVED) manager.remove(downloadId)
+        if (manager != null && snapshot(downloadId).status !in setOf(PostDownloadStatus.SAVED, PostDownloadStatus.ALREADY_EXISTS)) {
+            manager.remove(downloadId)
+        }
         Unit
     }
 }
@@ -104,7 +110,9 @@ internal class DownloadPreparationException(message: String) : Exception(message
 internal fun downloadTransferSnapshot(status: Int, reason: Int, downloadedBytes: Long, totalBytes: Long): DownloadTransferSnapshot {
     val downloadStatus = when (status) {
         DownloadManager.STATUS_SUCCESSFUL -> PostDownloadStatus.SAVED
-        DownloadManager.STATUS_FAILED -> PostDownloadStatus.FAILED
+        DownloadManager.STATUS_FAILED -> if (reason == DownloadManager.ERROR_FILE_ALREADY_EXISTS) {
+            PostDownloadStatus.ALREADY_EXISTS
+        } else PostDownloadStatus.FAILED
         DownloadManager.STATUS_PAUSED, DownloadManager.STATUS_PENDING -> PostDownloadStatus.WAITING
         else -> PostDownloadStatus.DOWNLOADING
     }

@@ -187,6 +187,53 @@ class PostDownloadQueueTest {
         assertEquals(20L, saved.totalBytes)
     }
 
+    @Test
+    fun `gallery expansion shares the worker bound and retries only failed pages`() = runTest {
+        val backend = FakeBackend()
+        var transfer = 0L
+        backend.prepareOverride = { request ->
+            if (request.selectedMedia == null) {
+                PreparedPostDownload.Gallery(galleryDownloadPages(request.post))
+            } else PreparedPostDownload.Transfer { ++transfer }
+        }
+        val gallery = request(1).post.copy(media = List(3) { MEDIA.copy(url = "https://example.test/$it.jpg") }, mediaCount = 3)
+        val queue = PostDownloadQueue(backgroundScope, backend)
+        val batchId = requireNotNull(queue.submit("Gallery", listOf(PostDownloadRequest(gallery))))
+        runCurrent()
+        assertEquals(3, queue.batches.value.single().items.size)
+        assertEquals(listOf(null, 0, 1), backend.requests.map { it.selectedMedia?.pageIndex })
+        backend.states[1] = DownloadTransferSnapshot(PostDownloadStatus.SAVED)
+        backend.states[2] = DownloadTransferSnapshot(PostDownloadStatus.FAILED)
+        advanceTimeBy(1_000)
+        runCurrent()
+        queue.retryFailed(batchId)
+        runCurrent()
+        assertEquals(listOf(null, 0, 1, 2, 1), backend.requests.map { it.selectedMedia?.pageIndex })
+        assertEquals(1, queue.batches.value.single().savedCount)
+        queue.cancel(batchId)
+        runCurrent()
+        assertEquals(1, queue.batches.value.single().savedCount)
+        assertFalse(queue.batches.value.single().active)
+    }
+
+    @Test
+    fun `an existing canonical download is terminal and does not offer a failing retry`() = runTest {
+        val backend = FakeBackend()
+        backend.states[1] = downloadTransferSnapshot(DownloadManager.STATUS_FAILED,
+            DownloadManager.ERROR_FILE_ALREADY_EXISTS, 0, -1)
+        val queue = PostDownloadQueue(backgroundScope, backend)
+        val batchId = requireNotNull(queue.submit("Existing", listOf(request(1))))
+        runCurrent()
+        val batch = queue.batches.value.single()
+        assertEquals(1, batch.existingCount)
+        assertEquals(0, batch.failedCount)
+        assertFalse(batch.active)
+        queue.retryFailed(batchId)
+        runCurrent()
+        assertEquals(1, backend.prepared.size)
+        assertTrue(backend.cancelled.isEmpty())
+    }
+
     private class FakeBackend : PostDownloadBackend {
         val prepared = mutableListOf<String>()
         val requests = mutableListOf<PostDownloadRequest>()

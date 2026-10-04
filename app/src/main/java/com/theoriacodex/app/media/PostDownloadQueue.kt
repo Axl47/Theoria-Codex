@@ -20,7 +20,7 @@ import kotlinx.coroutines.yield
 internal data class PostDownloadRequest(val post: Post, val selectedMedia: SelectedDownloadMedia? = null)
 internal data class SelectedDownloadMedia(val media: ImageRef, val pageIndex: Int, val totalPages: Int)
 
-internal enum class PostDownloadStatus { QUEUED, PREPARING, DOWNLOADING, WAITING, SAVED, FAILED, CANCELLED }
+internal enum class PostDownloadStatus { QUEUED, PREPARING, DOWNLOADING, WAITING, SAVED, ALREADY_EXISTS, FAILED, CANCELLED }
 
 internal data class PostDownloadItem(
     val id: Long,
@@ -37,12 +37,14 @@ internal data class PostDownloadItem(
 internal data class PostDownloadBatch(val id: Long, val title: String, val items: List<PostDownloadItem>) {
     val active: Boolean get() = items.any { it.active }
     val savedCount: Int get() = items.count { it.status == PostDownloadStatus.SAVED }
+    val existingCount: Int get() = items.count { it.status == PostDownloadStatus.ALREADY_EXISTS }
     val failedCount: Int get() = items.count { it.status == PostDownloadStatus.FAILED }
     val settledCount: Int get() = items.count { !it.active }
 }
 
 internal sealed interface PreparedPostDownload {
     data class Transfer(val enqueue: () -> Long?) : PreparedPostDownload
+    data class Gallery(val pages: List<PostDownloadRequest>) : PreparedPostDownload
     data object Saved : PreparedPostDownload
 }
 
@@ -136,6 +138,7 @@ internal class PostDownloadQueue(
             currentCoroutineContext().ensureActive()
             when (prepared) {
                 PreparedPostDownload.Saved -> update(item.id) { it.copy(status = PostDownloadStatus.SAVED) }
+                is PreparedPostDownload.Gallery -> expandGallery(item.id, prepared.pages)
                 is PreparedPostDownload.Transfer -> {
                     // Enqueue and retain its ID without a suspension: cancellation cannot lose the system job.
                     downloadId = prepared.enqueue() ?: error("Could not queue this download")
@@ -168,6 +171,18 @@ internal class PostDownloadQueue(
         }
     }
 
+    private fun expandGallery(itemId: Long, pages: List<PostDownloadRequest>) {
+        require(pages.isNotEmpty() && pages.all { it.selectedMedia != null })
+        mutableBatches.value = mutableBatches.value.map { batch ->
+            if (batch.items.none { it.id == itemId }) return@map batch
+            val seen = batch.items.filterNot { it.id == itemId }
+                .mapTo(mutableSetOf()) { it.request.post.id to it.request.selectedMedia?.pageIndex }
+            val children = pages.filter { seen.add(it.post.id to it.selectedMedia?.pageIndex) }
+                .map { PostDownloadItem(id = ++nextId, request = it) }
+            batch.copy(items = batch.items.flatMap { if (it.id == itemId) children else listOf(it) })
+        }
+    }
+
     private fun currentItem(itemId: Long): PostDownloadItem? =
         mutableBatches.value.asSequence().flatMap { it.items }.find { it.id == itemId }
 
@@ -178,6 +193,16 @@ internal class PostDownloadQueue(
             )
         }
     }
+}
+
+/** Expansion happens after one authoritative resolution; selected Viewer pages never expand again. */
+internal fun galleryDownloadPages(post: Post): List<PostDownloadRequest> {
+    val media = post.media.ifEmpty { listOfNotNull(post.full) }
+    if ((post.mediaCount ?: media.size) > media.size) {
+        throw DownloadPreparationException("The provider could not load the complete gallery. Try again.")
+    }
+    if (media.size < 2) return emptyList()
+    return media.mapIndexed { index, ref -> PostDownloadRequest(post, SelectedDownloadMedia(ref, index, media.size)) }
 }
 
 private val ACTIVE_DOWNLOAD_STATUSES = setOf(

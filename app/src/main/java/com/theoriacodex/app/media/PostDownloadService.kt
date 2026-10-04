@@ -7,6 +7,8 @@ import androidx.core.net.toUri
 import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
+import java.net.URLEncoder
+import java.security.MessageDigest
 
 object PostDownloadService {
     internal fun enqueuePostDownloadId(
@@ -70,10 +72,12 @@ object PostDownloadService {
         totalPages: Int,
     ): String {
         val extension = fileExtension(fallbackUrl, media.mime)
-        val base = post.title
-            ?.sanitizeFileName()
-            ?.takeIf { it.isNotBlank() }
-            ?: "${post.id.source.name.lowercase()}_${post.id.sourcePostId}"
+        val title = post.title?.sanitizeFileName()?.takeUtf8Bytes(100)?.takeIf(String::isNotBlank)
+        val encodedId = URLEncoder.encode(post.id.sourcePostId, Charsets.UTF_8.name())
+        val id = encodedId.takeIf { it.length <= 96 } ?: MessageDigest.getInstance("SHA-256")
+            .digest(post.id.sourcePostId.toByteArray()).take(16).joinToString("") { "%02x".format(it) }
+        val identity = "${post.id.source.name.lowercase()}_$id"
+        val base = title?.let { "${it}_$identity" } ?: identity
         val pageSuffix = if (pageIndex != null && totalPages > 1) "_p${pageIndex + 1}" else ""
         return if (extension.isNotBlank()) {
             "${base}$pageSuffix.$extension"
@@ -155,6 +159,18 @@ private fun normalizeExtension(extension: String): String {
 }
 
 private fun String.sanitizeFileName(): String {
-    val cleaned = trim().replace(Regex("[^A-Za-z0-9._-]+"), "_").trim('_')
-    return cleaned.ifBlank { "image" }
+    return trim().replace(Regex("[\\p{Cntrl}/\\\\:*?\"<>|\\s]+"), "_").trim('_', '.')
+}
+
+private fun String.takeUtf8Bytes(limit: Int): String = buildString {
+    var bytes = 0
+    var offset = 0
+    while (offset < this@takeUtf8Bytes.length) {
+        val point = this@takeUtf8Bytes.codePointAt(offset)
+        val text = String(Character.toChars(point))
+        bytes += text.toByteArray(Charsets.UTF_8).size
+        if (bytes > limit) break
+        append(text)
+        offset += Character.charCount(point)
+    }
 }

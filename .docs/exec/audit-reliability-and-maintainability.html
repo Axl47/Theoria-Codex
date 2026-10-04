@@ -11,7 +11,7 @@
 <h1>Audit reliability and maintainability</h1>
 <p>Owner: Codex · Created October 3, 2026 · Base: fe8177cb292cf712ec64ae2975cf9d718fae4b6d · Branch: codex/audit-reliability-and-maintainability</p>
 <div class="status">
-<strong>Status: In progress.</strong> Next: complete gallery downloads and canonical filenames. All 13 findings and both additional product observations are in scope. Separate conventional commits follow the phases below.</div>
+<strong>Status: In progress.</strong> Next: stabilize browsing subscriptions and use lightweight membership queries. All 13 findings and both additional product observations are in scope. Separate conventional commits follow the phases below.</div>
 </header>
 <nav>
 <div>
@@ -90,7 +90,7 @@
 <code>app/src/main/java/com/theoriacodex/app/media/PostDownloadQueue.kt; PostDownloadsViewModel.kt; PostDownloadService.kt; DownloadJobsSheet.kt</code>
 <p>Distinct Unicode titles, bounded gallery expansion, selected Viewer page, progress/retry/cancel.</p>
 </td>
-<td data-phase="downloads">Pending</td>
+<td data-phase="downloads">Complete</td>
 </tr>
 <tr id="phase-reads">
 <td>reads</td>
@@ -426,7 +426,7 @@ npm run audit:quality
 <section id="log">
 <h2>Living Log</h2>
 <h3>Progress</h3>
-<ul id="progress"><li>2026-10-03: F03/F06 implemented and focused DurationDemand, Hitomi, MediaDuration and DurationBacklogIntegration suites passed (18s). The coordinator retains deferred tickets outside the bounded active queue, preserves evicted consumers, and refills by priority. Filter owners retain decisions for their current snapshot after process-cache eviction. Hitomi flights retain the supplied parent, use reference counts, and convert their own deadline to a provider failure.</li>
+<ul id="progress"><li>2026-10-03: F05/gallery observation complete. Filenames preserve bounded Unicode text plus encoded canonical source/ID and page suffix. Complete galleries expand into per-page requests after one resolution, sharing the two-worker queue. Retry preserves successful pages; existing files are terminal and preserved. Focused download naming/queue suites passed (8s).</li><li>2026-10-03: F03/F06 implemented and focused DurationDemand, Hitomi, MediaDuration and DurationBacklogIntegration suites passed (18s). The coordinator retains deferred tickets outside the bounded active queue, preserves evicted consumers, and refills by priority. Filter owners retain decisions for their current snapshot after process-cache eviction. Hitomi flights retain the supplied parent, use reference counts, and convert their own deadline to a provider failure.</li>
 <li>2026-10-03: F02 and callback observation implemented. Pixiv refresh uses a process-local credential session revision and atomic conditional commits, including expired-session clearing. Settings shares the application token coordinator. Callback paths are exact. Pixiv/core and app account/settings tests passed; the added account-owner ABA case passed separately (23s).</li>
 <li>2026-10-03: F01/F04 implemented. Settings mutations and restore preflight reject profile/favorite/blacklist overflow. Restore verifies retained profile IDs. Search resets drain older admitted writes and update the same serialized scroll cache. Focused ProfileCapacity, ProfileBackupService, DataStoreRepositories, SearchCoordinator, SearchScrollReset and ScrollPersistenceSearchViewModel tests passed (15s).</li>
 <li>2026-10-03: Read the audit, verified clean base and created the implementation branch. Planned phases cover all findings and gallery/callback observations.</li>
