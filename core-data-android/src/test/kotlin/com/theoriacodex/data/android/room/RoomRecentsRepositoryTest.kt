@@ -42,6 +42,15 @@ class RoomRecentsRepositoryTest {
 
     @After fun tearDown() = database.close()
 
+    @Test fun `watched membership projection does not hydrate payloads or include Codex-only entries`() = runTest {
+        database.codexLikesDao().insertPost(PostEntity("PIXIV", "sparse", "unreadable payload"))
+        database.codexLikesDao().insertPost(PostEntity("PIXIV", "codex", "unreadable payload"))
+        database.recentsDao().upsertWatched(RecentWatchedEntity("PIXIV", "sparse", "WATCHED", 1L, 1L, "SEARCH", null, 1))
+        database.recentsDao().upsertWatched(RecentWatchedEntity("PIXIV", "codex", "CODEX", 2L, 2L, "CODEX", null, 1))
+        val ids = RoomRecentsRepository(database).observeWatchedPostIds().first()
+        assertEquals(setOf(PostId(SourceKey.PIXIV, "sparse")), ids)
+    }
+
     @Test fun `Multi-Search metadata round trips through the existing payload column`() = runTest {
         val repository = RoomRecentsRepository(database, clock = { now++ })
         val query = recentQuery("multi").copy(mode = QueryMode.Unified)

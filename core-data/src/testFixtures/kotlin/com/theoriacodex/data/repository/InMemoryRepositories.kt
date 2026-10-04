@@ -265,13 +265,17 @@ class InMemoryRecentsRepository(
         return watched
     }
 
+    override fun observeWatchedPostIds(): Flow<Set<PostId>> = watched.map { posts ->
+        posts.filter { it.section == RecentPostSection.WATCHED }.mapTo(linkedSetOf()) { it.post.id }
+    }
+
     override fun observeSearches(): Flow<List<RecentSearchEntry>> {
         return searches
     }
 
     override fun observeActivity(): Flow<List<RecentActivityEntry>> {
         return combine(watched, searches) { watchedPosts, searchEntries ->
-            FixtureRepositoryPolicies.mergeRecentActivity(watchedPosts, searchEntries)
+            mergeRecentActivity(watchedPosts, searchEntries)
         }
     }
 

@@ -156,6 +156,9 @@ public interface CodexLikesDao {
             + "ORDER BY liked_at_epoch_ms DESC, source ASC, source_post_id ASC")
     Flow<List<LikedPostEntity>> observeLikes(String profileId);
 
+    @Query("SELECT source, source_post_id FROM liked_posts WHERE profile_id = :profileId")
+    Flow<List<PostIdentityRow>> observeLikedPostIds(String profileId);
+
     @Query("SELECT * FROM liked_posts WHERE profile_id = :profileId "
             + "ORDER BY liked_at_epoch_ms DESC, source ASC, source_post_id ASC")
     List<LikedPostEntity> likesForProfile(String profileId);

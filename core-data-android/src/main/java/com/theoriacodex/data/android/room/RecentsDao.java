@@ -13,6 +13,8 @@ public interface RecentsDao {
             + "FROM recent_watched INNER JOIN posts ON posts.source = recent_watched.source AND posts.source_post_id = recent_watched.source_post_id "
             + "ORDER BY recent_watched.viewed_at_epoch_ms DESC, recent_watched.sort_sequence DESC, posts.source ASC, posts.source_post_id ASC, recent_watched.section ASC")
     Flow<List<RecentWatchedRow>> observeWatched();
+    @Query("SELECT source, source_post_id FROM recent_watched WHERE section = 'WATCHED'")
+    Flow<List<PostIdentityRow>> observeWatchedPostIds();
     @Query("SELECT * FROM recent_watched ORDER BY viewed_at_epoch_ms DESC, sort_sequence DESC, source ASC, source_post_id ASC, section ASC")
     List<RecentWatchedEntity> watched();
     @Query("SELECT * FROM recent_watched WHERE source = :source AND source_post_id = :postId AND section = :section LIMIT 1")

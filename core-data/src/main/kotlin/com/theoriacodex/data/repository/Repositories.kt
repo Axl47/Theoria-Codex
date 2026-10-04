@@ -11,6 +11,8 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 interface CodexRepository {
     fun observeCodices(): Flow<List<Codex>>
@@ -126,6 +128,9 @@ sealed interface RecentActivityEntry {
 
 interface RecentsRepository {
     fun observeWatchedPosts(): Flow<List<RecentPostEntry>>
+    fun observeWatchedPostIds(): Flow<Set<PostId>> = observeWatchedPosts().map { posts ->
+        posts.filter { it.section == RecentPostSection.WATCHED }.mapTo(linkedSetOf()) { it.post.id }
+    }.distinctUntilChanged()
     fun observeSearches(): Flow<List<RecentSearchEntry>>
     fun observeActivity(): Flow<List<RecentActivityEntry>>
     suspend fun recordWatchedPost(

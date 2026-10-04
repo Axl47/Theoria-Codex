@@ -79,19 +79,6 @@ internal object FixtureRepositoryPolicies {
         return normalizeRecentSearches(listOf(entry) + entries, limit)
     }
 
-    fun mergeRecentActivity(
-        watched: List<RecentPostEntry>,
-        searches: List<RecentSearchEntry>,
-    ): List<RecentActivityEntry> {
-        return buildList {
-            watched
-                .filterNot { entry -> entry.section == RecentPostSection.FYP }
-                .sortedByDescending { entry -> entry.viewedAtEpochMs }
-                .distinctBy { entry -> entry.post.id }
-                .forEach { entry -> add(RecentActivityEntry.Watched(entry)) }
-            searches.forEach { entry -> add(RecentActivityEntry.Search(entry)) }
-        }.sortedByDescending { entry -> entry.occurredAtEpochMs }
-    }
 
     fun toggleLike(
         likesByProfile: Map<String, Map<PostId, LikedPost>>,

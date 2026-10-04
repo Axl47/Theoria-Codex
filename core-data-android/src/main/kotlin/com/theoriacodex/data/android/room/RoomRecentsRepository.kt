@@ -11,6 +11,11 @@ import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.storage.RecentSearchPayloadCodec
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.data.repository.mergeRecentActivity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
@@ -53,7 +58,11 @@ class RoomRecentsRepository(
                 maxViewedMediaNumber = row.maxViewedMediaNumber,
             )
         }
-    }
+    }.flowOn(Dispatchers.Default)
+
+    override fun observeWatchedPostIds(): Flow<Set<PostId>> = dao.observeWatchedPostIds().map { rows ->
+        rows.mapTo(linkedSetOf()) { PostId(SourceKey.valueOf(it.source), it.sourcePostId) }
+    }.distinctUntilChanged().flowOn(Dispatchers.Default)
 
     override fun observeSearches(): Flow<List<RecentSearchEntry>> = dao.observeSearches().map { rows ->
         rows.map { row ->
@@ -67,21 +76,10 @@ class RoomRecentsRepository(
                 sourceTags = payload.sourceTags,
             )
         }
-    }
+    }.flowOn(Dispatchers.Default)
 
     override fun observeActivity(): Flow<List<RecentActivityEntry>> =
-        combine(observeWatchedPosts(), observeSearches()) { watched, searches ->
-            buildList<RecentActivityEntry> {
-                watched
-                    .filterNot { entry -> entry.section == RecentPostSection.FYP }
-                    .distinctBy { entry -> entry.post.id }
-                    .forEach { add(RecentActivityEntry.Watched(it)) }
-                searches.forEach { add(RecentActivityEntry.Search(it)) }
-            }.sortedWith(
-                compareByDescending<RecentActivityEntry> { it.occurredAtEpochMs }
-                    .thenBy { if (it is RecentActivityEntry.Watched) 0 else 1 }
-            )
-        }
+        combine(observeWatchedPosts(), observeSearches(), ::mergeRecentActivity).flowOn(Dispatchers.Default)
 
     override suspend fun recordWatchedPost(
         post: Post,

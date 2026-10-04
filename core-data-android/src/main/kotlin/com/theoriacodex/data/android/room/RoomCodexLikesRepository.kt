@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 /**
  * One Room-backed owner for Codex membership, reusable post snapshots, and profile likes.
@@ -56,13 +57,13 @@ class RoomCodexLikesRepository(
         return combine(dao.observeCodices(), dao.observeAutomaticTags()) { codices, automaticTags ->
             val tagsByCodex = automaticTags.groupBy(CodexAutomaticTagEntity::getCodexId)
             codices.map { entity -> entity.toDomain(tagsByCodex[entity.codexId].orEmpty()) }
-        }
+        }.distinctUntilChanged().flowOn(Dispatchers.Default)
     }
 
     override fun observeCodex(codexId: String): Flow<Codex?> {
         return combine(dao.observeCodex(codexId), dao.observeAutomaticTags()) { entity, automaticTags ->
             entity?.toDomain(automaticTags.filter { tag -> tag.codexId == codexId })
-        }
+        }.distinctUntilChanged().flowOn(Dispatchers.Default)
     }
 
     override suspend fun ensureCodex(codexId: String, name: String): Codex {
@@ -149,7 +150,7 @@ class RoomCodexLikesRepository(
     override fun observeCodexItems(codexId: String): Flow<List<CodexItem>> {
         return dao.observeCodexItems(codexId).map { entities ->
             entities.mapNotNull(CodexItemEntity::toDomainOrNull)
-        }
+        }.distinctUntilChanged().flowOn(Dispatchers.Default)
     }
 
     override fun observeCodexPosts(codexId: String, sort: CodexSortMode): Flow<List<Post>> {
@@ -233,13 +234,16 @@ class RoomCodexLikesRepository(
     override fun observeLikes(profileId: String): Flow<List<LikedPost>> {
         val normalized = CodexLikesPolicy.normalizeProfileId(profileId)
         return dao.observeLikes(normalized).map { entities -> entities.mapNotNull(codec::decodeLike) }
+            .distinctUntilChanged().flowOn(Dispatchers.Default)
     }
 
     override fun observeLikedPostIds(profileId: String): Flow<Set<PostId>> {
         val normalized = CodexLikesPolicy.normalizeProfileId(profileId)
-        return dao.observeLikes(normalized).map { entities ->
-            entities.mapNotNullTo(linkedSetOf()) { entity -> entity.toPostIdOrNull() }
-        }
+        return dao.observeLikedPostIds(normalized).map { entities ->
+            entities.mapNotNullTo(linkedSetOf()) { entity ->
+                entity.source.toSourceKeyOrNull()?.let { PostId(it, entity.sourcePostId) }
+            }
+        }.distinctUntilChanged().flowOn(Dispatchers.Default)
     }
 
     override suspend fun importCodex(

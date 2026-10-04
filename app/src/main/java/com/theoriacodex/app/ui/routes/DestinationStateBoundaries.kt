@@ -9,6 +9,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.appshell.PendingIncomingUri
 import com.theoriacodex.app.codex.CodexCollectionSource
 import com.theoriacodex.app.codex.CodexCollectionPresentation
@@ -124,49 +127,26 @@ internal fun BrowsingDestinationStateBoundary(
     sources: SourceDependencies,
     content: @Composable (BrowsingDestinationState) -> Unit,
 ) {
-    val settingsState = data.settingsRepository.observeSettings()
-        .collectAsStateWithLifecycle(initialValue = null)
-    val settings = settingsState.value ?: return
-    DestinationStateBoundary(settingsState) {
-        val activeProfile = settings.activeRecommendationProfile()
-        val availableSourcesState = sources.availableSources.collectAsStateWithLifecycle()
-        val likedPostIdsState = data.likesRepository.observeLikedPostIds(activeProfile.profileId)
-            .collectAsStateWithLifecycle(initialValue = null)
-        val activeProfileLikesState = data.likesRepository.observeLikes(activeProfile.profileId)
-            .collectAsStateWithLifecycle(initialValue = null)
-        val watchedPostsState = data.recentsRepository.observeWatchedPosts()
-            .collectAsStateWithLifecycle(initialValue = null)
-        val savedPostIds = rememberSavedPostIds(data)
-        val likedPostIds = likedPostIdsState.value ?: return@DestinationStateBoundary
-        val activeProfileLikes = activeProfileLikesState.value ?: return@DestinationStateBoundary
-        val watchedPosts = watchedPostsState.value ?: return@DestinationStateBoundary
-        val availableSources = availableSourcesState.value
-        content(
-            BrowsingDestinationState(
-                settings = settings,
-                activeProfile = activeProfile,
-                availableSources = availableSources,
-                creatorBrowsingSources = remember(sources.registry, availableSources) {
-                    sources.registry.creatorBrowsingSources().intersect(availableSources)
-                },
-                likedPostIds = likedPostIds,
-                activeProfileLikesCount = activeProfileLikes.size,
-                favoriteTags = remember(settings.favoriteTagsByProfile, activeProfile.profileId) {
-                    settings.favoriteTagsByProfile[activeProfile.profileId]
-                        .orEmpty()
-                        .groupBy { it.source }
-                        .mapValues { (_, entries) -> entries.map { it.tag } }
-                },
-                savedPostIds = savedPostIds,
-                watchedPostIds = remember(watchedPosts) {
-                    watchedPosts
-                        .asSequence()
-                        .filter { entry -> entry.section == RecentPostSection.WATCHED }
-                        .mapTo(linkedSetOf()) { entry -> entry.post.id }
-                },
-            ),
-        )
-    }
+    val metadata = browsingMetadataOwner(data).state.collectAsStateWithLifecycle().value ?: return
+    val settings = metadata.settings
+    val activeProfile = settings.activeRecommendationProfile()
+    val available by sources.availableSources.collectAsStateWithLifecycle()
+    content(BrowsingDestinationState(
+        settings = settings,
+        activeProfile = activeProfile,
+        availableSources = available,
+        creatorBrowsingSources = remember(sources.registry, available) {
+            sources.registry.creatorBrowsingSources().intersect(available)
+        },
+        likedPostIds = metadata.likedPostIds,
+        activeProfileLikesCount = metadata.likedPostIds.size,
+        favoriteTags = remember(settings.favoriteTagsByProfile, activeProfile.profileId) {
+            settings.favoriteTagsByProfile[activeProfile.profileId].orEmpty()
+                .groupBy { it.source }.mapValues { (_, entries) -> entries.map { it.tag } }
+        },
+        savedPostIds = metadata.savedPostIds,
+        watchedPostIds = metadata.watchedPostIds,
+    ))
 }
 
 @Composable
@@ -174,32 +154,18 @@ internal fun RecentsDestinationStateBoundary(
     data: DataDependencies,
     content: @Composable (RecentsDestinationState) -> Unit,
 ) {
-    val watchedState = data.recentsRepository.observeWatchedPosts()
-        .collectAsStateWithLifecycle(initialValue = emptyList())
-    val searchesState = data.recentsRepository.observeSearches()
-        .collectAsStateWithLifecycle(initialValue = emptyList())
-    val activityState = data.recentsRepository.observeActivity()
-        .collectAsStateWithLifecycle(initialValue = emptyList())
-    val settingsState = data.settingsRepository.observeSettings()
-        .collectAsStateWithLifecycle(initialValue = AppSettings())
-    DestinationStateBoundary(settingsState) { settings ->
-        val profile = settings.activeRecommendationProfile()
-        val likedState = data.likesRepository.observeLikedPostIds(profile.profileId)
-            .collectAsStateWithLifecycle(initialValue = emptySet())
-        val watched = watchedState.value
-        val searches = searchesState.value
-        content(
-            RecentsDestinationState(
-                watchedPosts = watched.filter { it.section == RecentPostSection.WATCHED },
-                codexPosts = watched.filter { it.section == RecentPostSection.CODEX },
-                searches = searches.filterNot { it.kind == RecentSearchKind.FYP },
-                fypSearches = searches.filter { it.kind == RecentSearchKind.FYP },
-                activity = activityState.value,
-                likedPostIds = likedState.value,
-            ),
-        )
-    }
+    val recentState = browsingMetadataOwner(data).recents.collectAsStateWithLifecycle().value ?: return
+    content(recentState)
 }
+
+@Composable
+private fun browsingMetadataOwner(data: DataDependencies): BrowsingMetadataViewModel = viewModel(
+    key = "browsing-metadata",
+    factory = remember(data) { viewModelFactory {
+        initializer { BrowsingMetadataViewModel(data.settingsRepository, data.likesRepository,
+            data.codexRepository, data.recentsRepository) }
+    } },
+)
 
 @Composable
 internal fun CodexDestinationStateBoundary(
@@ -208,10 +174,10 @@ internal fun CodexDestinationStateBoundary(
     thumbnailCacheGeneration: Int,
     content: @Composable (CodexDestinationState) -> Unit,
 ) {
-    val settingsState = data.settingsRepository.observeSettings()
+    val settingsState = remember(data.settingsRepository) { data.settingsRepository.observeSettings() }
         .collectAsStateWithLifecycle(initialValue = null)
     val settings = settingsState.value ?: return
-    val codicesState = data.codexRepository.observeCodices()
+    val codicesState = remember(data.codexRepository) { data.codexRepository.observeCodices() }
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val availableSourcesState = sources.availableSources.collectAsStateWithLifecycle()
     val codices = codicesState.value
@@ -254,13 +220,13 @@ internal fun CodexDetailDestinationStateBoundary(
         FollowedCodexDestinationStateBoundary(data, sources, fabRestoreState, sortMode, content)
         return
     }
-    val codexState = data.codexRepository.observeCodex(codexId)
+    val codexState = remember(data.codexRepository, codexId) { data.codexRepository.observeCodex(codexId) }
         .collectAsStateWithLifecycle(initialValue = null)
-    val itemsState = data.codexRepository.observeCodexItems(codexId)
+    val itemsState = remember(data.codexRepository, codexId) { data.codexRepository.observeCodexItems(codexId) }
         .collectAsStateWithLifecycle(initialValue = emptyList())
-    val postsState = data.codexRepository.observeCodexPosts(codexId, sortMode)
+    val postsState = remember(data.codexRepository, codexId, sortMode) { data.codexRepository.observeCodexPosts(codexId, sortMode) }
         .collectAsStateWithLifecycle(initialValue = emptyList())
-    val settingsState = data.settingsRepository.observeSettings()
+    val settingsState = remember(data.settingsRepository) { data.settingsRepository.observeSettings() }
         .collectAsStateWithLifecycle(initialValue = null)
     val settings = settingsState.value ?: return
     val availableState = sources.availableSources.collectAsStateWithLifecycle()
@@ -287,9 +253,9 @@ internal fun SaveToCodexDestinationStateBoundary(
     data: DataDependencies,
     content: @Composable (SaveToCodexDestinationState) -> Unit,
 ) {
-    val settingsState = data.settingsRepository.observeSettings()
+    val settingsState = remember(data.settingsRepository) { data.settingsRepository.observeSettings() }
         .collectAsStateWithLifecycle(initialValue = AppSettings())
-    val codicesState = data.codexRepository.observeCodices()
+    val codicesState = remember(data.codexRepository) { data.codexRepository.observeCodices() }
         .collectAsStateWithLifecycle(initialValue = emptyList())
     val codices = codicesState.value
     val collection = rememberCodexCollectionState(data = data, codices = codices)
@@ -415,14 +381,6 @@ private fun rememberCodexCollectionState(
     return key(ids, refreshKey) {
         summaries.collectAsStateWithLifecycle(initialValue = CodexCollectionPresentation()).value
     }
-}
-
-@Composable
-private fun rememberSavedPostIds(data: DataDependencies): Set<PostId> {
-    val codices by data.codexRepository.observeCodices().collectAsStateWithLifecycle(initialValue = emptyList())
-    val ids = remember(codices) { codices.mapTo(linkedSetOf(), Codex::codexId) }
-    val saved = remember(data.codexRepository, ids) { data.codexRepository.observeSavedPostIds(ids) }
-    return saved.collectAsStateWithLifecycle(initialValue = emptySet()).value
 }
 
 @Composable
