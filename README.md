@@ -16,7 +16,7 @@ The app has five top-level tabs, in bottom-navigation and pager order:
 
 Viewer handles still images, videos, GIF-like animated media, animated WebP, Pixiv ugoira, and multi-page posts. Multi-page and mixed-media posts support full-view paging, a two-column Media Overview that preserves the exact media order, type badges without grid autoplay, and a persisted scroll-direction toggle. Animated media supports playback-rate controls, scrub/seek affordances, and repeated double-tap seek feedback. Animated WebP uses Android's native decoder on API 28 and newer plus a bounded API 26/27 fallback; Media Overview requests a separate static first frame.
 
-Hitomi image galleries keep each ordered page as a Viewer item, and Viewer download saves only the selected page. A Hitomi anime record with a playable video exposes exactly one MP4 item—the poster remains preview metadata rather than becoming a second page—and downloading it creates one `.mp4` request with the source headers.
+Saving a post or collection to the device downloads every gallery page, with per-page progress and failed-page retry. Viewer download saves only the selected page. Filenames retain a bounded Unicode title plus source, canonical post ID, and gallery page; repeated downloads preserve the existing file. A Hitomi anime record with a playable video exposes exactly one MP4 item—the poster remains preview metadata rather than becoming a second page—and downloading it creates one `.mp4` request with the source headers.
 
 Media policy is shared across Search, Viewer, Codex, Creator Profile, and downloads. Source-aware request headers, progressive image URLs, canonical download URLs, lazy media resolution, and filename rules live in app media helpers instead of being duplicated inside screens.
 
@@ -61,6 +61,8 @@ THEORIA_RULE34XXX_API_KEY
 
 Search, Viewer, For You, and Creator each have a navigation-scoped ViewModel that owns immutable UI state, request identity, paging, and effects. Their composables render state and forward typed actions. `TheoriaApp.kt` remains the navigation and Android-effect host, and cross-route access uses weak ViewModel-lifetime handles rather than a second mutable state owner.
 
+Search, For You, and Creator execution services return immutable results to those route owners. Failed provider pages retain their exact continuation for in-place Retry while healthy posts keep their order. Shared browsing metadata observes membership IDs once across routes. Viewer sends stable controls to separate image/video/animation renderers; frame timing stays inside each renderer.
+
 ## Local Persistence
 
 Runtime state is local-first. The production owners are:
@@ -81,15 +83,19 @@ Legacy `codex_store.json`, `likes_store.json`, `settings_store.json`, and `ui_re
 
 ## Deep Links And Imports
 
-The Android manifest handles Pixiv auth callbacks, source post/profile links for supported providers, and JSON file/content URIs for Codex import. Hitomi routing accepts reader links and gallery paths for anime, CG, doujinshi, manga, artist-CG, game-CG, and image-set posts, plus `artist/<slug>-all.html` creator links. Codex sharing includes post identities and portable snapshots so collection metadata can import without a live provider.
+The Android manifest handles exact Pixiv auth callback paths, source post/profile links for supported providers, and JSON file/content URIs for Codex import. Hitomi routing accepts reader links and gallery paths for anime, CG, doujinshi, manga, artist-CG, game-CG, and image-set posts, plus `artist/<slug>-all.html` creator links. Codex sharing includes post identities and portable snapshots so collection metadata can import without a live provider. Imports validate document size, depth and version before preparing entries, prefer portable snapshots and local metadata, and resolve missing legacy entries in bounded batches. Progress, cancellation and Retry survive Activity recreation; membership commits only after preparation succeeds.
 
 Settings > Storage & Caching also exports all profiles, collections, Likes, automatic rules, follows, favorites, named searches, and preferences, with optional Recents and reading positions. Restore previews the archive and adds new profiles alongside existing data; applying global preferences is optional. Credentials, downloaded media, signed media URLs, and device paths are excluded. Interrupted restores resume from a verified intent journal.
+
+Profile creation and restore reject capacity overflow before changing library data. Collection commands retain their captured destination across navigation and Activity recreation, and keep Retry or exact membership Undo available until acknowledged.
 
 Collection actions offer Make available offline. Only complete verified galleries count as available; shared copies are retained until their final collection owner is removed. Manage storage reports bytes, exposes offline progress/retry/cancel, and clears disposable Coil, video, GIF, and Ugoira caches separately from offline copies. Keep media offline when saving queues acquisition after the collection transaction completes. Save to device uses a separate bounded DownloadManager queue with progress, cancellation, and failed-item retry; preparation survives Activity recreation but is not a durable process-restart queue.
 
 ## Releases And Updates
 
 Release builds enable the startup updater. The updater reads GitHub prereleases for the `main` channel, expects the fixed APK asset name `theoria-codex-main.apk`, validates version metadata/signature, and launches Android's package installer. Debug builds appear as **Theoria Debug**, disable the updater, and use `applicationIdSuffix ".debug"` plus `versionNameSuffix "-debug"`, so debug and release installs have separate app storage. Benchmark, release-acceptance, and baseline-profile targets likewise use `.benchmark`, `.acceptance`, and `.baselineprofile` package identities; connected/install tasks verify their packaged metadata before touching a device.
+
+One retained startup owner manages update choices and downloads. Release history shares a short-lived fetch cache; APK transfers are cancellable, bounded by size and time, and use separate staging files before atomic publication.
 
 Shipping releases enable R8 and resource shrinking. Durable Gson field names are explicit and every release assembly verifies the optimizer mapping against the checked contract manifest. Checked-in baseline/startup profiles cover cold start and all five top-level destinations. The separate `releaseAcceptance` variant keeps the same optimizer behavior but uses a debug key and updater-disabled package identity for non-debuggable device acceptance.
 
@@ -173,6 +179,13 @@ ANDROID_SERIAL=YOUR_DEVICE_SERIAL DEVICE_TEST_CLASS=com.theoriacodex.app.journey
 
 Use `data` to run only the Room device owner. The wrapper retains its task graph and build log under
 `build/reports/device-preflight/` and delegates all packaged checks to `scripts/verify_device_apk.py`.
+
+For limited benchmark storage, set `BENCHMARK_SCENARIO` to a method from
+`python3 scripts/benchmark_results.py contract` when running `scripts/verify_performance_device.sh`.
+Calibrate and compare that same workload before proceeding to the next. This preserves its normal
+iterations, metrics, three-run calibration and packaged preflight. The default remains the full suite.
+Raw evidence must remain available through comparison; deleting it afterwards preserves the small
+comparison reports but prevents later trace inspection or independent revalidation of those runs.
 
 Android-related pull requests and main pushes, including `app-logic` changes, run device tests on
 API 35 while the app compiles and targets SDK 37. Scheduled/manual runs also cover API 27. Tagged
