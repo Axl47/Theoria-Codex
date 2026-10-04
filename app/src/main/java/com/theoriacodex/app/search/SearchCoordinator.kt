@@ -461,7 +461,7 @@ class SearchCoordinator(
             if (sourceScope is SearchSourceScope.Temporary) return@withLock
             queryRepository.upsertAppliedQueries(mapOf(modeKey(query.mode) to query, LAST_ACTIVE_QUERY_KEY to query))
             currentCoroutineContext().ensureActive()
-            uiRestoreRepository.setSearchScrollState(executionKey, SearchScrollState(0, 0))
+            persistSearchScrollState(0, 0, executionKey)
         }
     }
 

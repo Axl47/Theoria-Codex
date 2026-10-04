@@ -51,6 +51,22 @@ internal class SearchScrollPersistenceController(
         }
     }
 
+    /** Finish an already admitted write before resetting this query; discard its older debounce. */
+    suspend fun reset(queryHash: String, writeReset: suspend () -> Unit) {
+        val previous = synchronized(lock) {
+            if (latest?.queryHash != queryHash) null else {
+                latest = null
+                committed = null
+                activeJob.also { it?.cancel(); activeJob = null }
+            }
+        }
+        previous?.join()
+        commitMutex.withLock {
+            synchronized(lock) { if (committed?.queryHash == queryHash) committed = null }
+            writeReset()
+        }
+    }
+
     /**
      * ViewModel.clear() has no suspending completion hook. The caller therefore waits for the one
      * final DataStore acknowledgement on Dispatchers.IO before the owned scheduler is cancelled.

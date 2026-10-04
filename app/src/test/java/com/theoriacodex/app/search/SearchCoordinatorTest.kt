@@ -257,6 +257,18 @@ class SearchCoordinatorTest {
     }
 
     @Test
+    fun `reapplying a query invalidates the previously cached scroll position`() = runTest {
+        val restore = InMemoryUiRestoreRepository()
+        val coordinator = coordinator(uiRestoreRepository = restore)
+        val query = unifiedQuery("scroll-reset")
+        val key = QueryHash.from(query)
+        coordinator.persistSearchScrollState(12, 24, key)
+        coordinator.persistAppliedSearch(query, SearchSourceScope.GlobalUnified, key)
+        coordinator.persistSearchScrollState(12, 24, key)
+        assertEquals(SearchScrollState(12, 24), restore.getSearchScrollState(key))
+    }
+
+    @Test
     fun `autocomplete follows temporary sources normalizes prefixes and sorts counts`() = runTest {
         val pixiv = TestAdapter(SourceKey.PIXIV).apply {
             autocomplete = listOf(

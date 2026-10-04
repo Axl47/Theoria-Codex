@@ -53,5 +53,5 @@ internal fun AppSettings.mergeRestoredSettings(imported: AppSettings, applyPrefe
         favoriteTagsByProfile = imported.favoriteTagsByProfile + favoriteTagsByProfile,
         forYouBlacklistByProfile = imported.forYouBlacklistByProfile + forYouBlacklistByProfile,
         followedCreators = follows,
-    )
+    ).requireSettingsCapacity()
 }

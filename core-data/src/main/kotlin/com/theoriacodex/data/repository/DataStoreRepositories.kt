@@ -231,7 +231,7 @@ class DataStoreSettingsRepository(
         dataStore.updateData { stored ->
             val current = stored.toDomain()
             val policyResult = policy(current)
-            val normalized = RepositoryPolicies.normalizeSettings(policyResult.state)
+            val normalized = RepositoryPolicies.normalizeSettings(policyResult.state).requireSettingsCapacity()
             result = MutationValue(policyResult.value)
             if (normalized == current) {
                 stored

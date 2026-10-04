@@ -665,9 +665,9 @@ internal class SearchViewModel(
             cancelRequestIfCurrent(requestId)
             return@withTimeout
         }
-        if (persistAcceptedResult) executionService.persistAppliedSearch(
-            result.query, result.sourceScope, result.executionKey,
-        )
+        if (persistAcceptedResult) scrollPersistence.reset(result.executionKey) {
+            executionService.persistAppliedSearch(result.query, result.sourceScope, result.executionKey)
+        }
         val succeeded = completeRequest(requestId, result, expectedExecutionKey)
         persistDraftQuery()
         if (persistAcceptedResult) withContext(NonCancellable) {

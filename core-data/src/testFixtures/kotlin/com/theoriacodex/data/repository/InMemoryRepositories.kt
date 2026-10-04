@@ -545,7 +545,7 @@ class InMemorySettingsRepository : SettingsRepository {
     ): T {
         return mutex.withLock {
             val result = policy(settings.value)
-            settings.value = RepositoryPolicies.normalizeSettings(result.state)
+            settings.value = RepositoryPolicies.normalizeSettings(result.state).requireSettingsCapacity()
             result.value
         }
     }

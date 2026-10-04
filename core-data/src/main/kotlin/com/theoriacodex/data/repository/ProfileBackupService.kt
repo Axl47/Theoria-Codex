@@ -102,6 +102,10 @@ class ProfileBackupService(
             savedSearches.merge(imported.savedSearches)
             readingPositions.merge(imported.readingPositions)
             settings.updateSettings { it.mergeRestoredSettings(imported.settings, pending.applyPreferences) }
+            val persistedIds = settings.observeSettings().first().recommendationProfiles.mapTo(mutableSetOf()) { it.profileId }
+            check(imported.settings.recommendationProfiles.all { it.profileId in persistedIds }) {
+                "Restored profiles were not retained"
+            }
             check(journalFile.delete() || !journalFile.exists()) { "Could not finish the restore journal" }
             ProfileRestoreResult(imported.settings.recommendationProfiles.size, imported.library.codices.size)
         } catch (cancelled: CancellationException) {
