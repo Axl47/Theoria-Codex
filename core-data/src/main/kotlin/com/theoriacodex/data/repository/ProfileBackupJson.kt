@@ -8,13 +8,10 @@ import com.google.gson.JsonParser
 import com.theoriacodex.data.storage.PostStorageCodec
 import com.theoriacodex.data.storage.PostStorageRecord
 import com.theoriacodex.data.storage.RecentSearchPayloadCodec
-import com.theoriacodex.domain.model.CreatorProfile
-import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
-import java.net.URI
 
 internal fun backupObject(block: JsonObject.() -> Unit): JsonObject = JsonObject().apply(block)
 internal fun <T> backupArray(values: List<T>, encode: (T) -> JsonElement): JsonArray =
@@ -74,54 +71,8 @@ internal fun JsonObject.readBackupSearch(gson: Gson): RecentSearchEntry {
         payload.kind, payload.sources, payload.sourceTags)
 }
 
-/** Device paths, credentials, and signed URLs are never portable backup data. */
-internal fun portableBackupPost(post: Post): Post = post.copy(
-    preview = portableBackupImage(post.preview),
-    full = post.full?.let(::portableBackupImage)?.takeIf { it.url != null },
-    media = post.media.map(::portableBackupImage),
-    pageUrl = portableBackupPageUrl(post),
-    creatorProfile = post.creatorProfile?.let(::portableBackupCreator),
-    creatorProfiles = post.creatorProfiles.map(::portableBackupCreator),
-)
-
-internal fun portableBackupCreator(creator: CreatorProfile): CreatorProfile {
-    val numericId = creator.profileId?.takeIf { it.matches(Regex("[0-9]+")) }
-    val profileUrl = if (creator.source == SourceKey.GELBOORU && numericId != null) {
-        "https://gelbooru.com/index.php?page=account&s=profile&id=$numericId"
-    } else portableBackupUrl(creator.profileUrl)
-    return creator.copy(profileUrl = profileUrl)
-}
-
-private fun portableBackupImage(image: ImageRef): ImageRef = image.copy(
-    url = portableBackupUrl(image.url),
-    localPath = null,
-    progressiveUrls = image.progressiveUrls.mapNotNull(::portableBackupUrl),
-    videoVariants = image.videoVariants.mapNotNull { variant ->
-        portableBackupUrl(variant.url)?.let { variant.copy(url = it) }
-    },
-)
-
-private fun portableBackupUrl(value: String?): String? = value?.takeIf { raw ->
-    runCatching { URI(raw) }.getOrNull()?.let {
-        it.scheme in setOf("https", "http") && !it.host.isNullOrBlank() &&
-            it.rawUserInfo == null && it.rawQuery == null && it.rawFragment == null
-    } == true
-}
-
-private fun portableBackupPageUrl(post: Post): String? {
-    val host = when (post.id.source) {
-        SourceKey.GELBOORU -> "gelbooru.com"
-        SourceKey.RULE34XXX -> "rule34.xxx"
-        else -> null
-    }
-    // These public post identities use query parameters; rebuild only their known canonical form.
-    return if (host != null && post.id.sourcePostId.matches(Regex("[0-9]+"))) {
-        "https://$host/index.php?page=post&s=view&id=${post.id.sourcePostId}"
-    } else portableBackupUrl(post.pageUrl)
-}
-
 internal fun encodeBackupPost(post: Post, gson: Gson): JsonElement =
-    gson.toJsonTree(PostStorageCodec.encode(portableBackupPost(post)))
+    gson.toJsonTree(PostStorageCodec.encode(portablePostSnapshot(post)))
 
 internal fun decodeBackupPost(record: JsonObject, gson: Gson): Post {
     require(record.backupInt("schemaVersion") == 1) { "Unsupported backup post version" }
@@ -129,7 +80,7 @@ internal fun decodeBackupPost(record: JsonObject, gson: Gson): Post {
     val post = PostStorageCodec.decode(gson.fromJson(record, PostStorageRecord::class.java))
         ?: error("Invalid backup post")
     require(post.id.sourcePostId.isNotBlank()) { "Backup post has no identity" }
-    return portableBackupPost(post)
+    return portablePostSnapshot(post)
 }
 
 private fun validateBackupPostRecord(record: JsonObject) {

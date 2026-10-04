@@ -73,7 +73,8 @@ import com.theoriacodex.app.codex.SaveToCodexSheet
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.codex.likesCodexIdForProfile
 import com.theoriacodex.app.codex.transfer.CodexExportResult
-import com.theoriacodex.app.codex.transfer.CodexImportResult
+import com.theoriacodex.app.codex.transfer.CodexImportViewModel
+import com.theoriacodex.app.codex.transfer.CodexImportHost
 import com.theoriacodex.app.appshell.AppShellAction
 import com.theoriacodex.app.appshell.AppShellEffect
 import com.theoriacodex.app.appshell.AppShellViewModel
@@ -696,51 +697,25 @@ internal fun TheoriaAppContent(
         }
     }
 
-    suspend fun importCodexFromUri(uri: Uri) {
-        val raw = runCatchingPreservingCancellation {
-            readCodexDocument { appContext.contentResolver.openInputStream(uri) }
-        }.getOrNull()
-        if (raw.isNullOrBlank()) {
-            Toast.makeText(appContext, "Could not read codex file", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        settingsOwner.onAction(SettingsAction.RefreshAccounts)
-        when (
-            val result = workflowDependencies.codexTransfer.import(
-                raw = raw,
-                targetCodexId = profileScopedCodexId(
-                    dataDependencies.currentActiveRecommendationProfile().profileId,
-                ),
-            )
-        ) {
-            CodexImportResult.Failure -> {
-                Toast.makeText(appContext, "Could not import codex. Please try again.", Toast.LENGTH_SHORT).show()
+    val codexImportOwner = viewModel<CodexImportViewModel>(
+        key = "codex-import-owner",
+        factory = viewModelFactory {
+            initializer {
+                CodexImportViewModel(
+                    transfer = workflowDependencies.codexTransfer,
+                    readDocument = { document -> readCodexDocument { appContext.contentResolver.openInputStream(document.toUri()) } },
+                    newTargetCodexId = { profileScopedCodexId(dataDependencies.currentActiveRecommendationProfile().profileId) },
+                )
             }
-            CodexImportResult.Unreadable -> {
-                Toast.makeText(appContext, "Could not read codex file", Toast.LENGTH_SHORT).show()
-            }
-            CodexImportResult.Invalid -> {
-                Toast.makeText(appContext, "Invalid codex file", Toast.LENGTH_SHORT).show()
-            }
-            is CodexImportResult.Success -> {
-                val message = if (result.imported == 0 && result.skipped == 0) {
-                    "Imported codex with no posts"
-                } else {
-                    "Imported ${result.imported} posts${if (result.skipped > 0) " (${result.skipped} skipped)" else ""}"
-                }
-                Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
+        },
+    )
+    CodexImportHost(codexImportOwner, snackbarHostState)
 
     val importCodexLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
         onResult = { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                importCodexFromUri(uri)
-            }
+            codexImportOwner.start(uri.toString())
         },
     )
 
@@ -949,15 +924,8 @@ internal fun TheoriaAppContent(
                 Intent.FLAG_GRANT_READ_URI_PERMISSION,
             )
         }
-        try {
-            importCodexFromUri(uri)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (_: Throwable) {
-            Toast.makeText(appContext, "Could not import codex file", Toast.LENGTH_SHORT).show()
-        } finally {
-            consumePendingImportUriIfCurrent()
-        }
+        codexImportOwner.start(uri.toString())
+        consumePendingImportUriIfCurrent()
     }
 
     val pendingExternalContent = appShellState.pendingIncomingUri

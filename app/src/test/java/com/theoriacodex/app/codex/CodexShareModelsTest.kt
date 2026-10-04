@@ -18,6 +18,25 @@ import org.junit.Test
 
 class CodexShareModelsTest {
     @Test
+    fun `document budgets and portable media reject oversized and credential-bearing input`() {
+        assertNull(parseCodexShareFile(" ".repeat(CODEX_SHARE_MAX_BYTES + 1)))
+        assertNull(parseCodexShareFile("""{"version":2,"title":"Many","posts":[${"{},".repeat(CODEX_SHARE_MAX_POSTS)}{}]}"""))
+        assertNull(parseCodexShareFile("""{"version":2.5,"title":"Future","posts":[]}"""))
+        val source = samplePost(SourceKey.PIXIV, "42").copy(
+            preview = ImageRef("https://example.test/preview.jpg", "/private/preview.jpg", "image/jpeg"),
+            full = ImageRef("https://example.test/full.jpg?token=secret", "/private/full.jpg", "image/jpeg"),
+            pageUrl = "https://name:secret@example.test/post/42",
+        )
+        val encoded = Gson().toJson(buildCodexShareFile("Portable", listOf(source)))
+        assertFalse(encoded.contains("secret"))
+        assertFalse(encoded.contains("/private"))
+        val restored = codexSharePostSnapshot(parseCodexShareFile(encoded)!!.posts!!.single())!!
+        assertNull(restored.full)
+        assertNull(restored.pageUrl)
+        assertEquals(source.preview.url, restored.preview.url)
+    }
+
+    @Test
     fun `builds v2 share file with stable source ids and embedded snapshots`() {
         val export = buildCodexShareFile(
             title = "Favorites",
@@ -305,34 +324,21 @@ class CodexShareModelsTest {
     }
 
     @Test
-    fun `import resolution keeps source then snapshot then repository precedence`() = runTest {
-        val snapshotPost = samplePost(SourceKey.PIXIV, "42")
-        val entry = buildCodexShareFile("Import", listOf(snapshotPost)).posts.orEmpty().single()
-        val sourcePost = snapshotPost.copy(title = "Fresh source")
-        val storedPost = snapshotPost.copy(title = "Stored fallback")
-        var repositoryReads = 0
-
-        val resolvedFromSource = resolveCodexShareImportPost(entry, sourcePost) {
-            repositoryReads += 1
-            storedPost
-        }
-        assertEquals(sourcePost, resolvedFromSource)
-        assertEquals(0, repositoryReads)
-
-        val resolvedFromSnapshot = resolveCodexShareImportPost(entry, null) {
-            repositoryReads += 1
-            storedPost
-        }
-        assertEquals(snapshotPost, resolvedFromSnapshot)
-        assertEquals(0, repositoryReads)
-
+    fun `import resolves snapshots and stored posts before a provider`() = runTest {
+        val snapshot = samplePost(SourceKey.PIXIV, "42")
+        val entry = buildCodexShareFile("Import", listOf(snapshot)).posts.orEmpty().single()
+        var sourceReads = 0
+        var storedReads = 0
+        val source = suspend { sourceReads++; snapshot.copy(title = "Source") }
+        val stored = suspend { storedReads++; snapshot.copy(title = "Stored") }
+        assertEquals(snapshot, resolveCodexShareImportPost(entry, stored, source))
+        assertEquals(0, storedReads)
+        assertEquals(0, sourceReads)
         val idOnly = CodexSharePost(source = "PIXIV", sourcePostId = "42")
-        val resolvedFromRepository = resolveCodexShareImportPost(idOnly, null) {
-            repositoryReads += 1
-            storedPost
-        }
-        assertEquals(storedPost, resolvedFromRepository)
-        assertEquals(1, repositoryReads)
+        assertEquals("Stored", resolveCodexShareImportPost(idOnly, stored, source)?.title)
+        assertEquals(0, sourceReads)
+        assertEquals("Source", resolveCodexShareImportPost(idOnly, { null }, source)?.title)
+        assertEquals(1, sourceReads)
     }
 
     @Test

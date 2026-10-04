@@ -136,7 +136,7 @@ class ProfileBackupService(
         val raw = Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
             .onUnmappableCharacter(CodingErrorAction.REPORT)
             .decode(ByteBuffer.wrap(journalFile.readBytes())).toString()
-        checkBackupDepth(raw)
+        checkDocumentDepth(raw)
         val record = JsonParser.parseString(raw).asJsonObject
         val operationId = record.backupString("operationId")
         require(operationId.matches(Regex("[A-Za-z0-9-]{1,80}"))) { "Invalid restore operation" }

@@ -4,6 +4,9 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.annotations.SerializedName
+import com.theoriacodex.data.repository.checkDocumentDepth
+import com.theoriacodex.data.repository.portableMediaUrl
+import com.theoriacodex.data.repository.portablePostSnapshot
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -108,20 +111,30 @@ internal fun buildCodexShareFile(title: String, posts: List<Post>): CodexShareFi
             CodexSharePost(
                 source = post.id.source.name,
                 sourcePostId = post.id.sourcePostId,
-                snapshot = post.toCodexShareSnapshot(),
+                snapshot = portablePostSnapshot(post).toCodexShareSnapshot(),
             )
         },
     )
 }
 
 internal fun parseCodexShareFile(raw: String): CodexShareFile? {
-    val root = runCatching { JsonParser.parseString(raw) }
+    val root = runCatching {
+        require(raw.length <= CODEX_SHARE_MAX_BYTES && raw.toByteArray(Charsets.UTF_8).size <= CODEX_SHARE_MAX_BYTES)
+        checkDocumentDepth(raw)
+        JsonParser.parseString(raw)
+    }
         .getOrNull()
         ?.takeIf(JsonElement::isJsonObject)
         ?.asJsonObject
         ?: return null
+    val version = if (root.has("version")) {
+        root.get("version").takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asString?.toIntOrNull()
+    } else 1
+    if (version !in 1..CODEX_SHARE_VERSION) return null
+    val posts = root.get("posts")?.takeIf { it.isJsonArray }?.asJsonArray ?: return null
+    if (posts.size() > CODEX_SHARE_MAX_POSTS || !boundedShareValue(root, root = true)) return null
     return CodexShareFile(
-        version = root.intOrNull("version"),
+        version = version,
         title = root.stringOrNull("title"),
         posts = root.postListOrNull("posts"),
     )
@@ -134,7 +147,7 @@ internal fun codexSharePostId(post: CodexSharePost): PostId? {
         ?.let { value -> runCatching { SourceKey.valueOf(value) }.getOrNull() }
         ?: return null
     val sourcePostId = post.sourcePostId?.trim().orEmpty()
-    if (sourcePostId.isBlank()) return null
+    if (sourcePostId.isBlank() || sourcePostId.length > 512 || sourcePostId.any { it.isISOControl() }) return null
     return PostId(source = source, sourcePostId = sourcePostId)
 }
 
@@ -162,7 +175,7 @@ internal fun codexSharePostSnapshot(post: CodexSharePost): Post? {
         }
     val effectivePrimaryCreator = primaryCreator ?: creatorProfiles.firstOrNull()
 
-    return Post(
+    return portablePostSnapshot(Post(
         id = postId,
         preview = preview,
         full = snapshot.full?.toImageRef(),
@@ -180,7 +193,7 @@ internal fun codexSharePostSnapshot(post: CodexSharePost): Post? {
         creatorProfiles = creatorProfiles,
         durationMs = snapshot.durationMs?.takeIf { it >= 0L },
         mediaCount = snapshot.mediaCount?.takeIf { it > 0 },
-    )
+    ))
 }
 
 internal fun selectCodexShareEntries(
@@ -203,12 +216,12 @@ internal fun selectCodexShareEntries(
 
 internal suspend fun resolveCodexShareImportPost(
     entry: CodexSharePost,
-    resolvedFromSource: Post?,
     storedPost: suspend () -> Post?,
+    resolveFromSource: suspend () -> Post?,
 ): Post? {
-    return resolvedFromSource
-        ?: codexSharePostSnapshot(entry)
+    return codexSharePostSnapshot(entry)
         ?: storedPost()
+        ?: resolveFromSource()
 }
 
 internal fun sanitizeCodexExportName(name: String): String {
@@ -252,13 +265,13 @@ private fun ImageRef.toCodexShareImageRef(): CodexShareImageRef {
 }
 
 private fun CodexShareImageRef.toImageRef(): ImageRef? {
-    val normalizedUrl = url.normalizedOptionalString()
+    val normalizedUrl = portableMediaUrl(url.normalizedOptionalString())
     if (normalizedUrl == null) return null
     return ImageRef(
         url = normalizedUrl,
         localPath = null,
         mime = mime.normalizedOptionalString(),
-        progressiveUrls = progressiveUrls.normalizedStrings(),
+        progressiveUrls = progressiveUrls.normalizedStrings().mapNotNull(::portableMediaUrl),
         isAnimated = isAnimated ?: false,
     )
 }
@@ -448,3 +461,18 @@ private fun <T> JsonObject.listOrNull(
 }
 
 private const val CODEX_SHARE_VERSION = 2
+
+internal const val CODEX_SHARE_MAX_BYTES = 32 * 1024 * 1024
+internal const val CODEX_SHARE_MAX_POSTS = 100_000
+
+/** Byte/depth checks precede parsing; per-value bounds cap work inside otherwise valid documents. */
+private fun boundedShareValue(value: JsonElement, root: Boolean = false): Boolean = when {
+    value.isJsonObject -> value.asJsonObject.entrySet().all { (key, child) ->
+        key.length <= 256 && if (root && key == "posts" && child.isJsonArray) {
+            child.asJsonArray.all { boundedShareValue(it) }
+        } else boundedShareValue(child)
+    }
+    value.isJsonArray -> value.asJsonArray.size() <= 10_000 && value.asJsonArray.all { boundedShareValue(it) }
+    value.isJsonPrimitive && value.asJsonPrimitive.isString -> value.asString.length <= 32_768
+    else -> true
+}

@@ -5,10 +5,7 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import com.theoriacodex.data.repository.PROFILE_BACKUP_MAX_BYTES
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
-import java.io.ByteArrayOutputStream
 import java.io.InputStream
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
 
 /** The owner passes document IDs; stream and permission lifetimes stay in this gateway. */
 internal interface BackupDocuments {
@@ -42,15 +39,5 @@ internal suspend fun readBackupDocument(
     input: InputStream,
     maximumBytes: Int = PROFILE_BACKUP_MAX_BYTES,
 ): ByteArray {
-    val output = ByteArrayOutputStream()
-    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-    while (true) {
-        currentCoroutineContext().ensureActive()
-        val count = input.read(buffer, 0, minOf(buffer.size, maximumBytes - output.size() + 1))
-        if (count < 0) break
-        require(output.size() + count <= maximumBytes) { "Backup files must be 32 MiB or smaller." }
-        output.write(buffer, 0, count)
-    }
-    require(output.size() > 0) { "This backup file is empty." }
-    return output.toByteArray()
+    return com.theoriacodex.data.repository.readBoundedDocument(input, maximumBytes)
 }

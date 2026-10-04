@@ -8,8 +8,6 @@ import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.CodexAutomaticTag
 import com.theoriacodex.domain.model.CodexItem
 import com.theoriacodex.domain.model.SourceKey
-import java.nio.ByteBuffer
-import java.nio.charset.CodingErrorAction
 
 const val PROFILE_BACKUP_MAX_BYTES = 32 * 1024 * 1024
 
@@ -42,9 +40,8 @@ class ProfileBackupCodec(private val gson: Gson = Gson()) {
 
     fun decode(bytes: ByteArray): ProfileBackup {
         require(bytes.isNotEmpty() && bytes.size <= PROFILE_BACKUP_MAX_BYTES) { "Backup must be at most 32 MiB" }
-        val raw = Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
-            .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString()
-        checkBackupDepth(raw)
+        val raw = decodeDocumentUtf8(bytes)
+        checkDocumentDepth(raw)
         val root = JsonParser.parseString(raw).asJsonObject
         require(root.backupString("format") == "theoria-profile-backup") { "This is not a Theoria profile backup" }
         require(root.backupInt("version") == 1) { "This backup needs a newer version of Theoria" }
@@ -177,22 +174,4 @@ private fun validate(backup: ProfileBackup) {
     require(backup.savedSearches.all { it.id.isNotBlank() && it.name.isNotBlank() && it.name.length <= MAX_SAVED_SEARCH_NAME_LENGTH })
     require(backup.readingPositions.size <= MAX_READING_POSITIONS)
     require(backup.readingPositions.distinctBy { it.postId to it.section }.size == backup.readingPositions.size)
-}
-
-internal fun checkBackupDepth(raw: String) {
-    var depth = 0
-    var inString = false
-    var escaped = false
-    raw.forEach { char ->
-        when {
-            escaped -> escaped = false
-            inString && char == '\\' -> escaped = true
-            char == '"' -> inString = !inString
-            !inString && (char == '{' || char == '[') -> {
-                depth += 1
-                require(depth <= 64) { "Backup nesting is too deep" }
-            }
-            !inString && (char == '}' || char == ']') -> depth -= 1
-        }
-    }
 }

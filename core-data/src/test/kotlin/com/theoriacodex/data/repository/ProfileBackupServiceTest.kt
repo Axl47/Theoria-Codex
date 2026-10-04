@@ -97,11 +97,11 @@ class ProfileBackupServiceTest {
     @Test fun `canonical booru post links survive while arbitrary credential queries do not`() {
         val original = backup().library.posts.single()
         listOf(SourceKey.GELBOORU to "gelbooru.com", SourceKey.RULE34XXX to "rule34.xxx").forEach { (source, host) ->
-            val restored = portableBackupPost(original.copy(id = PostId(source, "42"),
+            val restored = portablePostSnapshot(original.copy(id = PostId(source, "42"),
                 pageUrl = "https://$host/index.php?page=post&s=view&id=42&api_key=secret"))
             assertEquals("https://$host/index.php?page=post&s=view&id=42", restored.pageUrl)
         }
-        assertNull(portableBackupPost(original.copy(pageUrl = "https://example.test/post?token=secret")).pageUrl)
+        assertNull(portablePostSnapshot(original.copy(pageUrl = "https://example.test/post?token=secret")).pageUrl)
         assertEquals("https://gelbooru.com/index.php?page=account&s=profile&id=3", portableBackupCreator(
             CreatorProfile(SourceKey.GELBOORU, "Artist", "3", profileUrl = "https://gelbooru.com/?token=secret"),
         ).profileUrl)
