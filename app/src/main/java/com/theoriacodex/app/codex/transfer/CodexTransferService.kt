@@ -133,6 +133,18 @@ class CodexTransferService internal constructor(
         )
     }
 
+    /** Reorders the selected profile's slots while preserving other profiles in one transaction. */
+    suspend fun reorderVisibleCodices(visibleIds: List<String>) = withContext(workerDispatcher) {
+        if (visibleIds.isEmpty()) return@withContext
+        val selected = visibleIds.toSet()
+        require(selected.size == visibleIds.size) { "Duplicate Codex order" }
+        val current = codexRepository.observeCodices().first().map { it.codexId }
+        require(current.count { it in selected } == selected.size) { "Codex list changed. Please try again." }
+        val order = visibleIds.iterator()
+        transactions.reorderCodices(current.map { if (it in selected) order.next() else it })
+        Unit
+    }
+
     /** Commit the selection atomically; optional cache failures cannot truncate durable saves. */
     suspend fun save(codexId: String, posts: List<Post>, cacheFullImage: Boolean): CodexSaveResult =
         withContext(workerDispatcher) {

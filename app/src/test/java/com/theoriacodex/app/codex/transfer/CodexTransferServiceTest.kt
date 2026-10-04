@@ -23,6 +23,27 @@ import org.junit.Test
 
 class CodexTransferServiceTest {
     @Test
+    fun `visible reorder commits once and preserves other profile slots`() = runTest {
+        val repository = InMemoryCodexRepository()
+        for (id in listOf("first", "other-profile", "last")) repository.ensureCodex(id, id)
+        val base = InMemoryCodexLikesTransactions(codices = repository)
+        var commits = 0
+        val transactions = object : com.theoriacodex.data.repository.CodexLikesTransactions by base {
+            override suspend fun reorderCodices(codexIdsInOrder: List<String>): com.theoriacodex.data.repository.CodexBulkReorderResult {
+                commits++
+                assertEquals(listOf("last", "other-profile", "first"), codexIdsInOrder)
+                return base.reorderCodices(codexIdsInOrder)
+            }
+        }
+        val service = CodexTransferService(repository, transactions, InMemoryCacheRepository(), emptyRegistry())
+        service.reorderVisibleCodices(listOf("last", "first"))
+        assertEquals(1, commits)
+        assertEquals(listOf("last", "other-profile", "first"), repository.observeCodices().first().map { it.codexId })
+        assertTrue(runCatching { service.reorderVisibleCodices(listOf("missing")) }.isFailure)
+        assertEquals(1, commits)
+    }
+
+    @Test
     fun `storage failures during import and export are typed outcomes`() = runTest {
         val repository = InMemoryCodexRepository()
         repository.ensureCodex("source", "Saved")

@@ -68,7 +68,8 @@ import androidx.core.net.toUri
 import com.theoriacodex.app.codex.CodexDetailScreen
 import com.theoriacodex.app.media.MediaDurationRouteViewModel
 import com.theoriacodex.app.codex.CodexListScreen
-import com.theoriacodex.app.codex.CodexRemovalWorkflow
+import com.theoriacodex.app.codex.CodexCommandViewModel
+import com.theoriacodex.app.codex.CodexCommandHost
 import com.theoriacodex.app.codex.SaveToCodexSheet
 import com.theoriacodex.app.codex.profileScopedCodexId
 import com.theoriacodex.app.codex.likesCodexIdForProfile
@@ -278,9 +279,6 @@ internal fun TheoriaAppContent(
     val recentsClearWorkflow = remember(dataDependencies.recentsRepository) {
         RecentsClearWorkflow(dataDependencies.recentsRepository)
     }
-    val codexRemovalWorkflow = remember(dataDependencies.codexRepository) {
-        CodexRemovalWorkflow(dataDependencies.codexRepository)
-    }
     suspend fun showActionableFeedback(message: String, actionLabel: String): Boolean {
         return snackbarHostState.showSnackbar(
             message = message,
@@ -293,6 +291,13 @@ internal fun TheoriaAppContent(
     val updateDependencies = appContainer.updates
     val featureDependencies = appContainer.features
     val workflowDependencies = appContainer.workflows
+    val codexCommandOwner = viewModel<CodexCommandViewModel>(
+        key = "codex-command-owner",
+        factory = viewModelFactory {
+            initializer { CodexCommandViewModel(dataDependencies.codexRepository,
+                workflowDependencies.likesCodexSync::clearProfile, workflowDependencies.codexTransfer::reorderVisibleCodices) }
+        },
+    )
     val codexSaveOwner = viewModel<CodexSaveViewModel>(
         key = "codex-save-owner",
         factory = viewModelFactory {
@@ -423,6 +428,12 @@ internal fun TheoriaAppContent(
         excludedCodexIdsForSave = emptySet()
     }
     var homeTabRoute by rememberSaveable { mutableStateOf(TopLevelDestination.Search.route) }
+    CodexCommandHost(codexCommandOwner, snackbarHostState) { deletedId ->
+        if (navController.currentBackStackEntry?.arguments?.getString("codexId") == deletedId) {
+            homeTabRoute = TopLevelDestination.Codex.route
+            navController.popBackStack(AppRoute.Home, inclusive = false)
+        }
+    }
     LaunchedEffect(homeTabRoute) {
         if (homeTabRoute == TopLevelDestination.Settings.route) {
             settingsOwner.onAction(SettingsAction.SettingsEntered)
@@ -718,32 +729,6 @@ internal fun TheoriaAppContent(
             codexImportOwner.start(uri.toString())
         },
     )
-
-    suspend fun commitVisibleCodexOrder(
-        orderedVisibleIds: List<String>,
-        codices: List<com.theoriacodex.domain.model.Codex>,
-    ) {
-        if (orderedVisibleIds.isEmpty()) return
-        val idSet = orderedVisibleIds.toSet()
-        if (idSet.size != orderedVisibleIds.size) return
-
-        val codexById = codices.associateBy { codex -> codex.codexId }
-        if (!orderedVisibleIds.all { id -> codexById.containsKey(id) }) return
-
-        val visibleSlots = codices.mapIndexedNotNull { index, codex ->
-            index.takeIf { codex.codexId in idSet }
-        }
-        if (visibleSlots.size != orderedVisibleIds.size) return
-
-        val desired = codices.toMutableList()
-        orderedVisibleIds.forEachIndexed { orderIndex, codexId ->
-            val slot = visibleSlots[orderIndex]
-            desired[slot] = codexById.getValue(codexId)
-        }
-        desired.forEachIndexed { index, codex ->
-            dataDependencies.codexRepository.reorderCodex(codex.codexId, index)
-        }
-    }
 
     suspend fun completeAppStartup() {
         if (navReady) return
@@ -1686,40 +1671,11 @@ internal fun TheoriaAppContent(
                                                 searchFromCodex(source, includeTags)
                                             }
                                         },
-                                        onCommitReorder = { orderedVisibleIds ->
-                                            scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                commitVisibleCodexOrder(orderedVisibleIds, state.allCodices)
-                                            }
-                                        },
-                                        onCreateCodex = { name ->
-                                            scope.launch {
-                                                dataDependencies.codexRepository.ensureCodex(
-                                                    codexId = profileScopedCodexId(state.activeProfile.profileId),
-                                                    name = name,
-                                                )
-                                            }
-                                        },
-                                        onRenameCodex = { codexId, name ->
-                                            scope.launch { dataDependencies.codexRepository.renameCodex(codexId, name) }
-                                        },
-                                        onSetAutomaticTag = { codexId, tag, enabled ->
-                                            scope.launch {
-                                                dataDependencies.codexRepository.setAutomaticTag(
-                                                    codexId = codexId,
-                                                    tag = tag,
-                                                    enabled = enabled,
-                                                )
-                                            }
-                                        },
-                                        onDeleteCodex = { codexId ->
-                                            scope.launch {
-                                                if (codexId == likesCodexIdForProfile(state.activeProfile.profileId)) {
-                                                    workflowDependencies.likesCodexSync.clearProfile(state.activeProfile.profileId)
-                                                } else {
-                                                    dataDependencies.codexRepository.deleteCodex(codexId)
-                                                }
-                                            }
-                                        },
+                                        onCommitReorder = codexCommandOwner::reorder,
+                                        onCreateCodex = { name -> codexCommandOwner.create(state.activeProfile.profileId, name) },
+                                        onRenameCodex = codexCommandOwner::rename,
+                                        onSetAutomaticTag = codexCommandOwner::automaticTag,
+                                        onDeleteCodex = { id -> codexCommandOwner.delete(id, state.activeProfile.profileId) },
                                         likesCodexId = likesCodexIdForProfile(state.activeProfile.profileId),
                                     )
                                     }
@@ -1835,16 +1791,7 @@ internal fun TheoriaAppContent(
                                     navController.navigate(AppRoute.Viewer)
                                 }
                             },
-                            onRemovePosts = { posts ->
-                                scope.launch {
-                                    codexRemovalWorkflow.remove(
-                                        codexId = codexId,
-                                        items = state.items,
-                                        posts = posts,
-                                        showActionableFeedback = ::showActionableFeedback,
-                                    )
-                                }
-                            },
+                            onRemovePosts = { posts -> codexCommandOwner.remove(codexId, state.items, posts) },
                             onAddPostsToAnotherCodex = { posts ->
                                 requestSaveToCodex(posts, excludedCodexId = codexId)
                             },
@@ -1878,17 +1825,7 @@ internal fun TheoriaAppContent(
                             onBack = {
                                 navController.popBackStack()
                             },
-                            onDeleteCodex = {
-                                scope.launch {
-                                    if (codexId == likesCodexIdForProfile(state.activeProfile.profileId)) {
-                                        workflowDependencies.likesCodexSync.clearProfile(state.activeProfile.profileId)
-                                    } else {
-                                        dataDependencies.codexRepository.deleteCodex(codexId)
-                                        homeTabRoute = TopLevelDestination.Codex.route
-                                        navController.popBackStack(AppRoute.Home, inclusive = false)
-                                    }
-                                }
-                            },
+                            onDeleteCodex = { codexCommandOwner.delete(codexId, state.activeProfile.profileId) },
                             isLikesCodex = codexId == likesCodexIdForProfile(state.activeProfile.profileId),
                             fabRestoreState = fabRestoreState,
                             onFabRestoreStateChange = { updated ->
