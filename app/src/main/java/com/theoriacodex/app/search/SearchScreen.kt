@@ -1018,14 +1018,6 @@ fun SearchResultCard(
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .onGloballyPositioned { coordinates ->
-                val visible = coordinates.isAttached &&
-                    isVisibleFeedBounds(coordinates.boundsInWindow(clipBounds = true))
-                if (isInViewport != visible) {
-                    isInViewport = visible
-                    onViewportChanged(visible)
-                }
-            }
             .testTag(searchCardTestTag(post.id))
             .combinedClickable(
                 onClick = onClick,
@@ -1138,12 +1130,20 @@ fun SearchResultCard(
                 requestResolvedCardPreview()
             }
         }
-
+        // A visible caption must not retain autoplay demand for media outside the window.
         Box(
             modifier = Modifier
                 .testTag(searchMediaTestTag(post.id))
                 .fillMaxWidth()
-                .aspectRatio(ratio),
+                .aspectRatio(ratio)
+                .onGloballyPositioned { coordinates ->
+                    val visible = coordinates.isAttached &&
+                        isVisibleFeedBounds(coordinates.boundsInWindow(clipBounds = true))
+                    if (isInViewport != visible) {
+                        isInViewport = visible
+                        onViewportChanged(visible)
+                    }
+                },
         ) {
             val showUgoira = isPixivUgoiraPost(effectivePost) && pixivUgoiraClient != null
             if (showUgoira) {
