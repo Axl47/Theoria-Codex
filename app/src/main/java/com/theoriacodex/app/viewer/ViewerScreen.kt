@@ -163,7 +163,7 @@ internal fun ViewerScreen(
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
     onGoToSearch: () -> Unit,
     onOpenCreatorFallback: ((Post) -> Unit)? = null,
-    playbackDiagnosticsEnabled: Boolean = false,
+    playbackDiagnosticsEnabled: Boolean = com.theoriacodex.app.BuildConfig.BENCHMARK_FIXTURES_ENABLED,
 ) {
     val activity = LocalContext.current.viewerActivity()
     val inPictureInPicture = activity?.viewerPictureInPictureActive == true
