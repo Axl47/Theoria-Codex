@@ -18,6 +18,25 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class ViewerPlatformPlaybackTest {
+    @Test fun `overlapping page handoff sessions have independent identities and controls`() {
+        val context = RuntimeEnvironment.getApplication()
+        val players = List(2) { ExoPlayer.Builder(context).build() }
+        val sessions = mutableListOf<androidx.media3.session.MediaSession>()
+        try {
+            players.forEach { sessions += createViewerMediaSession(context, it) {} }
+            assertEquals(2, sessions.map { it.id }.distinct().size)
+            sessions[1].player.play()
+            assertTrue(players[1].playWhenReady)
+            assertFalse(players[0].playWhenReady)
+            sessions[0].release()
+            sessions[1].player.pause()
+            assertFalse(players[1].playWhenReady)
+        } finally {
+            sessions.forEach { it.release() }
+            players.forEach { it.release() }
+        }
+    }
+
     @Test fun `external session play and pause update Viewer intent and actual player`() {
         val context = RuntimeEnvironment.getApplication()
         val player = ExoPlayer.Builder(context).build()

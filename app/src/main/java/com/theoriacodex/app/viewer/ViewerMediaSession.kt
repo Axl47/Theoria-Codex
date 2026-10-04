@@ -28,7 +28,8 @@ internal fun createViewerMediaSession(
         }
     }
     return MediaSession.Builder(context.applicationContext, controlledPlayer)
-        .setId("theoria-viewer")
+        // Compose can attach the next page before disposing the previous page's session.
+        .setId("theoria-viewer-${java.util.UUID.randomUUID()}")
         .build()
 }
 
