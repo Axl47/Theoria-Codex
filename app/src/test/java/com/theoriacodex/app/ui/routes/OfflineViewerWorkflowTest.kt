@@ -92,7 +92,7 @@ class OfflineViewerWorkflowTest {
     fun `offline galleries replace remote Codex snapshots for every Viewer page and cold restoration`() = runTest {
         val directory = temporary.newFolder()
         val images = (0..2).map { createPng(directory.resolve("input-$it.png"), Color.CYAN + it) }
-        val galleries = listOf("one", "two").map { id -> gallery(id, images) }
+        val galleries = listOf("one", "two", "three", "four").map { id -> gallery(id, images) }
         val snapshots = galleries.map { post -> post.copy(
             media = post.media.map { it.copy(localPath = null) }, full = post.full?.copy(localPath = null),
         ) }
@@ -104,9 +104,9 @@ class OfflineViewerWorkflowTest {
             val offline = requireNotNull(graph.features.offlineMedia)
             offline.makeAvailableOffline("codex:offline", snapshots)
             val job = offline.jobs.first { it["codex:offline"]?.isRunning == false }.getValue("codex:offline")
-            assertEquals(2, job.completedPosts)
+            assertEquals(4, job.completedPosts)
             assertTrue(job.failedPosts.isEmpty())
-            assertEquals(6, offline.store.snapshot.value.mediaCount)
+            assertEquals(12, offline.store.snapshot.value.mediaCount)
             images.forEach { assertTrue(it.delete()) }
             graph.registry.resolveRequests.clear()
             graph.data.cacheRepository.clearThumbnailCache()
@@ -114,16 +114,26 @@ class OfflineViewerWorkflowTest {
             val workflow = workflow(graph)
             val launchContext = ViewerLaunchContext("codex:offline", 1, ViewerStreamSource.CODEX, 0)
             val prepared = workflow.preparePostsForLaunch(snapshots, launchContext)
-            val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this@runTest)
+            assertNull(prepared[0].full?.localPath)
+            assertLocalGallery(prepared[1], directory)
+            assertLocalGallery(prepared[2], directory)
+            assertNull(prepared[3].full?.localPath)
+            val owner = ViewerViewModel(SavedStateHandle(), postResolver = workflow, scopeOverride = kotlinx.coroutines.CoroutineScope(coroutineContext + kotlinx.coroutines.Dispatchers.Default))
             owner.replaceSession(ViewerSession(prepared, launchContext, initialMediaIndex = 2))
             assertEquals(galleries[1].id, owner.state.value.currentPage?.post?.id)
             assertLocalGallery(owner.state.value.currentPage!!.post, directory)
             assertEquals(2, owner.state.value.currentPage?.selectedMediaIndex)
             owner.onAction(ViewerAction.SelectPage(0))
+            owner.onAction(ViewerAction.RequestCurrentPageResolution)
+            owner.state.first { it.currentPage?.resolution?.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.RESOLVED }
             owner.onAction(ViewerAction.SelectMedia(1))
             assertLocalGallery(owner.state.value.currentPage!!.post, directory)
             assertTrue(owner.state.value.currentMedia?.displayLocation?.startsWith(directory.resolve("offline-media").path) == true)
-            assertEquals(prepared.first(), workflow.resolvePost(galleries.first().id, ViewerStreamSource.CODEX))
+            assertLocalGallery(requireNotNull(workflow.resolvePost(galleries.first().id, ViewerStreamSource.CODEX)), directory)
+            owner.onAction(ViewerAction.SelectPage(3))
+            owner.onAction(ViewerAction.RequestCurrentPageResolution)
+            owner.state.first { it.currentPage?.resolution?.status == com.theoriacodex.app.viewer.state.ViewerResolutionStatus.RESOLVED }
+            assertLocalGallery(owner.state.value.currentPage!!.post, directory)
             assertTrue(graph.registry.resolveRequests.isEmpty())
 
             graph.shutdown()
@@ -136,7 +146,11 @@ class OfflineViewerWorkflowTest {
             )))
             assertEquals(1, restored.context.startIndex)
             assertEquals(2, restored.initialMediaIndex)
-            restored.posts.forEach { assertLocalGallery(it, directory) }
+            assertEquals(galleries.map(Post::id), restored.posts.map(Post::id))
+            assertNull(restored.posts[0].full?.localPath)
+            assertLocalGallery(restored.posts[1], directory)
+            assertLocalGallery(restored.posts[2], directory)
+            assertNull(restored.posts[3].full?.localPath)
             assertTrue(graph.registry.resolveRequests.isEmpty())
         } finally {
             graph.shutdown()

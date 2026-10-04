@@ -40,8 +40,13 @@ class OfflineMediaStore(
     private var revision = 0L
     private val ownerRevisions = mutableMapOf<String, Long>()
     private val activeStaging = java.util.concurrent.ConcurrentHashMap.newKeySet<File>()
+    private val catalog = OfflineMediaCatalog()
+    private var catalogLoaded = false
     private val mutableSnapshot = MutableStateFlow(OfflineMediaSnapshot())
     val snapshot: StateFlow<OfflineMediaSnapshot> = mutableSnapshot
+
+    fun hasOfflineLocations(post: Post): Boolean =
+        isOfflineRef(post.preview) || post.full?.let(::isOfflineRef) == true || post.media.any(::isOfflineRef)
 
     /** Restore canonical source media before persistence or duration identity; no disk access is needed. */
     fun withoutOfflineLocations(post: Post): Post {
@@ -84,17 +89,18 @@ class OfflineMediaStore(
         while (true) sourceMediaByOfflineRef.remove((collectedOfflineRefs.poll() as? OfflineRefKey) ?: return)
     }
 
-    suspend fun refresh() = withContext(ioDispatcher) {
-        mutex.withLock {
-            directory.listFiles().orEmpty().filter { it.name.startsWith(".pending-") && it !in activeStaging }
-                .forEach(File::deleteRecursively)
-            publishSnapshot()
-        }
-    }
+    /** Startup owners may both call load; only explicit refresh reconciles the whole disk again. */
+    suspend fun load() = withContext(ioDispatcher) { mutex.withLock { ensureCatalogLoaded() } }
+
+    suspend fun refresh() = withContext(ioDispatcher) { mutex.withLock { rebuildCatalog() } }
 
     suspend fun find(id: PostId): Post? = withContext(ioDispatcher) {
         mutex.withLock {
-            readRecord(postDirectory(id))?.takeIf { it.post.id == id }?.also(::rememberSourceMedia)?.post
+            ensureCatalogLoaded()
+            val folder = postDirectory(id)
+            val record = readRecord(folder)?.takeIf { it.post.id == id }
+            if (record == null) updateCatalog(folder, null)
+            record?.also(::rememberSourceMedia)?.post
         }
     }
 
@@ -106,11 +112,15 @@ class OfflineMediaStore(
     /** A complete existing copy can be shared by multiple collections without duplicate downloads. */
     suspend fun retain(id: PostId, owner: String, admission: OfflineMediaAdmission? = null): Post? = withContext(ioDispatcher) {
         mutex.withLock {
+            ensureCatalogLoaded()
             admission?.let { validateAdmission(owner, it) }
             val folder = postDirectory(id)
             val record = readRecord(folder)?.takeIf { it.post.id == id } ?: return@withLock null
-            writeManifest(folder, record.post, record.sourcePost, record.owners + owner)
-            publishSnapshot()
+            if (owner !in record.owners) {
+                val retained = record.copy(owners = record.owners + owner)
+                writeManifest(folder, retained.post, retained.sourcePost, retained.owners)
+                updateCatalog(folder, retained)
+            }
             rememberSourceMedia(record)
             record.post
         }
@@ -154,11 +164,13 @@ class OfflineMediaStore(
         staged: File,
     ): Post {
         validateAdmission(owner, admission)
+        ensureCatalogLoaded()
         val folder = postDirectory(post.id).apply { mkdirs() }
         val old = readRecord(folder)
         if (old != null) {
-            writeManifest(folder, old.post, old.sourcePost, old.owners + owner)
-            publishSnapshot()
+            val retained = old.copy(owners = old.owners + owner)
+            writeManifest(folder, retained.post, retained.sourcePost, retained.owners)
+            updateCatalog(folder, retained)
             rememberSourceMedia(old)
             return old.post
         }
@@ -181,21 +193,23 @@ class OfflineMediaStore(
             throw failure
         }
         folder.listFiles().orEmpty().filter { it.isDirectory && it != generation }.forEach(File::deleteRecursively)
-        rememberSourceMedia(OfflineRecord(completed, sourcePost, setOf(owner)))
-        publishSnapshot()
+        val record = OfflineRecord(completed, sourcePost, setOf(owner))
+        rememberSourceMedia(record)
+        updateCatalog(folder, record)
         return completed
     }
 
     suspend fun removeOwner(owner: String) = withContext(ioDispatcher) {
         mutex.withLock {
             ownerRevisions[owner] = (ownerRevisions[owner] ?: 0L) + 1L
-            directory.listFiles().orEmpty().filter(File::isDirectory).forEach { folder ->
-                val record = readRecord(folder) ?: return@forEach
-                if (owner !in record.owners) return@forEach
+            ensureCatalogLoaded()
+            catalog.foldersOwnedBy(owner).forEach { folder ->
+                val record = readRecord(folder)
+                if (record == null) { updateCatalog(folder, null); return@forEach }
                 val retained = record.owners - owner
                 if (retained.isEmpty()) folder.deleteRecursively() else writeManifest(folder, record.post, record.sourcePost, retained)
+                updateCatalog(folder, if (retained.isEmpty()) readRecord(folder) else record.copy(owners = retained))
             }
-            publishSnapshot()
         }
     }
 
@@ -203,7 +217,7 @@ class OfflineMediaStore(
         mutex.withLock {
             revision++
             directory.listFiles().orEmpty().filterNot { it.name.startsWith(".pending-") }.forEach(File::deleteRecursively)
-            publishSnapshot()
+            rebuildCatalog()
         }
     }
 
@@ -256,18 +270,27 @@ class OfflineMediaStore(
         }
     }
 
-    private fun publishSnapshot() {
-        val records = directory.listFiles().orEmpty().filterNot { it.name.startsWith(".") }.mapNotNull(::readRecord)
-        mutableSnapshot.value = OfflineMediaSnapshot(
-            postCount = records.size,
-            availablePostIds = records.mapTo(linkedSetOf()) { it.post.id },
-            mediaCount = records.sumOf { it.post.media.size },
-            bytes = directory.listFiles().orEmpty().filterNot { it.name.startsWith(".pending-") }
-                .sumOf { folder -> folder.walkTopDown().filter(File::isFile).sumOf(File::length) },
-            postsByOwner = buildMap {
-                records.forEach { record -> record.owners.forEach { owner -> put(owner, (get(owner) ?: 0) + 1) } }
-            },
-        )
+    private fun ensureCatalogLoaded() { if (!catalogLoaded) rebuildCatalog() }
+
+    private fun rebuildCatalog() {
+        catalog.clear()
+        directory.listFiles().orEmpty().forEach { folder ->
+            if (folder.name.startsWith(".pending-")) {
+                if (folder !in activeStaging) folder.deleteRecursively()
+            } else indexFolder(folder, readRecord(folder))
+        }
+        catalogLoaded = true
+        mutableSnapshot.value = catalog.snapshot()
+    }
+
+    private fun updateCatalog(folder: File, record: OfflineRecord?) {
+        indexFolder(folder, record)
+        mutableSnapshot.value = catalog.snapshot()
+    }
+
+    private fun indexFolder(folder: File, record: OfflineRecord?) {
+        catalog.update(folder, record?.post?.id, record?.owners.orEmpty(), record?.post?.media?.size ?: 0,
+            folder.walkTopDown().filter(File::isFile).sumOf(File::length))
     }
 
     private fun postDirectory(id: PostId) = File(directory, digest("${id.source.name}:${id.sourcePostId}"))

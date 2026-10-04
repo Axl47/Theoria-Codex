@@ -367,7 +367,7 @@ internal class DefaultTheoriaAppContainer(
         uiRestoreReady.await()
         contentReady.await()
         profileBackup.recoverPendingRestore()
-        offlineStore.refresh()
+        offlineStore.load()
     }
 
     private suspend fun awaitContentStore() {

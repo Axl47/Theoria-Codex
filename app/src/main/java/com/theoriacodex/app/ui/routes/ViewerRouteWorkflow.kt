@@ -10,6 +10,8 @@ import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.statistics.statisticsTagsForPost
 import com.theoriacodex.app.viewer.ViewerSession
+import com.theoriacodex.app.viewer.ViewerPostResolver
+import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.ViewerRestorationRequest
 import com.theoriacodex.app.viewer.prepareViewerPostsForLaunch
 import com.theoriacodex.data.repository.RecentPostSection
@@ -40,7 +42,16 @@ internal class ViewerRouteWorkflow(
     private val forYouOwner: () -> ForYouRouteOwnerHandle?,
     private val creatorOwner: () -> CreatorRouteOwnerHandle?,
     private val offlineMedia: com.theoriacodex.app.media.OfflineMediaCoordinator? = null,
-) {
+) : ViewerPostResolver {
+    override fun requiresResolution(post: Post): Boolean = offlineMedia?.store?.let { store ->
+        post.id in store.snapshot.value.availablePostIds && !store.hasOfflineLocations(post)
+    } == true
+
+    override suspend fun resolve(session: ViewerSessionIdentity, postId: PostId): Post? {
+        val source = ViewerStreamSource.entries.firstOrNull { it.name == session.streamKey } ?: ViewerStreamSource.SEARCH
+        return resolvePost(postId, source)
+    }
+
     suspend fun persistResolvedPost(resolvedPost: Post, streamSource: ViewerStreamSource) {
         val post = offlineMedia?.withoutOfflineLocations(resolvedPost) ?: resolvedPost
         when (streamSource) {
@@ -115,9 +126,10 @@ internal class ViewerRouteWorkflow(
         context: ViewerLaunchContext,
     ): List<Post> {
         val offlineIds = offlineMedia?.store?.snapshot?.value?.availablePostIds.orEmpty()
-        val availablePosts = posts.map { post ->
+        val selected = context.startIndex.coerceIn(0, posts.lastIndex.coerceAtLeast(0))
+        val availablePosts = posts.mapIndexed { index, post ->
             val portable = offlineMedia?.withoutOfflineLocations(post) ?: post
-            if (post.id in offlineIds) offlineMedia?.find(post.id) ?: portable else portable
+            if (index in selected..selected + 1 && post.id in offlineIds) offlineMedia?.find(post.id) ?: portable else portable
         }
         return prepareViewerPostsForLaunch(availablePosts, context) { selectedPost ->
             runCatchingPreservingCancellation {
@@ -149,7 +161,7 @@ internal class ViewerRouteWorkflow(
         val orderedIds = request.orderedPostIds.ifEmpty { listOf(selectedId) }.distinct()
         val restored = linkedMapOf<PostId, Post>()
         for (postId in orderedIds) {
-            val post = offlineMedia?.find(postId) ?: data.codexRepository.getPost(postId) ?: recentPosts[postId]
+            val post = data.codexRepository.getPost(postId) ?: recentPosts[postId] ?: offlineMedia?.find(postId)
             if (post != null) restored[postId] = post
         }
         val selected = restored[selectedId]
@@ -162,7 +174,7 @@ internal class ViewerRouteWorkflow(
         val selectedIndex = posts.indexOfFirst { it.id == selectedId }
         if (selectedIndex < 0) return null
         return ViewerSession(
-            posts = posts,
+            posts = preparePostsForLaunch(posts, restoredContext.copy(startIndex = selectedIndex)),
             context = restoredContext.copy(
                 startIndex = selectedIndex,
                 recentsSection = request.recentsSection ?: restoredContext.recentsSection,

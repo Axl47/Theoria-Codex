@@ -40,7 +40,7 @@ class OfflineMediaCoordinator(
     private val mutableJobs = MutableStateFlow<Map<String, OfflineMediaJob>>(emptyMap())
     val jobs: StateFlow<Map<String, OfflineMediaJob>> = mutableJobs
 
-    init { scope.launch { store.refresh() } }
+    init { scope.launch { store.load() } }
 
     fun makeAvailableOffline(owner: String, posts: List<Post>) {
         require(owner.isNotBlank())

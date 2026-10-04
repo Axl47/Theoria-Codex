@@ -19,6 +19,48 @@ import org.junit.Test
 
 internal class OfflineMediaStoreTest : FileBackedRepositoryTestFixture() {
     @Test
+    fun `100 and 1000 saves scan the root once and decode only changed records`() = runTest {
+        for (size in listOf(100, 1_000)) {
+            val scans = java.util.concurrent.atomic.AtomicInteger()
+            val reads = java.util.concurrent.atomic.AtomicInteger()
+            val directory = object : File(tempDir("catalog-$size").path) {
+                override fun listFiles(): Array<File>? { scans.incrementAndGet(); return super.listFiles() }
+            }
+            val gson = com.google.gson.GsonBuilder().registerTypeAdapterFactory(object : com.google.gson.TypeAdapterFactory {
+                override fun <T> create(gson: com.google.gson.Gson, type: com.google.gson.reflect.TypeToken<T>): com.google.gson.TypeAdapter<T>? {
+                    if (type.rawType != Post::class.java) return null
+                    val delegate = gson.getDelegateAdapter(this, type)
+                    return object : com.google.gson.TypeAdapter<T>() {
+                        override fun write(writer: com.google.gson.stream.JsonWriter, value: T) = delegate.write(writer, value)
+                        override fun read(reader: com.google.gson.stream.JsonReader): T {
+                            reads.incrementAndGet()
+                            return delegate.read(reader)
+                        }
+                    }
+                }
+            }).create()
+            val store = OfflineMediaStore(directory, gson)
+            val posts = (1..size).map { samplePost(it.toString(), null) }
+            for (post in posts) {
+                store.save(post, listOf(requireNotNull(post.full)), "all") { _, file -> file.writeText("media") }
+                store.retain(post.id, "shared")
+            }
+            assertEquals(1, scans.get())
+            assertEquals(size * 2, reads.get())
+            assertEquals(size, store.snapshot.value.postCount)
+            assertEquals(mapOf("all" to size, "shared" to size), store.snapshot.value.postsByOwner)
+            store.load()
+            assertEquals(1, scans.get())
+            val beforeRefresh = store.snapshot.value
+            store.refresh()
+            assertEquals(beforeRefresh, store.snapshot.value)
+            assertEquals(size * 4, reads.get())
+            store.removeOwner("shared")
+            assertEquals(mapOf("all" to size), store.snapshot.value.postsByOwner)
+        }
+    }
+
+    @Test
     fun `complete galleries survive restart and share one copy across collection owners`() = runTest {
         val directory = tempDir("offline")
         val post = gallery()

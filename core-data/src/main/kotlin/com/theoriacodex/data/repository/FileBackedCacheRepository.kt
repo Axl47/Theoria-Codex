@@ -21,13 +21,15 @@ class FileBackedCacheRepository(
     private val mutex = Mutex()
     private val thumbnailDir = baseDirectory.resolve("cache/thumbnails")
     private val fullDir = baseDirectory.resolve("cache/full")
+    private val thumbnails = CachedMediaDirectory(thumbnailDir)
+    private val fullImages = CachedMediaDirectory(fullDir)
     private val snapshotFlow = MutableStateFlow(CacheSnapshot(thumbnailCount = 0, fullImageCount = 0))
 
     init {
         snapshotFlow.value = runBlocking {
             withContext(ioDispatcher) {
-                thumbnailDir.mkdirs()
-                fullDir.mkdirs()
+                thumbnails.reconcile()
+                fullImages.reconcile()
                 currentSnapshot()
             }
         }
@@ -47,15 +49,13 @@ class FileBackedCacheRepository(
         mutex.withLock {
             snapshotFlow.value = withContext(ioDispatcher) {
                 writeCachedEntry(
-                    targetDirectory = thumbnailDir,
+                    index = thumbnails,
                     key = key,
                     localPath = post.preview.localPath,
                     fallbackUrl = post.preview.url,
                 )
                 if (replacePrefix != null) {
-                    thumbnailDir.listFiles().orEmpty()
-                        .filter { it.isFile && it.name.startsWith(replacePrefix) && !it.name.startsWith("$key.") }
-                        .forEach(File::delete)
+                    thumbnails.removeOtherKeys(replacePrefix, key)
                 }
                 currentSnapshot()
             }
@@ -67,7 +67,7 @@ class FileBackedCacheRepository(
             val fullImage = post.full ?: return@withLock
             snapshotFlow.value = withContext(ioDispatcher) {
                 writeCachedEntry(
-                    targetDirectory = fullDir,
+                    index = fullImages,
                     key = cacheKey(post.id),
                     localPath = fullImage.localPath,
                     fallbackUrl = fullImage.url,
@@ -80,8 +80,7 @@ class FileBackedCacheRepository(
     override suspend fun clearThumbnailCache() {
         mutex.withLock {
             snapshotFlow.value = withContext(ioDispatcher) {
-                thumbnailDir.deleteRecursively()
-                thumbnailDir.mkdirs()
+                thumbnails.clear()
                 currentSnapshot()
             }
         }
@@ -90,48 +89,80 @@ class FileBackedCacheRepository(
     override suspend fun clearFullImageCache() {
         mutex.withLock {
             snapshotFlow.value = withContext(ioDispatcher) {
-                fullDir.deleteRecursively()
-                fullDir.mkdirs()
+                fullImages.clear()
                 currentSnapshot()
             }
         }
     }
 
     private fun writeCachedEntry(
-        targetDirectory: File,
+        index: CachedMediaDirectory,
         key: String,
         localPath: String?,
         fallbackUrl: String?,
     ) {
-        val existing = targetDirectory.listFiles().orEmpty()
-            .filter { file -> file.isFile && file.name.startsWith("$key.") }
+        val existing = index.files(key)
         val localFile = localPath?.let(::File)?.takeIf(::hasUsableBytes)
         val retained = if (localFile != null) {
             val extension = localFile.extension.takeIf { it.isNotBlank() } ?: "bin"
-            targetDirectory.resolve("$key.$extension").also { output ->
+            index.directory.resolve("$key.$extension").also { output ->
                 // Copy before removing old variants; copying an existing cache file to itself is a no-op.
                 Files.copy(localFile.toPath(), output.toPath(), REPLACE_EXISTING)
             }
         } else {
             // A sparse route snapshot must not replace downloaded bytes with a remote pointer.
             existing.firstOrNull { file -> file.extension != "url" && hasUsableBytes(file) }
-                ?: targetDirectory.resolve("$key.url").also { it.writeText(fallbackUrl.orEmpty()) }
+                ?: index.directory.resolve("$key.url").also { it.writeText(fallbackUrl.orEmpty()) }
         }
-        existing.filterNot { it == retained }.forEach(File::delete)
+        existing.filterNot { it == retained }.forEach { file -> file.delete(); index.update(file) }
+        index.update(retained)
     }
 
     private fun hasUsableBytes(file: File): Boolean = file.isFile && file.canRead() && file.length() > 0
 
-    private fun currentSnapshot(): CacheSnapshot {
-        return CacheSnapshot(
-            thumbnailCount = thumbnailDir.listFiles().orEmpty().count(::isMediaFile),
-            fullImageCount = fullDir.listFiles().orEmpty().count(::isMediaFile),
-            thumbnailBytes = thumbnailDir.listFiles().orEmpty().filter(::isMediaFile).sumOf(File::length),
-            fullImageBytes = fullDir.listFiles().orEmpty().filter(::isMediaFile).sumOf(File::length),
-        )
-    }
-
-    private fun isMediaFile(file: File): Boolean = file.extension != "url" && hasUsableBytes(file)
+    private fun currentSnapshot() = CacheSnapshot(thumbnails.count, fullImages.count, thumbnails.bytes, fullImages.bytes)
 
     private fun cacheKey(postId: PostId): String = "${postId.source.name}_${postId.sourcePostId}"
+}
+
+/** One startup scan; writes reconcile only the affected files, including deletion failures. */
+private class CachedMediaDirectory(val directory: File) {
+    private val entries = mutableMapOf<String, MutableMap<File, Long>>()
+    var count = 0
+        private set
+    var bytes = 0L
+        private set
+
+    fun files(key: String): List<File> = entries[key]?.keys?.toList().orEmpty()
+
+    fun update(file: File) {
+        val key = file.name.substringBeforeLast('.')
+        entries[key]?.remove(file)?.let { old -> if (old > 0) { count--; bytes -= old } }
+        if (file.isFile) {
+            val size = if (file.extension != "url" && file.canRead()) file.length() else 0L
+            entries.getOrPut(key) { mutableMapOf() }[file] = size
+            if (size > 0) { count++; bytes += size }
+        }
+        if (entries[key]?.isEmpty() == true) entries.remove(key)
+    }
+
+    fun removeOtherKeys(prefix: String, retained: String) {
+        entries.keys.filter { it.startsWith(prefix) && it != retained }.flatMap(::files).forEach { file ->
+            file.delete()
+            update(file)
+        }
+    }
+
+    fun reconcile() {
+        entries.clear()
+        count = 0
+        bytes = 0L
+        directory.mkdirs()
+        directory.listFiles().orEmpty().forEach(::update)
+    }
+
+    fun clear() {
+        directory.deleteRecursively()
+        reconcile()
+    }
 }

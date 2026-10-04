@@ -40,6 +40,7 @@ import kotlinx.coroutines.sync.withPermit
 /** Resolves a post without exposing a provider, repository, or Android handle to Viewer state. */
 internal fun interface ViewerPostResolver {
     suspend fun resolve(session: ViewerSessionIdentity, postId: PostId): Post?
+    fun requiresResolution(post: Post): Boolean = false
 }
 
 /** Performs bounded media prefetch outside immutable state and platform playback ownership. */
@@ -128,7 +129,7 @@ internal class ViewerViewModel(
     fun replaceSession(session: ViewerSession) {
         val isNewLaunch = state.value.session != session.toViewerSessionIdentity()
         mutableSession.value = session
-        onAction(session.toReplaceViewerSessionAction())
+        onAction(session.toReplaceViewerSessionAction { post -> postResolver?.requiresResolution(post) == true })
         if (isNewLaunch && session.initialMediaIndex > 0) onAction(ViewerAction.SelectMedia(session.initialMediaIndex))
     }
 
@@ -453,14 +454,16 @@ internal fun ViewerSession.toViewerSessionIdentity(): ViewerSessionIdentity {
     )
 }
 
-internal fun ViewerSession.toReplaceViewerSessionAction(): ViewerAction.ReplaceSession {
+internal fun ViewerSession.toReplaceViewerSessionAction(
+    requiresResolution: (Post) -> Boolean = { false },
+): ViewerAction.ReplaceSession {
     return ViewerAction.ReplaceSession(
         session = toViewerSessionIdentity(),
         posts = posts.toList(),
         initialPageIndex = context.startIndex,
         resolutionRequiredPostIds = posts
             .asSequence()
-            .filter { post -> requiresViewerPostResolution(post, context.streamSource) }
+            .filter { post -> requiresResolution(post) || requiresViewerPostResolution(post, context.streamSource) }
             .mapTo(linkedSetOf(), Post::id),
     )
 }

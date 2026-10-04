@@ -205,8 +205,10 @@ internal fun ViewerRoute(
     val routeScope = rememberCoroutineScope()
     val ownerFactory = remember {
         ViewerViewModel.factory(
-            postResolver = ViewerPostResolver { session, postId ->
-                latestDependencies.value.postResolver.resolve(session, postId)
+            postResolver = object : ViewerPostResolver {
+                override suspend fun resolve(session: com.theoriacodex.app.viewer.state.ViewerSessionIdentity, postId: PostId) =
+                    latestDependencies.value.postResolver.resolve(session, postId)
+                override fun requiresResolution(post: Post) = latestDependencies.value.postResolver.requiresResolution(post)
             },
             mediaPrefetcher = ViewerMediaPrefetcher { session, media ->
                 latestDependencies.value.mediaPrefetcher.prefetch(session, media)

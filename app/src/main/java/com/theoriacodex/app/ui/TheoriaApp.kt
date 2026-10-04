@@ -148,7 +148,6 @@ import com.theoriacodex.app.update.StartupUpdateState
 import com.theoriacodex.app.update.StartupUpdateWorkflowEvent
 import com.theoriacodex.app.update.StartupUpdateWorkflowEffect
 import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
-import com.theoriacodex.app.viewer.ViewerPostResolver
 import com.theoriacodex.app.viewer.ViewerSession
 import com.theoriacodex.app.viewer.prefetchViewerMedia
 import com.theoriacodex.data.repository.CodexSortMode
@@ -2005,14 +2004,7 @@ internal fun TheoriaAppContent(
                             dependencies = ViewerRouteDependencies(
                                 sessionRetentionOwner = viewerSessionOwner,
                                 canonicalizePost = { post -> featureDependencies.offlineMedia?.withoutOfflineLocations(post) ?: post },
-                                postResolver = ViewerPostResolver { identity, postId ->
-                                    val streamSource = identity.streamKey
-                                        ?.let { name ->
-                                            ViewerStreamSource.entries.firstOrNull { source -> source.name == name }
-                                        }
-                                        ?: ViewerStreamSource.SEARCH
-                                    viewerRouteWorkflow.resolvePost(postId, streamSource)
-                                },
+                                postResolver = viewerRouteWorkflow,
                                 mediaPrefetcher = ViewerMediaPrefetcher { _, media ->
                                     prefetchViewerMedia(appContext, media)
                                 },
