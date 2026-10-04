@@ -1,6 +1,7 @@
 package com.theoriacodex.app.journeys
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -42,7 +43,7 @@ class CodexCollectionJourneyTest : AppJourneyFixture() {
         activate(compose.onNodeWithContentDescription("Remove 2 selected posts from this Codex"))
         compose.waitUntil(10_000) { io { container.content.observeCodexItems(collection.codexId).first().size == 1 } }
         assertEquals(listOf(saved.last().id), io { container.content.observeCodexItems(collection.codexId).first().map { it.postId } })
-        compose.onNodeWithText("2 posts removed").assertIsDisplayed()
+        compose.waitUntil(10_000) { compose.onNodeWithText("2 posts removed").isDisplayed() }
         activate(compose.onNodeWithText("Undo"))
         compose.waitUntil(10_000) { io { container.content.observeCodexItems(collection.codexId).first().size == 3 } }
         assertEquals(original, io { container.content.observeCodexItems(collection.codexId).first() })
