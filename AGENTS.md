@@ -226,6 +226,8 @@ Compose test v2 `performClick` injects pointer input. Use `performSemanticsActio
 
 Physical five-feed journeys open Viewer through the real app route. Keep Viewer playback diagnostics enabled by `BENCHMARK_FIXTURES_ENABLED` there as well as in the direct fixture; otherwise the Media actions overlay can hide the media node from UiAutomator while playback is healthy. Evidence archiving uses independent APFS clones on macOS, preserving full paths, hashes and later source-mutation isolation; it never relies on hard links or drops iteration traces to save space.
 
+AndroidX Benchmark 1.5's reported `cpuLocked` is a one-time heuristic over minimum frequencies; ordinary OS boosts can flip it on an unchanged personal device. Retain that raw observation, but exclude only that field from setup identity. Device/OS, maximum frequency, sustained-performance mode, compilation, workload, runner and thermal checks remain authoritative. Never change a personal phone's governor or frequency limits to make a comparison pass.
+
 Debug-key preflight must follow Android's configured preferences directory, including hosted Ubuntu's `XDG_CONFIG_HOME/.android` default, rather than assuming `HOME/.android`. An explicit `ANDROID_DEBUG_KEYSTORE` selects one expected key; never search for a different key to make verification pass. The API 27 Google APIs emulator lane uses `x86` because the catalog does not publish an `x86_64` image for that API. Retain device-preflight task graphs and build logs in CI artifacts so failures before installation remain diagnosable.
 
 ## Final Output

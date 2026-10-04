@@ -199,6 +199,25 @@ class BenchmarkResultsTest(unittest.TestCase):
         with self.assertRaisesRegex(benchmark.EvidenceError, "Physical-device"):
             benchmark.calibrate(runs)
 
+    def test_cpu_lock_snapshot_is_retained_without_redefining_the_measurement_setup(self) -> None:
+        paths = []
+        for locked in (True, False, True):
+            raw = self.raw_report()
+            report = json.loads(raw.read_text())
+            report["context"]["cpuLocked"] = locked
+            raw.write_text(json.dumps(report))
+            paths.append(self.capture(report=raw))
+            self.assertEqual(locked, benchmark.load_run(paths[-1])["report_context"]["cpuLocked"])
+        baseline = self.root / "clock-snapshots.json"
+        benchmark.write_new_json(baseline, benchmark.calibrate(paths))
+        self.assertTrue(benchmark.compare(baseline, self.capture())["passed"])
+        raw = self.raw_report()
+        report = json.loads(raw.read_text())
+        report["context"]["sustainedPerformanceModeEnabled"] = True
+        raw.write_text(json.dumps(report))
+        with self.assertRaisesRegex(benchmark.EvidenceError, "differs from calibration"):
+            benchmark.compare(baseline, self.capture(report=raw))
+
     def test_selective_methods_missing_metrics_and_partial_iterations_are_rejected(self) -> None:
         for corruption in ("scenario", "metric", "iteration", "samples", "trace", "summary"):
             with self.subTest(corruption=corruption):

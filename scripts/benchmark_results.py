@@ -326,7 +326,12 @@ def load_run(path: Path) -> dict[str, Any]:
 
 
 def setup_identity(record: dict[str, Any]) -> dict[str, Any]:
-    return {**{key: record[key] for key in ("device_serial", "device_kind", "compilation", "contract", "report_context", "layout")},
+    # AndroidX 1.5's cpuLocked is a one-time minimum-frequency heuristic, not a configured
+    # governor/lock mode. Normal OS boosts can flip it on the same phone between captures.
+    # Retain the original observation in every report/record; compare all other context fields.
+    context = {key: value for key, value in record["report_context"].items() if key != "cpuLocked"}
+    return {**{key: record[key] for key in ("device_serial", "device_kind", "compilation", "contract", "layout")},
+            "report_context": context,
             "harness_sha256": record["harness_apk"]["sha256"], "workload_sha256": record["workload"]["sha256"]}
 
 
