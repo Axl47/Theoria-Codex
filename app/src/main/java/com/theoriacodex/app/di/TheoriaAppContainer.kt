@@ -108,6 +108,7 @@ data class SourceDependencies(
     val pixivUgoiraClient: PixivUgoiraClient,
     val registry: SourceAdapterRegistry,
     val availableSources: StateFlow<Set<SourceKey>>,
+    val pixivTokens: PixivTokenCoordinator = PixivTokenCoordinator(accounts, pixivAuthApi),
 )
 
 data class UpdateDependencies(
@@ -304,6 +305,7 @@ internal class DefaultTheoriaAppContainer(
         pixivUgoiraClient = pixivUgoiraClient,
         registry = sourceRegistry,
         availableSources = accountStore.availableSources,
+        pixivTokens = pixivTokenCoordinator,
     )
 
     override val updates = UpdateDependencies(

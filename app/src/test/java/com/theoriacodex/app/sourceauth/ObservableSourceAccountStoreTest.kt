@@ -14,6 +14,17 @@ import org.junit.Test
 
 class ObservableSourceAccountStoreTest {
     @Test
+    fun `account owner invalidates refresh authority even when identical tokens are restored`() = runTest {
+        val tokens = PixivAuthTokens("access", "refresh", 100L)
+        val store = ObservableSourceAccountStore(FakeRecoverableCredentialsStore(pixivTokens = tokens))
+        val session = store.getPixivSession()
+        store.clearPixivTokens()
+        store.savePixivTokens(tokens)
+        assertFalse(store.commitPixivRefresh(session, tokens.copy(accessToken = "stale-refresh")))
+        assertEquals(tokens, store.getPixivTokens())
+    }
+
+    @Test
     fun `rule34 capability changes without replacing the account store`() = runTest {
         val delegate = FakeRecoverableCredentialsStore()
         val store = ObservableSourceAccountStore(delegate)

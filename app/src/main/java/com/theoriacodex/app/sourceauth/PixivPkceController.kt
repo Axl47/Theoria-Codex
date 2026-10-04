@@ -41,13 +41,7 @@ class PixivPkceController internal constructor(
         authorizationUri
     }
 
-    fun isAuthorizationCallback(uri: Uri): Boolean {
-        val scheme = uri.scheme?.lowercase() ?: return false
-        val host = uri.host?.lowercase() ?: return false
-        val path = uri.path ?: ""
-        return (scheme == "theoriacodex" && host == "pixiv-auth" && path.startsWith("/callback")) ||
-            (scheme == "pixiv" && host == "account" && path.startsWith("/login"))
-    }
+    fun isAuthorizationCallback(uri: Uri): Boolean = uri.callbackKind() != null
 
     suspend fun handleAuthorizationCallback(uri: Uri): Result<Unit> {
         return runCatchingPreservingCancellation {
@@ -67,7 +61,7 @@ class PixivPkceController internal constructor(
                     // Pixiv's browser flow returns state on its HTTPS callback, but the final
                     // native-app handoff can contain only the short-lived code. PKCE
                     // still binds that code to this exact persisted authorization attempt.
-                    allowMissingCallbackState = uri.isPixivNativeAuthorizationCallback(),
+                    allowMissingCallbackState = uri.callbackKind() == PixivCallbackKind.PROVIDER_NATIVE,
                 )
 
                 val tokens = authApi.exchangeAuthorizationCode(
@@ -104,11 +98,7 @@ class PixivPkceController internal constructor(
 private val tokenAlphabet: List<Char> = PIXIV_PKCE_TOKEN_ALPHABET.toList()
 private val pixivPkceControllerMutex = Mutex()
 
-private fun Uri.isPixivNativeAuthorizationCallback(): Boolean {
-    return scheme.equals("pixiv", ignoreCase = true) &&
-        host.equals("account", ignoreCase = true) &&
-        path.orEmpty().startsWith("/login")
-}
+private fun Uri.callbackKind(): PixivCallbackKind? = pixivCallbackKind(scheme, host, path)
 
 private fun String.sha256Base64Url(): String {
     val digest = MessageDigest.getInstance("SHA-256")

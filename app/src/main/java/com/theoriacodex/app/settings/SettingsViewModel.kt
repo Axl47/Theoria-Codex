@@ -23,14 +23,12 @@ import com.theoriacodex.data.repository.LikesRepository
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
-import com.theoriacodex.domain.adapter.SourceAdapterException
-import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.Rule34XxxCredentials
-import com.theoriacodex.sources.pixiv.PixivAuthApi
+import com.theoriacodex.sources.pixiv.PixivTokenCoordinator
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -72,7 +70,7 @@ internal interface SettingsAccountGateway {
 
 internal class DefaultSettingsAccountGateway(
     private val accounts: SourceAccountStore,
-    private val pixivAuthApi: PixivAuthApi,
+    private val pixivTokens: PixivTokenCoordinator,
     private val pixivAuthController: PixivPkceController,
     private val clock: () -> Long = System::currentTimeMillis,
 ) : SettingsAccountGateway {
@@ -83,7 +81,7 @@ internal class DefaultSettingsAccountGateway(
         val pixivStatus = when {
             pixivTokens == null -> false to "Not connected"
             pixivTokens.expiresAtEpochMs > clock() -> true to "Connected"
-            else -> refreshExpiredPixivSession(pixivTokens.refreshToken)
+            else -> refreshExpiredPixivSession()
         }
         val gelbooru = accounts.getGelbooruCredentials()
         val rule34Xxx = accounts.getRule34XxxCredentials()
@@ -105,34 +103,15 @@ internal class DefaultSettingsAccountGateway(
         )
     }
 
-    private suspend fun refreshExpiredPixivSession(refreshToken: String): Pair<Boolean, String> {
-        val refreshResult = withTimeoutOrNull(PIXIV_TOKEN_REFRESH_TIMEOUT_MS) {
-            runCatchingPreservingCancellation { pixivAuthApi.refresh(refreshToken) }
+    private suspend fun refreshExpiredPixivSession(): Pair<Boolean, String> {
+        val refreshed = withTimeoutOrNull(PIXIV_TOKEN_REFRESH_TIMEOUT_MS) {
+            runCatchingPreservingCancellation { pixivTokens.activeTokens() }
         } ?: return false to "Connected (refresh timed out, retry on next request)"
-        if (refreshResult.isSuccess) {
-            val saved = runCatchingPreservingCancellation {
-                accounts.savePixivTokens(requireNotNull(refreshResult.getOrNull()))
-            }
-            return if (saved.isSuccess) {
-                true to "Connected"
-            } else {
-                false to recoveryMessage(accounts.recoveryState.value)
-            }
-        }
-        val failure = refreshResult.exceptionOrNull()
-        return if (
-            failure is SourceAdapterException &&
-            (failure.reason == SourceFailureReason.AUTH_EXPIRED ||
-                failure.reason == SourceFailureReason.AUTH_REQUIRED)
-        ) {
-            val cleared = runCatchingPreservingCancellation { accounts.clearPixivTokens() }
-            if (cleared.isSuccess) {
-                false to "Not connected (session expired)"
-            } else {
-                false to recoveryMessage(accounts.recoveryState.value)
-            }
-        } else {
-            false to "Connected (refresh failed, retry on next request)"
+        return when {
+            refreshed.isSuccess -> true to "Connected"
+            accounts.getPixivTokens() == null -> false to "Not connected (session expired or disconnected)"
+            accounts.recoveryState.value != CredentialStoreRecoveryState.Ready -> false to recoveryMessage(accounts.recoveryState.value)
+            else -> false to "Connected (refresh failed, retry on next request)"
         }
     }
 
@@ -684,7 +663,7 @@ internal class SettingsViewModel(
                         ),
                         accounts = DefaultSettingsAccountGateway(
                             accounts = container.sources.accounts,
-                            pixivAuthApi = container.sources.pixivAuthApi,
+                            pixivTokens = container.sources.pixivTokens,
                             pixivAuthController = container.sources.pixivAuthController,
                         ),
                         availableSources = container.sources.availableSources,

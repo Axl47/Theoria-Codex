@@ -38,7 +38,7 @@
 
                 <data
                     android:host="pixiv-auth"
-                    android:pathPrefix="/callback"
+                    android:path="/callback"
                     android:scheme="theoriacodex" />
             </intent-filter>
             <intent-filter>
@@ -49,7 +49,7 @@
 
                 <data
                     android:host="account"
-                    android:pathPrefix="/login"
+                    android:path="/login"
                     android:scheme="pixiv" />
             </intent-filter>
             <intent-filter android:autoVerify="true">

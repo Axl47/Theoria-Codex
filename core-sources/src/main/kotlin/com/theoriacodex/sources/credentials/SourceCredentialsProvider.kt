@@ -6,6 +6,9 @@ data class PixivAuthTokens(
     val expiresAtEpochMs: Long,
 )
 
+/** Process-local authority for a refresh; credentials themselves retain their existing wire format. */
+data class PixivCredentialSession(val tokens: PixivAuthTokens?, val revision: Long)
+
 data class GelbooruCredentials(
     val userId: String,
     val apiKey: String,
@@ -20,6 +23,11 @@ interface SourceCredentialsProvider {
     suspend fun getPixivTokens(): PixivAuthTokens?
     suspend fun savePixivTokens(tokens: PixivAuthTokens)
     suspend fun clearPixivTokens()
+
+    suspend fun getPixivSession(): PixivCredentialSession = PixivCredentialSession(getPixivTokens(), 0L)
+
+    /** Read-only credential providers reject refresh writes. Mutable owners must commit atomically. */
+    suspend fun commitPixivRefresh(session: PixivCredentialSession, tokens: PixivAuthTokens?): Boolean = false
 
     suspend fun getGelbooruCredentials(): GelbooruCredentials?
     suspend fun saveGelbooruCredentials(credentials: GelbooruCredentials)

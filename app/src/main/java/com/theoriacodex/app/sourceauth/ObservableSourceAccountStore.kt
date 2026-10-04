@@ -4,6 +4,8 @@ import com.theoriacodex.app.source.exposedRealSources
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
+import com.theoriacodex.sources.credentials.PixivCredentialSession
+import com.theoriacodex.sources.credentials.SessionBoundSourceCredentials
 import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +39,7 @@ interface SourceAccountStore : RecoverableSourceCredentialsStore {
 class ObservableSourceAccountStore(
     private val delegate: RecoverableSourceCredentialsStore,
 ) : SourceAccountStore {
+    private val pixivSessions = SessionBoundSourceCredentials(delegate)
     private val mutableAvailableSources = MutableStateFlow(exposedRealSources(rule34XxxConfigured = false))
 
     override val recoveryState: StateFlow<CredentialStoreRecoveryState> = delegate.recoveryState
@@ -47,16 +50,22 @@ class ObservableSourceAccountStore(
     }
 
     override suspend fun getPixivTokens(): PixivAuthTokens? {
-        return withRecoverySynchronization { delegate.getPixivTokens() }
+        return withRecoverySynchronization { pixivSessions.getPixivTokens() }
     }
 
     override suspend fun savePixivTokens(tokens: PixivAuthTokens) {
-        withRecoverySynchronization { delegate.savePixivTokens(tokens) }
+        withRecoverySynchronization { pixivSessions.savePixivTokens(tokens) }
     }
 
     override suspend fun clearPixivTokens() {
-        withRecoverySynchronization { delegate.clearPixivTokens() }
+        withRecoverySynchronization { pixivSessions.clearPixivTokens() }
     }
+
+    override suspend fun getPixivSession(): PixivCredentialSession =
+        withRecoverySynchronization { pixivSessions.getPixivSession() }
+
+    override suspend fun commitPixivRefresh(session: PixivCredentialSession, tokens: PixivAuthTokens?): Boolean =
+        withRecoverySynchronization { pixivSessions.commitPixivRefresh(session, tokens) }
 
     override suspend fun getGelbooruCredentials(): GelbooruCredentials? {
         return withRecoverySynchronization { delegate.getGelbooruCredentials() }
@@ -87,7 +96,9 @@ class ObservableSourceAccountStore(
     }
 
     override suspend fun resetAfterReconnectRequired(): Boolean {
-        val reset = withRecoverySynchronization { delegate.resetAfterReconnectRequired() }
+        val reset = withRecoverySynchronization {
+            pixivSessions.invalidatePixivSession { delegate.resetAfterReconnectRequired() }
+        }
         if (reset) {
             publishRule34XxxAvailability(configured = false)
         }

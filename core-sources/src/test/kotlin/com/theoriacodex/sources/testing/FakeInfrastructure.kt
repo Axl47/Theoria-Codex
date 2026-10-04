@@ -2,6 +2,7 @@ package com.theoriacodex.sources.testing
 
 import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
+import com.theoriacodex.sources.credentials.PixivCredentialSession
 import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
 import com.theoriacodex.sources.http.SourceHttpClient
@@ -63,6 +64,12 @@ class FakeCredentialsProvider : SourceCredentialsProvider {
     override suspend fun getPixivTokens(): PixivAuthTokens? = pixivTokens
     override suspend fun savePixivTokens(tokens: PixivAuthTokens) {
         pixivTokens = tokens
+    }
+
+    override suspend fun commitPixivRefresh(session: PixivCredentialSession, tokens: PixivAuthTokens?): Boolean {
+        if (pixivTokens != session.tokens) return false
+        pixivTokens = tokens
+        return true
     }
 
     override suspend fun clearPixivTokens() {

@@ -4,6 +4,7 @@ import com.theoriacodex.sources.credentials.GelbooruCredentials
 import com.theoriacodex.sources.credentials.PixivAuthTokens
 import com.theoriacodex.sources.credentials.Rule34XxxCredentials
 import com.theoriacodex.sources.credentials.SourceCredentialsProvider
+import com.theoriacodex.sources.credentials.SessionBoundSourceCredentials
 import com.theoriacodex.sources.http.SourceHttpClient
 import com.theoriacodex.sources.http.SourceHttpResponse
 import kotlinx.coroutines.async
@@ -20,7 +21,7 @@ class PixivTokenCoordinatorTest {
         val credentials = FakeCredentials(expired)
         var refreshCount = 0
         val coordinator = PixivTokenCoordinator(
-            credentialsProvider = credentials,
+            credentialsProvider = SessionBoundSourceCredentials(credentials),
             authApi = PixivAuthApi(UnusedHttpClient),
             clock = { 100_000L },
             refresh = {
@@ -43,7 +44,7 @@ class PixivTokenCoordinatorTest {
         val credentials = FakeCredentials(failed)
         var refreshCount = 0
         val coordinator = PixivTokenCoordinator(
-            credentialsProvider = credentials,
+            credentialsProvider = SessionBoundSourceCredentials(credentials),
             authApi = PixivAuthApi(UnusedHttpClient),
             clock = { 100_000L },
             refresh = {
