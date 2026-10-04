@@ -1,5 +1,9 @@
 package com.theoriacodex.app.ui
 
+import com.theoriacodex.app.update.ReleaseChangelogEntry
+import com.theoriacodex.app.update.mergeReleaseHistory
+import com.theoriacodex.app.update.toReleaseHistoryEntry
+
 import com.theoriacodex.data.repository.followKey
 import android.content.ClipData
 import android.content.Context
@@ -78,6 +82,7 @@ import com.theoriacodex.app.codex.transfer.CodexImportViewModel
 import com.theoriacodex.app.codex.transfer.CodexImportHost
 import com.theoriacodex.app.appshell.AppShellAction
 import com.theoriacodex.app.appshell.AppShellEffect
+import com.theoriacodex.app.appshell.StartupUpdateChoice
 import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.appshell.IncomingUriKind
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
@@ -143,11 +148,7 @@ import com.theoriacodex.app.ui.components.SEARCH_FEED_FAB_CONTEXT
 import com.theoriacodex.app.ui.components.codexFeedFabContext
 import com.theoriacodex.app.ui.components.creatorFeedFabContext
 import com.theoriacodex.app.ui.components.rememberFeedFabRestoreRegistry
-import com.theoriacodex.app.update.RemoteUpdate
-import com.theoriacodex.app.update.PendingPostInstallChangelog
-import com.theoriacodex.app.update.StartupUpdateOutcome
 import com.theoriacodex.app.update.StartupUpdateState
-import com.theoriacodex.app.update.StartupUpdateWorkflowEvent
 import com.theoriacodex.app.update.StartupUpdateWorkflowEffect
 import com.theoriacodex.app.viewer.ViewerMediaPrefetcher
 import com.theoriacodex.app.viewer.ViewerSession
@@ -167,7 +168,6 @@ import com.theoriacodex.domain.model.PostId
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SourceKey
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
@@ -446,18 +446,13 @@ internal fun TheoriaAppContent(
     val startupUpdateState = startupWorkflowState.updateState
     val startupStatusMessage = startupWorkflowState.statusMessage
     val updateChoiceRemote = startupWorkflowState.choice
-    var startupUpdateReleaseHistory by remember { mutableStateOf<List<ReleaseChangelogEntry>>(emptyList()) }
-    var postInstallChangelog by remember { mutableStateOf<PendingPostInstallChangelog?>(null) }
-    var postInstallReleaseHistory by remember { mutableStateOf<List<ReleaseChangelogEntry>>(emptyList()) }
-    var latestInstalledChangelog by remember { mutableStateOf<PendingPostInstallChangelog?>(null) }
+    val startupUpdateReleaseHistory = appShellState.startupReleaseHistory
+    val postInstallChangelog = appShellState.postInstallChangelog
+    val postInstallReleaseHistory = appShellState.postInstallReleaseHistory
+    val latestInstalledChangelog = appShellState.latestInstalledChangelog
     var releaseHistoryEntries by remember { mutableStateOf<List<ReleaseChangelogEntry>?>(null) }
     val startupActionLocked = startupWorkflowState.actionLocked
-    val pendingInstallRemote = startupWorkflowState.pendingInstall
-    val awaitingUnknownSources = startupWorkflowState.awaitingUnknownSources
     val awaitingInstallerReturn = startupWorkflowState.awaitingInstallerReturn
-    fun updateStartupWorkflow(event: StartupUpdateWorkflowEvent) {
-        appShellOwner.onAction(AppShellAction.UpdateStartup(event))
-    }
     var thumbnailCacheGeneration by rememberSaveable { mutableStateOf(0) }
     val addFavoriteTag: (SourceKey, String) -> Unit = remember(
         scope,
@@ -742,39 +737,17 @@ internal fun TheoriaAppContent(
             ?: TopLevelDestination.Search.route
         appShellOwner.onAction(AppShellAction.MarkAppReady)
         navReady = true
-        val updateSnapshot = updateDependencies.startupUpdater.pendingSnapshot()
-        latestInstalledChangelog = updateSnapshot.lastInstalledChangelog
-        val pendingChangelog = updateSnapshot.pendingPostInstallChangelog
-        if (pendingChangelog != null) {
-            val installedVersionCode = installedAppVersionCode(appContext)
-            if (pendingChangelog.versionCode <= installedVersionCode) {
-                postInstallChangelog = pendingChangelog
-                latestInstalledChangelog = pendingChangelog
-                val merged = mergeReleaseHistory(
-                    remoteHistory = updateDependencies.feedClient.mainPrereleaseHistory(limit = 100)
-                        .getOrElse { emptyList() },
-                    localCurrent = pendingChangelog,
-                )
-                val fromVersionCode = pendingChangelog.fromVersionCode ?: (pendingChangelog.versionCode - 1)
-                val updatesSincePreviousInstall = merged
-                    .filter { entry ->
-                        entry.versionCode > fromVersionCode && entry.versionCode <= installedVersionCode
-                    }
-                    .sortedWith(releaseChangelogNewestFirstComparator())
-                postInstallReleaseHistory = if (updatesSincePreviousInstall.isNotEmpty()) {
-                    updatesSincePreviousInstall
-                } else {
-                    listOf(pendingChangelog.toReleaseHistoryEntry())
-                }
-            }
-        }
+    }
+
+    LaunchedEffect(appShellState.readyToEnterApp, navReady) {
+        if (appShellState.readyToEnterApp && !navReady) completeAppStartup()
     }
 
     LaunchedEffect(appShellOwner) {
         appShellOwner.effects.collect { effect ->
             when (effect) {
                 is AppShellEffect.Startup -> when (effect.effect) {
-                    StartupUpdateWorkflowEffect.ContinueToApp -> completeAppStartup()
+                    StartupUpdateWorkflowEffect.ContinueToApp -> Unit
                     StartupUpdateWorkflowEffect.OpenUnknownSourcesSettings -> {
                         openUnknownSourcesSettings(appContext)
                     }
@@ -784,86 +757,9 @@ internal fun TheoriaAppContent(
         }
     }
 
-    suspend fun continueAfterUpdateFailure(message: String) {
-        startupUpdateReleaseHistory = emptyList()
-        updateStartupWorkflow(StartupUpdateWorkflowEvent.Failed(message))
-        delay(1_200)
-        completeAppStartup()
-    }
-
-    suspend fun performStartupInstall(remote: RemoteUpdate) {
-        updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallStarted)
-        updateDependencies.startupUpdater.onUserChoseYes(remote)
-        val updateOutcome = updateDependencies.startupUpdater.installUpdate(remote) { state ->
-            updateStartupWorkflow(StartupUpdateWorkflowEvent.UpdaterStateChanged(state))
-        }
-
-        when (updateOutcome) {
-            StartupUpdateOutcome.ContinueToApp -> {
-                updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallFinished(updateOutcome))
-                startupUpdateReleaseHistory = emptyList()
-            }
-
-            is StartupUpdateOutcome.ContinueToAppWithError -> {
-                continueAfterUpdateFailure(updateOutcome.message)
-            }
-
-            is StartupUpdateOutcome.AwaitingUnknownSources -> {
-                updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallFinished(updateOutcome))
-                startupUpdateReleaseHistory = emptyList()
-            }
-
-            is StartupUpdateOutcome.InstallerLaunched -> {
-                updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallFinished(updateOutcome))
-                startupUpdateReleaseHistory = emptyList()
-            }
-        }
-    }
-
-    suspend fun beginStartupUpdateFlow() {
-        if (!BuildConfig.UPDATER_ENABLED) {
-            updateStartupWorkflow(StartupUpdateWorkflowEvent.ContinuedToApp("Loading app..."))
-            return
-        }
-
-        val remoteResult = updateDependencies.startupUpdater.checkForEligibleUpdate { state ->
-            updateStartupWorkflow(StartupUpdateWorkflowEvent.UpdaterStateChanged(state))
-        }
-        val eligibleRemote = remoteResult.getOrElse { error ->
-            continueAfterUpdateFailure(error.message ?: "Could not check for updates")
-            return
-        }
-
-        if (eligibleRemote == null) {
-            startupUpdateReleaseHistory = emptyList()
-            updateStartupWorkflow(StartupUpdateWorkflowEvent.NoEligibleUpdate)
-            return
-        }
-
-        val installedVersionCode = installedAppVersionCode(appContext)
-        val startupHistory = mergeReleaseHistory(
-            remoteHistory = updateDependencies.feedClient.mainPrereleaseHistory(limit = 100).getOrElse { emptyList() },
-            localCurrent = latestInstalledChangelog,
-        )
-            .filter { entry ->
-                entry.versionCode > installedVersionCode && entry.versionCode <= eligibleRemote.versionCode
-            }
-            .sortedWith(releaseChangelogNewestFirstComparator())
-
-        startupUpdateReleaseHistory = if (startupHistory.isNotEmpty()) {
-            startupHistory
-        } else {
-            listOf(eligibleRemote.toReleaseHistoryEntry())
-        }
-        updateStartupWorkflow(StartupUpdateWorkflowEvent.EligibleUpdateFound(eligibleRemote))
-    }
-
-    LaunchedEffect(Unit) {
-        if (navReady) {
-            updateStartupWorkflow(StartupUpdateWorkflowEvent.ContinuedToApp())
-        } else {
-            beginStartupUpdateFlow()
-        }
+    LaunchedEffect(appShellOwner, appContainer) {
+        appShellOwner.beginStartup(updateDependencies.startupUpdater, updateDependencies.feedClient,
+            installedAppVersionCode(appContext), BuildConfig.UPDATER_ENABLED)
     }
 
     LaunchedEffect(incomingUri) {
@@ -1120,60 +1016,12 @@ internal fun TheoriaAppContent(
         orientation = configuration.orientation,
     )
 
-    DisposableEffect(
-        lifecycleOwner,
-        awaitingUnknownSources,
-        awaitingInstallerReturn,
-        pendingInstallRemote,
-        navReady,
-    ) {
+    DisposableEffect(lifecycleOwner, appShellOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event != Lifecycle.Event.ON_RESUME || navReady) return@LifecycleEventObserver
-
-            val remote = pendingInstallRemote
-            if (awaitingUnknownSources && remote != null) {
-                scope.launch {
-                    val outcome = updateDependencies.startupUpdater.retryPendingInstall(remote) { state ->
-                        updateStartupWorkflow(StartupUpdateWorkflowEvent.UpdaterStateChanged(state))
-                    }
-                    when (outcome) {
-                        StartupUpdateOutcome.ContinueToApp -> {
-                            updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallFinished(outcome))
-                        }
-
-                        is StartupUpdateOutcome.ContinueToAppWithError -> {
-                            continueAfterUpdateFailure(outcome.message)
-                        }
-
-                        is StartupUpdateOutcome.AwaitingUnknownSources -> {
-                            continueAfterUpdateFailure(
-                                "Install permission was not granted. Continuing with current app.",
-                            )
-                        }
-
-                        is StartupUpdateOutcome.InstallerLaunched -> {
-                            updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallFinished(outcome))
-                        }
-                    }
-                }
-            } else if (awaitingInstallerReturn && remote != null) {
-                scope.launch {
-                    val installedNow = installedAppVersionCode(appContext)
-                    if (installedNow >= remote.versionCode) {
-                        updateStartupWorkflow(
-                            StartupUpdateWorkflowEvent.ContinuedToApp("Update installed. Loading app...")
-                        )
-                    } else {
-                        updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallerStillPending)
-                    }
-                }
-            }
+            if (event == Lifecycle.Event.ON_RESUME) appShellOwner.onInstallerReturn(installedAppVersionCode(appContext))
         }
-
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     ActiveProfileCoordinationEffect(
@@ -1201,36 +1049,9 @@ internal fun TheoriaAppContent(
                         },
                         installedVersionCode = installedVersionCode,
                         actionEnabled = !startupActionLocked,
-                        onYes = {
-                            if (startupActionLocked) return@StartupUpdatePromptCard
-                            scope.launch {
-                                performStartupInstall(promptRemote)
-                            }
-                        },
-                        onNo = {
-                            if (startupActionLocked) return@StartupUpdatePromptCard
-                            scope.launch {
-                                updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallStarted)
-                                updateDependencies.startupUpdater.onUserChoseNo(promptRemote)
-                                startupUpdateReleaseHistory = emptyList()
-                                updateStartupWorkflow(
-                                    StartupUpdateWorkflowEvent.ContinuedToApp("Update skipped. Loading app...")
-                                )
-                            }
-                        },
-                        onRemindLater = {
-                            if (startupActionLocked) return@StartupUpdatePromptCard
-                            scope.launch {
-                                updateStartupWorkflow(StartupUpdateWorkflowEvent.InstallStarted)
-                                updateDependencies.startupUpdater.onUserChoseRemindLater(promptRemote)
-                                startupUpdateReleaseHistory = emptyList()
-                                updateStartupWorkflow(
-                                    StartupUpdateWorkflowEvent.ContinuedToApp(
-                                        "Update postponed for 24 hours. Loading app..."
-                                    )
-                                )
-                            }
-                        },
+                        onYes = { appShellOwner.chooseUpdate(StartupUpdateChoice.INSTALL) },
+                        onNo = { appShellOwner.chooseUpdate(StartupUpdateChoice.SKIP) },
+                        onRemindLater = { appShellOwner.chooseUpdate(StartupUpdateChoice.REMIND_LATER) },
                     )
                 } else {
                     if (startupUpdateState !is StartupUpdateState.Failed) {
@@ -1245,13 +1066,7 @@ internal fun TheoriaAppContent(
                             colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
                                 contentColor = Color.White,
                             ),
-                            onClick = {
-                                scope.launch {
-                                    continueAfterUpdateFailure(
-                                        "Update was not completed. Continuing with current app.",
-                                    )
-                                }
-                            },
+                            onClick = appShellOwner::continueCurrentVersion,
                         ) {
                             Text(
                                 text = "Continue current version",
@@ -2092,13 +1907,7 @@ internal fun TheoriaAppContent(
                     listOf(changelog.toReleaseHistoryEntry())
                 },
                 installedVersionCode = installedVersionCode,
-                onDismiss = {
-                    postInstallChangelog = null
-                    postInstallReleaseHistory = emptyList()
-                    scope.launch {
-                        updateDependencies.stateStore.setPendingPostInstallChangelog(null)
-                    }
-                },
+                onDismiss = appShellOwner::dismissPostInstallChangelog,
             )
         }
 

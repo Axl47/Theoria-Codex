@@ -267,6 +267,7 @@ internal class DefaultTheoriaAppContainer(
         repo = BuildConfig.UPDATE_REPO_NAME,
         channel = BuildConfig.UPDATE_CHANNEL,
         assetName = BuildConfig.UPDATE_ASSET_NAME,
+        httpClient = sourceHttpClient,
     )
     private val startupUpdater = StartupUpdater(
         context = appContext,

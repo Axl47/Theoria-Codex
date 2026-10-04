@@ -34,8 +34,8 @@ class StartupUpdater(
     private val updateCheckTimeoutMs: Long,
     private val installedVersionCodeProvider: (() -> Int)? = null,
     private val nowProvider: () -> Long = System::currentTimeMillis,
-) {
-    suspend fun checkForEligibleUpdate(
+) : StartupUpdateOperations {
+    override suspend fun checkForEligibleUpdate(
         onState: (StartupUpdateState) -> Unit,
     ): Result<RemoteUpdate?> {
         onState(StartupUpdateState.Checking)
@@ -99,7 +99,7 @@ class StartupUpdater(
         return Result.success(remote)
     }
 
-    suspend fun installUpdate(
+    override suspend fun installUpdate(
         remote: RemoteUpdate,
         onState: (StartupUpdateState) -> Unit,
     ): StartupUpdateOutcome {
@@ -107,10 +107,9 @@ class StartupUpdater(
             ?: return StartupUpdateOutcome.ContinueToAppWithError("Could not download update APK")
 
         onState(StartupUpdateState.Validating)
-        val validation = validator.validate(
-            apkFile = updateFile,
-            expectedVersionCode = remote.versionCode,
-        )
+        val validation = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            validator.validate(apkFile = updateFile, expectedVersionCode = remote.versionCode)
+        }
         if (validation.isFailure) {
             stateStore.clearPendingInstall()
             return StartupUpdateOutcome.ContinueToAppWithError(
@@ -123,7 +122,7 @@ class StartupUpdater(
         return launchInstaller(remote = remote, apkFile = updateFile)
     }
 
-    suspend fun onUserChoseNo(remote: RemoteUpdate) {
+    override suspend fun onUserChoseNo(remote: RemoteUpdate) {
         stateStore.update { current ->
             current.copy(
                 ignoredReleaseId = remote.releaseId,
@@ -135,19 +134,19 @@ class StartupUpdater(
         }
     }
 
-    suspend fun onUserChoseRemindLater(remote: RemoteUpdate, nowEpochMs: Long = nowProvider()) {
+    override suspend fun onUserChoseRemindLater(remote: RemoteUpdate, nowEpochMs: Long?) {
         stateStore.update { current ->
             current.copy(
                 ignoredReleaseId = null,
                 remindLaterReleaseId = remote.releaseId,
-                remindLaterUntilEpochMs = nowEpochMs + REMIND_LATER_WINDOW_MS,
+                remindLaterUntilEpochMs = (nowEpochMs ?: nowProvider()) + REMIND_LATER_WINDOW_MS,
                 pendingInstallReleaseId = null,
                 pendingInstallVersionCode = null,
             )
         }
     }
 
-    suspend fun onUserChoseYes(remote: RemoteUpdate) {
+    override suspend fun onUserChoseYes(remote: RemoteUpdate) {
         stateStore.update { current ->
             current.copy(
                 ignoredReleaseId = current.ignoredReleaseId.takeUnless { releaseId ->
@@ -163,7 +162,7 @@ class StartupUpdater(
         }
     }
 
-    suspend fun retryPendingInstall(
+    override suspend fun retryPendingInstall(
         remote: RemoteUpdate,
         onState: (StartupUpdateState) -> Unit,
     ): StartupUpdateOutcome {
@@ -176,7 +175,9 @@ class StartupUpdater(
         return launchInstaller(remote = remote, apkFile = file)
     }
 
-    suspend fun pendingSnapshot(): UpdateStateSnapshot = stateStore.snapshot()
+    override suspend fun pendingSnapshot(): UpdateStateSnapshot = stateStore.snapshot()
+
+    override suspend fun dismissPostInstallChangelog() { stateStore.setPendingPostInstallChangelog(null) }
 
     suspend fun clearPendingInstall() {
         stateStore.clearPendingInstall()

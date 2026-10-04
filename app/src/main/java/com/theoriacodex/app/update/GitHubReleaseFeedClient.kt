@@ -4,61 +4,59 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import com.theoriacodex.data.repository.checkDocumentDepth
+import com.theoriacodex.data.repository.decodeDocumentUtf8
+import com.theoriacodex.sources.http.SourceHttpClient
+import com.theoriacodex.sources.http.DefaultSourceHttpClient
 
 class GitHubReleaseFeedClient(
     private val owner: String,
     private val repo: String,
     private val channel: String,
     private val assetName: String,
+    private val httpClient: SourceHttpClient = DefaultSourceHttpClient(),
+    private val nowMs: () -> Long = { System.nanoTime() / 1_000_000 },
 ) : UpdateFeedClient {
-    override suspend fun latestMainPrerelease(): Result<RemoteUpdate?> = withContext(Dispatchers.IO) {
-        runCatching {
-            val body = fetchReleasesJson()
-            parseMainPrereleaseHistory(
-                jsonBody = body,
-                channel = channel,
-                assetName = assetName,
-            ).firstOrNull()
-        }
-    }
+    private val mutex = Mutex()
+    private var cachedHistory: List<RemoteUpdate>? = null
+    private var cachedAt = 0L
 
-    override suspend fun mainPrereleaseHistory(limit: Int): Result<List<RemoteUpdate>> = withContext(Dispatchers.IO) {
-        runCatching {
-            val body = fetchReleasesJson()
-            parseMainPrereleaseHistory(
-                jsonBody = body,
-                channel = channel,
-                assetName = assetName,
-            ).take(limit.coerceAtLeast(1))
-        }
-    }
+    override suspend fun latestMainPrerelease(): Result<RemoteUpdate?> = history().map { it.firstOrNull() }
 
-    private fun fetchReleasesJson(): String {
-        val endpoint = "https://api.github.com/repos/$owner/$repo/releases?per_page=50"
-        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 8_000
-            readTimeout = 8_000
-            setRequestProperty("Accept", "application/vnd.github+json")
-            setRequestProperty("User-Agent", "TheoriaCodexUpdater")
-        }
+    override suspend fun mainPrereleaseHistory(limit: Int): Result<List<RemoteUpdate>> =
+        history().map { it.take(limit.coerceAtLeast(1)) }
 
-        return try {
-            val status = connection.responseCode
-            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-            val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (status !in 200..299) {
-                throw IOException("GitHub update check failed ($status)")
+    private suspend fun history(): Result<List<RemoteUpdate>> = withContext(Dispatchers.IO) {
+        runCatchingPreservingCancellation {
+            mutex.withLock {
+                cachedHistory?.takeIf { nowMs() - cachedAt in 0 until 300_000L } ?: fetchHistory().also {
+                    cachedHistory = it
+                    cachedAt = nowMs()
+                }
             }
-            body
-        } finally {
-            connection.disconnect()
         }
+    }
+
+    private suspend fun fetchHistory(): List<RemoteUpdate> {
+        val response = withTimeoutOrNull(15_000L) {
+            httpClient.getBytes(
+                url = "https://api.github.com/repos/$owner/$repo/releases",
+                query = mapOf("per_page" to "50"),
+                headers = mapOf("Accept" to "application/vnd.github+json", "User-Agent" to "TheoriaCodexUpdater"),
+                maxBodyBytes = 4 * 1024 * 1024,
+            )
+        } ?: throw IOException("GitHub update check timed out")
+        if (response.statusCode !in 200..299) throw IOException("GitHub update check failed (${response.statusCode})")
+        val body = decodeDocumentUtf8(response.body)
+        checkDocumentDepth(body)
+        return parseMainPrereleaseHistory(body, channel, assetName)
     }
 
     companion object {

@@ -32,19 +32,14 @@ class AppShellViewModelTest {
     }
 
     @Test
-    @OptIn(ExperimentalCoroutinesApi::class)
-    fun `startup transition publishes one shot shell effect`() = runTest {
+    fun `startup continuation stays observable until application initialization finishes`() {
         val owner = AppShellViewModel(SavedStateHandle())
-        val received = async { owner.effects.first() }
-        runCurrent()
-
         owner.onAction(AppShellAction.UpdateStartup(StartupUpdateWorkflowEvent.NoEligibleUpdate))
-
         assertEquals(StartupUpdateState.NoUpdate, owner.state.value.startup.updateState)
-        assertEquals(
-            AppShellEffect.Startup(StartupUpdateWorkflowEffect.ContinueToApp),
-            received.await(),
-        )
+        assertEquals(true, owner.state.value.readyToEnterApp)
+        assertEquals(false, owner.state.value.appReady)
+        owner.onAction(AppShellAction.MarkAppReady)
+        assertEquals(true, owner.state.value.appReady)
     }
 
     @Test
