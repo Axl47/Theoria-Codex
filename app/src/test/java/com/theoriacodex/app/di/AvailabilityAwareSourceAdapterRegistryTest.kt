@@ -1,7 +1,11 @@
 package com.theoriacodex.app.di
 
 import com.theoriacodex.app.search.SearchCoordinator
-import com.theoriacodex.app.recommend.ForYouCoordinator
+import androidx.lifecycle.SavedStateHandle
+import com.theoriacodex.app.recommend.ForYouViewModel
+import com.theoriacodex.app.recommend.state.ForYouAction
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.theoriacodex.app.recommend.testForYouCoordinator
 import com.theoriacodex.app.search.testSearchCoordinator
 import com.theoriacodex.data.repository.InMemoryLikesRepository
@@ -28,6 +32,7 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class AvailabilityAwareSourceAdapterRegistryTest {
     @Test
     fun `capability changes preserve registry coordinator and orchestrator identity`() {
@@ -96,22 +101,25 @@ class AvailabilityAwareSourceAdapterRegistryTest {
             postId = PostId(SourceKey.RULE34XXX, "liked"),
             tags = listOf("tag"),
         )
-        val forYou = testForYouCoordinator(
+        val forYouService = testForYouCoordinator(
             registry = registry,
             settingsRepository = InMemorySettingsRepository(),
             likesRepository = likes,
         )
-        forYou.initialize()
-        forYou.refresh(shuffle = false)
-        forYou.setSourceSelection(SourceKey.RULE34XXX)
+        val forYou = ForYouViewModel(engine = forYouService, savedStateHandle = SavedStateHandle(), coroutineScope = this)
+        forYou.synchronizeEnvironment(com.theoriacodex.data.repository.AppSettings(), 1)
+        advanceUntilIdle()
+        forYou.onAction(ForYouAction.SelectSource(SourceKey.RULE34XXX))
+        advanceUntilIdle()
 
         capabilities.value = setOf(SourceKey.PIXIV)
 
         val searchChange = search.updateEnvironment(com.theoriacodex.data.repository.AppSettings())
         assertTrue(searchChange.sourcesChanged)
         assertEquals(listOf(SourceKey.PIXIV), searchChange.availableSources)
-        assertTrue(forYou.onAvailableSourcesChanged())
-        assertNull(forYou.selectedSource)
+        forYou.onSourceAvailabilityChanged()
+        advanceUntilIdle()
+        assertNull(forYou.state.value.selectedSource)
     }
 }
 

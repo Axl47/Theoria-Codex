@@ -1,14 +1,20 @@
 package com.theoriacodex.app.recommend.state
 
+import com.theoriacodex.app.recommend.ForYouContinuation
+import com.theoriacodex.app.recommend.ForYouFeedResult
+import com.theoriacodex.app.recommend.forYouBaseQuery
+import com.theoriacodex.app.recommend.forYouSourceQuery
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.data.repository.ForYouBlacklistEntry
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.data.repository.ViewerStreamSource
+import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SortMode
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.orchestration.SourceRunStatus
+import com.theoriacodex.domain.orchestration.UnifiedSearchResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -17,362 +23,139 @@ import org.junit.Test
 
 class ForYouStateContractTest {
     @Test
-    fun `initial snapshot remains neutral and refresh transition preserves results`() {
-        val initial = snapshot(seedId = "init").toUiState()
-        assertNull(initial.emptyReason)
-        assertFalse(initial.isRefreshing)
-
-        val existing = testPost(sourcePostId = "existing")
-        val state = snapshot(
-            likesCount = 3,
-            seedId = "PIXIV:sky",
-            results = listOf(existing),
-            statuses = listOf(SourceRunStatus(SourceKey.PIXIV, SourceRunState.SUCCESS)),
-            canLoadMore = true,
-        ).toUiState()
-
+    fun `refresh retains cards while replacing request and continuation`() {
+        assertNull(ForYouUiState().emptyReason)
+        val state = loadedState(listOf(testPost()), token = "next")
         val transition = state.reduce(ForYouAction.Refresh(shuffle = false))
-
         assertTrue(transition.state.isRefreshing)
-        assertEquals(listOf(existing), transition.state.results)
+        assertEquals(state.results, transition.state.results)
         assertTrue(transition.state.statuses.isEmpty())
         assertFalse(transition.state.canLoadMore)
-        assertEquals(
-            ForYouEffect.RefreshFeed(
-                request = requireNotNull(transition.state.activeRequest),
-                shuffle = false,
-            ),
-            transition.effect,
-        )
+        assertEquals(ForYouEffect.RefreshFeed(requireNotNull(transition.state.activeRequest), false), transition.effect)
     }
 
     @Test
-    fun `profile source and sort selections are typed deterministic transitions`() {
-        val profiles = listOf(
-            RecommendationProfile("main", "Main"),
-            RecommendationProfile("alt", "Alt"),
-        )
-        val base = snapshot(
-            profiles = profiles,
+    fun `profile source and sort select distinct immutable request identities`() {
+        val base = loadedState().copy(
+            profiles = listOf(RecommendationProfile("main", "Main"), RecommendationProfile("alt", "Alt")),
             activeProfileId = "main",
-            likesCount = 2,
             availableSources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU),
-            selectedSource = SourceKey.PIXIV,
-            seedId = "PIXIV:sky",
-        ).toUiState()
-
+        )
         val profile = base.reduce(ForYouAction.SelectProfile("alt"))
         val source = base.reduce(ForYouAction.SelectSource(SourceKey.GELBOORU))
         val sort = base.reduce(ForYouAction.SelectSort(SortMode.TOP))
-
-        assertEquals("alt", profile.state.activeProfileId)
-        assertEquals(
-            ForYouEffect.ChangeProfile(requireNotNull(profile.state.activeRequest), "alt"),
-            profile.effect,
-        )
-        assertEquals(SourceKey.GELBOORU, source.state.selectedSource)
-        assertEquals(
-            ForYouEffect.ChangeSource(requireNotNull(source.state.activeRequest), SourceKey.GELBOORU),
-            source.effect,
-        )
-        assertEquals(SortMode.TOP, sort.state.sortMode)
-        assertEquals(
-            ForYouEffect.ChangeSort(requireNotNull(sort.state.activeRequest), SortMode.TOP),
-            sort.effect,
-        )
+        assertEquals("alt", profile.state.activeRequest?.profileId)
+        assertEquals(SourceKey.GELBOORU, source.state.activeRequest?.source)
+        assertEquals(SortMode.TOP, sort.state.activeRequest?.sortMode)
+        assertTrue(profile.effect is ForYouEffect.ChangeProfile)
+        assertTrue(source.effect is ForYouEffect.ChangeSource)
+        assertTrue(sort.effect is ForYouEffect.ChangeSort)
     }
 
     @Test
-    fun `historical search starts a refresh with exact source tags and sort`() {
-        val state = snapshot(
-            likesCount = 2,
-            availableSources = listOf(SourceKey.PIXIV, SourceKey.GELBOORU),
-        ).toUiState()
-        val seed = linkedMapOf(
-            SourceKey.PIXIV to listOf("pixiv seed"),
-            SourceKey.GELBOORU to listOf("gelbooru seed"),
-        )
-
-        val transition = state.reduce(ForYouAction.ReplaySearch(seed, SortMode.TOP))
-
-        assertTrue(transition.state.isRefreshing)
-        assertEquals(SortMode.TOP, transition.state.sortMode)
-        assertNull(transition.state.selectedSource)
-        assertEquals(seed, transition.state.seedSummaryBySource)
-        assertEquals("GELBOORU:gelbooru seed|PIXIV:pixiv seed", transition.state.seedId)
-        assertEquals(
-            ForYouEffect.ReplaySearch(
-                request = requireNotNull(transition.state.activeRequest),
-                seedBySource = seed,
-                sortMode = SortMode.TOP,
-            ),
-            transition.effect,
-        )
+    fun `historical replay preserves seed order and can page without current likes`() {
+        val seed = linkedMapOf(SourceKey.PIXIV to listOf("pixiv seed"), SourceKey.GELBOORU to listOf("gelbooru seed"))
+        val replay = ForYouUiState().reduce(ForYouAction.ReplaySearch(seed, SortMode.TOP))
+        assertEquals(seed.keys.toList(), replay.state.seedSummaryBySource.keys.toList())
+        assertEquals(SortMode.TOP, replay.state.sortMode)
+        assertEquals(seed, (replay.effect as ForYouEffect.ReplaySearch).seedBySource)
+        val historical = loadedState(listOf(testPost()), "next", likesCount = 0)
+        assertTrue(historical.reduce(ForYouAction.LoadNextPage).state.isPaging)
+        assertNull(historical.emptyReason)
     }
 
     @Test
-    fun `empty error and blacklist exhausted snapshots stay distinguishable`() {
-        val noSources = snapshot(seedId = "empty-enabled", likesCount = 2).toUiState()
-        val exhausted = snapshot(
-            seedId = "empty-seed",
-            likesCount = 2,
-            blacklist = listOf(ForYouBlacklistEntry(SourceKey.PIXIV, listOf("sky"))),
-        ).toUiState()
-        val failed = snapshot(
-            seedId = "empty-seed",
-            likesCount = 2,
-            errorMessage = "provider failed",
-        ).toUiState()
-
+    fun `root failure exhausted seeds unavailable sources and empty replay have distinct states`() {
+        val base = ForYouUiState(activeProfileLikesCount = 2).reduce(ForYouAction.Refresh()).state
+        val request = requireNotNull(base.activeRequest)
+        val failed = base.reduce(ForYouAction.RefreshFailed(request, "failed")).state
+        val noSources = base.reduce(ForYouAction.RefreshCompleted(request, ForYouFeedResult.empty("empty-enabled", 2))).state
+        val exhausted = base.reduce(ForYouAction.RefreshCompleted(request, ForYouFeedResult.empty("empty-seed", 2))).state
+        assertNull(failed.emptyReason)
+        assertEquals("failed", failed.errorMessage)
         assertEquals(ForYouEmptyReason.NO_ENABLED_SOURCES, noSources.emptyReason)
         assertEquals(ForYouEmptyReason.SEEDS_EXHAUSTED, exhausted.emptyReason)
-        assertEquals(1, exhausted.blacklistEntries.size)
-        assertNull(failed.emptyReason)
-        assertEquals("provider failed", failed.errorMessage)
+        assertEquals(ForYouEmptyReason.NO_RESULTS, loadedState(likesCount = 0).emptyReason)
     }
 
     @Test
-    fun `historical seed without likes reports no results instead of training prompt`() {
-        val historical = snapshot(
-            likesCount = 0,
-            seedId = "PIXIV:saved seed",
-            results = emptyList(),
-        ).toUiState()
-
-        assertEquals(ForYouEmptyReason.NO_RESULTS, historical.emptyReason)
-    }
-
-    @Test
-    fun `historical seed remains pageable without current likes`() {
-        val historical = snapshot(
-            likesCount = 0,
-            seedId = "PIXIV:saved seed",
-            results = listOf(testPost()),
-            canLoadMore = true,
-        ).toUiState()
-
-        val transition = historical.reduce(ForYouAction.LoadNextPage)
-
-        assertNull(historical.emptyReason)
-        assertTrue(historical.seedSummaryBySource.isNotEmpty())
-        assertTrue(transition.state.isPaging)
-        assertTrue(transition.effect is ForYouEffect.LoadNextPage)
-    }
-
-    @Test
-    fun `seed blacklist undo carries the exact profile and entries into refresh`() {
-        val entry = ForYouBlacklistEntry(SourceKey.PIXIV, listOf("sky", "night"))
-        val state = snapshot(likesCount = 2, seedId = "PIXIV:sky+night").toUiState()
-
-        val transition = state.reduce(
-            ForYouAction.UndoSeedBlacklist(
-                profileId = "profile-main",
-                entries = listOf(entry),
-            )
+    fun `page settlement preserves failed tokens and untouched statuses while deduplicating hydration`() {
+        val sparse = testPost(sourcePostId = "old", title = null)
+        val hydrated = sparse.copy(title = "resolved")
+        val base = loadedState(listOf(sparse), "next")
+        val mixed = base.copy(
+            continuation = requireNotNull(base.continuation).copy(pageTokens = mapOf(SourceKey.PIXIV to "next", SourceKey.GELBOORU to "g2")),
+            statuses = listOf(success(SourceKey.PIXIV), success(SourceKey.GELBOORU)),
         )
-
-        assertTrue(transition.state.isRefreshing)
-        assertEquals(
-            ForYouEffect.UndoSeedBlacklist(
-                request = requireNotNull(transition.state.activeRequest),
-                profileId = "profile-main",
-                entries = listOf(entry),
-            ),
-            transition.effect,
-        )
+        val started = mixed.reduce(ForYouAction.LoadNextPage).state
+        val request = requireNotNull(started.activeRequest)
+        val failed = SourceRunStatus(SourceKey.GELBOORU, SourceRunState.FAILED, errorMessage = "failed")
+        val settled = started.reduce(ForYouAction.PageLoaded(request,
+            UnifiedSearchResult(listOf(hydrated), mapOf(SourceKey.PIXIV to null), listOf(success(SourceKey.PIXIV), failed)),
+            setOf(SourceKey.PIXIV, SourceKey.GELBOORU),
+        )).state
+        assertEquals(listOf(hydrated), settled.results)
+        assertEquals(mapOf(SourceKey.GELBOORU to "g2"), settled.continuation?.pageTokens)
+        assertFalse(settled.canLoadMore)
+        val retry = settled.reduce(ForYouAction.RetrySource(SourceKey.GELBOORU))
+        val effect = retry.effect as ForYouEffect.LoadNextPage
+        assertEquals(setOf(SourceKey.GELBOORU), effect.sources)
+        assertEquals("g2", effect.continuation.pageTokens[SourceKey.GELBOORU])
+        val completed = retry.state.reduce(ForYouAction.PageLoaded(effect.request,
+            UnifiedSearchResult(listOf(testPost(source = SourceKey.GELBOORU)), mapOf(SourceKey.GELBOORU to null), listOf(success(SourceKey.GELBOORU))),
+            effect.sources,
+        )).state
+        assertEquals(2, completed.results.size)
+        assertEquals(listOf(SourceKey.GELBOORU, SourceKey.PIXIV), completed.statuses.map { it.source })
+        assertTrue(completed.statuses.all { it.state == SourceRunState.SUCCESS })
+        assertTrue(completed.continuation?.pageTokens.orEmpty().isEmpty())
     }
 
     @Test
-    fun `paging transitions merge identities and retain incoming hydration`() {
-        val sparse = testPost(sourcePostId = "1", title = null)
-        val hydrated = sparse.copy(title = "Hydrated")
-        val next = testPost(sourcePostId = "2")
-        val state = snapshot(
-            likesCount = 2,
-            seedId = "PIXIV:sky",
-            results = listOf(sparse),
-            canLoadMore = true,
-        ).toUiState()
-
-        val started = state.reduce(ForYouAction.LoadNextPage)
-        val request = requireNotNull(started.state.activeRequest)
-        val completed = started.state.reduce(
-            ForYouAction.PageLoaded(
-                request = request,
-                posts = listOf(hydrated, next),
-                statuses = listOf(SourceRunStatus(SourceKey.PIXIV, SourceRunState.SUCCESS)),
-                canLoadMore = false,
-            )
-        )
-
-        assertTrue(started.state.isPaging)
-        assertEquals(ForYouEffect.LoadNextPage(request), started.effect)
-        assertEquals(listOf(hydrated, next), completed.state.results)
-        assertFalse(completed.state.isPaging)
-        assertFalse(completed.state.canLoadMore)
-        assertNull(completed.state.activeRequest)
+    fun `new generation rejects stale root page failure and cancellation`() {
+        val first = loadedState(listOf(testPost()), "next").reduce(ForYouAction.LoadNextPage).state
+        val old = requireNotNull(first.activeRequest)
+        val second = first.reduce(ForYouAction.ReplaySearch(mapOf(SourceKey.GELBOORU to listOf("new")), SortMode.TOP)).state
+        assertEquals(second, second.reduce(ForYouAction.PageLoaded(old, UnifiedSearchResult(emptyList(), emptyMap(), emptyList()), setOf(SourceKey.PIXIV))).state)
+        assertEquals(second, second.reduce(ForYouAction.RefreshFailed(old, "stale")).state)
+        assertEquals(second, second.reduce(ForYouAction.RequestCancelled(old)).state)
+        assertTrue(requireNotNull(second.activeRequest).generation > old.generation)
+        val cancelled = second.reduce(ForYouAction.RequestCancelled(requireNotNull(second.activeRequest))).state
+        assertFalse(cancelled.isRefreshing)
+        assertNull(cancelled.errorMessage)
     }
 
     @Test
-    fun `new profile generation rejects stale root completion failure and cancellation`() {
-        val profiles = listOf(
-            RecommendationProfile("main", "Main"),
-            RecommendationProfile("alt", "Alt"),
-        )
-        val base = snapshot(
-            profiles = profiles,
-            activeProfileId = "main",
-            likesCount = 2,
-            seedId = "PIXIV:old",
-        ).toUiState()
-        val first = base.reduce(ForYouAction.Refresh(shuffle = false))
-        val firstRequest = requireNotNull(first.state.activeRequest)
-        val second = first.state.reduce(ForYouAction.SelectProfile("alt"))
-        val secondRequest = requireNotNull(second.state.activeRequest)
-        val staleSnapshot = snapshot(
-            profiles = profiles,
-            activeProfileId = "main",
-            likesCount = 2,
-            seedId = "PIXIV:stale",
-            results = listOf(testPost(sourcePostId = "stale")),
-        )
-
-        val afterStaleCompletion = second.state.reduce(
-            ForYouAction.RefreshCompleted(firstRequest, staleSnapshot)
-        ).state
-        val afterStaleFailure = afterStaleCompletion.reduce(
-            ForYouAction.RefreshFailed(firstRequest, "stale failure")
-        ).state
-        val afterStaleCancellation = afterStaleFailure.reduce(
-            ForYouAction.RequestCancelled(firstRequest)
-        ).state
-
-        assertEquals(second.state, afterStaleCompletion)
-        assertEquals(second.state, afterStaleFailure)
-        assertEquals(second.state, afterStaleCancellation)
-        assertTrue(secondRequest.generation > firstRequest.generation)
-
-        val currentSnapshot = snapshot(
-            profiles = profiles,
-            activeProfileId = "alt",
-            likesCount = 4,
-            seedId = "PIXIV:current",
-            results = listOf(testPost(sourcePostId = "current")),
-        )
-        val completed = afterStaleCancellation.reduce(
-            ForYouAction.RefreshCompleted(secondRequest, currentSnapshot)
-        ).state
-
-        assertEquals("alt", completed.activeProfileId)
-        assertEquals("current", completed.results.single().id.sourcePostId)
-        assertEquals(second.state.nextRequestGeneration, completed.nextRequestGeneration)
-        assertNull(completed.activeRequest)
+    fun `seed Undo captures exact profile and entries`() {
+        val entries = listOf(ForYouBlacklistEntry(SourceKey.PIXIV, listOf("night", "sky")))
+        val transition = loadedState().reduce(ForYouAction.UndoSeedBlacklist("profile-main", entries))
+        val effect = transition.effect as ForYouEffect.UndoSeedBlacklist
+        assertEquals("profile-main", effect.profileId)
+        assertEquals(entries, effect.entries)
     }
 
     @Test
-    fun `cancelled page can be retried and stale page result cannot win`() {
-        val state = snapshot(
-            likesCount = 2,
-            seedId = "PIXIV:sky",
-            results = listOf(testPost(sourcePostId = "existing")),
-            canLoadMore = true,
-        ).toUiState()
-        val first = state.reduce(ForYouAction.LoadNextPage)
-        val firstRequest = requireNotNull(first.state.activeRequest)
-        val cancelled = first.state.reduce(ForYouAction.RequestCancelled(firstRequest)).state
-        val second = cancelled.reduce(ForYouAction.LoadNextPage)
-        val secondRequest = requireNotNull(second.state.activeRequest)
-
-        val afterStale = second.state.reduce(
-            ForYouAction.PageLoaded(
-                request = firstRequest,
-                posts = listOf(testPost(sourcePostId = "stale")),
-                statuses = emptyList(),
-                canLoadMore = false,
-            )
-        ).state
-        val afterStaleFailure = afterStale.reduce(
-            ForYouAction.PageFailed(firstRequest, "stale page failure")
-        ).state
-
-        assertEquals(second.state, afterStale)
-        assertEquals(second.state, afterStaleFailure)
-        assertTrue(secondRequest.generation > firstRequest.generation)
-
-        val completed = afterStaleFailure.reduce(
-            ForYouAction.PageLoaded(
-                request = secondRequest,
-                posts = listOf(testPost(sourcePostId = "current")),
-                statuses = emptyList(),
-                canLoadMore = false,
-            )
-        ).state
-        assertEquals(listOf("existing", "current"), completed.results.map { it.id.sourcePostId })
-        assertNull(completed.activeRequest)
-    }
-
-    @Test
-    fun `open result produces a pure viewer launch intent`() {
+    fun `Viewer effect preserves visible order and filters`() {
         val posts = listOf(testPost(sourcePostId = "1"), testPost(sourcePostId = "2"))
-        val visiblePosts = listOf(posts.last())
-        val filters = SearchVisibilityFilters(animatedOnly = true)
-        val state = snapshot(
-            likesCount = 2,
-            seedId = "PIXIV:sky",
-            results = posts,
-        ).toUiState()
-
-        val effect = state.reduce(
-            ForYouAction.OpenResult(
-                index = 0,
-                scrollOffsetHint = 80,
-                visibleResults = visiblePosts,
-                visibilityFilters = filters,
-            )
-        ).effect
-            as ForYouEffect.OpenViewer
-
-        assertEquals(visiblePosts, effect.posts)
-        assertEquals("for_you:PIXIV:sky", effect.context.queryHash)
-        assertEquals(0, effect.context.startIndex)
-        assertEquals(80, effect.context.scrollOffsetHint)
+        val filters = SearchVisibilityFilters(hideLiked = true)
+        val effect = loadedState(posts).reduce(ForYouAction.OpenResult(0, 25, listOf(posts.last()), filters)).effect as ForYouEffect.OpenViewer
+        assertEquals(listOf(posts.last()), effect.posts)
+        assertEquals(25, effect.context.scrollOffsetHint)
         assertEquals(ViewerStreamSource.FOR_YOU, effect.context.streamSource)
         assertEquals(filters, effect.visibilityFilters)
     }
 
-    private fun snapshot(
-        profiles: List<RecommendationProfile> = listOf(RecommendationProfile("main", "Main")),
-        activeProfileId: String = "main",
-        likesCount: Int = 0,
-        availableSources: List<SourceKey> = listOf(SourceKey.PIXIV),
-        selectedSource: SourceKey? = null,
-        seedId: String = "init",
-        results: List<com.theoriacodex.domain.model.Post> = emptyList(),
-        statuses: List<SourceRunStatus> = emptyList(),
-        blacklist: List<ForYouBlacklistEntry> = emptyList(),
-        canLoadMore: Boolean = false,
-        errorMessage: String? = null,
-    ): ForYouCoordinatorSnapshot {
-        return ForYouCoordinatorSnapshot(
-            profiles = profiles,
-            activeProfileId = activeProfileId,
-            activeProfileLikesCount = likesCount,
-            availableSources = availableSources,
-            selectedSource = selectedSource,
-            sortMode = SortMode.NEWEST,
-            seedId = seedId,
-            seedSummaryBySource = if (seedId.startsWith("empty") || seedId == "init") {
-                emptyMap()
-            } else {
-                mapOf(SourceKey.PIXIV to listOf("sky"))
-            },
-            blacklistEntries = blacklist,
-            results = results,
-            statuses = statuses,
-            loading = false,
-            loadingMore = false,
-            canLoadMore = canLoadMore,
-            errorMessage = errorMessage,
-        )
+    private fun success(source: SourceKey) = SourceRunStatus(source, SourceRunState.SUCCESS)
+
+    private fun loadedState(posts: List<Post> = emptyList(), token: String? = null, likesCount: Int = 2): ForYouUiState {
+        val base = ForYouUiState(activeProfileLikesCount = 2).reduce(ForYouAction.Refresh()).state
+        val seed = mapOf(SourceKey.PIXIV to listOf("seed"))
+        val page = UnifiedSearchResult(posts, mapOf(SourceKey.PIXIV to token), listOf(success(SourceKey.PIXIV)))
+        val continuation = ForYouContinuation(forYouBaseQuery(SortMode.NEWEST),
+            mapOf(SourceKey.PIXIV to forYouSourceQuery(SourceKey.PIXIV, listOf("seed"), SortMode.NEWEST)),
+            emptyMap(), mapOf(SourceKey.PIXIV to null)).accept(page, seed.keys)
+        return base.reduce(ForYouAction.RefreshCompleted(requireNotNull(base.activeRequest),
+            ForYouFeedResult(seed, "PIXIV:seed", likesCount, page, continuation),
+        )).state
     }
 }

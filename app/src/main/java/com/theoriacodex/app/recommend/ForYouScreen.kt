@@ -267,6 +267,11 @@ fun ForYouScreen(
             }
         }
 
+        com.theoriacodex.app.search.StatusRow(
+            statuses = state.statuses.filter { it.source in state.retryableSources },
+            retryEnabled = !state.isRefreshing && !state.isPaging,
+            onRetrySource = { onAction(ForYouAction.RetrySource(it)) },
+        )
         FeedContinueLoading(pageDemand)
         when {
             state.emptyReason == ForYouEmptyReason.NO_LIKES -> {

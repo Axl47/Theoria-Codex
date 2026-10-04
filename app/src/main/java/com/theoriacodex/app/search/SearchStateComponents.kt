@@ -28,14 +28,15 @@ internal fun StatusRow(
     statuses: List<SourceRunStatus>,
     retryEnabled: Boolean = true,
     onRetrySource: (SourceKey) -> Unit = {},
-    onOpenAccounts: () -> Unit = {},
+    onOpenAccounts: (() -> Unit)? = null,
 ) {
     var selected by remember { mutableStateOf<SourceKey?>(null) }
     val uriHandler = LocalUriHandler.current
     val selectedStatus = statuses.firstOrNull { it.source == selected }
     selectedStatus?.let { status ->
-        val requiresAccount = status.failureReason == SourceFailureReason.AUTH_REQUIRED ||
-            status.failureReason == SourceFailureReason.AUTH_EXPIRED
+        val requiresAccount = onOpenAccounts != null &&
+            (status.failureReason == SourceFailureReason.AUTH_REQUIRED ||
+                status.failureReason == SourceFailureReason.AUTH_EXPIRED)
         AlertDialog(
             onDismissRequest = { selected = null },
             title = { Text(status.source.displayName()) },

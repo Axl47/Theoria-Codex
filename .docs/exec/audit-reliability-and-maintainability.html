@@ -11,7 +11,7 @@
 <h1>Audit reliability and maintainability</h1>
 <p>Owner: Codex · Created October 3, 2026 · Base: fe8177cb292cf712ec64ae2975cf9d718fae4b6d · Branch: codex/audit-reliability-and-maintainability</p>
 <div class="status">
-<strong>Status: In progress.</strong> Next: converge Creator and For You execution on immutable requests/results with route-owned continuation and Retry. All 13 findings and both additional product observations are in scope. Separate conventional commits follow the phases below.</div>
+<strong>Status: In progress.</strong> Next: separate Viewer media rendering and finish aggregate plus device validation. All 13 findings and both additional product observations are in scope. Separate conventional commits follow the phases below.</div>
 </header>
 <nav>
 <div>
@@ -156,7 +156,7 @@
 <code>app/src/main/java/com/theoriacodex/app/recommend/ForYouCoordinator.kt; ForYouViewModel.kt; state/ForYouStateContract.kt; app/src/main/java/com/theoriacodex/app/creator/CreatorProfileCoordinator.kt; CreatorProfileViewModel.kt; related routes/screens; app-logic shared continuation policy</code>
 <p>Exact same-token retry, healthy order retained, no root side effects on retry; replay/startup/cancellation/source availability and related shelf tests.</p>
 </td>
-<td data-phase="feeds">In progress — Creator complete; For You next</td>
+<td data-phase="feeds">Complete</td>
 </tr>
 <tr id="phase-renderers">
 <td>renderers</td>
@@ -424,6 +424,7 @@ npm run audit:quality
 <p>Before any connected test, build/inspect its dry-run graph, verify every packaged application ID and signing certificate with the repository scripts, and confirm the package-mutating SideEffectRunListener is not configured. Allowed isolated targets: <code>com.theoriacodex.debug</code>, <code>.benchmark</code>, <code>.acceptance</code>, <code>.baselineprofile</code>; never install/clear/launch the production package. Physical performance requires complete baseline/candidate traces on the same hardware and fixture/runner configuration. Build or emulator results are not performance proof. Refresh checked-in profiles after structural work settles, then measure the final build. Report unavailable hardware as an evidence limit, not a measured improvement.</p>
 </section>
 <section id="log">
+<p>For You now executes immutable root/page inputs in a stateless service. The route owns settings, generation, cancellation, canonical results, related promotions, and exact prepared-query continuations. Shared feed settlement preserves failed source tokens (including first-page null tokens), clears only completed sources, and retains unaffected statuses. Retry requests only the selected failed provider and adds no root history/statistics. Accepted root bookkeeping outlives its completed request; all-failed and stale roots record nothing. Cold replay still waits for both startup inputs and retains exact source order; count-only updates, including zero Likes, preserve admitted feeds. Removed mirrored coordinator snapshots and redundant promotion replay. Focused For You, registry and failure-UI checks passed, including the final newer-Likes-projection admission test (6 seconds; /tmp/theoria-audit-foryou-admission-tests.log).</p>
 <p>Creator now has a stateless provider service and one route-owned request generation, result list and continuation. Its platform-free reducer moved into app-logic. A failed page preserves its exact token and existing order; automatic paging pauses until explicit Retry. Accepted root visits run once after route admission; stale completions cannot record visits. Reattaching an empty Creator route no longer repeats its root load. The focused Creator reducer, owner, real-service and provider tests passed (58 seconds; /tmp/theoria-audit-creator-tests.log).</p>
 <h2>Living Log</h2>
 <h3>Progress</h3>

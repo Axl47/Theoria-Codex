@@ -1,6 +1,10 @@
 package com.theoriacodex.app.recommend
 
+import androidx.lifecycle.SavedStateHandle
+import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.testing.testPost
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.advanceUntilIdle
 import com.theoriacodex.data.repository.InMemoryLikesRepository
 import com.theoriacodex.data.repository.InMemoryRecentsRepository
 import com.theoriacodex.data.repository.InMemorySettingsRepository
@@ -45,8 +49,8 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class ForYouCoordinatorTest {
     @Test
-    fun `cold fallback sources overlap and retain deterministic source order`() = runTest {
-        val adapters = listOf(SourceKey.GELBOORU, SourceKey.PIXIV).map { source ->
+    fun `cold fallback acquisition overlaps while seed order remains deterministic`() = runTest {
+        val adapters = listOf(SourceKey.PIXIV, SourceKey.GELBOORU).map { source ->
             object : SourceAdapter by FakeAdapter(source, source.name) {
                 override suspend fun trendingTags(limit: Int): List<TagSuggestion> {
                     delay(1_000L)
@@ -54,395 +58,204 @@ class ForYouCoordinatorTest {
                 }
             }
         }
-        val coordinator = testForYouCoordinator(registry = registryOf(*adapters.toTypedArray()))
-        coordinator.initialize()
+        val service = testForYouCoordinator(registryOf(*adapters.toTypedArray()))
         val started = testScheduler.currentTime
-        coordinator.refresh(shuffle = false)
+        val result = service.execute(request(service))
         assertEquals(1_000L, testScheduler.currentTime - started)
-        assertEquals(setOf(SourceKey.GELBOORU, SourceKey.PIXIV), coordinator.results.map { it.id.source }.toSet())
+        assertEquals(listOf(SourceKey.GELBOORU, SourceKey.PIXIV), result.seed.keys.toList())
+        assertEquals(result.seed.keys, result.page.items.map { it.id.source }.toSet())
     }
 
     @Test
-    fun `blacklist retries train each source once and a new root retrains`() = runTest {
+    fun `blacklist retries prepare each source once and new roots train again`() = runTest {
         val profileId = defaultRecommendationProfiles().first().profileId
-        val tagsBySource = listOf(SourceKey.GELBOORU, SourceKey.PIXIV)
-            .associateWith { CountingTags(listOf("only_seed")) }
+        val tagsBySource = listOf(SourceKey.GELBOORU, SourceKey.PIXIV).associateWith { CountingTags(listOf("only_seed")) }
         val likes = object : LikesRepository by InMemoryLikesRepository() {
             override fun observeLikes(profileId: String) = flowOf(tagsBySource.map { (source, tags) ->
                 LikedPost(profileId, PostId(source, "liked"), 1L, tags)
             })
         }
         val settings = InMemorySettingsRepository()
-        tagsBySource.keys.forEach { source ->
-            settings.addForYouBlacklistEntry(profileId, source, listOf("only_seed"))
-        }
-        val coordinator = testForYouCoordinator(
-            registry = registryOf(FakeAdapter(SourceKey.GELBOORU, "gelbooru"), FakeAdapter(SourceKey.PIXIV, "pixiv")),
-            settingsRepository = settings,
-            likesRepository = likes,
-        )
-        coordinator.initialize()
-
-        coordinator.refresh(shuffle = false)
-
-        assertTrue(coordinator.results.isEmpty())
+        tagsBySource.keys.forEach { settings.addForYouBlacklistEntry(profileId, it, listOf("only_seed")) }
+        val service = testForYouCoordinator(registryOf(FakeAdapter(SourceKey.PIXIV, "p"), FakeAdapter(SourceKey.GELBOORU, "g")),
+            settingsRepository = settings, likesRepository = likes)
+        val request = request(service, settings.observeSettings().first())
+        assertTrue(service.execute(request).page.items.isEmpty())
         assertEquals(listOf(1, 1), tagsBySource.values.map(CountingTags::reads))
-
-        coordinator.refresh(shuffle = false)
-
+        service.execute(request)
         assertEquals(listOf(2, 2), tagsBySource.values.map(CountingTags::reads))
     }
 
     @Test
-    fun `usable likes do not request trending before a successful personalized search`() = runTest {
-        val adapter = FakeAdapter(SourceKey.PIXIV, "pixiv").apply {
-            trendingCancellation = CancellationException("unused fallback must not block personalized search")
+    fun `usable likes do not fetch unused fallback and shuffle uses injected seed`() = runTest {
+        val adapter = FakeAdapter(SourceKey.PIXIV, "p").apply {
+            trendingCancellation = CancellationException("unused fallback")
         }
-        val likes = InMemoryLikesRepository()
-        likes.toggleLike(defaultRecommendationProfiles().first().profileId, PostId(SourceKey.PIXIV, "liked"), listOf("cloud"))
-        val coordinator = testForYouCoordinator(registry = registryOf(adapter), likesRepository = likes)
-        coordinator.initialize()
-
-        coordinator.refresh(shuffle = false)
-
-        assertEquals(listOf("cloud"), adapter.lastSearchQuery?.includeTags)
+        val likes = liked(SourceKey.PIXIV)
+        var seedReads = 0
+        val service = testForYouCoordinator(registryOf(adapter), likesRepository = likes, seedSource = { seedReads++; 42L })
+        assertTrue(service.execute(request(service).copy(shuffle = true)).page.items.isNotEmpty())
+        service.execute(request(service))
+        assertEquals(1, seedReads)
         assertEquals(0, adapter.trendingRequests)
-        assertTrue(coordinator.results.isNotEmpty())
+        assertEquals(listOf("cloud"), adapter.lastSearchQuery?.includeTags)
     }
 
     @Test
-    fun `accepted recommendation root records one FYP search and pagination records none`() = runTest {
-        val recents = InMemoryRecentsRepository(clock = { 100L })
-        val likes = InMemoryLikesRepository()
+    fun `only admitted roots record history and failed roots or pages never do`() = runTest {
+        val adapter = FakeAdapter(SourceKey.PIXIV, "p")
+        val recents = InMemoryRecentsRepository()
         val statistics = InMemoryStatisticsRepository()
-        likes.toggleLike(
-            profileId = defaultRecommendationProfiles().first().profileId,
-            postId = PostId(SourceKey.PIXIV, "liked-pixiv"),
-            tags = listOf("favorite"),
-        )
-        val coordinator = testForYouCoordinator(
-            registry = registryOf(FakeAdapter(SourceKey.PIXIV, "pixiv-post")),
-            settingsRepository = InMemorySettingsRepository(),
-            likesRepository = likes,
-            recentsRepository = recents,
-            statisticsRepository = statistics,
-        )
-
-        coordinator.initialize()
-        coordinator.refresh(shuffle = false)
-        val rootEntries = recents.observeSearches().first()
-        coordinator.loadNextPage()
-
-        val entry = rootEntries.single()
+        val service = testForYouCoordinator(registryOf(adapter), likesRepository = liked(SourceKey.PIXIV),
+            recentsRepository = recents, statisticsRepository = statistics)
+        val result = service.execute(request(service))
+        assertTrue(recents.observeSearches().first().isEmpty())
+        service.recordAccepted(result)
+        val entry = recents.observeSearches().first().single()
         assertEquals(RecentSearchKind.FYP, entry.kind)
         assertEquals(listOf(SourceKey.PIXIV), entry.sources)
-        assertEquals(listOf("favorite"), entry.query.includeTags)
-        assertEquals(mapOf(SourceKey.PIXIV to listOf("favorite")), entry.sourceTags)
-        assertEquals("for_you:${coordinator.seedId}", entry.queryHash)
-        assertEquals(rootEntries, recents.observeSearches().first())
-        assertTrue(recents.observeWatchedPosts().first().isEmpty())
-        assertEquals(1, recents.observeActivity().first().size)
+        assertEquals(result.seed, entry.sourceTags)
+        assertEquals("for_you:${result.seedId}", entry.queryHash)
+        service.loadPage(requireNotNull(result.continuation), setOf(SourceKey.PIXIV))
+        adapter.failSearch = true
+        service.recordAccepted(service.execute(request(service)))
+        assertEquals(listOf(entry), recents.observeSearches().first())
         assertEquals(1L, statistics.observeStatistics().first().forYouSearchCount)
+        assertTrue(recents.observeWatchedPosts().first().isEmpty())
     }
 
     @Test
-    fun `saved FYP search replays exact source tags and sort`() = runTest {
-        val pixiv = FakeAdapter(SourceKey.PIXIV, "pixiv-post")
-        val gelbooru = FakeAdapter(SourceKey.GELBOORU, "gelbooru-post")
-        val coordinator = testForYouCoordinator(
-            registry = registryOf(pixiv, gelbooru),
-            settingsRepository = InMemorySettingsRepository(),
-        )
-        val seed = linkedMapOf(
-            SourceKey.GELBOORU to listOf("gelbooru seed"),
-            SourceKey.PIXIV to listOf("pixiv seed", "night"),
-        )
-
-        coordinator.initialize()
-        coordinator.replaySearch(seed, SortMode.TOP)
-
-        assertEquals(seed, coordinator.seedSummaryBySource)
-        assertEquals(SortMode.TOP, coordinator.sortMode)
-        assertNull(coordinator.selectedSource)
-        assertEquals(listOf("gelbooru seed"), gelbooru.lastSearchQuery?.includeTags)
-        assertEquals(listOf("pixiv seed", "night"), pixiv.lastSearchQuery?.includeTags)
+    fun `historical replay preserves exact source tags sort and recorded source order without likes`() = runTest {
+        val pixiv = FakeAdapter(SourceKey.PIXIV, "p")
+        val gelbooru = FakeAdapter(SourceKey.GELBOORU, "g")
+        val recents = InMemoryRecentsRepository()
+        val service = testForYouCoordinator(registryOf(pixiv, gelbooru), recentsRepository = recents)
+        val seed = linkedMapOf(SourceKey.PIXIV to listOf("pixiv seed", "night"), SourceKey.GELBOORU to listOf("gelbooru seed"))
+        val result = service.execute(request(service).copy(sortMode = SortMode.TOP, historicalSeed = seed))
+        service.recordAccepted(result)
+        assertEquals(seed, result.seed)
+        assertEquals(seed.keys.toList(), recents.observeSearches().first().single().sources)
+        assertEquals(seed[SourceKey.GELBOORU], gelbooru.lastSearchQuery?.includeTags)
+        assertEquals(seed[SourceKey.PIXIV], pixiv.lastSearchQuery?.includeTags)
         assertEquals(SortMode.TOP, pixiv.lastSearchQuery?.sort)
     }
 
     @Test
-    fun `shuffled recommendations use the injected seed source`() = runTest {
-        var seedReads = 0
-        val coordinator = testForYouCoordinator(
-            registry = registryOf(FakeAdapter(SourceKey.PIXIV, "pixiv-post")),
-            settingsRepository = InMemorySettingsRepository(),
-            seedSource = {
-                seedReads += 1
-                42L
-            },
-        )
-
-        coordinator.initialize()
-        coordinator.refresh(shuffle = true)
-        coordinator.refresh(shuffle = false)
-
-        assertEquals(1, seedReads)
-    }
-
-    @Test
-    fun `source selection constrains recommendation tags and content then unified restores both sources`() = runTest {
-        val pixiv = FakeAdapter(SourceKey.PIXIV, "pixiv-post")
-        val gelbooru = FakeAdapter(SourceKey.GELBOORU, "gelbooru-post")
-        val likesRepository = InMemoryLikesRepository()
-        val profileId = defaultRecommendationProfiles().first().profileId
-        likesRepository.toggleLike(
-            profileId = profileId,
-            postId = PostId(SourceKey.PIXIV, "liked-pixiv"),
-            tags = listOf("pixiv favorite"),
-        )
-        likesRepository.toggleLike(
-            profileId = profileId,
-            postId = PostId(SourceKey.GELBOORU, "liked-gelbooru"),
-            tags = listOf("gelbooru favorite"),
-        )
-        val coordinator = testForYouCoordinator(
-            registry = registryOf(pixiv, gelbooru),
-            settingsRepository = InMemorySettingsRepository(),
-            likesRepository = likesRepository,
-        )
-
-        coordinator.initialize()
-        coordinator.refresh(shuffle = false)
-
-        assertEquals(listOf(SourceKey.GELBOORU, SourceKey.PIXIV), coordinator.availableSourceSelections)
-        assertEquals(setOf(SourceKey.PIXIV, SourceKey.GELBOORU), coordinator.seedSummaryBySource.keys)
-        assertEquals(setOf(SourceKey.PIXIV, SourceKey.GELBOORU), coordinator.results.map { it.id.source }.toSet())
-
-        coordinator.setSourceSelection(SourceKey.PIXIV)
-
-        assertEquals(SourceKey.PIXIV, coordinator.selectedSource)
-        assertEquals(setOf(SourceKey.PIXIV), coordinator.seedSummaryBySource.keys)
-        assertTrue(coordinator.results.isNotEmpty())
-        assertTrue(coordinator.results.all { post -> post.id.source == SourceKey.PIXIV })
-        assertEquals(listOf("pixiv favorite"), pixiv.lastSearchQuery?.includeTags)
-        val gelbooruRequestsAfterSelection = gelbooru.requestedPageTokens.size
-
-        coordinator.loadNextPage()
-
-        assertTrue(coordinator.results.all { post -> post.id.source == SourceKey.PIXIV })
+    fun `source selection and continuation carry their original queries independently of later roots`() = runTest {
+        val pixiv = FakeAdapter(SourceKey.PIXIV, "p")
+        val gelbooru = FakeAdapter(SourceKey.GELBOORU, "g")
+        val service = testForYouCoordinator(registryOf(pixiv, gelbooru), likesRepository = liked(SourceKey.PIXIV, SourceKey.GELBOORU))
+        val selected = service.execute(request(service).copy(selectedSource = SourceKey.PIXIV, sortMode = SortMode.TOP))
+        val unified = service.execute(request(service))
+        val page = service.loadPage(requireNotNull(selected.continuation), setOf(SourceKey.PIXIV))
+        assertEquals(setOf(SourceKey.PIXIV), selected.seed.keys)
+        assertEquals(setOf(SourceKey.PIXIV, SourceKey.GELBOORU), unified.seed.keys)
+        assertTrue(page.items.all { it.id.source == SourceKey.PIXIV })
+        assertEquals(SortMode.TOP, pixiv.lastSearchQuery?.sort)
         assertEquals(listOf(null, null, "next"), pixiv.requestedPageTokens)
-        assertEquals(gelbooruRequestsAfterSelection, gelbooru.requestedPageTokens.size)
-
-        coordinator.setSourceSelection(null)
-
-        assertEquals(null, coordinator.selectedSource)
-        assertEquals(setOf(SourceKey.PIXIV, SourceKey.GELBOORU), coordinator.seedSummaryBySource.keys)
-        assertEquals(setOf(SourceKey.PIXIV, SourceKey.GELBOORU), coordinator.results.map { it.id.source }.toSet())
+        assertEquals(listOf<String?>(null), gelbooru.requestedPageTokens)
     }
 
     @Test
-    fun `blacklisting the only personalized seed leaves an honest empty feed`() = runTest {
-        val adapter = FakeAdapter(SourceKey.PIXIV, "pixiv-post")
-        val likesRepository = InMemoryLikesRepository()
-        val settingsRepository = InMemorySettingsRepository()
-        val profileId = defaultRecommendationProfiles().first().profileId
-        likesRepository.toggleLike(
-            profileId = profileId,
-            postId = PostId(SourceKey.PIXIV, "liked-pixiv"),
-            tags = listOf("only seed"),
-        )
-        settingsRepository.addForYouBlacklistEntry(
-            profileId = profileId,
-            source = SourceKey.PIXIV,
-            tags = listOf("only seed"),
-        )
-        val coordinator = testForYouCoordinator(
-            registry = registryOf(adapter),
-            settingsRepository = settingsRepository,
-            likesRepository = likesRepository,
-        )
-
-        coordinator.initialize()
-        coordinator.refresh(shuffle = false)
-
-        assertTrue(coordinator.results.isEmpty())
-        assertTrue(coordinator.seedSummaryBySource.isEmpty())
-        assertEquals("empty-seed", coordinator.seedId)
-        assertFalse(coordinator.canLoadMore)
-        assertNull(coordinator.errorMessage)
+    fun `blacklisting the only personalized seed returns an honest empty result`() = runTest {
+        val adapter = FakeAdapter(SourceKey.PIXIV, "p")
+        val service = testForYouCoordinator(registryOf(adapter), likesRepository = liked(SourceKey.PIXIV))
+        val change = service.updateBlacklist(defaultRecommendationProfiles().first().profileId,
+            listOf(com.theoriacodex.data.repository.ForYouBlacklistEntry(SourceKey.PIXIV, listOf("cloud"))), true)
+        val result = service.execute(request(service, change.settings))
+        assertEquals("empty-seed", result.seedId)
+        assertTrue(result.page.items.isEmpty())
+        assertNull(result.continuation)
         assertTrue(adapter.requestedPageTokens.isEmpty())
     }
 
     @Test
-    fun `one failed source does not discard healthy recommendations`() = runTest {
-        val healthy = FakeAdapter(SourceKey.PIXIV, "pixiv-post")
-        val failing = FakeAdapter(SourceKey.GELBOORU, "gelbooru-post", failSearch = true)
-        val likesRepository = InMemoryLikesRepository()
-        val profileId = defaultRecommendationProfiles().first().profileId
-        likesRepository.toggleLike(profileId, PostId(SourceKey.PIXIV, "liked-pixiv"), listOf("pixiv seed"))
-        likesRepository.toggleLike(profileId, PostId(SourceKey.GELBOORU, "liked-gelbooru"), listOf("gelbooru seed"))
-        val coordinator = testForYouCoordinator(
-            registry = registryOf(healthy, failing),
-            settingsRepository = InMemorySettingsRepository(),
-            likesRepository = likesRepository,
-        )
-
-        coordinator.initialize()
-        coordinator.refresh(shuffle = false)
-
-        assertEquals(listOf(SourceKey.PIXIV), coordinator.results.map { post -> post.id.source })
-        assertEquals(setOf(SourceKey.PIXIV, SourceKey.GELBOORU), coordinator.seedSummaryBySource.keys)
-        assertTrue(coordinator.statuses.any { status -> status.source == SourceKey.GELBOORU })
-        assertNull(coordinator.errorMessage)
+    fun `failed first page retains null retry token without discarding healthy provider`() = runTest {
+        val healthy = FakeAdapter(SourceKey.PIXIV, "p")
+        val failing = FakeAdapter(SourceKey.GELBOORU, "g", failSearch = true)
+        val service = testForYouCoordinator(registryOf(healthy, failing), likesRepository = liked(SourceKey.PIXIV, SourceKey.GELBOORU))
+        val result = service.execute(request(service))
+        val continuation = requireNotNull(result.continuation)
+        assertEquals(listOf(SourceKey.PIXIV), result.page.items.map { it.id.source })
+        assertTrue(continuation.pageTokens.containsKey(SourceKey.GELBOORU))
+        assertNull(continuation.pageTokens[SourceKey.GELBOORU])
+        failing.failSearch = false
+        val retry = service.loadPage(continuation, setOf(SourceKey.GELBOORU))
+        assertEquals(listOf(SourceKey.GELBOORU), retry.items.map { it.id.source })
+        assertEquals(listOf<String?>(null), healthy.requestedPageTokens)
     }
 
     @Test
-    fun `failed page continuation retires while healthy source posts are retained`() = runTest {
-        val healthy = FakeAdapter(SourceKey.PIXIV, "healthy")
-        val failing = FakeAdapter(SourceKey.GELBOORU, "failing", failPaging = true)
-        val likes = InMemoryLikesRepository()
-        val profileId = defaultRecommendationProfiles().first().profileId
-        likes.toggleLike(profileId, PostId(SourceKey.PIXIV, "liked"), listOf("cloud"))
-        likes.toggleLike(profileId, PostId(SourceKey.GELBOORU, "liked"), listOf("cloud"))
-        val coordinator = testForYouCoordinator(registry = registryOf(healthy, failing), likesRepository = likes)
-        coordinator.initialize()
-        coordinator.refresh(shuffle = false)
-
-        coordinator.loadNextPage()
-        coordinator.loadNextPage()
-
+    fun `route retries only failed page and records no additional root history`() = runTest {
+        val healthy = FakeAdapter(SourceKey.PIXIV, "p")
+        val failing = FakeAdapter(SourceKey.GELBOORU, "g", failPaging = true)
+        val statistics = InMemoryStatisticsRepository()
+        val service = testForYouCoordinator(registryOf(healthy, failing), likesRepository = liked(SourceKey.PIXIV, SourceKey.GELBOORU), statisticsRepository = statistics)
+        val owner = ForYouViewModel(engine = service, savedStateHandle = SavedStateHandle(), coroutineScope = this)
+        owner.synchronizeEnvironment(AppSettings(), 2)
+        advanceUntilIdle()
+        owner.onAction(ForYouAction.LoadNextPage)
+        advanceUntilIdle()
+        val retained = owner.state.value.results
+        assertEquals(3, retained.size)
+        assertEquals(setOf(SourceKey.GELBOORU), owner.state.value.retryableSources)
+        owner.onAction(ForYouAction.LoadNextPage)
+        advanceUntilIdle()
         assertEquals(1, failing.pageAttempts)
+        failing.failPaging = false
+        owner.onAction(ForYouAction.RetrySource(SourceKey.GELBOORU))
+        advanceUntilIdle()
+        assertEquals(2, failing.pageAttempts)
         assertEquals(1, healthy.pageAttempts)
-        assertEquals(3, coordinator.results.size)
-        assertEquals(SourceRunState.FAILED, coordinator.statuses.single { it.source == SourceKey.GELBOORU }.state)
-        assertEquals(SourceRunState.SUCCESS, coordinator.statuses.single { it.source == SourceKey.PIXIV }.state)
-        assertFalse(coordinator.canLoadMore)
+        assertEquals(retained, owner.state.value.results.take(retained.size))
+        assertEquals(4, owner.state.value.results.size)
+        assertTrue(owner.state.value.retryableSources.isEmpty())
+        assertEquals(1L, statistics.observeStatistics().first().forYouSearchCount)
     }
 
     @Test
-    fun `cancellation while loading fallback tags propagates without replacing current posts`() = runTest {
-        val adapter = FakeAdapter(SourceKey.PIXIV, "pixiv-post")
-        val likesRepository = InMemoryLikesRepository()
-        val profileId = defaultRecommendationProfiles().first().profileId
-        likesRepository.toggleLike(
-            profileId = profileId,
-            postId = PostId(SourceKey.PIXIV, "liked-pixiv"),
-            tags = listOf("100users入り"),
-        )
-        val coordinator = testForYouCoordinator(
-            registry = registryOf(adapter),
-            settingsRepository = InMemorySettingsRepository(),
-            likesRepository = likesRepository,
-        )
-        adapter.trendingCandidates = listOf(TagSuggestion(text = "favorite", type = null, count = 1))
-        coordinator.initialize()
-        coordinator.refresh(shuffle = false)
-        val postsBeforeCancellation = coordinator.results
-        val expected = CancellationException("recommendation request superseded")
-        adapter.trendingCancellation = expected
-
-        var thrown: CancellationException? = null
-        try {
-            coordinator.refresh(shuffle = false)
-        } catch (error: CancellationException) {
-            thrown = error
+    fun `fallback cancellation propagates and leaves previously returned result immutable`() = runTest {
+        val adapter = FakeAdapter(SourceKey.PIXIV, "p").apply {
+            trendingCandidates = listOf(TagSuggestion("favorite", null, 1))
         }
-
-        assertEquals(expected.message, thrown?.message)
-        assertEquals(postsBeforeCancellation, coordinator.results)
-        assertFalse(coordinator.loading)
-        assertNull(coordinator.errorMessage)
+        val service = testForYouCoordinator(registryOf(adapter))
+        val first = service.execute(request(service))
+        adapter.trendingCancellation = CancellationException("superseded")
+        var message: String? = null
+        try { service.execute(request(service)) } catch (error: CancellationException) { message = error.message }
+        assertEquals("superseded", message)
+        assertEquals(1, first.page.items.size)
     }
 
     @Test
-    fun `capability removal cancels in flight source feed before replacement publishes`() = runTest {
+    fun `capability removal rejects late results and their history through the real route owner`() = runTest {
         val started = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
-        val pixiv = FakeAdapter(SourceKey.PIXIV, "pixiv-current")
-        val rule34 = FakeAdapter(
-            sourceKey = SourceKey.RULE34XXX,
-            postId = "rule34-stale",
-            searchStarted = started,
-            searchRelease = release,
-        )
+        val pixiv = FakeAdapter(SourceKey.PIXIV, "fresh")
+        val rule34 = FakeAdapter(SourceKey.RULE34XXX, "stale", searchStarted = started, searchRelease = release)
         val capabilities = MutableStateFlow(setOf(SourceKey.PIXIV, SourceKey.RULE34XXX))
-        val registry = mutableRegistryOf(capabilities, pixiv, rule34)
-        val likesRepository = InMemoryLikesRepository()
-        val recentsRepository = InMemoryRecentsRepository()
-        val profileId = defaultRecommendationProfiles().first().profileId
-        likesRepository.toggleLike(profileId, PostId(SourceKey.PIXIV, "liked-pixiv"), listOf("pixiv seed"))
-        likesRepository.toggleLike(profileId, PostId(SourceKey.RULE34XXX, "liked-rule34"), listOf("rule34 seed"))
-        val coordinator = testForYouCoordinator(
-            registry = registry,
-            settingsRepository = InMemorySettingsRepository(),
-            likesRepository = likesRepository,
-            recentsRepository = recentsRepository,
-        )
-        coordinator.initialize()
-
-        val staleRequest = backgroundScope.launch {
-            coordinator.setSourceSelection(SourceKey.RULE34XXX)
-        }
+        val recents = InMemoryRecentsRepository()
+        val service = testForYouCoordinator(mutableRegistryOf(capabilities, pixiv, rule34),
+            likesRepository = liked(SourceKey.PIXIV, SourceKey.RULE34XXX), recentsRepository = recents)
+        val owner = ForYouViewModel(engine = service, savedStateHandle = SavedStateHandle(), coroutineScope = this)
+        owner.synchronizeEnvironment(AppSettings(), 2)
+        runCurrent()
         started.await()
-
         capabilities.value = setOf(SourceKey.PIXIV)
-        assertTrue(coordinator.onAvailableSourcesChanged())
-        assertNull(coordinator.selectedSource)
-        assertFalse(coordinator.loading)
-
-        coordinator.refresh(shuffle = false)
+        owner.onSourceAvailabilityChanged()
+        runCurrent()
         release.complete(Unit)
-        staleRequest.join()
-
-        assertEquals(listOf(SourceKey.PIXIV), coordinator.results.map { it.id.source }.distinct())
-        assertEquals("pixiv-current", coordinator.results.single().id.sourcePostId)
-        assertEquals(
-            listOf(SourceKey.PIXIV),
-            recentsRepository.observeSearches().first().flatMap { it.sources }.distinct(),
-        )
-        assertFalse(coordinator.loading)
-        assertNull(coordinator.errorMessage)
+        advanceUntilIdle()
+        assertEquals(listOf("fresh"), owner.state.value.results.map { it.id.sourcePostId })
+        assertEquals(listOf(SourceKey.PIXIV), recents.observeSearches().first().flatMap { it.sources }.distinct())
     }
 
-    @Test
-    fun `settings change supersedes in flight feed before replacement publishes`() = runTest {
-        val started = CompletableDeferred<Unit>()
-        val release = CompletableDeferred<Unit>()
-        val pixiv = FakeAdapter(SourceKey.PIXIV, "pixiv-current")
-        val rule34 = FakeAdapter(
-            sourceKey = SourceKey.RULE34XXX,
-            postId = "rule34-stale",
-            searchStarted = started,
-            searchRelease = release,
-        )
-        val likesRepository = InMemoryLikesRepository()
-        val profileId = defaultRecommendationProfiles().first().profileId
-        likesRepository.toggleLike(profileId, PostId(SourceKey.PIXIV, "liked-pixiv"), listOf("pixiv seed"))
-        likesRepository.toggleLike(profileId, PostId(SourceKey.RULE34XXX, "liked-rule34"), listOf("rule34 seed"))
-        val coordinator = testForYouCoordinator(
-            registry = registryOf(pixiv, rule34),
-            settingsRepository = InMemorySettingsRepository(),
-            likesRepository = likesRepository,
-        )
-        coordinator.initialize()
+    private fun request(service: ForYouCoordinator, settings: AppSettings = AppSettings()) = ForYouFeedRequest(
+        settings, service.availableSources(settings), null, SortMode.NEWEST, false, 0,
+    )
 
-        val staleRequest = backgroundScope.launch { coordinator.refresh(shuffle = false) }
-        started.await()
-
-        assertTrue(
-            coordinator.onSettingsChanged(
-                AppSettings(
-                    runtime = SourceRuntimeSettings(enabledSources = setOf(SourceKey.PIXIV)),
-                )
-            )
-        )
-        coordinator.refresh(shuffle = false)
-        release.complete(Unit)
-        staleRequest.join()
-
-        assertEquals(listOf(SourceKey.PIXIV), coordinator.results.map { it.id.source }.distinct())
-        assertEquals("pixiv-current", coordinator.results.single().id.sourcePostId)
-        assertFalse(coordinator.loading)
-        assertNull(coordinator.errorMessage)
+    private suspend fun liked(vararg sources: SourceKey): LikesRepository = InMemoryLikesRepository().also { likes ->
+        sources.forEach { likes.toggleLike(defaultRecommendationProfiles().first().profileId, PostId(it, "liked"), listOf("cloud")) }
     }
 
     private fun registryOf(vararg adapters: SourceAdapter): SourceAdapterRegistry {
@@ -483,8 +296,8 @@ class ForYouCoordinatorTest {
     private class FakeAdapter(
         override val sourceKey: SourceKey,
         postId: String,
-        private val failSearch: Boolean = false,
-        private val failPaging: Boolean = false,
+        var failSearch: Boolean = false,
+        var failPaging: Boolean = false,
         private val searchStarted: CompletableDeferred<Unit>? = null,
         private val searchRelease: CompletableDeferred<Unit>? = null,
     ) : SourceAdapter {

@@ -8,13 +8,18 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.recommend.state.ForYouAction
-import com.theoriacodex.app.recommend.state.ForYouCoordinatorSnapshot
 import com.theoriacodex.app.recommend.state.ForYouEffect
 import com.theoriacodex.app.recommend.state.ForYouRequestIdentity
 import com.theoriacodex.app.recommend.state.ForYouRequestKind
 import com.theoriacodex.app.recommend.state.ForYouUiState
 import com.theoriacodex.app.recommend.state.reduce
-import com.theoriacodex.app.recommend.state.toUiState
+import com.theoriacodex.app.recommend.state.ForYouEmptyReason
+import com.theoriacodex.app.media.replacingPostSnapshot
+import com.theoriacodex.app.related.promoteRelatedPost
+import com.theoriacodex.domain.orchestration.SourceRunState
+import com.theoriacodex.domain.orchestration.SourceRunStatus
+import com.theoriacodex.domain.orchestration.UnifiedSearchResult
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.related.RelatedPostsLoading
 import com.theoriacodex.app.related.RelatedPostsRouteController
 import com.theoriacodex.app.related.RelatedPostsUiState
@@ -38,103 +43,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
-/** Non-Compose execution boundary used by the navigation-scoped route owner. */
-internal interface ForYouRouteEngine {
-    suspend fun initialize()
-    fun restoreRouteInputs(source: SourceKey?, sort: SortMode?)
-    fun snapshot(
-        profiles: List<RecommendationProfile>,
-        blacklistEntries: List<ForYouBlacklistEntry>,
-    ): ForYouCoordinatorSnapshot
-
-    fun onSettingsChanged(settings: AppSettings): Boolean
-    fun onAvailableSourcesChanged(): Boolean
-    suspend fun refresh(shuffle: Boolean)
-    suspend fun selectProfile(settings: AppSettings, profileId: String)
-    suspend fun setSourceSelection(source: SourceKey?)
-    suspend fun setSortMode(sort: SortMode)
-    suspend fun replaySearch(seedBySource: Map<SourceKey, List<String>>, sort: SortMode)
-    suspend fun blacklistCurrentSeedAndRefresh(): List<ForYouBlacklistEntry>
-    suspend fun undoBlacklistAndRefresh(profileId: String, entries: List<ForYouBlacklistEntry>)
-    suspend fun loadNextPage()
-    fun clear()
-    suspend fun resolvePost(postId: PostId): Post?
-    fun rememberResolvedPost(post: Post)
-}
-
-internal class CoordinatorForYouRouteEngine(
-    private val coordinator: ForYouCoordinator,
-) : ForYouRouteEngine {
-    override suspend fun initialize() = coordinator.initialize()
-
-    override fun restoreRouteInputs(source: SourceKey?, sort: SortMode?) {
-        coordinator.restoreRouteInputs(source, sort)
-    }
-
-    override fun snapshot(
-        profiles: List<RecommendationProfile>,
-        blacklistEntries: List<ForYouBlacklistEntry>,
-    ): ForYouCoordinatorSnapshot {
-        return ForYouCoordinatorSnapshot(
-            profiles = profiles,
-            activeProfileId = coordinator.activeProfileId,
-            activeProfileLikesCount = coordinator.activeProfileLikesCount,
-            availableSources = coordinator.availableSourceSelections,
-            selectedSource = coordinator.selectedSource,
-            sortMode = coordinator.sortMode,
-            seedId = coordinator.seedId,
-            seedSummaryBySource = coordinator.seedSummaryBySource,
-            blacklistEntries = blacklistEntries,
-            results = coordinator.results,
-            statuses = coordinator.statuses,
-            loading = coordinator.loading,
-            loadingMore = coordinator.loadingMore,
-            canLoadMore = coordinator.canLoadMore,
-            errorMessage = coordinator.errorMessage,
-        )
-    }
-
-    override fun onSettingsChanged(settings: AppSettings): Boolean = coordinator.onSettingsChanged(settings)
-    override fun onAvailableSourcesChanged(): Boolean = coordinator.onAvailableSourcesChanged()
-    override suspend fun refresh(shuffle: Boolean) = coordinator.refresh(shuffle)
-
-    override suspend fun selectProfile(settings: AppSettings, profileId: String) {
-        coordinator.onSettingsChanged(settings.copy(activeProfileId = profileId))
-        coordinator.refresh(shuffle = false)
-    }
-
-    override suspend fun setSourceSelection(source: SourceKey?) = coordinator.setSourceSelection(source)
-    override suspend fun setSortMode(sort: SortMode) = coordinator.setSortMode(sort)
-    override suspend fun replaySearch(seedBySource: Map<SourceKey, List<String>>, sort: SortMode) =
-        coordinator.replaySearch(seedBySource, sort)
-    override suspend fun blacklistCurrentSeedAndRefresh(): List<ForYouBlacklistEntry> =
-        coordinator.blacklistCurrentSeedAndRefresh()
-
-    override suspend fun undoBlacklistAndRefresh(profileId: String, entries: List<ForYouBlacklistEntry>) {
-        coordinator.undoBlacklistAndRefresh(profileId, entries)
-    }
-    override suspend fun loadNextPage() = coordinator.loadNextPage()
-    override fun clear() = coordinator.clear()
-    override suspend fun resolvePost(postId: PostId): Post? = coordinator.resolvePostForFeed(postId)
-    override fun rememberResolvedPost(post: Post) = coordinator.rememberResolvedPost(post)
-}
-
-/**
- * Navigation-scoped owner for recommendation state and work.
- *
- * Only compact route inputs are reconstructed from [SavedStateHandle]. Results and jobs remain
- * process-local. Internal engine commands are executed here; only user-facing one-shot effects
- * are published to the shell.
- */
+/** One navigation-scoped owner for recommendation inputs, admission, continuation, and work. */
 internal class ForYouViewModel(
     private val engine: ForYouRouteEngine,
     private val savedStateHandle: SavedStateHandle,
     initialProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
     initialSort: SortMode? = null,
     coroutineScope: CoroutineScope? = null,
-    private val relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
+    relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
 ) : ViewModel(), RouteStateOwner<ForYouUiState, ForYouAction, ForYouEffect> {
     constructor(
         coordinator: ForYouCoordinator,
@@ -142,70 +61,42 @@ internal class ForYouViewModel(
         initialProfiles: List<RecommendationProfile> = defaultRecommendationProfiles(),
         initialSort: SortMode? = null,
         relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
-    ) : this(
-        engine = CoordinatorForYouRouteEngine(coordinator),
-        savedStateHandle = savedStateHandle,
-        initialProfiles = initialProfiles,
-        initialSort = initialSort,
-        relatedPostsLoader = relatedPostsLoader,
-    )
+    ) : this(coordinator as ForYouRouteEngine, savedStateHandle, initialProfiles, initialSort,
+        relatedPostsLoader = relatedPostsLoader)
 
     private val ownerScope = coroutineScope ?: viewModelScope
-    private val restoredSource = savedStateHandle.get<String>(KEY_SELECTED_SOURCE)
-        ?.let { name -> SourceKey.entries.firstOrNull { it.name == name } }
-    private val restoredSort = savedStateHandle.get<String>(KEY_SORT_MODE)
-        ?.let { name -> SortMode.entries.firstOrNull { it.name == name } }
-        ?: initialSort
-    private val restoredProfileId = savedStateHandle.get<String>(KEY_PROFILE_ID)
-
-    private var profiles = initialProfiles
-    private var blacklistEntries: List<ForYouBlacklistEntry> = emptyList()
     private var latestSettings: AppSettings? = null
-    private var rootJob: Job? = null
-    private var pageJob: Job? = null
-    private var seedMutationJob: Job? = null
+    private var requestJob: Job? = null
+    private var seedMutationRequest: ForYouRequestIdentity? = null
     private var environmentSynchronized = false
     private var sourceAvailabilitySynchronized = false
     private var pendingReplaySearch: ForYouAction.ReplaySearch? = null
-    private val relatedPromotions = mutableListOf<RelatedPromotion>()
-
-    private val mutableState = MutableStateFlow(
-        engine.snapshot(initialProfiles, emptyList()).toUiState().copy(
-            activeProfileId = restoredProfileId
-                ?.takeIf { id -> initialProfiles.any { profile -> profile.profileId == id } }
-                ?: initialProfiles.firstOrNull()?.profileId
-                ?: defaultRecommendationProfiles().first().profileId,
-            selectedSource = restoredSource,
-            sortMode = restoredSort ?: SortMode.NEWEST,
-        )
-    )
+    private var replaySearch: ForYouAction.ReplaySearch? = null
+    private var hasRequestedFeed = false
+    private val mutableState = MutableStateFlow(ForYouUiState(
+        profiles = initialProfiles,
+        activeProfileId = savedStateHandle.get<String>(KEY_PROFILE_ID)
+            ?.takeIf { id -> initialProfiles.any { it.profileId == id } }
+            ?: initialProfiles.firstOrNull()?.profileId ?: defaultRecommendationProfiles().first().profileId,
+        selectedSource = savedStateHandle.get<String>(KEY_SELECTED_SOURCE)
+            ?.let { name -> SourceKey.entries.firstOrNull { it.name == name } },
+        sortMode = savedStateHandle.get<String>(KEY_SORT_MODE)
+            ?.let { name -> SortMode.entries.firstOrNull { it.name == name } } ?: initialSort ?: SortMode.NEWEST,
+    ))
     private val relatedPosts = RelatedPostsRouteController(
         scope = ownerScope,
         loader = relatedPostsLoader,
         currentState = { mutableState.value.relatedPosts },
         canonicalPosts = { mutableState.value.results },
-        promotePost = { post, insertionIndex ->
-            if (relatedPromotions.none { promotion -> promotion.post.id == post.id }) {
-                relatedPromotions += RelatedPromotion(post, insertionIndex)
-            }
+        promotePost = { post, index ->
             val current = mutableState.value
-            mutableState.value = current.copy(
-                results = applyRelatedPromotions(current.results),
-            )
+            mutableState.value = current.copy(results = promoteRelatedPost(current.results, post, index))
         },
         updateState = { related -> mutableState.value = mutableState.value.copy(relatedPosts = related) },
     )
     override val state: StateFlow<ForYouUiState> = mutableState.asStateFlow()
-
     private val effectChannel = Channel<ForYouEffect>(capacity = Channel.BUFFERED)
     override val effects: Flow<ForYouEffect> = effectChannel.receiveAsFlow()
-    init {
-        ownerScope.launch {
-            engine.initialize()
-            engine.restoreRouteInputs(restoredSource, restoredSort)
-            publishSnapshot(activeLikesOverride = mutableState.value.activeProfileLikesCount)
-        }
-    }
 
     override fun onAction(action: ForYouAction) {
         when (action) {
@@ -231,278 +122,219 @@ internal class ForYouViewModel(
             }
             else -> Unit
         }
-        if (action is ForYouAction.ReplaySearch && !isReplayReady()) {
+        if (action is ForYouAction.ReplaySearch && !(environmentSynchronized && sourceAvailabilitySynchronized)) {
             pendingReplaySearch = action
             return
         }
-        val previousRelated = mutableState.value.relatedPosts
-        val transition = mutableState.value.reduce(action)
-        val startsRootRefresh = transition.state.activeRequest?.kind == ForYouRequestKind.REFRESH &&
-            transition.state.activeRequest != mutableState.value.activeRequest
-        if (startsRootRefresh) {
-            relatedPromotions.clear()
-        }
-        mutableState.value = transition.state.copy(
-            results = applyRelatedPromotions(transition.state.results),
-        )
-        if (previousRelated != RelatedPostsUiState.Idle && transition.state.relatedPosts == RelatedPostsUiState.Idle) {
+        val previous = mutableState.value
+        val transition = previous.reduce(action)
+        if (transition.state.activeRequest?.kind == ForYouRequestKind.REFRESH &&
+            transition.state.activeRequest != previous.activeRequest
+        ) {
             relatedPosts.clear()
+            hasRequestedFeed = true
+            replaySearch = action as? ForYouAction.ReplaySearch
         }
+        mutableState.value = transition.state
         persistRouteInputs(transition.state)
         transition.effect?.let(::handleEffect)
     }
 
-    /** Synchronizes app-level settings/profile inputs without making the screen own refresh jobs. */
-    fun synchronizeEnvironment(
-        settings: AppSettings,
-        activeProfileLikesCount: Int,
-    ) {
-        profiles = settings.recommendationProfiles
-        blacklistEntries = settings.forYouBlacklistByProfile[settings.activeProfileId].orEmpty()
-        latestSettings = settings
+    /** A count-only Like update never regenerates an admitted feed. */
+    fun synchronizeEnvironment(settings: AppSettings, activeProfileLikesCount: Int) {
+        val previousSettings = latestSettings
         val previous = mutableState.value
-        val engineChanged = engine.onSettingsChanged(settings)
-        if (engineChanged) {
-            cancelActiveReduction()
-        }
-
-        if (activeProfileLikesCount <= 0) {
-            cancelActiveReduction()
-            relatedPosts.clear()
-            relatedPromotions.clear()
-            engine.clear()
-            publishSnapshot(activeLikesOverride = 0)
-            environmentSynchronized = true
-            replayPendingSearchIfReady()
-            return
-        }
-
-        publishSnapshot(activeLikesOverride = activeProfileLikesCount)
+        val profileChanged = previous.activeProfileId != settings.activeProfileId
+        val runtimeChanged = previousSettings != null && previousSettings.runtime != settings.runtime
+        val blacklistChanged = previousSettings != null &&
+            previousSettings.forYouBlacklistByProfile[settings.activeProfileId] !=
+            settings.forYouBlacklistByProfile[settings.activeProfileId]
+        val ownBlacklistWrite = seedMutationRequest != null && seedMutationRequest == previous.activeRequest
+        latestSettings = settings
         environmentSynchronized = true
-        if (pendingReplaySearch != null) {
-            replayPendingSearchIfReady()
-            return
+        val available = engine.availableSources(settings)
+        val sourcesChanged = previous.availableSources != available
+        val refreshRequired = profileChanged || runtimeChanged || sourcesChanged || (blacklistChanged && !ownBlacklistWrite)
+        if (refreshRequired) cancelActiveReduction()
+        if (profileChanged) {
+            hasRequestedFeed = false
+            replaySearch = null
+            relatedPosts.clear()
         }
         val current = mutableState.value
-        val shouldRefresh = engineChanged ||
-            current.results.isEmpty() ||
-            previous.activeProfileId != settings.activeProfileId
-        if (shouldRefresh && !current.isRefreshing && !current.isPaging) {
-            onAction(ForYouAction.Refresh(shuffle = false))
-        }
-    }
-
-    private fun isReplayReady(): Boolean = environmentSynchronized && sourceAvailabilitySynchronized
-
-    private fun replayPendingSearchIfReady(): Boolean {
-        if (!isReplayReady()) return false
-        val pending = pendingReplaySearch ?: return false
-        pendingReplaySearch = null
-        onAction(pending)
-        return true
-    }
-
-    /** Reconciles a stable engine after credential/source capability changes. */
-    fun onSourceAvailabilityChanged() {
-        val shouldRefresh = engine.onAvailableSourcesChanged()
-        if (shouldRefresh) {
-            cancelActiveReduction()
-        }
-        publishSnapshot(activeLikesOverride = mutableState.value.activeProfileLikesCount)
-        sourceAvailabilitySynchronized = true
+        mutableState.value = current.copy(
+            profiles = settings.recommendationProfiles,
+            activeProfileId = settings.activeProfileId,
+            activeProfileLikesCount = activeProfileLikesCount.coerceAtLeast(0),
+            blacklistEntries = settings.forYouBlacklistByProfile[settings.activeProfileId].orEmpty(),
+            availableSources = available,
+            selectedSource = current.selectedSource?.takeIf { it in available },
+            results = if (profileChanged) emptyList() else current.results.filter { it.id.source in available },
+            continuation = if (refreshRequired) null else current.continuation,
+            seedSummaryBySource = if (profileChanged) emptyMap() else current.seedSummaryBySource,
+        )
         if (pendingReplaySearch != null) {
             replayPendingSearchIfReady()
             return
         }
-        if (shouldRefresh && mutableState.value.activeProfileLikesCount > 0) {
+        if (!ownBlacklistWrite) refreshForEnvironment(refreshRequired)
+    }
+
+    fun onSourceAvailabilityChanged() {
+        sourceAvailabilitySynchronized = true
+        val settings = latestSettings ?: return
+        val available = engine.availableSources(settings)
+        val changed = mutableState.value.availableSources != available
+        if (changed) {
+            cancelActiveReduction()
+            val current = mutableState.value
+            mutableState.value = current.copy(
+                availableSources = available,
+                selectedSource = current.selectedSource?.takeIf { it in available },
+                results = current.results.filter { it.id.source in available },
+                continuation = null,
+            )
+        }
+        if (pendingReplaySearch != null) replayPendingSearchIfReady() else refreshForEnvironment(changed)
+    }
+
+    private fun replayPendingSearchIfReady() {
+        if (!environmentSynchronized || !sourceAvailabilitySynchronized) return
+        val pending = pendingReplaySearch ?: return
+        pendingReplaySearch = null
+        onAction(pending)
+    }
+
+    private fun refreshForEnvironment(changed: Boolean) {
+        val current = mutableState.value
+        if (current.isRefreshing || current.isPaging || (!changed && hasRequestedFeed)) return
+        val historical = replaySearch
+        if (historical != null) {
+            onAction(historical)
+        } else if (current.activeProfileLikesCount > 0) {
             onAction(ForYouAction.Refresh(shuffle = false))
+        } else if (!hasRequestedFeed) {
+            mutableState.value = current.copy(seedId = "empty", emptyReason = ForYouEmptyReason.NO_LIKES)
         }
     }
 
-    suspend fun resolvePost(postId: PostId): Post? {
-        return engine.resolvePost(postId)?.also {
-            publishSnapshot(activeLikesOverride = mutableState.value.activeProfileLikesCount)
-        }
-    }
+    suspend fun resolvePost(postId: PostId): Post? = engine.resolvePost(postId)?.also(::rememberResolvedPost)
 
     fun rememberResolvedPost(post: Post) {
-        engine.rememberResolvedPost(post)
-        publishSnapshot(activeLikesOverride = mutableState.value.activeProfileLikesCount)
+        val current = mutableState.value
+        mutableState.value = current.copy(results = current.results.replacingPostSnapshot(post))
     }
 
     private fun handleEffect(effect: ForYouEffect) {
         when (effect) {
-            is ForYouEffect.RefreshFeed -> launchRefresh(effect.request) {
-                engine.refresh(effect.shuffle)
-            }
-
-            is ForYouEffect.ChangeProfile -> {
-                val settings = latestSettings
-                if (settings == null) {
-                    onAction(ForYouAction.RefreshFailed(effect.request, "Recommendation settings unavailable"))
-                } else {
-                    launchRefresh(effect.request) {
-                        engine.selectProfile(settings, effect.profileId)
-                    }
-                }
-            }
-
-            is ForYouEffect.ChangeSource -> launchRefresh(effect.request) {
-                engine.setSourceSelection(effect.source)
-            }
-
-            is ForYouEffect.ChangeSort -> launchRefresh(effect.request) {
-                engine.setSortMode(effect.sortMode)
-            }
-
-            is ForYouEffect.ReplaySearch -> launchRefresh(effect.request) {
-                engine.replaySearch(effect.seedBySource, effect.sortMode)
-            }
-
-            is ForYouEffect.BlacklistSeed -> launchSeedMutation(effect.request) {
-                val additions = engine.blacklistCurrentSeedAndRefresh()
-                effectChannel.trySend(
-                    if (additions.isNotEmpty()) {
-                        ForYouEffect.SeedHidden(
-                            profileId = effect.profileId,
-                            entries = additions,
-                        )
-                    } else {
-                        ForYouEffect.ShowMessage(
-                            "Current recommendation is already hidden",
-                        )
-                    }
-                )
-            }
-
-            is ForYouEffect.UndoSeedBlacklist -> launchSeedMutation(effect.request) {
-                engine.undoBlacklistAndRefresh(effect.profileId, effect.entries)
-            }
-
-            is ForYouEffect.LoadNextPage -> launchPage(effect.request)
-            is ForYouEffect.OpenViewer,
-            is ForYouEffect.SeedHidden,
-            ForYouEffect.NavigateToSearch,
-            is ForYouEffect.ShowMessage,
-            -> effectChannel.trySend(effect)
+            is ForYouEffect.RefreshFeed -> launchRefresh(effect.request, effect.shuffle)
+            is ForYouEffect.ChangeProfile -> launchRefresh(effect.request, false)
+            is ForYouEffect.ChangeSource -> launchRefresh(effect.request, false)
+            is ForYouEffect.ChangeSort -> launchRefresh(effect.request, false)
+            is ForYouEffect.ReplaySearch -> launchRefresh(effect.request, false, effect.seedBySource)
+            is ForYouEffect.BlacklistSeed -> launchSeedMutation(
+                effect.request, effect.profileId,
+                effect.seedSummaryBySource.map { (source, tags) -> ForYouBlacklistEntry(source, tags) }, true,
+            )
+            is ForYouEffect.UndoSeedBlacklist -> launchSeedMutation(effect.request, effect.profileId, effect.entries, false)
+            is ForYouEffect.LoadNextPage -> launchPage(effect)
+            is ForYouEffect.OpenViewer, is ForYouEffect.SeedHidden,
+            ForYouEffect.NavigateToSearch, is ForYouEffect.ShowMessage -> effectChannel.trySend(effect)
         }
     }
 
+    private fun feedRequest(identity: ForYouRequestIdentity, shuffle: Boolean, seed: Map<SourceKey, List<String>>?) =
+        ForYouFeedRequest(
+            settings = requireNotNull(latestSettings) { "Recommendation settings unavailable" }
+                .copy(activeProfileId = identity.profileId),
+            availableSources = mutableState.value.availableSources,
+            selectedSource = identity.source,
+            sortMode = identity.sortMode,
+            shuffle = shuffle,
+            likesCount = mutableState.value.activeProfileLikesCount,
+            historicalSeed = seed,
+        )
+
     private fun launchRefresh(
-        request: ForYouRequestIdentity,
-        operation: suspend () -> Unit,
-    ) {
-        rootJob?.cancel(CancellationException("For You refresh replaced"))
-        pageJob?.cancel(CancellationException("For You page replaced by refresh"))
-        rootJob = ownerScope.launch {
-            try {
-                operation()
-                onAction(ForYouAction.RefreshCompleted(request, snapshot()))
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                onAction(ForYouAction.RefreshFailed(request, error.message ?: "Could not load recommendations"))
-            } finally {
-                if (!isActive) onAction(ForYouAction.RequestCancelled(request))
-            }
-        }
+        identity: ForYouRequestIdentity,
+        shuffle: Boolean,
+        seed: Map<SourceKey, List<String>>? = null,
+    ) = launchRequest(identity) { acceptRoot(identity, engine.execute(feedRequest(identity, shuffle, seed))) }
+
+    private suspend fun acceptRoot(identity: ForYouRequestIdentity, result: ForYouFeedResult) {
+        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+        if (mutableState.value.activeRequest != identity) return
+        onAction(ForYouAction.RefreshCompleted(identity, result))
+        // A later refresh cannot cancel bookkeeping for an already accepted root.
+        ownerScope.launch { runCatchingPreservingCancellation { engine.recordAccepted(result) } }
     }
 
     private fun launchSeedMutation(
-        request: ForYouRequestIdentity,
+        identity: ForYouRequestIdentity,
+        profileId: String,
+        entries: List<ForYouBlacklistEntry>,
+        hidden: Boolean,
+    ) {
+        seedMutationRequest = identity
+        launchRequest(identity) {
+            val changed = engine.updateBlacklist(profileId, entries, hidden)
+            if (hidden) effectChannel.trySend(
+                if (changed.entries.isEmpty()) ForYouEffect.ShowMessage("Current recommendation is already hidden")
+                else ForYouEffect.SeedHidden(profileId, changed.entries)
+            )
+            if (mutableState.value.activeRequest != identity) return@launchRequest
+            latestSettings = changed.settings
+            mutableState.value = mutableState.value.copy(
+                blacklistEntries = changed.settings.forYouBlacklistByProfile[identity.profileId].orEmpty(),
+            )
+            acceptRoot(identity, engine.execute(feedRequest(identity, true, null)))
+        }
+    }
+
+    private fun launchPage(effect: ForYouEffect.LoadNextPage) = launchRequest(effect.request, effect.sources) {
+        val result = engine.loadPage(effect.continuation, effect.sources)
+        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+        onAction(ForYouAction.PageLoaded(effect.request, result, effect.sources))
+    }
+
+    private fun launchRequest(
+        identity: ForYouRequestIdentity,
+        attemptedSources: Set<SourceKey> = emptySet(),
         operation: suspend () -> Unit,
     ) {
-        seedMutationJob?.cancel(CancellationException("For You seed mutation replaced"))
-        seedMutationJob = ownerScope.launch {
+        requestJob?.cancel(CancellationException("For You request replaced"))
+        requestJob = ownerScope.launch {
             try {
                 operation()
-                onAction(ForYouAction.RefreshCompleted(request, snapshot()))
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                onAction(ForYouAction.RefreshFailed(request, error.message ?: "Could not update recommendations"))
-            } finally {
-                if (!isActive) onAction(ForYouAction.RequestCancelled(request))
-            }
-        }
-    }
-
-    private fun launchPage(request: ForYouRequestIdentity) {
-        pageJob?.cancel(CancellationException("For You page replaced"))
-        pageJob = ownerScope.launch {
-            try {
-                engine.loadNextPage()
-                val snapshot = snapshot()
-                val error = snapshot.errorMessage
-                if (error == null) {
-                    onAction(
-                        ForYouAction.PageLoaded(
-                            request = request,
-                            posts = snapshot.results,
-                            statuses = snapshot.statuses,
-                            canLoadMore = snapshot.canLoadMore,
-                        )
-                    )
+                val message = error.message ?: "Could not load recommendations"
+                if (identity.kind == ForYouRequestKind.REFRESH) {
+                    onAction(ForYouAction.RefreshFailed(identity, message))
                 } else {
-                    onAction(ForYouAction.PageFailed(request, error))
+                    onAction(ForYouAction.PageLoaded(identity, UnifiedSearchResult(
+                        emptyList(), emptyMap(), attemptedSources.map {
+                            SourceRunStatus(it, SourceRunState.FAILED, errorMessage = message)
+                        },
+                    ), attemptedSources))
                 }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                onAction(ForYouAction.PageFailed(request, error.message ?: "Could not load more recommendations"))
             } finally {
-                if (!isActive) onAction(ForYouAction.RequestCancelled(request))
+                if (!isActive) onAction(ForYouAction.RequestCancelled(identity))
+                if (seedMutationRequest == identity) seedMutationRequest = null
             }
         }
     }
 
-    private fun snapshot(): ForYouCoordinatorSnapshot = engine.snapshot(profiles, blacklistEntries)
-
-    private fun publishSnapshot(activeLikesOverride: Int? = null) {
-        val previous = mutableState.value
-        val snapshot = snapshot()
-        val snapshotState = snapshot.toUiState()
-        mutableState.value = snapshotState.copy(
-            results = applyRelatedPromotions(snapshotState.results),
-            activeProfileLikesCount = activeLikesOverride ?: snapshot.activeProfileLikesCount,
-            nextRequestGeneration = previous.nextRequestGeneration,
-            activeRequest = previous.activeRequest,
-            isRefreshing = previous.isRefreshing,
-            isPaging = previous.isPaging,
-            relatedPosts = previous.relatedPosts,
-        )
-        persistRouteInputs(mutableState.value)
-    }
-
-    private fun applyRelatedPromotions(posts: List<Post>): List<Post> {
-        return relatedPromotions.fold(posts) { accumulated, promotion ->
-            com.theoriacodex.app.related.promoteRelatedPost(
-                canonicalPosts = accumulated,
-                post = promotion.post,
-                insertionIndex = promotion.insertionIndex,
-            )
-        }
+    private fun cancelActiveReduction() {
+        requestJob?.cancel(CancellationException("For You environment changed"))
+        mutableState.value.activeRequest?.let { onAction(ForYouAction.RequestCancelled(it)) }
     }
 
     private fun persistRouteInputs(value: ForYouUiState) {
         savedStateHandle[KEY_PROFILE_ID] = value.activeProfileId
         savedStateHandle[KEY_SELECTED_SOURCE] = value.selectedSource?.name
         savedStateHandle[KEY_SORT_MODE] = value.sortMode.name
-    }
-
-    private fun cancelRequests() {
-        rootJob?.cancel(CancellationException("For You environment cleared"))
-        pageJob?.cancel(CancellationException("For You environment cleared"))
-        rootJob = null
-        pageJob = null
-    }
-
-    private fun cancelActiveReduction() {
-        val request = mutableState.value.activeRequest
-        cancelRequests()
-        if (request != null) {
-            onAction(ForYouAction.RequestCancelled(request))
-        }
     }
 
     companion object {
@@ -528,8 +360,3 @@ internal class ForYouViewModel(
         internal const val KEY_SORT_MODE = "for_you_sort_mode"
     }
 }
-
-private data class RelatedPromotion(
-    val post: Post,
-    val insertionIndex: Int,
-)
