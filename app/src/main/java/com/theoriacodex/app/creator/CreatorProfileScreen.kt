@@ -252,13 +252,19 @@ fun CreatorProfileScreen(
                 }
             }
 
+            if (state.errorMessage != null && state.canLoadMore) {
+                FeedErrorTile(
+                    message = state.errorMessage.orEmpty(),
+                    onRetry = { onAction(CreatorAction.RetryPage) },
+                )
+            }
             FeedContinueLoading(pageDemand)
             when {
                 state.isRefreshing && visibleResults.isEmpty() -> {
                     FeedLoadingState()
                 }
 
-                state.errorMessage != null && visibleResults.isEmpty() -> {
+                state.errorMessage != null && !state.canLoadMore && visibleResults.isEmpty() -> {
                     FeedErrorTile(
                         message = state.errorMessage.orEmpty(),
                         onRetry = { onAction(CreatorAction.Refresh) },

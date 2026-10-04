@@ -113,7 +113,7 @@ internal fun CreatorRoute(
 
     LaunchedEffect(owner, config.activeCreator) {
         config.activeCreator?.let { creator ->
-            if (owner.state.value.creator != creator || owner.state.value.results.isEmpty()) {
+            if (owner.state.value.creator != creator) {
                 owner.onAction(CreatorAction.OpenCreator(creator))
             }
         }
@@ -126,9 +126,7 @@ internal fun CreatorRoute(
         when (effect) {
             is CreatorEffect.OpenViewer -> callbacks.onOpenViewer(effect)
             CreatorEffect.NavigateBack -> callbacks.onNavigateBack()
-            is CreatorEffect.LoadCreator,
-            is CreatorEffect.LoadNextPage,
-            is CreatorEffect.Refresh,
+            is CreatorEffect.LoadPage,
             -> Unit
         }
     }

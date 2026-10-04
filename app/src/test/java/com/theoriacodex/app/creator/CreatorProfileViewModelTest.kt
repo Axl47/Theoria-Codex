@@ -2,7 +2,7 @@ package com.theoriacodex.app.creator
 
 import androidx.lifecycle.SavedStateHandle
 import com.theoriacodex.app.creator.state.CreatorAction
-import com.theoriacodex.app.creator.state.CreatorCoordinatorSnapshot
+import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.app.creator.state.CreatorEffect
 import com.theoriacodex.app.creator.state.CreatorFailureReason
 import com.theoriacodex.app.testing.testPost
@@ -129,10 +129,11 @@ class CreatorProfileViewModelTest {
         advanceUntilIdle()
         assertEquals(replacement, viewModel.state.value.creator)
         assertEquals(listOf("fresh"), viewModel.state.value.results.map { it.id.sourcePostId })
+        assertEquals(listOf(replacement), engine.visits)
     }
 
     @Test
-    fun `paging failure preserves loaded creator results`() = runTest {
+    fun `paging failure retries exact continuation without duplicating accepted root bookkeeping`() = runTest {
         val first = testPost(sourcePostId = "first")
         val engine = FakeCreatorRouteEngine().apply {
             openResults = listOf(first)
@@ -149,6 +150,19 @@ class CreatorProfileViewModelTest {
         assertEquals(listOf(first), viewModel.state.value.results)
         assertEquals("page failed", viewModel.state.value.errorMessage)
         assertFalse(viewModel.state.value.isPaging)
+        assertTrue(viewModel.state.value.canLoadMore)
+        viewModel.onAction(CreatorAction.LoadNextPage)
+        advanceUntilIdle()
+        assertEquals(listOf("next"), engine.pageTokens)
+        engine.pageError = null
+        engine.pageResults = listOf(first, testPost(sourcePostId = "next"))
+        viewModel.onAction(CreatorAction.RetryPage)
+        advanceUntilIdle()
+        assertEquals(listOf("next", "next"), engine.pageTokens)
+        assertEquals(listOf("first", "next"), viewModel.state.value.results.map { it.id.sourcePostId })
+        assertEquals(1, engine.visits.size)
+        assertNull(viewModel.state.value.errorMessage)
+        assertFalse(viewModel.state.value.canLoadMore)
     }
 
     @Test
@@ -194,88 +208,42 @@ class CreatorProfileViewModelTest {
 }
 
 private class FakeCreatorRouteEngine : CreatorRouteEngine {
-    private var current = CreatorCoordinatorSnapshot(
-        creator = null,
-        queryHash = null,
-        results = emptyList(),
-        loading = false,
-        loadingMore = false,
-        canLoadMore = false,
-        errorMessage = null,
-    )
     val openedCreators = mutableListOf<CreatorProfile>()
+    val pageTokens = mutableListOf<String>()
+    val visits = mutableListOf<CreatorProfile>()
     var openResults: List<Post> = emptyList()
     var openCanLoadMore = false
+    var pageResults: List<Post> = emptyList()
     var pageError: String? = null
     var capabilityAvailable = true
     var firstOpenStarted: CompletableDeferred<Unit>? = null
     var firstOpenRelease: CompletableDeferred<Unit>? = null
     var firstOpenResults: List<Post> = emptyList()
-    private var openCalls = 0
 
-    override fun snapshot(): CreatorCoordinatorSnapshot = current
+    override fun supports(creator: CreatorProfile): Boolean = capabilityAvailable
 
-    override suspend fun open(creator: CreatorProfile) {
+    override suspend fun load(creator: CreatorProfile, pageToken: String?): Page<Post> {
+        if (pageToken != null) {
+            pageTokens += pageToken
+            pageError?.let { error(it) }
+            return Page(pageResults, null)
+        }
         openedCreators += creator
-        openCalls += 1
         val started = firstOpenStarted
         val release = firstOpenRelease
-        if (openCalls == 1 && started != null && release != null) {
+        if (openedCreators.size == 1 && started != null && release != null) {
             withContext(NonCancellable) {
                 started.complete(Unit)
                 release.await()
-                current = current.copy(
-                    creator = creator,
-                    queryHash = "creator:${creator.source.name}:${creator.uploadsQuery}",
-                    results = firstOpenResults,
-                    canLoadMore = false,
-                    errorMessage = null,
-                    failureReason = null,
-                )
             }
-            return
+            return Page(firstOpenResults, null)
         }
-        current = current.copy(
-            creator = creator,
-            queryHash = "creator:${creator.source.name}:${creator.uploadsQuery}",
-            results = openResults,
-            canLoadMore = openCanLoadMore,
-            errorMessage = null,
-            failureReason = null,
-        )
+        return Page(openResults, if (openCanLoadMore) "next" else null)
     }
 
-    override suspend fun refresh() {
-        val creator = current.creator ?: return
-        open(creator)
-    }
-
-    override suspend fun loadNextPage() {
-        current = current.copy(
-            canLoadMore = false,
-            errorMessage = pageError,
-            failureReason = pageError?.let { CreatorFailureReason.REQUEST_FAILED },
-        )
-    }
-
-    override fun onAvailableSourcesChanged(): CreatorSourceAvailabilityChange {
-        if (capabilityAvailable) return CreatorSourceAvailabilityChange.UNCHANGED
-        current = current.copy(
-            results = emptyList(),
-            canLoadMore = false,
-            errorMessage = "Creator browsing is not available",
-            failureReason = CreatorFailureReason.UNSUPPORTED_SOURCE,
-        )
-        return CreatorSourceAvailabilityChange.RECONCILED
+    override suspend fun recordAcceptedVisit(creator: CreatorProfile, posts: List<Post>) {
+        visits += creator
     }
 
     override suspend fun resolvePost(postId: PostId): Post? = null
-
-    override fun rememberResolvedPost(post: Post) {
-        val index = current.results.indexOfFirst { it.id == post.id }
-        if (index < 0) return
-        current = current.copy(
-            results = current.results.toMutableList().apply { this[index] = post },
-        )
-    }
 }

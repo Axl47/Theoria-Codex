@@ -209,12 +209,11 @@ internal class LiveSearchCoordinatorRouteTestHitomiTest : LiveSearchCoordinatorR
         ) { "Hitomi gallery $ANIMATED_GALLERY_ID did not expose Najar as a creator" }
         assertEquals("artist:najar", najar.uploadsQuery)
         val creator = CreatorProfileCoordinator(registry)
-        creator.open(najar)
-        assertNull("Hitomi Najar creator uploads failed: ${creator.errorMessage}", creator.errorMessage)
-        assertTrue("Hitomi Najar creator uploads were empty", creator.results.isNotEmpty())
+        val creatorPage = creator.load(najar, pageToken = null)
+        assertTrue("Hitomi Najar creator uploads were empty", creatorPage.items.isNotEmpty())
         assertTrue(
             "Hitomi Najar creator uploads returned another source",
-            creator.results.all { post -> post.id.source == SourceKey.HITOMI },
+            creatorPage.items.all { post -> post.id.source == SourceKey.HITOMI },
         )
 
         val anime = requireNotNull(

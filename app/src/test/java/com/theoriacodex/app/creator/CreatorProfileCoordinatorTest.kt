@@ -1,5 +1,12 @@
 package com.theoriacodex.app.creator
 
+import androidx.lifecycle.SavedStateHandle
+import com.theoriacodex.app.creator.state.CreatorAction
+import com.theoriacodex.app.creator.state.CreatorEffect
+import com.theoriacodex.app.creator.state.reduce
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.adapter.CreatorPostsSourceAdapter
 import com.theoriacodex.domain.adapter.Page
@@ -28,6 +35,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class CreatorProfileCoordinatorTest {
     @Test
     fun `open loads first page and buildViewerLaunchContext uses creator stream`() = runTest {
@@ -43,14 +51,15 @@ class CreatorProfileCoordinatorTest {
                 ),
             ),
         )
-        val coordinator = CreatorProfileCoordinator(registry = singleAdapterRegistry(adapter))
+        val coordinator = CreatorProfileViewModel(CreatorProfileCoordinator(singleAdapterRegistry(adapter)), SavedStateHandle(), this)
 
-        coordinator.open(sampleCreator())
-        val context = coordinator.buildViewerLaunchContext(startIndex = 1, scrollOffsetHint = 42)
+        coordinator.onAction(CreatorAction.OpenCreator(sampleCreator()))
+        advanceUntilIdle()
+        val context = (coordinator.state.value.reduce(CreatorAction.OpenResult(1, 42)).effect as CreatorEffect.OpenViewer).context
 
-        assertEquals(listOf("1", "2"), coordinator.results.map { it.id.sourcePostId })
-        assertTrue(coordinator.canLoadMore)
-        assertEquals(SourceKey.PIXIV, coordinator.activeCreator?.source)
+        assertEquals(listOf("1", "2"), coordinator.state.value.results.map { it.id.sourcePostId })
+        assertTrue(coordinator.state.value.canLoadMore)
+        assertEquals(SourceKey.PIXIV, coordinator.state.value.creator?.source)
         assertEquals("creator:PIXIV:201823", context.queryHash)
         assertEquals(1, context.startIndex)
     }
@@ -64,13 +73,15 @@ class CreatorProfileCoordinatorTest {
                 "page-2" to Page(items = listOf(testPost(sourcePostId = "2", creatorProfile = sampleCreator())), nextPageToken = null),
             ),
         )
-        val coordinator = CreatorProfileCoordinator(registry = singleAdapterRegistry(adapter))
+        val coordinator = CreatorProfileViewModel(CreatorProfileCoordinator(singleAdapterRegistry(adapter)), SavedStateHandle(), this)
 
-        coordinator.open(sampleCreator())
-        coordinator.loadNextPage()
+        coordinator.onAction(CreatorAction.OpenCreator(sampleCreator()))
+        advanceUntilIdle()
+        coordinator.onAction(CreatorAction.LoadNextPage)
+        advanceUntilIdle()
 
-        assertEquals(listOf("1", "2"), coordinator.results.map { it.id.sourcePostId })
-        assertFalse(coordinator.canLoadMore)
+        assertEquals(listOf("1", "2"), coordinator.state.value.results.map { it.id.sourcePostId })
+        assertFalse(coordinator.state.value.canLoadMore)
         assertEquals(listOf(null, "page-2"), adapter.requestedTokens)
     }
 
@@ -83,26 +94,30 @@ class CreatorProfileCoordinatorTest {
                 "page-2" to Page(items = listOf(testPost(sourcePostId = "2", creatorProfile = sampleCreator())), nextPageToken = null),
             ),
         )
-        val coordinator = CreatorProfileCoordinator(registry = singleAdapterRegistry(adapter))
+        val coordinator = CreatorProfileViewModel(CreatorProfileCoordinator(singleAdapterRegistry(adapter)), SavedStateHandle(), this)
 
-        coordinator.open(sampleCreator())
-        coordinator.loadNextPage()
-        coordinator.refresh()
+        coordinator.onAction(CreatorAction.OpenCreator(sampleCreator()))
+        advanceUntilIdle()
+        coordinator.onAction(CreatorAction.LoadNextPage)
+        advanceUntilIdle()
+        coordinator.onAction(CreatorAction.Refresh)
+        advanceUntilIdle()
 
-        assertEquals(listOf("1"), coordinator.results.map { it.id.sourcePostId })
-        assertTrue(coordinator.canLoadMore)
+        assertEquals(listOf("1"), coordinator.state.value.results.map { it.id.sourcePostId })
+        assertTrue(coordinator.state.value.canLoadMore)
         assertEquals(listOf(null, "page-2", null), adapter.requestedTokens)
     }
 
     @Test
     fun `unsupported adapter state is surfaced cleanly`() = runTest {
-        val coordinator = CreatorProfileCoordinator(registry = unsupportedRegistry())
+        val coordinator = CreatorProfileViewModel(CreatorProfileCoordinator(unsupportedRegistry()), SavedStateHandle(), this)
 
-        coordinator.open(sampleCreator())
+        coordinator.onAction(CreatorAction.OpenCreator(sampleCreator()))
+        advanceUntilIdle()
 
-        assertTrue(coordinator.results.isEmpty())
-        assertFalse(coordinator.canLoadMore)
-        assertTrue(coordinator.errorMessage?.contains("not available", ignoreCase = true) == true)
+        assertTrue(coordinator.state.value.results.isEmpty())
+        assertFalse(coordinator.state.value.canLoadMore)
+        assertTrue(coordinator.state.value.errorMessage?.contains("not available", ignoreCase = true) == true)
     }
 
     @Test
@@ -119,17 +134,18 @@ class CreatorProfileCoordinatorTest {
                 ),
             ),
         )
-        val coordinator = CreatorProfileCoordinator(registry = singleAdapterRegistry(adapter))
+        val coordinator = CreatorProfileViewModel(CreatorProfileCoordinator(singleAdapterRegistry(adapter)), SavedStateHandle(), this)
 
-        coordinator.open(sampleCreator())
+        coordinator.onAction(CreatorAction.OpenCreator(sampleCreator()))
+        advanceUntilIdle()
         val filtered = com.theoriacodex.app.search.filterSearchResults(
-            results = coordinator.results,
+            results = coordinator.state.value.results,
             filters = com.theoriacodex.app.search.SearchVisibilityFilters(hideLiked = true),
-            likedPostIds = setOf(coordinator.results.last().id),
+            likedPostIds = setOf(coordinator.state.value.results.last().id),
             savedPostIds = emptySet(),
         )
 
-        assertEquals(2, coordinator.results.size)
+        assertEquals(2, coordinator.state.value.results.size)
         assertEquals(1, filtered.size)
     }
 
@@ -149,14 +165,16 @@ class CreatorProfileCoordinatorTest {
                 ),
             ),
         )
-        val coordinator = CreatorProfileCoordinator(registry = singleAdapterRegistry(adapter))
+        val coordinator = CreatorProfileViewModel(CreatorProfileCoordinator(singleAdapterRegistry(adapter)), SavedStateHandle(), this)
 
-        coordinator.open(creator)
-        coordinator.loadNextPage()
+        coordinator.onAction(CreatorAction.OpenCreator(creator))
+        advanceUntilIdle()
+        coordinator.onAction(CreatorAction.LoadNextPage)
+        advanceUntilIdle()
 
-        assertEquals(listOf("i1", "i2"), coordinator.results.map { it.id.sourcePostId })
+        assertEquals(listOf("i1", "i2"), coordinator.state.value.results.map { it.id.sourcePostId })
         assertEquals(listOf(null, "1"), adapter.requestedTokens)
-        assertEquals(SourceKey.IWARA, coordinator.activeCreator?.source)
+        assertEquals(SourceKey.IWARA, coordinator.state.value.creator?.source)
     }
 
     @Test
@@ -182,30 +200,28 @@ class CreatorProfileCoordinatorTest {
             searchRelease = release,
         )
         val capabilities = MutableStateFlow(setOf(SourceKey.RULE34XXX))
-        val coordinator = CreatorProfileCoordinator(
-            registry = mutableRegistry(capabilities, adapter),
+        val coordinator = CreatorProfileViewModel(
+            CreatorProfileCoordinator(mutableRegistry(capabilities, adapter)), SavedStateHandle(), this,
         )
 
-        val staleRequest = backgroundScope.launch { coordinator.open(creator) }
+        coordinator.onAction(CreatorAction.OpenCreator(creator))
+        runCurrent()
         started.await()
 
         capabilities.value = emptySet()
-        assertEquals(
-            CreatorSourceAvailabilityChange.RECONCILED,
-            coordinator.onAvailableSourcesChanged(),
-        )
-        assertTrue(coordinator.results.isEmpty())
-        assertFalse(coordinator.loading)
-        assertFalse(coordinator.canLoadMore)
-        assertTrue(coordinator.errorMessage?.contains("not available", ignoreCase = true) == true)
+        coordinator.onSourceAvailabilityChanged()
+        assertTrue(coordinator.state.value.results.isEmpty())
+        assertFalse(coordinator.state.value.isRefreshing)
+        assertFalse(coordinator.state.value.canLoadMore)
+        assertTrue(coordinator.state.value.errorMessage?.contains("not available", ignoreCase = true) == true)
 
         release.complete(Unit)
-        staleRequest.join()
+        advanceUntilIdle()
 
-        assertTrue(coordinator.results.isEmpty())
-        assertFalse(coordinator.canLoadMore)
-        assertTrue(coordinator.errorMessage?.contains("not available", ignoreCase = true) == true)
-        assertEquals(creator, coordinator.activeCreator)
+        assertTrue(coordinator.state.value.results.isEmpty())
+        assertFalse(coordinator.state.value.canLoadMore)
+        assertTrue(coordinator.state.value.errorMessage?.contains("not available", ignoreCase = true) == true)
+        assertEquals(creator, coordinator.state.value.creator)
     }
 
     private fun sampleCreator(

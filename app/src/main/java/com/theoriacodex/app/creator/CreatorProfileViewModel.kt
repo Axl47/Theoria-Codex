@@ -8,13 +8,13 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.theoriacodex.app.creator.state.CreatorAction
-import com.theoriacodex.app.creator.state.CreatorCoordinatorSnapshot
 import com.theoriacodex.app.creator.state.CreatorEffect
 import com.theoriacodex.app.creator.state.CreatorFailureReason
-import com.theoriacodex.app.creator.state.CreatorRequestIdentity
+import com.theoriacodex.app.creator.state.CreatorRequestKind
 import com.theoriacodex.app.creator.state.CreatorUiState
 import com.theoriacodex.app.creator.state.reduce
-import com.theoriacodex.app.creator.state.toUiState
+import com.theoriacodex.app.media.replacingPostSnapshot
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.ui.state.RouteStateOwner
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.Post
@@ -30,50 +30,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
-
-/** Non-Compose execution boundary used by the Creator route owner. */
-internal interface CreatorRouteEngine {
-    fun snapshot(): CreatorCoordinatorSnapshot
-    suspend fun open(creator: CreatorProfile)
-    suspend fun refresh()
-    suspend fun loadNextPage()
-    fun onAvailableSourcesChanged(): CreatorSourceAvailabilityChange
-    suspend fun resolvePost(postId: PostId): Post?
-    fun rememberResolvedPost(post: Post)
-}
-
-internal class CoordinatorCreatorRouteEngine(
-    private val coordinator: CreatorProfileCoordinator,
-) : CreatorRouteEngine {
-    override fun snapshot(): CreatorCoordinatorSnapshot {
-        val error = coordinator.errorMessage
-        return CreatorCoordinatorSnapshot(
-            creator = coordinator.activeCreator,
-            queryHash = coordinator.activeQueryHash,
-            results = coordinator.results,
-            loading = coordinator.loading,
-            loadingMore = coordinator.loadingMore,
-            canLoadMore = coordinator.canLoadMore,
-            errorMessage = error,
-            failureReason = if (error?.startsWith("Creator browsing is not available") == true) {
-                CreatorFailureReason.UNSUPPORTED_SOURCE
-            } else if (error != null) {
-                CreatorFailureReason.REQUEST_FAILED
-            } else {
-                null
-            },
-        )
-    }
-
-    override suspend fun open(creator: CreatorProfile) = coordinator.open(creator)
-    override suspend fun refresh() = coordinator.refresh()
-    override suspend fun loadNextPage() = coordinator.loadNextPage()
-    override fun onAvailableSourcesChanged(): CreatorSourceAvailabilityChange =
-        coordinator.onAvailableSourcesChanged()
-    override suspend fun resolvePost(postId: PostId): Post? = coordinator.resolvePostForCreator(postId)
-    override fun rememberResolvedPost(post: Post) = coordinator.rememberResolvedPost(post)
-}
 
 /** Navigation-scoped owner for Creator identity, requests, paging, and navigation effects. */
 internal class CreatorProfileViewModel(
@@ -85,15 +43,14 @@ internal class CreatorProfileViewModel(
         coordinator: CreatorProfileCoordinator,
         savedStateHandle: SavedStateHandle,
     ) : this(
-        engine = CoordinatorCreatorRouteEngine(coordinator),
+        engine = coordinator,
         savedStateHandle = savedStateHandle,
     )
 
     private val ownerScope = coroutineScope ?: viewModelScope
-    private var rootJob: Job? = null
-    private var pageJob: Job? = null
+    private var requestJob: Job? = null
 
-    private val mutableState = MutableStateFlow(engine.snapshot().toUiState())
+    private val mutableState = MutableStateFlow(CreatorUiState())
     override val state: StateFlow<CreatorUiState> = mutableState.asStateFlow()
 
     private val effectChannel = Channel<CreatorEffect>(capacity = Channel.BUFFERED)
@@ -109,133 +66,61 @@ internal class CreatorProfileViewModel(
         transition.effect?.let(::handleEffect)
     }
 
-    /** Reconciles the current creator when credential/source capability changes. */
+    /** Only loss of this creator's capability invalidates its active request. */
     fun onSourceAvailabilityChanged() {
-        val change = engine.onAvailableSourcesChanged()
-        if (change == CreatorSourceAvailabilityChange.UNCHANGED) return
-        val previous = mutableState.value
-        val snapshot = engine.snapshot()
-        mutableState.value = snapshot.toUiState().copy(
-            nextRequestGeneration = previous.nextRequestGeneration,
-            activeRequest = null,
-        )
-        rootJob?.cancel(CancellationException("Creator capabilities changed"))
-        pageJob?.cancel(CancellationException("Creator capabilities changed"))
-        if (change == CreatorSourceAvailabilityChange.REFRESH_REQUIRED && snapshot.creator != null) {
+        val current = mutableState.value
+        val creator = current.creator ?: return
+        if (!engine.supports(creator)) {
+            onAction(CreatorAction.SourceUnavailable)
+            requestJob?.cancel(CancellationException("Creator capability unavailable"))
+        } else if (current.failureReason == CreatorFailureReason.UNSUPPORTED_SOURCE) {
             onAction(CreatorAction.Refresh)
         }
     }
 
-    suspend fun resolvePost(postId: PostId): Post? {
-        return engine.resolvePost(postId)?.also { publishSnapshot() }
-    }
+    suspend fun resolvePost(postId: PostId): Post? =
+        engine.resolvePost(postId)?.also(::rememberResolvedPost)
 
     fun rememberResolvedPost(post: Post) {
-        engine.rememberResolvedPost(post)
-        publishSnapshot()
+        val current = mutableState.value
+        mutableState.value = current.copy(results = current.results.replacingPostSnapshot(post))
     }
 
     private fun handleEffect(effect: CreatorEffect) {
         when (effect) {
-            is CreatorEffect.LoadCreator -> launchRefresh(effect.request) {
-                engine.open(effect.creator)
-            }
-
-            is CreatorEffect.Refresh -> launchRefresh(effect.request) {
-                engine.refresh()
-            }
-
-            is CreatorEffect.LoadNextPage -> launchPage(effect.request)
-            is CreatorEffect.OpenViewer,
-            CreatorEffect.NavigateBack,
-            -> effectChannel.trySend(effect)
+            is CreatorEffect.LoadPage -> launchRequest(effect)
+            is CreatorEffect.OpenViewer, CreatorEffect.NavigateBack -> effectChannel.trySend(effect)
         }
     }
 
-    private fun launchRefresh(
-        request: CreatorRequestIdentity,
-        operation: suspend () -> Unit,
-    ) {
-        rootJob?.cancel(CancellationException("Creator request replaced"))
-        pageJob?.cancel(CancellationException("Creator page replaced by refresh"))
-        rootJob = ownerScope.launch {
+    private fun launchRequest(effect: CreatorEffect.LoadPage) {
+        requestJob?.cancel(CancellationException("Creator request replaced"))
+        requestJob = ownerScope.launch {
             try {
-                operation()
-                val snapshot = engine.snapshot()
-                val error = snapshot.errorMessage
-                if (error == null) {
-                    onAction(CreatorAction.RefreshCompleted(request, snapshot))
-                } else {
-                    onAction(
-                        CreatorAction.RefreshFailed(
-                            request = request,
-                            message = error,
-                            reason = snapshot.failureReason ?: CreatorFailureReason.REQUEST_FAILED,
-                        )
-                    )
+                val page = engine.load(effect.creator, effect.pageToken)
+                ensureActive()
+                if (mutableState.value.activeRequest != effect.request) return@launch
+                onAction(CreatorAction.PageLoaded(effect.request, page))
+                if (effect.request.kind == CreatorRequestKind.REFRESH) {
+                    // Accepted bookkeeping outlives the completed request, but not the route owner.
+                    val posts = mutableState.value.results
+                    ownerScope.launch {
+                        runCatchingPreservingCancellation { engine.recordAcceptedVisit(effect.creator, posts) }
+                    }
                 }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {
-                onAction(
-                    CreatorAction.RefreshFailed(
-                        request = request,
-                        message = error.message ?: "Could not load creator uploads",
-                    )
-                )
+                onAction(CreatorAction.RequestFailed(
+                    effect.request,
+                    error.message ?: "Could not load creator uploads",
+                    if (engine.supports(effect.creator)) CreatorFailureReason.REQUEST_FAILED
+                    else CreatorFailureReason.UNSUPPORTED_SOURCE,
+                ))
             } finally {
-                if (!isActive) onAction(CreatorAction.RequestCancelled(request))
+                if (!isActive) onAction(CreatorAction.RequestCancelled(effect.request))
             }
         }
-    }
-
-    private fun launchPage(request: CreatorRequestIdentity) {
-        pageJob?.cancel(CancellationException("Creator page replaced"))
-        pageJob = ownerScope.launch {
-            try {
-                engine.loadNextPage()
-                val snapshot = engine.snapshot()
-                val error = snapshot.errorMessage
-                if (error == null) {
-                    onAction(
-                        CreatorAction.PageLoaded(
-                            request = request,
-                            posts = snapshot.results,
-                            canLoadMore = snapshot.canLoadMore,
-                        )
-                    )
-                } else {
-                    onAction(
-                        CreatorAction.PageFailed(
-                            request = request,
-                            message = error,
-                            reason = snapshot.failureReason ?: CreatorFailureReason.REQUEST_FAILED,
-                        )
-                    )
-                }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                onAction(
-                    CreatorAction.PageFailed(
-                        request = request,
-                        message = error.message ?: "Could not load more creator uploads",
-                    )
-                )
-            } finally {
-                if (!isActive) onAction(CreatorAction.RequestCancelled(request))
-            }
-        }
-    }
-
-    private fun publishSnapshot() {
-        val previous = mutableState.value
-        mutableState.value = engine.snapshot().toUiState().copy(
-            nextRequestGeneration = previous.nextRequestGeneration,
-            activeRequest = previous.activeRequest,
-            isRefreshing = previous.isRefreshing,
-            isPaging = previous.isPaging,
-        )
     }
 
     private fun persistCreator(creator: CreatorProfile) {
