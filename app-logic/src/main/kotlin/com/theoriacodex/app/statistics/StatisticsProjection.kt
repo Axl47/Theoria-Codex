@@ -52,26 +52,23 @@ data class StatisticsSummary(
     val topCodexSources: List<SourceStatistic> = emptyList(),
 )
 
+/** Process-only saved-library projection; timer updates never read Posts. */
+data class SavedContentStatistics(
+    val codices: List<Codex> = emptyList(),
+    val postCount: Long = 0L,
+    val sources: List<SourceStatistic> = emptyList(),
+    val tags: List<TagStatistic> = emptyList(),
+)
+
 object StatisticsProjection {
     fun build(
         lifetime: LifetimeStatistics,
         liveUsage: UsageDurationDelta = UsageDurationDelta(),
         codices: List<Codex> = emptyList(),
         postsByCodex: Map<String, List<Post>> = emptyMap(),
+        savedContent: SavedContentStatistics = prepareContent(codices, postsByCodex),
     ): StatisticsSummary {
-        val savedPosts = codices.asSequence()
-            .flatMap { codex -> postsByCodex[codex.codexId].orEmpty().asSequence() }
-            .distinctBy(Post::id)
-            .toList()
-        val savedCount = savedPosts.size.toLong()
-        val savedSourceCounts = savedPosts.groupingBy { post -> post.id.source }.eachCount()
-            .mapValues { (_, count) -> count.toLong() }
-        val savedTagCounts = savedPosts
-            .flatMap { post -> statisticsTagsForPost(post).map { tag -> StatisticsTagKey(post.id.source, tag) } }
-            .groupingBy { key -> key }
-            .eachCount()
-            .mapValues { (_, count) -> count.toLong() }
-        val codexUsage = codices.map { codex ->
+        val codexUsage = savedContent.codices.map { codex ->
             CodexUsageStatistic(
                 codexId = codex.codexId,
                 name = codex.name,
@@ -86,8 +83,8 @@ object StatisticsProjection {
             codexMs = lifetime.codexMs.saturatingAdd(liveUsage.codexMs),
             watchedPostCount = lifetime.watchedPostCount,
             watchedSources = sourceRows(lifetime.watchedBySource, lifetime.watchedPostCount),
-            savedPostCount = savedCount,
-            savedSources = sourceRows(savedSourceCounts, savedCount),
+            savedPostCount = savedContent.postCount,
+            savedSources = savedContent.sources,
             forYouSaveCount = lifetime.forYouSaveCount,
             postUrlCopyCount = lifetime.postUrlCopyCount,
             searchCount = lifetime.searchCount,
@@ -96,7 +93,7 @@ object StatisticsProjection {
             translatedPhraseCount = lifetime.translatedPhraseCount,
             translatedSourceCharacterCount = lifetime.translatedSourceCharacterCount,
             topWatchedTags = tagRows(lifetime.watchedByTag, lifetime.watchedPostCount),
-            topSavedTags = tagRows(savedTagCounts, savedCount),
+            topSavedTags = savedContent.tags,
             mostUsedCodex = codexUsage.sortedWith(
                 compareByDescending<CodexUsageStatistic> { row -> row.entryCount }
                     .thenBy(String.CASE_INSENSITIVE_ORDER) { row -> row.name }
@@ -107,8 +104,25 @@ object StatisticsProjection {
                     .thenBy(String.CASE_INSENSITIVE_ORDER) { row -> row.name }
                     .thenBy { row -> row.codexId }
             ).firstOrNull(),
-            topCodexSources = sourceRows(savedSourceCounts, savedCount),
+            topCodexSources = savedContent.sources,
         )
+    }
+
+    fun prepareContent(codices: List<Codex>, postsByCodex: Map<String, List<Post>>): SavedContentStatistics {
+        val savedPosts = codices.asSequence()
+            .flatMap { codex -> postsByCodex[codex.codexId].orEmpty().asSequence() }
+            .distinctBy(Post::id)
+            .toList()
+        val savedCount = savedPosts.size.toLong()
+        val savedSourceCounts = savedPosts.groupingBy { post -> post.id.source }.eachCount()
+            .mapValues { (_, count) -> count.toLong() }
+        val savedTagCounts = savedPosts
+            .flatMap { post -> statisticsTagsForPost(post).map { tag -> StatisticsTagKey(post.id.source, tag) } }
+            .groupingBy { key -> key }
+            .eachCount()
+            .mapValues { (_, count) -> count.toLong() }
+        return SavedContentStatistics(codices, savedCount, sourceRows(savedSourceCounts, savedCount),
+            tagRows(savedTagCounts, savedCount))
     }
 
     private fun sourceRows(counts: Map<SourceKey, Long>, denominator: Long): List<SourceStatistic> {
@@ -131,6 +145,14 @@ object StatisticsProjection {
             .toList()
     }
 }
+
+/** Overlay live monotonic time without rebuilding content, source or tag statistics. */
+fun StatisticsSummary.withLiveUsage(usage: UsageDurationDelta): StatisticsSummary = copy(
+    totalForegroundMs = totalForegroundMs.saturatingAdd(usage.totalMs),
+    browsingMs = browsingMs.saturatingAdd(usage.browsingMs),
+    watchingMs = watchingMs.saturatingAdd(usage.watchingMs),
+    codexMs = codexMs.saturatingAdd(usage.codexMs),
+)
 
 fun statisticsTagsForPost(post: Post): Set<String> {
     val rawTags = post.taxonomy

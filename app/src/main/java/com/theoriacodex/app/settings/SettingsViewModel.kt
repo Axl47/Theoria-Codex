@@ -178,6 +178,7 @@ internal class SettingsViewModel(
     private val effectChannel = Channel<SettingsEffect>(capacity = Channel.BUFFERED)
     override val effects: Flow<SettingsEffect> = effectChannel.receiveAsFlow()
     private var likesJob: Job? = null
+    private var observedLikesProfileId: String? = null
     private val accountRefreshRunning = AtomicBoolean(false)
     private var sectionExpansionRevision = 0L
 
@@ -414,9 +415,11 @@ internal class SettingsViewModel(
     }
 
     private fun observeLikes(profileId: String) {
+        if (profileId == observedLikesProfileId) return
+        observedLikesProfileId = profileId
         likesJob?.cancel()
         likesJob = ownerScope.launch {
-            dependencies.likesRepository.observeLikes(profileId).collect { likes ->
+            dependencies.likesRepository.observeLikedPostIds(profileId).collect { likes ->
                 updateState { copy(activeProfileLikesCount = likes.size) }
             }
         }
