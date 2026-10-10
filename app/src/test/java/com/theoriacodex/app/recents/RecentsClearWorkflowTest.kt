@@ -6,6 +6,7 @@ import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchKind
+import com.theoriacodex.data.repository.RecentSearchSection
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.model.Query
@@ -125,10 +126,10 @@ class RecentsClearWorkflowTest {
         var clears = 0
         var restores = 0
         val repository = object : RecentsRepository by stored {
-            override suspend fun clearSearches(queryHashPrefix: String?) {
+            override suspend fun clearSearches(section: RecentSearchSection): List<RecentSearchEntry> {
                 clears++
                 if (clears == 1) error("storage unavailable")
-                stored.clearSearches(queryHashPrefix)
+                return stored.clearSearches(section)
             }
             override suspend fun restoreEntries(watchedPosts: List<RecentPostEntry>, searches: List<RecentSearchEntry>) {
                 restores++
@@ -153,6 +154,26 @@ class RecentsClearWorkflowTest {
         assertEquals(2, clears)
         assertEquals(2, restores)
         assertEquals(original, stored.observeSearches().first())
+    }
+
+    @Test
+    fun `Searches clear preserves FYP and Undo restores the actual deletion snapshot`() = runTest {
+        for (undo in listOf(false, true)) {
+            var now = 100L
+            val repository = InMemoryRecentsRepository(clock = { now++ })
+            repository.recordSearch(recentQuery().copy(mode = QueryMode.Unified), "fyp-without-prefix",
+                RecentSearchKind.FYP, listOf(SourceKey.PIXIV))
+            val fyp = repository.observeSearches().first()
+            // The UI snapshot predates this entry; Undo must still capture its exact removal.
+            repository.recordSearch(recentQuery(), "new-manual")
+            val original = repository.observeSearches().first()
+            RecentsClearWorkflow(repository).clear(RecentsClearTarget.SEARCHES,
+                emptyList(), emptyList(), emptyList(), fyp) { _, _ ->
+                assertEquals(fyp, repository.observeSearches().first())
+                undo
+            }
+            assertEquals(if (undo) original else fyp, repository.observeSearches().first())
+        }
     }
 
     private fun recentQuery(): Query = Query(

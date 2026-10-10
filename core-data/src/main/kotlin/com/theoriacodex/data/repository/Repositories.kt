@@ -161,7 +161,15 @@ interface RecentsRepository {
     suspend fun clearWatchedPosts()
     suspend fun clearWatchedPosts(section: RecentPostSection)
     suspend fun clearSearches(queryHashPrefix: String? = null)
+    /** Remove only this section and capture the exact Undo payload in the same transaction. */
+    suspend fun clearSearches(section: RecentSearchSection): List<RecentSearchEntry>
     suspend fun clearAll()
+}
+
+enum class RecentSearchSection {
+    SEARCHES, FYP;
+
+    fun contains(entry: RecentSearchEntry): Boolean = (entry.kind == RecentSearchKind.FYP) == (this == FYP)
 }
 
 interface ExploreRepository {
