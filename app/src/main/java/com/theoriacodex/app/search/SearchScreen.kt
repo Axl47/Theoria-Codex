@@ -614,6 +614,8 @@ fun SearchScreen(
                 }
             }
 
+            val retrySearch = { inputFocus.clear(); onAction(SearchAction.Retry) }
+            state.pageFailure?.let { SearchFailureSurface(it, retrySearch) }
             FeedContinueLoading(pageDemand)
             if (state.retainsResultsWhileRefreshing) SearchRefreshProgress()
             when {
@@ -628,24 +630,11 @@ fun SearchScreen(
                             ) { inputFocus.clear() },
                     )
                 }
-                state.content.error != null -> {
-                    val error = requireNotNull(state.content.error)
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable(
-                                interactionSource = clearFocusInteraction,
-                                indication = null,
-                            ) { inputFocus.clear() }
-                    ) {
-                        ErrorBlock(
-                            message = error.message,
-                            onRetry = {
-                                inputFocus.clear()
-                                onAction(SearchAction.Retry)
-                            },
-                        )
-                    }
+                state.content.error != null && state.pageFailure == null -> {
+                    SearchFailureSurface(requireNotNull(state.content.error), retrySearch,
+                        Modifier.weight(1f).clickable(interactionSource = clearFocusInteraction, indication = null) {
+                            inputFocus.clear()
+                        })
                 }
                 feedProjection.entries.isEmpty() -> {
                     Box(
