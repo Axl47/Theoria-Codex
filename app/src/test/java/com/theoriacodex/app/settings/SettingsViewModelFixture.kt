@@ -17,8 +17,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 internal fun kotlinx.coroutines.test.TestScope.settingsOwner(
-    settingsRepository: InMemorySettingsRepository = InMemorySettingsRepository(),
-    uiRestoreRepository: InMemoryUiRestoreRepository = InMemoryUiRestoreRepository(),
+    settingsRepository: com.theoriacodex.data.repository.SettingsRepository = InMemorySettingsRepository(),
+    uiRestoreRepository: com.theoriacodex.data.repository.UiRestoreRepository = InMemoryUiRestoreRepository(),
     accounts: FakeSettingsAccountGateway = FakeSettingsAccountGateway(),
     legacyJsonRecoveries: StateFlow<List<CorruptionRecovery>> = MutableStateFlow(emptyList()),
     availableSources: StateFlow<Set<SourceKey>> = MutableStateFlow(setOf(SourceKey.PIXIV)),

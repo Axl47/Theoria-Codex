@@ -272,12 +272,11 @@ internal class SettingsViewModel(
             is SettingsAction.RequestRemoveProfile -> updateState { copy(profileDeleteTargetId = action.profileId) }
             SettingsAction.DismissRemoveProfile -> updateState { copy(profileDeleteTargetId = null) }
             SettingsAction.ConfirmRemoveProfile -> removeRequestedProfile()
-            is SettingsAction.RemoveBlacklistEntry -> launchMutation {
-                dependencies.settingsRepository.removeForYouBlacklistEntry(
-                    profileId = state.value.activeProfile.profileId,
-                    source = action.source,
-                    tags = action.tags,
-                )
+            is SettingsAction.RemoveBlacklistEntry -> {
+                val profileId = state.value.activeProfile.profileId
+                launchMutation {
+                    dependencies.settingsRepository.removeForYouBlacklistEntry(profileId, action.source, action.tags)
+                }
             }
             else -> return false
         }
@@ -386,7 +385,7 @@ internal class SettingsViewModel(
         sectionExpansionRevision += 1
         val updated = state.value.sectionExpansion.updated(section, expanded)
         updateState { copy(sectionExpansion = updated) }
-        ownerScope.launch {
+        launchMutation {
             dependencies.uiRestoreRepository.setSettingsSectionExpansion(updated.toPersistenceMap())
         }
     }
@@ -637,7 +636,10 @@ internal class SettingsViewModel(
     }
 
     private fun launchMutation(mutation: suspend () -> Unit) {
-        ownerScope.launch { mutation() }
+        ownerScope.launch {
+            val result = runCatchingPreservingCancellation { mutation() }
+            if (result.isFailure) effectChannel.send(SettingsEffect.ShowMessage("Could not save Settings. Please try again."))
+        }
     }
 
     private inline fun updateState(transform: SettingsUiState.() -> SettingsUiState) {

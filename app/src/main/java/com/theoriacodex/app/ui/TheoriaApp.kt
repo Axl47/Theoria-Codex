@@ -88,7 +88,6 @@ import com.theoriacodex.app.appshell.IncomingUriKind
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.creator.browseableCreatorProfile
 import com.theoriacodex.app.di.TheoriaAppContainer
-import com.theoriacodex.app.recommend.trainingTagsFor
 import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.recents.RecentsScreen
 import com.theoriacodex.app.recents.fypSeedBySource
@@ -100,6 +99,8 @@ import com.theoriacodex.app.source.ExternalCreatorDeepLink
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsEffect
 import com.theoriacodex.app.settings.SettingsViewModel
+import com.theoriacodex.app.post.PostMutationViewModel
+import com.theoriacodex.app.ui.components.MutationFeedbackHost
 import com.theoriacodex.app.statistics.StatisticsUsageCategory
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.creatorBrowsingSources
@@ -298,6 +299,14 @@ internal fun TheoriaAppContent(
                 workflowDependencies.likesCodexSync::clearProfile, workflowDependencies.codexTransfer::reorderVisibleCodices) }
         },
     )
+    val postMutationOwner = viewModel<PostMutationViewModel>(
+        key = "post-mutations",
+        factory = viewModelFactory { initializer {
+            PostMutationViewModel(dataDependencies.settingsRepository, workflowDependencies.likesCodexSync::toggle)
+        } },
+    )
+    MutationFeedbackHost(postMutationOwner.feedback, snackbarHostState)
+    MutationFeedbackHost(feedFabRestoreRegistry.feedback, snackbarHostState)
     val codexSaveOwner = viewModel<CodexSaveViewModel>(
         key = "codex-save-owner",
         factory = viewModelFactory {
@@ -454,42 +463,11 @@ internal fun TheoriaAppContent(
     val startupActionLocked = startupWorkflowState.actionLocked
     val awaitingInstallerReturn = startupWorkflowState.awaitingInstallerReturn
     var thumbnailCacheGeneration by rememberSaveable { mutableStateOf(0) }
-    val addFavoriteTag: (SourceKey, String) -> Unit = remember(
-        scope,
-        dataDependencies.settingsRepository,
-        appContext,
-    ) {
-        { source, tag ->
-            scope.launch {
-                val profile = dataDependencies.currentActiveRecommendationProfile()
-                val added = dataDependencies.settingsRepository.addFavoriteTag(
-                    profileId = profile.profileId,
-                    source = source,
-                    tag = tag,
-                )
-                val message = if (added) {
-                    "Added to favorite tags"
-                } else {
-                    "Already in favorite tags"
-                }
-                Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
-            }
-        }
+    val addFavoriteTag: (SourceKey, String) -> Unit = remember(postMutationOwner, settingsOwner) {
+        { source, tag -> postMutationOwner.favorite(settingsOwner.state.value.activeProfile.profileId, source, tag, true) }
     }
-    val removeFavoriteTag: (SourceKey, String) -> Unit = remember(
-        scope,
-        dataDependencies.settingsRepository,
-    ) {
-        { source, tag ->
-            scope.launch {
-                val profile = dataDependencies.currentActiveRecommendationProfile()
-                dataDependencies.settingsRepository.removeFavoriteTag(
-                    profileId = profile.profileId,
-                    source = source,
-                    tag = tag,
-                )
-            }
-        }
+    val removeFavoriteTag: (SourceKey, String) -> Unit = remember(postMutationOwner, settingsOwner) {
+        { source, tag -> postMutationOwner.favorite(settingsOwner.state.value.activeProfile.profileId, source, tag, false) }
     }
 
     fun requestSaveToDevice(post: Post) {
@@ -606,15 +584,12 @@ internal fun TheoriaAppContent(
         return workflowDependencies.likesCodexSync.ensureProfileCodex(profile)
     }
 
-    suspend fun toggleLikeAndSyncCodex(post: Post): LikeToggleOutcome {
-        val profile = dataDependencies.currentActiveRecommendationProfile()
-        return workflowDependencies.likesCodexSync.toggle(
-            profile = profile,
-            post = post,
-            trainingTags = trainingTagsFor(post),
-        )
+    fun toggleLikeAndSyncCodex(post: Post, onCommitted: (LikeToggleOutcome) -> Unit = {}) {
+        val profile = settingsOwner.state.value.activeProfile
+        postMutationOwner.like(profile, post) { outcome ->
+            if (settingsOwner.state.value.activeProfile.profileId == profile.profileId) onCommitted(outcome)
+        }
     }
-
 
     suspend fun searchFromCodex(source: SourceKey, includeTags: List<String>) {
         if (source !in sourceDependencies.registry.availableSources()) {
@@ -1149,9 +1124,10 @@ internal fun TheoriaAppContent(
                                             },
                                             onToggleLike = { post ->
                                                 val owner = searchRouteOwnerBinding.current
-                                                scope.launch {
-                                                    val outcome = toggleLikeAndSyncCodex(post)
-                                                    owner?.dispatch(SearchAction.RelatedLikeCommitted(post, outcome))
+                                                val query = owner?.state?.value?.query?.appliedQueryHash
+                                                toggleLikeAndSyncCodex(post) { outcome ->
+                                                    if (owner?.state?.value?.query?.appliedQueryHash == query)
+                                                        owner?.dispatch(SearchAction.RelatedLikeCommitted(post, outcome))
                                                 }
                                             },
                                             onOpenCreatorProfile = { creator ->
@@ -1234,9 +1210,10 @@ internal fun TheoriaAppContent(
                                             },
                                             onToggleLike = { post ->
                                                 val owner = forYouRouteOwnerBinding.current
-                                                scope.launch {
-                                                    val outcome = toggleLikeAndSyncCodex(post)
-                                                    owner?.dispatch(ForYouAction.RelatedLikeCommitted(post, outcome))
+                                                val seed = owner?.state?.value?.seedId
+                                                toggleLikeAndSyncCodex(post) { outcome ->
+                                                    if (owner?.state?.value?.seedId == seed)
+                                                        owner?.dispatch(ForYouAction.RelatedLikeCommitted(post, outcome))
                                                 }
                                             },
                                             onRequestSaveToCodex = { post ->
@@ -1341,11 +1318,7 @@ internal fun TheoriaAppContent(
                                         creatorBrowsingSources = sourceDependencies.registry.creatorBrowsingSources(),
                                         tagVideoCountProvider = featureDependencies.search::tagVideoCount,
                                         fetchTagVideoCounts = featureDependencies.search::fetchTagVideoCounts,
-                                        onToggleLike = { post ->
-                                            scope.launch {
-                                                toggleLikeAndSyncCodex(post)
-                                            }
-                                        },
+                                        onToggleLike = { post -> toggleLikeAndSyncCodex(post) },
                                         onRequestSaveToCodex = { post ->
                                             requestSaveToCodex(post)
                                         },
@@ -1695,7 +1668,7 @@ internal fun TheoriaAppContent(
                                 },
                                 onNavigateBack = { navController.popBackStack() },
                                 onToggleLike = { post ->
-                                    scope.launch { toggleLikeAndSyncCodex(post) }
+                                    toggleLikeAndSyncCodex(post)
                                 },
                                 onRequestSaveToCodex = { post ->
                                     requestSaveToCodex(post)
