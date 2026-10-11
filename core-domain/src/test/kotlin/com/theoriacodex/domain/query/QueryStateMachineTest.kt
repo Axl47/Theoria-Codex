@@ -26,7 +26,7 @@ class QueryStateMachineTest {
         val state = SearchQueryState.fromApplied(baseQuery())
 
         val updated = state.updateDraft {
-            it.copy(includeTerms = it.includeTerms + SearchTerm("portrait"))
+            it.withIncludeTermsAsRequired(it.includeTerms + SearchTerm("portrait"))
         }
         assertTrue(updated.hasPendingChanges)
 

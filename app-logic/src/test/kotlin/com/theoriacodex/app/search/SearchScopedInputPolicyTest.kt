@@ -79,8 +79,8 @@ class SearchScopedInputPolicyTest {
         val sourceOwned = state(QueryMode.Source(SourceKey.HITOMI)).let { current ->
             current.copy(
                 query = current.query.copy(
-                    draft = current.query.draft.copy(
-                        includeTerms = listOf(SearchTerm("najar", SearchFacet.ARTIST, "artist")),
+                    draft = current.query.draft.withIncludeTermsAsRequired(
+                        listOf(SearchTerm("najar", SearchFacet.ARTIST, "artist")),
                     ),
                 ),
             )

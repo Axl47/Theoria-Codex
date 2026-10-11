@@ -328,9 +328,7 @@ class RoomRecentsRepositoryTest {
 
     @Test fun `versioned query payload restarts from the same database`() = runTest {
         val repository = RoomRecentsRepository(database, clock = { 9L })
-        val query = recentQuery("artist").copy(
-            includeTerms = listOf(SearchTerm("name", sourceNamespace = "pixiv")),
-        )
+        val query = recentQuery("artist").withIncludeTermsAsRequired(listOf(SearchTerm("name", sourceNamespace = "pixiv")))
         repository.recordSearch(query, "hash")
 
         val reconstructed = RoomRecentsRepository(database)

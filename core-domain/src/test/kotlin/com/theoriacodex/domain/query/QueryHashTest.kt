@@ -63,16 +63,9 @@ class QueryHashTest {
             dateRange = null,
             minScore = null,
         )
-        val artist = base.copy(
-            includeTerms = listOf(SearchTerm("najar", SearchFacet.ARTIST, sourceNamespace = "artist")),
-        )
-        val namespacedTag = base.copy(
-            includeTerms = listOf(SearchTerm("najar", SearchFacet.TAG, sourceNamespace = "female")),
-        )
-        val excluded = base.copy(
-            includeTerms = emptyList(),
-            excludeTerms = listOf(SearchTerm("najar")),
-        )
+        val artist = base.withIncludeTermsAsRequired(listOf(SearchTerm("najar", SearchFacet.ARTIST, sourceNamespace = "artist")))
+        val namespacedTag = base.withIncludeTermsAsRequired(listOf(SearchTerm("najar", SearchFacet.TAG, sourceNamespace = "female")))
+        val excluded = base.withIncludeTermsAsRequired(emptyList()).copy(excludeTerms = listOf(SearchTerm("najar")))
 
         val hashes = listOf(base, artist, namespacedTag, excluded).map(QueryHash::from)
 
@@ -115,11 +108,9 @@ class QueryHashTest {
             dateRange = null,
             minScore = null,
         )
-        val second = first.copy(
-            includeTerms = listOf(
+        val second = first.withIncludeTermsAsRequired(listOf(
                 SearchTerm("the idolmaster", SearchFacet.SERIES, sourceNamespace = "parody"),
-            ),
-        )
+            ))
 
         assertEquals(QueryHash.from(first), QueryHash.from(second))
     }

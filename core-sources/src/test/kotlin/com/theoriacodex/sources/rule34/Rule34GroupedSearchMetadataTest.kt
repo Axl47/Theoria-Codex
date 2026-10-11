@@ -45,7 +45,7 @@ class Rule34GroupedSearchMetadataTest {
         for (gen in listOf(false, true)) {
             val http = VideoHttpClient(gen)
             val adapter = adapter(http, gen)
-            val query = plainQuery().copy(includeTerms = listOf(SearchTerm("cat")))
+            val query = plainQuery().withIncludeTermsAsRequired(listOf(SearchTerm("cat")))
 
             val page = UnifiedSearchOrchestrator(emptyMap()).searchSource(adapter, query, null)
 
@@ -75,7 +75,7 @@ class Rule34GroupedSearchMetadataTest {
     fun `unified exclusions hydrate sparse cards even without alternative groups`() = runTest {
         val http = VideoHttpClient(gen = false)
         val adapter = adapter(http, gen = false)
-        val query = plainQuery().copy(includeTerms = listOf(SearchTerm("cat")), excludeTerms = listOf(SearchTerm("green")))
+        val query = plainQuery().withIncludeTermsAsRequired(listOf(SearchTerm("cat"))).copy(excludeTerms = listOf(SearchTerm("green")))
 
         val result = UnifiedSearchOrchestrator(mapOf(adapter.sourceKey to adapter))
             .search(query, setOf(adapter.sourceKey), emptyMap(), emptyMap())

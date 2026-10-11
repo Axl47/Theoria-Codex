@@ -13,9 +13,7 @@ import org.junit.Test
 class CollapsedSearchContextTest {
     @Test
     fun `summary prioritizes applied source query and filter count`() {
-        val query = emptySearchQuery(QueryMode.Source(SourceKey.PIXIV)).copy(
-            includeTerms = listOf(SearchTerm("klee"), SearchTerm("landscape")),
-        )
+        val query = emptySearchQuery(QueryMode.Source(SourceKey.PIXIV)).withIncludeTermsAsRequired(listOf(SearchTerm("klee"), SearchTerm("landscape")))
 
         assertEquals(
             "Pixiv · klee AND landscape · 2 filters",
@@ -29,13 +27,10 @@ class CollapsedSearchContextTest {
 
     @Test
     fun `summary renders grouped applied terms`() {
-        val query = emptySearchQuery().copy(
-            includeTermGroups = listOf(
+        val query = emptySearchQuery().copy(includeTermGroups = listOf(
                 SearchTermGroup.single(SearchTerm("tag1")),
                 SearchTermGroup(listOf(SearchTerm("tag2"), SearchTerm("tag3"))),
-            ),
-            includeTerms = listOf(SearchTerm("tag1"), SearchTerm("tag2"), SearchTerm("tag3")),
-        )
+            ))
 
         assertEquals(
             "Unified · tag1 AND (tag2 OR tag3)",

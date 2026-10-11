@@ -146,7 +146,7 @@ class RepositoryContractTest(
         )
         repository.recordSearch(query, " query-hash ")
         repository.recordSearch(
-            query.copy(includeTerms = listOf(SearchTerm("updated"))),
+            query.withIncludeTermsAsRequired(listOf(SearchTerm("updated"))),
             "query-hash",
         )
 
@@ -189,7 +189,7 @@ class RepositoryContractTest(
             "newer",
             RecentPostSection.WATCHED,
         )
-        repository.recordSearch(query.copy(includeTerms = listOf(SearchTerm("newer"))), "restore-query")
+        repository.recordSearch(query.withIncludeTermsAsRequired(listOf(SearchTerm("newer"))), "restore-query")
         repository.restoreEntries(watchedSnapshot, searchSnapshot)
 
         val restoredWatched = repository.observeWatchedPosts().first()

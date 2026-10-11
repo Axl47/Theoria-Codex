@@ -307,10 +307,7 @@ class SearchCoordinatorTest {
         }
         val coordinator = coordinator(pixiv, gelbooru)
         coordinator.initializeRoute()
-        val query = unifiedQuery("cat").copy(
-            includeTerms = listOf(SearchTerm("cat"), SearchTerm("najar", com.theoriacodex.domain.model.SearchFacet.ARTIST, "artist")),
-            excludeTerms = listOf(SearchTerm("nsfw_(content)")),
-        )
+        val query = unifiedQuery("cat").withIncludeTermsAsRequired(listOf(SearchTerm("cat"), SearchTerm("najar", com.theoriacodex.domain.model.SearchFacet.ARTIST, "artist"))).copy(excludeTerms = listOf(SearchTerm("nsfw_(content)")))
 
         coordinator.executeInitial(query, SearchSourceScope.GlobalUnified)
 

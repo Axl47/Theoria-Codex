@@ -91,7 +91,7 @@ class SourceRetryTest {
         val adapter = TestAdapter(SourceKey.NHENTAI)
         val owner = testSearchCoordinator(TestRegistry(listOf(adapter)))
         owner.initializeRoute()
-        val query = query(SourceKey.NHENTAI, "").copy(includeTerms = listOf(SearchTerm("japanese", SearchFacet.LANGUAGE)))
+        val query = query(SourceKey.NHENTAI, "").withIncludeTermsAsRequired(listOf(SearchTerm("japanese", SearchFacet.LANGUAGE)))
         val result = owner.retrySource(query, SearchSourceScope.Single(SourceKey.NHENTAI), null,
             SourceKey.NHENTAI) as SearchPageResult.Success
         assertEquals(query, adapter.searchedQueries.single())

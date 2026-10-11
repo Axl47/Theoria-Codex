@@ -6,6 +6,7 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.normalizedForMode
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTermGroup
@@ -84,13 +85,7 @@ class UnifiedSearchOrchestrator(
                     val sourceBaseQuery = (queryOverridesBySource[source] ?: portableQuery)
                         .let { override ->
                             if (query.mode == QueryMode.Unified) {
-                                override.withIncludeTermGroups(
-                                    override.effectiveIncludeTermGroups.filter { group ->
-                                        group.isPortableGeneralTagGroup
-                                    },
-                                ).copy(
-                                    excludeTerms = override.excludeTerms.filter { it.isPortableGeneralTag },
-                                )
+                                override.normalizedForMode(QueryMode.Unified).query.copy(mode = override.mode)
                             } else {
                                 override
                             }

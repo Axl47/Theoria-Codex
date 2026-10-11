@@ -27,6 +27,7 @@ import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.normalizedForMode
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
@@ -117,7 +118,7 @@ class SearchCoordinator(
         } else {
             storedByMode[modeKey(QueryMode.Unified)] ?: defaultQuery()
         }
-        val sanitized = restored.sanitizedForMode(restored.mode)
+        val sanitized = restored.normalizedForMode(restored.mode)
         val sourceScope = SearchSourceScope.fromQuery(sanitized.query)
         val key = executionKey(sanitized.query, sourceScope)
         initialized = true
@@ -149,7 +150,7 @@ class SearchCoordinator(
     }
 
     override fun executionKeyFor(query: Query, sourceScope: SearchSourceScope): String {
-        return executionKey(query.sanitizedForMode(sourceScope.queryMode()).query, sourceScope)
+        return executionKey(query.normalizedForMode(sourceScope.queryMode()).query, sourceScope)
     }
 
     override suspend fun executeInitial(
@@ -157,7 +158,7 @@ class SearchCoordinator(
         sourceScope: SearchSourceScope,
     ): SearchExecutionResult {
         currentCoroutineContext().ensureActive()
-        val sanitized = query.sanitizedForMode(sourceScope.queryMode()).query
+        val sanitized = query.normalizedForMode(sourceScope.queryMode()).query
         val enabled = effectiveEnabledSources(sourceScope)
         val available = availableSources
         val weights = effectiveWeights(enabled)

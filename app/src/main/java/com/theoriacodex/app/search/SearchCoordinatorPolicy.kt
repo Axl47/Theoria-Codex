@@ -12,18 +12,6 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 
-internal data class SanitizedQuery(val query: Query, val removedSourceOwnedTerms: Boolean)
-
-internal fun Query.sanitizedForMode(mode: QueryMode): SanitizedQuery {
-    if (mode != QueryMode.Unified) return SanitizedQuery(copy(mode = mode), false)
-    val includeGroups = effectiveIncludeTermGroups.filter(SearchTermGroup::isPortableGeneralTagGroup)
-    val exclude = excludeTerms.filter(SearchTerm::isPortableGeneralTag)
-    return SanitizedQuery(
-        withIncludeTermGroups(includeGroups).copy(mode = mode, excludeTerms = exclude),
-        includeGroups.size != effectiveIncludeTermGroups.size || exclude.size != excludeTerms.size,
-    )
-}
-
 internal fun SearchSourceScope.reconciledWith(available: Set<com.theoriacodex.domain.model.SourceKey>) =
     when (this) {
         SearchSourceScope.GlobalUnified -> this

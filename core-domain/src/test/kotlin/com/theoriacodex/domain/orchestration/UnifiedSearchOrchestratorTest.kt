@@ -255,7 +255,7 @@ class UnifiedSearchOrchestratorTest {
             )
         )
         val query = sampleQuery()
-        val override = query.copy(includeTerms = listOf(SearchTerm("gelbooru_tag")))
+        val override = query.withIncludeTermsAsRequired(listOf(SearchTerm("gelbooru_tag")))
 
         orchestrator.search(
             query = query,

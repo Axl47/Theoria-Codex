@@ -33,7 +33,7 @@ class SearchDraftReducerTest {
     fun `draft edits reset to applied state and clear keeps the current mode`() {
         val applied = query(QueryMode.Source(SourceKey.PIXIV), listOf(SearchTerm("applied")))
         val edited = state(applied).copy(
-            query = state(applied).query.copy(draft = applied.copy(includeTerms = applied.includeTerms + SearchTerm("draft"))),
+            query = state(applied).query.copy(draft = applied.withIncludeTermsAsRequired(applied.includeTerms + SearchTerm("draft"))),
         )
 
         val reset = SearchDraftReducer.resetDraft(edited).state
