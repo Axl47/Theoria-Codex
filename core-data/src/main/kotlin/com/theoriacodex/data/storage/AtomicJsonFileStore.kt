@@ -192,6 +192,16 @@ class AtomicJsonFileStore private constructor(
     }
 
     suspend fun <T> write(file: File, payload: T) {
+        writePayload(file, payload, maxBytes = null)
+    }
+
+    /** Flush a bounded operational intent before its caller starts irreversible work. */
+    suspend fun <T> writeIntent(file: File, payload: T, maxBytes: Int) {
+        require(maxBytes > 0)
+        writePayload(file, payload, maxBytes)
+    }
+
+    private suspend fun <T> writePayload(file: File, payload: T, maxBytes: Int?) {
         currentCoroutineContext().ensureActive()
         withContext(NonCancellable) {
             withContext(ioDispatcher) {
@@ -199,7 +209,13 @@ class AtomicJsonFileStore private constructor(
                 parent?.mkdirs()
                 val tempFile = fileOperations.createTempFile(file)
                 try {
-                    tempFile.writeText(gson.toJson(payload))
+                    val text = gson.toJson(payload)
+                    if (maxBytes == null) tempFile.writeText(text)
+                    else {
+                        val bytes = text.toByteArray(Charsets.UTF_8)
+                        require(bytes.size <= maxBytes) { "${file.name} exceeds its intent size limit" }
+                        fileOperations.writeAndSync(tempFile, bytes)
+                    }
                     try {
                         fileOperations.moveAtomically(tempFile, file)
                     } catch (_: AtomicMoveNotSupportedException) {

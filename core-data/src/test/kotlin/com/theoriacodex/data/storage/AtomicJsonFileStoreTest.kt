@@ -287,6 +287,28 @@ class AtomicJsonFileStoreTest {
         assertEquals(unexpected.message, unexpectedFailure?.message)
     }
 
+    @Test
+    fun `intent sync failure and oversized UTF8 cannot replace the previous committed record`() = runTest {
+        val file = tempFolder.root.resolve("intent.json")
+        file.writeText("previous")
+        var syncCalls = 0
+        val operations = object : RecordingAtomicFileOperations() {
+            override fun writeAndSync(file: File, bytes: ByteArray) {
+                syncCalls++
+                throw IOException("fsync failed")
+            }
+        }
+        val store = AtomicJsonFileStore(Dispatchers.Unconfined, GsonBuilder().create(), operations)
+        assertTrue(runCatching { store.writeIntent(file, Payload("next"), maxBytes = 100) }.exceptionOrNull() is IOException)
+        assertEquals(1, syncCalls)
+        assertEquals(0, operations.atomicMoveCalls)
+        assertEquals("previous", file.readText())
+        assertTrue(runCatching { store.writeIntent(file, Payload("🙂".repeat(20)), maxBytes = 32) }.exceptionOrNull() is IllegalArgumentException)
+        assertEquals(1, syncCalls)
+        assertEquals("previous", file.readText())
+        assertTrue(tempFilesFor(file).none())
+    }
+
     private fun throwingReadAdapter(failure: RuntimeException): TypeAdapter<Payload> {
         return object : TypeAdapter<Payload>() {
             override fun write(out: JsonWriter, value: Payload?) {

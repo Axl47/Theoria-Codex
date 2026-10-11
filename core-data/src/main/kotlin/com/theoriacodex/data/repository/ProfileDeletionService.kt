@@ -44,10 +44,10 @@ class ProfileDeletionService(
             }
             // Once the durable intent is admitted, caller departure cannot skip its finish or guard.
             withContext(NonCancellable) {
-                if (!pending) fileStore.write(journalFile, JsonObject().apply {
+                if (!pending) fileStore.writeIntent(journalFile, JsonObject().apply {
                     addProperty("version", 1)
                     addProperty("profileId", profileId)
-                })
+                }, maxBytes = 4_096)
                 finish(profileId)
             }
         }
