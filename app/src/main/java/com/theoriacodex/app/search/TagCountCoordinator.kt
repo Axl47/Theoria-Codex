@@ -32,29 +32,38 @@ internal class TagCountCoordinator(
             val adapter = registry.adapterFor(source) as? TagCountLookupSourceAdapter ?: return@withContext resolved
             val completed = withTimeoutOrNull(timeoutMs) {
                 sourceLocks.getValue(source).withLock {
-                    val missing = requested.filter { tag ->
-                        resolved[tag] = store.getCount(source, tag) ?: resolved[tag]
-                        resolved[tag] == null && synchronized(missingUntil) {
-                            (missingUntil[source to sourceTagKey(source, tag)] ?: 0L) <= clock()
-                        }
-                    }
-                    if (missing.isEmpty()) return@withLock
-                    val counts = runCatchingPreservingCancellation {
-                        adapter.fetchTagCounts(missing.map { prepareTag(source, it) })
-                    }.getOrDefault(emptyMap())
-                    val indexed = counts.mapKeys { sourceTagKey(source, it.key) }
-                    if (counts.isNotEmpty()) store.put(source,
-                        counts.map { TagSuggestion(it.key, "tag_count_lookup", it.value) }, TagSuggestionOrigin.COUNT_LOOKUP)
-                    missing.forEach { tag ->
-                        resolved[tag] = indexed[sourceTagKey(source, tag)]
-                        if (resolved[tag] == null) markMissing(source, listOf(tag))
-                    }
+                    enrichCounts(source, requested, resolved, adapter)
                 }
                 true
             }
             if (completed == null) markMissing(source, requested.filter { resolved[it] == null })
             resolved
         }
+    private suspend fun enrichCounts(
+        source: SourceKey,
+        requested: List<String>,
+        resolved: MutableMap<String, Int?>,
+        adapter: TagCountLookupSourceAdapter,
+    ) {
+        val missing = requested.filter { tag ->
+            resolved[tag] = store.getCount(source, tag) ?: resolved[tag]
+            resolved[tag] == null && synchronized(missingUntil) {
+                (missingUntil[source to sourceTagKey(source, tag)] ?: 0L) <= clock()
+            }
+        }
+        if (missing.isEmpty()) return
+        val counts = runCatchingPreservingCancellation {
+            adapter.fetchTagCounts(missing.map { prepareTag(source, it) })
+        }.getOrDefault(emptyMap())
+        val indexed = counts.mapKeys { sourceTagKey(source, it.key) }
+        if (counts.isNotEmpty()) store.put(source,
+            counts.map { TagSuggestion(it.key, "tag_count_lookup", it.value) }, TagSuggestionOrigin.COUNT_LOOKUP)
+        missing.forEach { tag ->
+            resolved[tag] = indexed[sourceTagKey(source, tag)]
+            if (resolved[tag] == null) markMissing(source, listOf(tag))
+        }
+    }
+
     private fun markMissing(source: SourceKey, tags: List<String>) = synchronized(missingUntil) {
         tags.forEach { missingUntil[source to sourceTagKey(source, it)] = clock() + 60_000L }
         while (missingUntil.size > 2_000) missingUntil.remove(missingUntil.keys.first())
