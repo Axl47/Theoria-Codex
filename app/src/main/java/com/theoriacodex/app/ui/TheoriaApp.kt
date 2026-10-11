@@ -100,6 +100,7 @@ import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsEffect
 import com.theoriacodex.app.settings.SettingsViewModel
 import com.theoriacodex.app.post.PostMutationViewModel
+import com.theoriacodex.app.tags.SearchDraftSelectionProvider
 import com.theoriacodex.app.ui.components.MutationFeedbackHost
 import com.theoriacodex.app.statistics.StatisticsUsageCategory
 import com.theoriacodex.app.source.displayName
@@ -1004,6 +1005,7 @@ internal fun TheoriaAppContent(
         onProfileChanged = { profile -> ensureLikesCodexId(profile) },
     )
 
+    SearchDraftSelectionProvider(searchRouteOwner?.state) {
     TheoriaNightTheme {
         if (!navReady) {
             val promptRemote = updateChoiceRemote
@@ -1923,6 +1925,7 @@ internal fun TheoriaAppContent(
                 },
             )
         }
+    }
     }
 }
 

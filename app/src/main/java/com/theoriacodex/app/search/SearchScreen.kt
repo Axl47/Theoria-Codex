@@ -781,6 +781,7 @@ fun SearchScreen(
             onPostUrlCopied = onPostUrlCopied,
             tagContent = { header, footer ->
                 PostTagActionSection(
+                    draftQuery = state.query.draft,
                     loading = selectedActionPostResolving && !post.hasActionableTags(),
                     header = header,
                     footer = footer,

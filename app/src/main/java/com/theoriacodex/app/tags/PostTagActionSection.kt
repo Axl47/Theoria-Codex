@@ -33,6 +33,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.theoriacodex.app.post.PostTagSelection
+import com.theoriacodex.domain.model.Query
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import com.theoriacodex.app.search.searchScopeLabel
 import com.theoriacodex.app.search.searchTermChipLabel
 import com.theoriacodex.domain.adapter.FacetedSearchScope
@@ -54,6 +59,7 @@ fun PostTagActionSection(
     onRemoveIncludeTerm: (SearchTerm) -> Unit,
     onRemoveExcludeTerm: (SearchTerm) -> Unit,
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
+    draftQuery: Query? = null,
 ) {
     val termGroups = remember(post.taxonomy, post.canonicalTags, post.rawTags) {
         postActionTermGroups(post)
@@ -62,8 +68,9 @@ fun PostTagActionSection(
     val generalTags = remember(terms) {
         terms.filter(SearchTerm::isGeneralPostTag).map(SearchTerm::value).distinct()
     }
-    var tagSelections by remember(post.id.source, post.id.sourcePostId) {
-        mutableStateOf<Map<TagActionSelection, Set<SearchTerm>>>(emptyMap())
+    val draft = draftQuery ?: LocalSearchDraftSelection.current.collectAsStateWithLifecycle(initialValue = null).value
+    val selection = remember(post.id.source, draft) {
+        PostTagSelection(post.id.source, draft?.includeTerms.orEmpty(), draft?.excludeTerms.orEmpty())
     }
     val tagVideoCounts = rememberTagCounts(post.id.source, generalTags, tagVideoCountProvider, fetchTagVideoCounts)
 
@@ -80,44 +87,19 @@ fun PostTagActionSection(
             tagActionGrid(
                 groups = termGroups,
                 videoCounts = tagVideoCounts,
-                includedTerms = tagSelections[TagActionSelection.INCLUDE].orEmpty(),
-                excludedTerms = tagSelections[TagActionSelection.EXCLUDE].orEmpty(),
+                selection = selection,
                 onFavoriteTagLongPress = if (onFavoriteTagLongPress != null) {
                     { tag -> onFavoriteTagLongPress(post.id.source, tag) }
                 } else {
                     null
                 },
                 onIncludeTerm = { term ->
-                    val included = tagSelections[TagActionSelection.INCLUDE].orEmpty()
-                    val excluded = tagSelections[TagActionSelection.EXCLUDE].orEmpty()
-                    if (term in included) {
-                        onRemoveIncludeTerm(term)
-                        tagSelections = tagSelections.removeSelectedTerm(TagActionSelection.INCLUDE, term)
-                    } else {
-                        val accepted = onAddIncludeTerm(term)
-                        if (accepted && term in excluded) onRemoveExcludeTerm(term)
-                        tagSelections = tagSelections.afterSelectionAttempt(
-                            target = TagActionSelection.INCLUDE,
-                            term = term,
-                            accepted = accepted,
-                        )
-                    }
+                    val stored = selection.included(term)
+                    if (stored != null) onRemoveIncludeTerm(stored) else onAddIncludeTerm(term)
                 },
                 onExcludeTerm = { term ->
-                    val included = tagSelections[TagActionSelection.INCLUDE].orEmpty()
-                    val excluded = tagSelections[TagActionSelection.EXCLUDE].orEmpty()
-                    if (term in excluded) {
-                        onRemoveExcludeTerm(term)
-                        tagSelections = tagSelections.removeSelectedTerm(TagActionSelection.EXCLUDE, term)
-                    } else {
-                        val accepted = onAddExcludeTerm(term)
-                        if (accepted && term in included) onRemoveIncludeTerm(term)
-                        tagSelections = tagSelections.afterSelectionAttempt(
-                            target = TagActionSelection.EXCLUDE,
-                            term = term,
-                            accepted = accepted,
-                        )
-                    }
+                    val stored = selection.excluded(term)
+                    if (stored != null) onRemoveExcludeTerm(stored) else onAddExcludeTerm(term)
                 },
             )
         }
@@ -183,42 +165,10 @@ private fun rememberTagCounts(source: SourceKey, tags: List<String>,
     return counts
 }
 
-internal enum class TagActionSelection {
-    INCLUDE,
-    EXCLUDE,
-}
-
-internal fun Map<TagActionSelection, Set<SearchTerm>>.afterSelectionAttempt(
-    target: TagActionSelection,
-    term: SearchTerm,
-    accepted: Boolean,
-): Map<TagActionSelection, Set<SearchTerm>> {
-    if (!accepted) return this
-    val opposite = target.opposite()
-    return this +
-        (opposite to (get(opposite).orEmpty() - term)) +
-        (target to (get(target).orEmpty() + term))
-}
-
-internal fun Map<TagActionSelection, Set<SearchTerm>>.removeSelectedTerm(
-    target: TagActionSelection,
-    term: SearchTerm,
-): Map<TagActionSelection, Set<SearchTerm>> {
-    return this + (target to (get(target).orEmpty() - term))
-}
-
-private fun TagActionSelection.opposite(): TagActionSelection {
-    return when (this) {
-        TagActionSelection.INCLUDE -> TagActionSelection.EXCLUDE
-        TagActionSelection.EXCLUDE -> TagActionSelection.INCLUDE
-    }
-}
-
 private fun LazyListScope.tagActionGrid(
     groups: List<PostActionTermGroup>,
     videoCounts: Map<String, Int?>,
-    includedTerms: Set<SearchTerm>,
-    excludedTerms: Set<SearchTerm>,
+    selection: PostTagSelection,
     onFavoriteTagLongPress: ((String) -> Unit)?,
     onIncludeTerm: (SearchTerm) -> Unit,
     onExcludeTerm: (SearchTerm) -> Unit,
@@ -255,8 +205,8 @@ private fun LazyListScope.tagActionGrid(
                     TagActionCell(
                         label = postActionTermLabel(term),
                         videoCount = generalTag?.let(videoCounts::get),
-                        includeSelected = term in includedTerms,
-                        excludeSelected = term in excludedTerms,
+                        includeSelected = selection.included(term) != null,
+                        excludeSelected = selection.excluded(term) != null,
                         onTagLongPress = if (generalTag != null && onFavoriteTagLongPress != null) {
                             { onFavoriteTagLongPress(generalTag) }
                         } else {
@@ -416,7 +366,7 @@ private fun TagActionPill(
 ) {
     val accent = MaterialTheme.colorScheme.primary
     Surface(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier.semantics { this.selected = selected }.clickable(onClick = onClick),
         shape = RoundedCornerShape(999.dp),
         color = if (selected) {
             accent.copy(alpha = 0.24f)

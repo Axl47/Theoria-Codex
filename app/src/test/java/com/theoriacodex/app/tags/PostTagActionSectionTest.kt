@@ -67,34 +67,6 @@ class PostTagActionSectionTest {
         assertEquals(listOf(SearchTerm("legacy tag")), postActionTerms(post))
     }
 
-    @Test
-    fun `selection state changes only after acceptance and preserves exact term identity`() {
-        val tag = SearchTerm("najar", SearchFacet.TAG, "tag")
-        val artist = SearchTerm("najar", SearchFacet.ARTIST, "artist")
-        val initial = mapOf(
-            TagActionSelection.INCLUDE to setOf(tag),
-            TagActionSelection.EXCLUDE to setOf(artist),
-        )
-
-        val rejected = initial.afterSelectionAttempt(
-            target = TagActionSelection.INCLUDE,
-            term = artist,
-            accepted = false,
-        )
-        assertEquals(initial, rejected)
-
-        val accepted = initial.afterSelectionAttempt(
-            target = TagActionSelection.INCLUDE,
-            term = artist,
-            accepted = true,
-        )
-        assertEquals(setOf(tag, artist), accepted[TagActionSelection.INCLUDE])
-        assertTrue(accepted[TagActionSelection.EXCLUDE].orEmpty().isEmpty())
-
-        val removed = accepted.removeSelectedTerm(TagActionSelection.INCLUDE, artist)
-        assertEquals(setOf(tag), removed[TagActionSelection.INCLUDE])
-    }
-
     private fun samplePost(
         canonicalTags: List<String> = emptyList(),
         taxonomy: List<PostTaxonomyTerm>,
