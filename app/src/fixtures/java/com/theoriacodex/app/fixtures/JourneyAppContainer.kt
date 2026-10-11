@@ -43,6 +43,8 @@ import com.theoriacodex.data.repository.FileBackedQueryRepository
 import com.theoriacodex.data.repository.FileBackedReadingPositionRepository
 import com.theoriacodex.data.repository.FileBackedSavedSearchRepository
 import com.theoriacodex.data.repository.ProfileBackupService
+import com.theoriacodex.data.repository.ProfileDeletionService
+import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
 import com.theoriacodex.data.repository.OfflineMediaStore
 import com.theoriacodex.data.android.room.RoomProfileBackupStore
 import com.theoriacodex.domain.model.Post
@@ -73,8 +75,9 @@ class JourneyAppContainer(
     private val ownerScope = CoroutineScope(scope.coroutineContext + ownerJob + Dispatchers.IO)
     val registry = JourneySourceRegistry(postsBySource, pageSize)
     val database = TheoriaRoomDatabase.create(appContext, storageDirectory.resolve("journey.db").absolutePath)
-    val content = RoomCodexLikesRepository(database)
-    val settings = DataStoreSettingsRepository(storageDirectory, ownerScope)
+    private val profileWriteGuard = ProfileLibraryWriteGuard()
+    val content = RoomCodexLikesRepository(database, writeGuard = profileWriteGuard)
+    val settings = DataStoreSettingsRepository(storageDirectory, ownerScope, profileWriteGuard = profileWriteGuard)
     private val restore = DataStoreUiRestoreRepository(storageDirectory, ownerScope)
     private val statistics = DataStoreStatisticsRepository(storageDirectory, ownerScope)
     private val durations = RoomMediaDurationRepository(database)
@@ -137,6 +140,8 @@ class JourneyAppContainer(
     override val workflows = WorkflowDependencies(
         LikesCodexSyncService(content, content, offline::withoutOfflineLocations),
         CodexTransferService(content, content, data.cacheRepository, registry, canonicalizePost = offline::withoutOfflineLocations),
+        profileDeletion = ProfileDeletionService(settings, content,
+            storageDirectory.resolve("pending_profile_deletion.json"), profileWriteGuard),
         profileBackup = ProfileBackupService(settings, RoomProfileBackupStore(database), data.savedSearches,
             data.readingPositions, storageDirectory.resolve("pending_profile_restore.json")),
     )
@@ -145,6 +150,7 @@ class JourneyAppContainer(
         restore.awaitReady()
         statistics.awaitReady()
         workflows.profileBackup?.recoverPendingRestore()
+        workflows.profileDeletion?.recoverPendingDeletion()
         offline.store.refresh()
         settings.setEnabledSources(registry.availableSources())
         settings.setResolveUnknownAnimatedDurations(false)

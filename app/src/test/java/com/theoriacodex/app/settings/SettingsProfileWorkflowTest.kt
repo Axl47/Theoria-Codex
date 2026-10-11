@@ -20,6 +20,14 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SettingsProfileWorkflowTest {
+    private fun kotlinx.coroutines.test.TestScope.profileMutations(settings: InMemorySettingsRepository,
+        transactions: com.theoriacodex.data.repository.CodexLikesTransactions): SettingsProfileMutations =
+        DefaultSettingsProfileMutations(com.theoriacodex.data.repository.ProfileDeletionService(settings, transactions,
+            java.nio.file.Files.createTempDirectory("profile-removal").resolve("intent.json").toFile(),
+            com.theoriacodex.data.repository.ProfileLibraryWriteGuard(),
+            fileStore = com.theoriacodex.data.storage.AtomicJsonFileStore(ioDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)),
+            ioDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)))
+
     @Test
     fun `create switch and delete removes only the confirmed profile data`() = runTest {
         val settings = InMemorySettingsRepository().apply {
@@ -30,7 +38,7 @@ class SettingsProfileWorkflowTest {
         val likes = transactions.likes
         val sync = LikesCodexSyncService(transactions, codices)
         val owner = settingsOwner(settingsRepository = settings, codexRepository = codices,
-            likesRepository = likes, profileMutations = DefaultSettingsProfileMutations(sync, codices))
+            likesRepository = likes, profileMutations = profileMutations(settings, transactions))
         runCurrent()
         val first = owner.state.value.activeProfile
         owner.onAction(SettingsAction.AddProfile("  Sketching  "))
@@ -78,7 +86,7 @@ class SettingsProfileWorkflowTest {
         val sync = LikesCodexSyncService(transactions, transactions.codices)
         sync.toggle(second, testPost(sourcePostId = "keep"), listOf("landscape"))
         val owner = settingsOwner(settingsRepository = settings,
-            profileMutations = DefaultSettingsProfileMutations(sync, transactions.codices))
+            profileMutations = profileMutations(settings, transactions))
         runCurrent()
         val profiles = owner.state.value.settings.recommendationProfiles
         val saved = transactions.codices.observeCodices().first()
@@ -100,7 +108,7 @@ class SettingsProfileWorkflowTest {
             updateSettings { it.copy(recommendationProfiles = it.recommendationProfiles.take(1)) }
         }
         val owner = settingsOwner(settingsRepository = settings,
-            profileMutations = DefaultSettingsProfileMutations(sync, transactions.codices))
+            profileMutations = profileMutations(settings, transactions))
         runCurrent()
         val original = owner.state.value.activeProfile
         sync.toggle(original, testPost(sourcePostId = "keep"), listOf("landscape"))
@@ -128,17 +136,17 @@ class SettingsProfileWorkflowTest {
         val second = settings.addRecommendationProfile("Sketching")
         val transactions = InMemoryCodexLikesTransactions()
         var failDeletion = true
-        val codices = object : CodexRepository by transactions.codices {
-            override suspend fun deleteCodex(codexId: String) {
+        val codices = transactions.codices
+        val failing = object : com.theoriacodex.data.repository.CodexLikesTransactions by transactions {
+            override suspend fun removeProfileLibrary(profileId: String) {
                 if (failDeletion) error("disk unavailable")
-                transactions.codices.deleteCodex(codexId)
+                transactions.removeProfileLibrary(profileId)
             }
         }
-        val sync = LikesCodexSyncService(transactions, codices)
         val collection = codices.ensureCodex(profileScopedCodexId(second.profileId, "saved"), "Sketch saved")
         codices.addItem(collection.codexId, testPost(sourcePostId = "keep-until-deleted"))
         val owner = settingsOwner(settingsRepository = settings, codexRepository = codices,
-            profileMutations = DefaultSettingsProfileMutations(sync, codices))
+            profileMutations = profileMutations(settings, failing))
         runCurrent()
         owner.onAction(SettingsAction.RequestRemoveProfile(second.profileId))
         owner.onAction(SettingsAction.ConfirmRemoveProfile)
@@ -159,7 +167,7 @@ class SettingsProfileWorkflowTest {
         val settings = InMemorySettingsRepository()
         val second = settings.addRecommendationProfile("Sketching")
         val owner = settingsOwner(settingsRepository = settings, profileMutations = object : SettingsProfileMutations {
-            override suspend fun removeProfileData(profileId: String) { throw CancellationException("route closed") }
+            override suspend fun removeProfile(profileId: String) { throw CancellationException("route closed") }
         })
         runCurrent()
         owner.onAction(SettingsAction.RequestRemoveProfile(second.profileId))

@@ -275,6 +275,9 @@ data class CodexProfileDeleteResult(
  * store, without making Room or another database part of the domain-facing API.
  */
 interface CodexLikesTransactions {
+    /** Deletes every profile-owned collection and Like in one transaction, preserving shared Posts. */
+    suspend fun removeProfileLibrary(profileId: String)
+
     suspend fun importCodex(
         codexId: String,
         name: String,

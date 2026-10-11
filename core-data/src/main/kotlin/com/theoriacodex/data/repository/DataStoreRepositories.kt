@@ -37,6 +37,7 @@ class DataStoreSettingsRepository(
     baseDirectory: File,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     gson: Gson = Gson(),
+    private val profileWriteGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
 ) : SettingsRepository, AsynchronousStore {
     private val storeFile = baseDirectory.resolve(DATASTORE_SETTINGS_FILE_NAME)
     private val legacyFile = baseDirectory.resolve("settings_store.json")
@@ -173,7 +174,10 @@ class DataStoreSettingsRepository(
     }
 
     override suspend fun setActiveProfile(profileId: String) {
-        updateSettings { current -> current.copy(activeProfileId = profileId) }
+        updateSettings { current ->
+            profileWriteGuard.requireProfileWritable(profileId)
+            current.copy(activeProfileId = profileId)
+        }
     }
 
     override suspend fun addRecommendationProfile(name: String): RecommendationProfile {
@@ -195,6 +199,7 @@ class DataStoreSettingsRepository(
         tags: List<String>,
     ): Boolean {
         return mutateSettings { current ->
+            profileWriteGuard.requireProfileWritable(profileId)
             RepositoryPolicies.addBlacklistEntry(current, profileId, source, tags)
         }
     }
@@ -205,18 +210,21 @@ class DataStoreSettingsRepository(
         tags: List<String>,
     ): Boolean {
         return mutateSettings { current ->
+            profileWriteGuard.requireProfileWritable(profileId)
             RepositoryPolicies.removeBlacklistEntry(current, profileId, source, tags)
         }
     }
 
     override suspend fun addFavoriteTag(profileId: String, source: SourceKey, tag: String): Boolean {
         return mutateSettings { current ->
+            profileWriteGuard.requireProfileWritable(profileId)
             RepositoryPolicies.addFavoriteTag(current, profileId, source, tag)
         }
     }
 
     override suspend fun removeFavoriteTag(profileId: String, source: SourceKey, tag: String): Boolean {
         return mutateSettings { current ->
+            profileWriteGuard.requireProfileWritable(profileId)
             RepositoryPolicies.removeFavoriteTag(current, profileId, source, tag)
         }
     }

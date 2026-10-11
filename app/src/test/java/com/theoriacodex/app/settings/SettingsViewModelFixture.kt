@@ -24,7 +24,7 @@ internal fun kotlinx.coroutines.test.TestScope.settingsOwner(
     availableSources: StateFlow<Set<SourceKey>> = MutableStateFlow(setOf(SourceKey.PIXIV)),
     likesRepository: com.theoriacodex.data.repository.LikesRepository = InMemoryLikesRepository(),
     codexRepository: com.theoriacodex.data.repository.CodexRepository = InMemoryCodexRepository(),
-    profileMutations: SettingsProfileMutations = NoOpSettingsProfileMutations,
+    profileMutations: SettingsProfileMutations? = null,
 ): SettingsViewModel {
     val statisticsRepository = InMemoryStatisticsRepository()
     return SettingsViewModel(
@@ -41,7 +41,9 @@ internal fun kotlinx.coroutines.test.TestScope.settingsOwner(
                 elapsedRealtime = { 0L },
                 tickIntervalMs = 0L,
             ),
-            profileMutations = profileMutations,
+            profileMutations = profileMutations ?: object : SettingsProfileMutations {
+                override suspend fun removeProfile(profileId: String) { settingsRepository.removeRecommendationProfile(profileId) }
+            },
             accounts = accounts,
             availableSources = availableSources,
             legacyJsonRecoveries = legacyJsonRecoveries,
@@ -106,8 +108,4 @@ internal class FakeSettingsAccountGateway(
         rule34XxxCredential = null
         return true
     }
-}
-
-private data object NoOpSettingsProfileMutations : SettingsProfileMutations {
-    override suspend fun removeProfileData(profileId: String) = Unit
 }
