@@ -85,16 +85,16 @@ private class AndroidPostDownloadBackend(
             val pages = galleryDownloadPages(post)
             if (pages.isNotEmpty()) return PreparedPostDownload.Gallery(pages)
         }
-        return PreparedPostDownload.Transfer {
-            val selected = request.selectedMedia
-            if (selected == null) PostDownloadService.enqueuePostDownloadId(context, post, settings, request.marker)
-            else {
-                val media = if (request.restored) post.media.ifEmpty { listOfNotNull(post.full) }.getOrNull(selected.pageIndex)
-                    ?: throw DownloadPreparationException("This gallery page is no longer available.") else selected.media
-                PostDownloadService.enqueueViewerDownloadId(context, post, media, selected.pageIndex, selected.totalPages,
-                    settings, request.marker)
-            }
-        }
+        return PreparedPostDownload.Transfer { enqueueResolved(request, post, settings) }
+    }
+
+    private fun enqueueResolved(request: PostDownloadRequest, post: Post, settings: CacheSettings): Long? {
+        val selected = request.selectedMedia
+            ?: return PostDownloadService.enqueuePostDownloadId(context, post, settings, request.marker)
+        val media = if (request.restored) post.media.ifEmpty { listOfNotNull(post.full) }.getOrNull(selected.pageIndex)
+            ?: throw DownloadPreparationException("This gallery page is no longer available.") else selected.media
+        return PostDownloadService.enqueueViewerDownloadId(context, post, media, selected.pageIndex, selected.totalPages,
+            settings, request.marker)
     }
 
     override suspend fun findTransfer(marker: String): Long? = withContext(Dispatchers.IO) {

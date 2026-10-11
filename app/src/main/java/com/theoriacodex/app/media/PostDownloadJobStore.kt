@@ -78,6 +78,6 @@ internal class FileBackedPostDownloadJobStore(private val file: File,
                 }) } })
             }) } })
         }
-        store.write(file, root)
+        store.writeIntent(file, root, maxBytes = 8 * 1024 * 1024)
     }
 }

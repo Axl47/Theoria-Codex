@@ -114,12 +114,15 @@ internal class PostDownloadQueue(
             .let { batches -> batches.filter { it.active } + batches.filterNot { it.active }.takeLast(20) }
             .sortedBy { it.id }
         rebuildLocations()
+        var admitted = false
         try {
             checkpoint()
-        } catch (error: Exception) {
-            mutableBatches.value = mutableBatches.value.filterNot { it.id == batchId }
-            rebuildLocations()
-            throw error
+            admitted = true
+        } finally {
+            if (!admitted) {
+                mutableBatches.value = mutableBatches.value.filterNot { it.id == batchId }
+                rebuildLocations()
+            }
         }
         schedule()
         return batchId
@@ -143,10 +146,16 @@ internal class PostDownloadQueue(
         val failed = mutableBatches.value.find { it.id == batchId }?.items.orEmpty()
             .filter { it.status == PostDownloadStatus.FAILED }
         failed.forEach { item ->
-            val completed = item.downloadId?.let { backend.snapshot(it).status == PostDownloadStatus.SAVED } == true
-            if (completed) update(item.id) { it.copy(status = PostDownloadStatus.SAVED, message = null) }
-            else {
-                item.downloadId?.let { backend.cancel(it) }
+            val nativeId = item.downloadId ?: if (item.enqueuePending) backend.findTransfer(item.request.marker) else null
+            // Losing a marker to a native redirect cannot authorize a duplicate of an unknown transfer.
+            if (item.enqueuePending && nativeId == null) return@forEach
+            val nativeStatus = nativeId?.let { backend.snapshot(it).status }
+            if (nativeStatus == PostDownloadStatus.SAVED || nativeStatus == PostDownloadStatus.ALREADY_EXISTS) {
+                update(item.id) { it.copy(status = requireNotNull(nativeStatus), downloadId = nativeId, enqueuePending = false, message = null) }
+            } else if (nativeStatus in ACTIVE_DOWNLOAD_STATUSES) {
+                update(item.id) { it.copy(status = PostDownloadStatus.QUEUED, downloadId = nativeId, enqueuePending = false, message = null) }
+            } else {
+                nativeId?.let { backend.cancel(it) }
                 update(item.id) { it.copy(status = PostDownloadStatus.QUEUED, downloadId = null, enqueuePending = false,
                     request = it.request.copy(marker = UUID.randomUUID().toString()), message = null) }
             }
@@ -179,18 +188,7 @@ internal class PostDownloadQueue(
     private suspend fun execute(item: PostDownloadItem) {
         var downloadId: Long? = item.downloadId
         try {
-            if (item.request.restored && downloadId != null) {
-                awaitTransfer(item.id, requireNotNull(downloadId))
-                return
-            }
-            if (item.enqueuePending) {
-                downloadId = backend.findTransfer(item.request.marker)
-                if (downloadId == null) throw DownloadPreparationException("Download start could not be recovered. Check Downloads before retrying.")
-                update(item.id) { it.copy(downloadId = downloadId, enqueuePending = false) }
-                checkpoint()
-                awaitTransfer(item.id, requireNotNull(downloadId))
-                return
-            }
+            if (resumeExistingTransfer(item)) return
             update(item.id) { it.copy(status = PostDownloadStatus.PREPARING, downloadId = null, downloadedBytes = 0, totalBytes = null) }
             checkpoint()
             val prepared = backend.prepare(item.request)
@@ -222,9 +220,21 @@ internal class PostDownloadQueue(
             com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation { checkpoint() }
         } finally {
             if (currentItem(item.id)?.status == PostDownloadStatus.CANCELLED) {
-                withContext(NonCancellable) { downloadId?.let { backend.cancel(it) } }
+                withContext(NonCancellable) { (downloadId ?: currentItem(item.id)?.downloadId)?.let { backend.cancel(it) } }
             }
         }
+    }
+
+    private suspend fun resumeExistingTransfer(item: PostDownloadItem): Boolean {
+        val nativeId = item.downloadId ?: if (item.enqueuePending) backend.findTransfer(item.request.marker) else return false
+        if (nativeId == null) throw DownloadPreparationException(
+            "Android could not identify this transfer. Check Downloads; start a new download if needed.")
+        if (item.downloadId == null) {
+            update(item.id) { it.copy(downloadId = nativeId, enqueuePending = false) }
+            checkpoint()
+        }
+        awaitTransfer(item.id, nativeId)
+        return true
     }
 
     private suspend fun awaitTransfer(itemId: Long, downloadId: Long) {

@@ -126,4 +126,52 @@ class PostDownloadRecoveryTest {
         } finally { scope.cancel() }
     }
 
+    @Test fun `retry reconciles an enqueue gap and never duplicates an unidentified native transfer`() = runTest {
+        val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+        var found: Long? = null
+        val store = object : PostDownloadJobStore {
+            override suspend fun load() = listOf(PostDownloadBatch(1, "Gap", listOf(PostDownloadItem(2,
+                PostDownloadRequest(testPost(), restored = true), PostDownloadStatus.FAILED, enqueuePending = true))))
+            override suspend fun save(batches: List<PostDownloadBatch>) = Unit
+        }
+        val backend = object : PostDownloadBackend {
+            override suspend fun prepare(request: PostDownloadRequest): PreparedPostDownload = error("No duplicate")
+            override suspend fun findTransfer(marker: String) = found
+            override suspend fun snapshot(downloadId: Long) = DownloadTransferSnapshot(PostDownloadStatus.SAVED)
+            override suspend fun cancel(downloadId: Long) = error("Completed file is protected")
+        }
+        try {
+            val queue = PostDownloadQueue(scope, backend, jobStore = store)
+            queue.retryFailed(1)
+            assertEquals(PostDownloadStatus.FAILED, queue.batches.value.single().items.single().status)
+            found = 99L
+            queue.retryFailed(1)
+            assertEquals(PostDownloadStatus.SAVED, queue.batches.value.single().items.single().status)
+            assertEquals(99L, queue.batches.value.single().items.single().downloadId)
+        } finally { scope.cancel() }
+    }
+
+    @Test fun `a transient restore failure can be retried in the same owner`() = runTest {
+        val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+        var first = true
+        val store = object : PostDownloadJobStore {
+            override suspend fun load(): List<PostDownloadBatch> {
+                if (first) { first = false; throw java.io.IOException("temporarily unreadable") }
+                return emptyList()
+            }
+            override suspend fun save(batches: List<PostDownloadBatch>) = Unit
+        }
+        val backend = object : PostDownloadBackend {
+            override suspend fun prepare(request: PostDownloadRequest): PreparedPostDownload = error("Nothing queued")
+            override suspend fun snapshot(downloadId: Long): DownloadTransferSnapshot = error("Nothing queued")
+            override suspend fun cancel(downloadId: Long) = Unit
+        }
+        try {
+            val queue = PostDownloadQueue(scope, backend, jobStore = store)
+            assertTrue(runCatching { queue.restore() }.isFailure)
+            queue.restore()
+            assertTrue(queue.batches.value.isEmpty())
+        } finally { scope.cancel() }
+    }
+
 }

@@ -45,6 +45,6 @@ class OfflinePendingJobStore(private val file: File, private val store: AtomicJs
                 }) } })
             }) } })
         }
-        store.write(file, root)
+        store.writeIntent(file, root, maxBytes = 8 * 1024 * 1024)
     }
 }
