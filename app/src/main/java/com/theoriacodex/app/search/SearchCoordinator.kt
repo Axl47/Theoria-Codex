@@ -1,6 +1,7 @@
 package com.theoriacodex.app.search
 
 import com.theoriacodex.app.media.recoverRemoteMedia
+import com.theoriacodex.app.feed.settleFeedContinuations
 import com.theoriacodex.app.recommend.recommendationTaxonomyFor
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.modeKey
@@ -232,24 +233,15 @@ class SearchCoordinator(
         )
         currentCoroutineContext().ensureActive()
         val statuses = mergeStatuses(excluded, result.statuses)
-        if (isPixivUnknownFailure(result.items, statuses)) {
-            return SearchExecutionResult.Failure(
-                executionKey, query, sourceScope, statuses, PIXIV_UNKNOWN_RETRY_MESSAGE,
-            )
+        val next = continuation(executionKey, query, sourceScope, enabledSources, availableSources, weights,
+            unifiedPageTokens = result.nextPageTokens, unifiedQueryOverrides = result.queriesBySource)
+            .copy(failedSources = statuses.filter { it.state == SourceRunState.FAILED }.mapTo(mutableSetOf()) { it.source })
+        if (statuses.none { it.state == SourceRunState.SUCCESS }) {
+            return SearchExecutionResult.Failure(executionKey, query, sourceScope, statuses,
+                unifiedFailureMessage(result.items, statuses), next)
         }
         rememberSeenTags(result.items)
-        return SearchExecutionResult.Success(
-            executionKey = executionKey,
-            query = query,
-            sourceScope = sourceScope,
-            posts = result.items,
-            statuses = statuses,
-            continuation = continuation(
-                executionKey, query, sourceScope, enabledSources, availableSources, weights,
-                unifiedPageTokens = result.nextPageTokens,
-                unifiedQueryOverrides = result.queriesBySource,
-            ),
-        )
+        return SearchExecutionResult.Success(executionKey, query, sourceScope, result.items, statuses, next)
     }
 
     private suspend fun executeSourceInitial(
@@ -336,6 +328,7 @@ class SearchCoordinator(
         val updated = base.copy(
             unifiedPageTokens = base.unifiedPageTokens + result.nextPageTokens,
             unifiedQueryOverrides = base.unifiedQueryOverrides + result.queriesBySource,
+            failedSources = base.failedSources - source,
         )
         return SearchPageResult.Success(base.executionKey, result.items, result.statuses, updated)
     }
@@ -388,7 +381,7 @@ class SearchCoordinator(
             continuation.enabledSources,
         )
         val pageable = continuation.enabledSources.filterTo(mutableSetOf()) { source ->
-            !continuation.unifiedPageTokens[source].isNullOrBlank()
+            source !in continuation.failedSources && !continuation.unifiedPageTokens[source].isNullOrBlank()
         }
         if (pageable.isEmpty()) {
             return SearchPageResult.Success(
@@ -407,22 +400,18 @@ class SearchCoordinator(
         )
         currentCoroutineContext().ensureActive()
         val statuses = mergeStatuses(excluded, result.statuses)
-        if (isPixivUnknownFailure(result.items, statuses)) {
-            return SearchPageResult.Failure(
-                continuation.executionKey, statuses, PIXIV_UNKNOWN_RETRY_MESSAGE,
-            )
+        if (statuses.none { it.state == SourceRunState.SUCCESS }) {
+            return SearchPageResult.Failure(continuation.executionKey, statuses, unifiedFailureMessage(result.items, statuses))
         }
         rememberSeenTags(result.items)
-        val nextTokens = continuation.unifiedPageTokens.toMutableMap().apply {
-            val failed = result.statuses.filter { it.state == SourceRunState.FAILED }.map { it.source }.toSet()
-            pageable.filterNot { it in failed }.forEach { source -> put(source, null) }
-            putAll(result.nextPageTokens)
-        }
+        val nextTokens = settleFeedContinuations(continuation.unifiedPageTokens, pageable, result.nextPageTokens, statuses)
+            .minus(pageable - registry.availableSources())
+        val failed = statuses.filter { it.state == SourceRunState.FAILED }.mapTo(mutableSetOf()) { it.source }
         return SearchPageResult.Success(
             continuation.executionKey,
             result.items,
             statuses,
-            continuation.copy(unifiedPageTokens = nextTokens),
+            continuation.copy(unifiedPageTokens = nextTokens, failedSources = continuation.failedSources + failed),
         )
     }
 
@@ -465,15 +454,29 @@ class SearchCoordinator(
         }
     }
 
-    override suspend fun recordAcceptedSearch(query: Query, sourceScope: SearchSourceScope, executionKey: String) {
-        val kind = when (sourceScope) {
+    override suspend fun recordAcceptedSearch(result: SearchExecutionResult) {
+        val scope = result.sourceScope
+        val kind = when (scope) {
             SearchSourceScope.GlobalUnified -> RecentSearchKind.UNIFIED
             is SearchSourceScope.Single -> RecentSearchKind.SOURCE
             is SearchSourceScope.Temporary -> RecentSearchKind.MULTI_SEARCH
         }
-        val sources = effectiveEnabledSources(sourceScope).inPresentationOrder()
-        runCatchingPreservingCancellation { recentsRepository.recordSearch(query, executionKey, kind, sources) }
-        runCatchingPreservingCancellation { statisticsRepository.recordSearch(sources.toSet()) }
+        val captured = when (result) {
+            is SearchExecutionResult.Success -> result.continuation.enabledSources
+            is SearchExecutionResult.Failure -> result.continuation?.enabledSources.orEmpty()
+        }
+        val sources = when (scope) {
+            is SearchSourceScope.Single -> listOf(scope.source)
+            is SearchSourceScope.Temporary -> scope.sources
+            SearchSourceScope.GlobalUnified -> captured.inPresentationOrder()
+        }
+        runCatchingPreservingCancellation {
+            recentsRepository.recordSearch(result.query, result.executionKey, kind, sources)
+        }
+        if (result.completedSuccessfully) runCatchingPreservingCancellation {
+            statisticsRepository.recordSearch(result.statuses.filter { it.state != SourceRunState.EXCLUDED }
+                .mapTo(mutableSetOf()) { it.source })
+        }
     }
 
     internal suspend fun fetchAutocomplete(
@@ -757,6 +760,11 @@ class SearchCoordinator(
         first: List<SourceRunStatus>,
         second: List<SourceRunStatus>,
     ): List<SourceRunStatus> = (first + second).associateBy { it.source }.values.sortedBy { it.source.name }
+
+    private fun unifiedFailureMessage(posts: List<Post>, statuses: List<SourceRunStatus>): String =
+        if (isPixivUnknownFailure(posts, statuses)) PIXIV_UNKNOWN_RETRY_MESSAGE else
+            buildSourceFailureMessage(statuses) ?: buildSourceAuthErrorMessage(statuses)
+                ?: "These search options are not supported by the selected sources."
 
     private fun isPixivUnknownFailure(posts: List<Post>, statuses: List<SourceRunStatus>): Boolean =
         posts.isEmpty() && statuses.any { status ->

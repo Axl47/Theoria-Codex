@@ -666,7 +666,7 @@ internal class SearchViewModel(
         val succeeded = completeRequest(requestId, result, expectedExecutionKey)
         persistDraftQuery()
         if (persistAcceptedResult) withContext(NonCancellable) {
-            executionService.recordAcceptedSearch(result.query, result.sourceScope, result.executionKey)
+            executionService.recordAcceptedSearch(result)
         }
         if (succeeded) onSuccess()
     }
@@ -684,7 +684,7 @@ internal class SearchViewModel(
         }
         return when (result) {
             is SearchExecutionResult.Failure -> {
-                activeContinuation = null
+                activeContinuation = result.continuation
                 rememberAppliedQuery(result.query, result.sourceScope)
                 reduce(
                     SearchStateChange.RequestFailed(
