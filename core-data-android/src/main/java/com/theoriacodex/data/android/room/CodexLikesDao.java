@@ -79,6 +79,11 @@ public interface CodexLikesDao {
             + "ORDER BY posts.source ASC, codex_items.saved_at_epoch_ms DESC, posts.source_post_id ASC")
     Flow<List<CodexPostRow>> observeCodexPostsBySource(String codexId);
 
+    @Query("SELECT DISTINCT posts.source, posts.source_post_id, posts.payload_json FROM posts "
+            + "INNER JOIN codex_items ON posts.source = codex_items.source AND posts.source_post_id = codex_items.source_post_id "
+            + "WHERE codex_items.codex_id IN (:codexIds) ORDER BY posts.source ASC, posts.source_post_id ASC")
+    Flow<List<PostEntity>> observeLibraryPosts(List<String> codexIds);
+
     @Query("SELECT codices.codex_id, "
             + "(SELECT COUNT(*) FROM codex_items WHERE codex_id = codices.codex_id) AS item_count, "
             + "posts.source, posts.source_post_id, posts.payload_json "

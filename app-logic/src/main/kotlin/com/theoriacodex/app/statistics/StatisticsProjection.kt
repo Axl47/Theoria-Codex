@@ -108,11 +108,11 @@ object StatisticsProjection {
         )
     }
 
-    fun prepareContent(codices: List<Codex>, postsByCodex: Map<String, List<Post>>): SavedContentStatistics {
-        val savedPosts = codices.asSequence()
-            .flatMap { codex -> postsByCodex[codex.codexId].orEmpty().asSequence() }
-            .distinctBy(Post::id)
-            .toList()
+    fun prepareContent(codices: List<Codex>, postsByCodex: Map<String, List<Post>>): SavedContentStatistics =
+        prepareContent(codices, codices.flatMap { postsByCodex[it.codexId].orEmpty() })
+
+    fun prepareContent(codices: List<Codex>, posts: List<Post>): SavedContentStatistics {
+        val savedPosts = posts.distinctBy(Post::id)
         val savedCount = savedPosts.size.toLong()
         val savedSourceCounts = savedPosts.groupingBy { post -> post.id.source }.eachCount()
             .mapValues { (_, count) -> count.toLong() }

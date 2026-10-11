@@ -9,7 +9,6 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOn
 import com.theoriacodex.data.repository.CodexRepository
-import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.domain.model.Codex
 import com.theoriacodex.domain.model.Post
@@ -34,7 +33,7 @@ internal class SettingsStatisticsSource(
             .distinctUntilChanged()
             .flatMapLatest(::observeProfileContent)
             .distinctUntilChanged()
-            .map { StatisticsProjection.prepareContent(it.codices, it.postsByCodex) }
+            .map { StatisticsProjection.prepareContent(it.codices, it.posts) }
             .flowOn(computationDispatcher)
         val settled = combine(statisticsRepository.observeStatistics(), content) { lifetime, saved ->
             StatisticsProjection.build(lifetime = lifetime, savedContent = saved)
@@ -50,17 +49,8 @@ internal class SettingsStatisticsSource(
             if (visibleCodices.isEmpty()) {
                 flowOf(SettingsStatisticsContent())
             } else {
-                combine(
-                    visibleCodices.map { codex ->
-                        codexRepository.observeCodexPosts(codex.codexId, CodexSortMode.NEWEST_SAVED)
-                            .map { posts -> codex.codexId to posts }
-                    }
-                ) { postsByCodex ->
-                    SettingsStatisticsContent(
-                        codices = visibleCodices,
-                        postsByCodex = postsByCodex.toMap(),
-                    )
-                }
+                codexRepository.observeLibraryPosts(visibleCodices.mapTo(linkedSetOf()) { it.codexId })
+                    .map { SettingsStatisticsContent(visibleCodices, it) }
             }
         }
     }
@@ -68,5 +58,5 @@ internal class SettingsStatisticsSource(
 
 private data class SettingsStatisticsContent(
     val codices: List<Codex> = emptyList(),
-    val postsByCodex: Map<String, List<Post>> = emptyMap(),
+    val posts: List<Post> = emptyList(),
 )

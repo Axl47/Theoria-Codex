@@ -28,6 +28,7 @@ import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -47,6 +48,7 @@ class RoomCodexLikesRepository(
 ) : CodexRepository, LikesRepository, CodexLikesTransactions {
     private val dao = database.codexLikesDao()
     private val codec = RoomPayloadCodec(gson)
+    private val postCodec = LocalPostPayloadCodec(gson)
     private val sharedPostPayloads = SharedPostPayloadWriter(dao, LocalPostPayloadCodec(gson))
     private val summaries = RoomCodexSummaryQueries(dao, LocalPostPayloadCodec(gson))
 
@@ -175,8 +177,12 @@ class RoomCodexLikesRepository(
             CodexSortMode.OLDEST_SAVED -> dao.observeCodexPostsOldest(codexId)
             CodexSortMode.BY_SOURCE -> dao.observeCodexPostsBySource(codexId)
         }
-        return rows.map { values -> values.map(codec::decodePostRow) }.flowOn(Dispatchers.Default)
+        return rows.map { values -> values.map { PostEntity(it.source, it.sourcePostId, it.payloadJson) } }
+            .decodePostSnapshots(postCodec)
     }
+
+    override fun observeLibraryPosts(codexIds: Set<String>): Flow<List<Post>> =
+        if (codexIds.isEmpty()) flowOf(emptyList()) else dao.observeLibraryPosts(codexIds.sorted()).decodePostSnapshots(postCodec)
 
     override suspend fun getPost(postId: PostId): Post? {
         return database.withTransaction {

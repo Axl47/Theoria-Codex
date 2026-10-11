@@ -11,6 +11,8 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
 
@@ -25,6 +27,11 @@ interface CodexRepository {
     suspend fun deleteCodex(codexId: String)
     fun observeCodexItems(codexId: String): Flow<List<CodexItem>>
     fun observeCodexPosts(codexId: String, sort: CodexSortMode): Flow<List<Post>>
+    /** A unique saved-library snapshot for read models that do not need per-collection memberships. */
+    fun observeLibraryPosts(codexIds: Set<String>): Flow<List<Post>> = if (codexIds.isEmpty()) flowOf(emptyList()) else
+        combine(codexIds.sorted().map { observeCodexPosts(it, CodexSortMode.NEWEST_SAVED) }) { lists ->
+            lists.flatMap { it }.distinctBy(Post::id)
+        }
     suspend fun getPost(postId: com.theoriacodex.domain.model.PostId): Post?
     /** Commits the unique selection atomically; missing collections fail, duplicates return zero. */
     suspend fun addItems(codexId: String, posts: List<Post>): Int

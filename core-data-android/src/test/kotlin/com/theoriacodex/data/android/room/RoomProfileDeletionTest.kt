@@ -23,6 +23,21 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class RoomProfileDeletionTest {
+    @Test fun `saved-library observation publishes unique canonical Posts across collection memberships`() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(),
+            TheoriaRoomDatabase::class.java).allowMainThreadQueries().build()
+        try {
+            val repository = RoomCodexLikesRepository(database)
+            val first = repository.ensureCodex("first", "First")
+            val second = repository.ensureCodex("second", "Second")
+            repository.addItems(first.codexId, listOf(post("shared"), post("one")))
+            repository.addItems(second.codexId, listOf(post("shared"), post("two")))
+            val posts = repository.observeLibraryPosts(setOf(first.codexId, second.codexId)).first()
+            assertEquals(setOf("shared", "one", "two"), posts.map { it.id.sourcePostId }.toSet())
+            assertEquals(3, posts.size)
+        } finally { database.close() }
+    }
+
     @Test fun `a later collection deletion failure rolls back the entire profile and preserves shared Posts`() = runTest {
         val database = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(),
             TheoriaRoomDatabase::class.java).allowMainThreadQueries().build()
