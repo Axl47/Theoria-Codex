@@ -5,6 +5,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -38,6 +40,9 @@ import com.theoriacodex.domain.model.Query
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.Role
 import com.theoriacodex.app.search.searchScopeLabel
 import com.theoriacodex.app.search.searchTermChipLabel
 import com.theoriacodex.domain.adapter.FacetedSearchScope
@@ -74,6 +79,8 @@ fun PostTagActionSection(
     }
     val tagVideoCounts = rememberTagCounts(post.id.source, generalTags, tagVideoCountProvider, fetchTagVideoCounts)
 
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columns = if (maxWidth.value >= 354f) 3 else 2
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -86,6 +93,7 @@ fun PostTagActionSection(
         } else {
             tagActionGrid(
                 groups = termGroups,
+                columns = columns,
                 videoCounts = tagVideoCounts,
                 selection = selection,
                 onFavoriteTagLongPress = if (onFavoriteTagLongPress != null) {
@@ -104,6 +112,7 @@ fun PostTagActionSection(
             )
         }
         item(key = "footer") { footer() }
+    }
     }
 }
 
@@ -128,7 +137,10 @@ fun FavoriteTagActionGrid(
         return
     }
 
-    tags.chunked(3).forEach { rowTags ->
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columns = if (maxWidth.value >= 354f) 3 else 2
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    tags.chunked(columns).forEach { rowTags ->
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -143,9 +155,11 @@ fun FavoriteTagActionGrid(
                     modifier = Modifier.weight(1f),
                 )
             }
-            repeat(3 - rowTags.size) {
+            repeat(columns - rowTags.size) {
                 Spacer(modifier = Modifier.weight(1f))
             }
+        }
+    }
         }
     }
 }
@@ -167,6 +181,7 @@ private fun rememberTagCounts(source: SourceKey, tags: List<String>,
 
 private fun LazyListScope.tagActionGrid(
     groups: List<PostActionTermGroup>,
+    columns: Int,
     videoCounts: Map<String, Int?>,
     selection: PostTagSelection,
     onFavoriteTagLongPress: ((String) -> Unit)?,
@@ -192,7 +207,7 @@ private fun LazyListScope.tagActionGrid(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        val rows = group.terms.chunked(3)
+        val rows = group.terms.chunked(columns)
         items(rows.size, key = { "row:$groupIndex:$it" }, contentType = { "tags" }) { rowIndex ->
             val rowTerms = rows[rowIndex]
             Row(
@@ -217,7 +232,7 @@ private fun LazyListScope.tagActionGrid(
                         modifier = Modifier.weight(1f),
                     )
                 }
-                repeat(3 - rowTerms.size) {
+                repeat(columns - rowTerms.size) {
                     Spacer(modifier = Modifier.weight(1f))
                 }
             }
@@ -267,12 +282,14 @@ private fun TagActionCell(
         ) {
             TagActionPill(
                 label = "+",
+                actionLabel = "Include $label in Search",
                 selected = includeSelected,
                 onClick = onInclude,
                 modifier = Modifier.weight(1f),
             )
             TagActionPill(
                 label = "-",
+                actionLabel = "Exclude $label from Search",
                 selected = excludeSelected,
                 onClick = onExclude,
                 modifier = Modifier.weight(1f),
@@ -310,11 +327,13 @@ private fun FavoriteTagActionCell(
         ) {
             TagActionPill(
                 label = "+",
+                actionLabel = "Include $tag in Search",
                 selected = false,
                 onClick = onAdd,
                 modifier = Modifier.weight(1f),
             )
             TagActionPill(
+                actionLabel = "Remove $tag from favorites",
                 icon = {
                     Icon(
                         imageVector = Icons.Default.Delete,
@@ -358,6 +377,7 @@ fun TagSelectionSurface(
 
 @Composable
 private fun TagActionPill(
+    actionLabel: String,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -366,7 +386,11 @@ private fun TagActionPill(
 ) {
     val accent = MaterialTheme.colorScheme.primary
     Surface(
-        modifier = modifier.semantics { this.selected = selected }.clickable(onClick = onClick),
+        modifier = modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics {
+            this.selected = selected
+            contentDescription = actionLabel
+            stateDescription = if (selected) "Selected" else "Not selected"
+        }.clickable(role = Role.Button, onClickLabel = actionLabel, onClick = onClick),
         shape = RoundedCornerShape(999.dp),
         color = if (selected) {
             accent.copy(alpha = 0.24f)
