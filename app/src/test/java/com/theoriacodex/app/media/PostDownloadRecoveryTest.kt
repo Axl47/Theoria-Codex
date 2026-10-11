@@ -174,4 +174,26 @@ class PostDownloadRecoveryTest {
         } finally { scope.cancel() }
     }
 
+    @Test fun `a restored cancelled enqueue gap reconciles its native transfer before returning`() = runTest {
+        val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+        val cancelled = mutableListOf<Long>()
+        val store = object : PostDownloadJobStore {
+            override suspend fun load() = listOf(PostDownloadBatch(1, "Cancelled", listOf(PostDownloadItem(2,
+                PostDownloadRequest(testPost()), PostDownloadStatus.CANCELLED, enqueuePending = true))))
+            override suspend fun save(batches: List<PostDownloadBatch>) = Unit
+        }
+        val backend = object : PostDownloadBackend {
+            override suspend fun prepare(request: PostDownloadRequest): PreparedPostDownload = error("Cancelled")
+            override suspend fun findTransfer(marker: String) = 99L
+            override suspend fun snapshot(downloadId: Long): DownloadTransferSnapshot = error("Cancelled")
+            override suspend fun cancel(downloadId: Long) { cancelled += downloadId }
+        }
+        try {
+            val queue = PostDownloadQueue(scope, backend, jobStore = store)
+            queue.restore()
+            assertEquals(listOf(99L), cancelled)
+            assertEquals(PostDownloadStatus.CANCELLED, queue.batches.value.single().items.single().status)
+        } finally { scope.cancel() }
+    }
+
 }

@@ -89,7 +89,7 @@ internal class PostDownloadQueue(
         if (restored) return@withLock
         val loaded = jobStore?.load().orEmpty()
         loaded.flatMap { it.items }.filter { it.status == PostDownloadStatus.CANCELLED }
-            .forEach { item -> item.downloadId?.let { backend.cancel(it) } }
+            .forEach { item -> cancelNativeTransfer(item) }
         mutableBatches.value = loaded
         rebuildLocations()
         nextId = loaded.flatMap { listOf(it.id) + it.items.map(PostDownloadItem::id) }.maxOrNull() ?: 0L
@@ -137,7 +137,7 @@ internal class PostDownloadQueue(
         }
         checkpoint()
         // A restored native transfer may still be waiting for a worker slot.
-        withContext(NonCancellable) { activeItems.forEach { item -> item.downloadId?.let { backend.cancel(it) } } }
+        withContext(NonCancellable) { activeItems.forEach { item -> cancelNativeTransfer(item) } }
         schedule()
     }
 
@@ -235,6 +235,11 @@ internal class PostDownloadQueue(
         }
         awaitTransfer(item.id, nativeId)
         return true
+    }
+
+    private suspend fun cancelNativeTransfer(item: PostDownloadItem) {
+        val id = item.downloadId ?: if (item.enqueuePending) backend.findTransfer(item.request.marker) else null
+        id?.let { backend.cancel(it) }
     }
 
     private suspend fun awaitTransfer(itemId: Long, downloadId: Long) {

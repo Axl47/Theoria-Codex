@@ -140,20 +140,22 @@ class OfflineMediaCoordinator(
 
     suspend fun remove(owner: String) {
         synchronized(lock) { active[owner] }?.cancelAndJoin()
+        mutableJobs.update { jobs -> jobs[owner]?.let { jobs + (owner to it.copy(isRunning = false, isCancelled = true)) } ?: jobs }
+        checkpoint()
         store.removeOwner(owner)
         mutableJobs.update { it - owner }
         synchronized(lock) { requests.remove(owner); active.remove(owner) }
-        checkpoint()
     }
 
     suspend fun clear() {
         val running = synchronized(lock) { active.values.toList() }
         running.forEach { it.cancel() }
         running.forEach { it.join() }
+        mutableJobs.update { jobs -> jobs.mapValues { (_, job) -> job.copy(isRunning = false, isCancelled = true) } }
+        checkpoint()
         store.clear()
         mutableJobs.value = emptyMap()
         synchronized(lock) { requests.clear(); active.clear() }
-        checkpoint()
     }
 
     suspend fun find(id: PostId): Post? = store.find(id)

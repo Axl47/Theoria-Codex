@@ -87,6 +87,30 @@ class OfflineQueueRecoveryTest {
         } finally { scope.cancel(); directory.deleteRecursively() }
     }
 
+    @Test fun `a failed removal checkpoint preserves completed offline copies`() = runTest {
+        for (clearAll in listOf(false, true)) {
+            val directory = Files.createTempDirectory("offline-remove-intent").toFile()
+            val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+            try {
+                val parent = directory.resolve("queue").apply { mkdirs() }
+                val pending = OfflinePendingJobStore(parent.resolve("intent.json"))
+                val media = OfflineMediaStore(directory.resolve("media"), ioDispatcher = StandardTestDispatcher(testScheduler))
+                val blocked = CompletableDeferred<Unit>()
+                val owner = OfflineMediaCoordinator(media, scope, { it }, { it.media }, { post, _, output ->
+                    if (post.id.sourcePostId == "b") { blocked.complete(Unit); awaitCancellation() }
+                    output.writeText("completed bytes")
+                }, pendingStore = pending)
+                owner.makeAvailableOffline("codex:keep", listOf(post("a"), post("b")))
+                blocked.await()
+                org.junit.Assert.assertTrue(parent.renameTo(directory.resolve("saved-queue")))
+                parent.writeText("storage became unavailable")
+                val result = runCatching { if (clearAll) owner.clear() else owner.remove("codex:keep") }
+                org.junit.Assert.assertTrue(result.exceptionOrNull() is java.io.IOException)
+                assertEquals(1, media.snapshot.value.postCount)
+            } finally { scope.cancel(); directory.deleteRecursively() }
+        }
+    }
+
     private fun post(id: String): Post = Post(PostId(SourceKey.PIXIV, id), ImageRef(null, null, null), null,
         media = listOf(ImageRef("https://example.test/$id.jpg?signed-token=secret", null, "image/jpeg")),
         pageUrl = null, width = null, height = null, canonicalTags = emptyList(), rawTags = emptyList(),
