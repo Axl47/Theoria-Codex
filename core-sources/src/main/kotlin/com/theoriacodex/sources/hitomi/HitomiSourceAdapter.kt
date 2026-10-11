@@ -15,7 +15,6 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
-import com.theoriacodex.domain.encoding.decodePercentEncodedUtf8Strict
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.HITOMI_ARTIST_QUERY_PREFIX
 import com.theoriacodex.domain.model.ImageRef
@@ -39,10 +38,6 @@ import java.io.IOException
 import java.net.URI
 import java.net.URLEncoder
 import java.security.MessageDigest
-import java.time.LocalDate
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.max
 import kotlinx.coroutines.CancellationException
@@ -848,29 +843,14 @@ class HitomiSourceAdapter(
     }
 
     private suspend fun JsonObject.toPost(fallbackGalleryId: Int, sparse: Boolean): Post {
-        val galleryId = stringValue("id")?.toIntOrNull() ?: fallbackGalleryId
-        val taxonomy = parseTaxonomy()
-        val files = arrayValue("files")
-            ?.mapIndexed { index, element ->
-                element.asObjectOrNull()?.toHitomiMediaFile()
-                    ?: throw HitomiGalleryException(
-                        reason = SourceFailureReason.PARSE,
-                        message = "Hitomi gallery $galleryId had invalid file metadata at index $index",
-                    )
-            }
-            .orEmpty()
-        val animated = taxonomy.any { term ->
-            term.facet == SearchFacet.TAG && term.value.equals("animated", ignoreCase = true)
-        }
-        val type = stringValue("type")?.lowercase(Locale.ROOT)
-        val videoFilename = stringValue("videofilename")
-        val hasPlayableVideo = type == HITOMI_ANIME_TYPE && videoFilename != null
-        if (files.isEmpty() && !hasPlayableVideo) {
-            throw HitomiGalleryException(
-                reason = SourceFailureReason.PARSE,
-                message = "Hitomi gallery $galleryId did not contain usable media files",
-            )
-        }
+        val metadata = parseHitomiGallery(this, fallbackGalleryId)
+        val galleryId = metadata.id
+        val taxonomy = metadata.taxonomy
+        val files = metadata.files
+        val animated = metadata.animated
+        val type = metadata.type
+        val videoFilename = metadata.videoFilename
+        val hasPlayableVideo = metadata.hasPlayableVideo
 
         val posterFile = if (type == HITOMI_ANIME_TYPE && videoFilename != null) {
             files.lastOrNull()
@@ -920,13 +900,13 @@ class HitomiSourceAdapter(
         } else {
             files.size
         }
-        val creatorProfiles = parseCreatorProfiles()
+        val creatorProfiles = metadata.creators
         val primaryCreator = creatorProfiles.firstOrNull()
         val canonicalTags = taxonomy
             .filter { term -> term.facet == SearchFacet.TAG }
             .map(PostTaxonomyTerm::value)
             .distinct()
-        val galleryPath = stringValue("galleryurl")
+        val galleryPath = metadata.galleryPath
         val width = posterFile?.width
         val height = posterFile?.height
 
@@ -941,10 +921,8 @@ class HitomiSourceAdapter(
             canonicalTags = canonicalTags,
             rawTags = canonicalTags,
             authorName = primaryCreator?.displayName,
-            createdAtEpochMs = parseHitomiDate(stringValue("date"), stringValue("datepublished")),
-            title = stringValue("title")
-                ?: stringValue("japanese_title")
-                ?: "Hitomi #$galleryId",
+            createdAtEpochMs = metadata.createdAtEpochMs,
+            title = metadata.title,
             creatorProfile = primaryCreator,
             mediaCount = declaredMediaCount,
             taxonomy = taxonomy,
@@ -960,51 +938,6 @@ class HitomiSourceAdapter(
     ): List<ImageRef> {
         if (!sparse) return videoMedia.ifEmpty { imageMedia }
         return videoMedia.takeIf { hasPlayableVideo }.orEmpty()
-    }
-
-    private fun JsonObject.parseCreatorProfiles(): List<CreatorProfile> {
-        return arrayValue("artists")
-            ?.mapNotNull { element ->
-                val artist = element.asObjectOrNull() ?: return@mapNotNull null
-                val rawDisplayName = artist.untrimmedStringValue("artist") ?: return@mapNotNull null
-                val identity = canonicalHitomiArtistIdentity(rawDisplayName) ?: return@mapNotNull null
-                CreatorProfile(
-                    source = SourceKey.HITOMI,
-                    displayName = rawDisplayName.trim(),
-                    profileId = identity,
-                    profileUrl = canonicalHitomiArtistUrl(
-                        artistIdentity = identity,
-                        providerRelativeUrl = artist.stringValue("url"),
-                    ),
-                    uploadsQuery = "$HITOMI_ARTIST_QUERY_PREFIX$identity",
-                )
-            }
-            .orEmpty()
-            .distinctBy { creator -> creator.profileId }
-    }
-
-    private fun canonicalHitomiArtistUrl(
-        artistIdentity: String,
-        providerRelativeUrl: String?,
-    ): String {
-        providerRelativeUrl
-            ?.takeIf { value -> value.isSafeHitomiArtistPathFor(artistIdentity) }
-            ?.let { value -> return "https://hitomi.la$value" }
-        val encoded = URLEncoder.encode(artistIdentity, Charsets.UTF_8.name()).replace("+", "%20")
-        return "https://hitomi.la/artist/$encoded-all.html"
-    }
-
-    private fun String.isSafeHitomiArtistPathFor(artistIdentity: String): Boolean {
-        if ('+' in this) return false
-        val parsed = runCatching { URI(this) }.getOrNull() ?: return false
-        if (parsed.isAbsolute || parsed.host != null || parsed.rawQuery != null || parsed.rawFragment != null) {
-            return false
-        }
-        val path = parsed.rawPath ?: return false
-        if (!path.startsWith("/artist/") || !path.endsWith("-all.html")) return false
-        val encodedSlug = path.removePrefix("/artist/").removeSuffix("-all.html")
-        val decodedSlug = decodePercentEncodedUtf8Strict(encodedSlug) ?: return false
-        return canonicalHitomiArtistIdentity(decodedSlug) == artistIdentity
     }
 
     private suspend fun candidatesFor(file: ParsedHitomiFile): List<HitomiMediaCandidate> {
@@ -1127,69 +1060,6 @@ class HitomiSourceAdapter(
     ): List<HitomiMediaCandidate> {
         return filter { candidate -> candidate.format == format } +
             filterNot { candidate -> candidate.format == format }
-    }
-
-    private fun JsonObject.parseTaxonomy(): List<PostTaxonomyTerm> {
-        val gallery = this
-        return buildList {
-            gallery.arrayValue("tags")?.forEach { element ->
-                val tag = element.asObjectOrNull() ?: return@forEach
-                val value = tag.stringValue("tag") ?: return@forEach
-                val namespace = when {
-                    tag.truthy("female") -> HITOMI_FEMALE_NAMESPACE
-                    tag.truthy("male") -> HITOMI_MALE_NAMESPACE
-                    else -> HITOMI_TAG_NAMESPACE
-                }
-                add(PostTaxonomyTerm(value, SearchFacet.TAG, namespace))
-            }
-            gallery.addObjectTaxonomy(
-                target = this,
-                field = "artists",
-                valueField = "artist",
-                facet = SearchFacet.ARTIST,
-                namespace = HITOMI_ARTIST_NAMESPACE,
-            )
-            gallery.addObjectTaxonomy(
-                target = this,
-                field = "characters",
-                valueField = "character",
-                facet = SearchFacet.CHARACTER,
-                namespace = HITOMI_CHARACTER_NAMESPACE,
-            )
-            gallery.addObjectTaxonomy(
-                target = this,
-                field = "parodys",
-                valueField = "parody",
-                facet = SearchFacet.SERIES,
-                namespace = HITOMI_SERIES_NAMESPACE,
-            )
-            gallery.addObjectTaxonomy(
-                target = this,
-                field = "groups",
-                valueField = "group",
-                facet = SearchFacet.GROUP,
-                namespace = HITOMI_GROUP_NAMESPACE,
-            )
-            gallery.stringValue("type")?.let { value ->
-                add(PostTaxonomyTerm(value, SearchFacet.TYPE, HITOMI_TYPE_NAMESPACE))
-            }
-            gallery.stringValue("language")?.let { value ->
-                add(PostTaxonomyTerm(value, SearchFacet.LANGUAGE, HITOMI_LANGUAGE_NAMESPACE))
-            }
-        }.distinctBy { term -> term.termCacheKey() }
-    }
-
-    private fun JsonObject.addObjectTaxonomy(
-        field: String,
-        valueField: String,
-        facet: SearchFacet,
-        namespace: String,
-        target: MutableList<PostTaxonomyTerm>,
-    ) {
-        arrayValue(field)?.forEach { element ->
-            val value = element.asObjectOrNull()?.stringValue(valueField) ?: return@forEach
-            target += PostTaxonomyTerm(value, facet, namespace)
-        }
     }
 
     private suspend fun compileQuery(query: Query): CompiledHitomiQuery {
@@ -1474,15 +1344,6 @@ class HitomiSourceAdapter(
         internal const val DEFAULT_GALLERY_MANIFEST_TTL_MILLIS = 2L * 60L * 1000L
         private const val BASE_PRIMARY_KEY = "__all__"
         private const val HITOMI_ALL_LANGUAGE = "all"
-        private const val HITOMI_ANIME_TYPE = "anime"
-        private const val HITOMI_TAG_NAMESPACE = "tag"
-        private const val HITOMI_FEMALE_NAMESPACE = "female"
-        private const val HITOMI_MALE_NAMESPACE = "male"
-        private const val HITOMI_ARTIST_NAMESPACE = "artist"
-        private const val HITOMI_CHARACTER_NAMESPACE = "character"
-        private const val HITOMI_SERIES_NAMESPACE = "series"
-        private const val HITOMI_GROUP_NAMESPACE = "group"
-        private const val HITOMI_TYPE_NAMESPACE = "type"
         private val HITOMI_FEATURED_TYPES = listOf(
             "doujinshi",
             "manga",
@@ -1502,7 +1363,6 @@ class HitomiSourceAdapter(
             "italian",
             "russian",
         )
-        private const val HITOMI_LANGUAGE_NAMESPACE = "language"
 
         private val HITOMI_AVIF_HOST = Regex("""a[12]\.gold-usergeneratedcontent\.net""")
         private val HITOMI_WEBP_HOST = Regex("""w[12]\.gold-usergeneratedcontent\.net""")
@@ -1523,21 +1383,6 @@ class HitomiSourceAdapter(
         private fun hitomiVideoUrl(filename: String): String {
             val encoded = URLEncoder.encode(filename, Charsets.UTF_8.name()).replace("+", "%20")
             return "https://streaming.gold-usergeneratedcontent.net/videos/$encoded"
-        }
-
-        private fun parseHitomiDate(date: String?, published: String?): Long? {
-            date?.let { raw ->
-                listOf("yyyy-MM-dd HH:mm:ssX", "yyyy-MM-dd HH:mm:ssXX", "yyyy-MM-dd HH:mm:ssXXX")
-                    .firstNotNullOfOrNull { pattern ->
-                        runCatching { OffsetDateTime.parse(raw, DateTimeFormatter.ofPattern(pattern)) }
-                            .getOrNull()
-                    }
-                    ?.let { parsed -> return parsed.toInstant().toEpochMilli() }
-            }
-            return published?.let { raw ->
-                runCatching { LocalDate.parse(raw).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli() }
-                    .getOrNull()
-            }
         }
 
         private fun bytesToIdCount(bytes: Long): Long {
@@ -1620,10 +1465,6 @@ class HitomiSourceAdapter(
                 else -> sourceNamespace.orEmpty().lowercase(Locale.ROOT)
             }
             return "${facet.name}|$namespace|${value.trim().lowercase(Locale.ROOT)}"
-        }
-
-        private fun PostTaxonomyTerm.termCacheKey(): String {
-            return toSearchTerm().termCacheKey()
         }
 
         private fun IntArray.containsId(id: Int): Boolean = binarySearch(id) >= 0
