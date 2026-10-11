@@ -2,6 +2,7 @@ package com.theoriacodex.app.media
 
 import com.theoriacodex.data.repository.CacheRepository
 import com.theoriacodex.data.repository.OfflineMediaStore
+import com.theoriacodex.data.repository.OfflinePendingJobStore
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -31,10 +32,13 @@ class OfflineMediaCoordinator(
     private val selectMedia: suspend (Post) -> List<ImageRef>,
     private val acquire: suspend (Post, ImageRef, File) -> Unit,
     private val postTimeoutMs: Long = OFFLINE_POST_TIMEOUT_MS,
+    private val pendingStore: OfflinePendingJobStore? = null,
+    private val ownerExists: suspend (String) -> Boolean = { true },
 ) {
     private val slots = Semaphore(2)
     private val postLocks = List(16) { Mutex() }
     private val lock = Any()
+    private val persistence = Mutex()
     private val active = mutableMapOf<String, Job>()
     private val requests = mutableMapOf<String, List<Post>>()
     private val mutableJobs = MutableStateFlow<Map<String, OfflineMediaJob>>(emptyMap())
@@ -42,10 +46,41 @@ class OfflineMediaCoordinator(
 
     init { scope.launch { store.load() } }
 
-    fun makeAvailableOffline(owner: String, posts: List<Post>) {
+    suspend fun recoverPendingJobs() {
+        val recovered = com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation { pendingStore?.load().orEmpty() }
+        if (recovered.isFailure) {
+            update(AUTOMATIC_OFFLINE_OWNER, OfflineMediaJob(0, isRunning = false,
+                failureReason = "The offline queue could not be restored. Retry to try again."))
+            return
+        }
+        val retained = recovered.getOrThrow().filterKeys { ownerExists(it) }
+        val restoredJobs = retained.mapNotNull { (owner, ids) ->
+            enqueueOffline(owner, ids.map { id ->
+                Post(id, ImageRef(null, null, null), null, pageUrl = null, width = null, height = null,
+                    canonicalTags = emptyList(), rawTags = emptyList(), authorName = null, createdAtEpochMs = null)
+            }, start = false)
+        }
+        // Register every owner before any worker can checkpoint the recovered intent.
+        restoredJobs.forEach(Job::start)
+    }
+
+    private suspend fun checkpoint() {
+        val store = pendingStore ?: return
+        persistence.withLock {
+            val snapshot = synchronized(lock) {
+                requests.filterKeys { owner -> mutableJobs.value[owner]?.let { !it.isCancelled && (it.isRunning || it.failedPosts.isNotEmpty()) } == true }
+                    .mapValues { (_, posts) -> posts.map(Post::id) }
+            }
+            store.save(snapshot)
+        }
+    }
+
+    fun makeAvailableOffline(owner: String, posts: List<Post>) { enqueueOffline(owner, posts, start = true) }
+
+    private fun enqueueOffline(owner: String, posts: List<Post>, start: Boolean): Job? {
         require(owner.isNotBlank())
         synchronized(lock) {
-            if (active[owner]?.isActive == true) {
+            if (active[owner]?.let { !it.isCompleted && !it.isCancelled } == true) {
                 if (owner == AUTOMATIC_OFFLINE_OWNER) {
                     val merged = (requests[owner].orEmpty() + posts).distinctBy(Post::id)
                     check(merged.size <= MAX_AUTOMATIC_OFFLINE_POSTS) { "The offline save queue is full" }
@@ -55,7 +90,7 @@ class OfflineMediaCoordinator(
                         jobs + (owner to current.copy(totalPosts = merged.size))
                     }
                 }
-                return
+                return null
             }
             val unique = posts.distinctBy(Post::id)
             requests[owner] = unique
@@ -64,16 +99,24 @@ class OfflineMediaCoordinator(
             val job = scope.launch(start = CoroutineStart.LAZY) {
                 previous?.join()
                 synchronized(lock) { update(owner, OfflineMediaJob(totalPosts = requests[owner].orEmpty().size)) }
-                download(owner)
+                val result = com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation {
+                    checkpoint()
+                    download(owner)
+                }
+                if (result.isFailure) update(owner, OfflineMediaJob(requests[owner].orEmpty().size,
+                    failedPosts = requests[owner].orEmpty().mapTo(mutableSetOf(), Post::id), isRunning = false,
+                    failureReason = "The offline queue could not be saved. Please retry."))
             }
             active[owner] = job
-            job.start()
+            if (start) job.start()
+            return job
         }
     }
 
     fun retry(owner: String) {
-        val posts = synchronized(lock) { requests[owner] } ?: return
-        makeAvailableOffline(owner, posts)
+        val posts = synchronized(lock) { requests[owner] }
+        if (posts != null) makeAvailableOffline(owner, posts)
+        else scope.launch { recoverPendingJobs() }
     }
 
     fun cancel(owner: String) {
@@ -82,6 +125,7 @@ class OfflineMediaCoordinator(
             val job = jobs[owner] ?: return@update jobs
             jobs + (owner to job.copy(isRunning = false, isCancelled = true))
         }
+        scope.launch { com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation { checkpoint() } }
     }
 
     suspend fun remove(owner: String) {
@@ -89,6 +133,7 @@ class OfflineMediaCoordinator(
         store.removeOwner(owner)
         mutableJobs.update { it - owner }
         synchronized(lock) { requests.remove(owner); active.remove(owner) }
+        checkpoint()
     }
 
     suspend fun clear() {
@@ -98,6 +143,7 @@ class OfflineMediaCoordinator(
         store.clear()
         mutableJobs.value = emptyMap()
         synchronized(lock) { requests.clear(); active.clear() }
+        checkpoint()
     }
 
     suspend fun find(id: PostId): Post? = store.find(id)
@@ -148,6 +194,7 @@ class OfflineMediaCoordinator(
                     failed += post.id
                 }
                 settled++
+                checkpoint()
                 synchronized(lock) {
                     update(owner, OfflineMediaJob(requests[owner].orEmpty().size, completed, failed.toSet()))
                 }
@@ -156,6 +203,7 @@ class OfflineMediaCoordinator(
             if (!drained) synchronized(lock) {
                 update(owner, OfflineMediaJob(requests[owner].orEmpty().size, completed, failed, isRunning = false, isCancelled = true))
             }
+            com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation { checkpoint() }
         }
     }
 
@@ -168,8 +216,9 @@ data class OfflineMediaJob(
     val failedPosts: Set<PostId> = emptySet(),
     val isRunning: Boolean = true,
     val isCancelled: Boolean = false,
+    val failureReason: String? = null,
 ) {
-    val failureMessage: String? get() = if (failedPosts.isEmpty()) null else
+    val failureMessage: String? get() = failureReason ?: if (failedPosts.isEmpty()) null else
         "Some posts could not be saved. Check your connection and download preferences, then retry."
 }
 

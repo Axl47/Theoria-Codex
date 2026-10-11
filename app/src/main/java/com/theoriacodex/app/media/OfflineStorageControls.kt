@@ -135,7 +135,7 @@ private fun OfflineStorageOwnerRow(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (owner.preparing || owner.job?.isRunning == true) {
                 TextButton(onClick = { onCancel(owner.id) }, enabled = enabled) { Text("Cancel") }
-            } else if (owner.job?.let { it.isCancelled || it.failedPosts.isNotEmpty() } == true) {
+            } else if (owner.job?.let { it.isCancelled || it.failureMessage != null } == true) {
                 TextButton(onClick = { onRetry(owner.id) }, enabled = enabled) { Text("Retry") }
             }
             TextButton(onClick = { onRemove(owner.id) }, enabled = enabled) { Text("Remove") }

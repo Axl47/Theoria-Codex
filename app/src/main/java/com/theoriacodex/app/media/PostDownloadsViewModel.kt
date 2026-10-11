@@ -5,6 +5,10 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.theoriacodex.app.viewer.requiresLazyMediaResolution
+import com.theoriacodex.app.ui.state.MutationFeedback
+import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
+import androidx.core.net.toUri
+import java.io.File
 import com.theoriacodex.data.repository.CacheSettings
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -23,28 +27,38 @@ internal class PostDownloadsViewModel(
 ) : ViewModel() {
     // Retain the ViewModel Job and serialize commands with worker continuations off Main.
     private val queueScope = CoroutineScope(viewModelScope.coroutineContext + Dispatchers.IO.limitedParallelism(1))
+    val feedback = MutationFeedback()
     private val queue = PostDownloadQueue(
         scope = queueScope,
         backend = AndroidPostDownloadBackend(context.applicationContext, readSettings, resolvePost, exportAnimation),
+        jobStore = FileBackedPostDownloadJobStore(File(context.filesDir, "theoria_codex/download_jobs.json")),
     )
     val batches = queue.batches
+    init { command { queue.restore() } }
+
+    private fun command(action: suspend () -> Unit) {
+        queueScope.launch {
+            val result = runCatchingPreservingCancellation { action() }
+            if (result.isFailure) feedback.add("The download queue could not be saved or restored. Please try again.")
+        }
+    }
 
     fun submitPosts(posts: List<Post>, title: String = "Save to device") {
-        queueScope.launch { queue.submit(title, posts.map { PostDownloadRequest(it) }) }
+        command { queue.submit(title, posts.map { PostDownloadRequest(it) }) }
     }
 
     fun submitViewerMedia(post: Post, media: ImageRef, pageIndex: Int, totalPages: Int) {
-        queueScope.launch {
+        command {
             queue.submit("Save to device", listOf(PostDownloadRequest(post, SelectedDownloadMedia(media, pageIndex, totalPages))))
         }
     }
 
     fun cancel(batchId: Long) {
-        queueScope.launch { queue.cancel(batchId) }
+        command { queue.cancel(batchId) }
     }
 
     fun retryFailed(batchId: Long) {
-        queueScope.launch { queue.retryFailed(batchId) }
+        command { queue.retryFailed(batchId) }
     }
 }
 
@@ -56,7 +70,7 @@ private class AndroidPostDownloadBackend(
 ) : PostDownloadBackend {
     override suspend fun prepare(request: PostDownloadRequest): PreparedPostDownload {
         val settings = readSettings()
-        val post = if (request.selectedMedia == null && requiresLazyMediaResolution(request.post)) {
+        val post = if (request.restored || request.selectedMedia == null && requiresLazyMediaResolution(request.post)) {
             resolvePost(request.post) ?: throw DownloadPreparationException("The provider could not load this post's media.")
         } else request.post
         if (isPixivUgoiraPost(post)) {
@@ -73,10 +87,26 @@ private class AndroidPostDownloadBackend(
         }
         return PreparedPostDownload.Transfer {
             val selected = request.selectedMedia
-            if (selected == null) PostDownloadService.enqueuePostDownloadId(context, post, settings)
-            else PostDownloadService.enqueueViewerDownloadId(
-                context, post, selected.media, selected.pageIndex, selected.totalPages, settings,
-            )
+            if (selected == null) PostDownloadService.enqueuePostDownloadId(context, post, settings, request.marker)
+            else {
+                val media = if (request.restored) post.media.ifEmpty { listOfNotNull(post.full) }.getOrNull(selected.pageIndex)
+                    ?: throw DownloadPreparationException("This gallery page is no longer available.") else selected.media
+                PostDownloadService.enqueueViewerDownloadId(context, post, media, selected.pageIndex, selected.totalPages,
+                    settings, request.marker)
+            }
+        }
+    }
+
+    override suspend fun findTransfer(marker: String): Long? = withContext(Dispatchers.IO) {
+        val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager ?: return@withContext null
+        manager.query(DownloadManager.Query()).use { cursor ->
+            if (cursor == null) return@use null
+            while (cursor.moveToNext()) {
+                val uri = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_URI)).toUri()
+                if (uri.fragment == downloadRequestMarker(marker))
+                    return@use cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_ID))
+            }
+            null
         }
     }
 

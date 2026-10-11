@@ -152,6 +152,10 @@ Keep the selected phone free from other device installs and foreground launches 
 
 Never configure `androidx.benchmark.junit4.SideEffectRunListener` as a runner argument in the personal-device benchmark lane. In AndroidX Benchmark 1.5.0-alpha07 it disables 41 unrelated packages, including Play Store and Google Play services, then unconditionally enables every package without restoring prior state. The required benchmark library may still package the listener and `DisablePackages` classes; class presence is harmless because no runner argument instantiates them. Source guards and packaged-runner manifest verification prove the listener is unconfigured. The benchmark app APK separately isolates its application ID and storage and removes production deep links, App Links verification, install/network permission, and FileProvider.
 
+## Transfer Recovery
+
+Public downloads and offline collection acquisitions retain bounded device-only intent journals, separate from portable backups and completed offline manifests. Resume known DownloadManager IDs before resolving media; reconcile the persisted enqueue marker for an interrupted native admission and never automatically duplicate an ambiguous transfer. Cancelled native IDs must be reconciled even before a restored item receives a worker slot. Register every restored offline owner before any acquisition checkpoints the journal. Completed public files and verified offline copies remain authoritative and must survive queue cancellation.
+
 ## Production App Data Safety
 
 Profile backups are logical metadata snapshots, never copies of live Room/DataStore files. Exclude credentials, offline media, signed media URLs, and device paths while preserving canonical public provider links. Restore creates fresh profile/Codex/follow identities and uses a bounded fsynced intent journal; finish `recoverPendingRestore()` before exposing the app graph. Preserve existing shared post payloads and keep every phase idempotent. Legacy Likes may lack a full Post, and system Likes Codices may contain independently saved members; these are distinct valid states.

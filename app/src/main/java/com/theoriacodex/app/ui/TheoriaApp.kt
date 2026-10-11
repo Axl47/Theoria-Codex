@@ -272,6 +272,7 @@ internal fun TheoriaAppContent(
     }
     val snackbarHostState = remember { SnackbarHostState() }
     val libraryTransfers = rememberLibraryTransferTools(appContainer) { snackbarHostState.showSnackbar(it) }
+    MutationFeedbackHost(libraryTransfers.downloads.feedback, snackbarHostState)
     val savedSearchOwner = viewModel<com.theoriacodex.app.recents.SavedSearchViewModel>(
         key = "saved-searches",
         factory = viewModelFactory { initializer { com.theoriacodex.app.recents.SavedSearchViewModel(dataDependencies.savedSearches) } },

@@ -2,6 +2,9 @@ package com.theoriacodex.app.media
 
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
+import java.util.UUID
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -17,7 +20,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 
-internal data class PostDownloadRequest(val post: Post, val selectedMedia: SelectedDownloadMedia? = null)
+internal data class PostDownloadRequest(val post: Post, val selectedMedia: SelectedDownloadMedia? = null,
+    val marker: String = UUID.randomUUID().toString(), val restored: Boolean = false)
 internal data class SelectedDownloadMedia(val media: ImageRef, val pageIndex: Int, val totalPages: Int)
 
 internal enum class PostDownloadStatus { QUEUED, PREPARING, DOWNLOADING, WAITING, SAVED, ALREADY_EXISTS, FAILED, CANCELLED }
@@ -30,6 +34,7 @@ internal data class PostDownloadItem(
     val downloadedBytes: Long = 0,
     val totalBytes: Long? = null,
     val message: String? = null,
+    val enqueuePending: Boolean = false,
 ) {
     val active: Boolean get() = status in ACTIVE_DOWNLOAD_STATUSES
 }
@@ -57,6 +62,7 @@ internal data class DownloadTransferSnapshot(
 
 internal interface PostDownloadBackend {
     suspend fun prepare(request: PostDownloadRequest): PreparedPostDownload
+    suspend fun findTransfer(marker: String): Long? = null
     suspend fun snapshot(downloadId: Long): DownloadTransferSnapshot
     /** Remove incomplete transfers only; completed public files must remain on the device. */
     suspend fun cancel(downloadId: Long)
@@ -68,18 +74,38 @@ internal class PostDownloadQueue(
     private val backend: PostDownloadBackend,
     private val concurrency: Int = 2,
     private val pollIntervalMs: Long = 1_000,
+    private val jobStore: PostDownloadJobStore? = null,
 ) {
     private val mutableBatches = MutableStateFlow<List<PostDownloadBatch>>(emptyList())
     val batches = mutableBatches.asStateFlow()
     private val workers = mutableMapOf<Long, Job>()
+    private val locations = mutableMapOf<Long, Pair<Int, Int>>()
     private var nextId = 0L
+    private val persistence = Mutex()
+    private val restoration = Mutex()
+    private var restored = false
+
+    suspend fun restore() = restoration.withLock {
+        if (restored) return@withLock
+        val loaded = jobStore?.load().orEmpty()
+        loaded.flatMap { it.items }.filter { it.status == PostDownloadStatus.CANCELLED }
+            .forEach { item -> item.downloadId?.let { backend.cancel(it) } }
+        mutableBatches.value = loaded
+        rebuildLocations()
+        nextId = loaded.flatMap { listOf(it.id) + it.items.map(PostDownloadItem::id) }.maxOrNull() ?: 0L
+        restored = true
+        schedule()
+    }
+
+    private suspend fun checkpoint() = persistence.withLock { jobStore?.save(mutableBatches.value); Unit }
 
     init {
         require(concurrency > 0)
         require(pollIntervalMs > 0)
     }
 
-    fun submit(title: String, requests: List<PostDownloadRequest>): Long? {
+    suspend fun submit(title: String, requests: List<PostDownloadRequest>): Long? {
+        restore()
         val uniqueRequests = requests.distinctBy { it.post.id to it.selectedMedia?.pageIndex }
         if (uniqueRequests.isEmpty()) return null
         val batchId = ++nextId
@@ -87,23 +113,45 @@ internal class PostDownloadQueue(
         mutableBatches.value = (mutableBatches.value + PostDownloadBatch(batchId, title, items))
             .let { batches -> batches.filter { it.active } + batches.filterNot { it.active }.takeLast(20) }
             .sortedBy { it.id }
+        rebuildLocations()
+        try {
+            checkpoint()
+        } catch (error: Exception) {
+            mutableBatches.value = mutableBatches.value.filterNot { it.id == batchId }
+            rebuildLocations()
+            throw error
+        }
         schedule()
         return batchId
     }
 
-    fun cancel(batchId: Long) {
+    suspend fun cancel(batchId: Long) {
+        restore()
         val activeItems = mutableBatches.value.find { it.id == batchId }?.items?.filter { it.active }.orEmpty()
         activeItems.forEach { item ->
             update(item.id) { it.copy(status = PostDownloadStatus.CANCELLED, message = null) }
             workers[item.id]?.cancel()
         }
+        checkpoint()
+        // A restored native transfer may still be waiting for a worker slot.
+        withContext(NonCancellable) { activeItems.forEach { item -> item.downloadId?.let { backend.cancel(it) } } }
         schedule()
     }
 
-    fun retryFailed(batchId: Long) {
-        mutableBatches.value.find { it.id == batchId }?.items
-            ?.filter { it.status == PostDownloadStatus.FAILED }
-            ?.forEach { item -> update(item.id) { it.copy(status = PostDownloadStatus.QUEUED, message = null) } }
+    suspend fun retryFailed(batchId: Long) {
+        restore()
+        val failed = mutableBatches.value.find { it.id == batchId }?.items.orEmpty()
+            .filter { it.status == PostDownloadStatus.FAILED }
+        failed.forEach { item ->
+            val completed = item.downloadId?.let { backend.snapshot(it).status == PostDownloadStatus.SAVED } == true
+            if (completed) update(item.id) { it.copy(status = PostDownloadStatus.SAVED, message = null) }
+            else {
+                item.downloadId?.let { backend.cancel(it) }
+                update(item.id) { it.copy(status = PostDownloadStatus.QUEUED, downloadId = null, enqueuePending = false,
+                    request = it.request.copy(marker = UUID.randomUUID().toString()), message = null) }
+            }
+        }
+        checkpoint()
         schedule()
     }
 
@@ -131,27 +179,47 @@ internal class PostDownloadQueue(
     private suspend fun execute(item: PostDownloadItem) {
         var downloadId: Long? = item.downloadId
         try {
-            downloadId?.let { backend.cancel(it) }
-            downloadId = null
+            if (item.request.restored && downloadId != null) {
+                awaitTransfer(item.id, requireNotNull(downloadId))
+                return
+            }
+            if (item.enqueuePending) {
+                downloadId = backend.findTransfer(item.request.marker)
+                if (downloadId == null) throw DownloadPreparationException("Download start could not be recovered. Check Downloads before retrying.")
+                update(item.id) { it.copy(downloadId = downloadId, enqueuePending = false) }
+                checkpoint()
+                awaitTransfer(item.id, requireNotNull(downloadId))
+                return
+            }
             update(item.id) { it.copy(status = PostDownloadStatus.PREPARING, downloadId = null, downloadedBytes = 0, totalBytes = null) }
+            checkpoint()
             val prepared = backend.prepare(item.request)
             currentCoroutineContext().ensureActive()
             when (prepared) {
                 PreparedPostDownload.Saved -> update(item.id) { it.copy(status = PostDownloadStatus.SAVED) }
                 is PreparedPostDownload.Gallery -> expandGallery(item.id, prepared.pages)
                 is PreparedPostDownload.Transfer -> {
-                    // Enqueue and retain its ID without a suspension: cancellation cannot lose the system job.
-                    downloadId = prepared.enqueue() ?: error("Could not queue this download")
-                    val id = requireNotNull(downloadId)
-                    update(item.id) { it.copy(status = PostDownloadStatus.DOWNLOADING, downloadId = id) }
-                    awaitTransfer(item.id, id)
+                    update(item.id) { it.copy(enqueuePending = true) }
+                    checkpoint()
+                    currentCoroutineContext().ensureActive()
+                    withContext(NonCancellable) {
+                        downloadId = prepared.enqueue() ?: error("Could not queue this download")
+                        update(item.id) {
+                            it.copy(status = if (it.status == PostDownloadStatus.CANCELLED) it.status else PostDownloadStatus.DOWNLOADING,
+                                downloadId = downloadId, enqueuePending = false)
+                        }
+                        checkpoint()
+                    }
+                    awaitTransfer(item.id, requireNotNull(downloadId))
                 }
             }
+            checkpoint()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
             val message = if (error is DownloadPreparationException) error.message else "Could not save this post. Try again."
             update(item.id) { it.copy(status = PostDownloadStatus.FAILED, message = message) }
+            com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation { checkpoint() }
         } finally {
             if (currentItem(item.id)?.status == PostDownloadStatus.CANCELLED) {
                 withContext(NonCancellable) { downloadId?.let { backend.cancel(it) } }
@@ -161,11 +229,13 @@ internal class PostDownloadQueue(
 
     private suspend fun awaitTransfer(itemId: Long, downloadId: Long) {
         while (true) {
+            val previousStatus = currentItem(itemId)?.status
             val snapshot = backend.snapshot(downloadId)
             update(itemId) {
                 it.copy(status = snapshot.status, downloadedBytes = snapshot.downloadedBytes,
                     totalBytes = snapshot.totalBytes, message = snapshot.message)
             }
+            if (previousStatus != snapshot.status) checkpoint()
             if (snapshot.status !in ACTIVE_DOWNLOAD_STATUSES) return
             delay(pollIntervalMs)
         }
@@ -181,18 +251,31 @@ internal class PostDownloadQueue(
                 .map { PostDownloadItem(id = ++nextId, request = it) }
             batch.copy(items = batch.items.flatMap { if (it.id == itemId) children else listOf(it) })
         }
+        rebuildLocations()
     }
 
-    private fun currentItem(itemId: Long): PostDownloadItem? =
-        mutableBatches.value.asSequence().flatMap { it.items }.find { it.id == itemId }
-
-    private fun update(itemId: Long, transform: (PostDownloadItem) -> PostDownloadItem) {
-        mutableBatches.value = mutableBatches.value.map { batch ->
-            if (batch.items.none { it.id == itemId }) batch else batch.copy(
-                items = batch.items.map { if (it.id == itemId) transform(it) else it },
-            )
+    private fun rebuildLocations() {
+        locations.clear()
+        mutableBatches.value.forEachIndexed { batchIndex, batch ->
+            batch.items.forEachIndexed { itemIndex, item -> locations[item.id] = batchIndex to itemIndex }
         }
     }
+
+    private fun currentItem(itemId: Long): PostDownloadItem? {
+        val (batch, item) = locations[itemId] ?: return null
+        return mutableBatches.value.getOrNull(batch)?.items?.getOrNull(item)
+    }
+
+    private fun update(itemId: Long, transform: (PostDownloadItem) -> PostDownloadItem) {
+        val (batchIndex, itemIndex) = locations[itemId] ?: return
+        val batches = mutableBatches.value.toMutableList()
+        val batch = batches[batchIndex]
+        val items = batch.items.toMutableList()
+        items[itemIndex] = transform(items[itemIndex])
+        batches[batchIndex] = batch.copy(items = items)
+        mutableBatches.value = batches
+    }
+
 }
 
 /** Expansion happens after one authoritative resolution; selected Viewer pages never expand again. */

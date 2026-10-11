@@ -4,6 +4,8 @@
         <exclude domain="file" path="theoria_codex/offline_media/" />
         <exclude domain="file" path="theoria_codex/cache/" />
         <exclude domain="file" path="theoria_codex/updates/" />
+        <exclude domain="file" path="theoria_codex/download_jobs.json" />
+        <exclude domain="file" path="theoria_codex/offline_jobs.json" />
         <exclude
             domain="sharedpref"
             path="theoria_source_credentials.xml" />
@@ -12,6 +14,8 @@
         <exclude domain="file" path="theoria_codex/offline_media/" />
         <exclude domain="file" path="theoria_codex/cache/" />
         <exclude domain="file" path="theoria_codex/updates/" />
+        <exclude domain="file" path="theoria_codex/download_jobs.json" />
+        <exclude domain="file" path="theoria_codex/offline_jobs.json" />
         <exclude
             domain="sharedpref"
             path="theoria_source_credentials.xml" />

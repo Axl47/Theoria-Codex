@@ -51,6 +51,7 @@ import com.theoriacodex.data.repository.FileBackedSavedSearchRepository
 import com.theoriacodex.data.repository.InMemorySavedSearchRepository
 import com.theoriacodex.data.repository.SavedSearchRepository
 import com.theoriacodex.data.repository.OfflineMediaStore
+import com.theoriacodex.data.repository.OfflinePendingJobStore
 import com.theoriacodex.data.repository.ProfileBackupService
 import com.theoriacodex.data.repository.ProfileDeletionService
 import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
@@ -85,6 +86,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 
 data class DataDependencies(
     val storageDirectory: File,
@@ -246,6 +248,9 @@ internal class DefaultTheoriaAppContainer(
         resolve = offlineAcquisition::resolve,
         selectMedia = offlineAcquisition::selectMedia,
         acquire = offlineAcquisition::acquire,
+        pendingStore = OfflinePendingJobStore(File(storageDirectory, "offline_jobs.json")),
+        ownerExists = { owner -> owner == com.theoriacodex.app.media.AUTOMATIC_OFFLINE_OWNER ||
+            owner.startsWith("codex:") && contentRepository.observeCodex(owner.removePrefix("codex:")).first() != null },
     )
     private val cacheRepository = OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offlineMedia)
     private val readingPositions = FileBackedReadingPositionRepository(storageDirectory)
@@ -378,6 +383,7 @@ internal class DefaultTheoriaAppContainer(
         profileBackup.recoverPendingRestore()
         profileDeletion.recoverPendingDeletion()
         offlineStore.load()
+        offlineMedia.recoverPendingJobs()
     }
 
     private suspend fun awaitContentStore() {
