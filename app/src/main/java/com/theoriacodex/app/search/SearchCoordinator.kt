@@ -22,7 +22,6 @@ import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceFailureReason
-import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
@@ -83,6 +82,8 @@ class SearchCoordinator(
         supportedSearchScopes = ::supportedSearchScopes,
         effectiveEnabledSources = ::effectiveEnabledSources,
     )
+    private val tagCounts = TagCountCoordinator(registry, tagSuggestionStore, ::autocompletePrefixForSource,
+        clock = clock, dispatcher = computationDispatcher)
     private val resolvedPostsByExecution = linkedMapOf<String, LinkedHashMap<PostId, Post>>()
     private val resolveFailuresByExecution = mutableMapOf<String, MutableMap<PostId, ResolveFailureRecord>>()
     private val queryPreparation = UnifiedQueryPreparation(clock)
@@ -528,8 +529,7 @@ class SearchCoordinator(
     ): Int? {
         val normalized = tag.trim()
         if (normalized.isBlank()) return null
-        return tagSuggestionStore.get(source, TAG_LOOKUP_LIMIT)
-            .firstOrNull { sourceTagsMatch(source, it.text, normalized) }?.count
+        return tagSuggestionStore.getCount(source, normalized)
             ?: autocomplete.firstOrNull { sourceTagsMatch(source, it.text, normalized) }?.count
             ?: trending.firstOrNull { sourceTagsMatch(source, it.text, normalized) }?.count
     }
@@ -544,42 +544,8 @@ class SearchCoordinator(
         autocomplete: List<TagSuggestion>,
         trending: List<TagSuggestion>,
     ): Map<String, Int?> {
-        val requested = tags.map(String::trim).filter(String::isNotBlank).distinct()
-        if (requested.isEmpty()) return emptyMap()
-        val resolved = requested.associateWith {
-            tagVideoCount(source, it, autocomplete, trending)
-        }.toMutableMap()
-        var missing = requested.filter { resolved[it] == null }
-        val adapter = registry.adapterFor(source) ?: return resolved
-        if (adapter is TagCountLookupSourceAdapter && missing.isNotEmpty()) {
-            val counts = runCatchingPreservingCancellation {
-                adapter.fetchTagCounts(missing.map { autocompletePrefixForSource(source, it) })
-            }.getOrDefault(emptyMap())
-            if (counts.isNotEmpty()) {
-                tagSuggestionStore.put(
-                    source,
-                    counts.map { (text, count) -> TagSuggestion(text, "tag_count_lookup", count) },
-                    TagSuggestionOrigin.COUNT_LOOKUP,
-                )
-                missing.forEach { tag ->
-                    counts.entries.firstOrNull { sourceTagsMatch(source, it.key, tag) }
-                        ?.value?.let { resolved[tag] = it }
-                }
-            }
-            missing = requested.filter { resolved[it] == null }
-        }
-        missing.forEach { tag ->
-            val fetched = runCatchingPreservingCancellation {
-                adapter.autocompleteTags(autocompletePrefixForSource(source, tag), TAG_FETCH_LIMIT)
-            }.getOrDefault(emptyList())
-            if (fetched.isNotEmpty()) {
-                tagSuggestionStore.put(source, fetched, TagSuggestionOrigin.AUTOCOMPLETE)
-            }
-            val count = fetched.firstOrNull { sourceTagsMatch(source, it.text, tag) }?.count
-                ?: tagVideoCount(source, tag, autocomplete, trending)
-            if (count != null) resolved[tag] = count
-        }
-        return resolved
+        val supplemental = tags.associateWith { tagVideoCount(source, it, autocomplete, trending) }
+        return tagCounts.fetch(source, tags, supplemental)
     }
 
     suspend fun fetchTagVideoCounts(source: SourceKey, tags: List<String>): Map<String, Int?> {

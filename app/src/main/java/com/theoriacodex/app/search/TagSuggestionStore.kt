@@ -11,6 +11,7 @@ import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.model.SearchFacet
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.tags.normalizeMatchToken
+import com.theoriacodex.domain.tags.sourceTagKey
 import java.io.File
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
@@ -43,6 +44,8 @@ interface TagSuggestionStore {
      * Compatibility lane for callers that only understand portable, general tags.
      */
     fun get(source: SourceKey, limit: Int): List<TagSuggestion>
+    fun getCount(source: SourceKey, tag: String): Int? = get(source, Int.MAX_VALUE)
+        .firstOrNull { sourceTagKey(source, it.text) == sourceTagKey(source, tag) }?.count
     fun put(source: SourceKey, suggestions: List<TagSuggestion>)
 
     fun find(source: SourceKey, prefix: String, limit: Int): List<TagSuggestion> =
@@ -158,6 +161,7 @@ internal class FileBackedTagSuggestionStore(
     private val persistenceMutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + workDispatcher)
     private val inMemory: MutableMap<SourceKey, MutableList<CachedSuggestion>> = seedInitial()
+    private val countsBySource = inMemory.mapValues { (source, entries) -> indexCounts(source, entries) }.toMutableMap()
     private val entryWeights: MutableMap<SourceKey, MutableList<Int>> = mutableMapOf()
     private var estimatedTotalUtf8Bytes = SNAPSHOT_ESTIMATED_OVERHEAD_BYTES
     private var mutationVersion = 0L
@@ -196,6 +200,16 @@ internal class FileBackedTagSuggestionStore(
                 .toList()
         }
     }
+
+    override fun getCount(source: SourceKey, tag: String): Int? = synchronized(lock) {
+        countsBySource[source]?.get(sourceTagKey(source, tag))
+    }
+
+    private fun indexCounts(source: SourceKey, entries: List<CachedSuggestion>): Map<String, Int> =
+        entries.filter { it.isRecommendationTag && it.count != null }.associate { entry ->
+            val native = entry.sourceNamespace?.takeUnless { it == "tag" }?.let { "$it:${entry.text}" } ?: entry.text
+            sourceTagKey(source, native) to requireNotNull(entry.count)
+        }
 
     override fun find(source: SourceKey, prefix: String, limit: Int): List<TagSuggestion> {
         if (limit <= 0 || prefix.isBlank()) return emptyList()
@@ -518,6 +532,7 @@ internal class FileBackedTagSuggestionStore(
 
         if (suggestions.isEmpty()) {
             inMemory.remove(source)
+            countsBySource.remove(source)
             entryWeights.remove(source)
             return
         }
@@ -532,6 +547,7 @@ internal class FileBackedTagSuggestionStore(
             retainedWeight ?: estimatedEntryBytes(suggestion)
         }
         inMemory[source] = suggestions.toMutableList()
+        countsBySource[source] = indexCounts(source, suggestions)
         entryWeights[source] = replacementWeights.toMutableList()
         estimatedTotalUtf8Bytes += sourceEstimatedOverhead(source) + replacementWeights.sum()
     }

@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,21 +65,7 @@ fun PostTagActionSection(
     var tagSelections by remember(post.id.source, post.id.sourcePostId) {
         mutableStateOf<Map<TagActionSelection, Set<SearchTerm>>>(emptyMap())
     }
-    var tagVideoCounts by remember(post.id, generalTags) {
-        mutableStateOf<Map<String, Int?>>(emptyMap())
-    }
-    LaunchedEffect(post.id, generalTags) {
-        // Cache lookup can scan the provider lexicon; keep it out of composition and off Main.
-        tagVideoCounts = withContext(Dispatchers.Default) {
-            generalTags.associateWith { tag -> tagVideoCountProvider(post.id.source, tag) }
-        }
-        val missingTags = generalTags.filter { tag -> tagVideoCounts[tag] == null }
-        if (missingTags.isEmpty()) return@LaunchedEffect
-        val fetchedCounts = withContext(Dispatchers.IO) {
-            fetchTagVideoCounts(post.id.source, missingTags)
-        }
-        if (fetchedCounts.isNotEmpty()) tagVideoCounts = tagVideoCounts + fetchedCounts
-    }
+    val tagVideoCounts = rememberTagCounts(post.id.source, generalTags, tagVideoCountProvider, fetchTagVideoCounts)
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
@@ -148,21 +135,7 @@ fun FavoriteTagActionGrid(
     onAddTag: (String) -> Unit,
     onRemoveTag: (String) -> Unit,
 ) {
-    var tagVideoCounts by remember(source, tags) {
-        mutableStateOf(
-            tags.associateWith { tag ->
-                tagVideoCountProvider(source, tag)
-            }
-        )
-    }
-    LaunchedEffect(source, tags) {
-        val missingTags = tags.filter { tag -> tagVideoCounts[tag] == null }
-        if (missingTags.isEmpty()) return@LaunchedEffect
-        val fetchedCounts = fetchTagVideoCounts(source, missingTags)
-        if (fetchedCounts.isNotEmpty()) {
-            tagVideoCounts = tagVideoCounts + fetchedCounts
-        }
-    }
+    val tagVideoCounts = rememberTagCounts(source, tags, tagVideoCountProvider, fetchTagVideoCounts)
 
     if (tags.isEmpty()) {
         Text(
@@ -193,6 +166,21 @@ fun FavoriteTagActionGrid(
             }
         }
     }
+}
+
+/** Both tag surfaces publish local counts first and keep all enrichment off the UI dispatcher. */
+@Composable
+private fun rememberTagCounts(source: SourceKey, tags: List<String>,
+    cached: (SourceKey, String) -> Int?, fetch: suspend (SourceKey, List<String>) -> Map<String, Int?>): Map<String, Int?> {
+    var counts by remember(source, tags) { mutableStateOf<Map<String, Int?>>(emptyMap()) }
+    val currentCached by rememberUpdatedState(cached)
+    val currentFetch by rememberUpdatedState(fetch)
+    LaunchedEffect(source, tags) {
+        counts = withContext(Dispatchers.Default) { tags.associateWith { currentCached(source, it) } }
+        val missing = tags.filter { counts[it] == null }
+        if (missing.isNotEmpty()) counts = counts + withContext(Dispatchers.IO) { currentFetch(source, missing) }
+    }
+    return counts
 }
 
 internal enum class TagActionSelection {
@@ -361,13 +349,11 @@ private fun FavoriteTagActionCell(
             active = false,
             modifier = Modifier.fillMaxWidth(),
         )
-        if (videoCount != null) {
-            Text(
-                text = videoCount.toString(),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
-            )
-        }
+        Text(
+            text = videoCount?.toString().orEmpty(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
