@@ -139,8 +139,9 @@ silently. Use `--no-configuration-cache` only for an intentional comparison or d
 
 CI holds total line coverage at 55% and requires at least 60% changed-line coverage in the core
 modules, `app-logic`, and app-owned ViewModels, coordinators, workflows, repositories, services,
-stores, translators and probes. The explicit `--include-path` patterns in `verify.yml` select those
-app boundaries; they do not apply a JVM threshold to every Composable. Missing eligible report
+stores, translators and probes. The reviewed `config/quality/coverage-boundaries.json` selects app ownership packages with narrow
+rendering-only exclusions; logic eligibility does not depend on filename suffixes, and the gate
+does not apply a JVM threshold to every Composable. Missing eligible report
 entries fail the gate. Pass `--working-tree` to `scripts/check_changed_coverage.py` for a local
 pre-commit check that includes untracked production files. Test-only fixture packages are excluded
 from production coverage. Hotspot, duplication and non-growing Detekt debt budgets remain enforced.
