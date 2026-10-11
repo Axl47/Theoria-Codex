@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.durationFilterMetadata
+import com.theoriacodex.app.media.rememberDurationFilterMetadata
 import com.theoriacodex.app.related.RelatedFeedProjection
 import com.theoriacodex.app.related.RelatedPostsUiState
 import com.theoriacodex.app.related.buildRelatedFeedProjection
@@ -35,9 +35,7 @@ fun rememberRelatedFeedPresentation(
     durationFilterActive: Boolean,
 ): RelatedFeedPresentation {
     val relatedPosts = relatedState.loadedPosts
-    val durationMetadata = remember(relatedPosts, durationStates, durationFilterActive) {
-        durationFilterMetadata(relatedPosts, durationStates, durationFilterActive)
-    }
+    val durationMetadata = rememberDurationFilterMetadata(relatedPosts, durationStates, durationFilterActive)
     val visiblePosts = remember(
         relatedPosts,
         visibilityFilters,

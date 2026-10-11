@@ -92,8 +92,7 @@ import com.theoriacodex.app.ui.components.FeedContinueLoading
 import com.theoriacodex.app.media.isAuthoritativeDurationMedia
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.durationFilterReadiness
-import com.theoriacodex.app.media.durationFilterMetadata
+import com.theoriacodex.app.media.rememberDurationFilterMetadata
 import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.media.animatedDurationLabel
@@ -258,26 +257,9 @@ fun SearchScreen(
     val displayResults = remember(state.content.results, state.content.displayVersion, queryHash) {
         state.content.results
     }
-    val durationMetadata = remember(
-        displayResults,
-        durationStates,
-        animatedDurationFilterActive,
-    ) {
-        durationFilterMetadata(displayResults, durationStates, animatedDurationFilterActive)
-    }
+    val durationMetadata = rememberDurationFilterMetadata(displayResults, durationStates, animatedDurationFilterActive)
     val acquiredDurations = durationMetadata.knownDurationMsByPostId
-    val durationDecisionStates = durationMetadata.stateByPostId
-    val durationReadiness = remember(
-        displayResults,
-        animatedDurationFilterActive,
-        durationDecisionStates,
-    ) {
-        durationFilterReadiness(
-            posts = displayResults,
-            durationFilterActive = animatedDurationFilterActive,
-            stateByPostId = durationDecisionStates,
-        )
-    }
+    val durationReadiness = durationMetadata.readiness
     val visibleResults = remember(
         displayResults,
         visibilityFilters,

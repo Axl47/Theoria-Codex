@@ -55,6 +55,7 @@ internal class MediaDurationRouteViewModel(
     private var candidatesByKey: Map<MediaDurationKey, Post> = emptyMap()
     private var knownDurationsByKey: Map<MediaDurationKey, Long> = emptyMap()
     private var observedKeys: Set<MediaDurationKey> = emptySet()
+    private var retainedDecisions: Map<MediaDurationKey, MediaDurationState> = emptyMap()
     private var backgroundEnabled = false
     private var filterActive = false
     private val visiblePostIds = mutableSetOf<PostId>()
@@ -68,7 +69,7 @@ internal class MediaDurationRouteViewModel(
     init {
         ownerScope.launch {
             coordinator.states.collect { allStates ->
-                if (filterActive) demandLock.withLock { publishObservedStates(allStates) }
+                demandLock.withLock { publishObservedStates(allStates) }
             }
         }
     }
@@ -153,6 +154,7 @@ internal class MediaDurationRouteViewModel(
         candidatesByKey = snapshot.candidatesByKey
         knownDurationsByKey = snapshot.knownDurationsByKey
         observedKeys = snapshot.observedKeys
+        retainedDecisions = withContext(snapshotDispatcher) { retainedDecisions.filterKeys { it in observedKeys } }
         publishObservedStates(coordinator.states.value)
         visiblePostIds.retainAll(snapshot.postsById.keys)
         backgroundEnabled = request.resolveInBackground
@@ -179,7 +181,7 @@ internal class MediaDurationRouteViewModel(
             null
         } ?: keyFactory(post)
         return coordinator.states
-            .map { states -> states[key] }
+            .map { states -> states[key] ?: retainedDecisions[key] }
             .distinctUntilChanged()
     }
 
@@ -350,15 +352,14 @@ internal class MediaDurationRouteViewModel(
             "${key.postId.source.name}:${key.postId.sourcePostId}:${key.mediaFingerprint}"
     }
 
-    private fun publishObservedStates(allStates: Map<MediaDurationKey, MediaDurationState>) {
-        if (!filterActive) return
-        val observed = buildMap {
-            // A long collection can outlive the coordinator's process-cache LRU. Keep decisions
-            // for this snapshot so eviction does not turn a settled filter back into Pending.
-            putAll(mutableStates.value.filterKeys { it in observedKeys })
-            observedKeys.forEach { key -> allStates[key]?.let { state -> put(key, state) } }
-        }
-        if (mutableStates.value != observed) mutableStates.value = observed
+    private suspend fun publishObservedStates(allStates: Map<MediaDurationKey, MediaDurationState>) {
+        val generation = requestGeneration
+        val keys = observedKeys
+        val previous = retainedDecisions
+        val observed = withContext(snapshotDispatcher) { reconcileDurationDecisions(previous, allStates, keys) }
+        if (generation != requestGeneration) return
+        retainedDecisions = observed
+        if (filterActive && mutableStates.value !== observed) mutableStates.value = observed
     }
 
     private enum class DemandLane {

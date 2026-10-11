@@ -6,8 +6,7 @@ import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.DurationFilterReadiness
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.durationFilterMetadata
-import com.theoriacodex.app.media.durationFilterReadiness
+import com.theoriacodex.app.media.rememberDurationFilterMetadata
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 
@@ -34,12 +33,8 @@ internal fun rememberSearchDurationFilterPresentation(
             UnknownAnimatedDurationPolicy.HIDE_UNKNOWNS
         }
     }
-    val metadata = remember(posts, durationStates, active) {
-        durationFilterMetadata(posts, durationStates, active)
-    }
-    val readiness = remember(posts, active, metadata.stateByPostId) {
-        durationFilterReadiness(posts, active, metadata.stateByPostId)
-    }
+    val metadata = rememberDurationFilterMetadata(posts, durationStates, active)
+    val readiness = metadata.readiness
     return SearchDurationFilterPresentation(
         active = active,
         unknownPolicy = unknownPolicy,

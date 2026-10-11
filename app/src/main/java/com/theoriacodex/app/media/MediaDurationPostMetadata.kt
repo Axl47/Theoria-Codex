@@ -58,9 +58,11 @@ internal fun mediaDurationPostSnapshot(
 internal data class DurationFilterMetadata(
     val knownDurationMsByPostId: Map<PostId, Long>,
     val stateByPostId: Map<PostId, MediaDurationState>,
+    val readiness: DurationFilterReadiness = DurationFilterReadiness(0, 0),
 ) {
     companion object {
         val EMPTY = DurationFilterMetadata(emptyMap(), emptyMap())
+        val RESOLVING = DurationFilterMetadata(emptyMap(), emptyMap(), DurationFilterReadiness(1, 1))
     }
 }
 
@@ -68,12 +70,15 @@ internal fun durationFilterMetadata(
     posts: List<Post>,
     states: Map<MediaDurationKey, MediaDurationState>,
     active: Boolean,
+    keysByPostId: Map<PostId, MediaDurationKey>? = null,
 ): DurationFilterMetadata {
     if (!active) return DurationFilterMetadata.EMPTY
-    val keysByPostId = mediaDurationKeysByPostId(posts)
+    val keys = keysByPostId ?: mediaDurationKeysByPostId(posts)
+    val byId = durationStatesByPostId(posts, states, keys)
     return DurationFilterMetadata(
-        knownDurationMsByPostId = knownMediaDurations(posts, states, keysByPostId),
-        stateByPostId = durationStatesByPostId(posts, states, keysByPostId),
+        knownDurationMsByPostId = knownMediaDurations(posts, states, keys),
+        stateByPostId = byId,
+        readiness = durationFilterReadiness(posts, active, byId),
     )
 }
 
