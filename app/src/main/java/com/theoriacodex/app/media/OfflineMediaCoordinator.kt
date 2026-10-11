@@ -89,6 +89,7 @@ class OfflineMediaCoordinator(
                         val current = jobs[owner] ?: return@update jobs
                         jobs + (owner to current.copy(totalPosts = merged.size))
                     }
+                    checkpointInBackground(owner)
                 }
                 return null
             }
@@ -125,7 +126,16 @@ class OfflineMediaCoordinator(
             val job = jobs[owner] ?: return@update jobs
             jobs + (owner to job.copy(isRunning = false, isCancelled = true))
         }
-        scope.launch { com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation { checkpoint() } }
+        checkpointInBackground(owner)
+    }
+
+    private fun checkpointInBackground(owner: String) {
+        scope.launch {
+            val result = com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation { checkpoint() }
+            if (result.isFailure) mutableJobs.update { jobs ->
+                jobs[owner]?.let { job -> jobs + (owner to job.copy(failureReason = "The offline queue update could not be saved.")) } ?: jobs
+            }
+        }
     }
 
     suspend fun remove(owner: String) {

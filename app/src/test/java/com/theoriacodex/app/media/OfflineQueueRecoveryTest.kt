@@ -29,7 +29,7 @@ class OfflineQueueRecoveryTest {
         try {
             val store = OfflineMediaStore(directory.resolve("media"), ioDispatcher = StandardTestDispatcher(testScheduler))
             val queue = OfflinePendingJobStore(directory.resolve("queue.json"))
-            val posts = listOf(post("a"), post("b")).associateBy(Post::id)
+            val posts = listOf(post("a"), post("b"), post("c")).associateBy(Post::id)
             val bStarted = CompletableDeferred<Unit>()
             val acquired = mutableListOf<String>()
             val first = OfflineMediaCoordinator(store, firstScope, { it }, { it.media }, { post, _, output ->
@@ -37,16 +37,20 @@ class OfflineQueueRecoveryTest {
                 acquired += post.id.sourcePostId
                 output.writeText("verified bytes")
             }, pendingStore = queue)
-            first.makeAvailableOffline("codex:keep", posts.values.toList())
+            first.makeAvailableOffline(AUTOMATIC_OFFLINE_OWNER, posts.values.take(2))
             bStarted.await()
+            first.saveOnCollectionSave(posts.values.last())
+            while (queue.load()[AUTOMATIC_OFFLINE_OWNER]?.size != 3) kotlinx.coroutines.yield()
             assertFalse(directory.resolve("queue.json").readText().contains("signed-token"))
             firstScope.cancel()
-            val reopened = OfflineMediaCoordinator(store, secondScope, { posts.getValue(it.id) }, { it.media },
+            val reopenedStore = OfflineMediaStore(directory.resolve("media"), ioDispatcher = StandardTestDispatcher(testScheduler))
+            reopenedStore.load()
+            val reopened = OfflineMediaCoordinator(reopenedStore, secondScope, { posts.getValue(it.id) }, { it.media },
                 { post, _, output -> acquired += post.id.sourcePostId; output.writeText("verified bytes") }, pendingStore = queue)
             reopened.recoverPendingJobs()
-            reopened.jobs.first { it["codex:keep"]?.isRunning == false }
-            assertEquals(listOf("a", "b"), acquired)
-            assertEquals(2, store.snapshot.value.postCount)
+            reopened.jobs.first { it[AUTOMATIC_OFFLINE_OWNER]?.isRunning == false }
+            assertEquals(listOf("a", "b", "c"), acquired)
+            assertEquals(3, reopenedStore.snapshot.value.postCount)
         } finally { firstScope.cancel(); secondScope.cancel(); directory.deleteRecursively() }
     }
 
