@@ -104,7 +104,10 @@ class AppLogicArchitectureTest {
         assertTrue("include(\":app-logic\")" in settings)
         assertTrue("kover(project(\":app-logic\"))" in rootBuild)
         assertTrue(":app-logic:detektMain" in workflow)
-        assertTrue("--include-module app-logic" in workflow)
+        assertTrue("--boundaries config/quality/coverage-boundaries.json" in workflow)
+        val boundaries = File(root, "config/quality/coverage-boundaries.json").readText()
+        val modules = boundaries.substringAfter("\"includeModules\": [").substringBefore("]")
+        assertTrue("\"app-logic\"" in modules)
         assertTrue("app-logic/build/reports/detekt/" in workflow)
     }
 
