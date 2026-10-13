@@ -19,6 +19,17 @@ ANDROID_HOME="$HOME/Library/Android/sdk" \
   ./gradlew :app:assembleBenchmarkRelease :macrobenchmark:assembleBenchmarkRelease
 ```
 
+For one complete current measurement without an existing compatible baseline, run:
+
+```bash
+ANDROID_SERIAL=SERIAL scripts/verify_performance_device.sh capture NEW_EVIDENCE_DIR
+```
+
+This performs the same artifact preflight and complete-trace archiving as calibration, but records
+one capture and claims no regression comparison. Set `THEORIA_DEVICE_OFFLINE=1` when the exact
+build/test dependencies are cached to keep every Gradle step offline. Calibration still requires three distinct full
+runs; a device or OS change requires a fresh compatible calibration.
+
 ## What the journeys exercise
 
 Ten cold and ten warm startup iterations use

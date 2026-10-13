@@ -5,7 +5,11 @@ set -euo pipefail
 readonly repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$repo/scripts/device_validation_common.sh"
 readonly mode="${1:-}"
-if [[ "$mode" == calibrate && $# == 2 ]]; then
+if [[ "$mode" == capture && $# == 2 ]]; then
+  baseline=""
+  destination="$2"
+  captures=1
+elif [[ "$mode" == calibrate && $# == 2 ]]; then
   baseline=""
   destination="$2"
   captures=3
@@ -15,7 +19,8 @@ elif [[ "$mode" == compare && $# == 3 ]]; then
   captures=1
   [[ -f "$baseline" ]] || { echo 'Baseline JSON is missing.' >&2; exit 2; }
 else
-  echo 'Usage: ANDROID_SERIAL=SERIAL scripts/verify_performance_device.sh calibrate NEW_EVIDENCE_DIR' >&2
+  echo 'Usage: ANDROID_SERIAL=SERIAL scripts/verify_performance_device.sh capture NEW_EVIDENCE_DIR' >&2
+  echo '   or: ANDROID_SERIAL=SERIAL scripts/verify_performance_device.sh calibrate NEW_EVIDENCE_DIR' >&2
   echo '   or: ANDROID_SERIAL=SERIAL scripts/verify_performance_device.sh compare BASELINE_JSON NEW_EVIDENCE_DIR' >&2
   exit 2
 fi
@@ -25,7 +30,11 @@ readonly output="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1
 mkdir -p "$output"
 cd "$repo"
 
-test_options=(--console=plain)
+gradle_options=(--console=plain)
+if [[ "${THEORIA_DEVICE_OFFLINE:-0}" == 1 ]]; then
+  gradle_options+=(--offline)
+fi
+test_options=("${gradle_options[@]}")
 record_options=(--compilation 'Partial(BaselineProfileMode.Require,warmupIterations=0)')
 if [[ -n "${BENCHMARK_SCENARIO:-}" ]]; then
   # Validate the selector and bind its full metrics/iterations before any device access.
@@ -46,7 +55,7 @@ require_selected_phone() {
 
 # A dry run is host-only. Actual package manifests and signatures are checked before connected work.
 ./gradlew :macrobenchmark:connectedBenchmarkReleaseAndroidTest "${test_options[@]}" --dry-run > "$output/task-graph.txt" 2>&1
-./gradlew :app:assembleBenchmarkRelease :macrobenchmark:assembleBenchmarkRelease --console=plain > "$output/build.log" 2>&1
+./gradlew :app:assembleBenchmarkRelease :macrobenchmark:assembleBenchmarkRelease "${gradle_options[@]}" > "$output/build.log" 2>&1
 if grep -Eq 'Startup (class|method) not found|missing startup classes and methods' "$output/build.log"; then
   echo 'Startup profiles are stale; regenerate in the isolated baseline-profile lane before measurement.' >&2
   exit 2
@@ -83,7 +92,9 @@ done
 
 if [[ "$mode" == calibrate ]]; then
   python3 scripts/benchmark_results.py calibrate --runs "${run_records[@]}" --output "$output/baseline.json"
-else
+elif [[ "$mode" == compare ]]; then
   python3 scripts/benchmark_results.py compare --baseline "$baseline" \
     --candidate "${run_records[0]}" --output "$output/comparison.json"
+else
+  printf 'Complete physical capture recorded at %s; no calibration or comparison claimed.\n' "${run_records[0]}"
 fi
