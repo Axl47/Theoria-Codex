@@ -78,6 +78,9 @@ fi
 run_records=()
 for ((index=1; index<=captures; index++)); do
   require_selected_phone
+  # Match the device setup normally performed by UTP; no persistent power setting changes.
+  "${adb_command[@]}" shell input keyevent KEYCODE_WAKEUP
+  "${adb_command[@]}" shell wm dismiss-keyguard
   printf 'Running complete physical benchmark capture %s/%s.\n' "$index" "$captures"
   remote="/sdcard/Android/media/com.theoriacodex.macrobenchmark/capture-$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
   results="$output/raw-$index"
