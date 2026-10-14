@@ -109,7 +109,7 @@ private fun RelatedShelfHeader(
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
 ) {
-    val showPageNavigation = state.availablePages.size > 1
+    val showPageNavigation = state.currentPageIndex > 0 || state.availablePages.size > 1
     Row(
         modifier = Modifier
             .fillMaxWidth()
