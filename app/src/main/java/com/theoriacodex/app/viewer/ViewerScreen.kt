@@ -326,6 +326,7 @@ internal fun ViewerScreen(
                 modifier = Modifier.fillMaxSize(),
             ) { postPage ->
             val post = posts[postPage]
+            val pageState = uiState.pages[postPage]
             val terminalResolutionMessage = uiState.pages
                 .getOrNull(postPage)
                 ?.resolution
@@ -336,7 +337,7 @@ internal fun ViewerScreen(
                 ?.message
             val postMedia = remember(post) { postMediaItems(post) }
             val mediaPagerReverseLayout = viewerMediaPagerReverseLayout(
-                mediaCount = postMedia.size,
+                mediaCount = pageState.swipeMediaCount(),
                 invertMultiImageScrollDirection = invertMultiImageScrollDirection,
             )
             val initialMediaPage = uiState.pages
@@ -378,9 +379,9 @@ internal fun ViewerScreen(
                 }
             }
 
-            fun navigateFromHorizontalSwipe(direction: ViewerHorizontalSwipeDirection) {
-                if (viewerTransform.isZoomed) return
-                if (postPage != postPagerState.currentPage) return
+            val navigateFromHorizontalSwipe: (ViewerHorizontalSwipeDirection) -> Unit = navigate@{ direction ->
+                if (viewerTransform.isZoomed) return@navigate
+                if (postPage != postPagerState.currentPage) return@navigate
                 val targetPostIndex = when (direction) {
                     ViewerHorizontalSwipeDirection.Previous -> postPage - 1
                     ViewerHorizontalSwipeDirection.Next -> postPage + 1
@@ -395,7 +396,8 @@ internal fun ViewerScreen(
                     postCount = posts.size,
                     targetPostMediaCount = targetPostMediaCount,
                     direction = direction,
-                ) ?: return
+                    galleryMediaPending = pageState.hasPendingGalleryMedia(),
+                ) ?: return@navigate
 
                 markInteraction()
                 if (target.postIndex == postPage) {
@@ -437,7 +439,7 @@ internal fun ViewerScreen(
                     post = post,
                     media = media,
                     mediaIndex = mediaPage,
-                    mediaCount = postMedia.size,
+                    mediaCount = pageState.swipeMediaCount(),
                     controls = ViewerRendererControls(
                         isActive = active,
                         isPlaying = mediaPlaybackEnabled,
@@ -465,7 +467,7 @@ internal fun ViewerScreen(
                     onInteraction = ::markInteraction,
                     onToggleChrome = { onAction(ViewerAction.ToggleChrome); interactionSerial += 1 },
                     imageSession = imageSession,
-                    onNavigate = ::navigateFromHorizontalSwipe,
+                    onNavigate = navigateFromHorizontalSwipe,
                     onRequestMediaRecovery = onRequestMediaRecovery,
                 )
             }

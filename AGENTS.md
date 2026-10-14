@@ -96,6 +96,10 @@ A related shelf row is never a persistable Search scroll anchor. Projection chan
 
 The `RelatedPosts` Android log tag records sparse shelf state, owner creation/clearing and explicit reset causes without post IDs, tags, media URLs or credentials. Capture by the installed app UID to follow process replacement while excluding other apps. `RelatedViewerReturnTest` exercises the real shell, restored navigation and local Gelbooru video players; its video cases retain the real `TheoriaApplication` media runtime with a `ShadowApplication`-derived startup shadow, and clear navigation owners before shutting down the isolated fixture graph. These host journeys do not prove physical decoder behavior.
 
+## Viewer Gallery Navigation
+
+An unresolved nhentai/Hitomi cover is not an authoritative final gallery page. Prevent forward post-boundary swipes while gallery media is pending, including sparse covers with unknown page counts and failed resolution; backward navigation remains available. Keep gallery swipe inversion consistent while loading. Viewer navigation callbacks must update when hydration replaces the media list: a local callable reference can retain the old captured cover through Compose's callback equality, while a capturing lambda updates correctly. `ViewerGalleryLoadingSwipeTest` covers the real screen's delayed hydration and subsequent page/post swipes.
+
 ## Retired Viewer Translation
 
 Viewer OCR and translation have been removed from Settings and Viewer, including model downloads, analysis, overlays, and remote requests. Legacy OCR preferences, translation lifetime counters, and the Room translation cache schema remain for stored-data compatibility only; do not wire them back into runtime features. The historical `deploy/libretranslate/` gateway is not used by the app; changing the live service requires separate authorization.
