@@ -66,6 +66,30 @@ abstract class VerifyInstallableApplicationIdTask : DefaultTask() {
     }
 }
 
+abstract class VerifyPublicDeveloperCopyAbsentTask : DefaultTask() {
+    @get:InputFile
+    abstract val mergedManifest: RegularFileProperty
+
+    @get:InputFile
+    abstract val mappingFile: RegularFileProperty
+
+    @TaskAction
+    fun verify() {
+        val manifest = mergedManifest.get().asFile.readText()
+        check(listOf("DeveloperCopyProvider", "DeveloperCopyActivity", ".developer-copy").none(manifest::contains)) {
+            "Public release contains a developer copy component"
+        }
+        check(!mappingFile.get().asFile.readText().contains("com.theoriacodex.app.developercopy.")) {
+            "Public release compiled developer copy code"
+        }
+    }
+}
+
+abstract class RejectPersonalReleaseInstallTask : DefaultTask() {
+    @TaskAction
+    fun reject(): Unit = error("Personal production APKs must use the separately verified signed release/update path")
+}
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -105,6 +129,8 @@ android {
         buildConfigField("long", "UPDATE_CHECK_TIMEOUT_MS", "3000L")
         buildConfigField("boolean", "UPDATER_ENABLED", "false")
         buildConfigField("boolean", "BENCHMARK_FIXTURES_ENABLED", "false")
+        buildConfigField("boolean", "DEVELOPER_COPY_ENABLED", "false")
+        buildConfigField("String", "DEVELOPER_COPY_CERT_SHA256", "\"\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -114,6 +140,7 @@ android {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
             buildConfigField("boolean", "UPDATER_ENABLED", "false")
+            buildConfigField("boolean", "DEVELOPER_COPY_ENABLED", "true")
         }
         release {
             isMinifyEnabled = true
@@ -123,6 +150,22 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        // Never add this source set to public release. Personal APKs are signed separately
+        // with the existing production key; connected Gradle installation is forbidden.
+        val copyCertificate = providers.gradleProperty("theoria.developerCopyCertSha256").orNull
+        if (copyCertificate != null) {
+            require(copyCertificate.matches(Regex("[0-9a-fA-F]{64}"))) {
+                "theoria.developerCopyCertSha256 must be one SHA-256 certificate fingerprint"
+            }
+            create("personalRelease") {
+                initWith(getByName("release"))
+                matchingFallbacks += "release"
+                buildConfigField("boolean", "UPDATER_ENABLED", "false")
+                buildConfigField("boolean", "DEVELOPER_COPY_ENABLED", "true")
+                buildConfigField("String", "DEVELOPER_COPY_CERT_SHA256", "\"${copyCertificate.lowercase()}\"")
+                manifestPlaceholders["developerCopyCertificate"] = copyCertificate.lowercase()
+            }
         }
         create("releaseAcceptance") {
             initWith(getByName("release"))
@@ -177,10 +220,27 @@ android {
         getByName("debug").res.directories.add("src/fixtures/res")
         getByName("benchmarkRelease").kotlin.directories.add("src/fixtures/java")
         getByName("benchmarkRelease").res.directories.add("src/fixtures/res")
+        getByName("debug").kotlin.directories.add("src/developerCopy/java")
+        findByName("personalRelease")?.kotlin?.directories?.add("src/developerCopy/java")
     }
 }
 
+val rejectPersonalReleaseInstall = tasks.register<RejectPersonalReleaseInstallTask>("rejectPersonalReleaseInstall")
+tasks.matching {
+    it.name.contains("PersonalRelease") &&
+        (it.name.startsWith("install") || it.name.startsWith("uninstall") || it.name.startsWith("connected"))
+}.configureEach {
+    dependsOn(rejectPersonalReleaseInstall)
+}
+
 androidComponents {
+    // Baseline Profile otherwise synthesizes debug-signed production-ID derivatives of this
+    // personal build. It is an export source only, never a measurement or connected-test lane.
+    beforeVariants(selector().all()) { variant ->
+        if (variant.buildType in setOf("benchmarkPersonalRelease", "nonMinifiedPersonalRelease")) {
+            variant.enable = false
+        }
+    }
     val deviceSafeApplicationIds = mapOf(
         "debug" to "com.theoriacodex.debug",
         "releaseAcceptance" to "com.theoriacodex.acceptance",
@@ -220,7 +280,16 @@ androidComponents {
         }
     }
 
-    setOf("release", "releaseAcceptance", "benchmarkRelease").forEach { buildType ->
+    onVariants(selector().withBuildType("release")) { variant ->
+        val guard = tasks.register<VerifyPublicDeveloperCopyAbsentTask>("verifyPublicDeveloperCopyAbsent") {
+            group = "verification"
+            mergedManifest.set(variant.artifacts.get(SingleArtifact.MERGED_MANIFEST))
+            mappingFile.set(variant.artifacts.get(SingleArtifact.OBFUSCATION_MAPPING_FILE))
+        }
+        tasks.matching { it.name == "assembleRelease" }.configureEach { finalizedBy(guard) }
+    }
+
+    setOf("release", "releaseAcceptance", "benchmarkRelease", "personalRelease").forEach { buildType ->
         onVariants(selector().withBuildType(buildType)) { variant ->
             val capitalizedVariant = variant.name.replaceFirstChar(Char::uppercaseChar)
             val verification = tasks.register<VerifyR8JsonContractsTask>(

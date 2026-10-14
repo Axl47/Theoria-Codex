@@ -28,6 +28,17 @@ class ProfileBackupServiceTest {
     @get:Rule val temporary = TemporaryFolder()
     private val codec = ProfileBackupCodec()
 
+    @Test fun `developer copy selects the imported active profile and repeats without duplicate identities`() = runTest {
+        val harness = harness()
+        val bytes = codec.encode(backup())
+        harness.service.restore(bytes, applyPreferences = true, selectImportedProfile = true)
+        val first = harness.settings.observeSettings().first()
+        assertEquals("restored-operation-0", first.activeProfileId)
+        harness.service.restore(bytes, applyPreferences = true, selectImportedProfile = true)
+        assertEquals(first, harness.settings.observeSettings().first())
+        assertEquals(1, harness.pins.observeSavedSearches().first().size)
+    }
+
     @Test fun `portable round trip preserves profile libraries rules settings and exact search replay`() {
         val backup = backup()
         val bytes = codec.encode(backup)

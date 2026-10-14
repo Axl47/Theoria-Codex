@@ -45,6 +45,7 @@ class TheoriaApplication : Application(), ImageLoaderFactory, TheoriaAppContaine
         }
         startAppContainerIfAllowed(
             benchmarkFixturesEnabled = BuildConfig.BENCHMARK_FIXTURES_ENABLED,
+            developerCopyEnabled = BuildConfig.DEVELOPER_COPY_ENABLED,
             packageName = packageName,
             processName = currentProcessName(),
             start = ::startAppContainer,
@@ -86,7 +87,9 @@ internal fun shouldStartAppContainer(
     benchmarkFixturesEnabled: Boolean,
     packageName: String,
     processName: String?,
+    developerCopyEnabled: Boolean = false,
 ): Boolean {
+    if (developerCopyEnabled && (processName == null || processName == "$packageName:developerCopy")) return false
     val benchmarkFixtureProcess = "$packageName:benchmarkFixture"
     return !benchmarkFixturesEnabled || processName != benchmarkFixtureProcess
 }
@@ -95,9 +98,10 @@ internal inline fun startAppContainerIfAllowed(
     benchmarkFixturesEnabled: Boolean,
     packageName: String,
     processName: String?,
+    developerCopyEnabled: Boolean = false,
     start: () -> Unit,
 ) {
-    if (shouldStartAppContainer(benchmarkFixturesEnabled, packageName, processName)) {
+    if (shouldStartAppContainer(benchmarkFixturesEnabled, packageName, processName, developerCopyEnabled)) {
         start()
     }
 }

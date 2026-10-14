@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.util.AtomicFile
 import android.util.Base64
+import com.theoriacodex.data.repository.readBoundedDocument
 import com.google.gson.Gson
 import com.google.gson.JsonParseException
 import com.google.gson.annotations.SerializedName
@@ -20,12 +21,15 @@ internal class AndroidCredentialEnvelopeStore(
     private val gson: Gson = Gson(),
     private val relativeEnvelopePath: String = CREDENTIAL_ENVELOPE_RELATIVE_PATH,
     keyAlias: String = CREDENTIAL_KEY_ALIAS,
+    private val allowAtomicRecovery: Boolean = true,
 ) : CredentialEnvelopeStore {
     private val appContext = context.applicationContext
     // Context.noBackupFilesDir may create directories. Defer it until a suspending operation so
     // constructing the application graph performs no storage I/O.
     private val envelopeFile: File by lazy {
-        File(appContext.noBackupFilesDir, relativeEnvelopePath)
+        val directory = if (allowAtomicRecovery) appContext.noBackupFilesDir else
+            File(appContext.applicationInfo.dataDir, "no_backup")
+        File(directory, relativeEnvelopePath)
     }
     private val crypto = AndroidKeystoreAesGcm(
         alias = keyAlias,
@@ -36,16 +40,7 @@ internal class AndroidCredentialEnvelopeStore(
 
     override suspend fun read(): CredentialEnvelopeReadResult {
         return try {
-            val atomicFile = AtomicFile(envelopeFile)
-            // An interrupted legacy AtomicFile write may leave only the committed .bak file.
-            if (!envelopeFile.hasCommittedAtomicData()) {
-                return CredentialEnvelopeReadResult.Missing
-            }
-            val raw = atomicFile.readBounded(MAX_CREDENTIAL_ENVELOPE_BYTES) {
-                CredentialEnvelopeCorruptException(
-                    IllegalArgumentException("Credential envelope exceeds its bounded storage limit"),
-                )
-            }
+            val raw = readEnvelopeBytes() ?: return CredentialEnvelopeReadResult.Missing
             val envelope = gson.fromJson(
                 raw.toString(Charsets.UTF_8),
                 CredentialEnvelopeRecord::class.java,
@@ -89,6 +84,25 @@ internal class AndroidCredentialEnvelopeStore(
             throw error
         } catch (error: Exception) {
             error.toCredentialReadFailure()
+        }
+    }
+
+    private suspend fun readEnvelopeBytes(): ByteArray? {
+        // AtomicFile.openRead may rename .bak or remove .new. A developer export must
+        // neither repair those artifacts nor create the no-backup directory while reading.
+        if (!allowAtomicRecovery && (File(envelopeFile.path + ".bak").exists() ||
+                File(envelopeFile.path + ".new").exists())) {
+            throw IOException("Credential envelope has an unfinished atomic write")
+        }
+        // An interrupted ordinary read may recover only the committed .bak file.
+        if (!envelopeFile.hasCommittedAtomicData()) return null
+        if (!allowAtomicRecovery) return envelopeFile.inputStream().use {
+            readBoundedDocument(it, MAX_CREDENTIAL_ENVELOPE_BYTES)
+        }
+        return AtomicFile(envelopeFile).readBounded(MAX_CREDENTIAL_ENVELOPE_BYTES) {
+            CredentialEnvelopeCorruptException(
+                IllegalArgumentException("Credential envelope exceeds its bounded storage limit"),
+            )
         }
     }
 

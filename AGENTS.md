@@ -162,6 +162,21 @@ Animation exports reuse the queue's durable marker in MediaStore pending/complet
 
 ## Production App Data Safety
 
+The developer profile-copy lane is deliberately separate from public builds. Only an explicitly
+configured `personalRelease` compiles the export bridge and declares its provider; ordinary release
+assembly verifies its absence in the merged manifest and R8 mapping. The `:developerCopy` process
+skips the production app graph so export cannot run migrations, credential cleanup, native transfer
+recovery, or pending profile intents. Its SQLite connection is opened read-only and rejects changes
+through `PRAGMA data_version` across staging; older Android write-transaction APIs cannot be used
+on this connection. Credentials are read directly from the existing envelope without refresh or
+migration and transferred only over a certificate-authenticated pipe. Its envelope reader must disable
+AtomicFile read recovery: even `openRead()` can rename `.bak` or delete `.new` files. Export rejects
+those unfinished artifacts instead, and must not create the no-backup directory. See README's developer-copy
+commands. The script never installs or mutates production packages; use the separately verified signed
+release path for the personal APK and never `installPersonalRelease`. The manual
+`personal-debug-copy.yml` workflow reuses production signing secrets and uploads a one-day Actions
+artifact only; it must not publish the bridge through a public release or automatic push workflow.
+
 Profile backups are logical metadata snapshots, never copies of live Room/DataStore files. Exclude credentials, offline media, signed media URLs, and device paths while preserving canonical public provider links. Restore creates fresh profile/Codex/follow identities and uses a bounded fsynced intent journal; finish `recoverPendingRestore()` before exposing the app graph. Preserve existing shared post payloads and keep every phase idempotent. Legacy Likes may lack a full Post, and system Likes Codices may contain independently saved members; these are distinct valid states.
 
 Profile removal uses one Room transaction for its complete library and a durable deletion intent for the Settings boundary. Recover pending deletion before exposing routes. Operational intents use `AtomicJsonFileStore.writeIntent` for bounded UTF-8 bytes, file fsync, and directory-entry fsync after publication (including new ancestor directories) before admitting destructive or native work; sync failures stop admission. Ordinary `write` provides atomic replacement only. The shared profile write guard must run inside Room/DataStore transactions and retain retired IDs for the process lifetime: a delayed captured command must not recreate the removed profile's collections after the journal completes.

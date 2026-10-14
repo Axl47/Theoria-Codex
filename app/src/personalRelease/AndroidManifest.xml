@@ -1,0 +1,10 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries><package android:name="com.theoriacodex.debug" /></queries>
+    <application>
+        <provider android:name="com.theoriacodex.app.developercopy.DeveloperCopyProvider"
+            android:authorities="${applicationId}.developer-copy" android:exported="true"
+            android:process=":developerCopy" android:grantUriPermissions="false">
+            <meta-data android:name="developerCopyDebugCertificateSha256" android:value="${developerCopyCertificate}" />
+        </provider>
+    </application>
+</manifest>
