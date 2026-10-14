@@ -83,6 +83,7 @@ internal class ForYouViewModel(
         sortMode = savedStateHandle.get<String>(KEY_SORT_MODE)
             ?.let { name -> SortMode.entries.firstOrNull { it.name == name } } ?: initialSort ?: SortMode.NEWEST,
     ))
+    private val relatedDiagnostics = com.theoriacodex.app.related.RelatedPostsDiagnostics("ForYou", this)
     private val relatedPosts = RelatedPostsRouteController(
         scope = ownerScope,
         loader = relatedPostsLoader,
@@ -92,8 +93,18 @@ internal class ForYouViewModel(
             val current = mutableState.value
             mutableState.value = current.copy(results = promoteRelatedPost(current.results, post, index))
         },
-        updateState = { related -> mutableState.value = mutableState.value.copy(relatedPosts = related) },
+        updateState = { related ->
+            relatedDiagnostics.record("state updated", related)
+            mutableState.value = mutableState.value.copy(relatedPosts = related)
+        },
+        onClear = { state, reason -> relatedDiagnostics.record("clear: $reason", state) },
     )
+    init {
+        relatedDiagnostics.record("owner created", mutableState.value.relatedPosts)
+        addCloseable("related-posts-diagnostics", java.io.Closeable {
+            relatedDiagnostics.record("owner cleared", mutableState.value.relatedPosts)
+        })
+    }
     override val state: StateFlow<ForYouUiState> = mutableState.asStateFlow()
     private val effectChannel = Channel<ForYouEffect>(capacity = Channel.BUFFERED)
     override val effects: Flow<ForYouEffect> = effectChannel.receiveAsFlow()
@@ -131,7 +142,7 @@ internal class ForYouViewModel(
         if (transition.state.activeRequest?.kind == ForYouRequestKind.REFRESH &&
             transition.state.activeRequest != previous.activeRequest
         ) {
-            relatedPosts.clear()
+            relatedPosts.clear("recommendation root (${action.javaClass.simpleName})")
             hasRequestedFeed = true
             replaySearch = action as? ForYouAction.ReplaySearch
         }
@@ -155,11 +166,16 @@ internal class ForYouViewModel(
         val available = engine.availableSources(settings)
         val sourcesChanged = previous.availableSources != available
         val refreshRequired = profileChanged || runtimeChanged || sourcesChanged || (blacklistChanged && !ownBlacklistWrite)
+        relatedDiagnostics.record(
+            "environment: profile=$profileChanged runtime=$runtimeChanged sources=$sourcesChanged blacklist=$blacklistChanged",
+            previous.relatedPosts,
+            enabled = refreshRequired,
+        )
         if (refreshRequired) cancelActiveReduction()
         if (profileChanged) {
             hasRequestedFeed = false
             replaySearch = null
-            relatedPosts.clear()
+            relatedPosts.clear("active profile changed")
         }
         val current = mutableState.value
         mutableState.value = current.copy(
@@ -186,6 +202,7 @@ internal class ForYouViewModel(
         val available = engine.availableSources(settings)
         val changed = mutableState.value.availableSources != available
         if (changed) {
+            relatedDiagnostics.record("available sources changed", mutableState.value.relatedPosts)
             cancelActiveReduction()
             val current = mutableState.value
             mutableState.value = current.copy(

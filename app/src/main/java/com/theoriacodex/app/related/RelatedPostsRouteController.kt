@@ -17,6 +17,7 @@ internal class RelatedPostsRouteController(
     private val promotePost: (post: Post, insertionIndex: Int) -> Unit = { _, _ -> },
     private val updateState: (RelatedPostsUiState) -> Unit,
     private val requestTimeoutMs: Long = DEFAULT_RELATED_POSTS_TIMEOUT_MS,
+    private val onClear: (RelatedPostsUiState, String) -> Unit = { _, _ -> },
 ) {
     init {
         require(requestTimeoutMs > 0L) { "Related-post timeout must be positive" }
@@ -29,6 +30,7 @@ internal class RelatedPostsRouteController(
         if (outcome == LikeToggleOutcome.UNLIKED) {
             val updated = currentState().clearIfSeed(post.id)
             if (updated !== currentState()) {
+                onClear(currentState(), "seed unliked")
                 cancelJob("Related-post seed unliked")
                 updateState(updated)
             }
@@ -65,9 +67,12 @@ internal class RelatedPostsRouteController(
         updateState(current.selectPage(current.currentPageIndex + 1))
     }
 
-    fun clear() {
-        cancelJob("Related-post shelf cleared")
-        if (currentState() != RelatedPostsUiState.Idle) updateState(RelatedPostsUiState.Idle)
+    fun clear(reason: String = "dismissed") {
+        cancelJob("Related-post shelf cleared: $reason")
+        if (currentState() != RelatedPostsUiState.Idle) {
+            onClear(currentState(), reason)
+            updateState(RelatedPostsUiState.Idle)
+        }
     }
 
     private fun launch(

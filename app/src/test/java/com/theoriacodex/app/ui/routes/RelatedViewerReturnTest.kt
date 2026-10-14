@@ -12,6 +12,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -28,6 +29,7 @@ import androidx.compose.ui.test.printToString
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.app.appshell.AppShellViewModel
+import com.theoriacodex.app.TheoriaApplication
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.fixtures.JourneyAppContainer
 import com.theoriacodex.app.search.searchCardTestTag
@@ -51,6 +53,9 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.Implementation
+import org.robolectric.annotation.Implements
+import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [35])
@@ -60,12 +65,24 @@ class RelatedViewerReturnTest {
 
     @Test fun `Search related shelf survives repeated fullscreen return`() = verifyReturn(RecentSearchKind.SOURCE)
     @Test fun `For You related shelf survives repeated fullscreen return`() = verifyReturn(RecentSearchKind.FYP)
+    @Test
+    @Config(application = TheoriaApplication::class, shadows = [ViewerReturnApplicationShadow::class])
+    fun `Gelbooru video shelf survives Search fullscreen return`() = verifyReturn(RecentSearchKind.SOURCE, SourceKey.GELBOORU, true)
+    @Test
+    @Config(application = TheoriaApplication::class, shadows = [ViewerReturnApplicationShadow::class])
+    fun `Gelbooru video shelf survives For You fullscreen return`() = verifyReturn(RecentSearchKind.FYP, SourceKey.GELBOORU, true)
 
-    private fun verifyReturn(kind: RecentSearchKind) {
+    private fun verifyReturn(kind: RecentSearchKind, source: SourceKey = SourceKey.PIXIV, video: Boolean = false) {
+        val videoPath = if (video) {
+            val root = generateSequence(File(requireNotNull(System.getProperty("user.dir"))).absoluteFile) { it.parentFile }
+                .first { File(it, "settings.gradle.kts").isFile }
+            File(root, "app/src/benchmarkRelease/res/raw/benchmark_loop.mp4").absolutePath
+        } else null
         val posts = (0..35).map { index ->
             val media = ImageRef(null, "/nonexistent/related-$index.jpg", "image/jpeg")
-            testPost(SourceKey.PIXIV, "return-$index").copy(
-                preview = media, full = media, media = listOf(media), width = 160, height = 120,
+            val full = videoPath?.let { ImageRef(null, it, "video/mp4") } ?: media
+            testPost(source, "return-$index").copy(
+                preview = media, full = full, media = listOf(full), width = 160, height = 120,
                 canonicalTags = listOf(if (index >= 6) "seed" else "other"),
             )
         }
@@ -74,18 +91,19 @@ class RelatedViewerReturnTest {
         var viewModelOwner: ViewModelStoreOwner? = null
         val graph = runBlocking(Dispatchers.IO) {
             JourneyAppContainer(ApplicationProvider.getApplicationContext(), temporary.newFolder(),
-                mapOf(SourceKey.PIXIV to posts), scope).also {
+                mapOf(source to posts), scope).also {
                 it.awaitReady()
                 it.data.recentsRepository.recordSearch(
-                    Query(if (kind == RecentSearchKind.FYP) QueryMode.Unified else QueryMode.Source(SourceKey.PIXIV),
+                    Query(if (kind == RecentSearchKind.FYP) QueryMode.Unified else QueryMode.Source(source),
                         listOf("seed"), emptyList(), SortMode.NEWEST, null, null),
-                    "return-query", kind, listOf(SourceKey.PIXIV),
-                    if (kind == RecentSearchKind.FYP) mapOf(SourceKey.PIXIV to listOf("seed")) else emptyMap(),
+                    "return-query", kind, listOf(source),
+                    if (kind == RecentSearchKind.FYP) mapOf(source to listOf("seed")) else emptyMap(),
                 )
             }
         }
         try {
-            compose.setContent {
+            val restoration = StateRestorationTester(compose)
+            restoration.setContent {
                 val owner = LocalViewModelStoreOwner.current
                 SideEffect { viewModelOwner = owner }
                 if (showApp.value) TheoriaAppContent(graph, viewModel<ViewerSessionRetentionViewModel>(), viewModel<AppShellViewModel>())
@@ -107,9 +125,13 @@ class RelatedViewerReturnTest {
             val relatedCard = compose.onNodeWithTag(searchCardTestTag(posts[0].id))
             val shelfTop = relatedCard.fetchSemanticsNode().boundsInRoot.top
             val roots = graph.registry.requests.count { it.pageToken == null }
-            repeat(3) {
+            repeat(3) { iteration ->
                 relatedCard.assertIsDisplayed().performClick()
                 compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Back").isDisplayed() }
+                if (iteration == 1) {
+                    restoration.emulateSavedInstanceStateRestore()
+                    compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Back").isDisplayed() }
+                }
                 compose.onNodeWithContentDescription("Back").assertIsDisplayed().performClick()
                 compose.waitUntil(10_000) { compose.onAllNodesWithText("More like this").fetchSemanticsNodes().isNotEmpty() }
                 relatedCard.assertIsDisplayed()
@@ -129,4 +151,10 @@ class RelatedViewerReturnTest {
             scope.cancel()
         }
     }
+}
+
+/** Keep the real application-owned video runtime while the test supplies its isolated fixture graph. */
+@Implements(TheoriaApplication::class)
+class ViewerReturnApplicationShadow : org.robolectric.shadows.ShadowApplication() {
+    @Implementation fun onCreate() = Unit
 }

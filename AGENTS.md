@@ -92,6 +92,8 @@ Viewer sessions opened from Search or For You retain that launch owner's transie
 
 A related shelf row is never a persistable Search scroll anchor. Projection changes must not restart scroll observation or replace the latest canonical post position with the shelf seed; if the shelf is first visible, retain the previous valid position. Bound the complete related-post load, including provider retries, to 15 seconds and convert only that deadline into the shelf Retry state. Route replacement, dismissal, and owner cancellation remain true cancellation and must not surface as timeout failures.
 
+The `RelatedPosts` Android log tag records sparse shelf state, owner creation/clearing and explicit reset causes without post IDs, tags, media URLs or credentials. Capture by the installed app UID to follow process replacement while excluding other apps. `RelatedViewerReturnTest` exercises the real shell, restored navigation and local Gelbooru video players; its video cases retain the real `TheoriaApplication` media runtime with a `ShadowApplication`-derived startup shadow, and clear navigation owners before shutting down the isolated fixture graph. These host journeys do not prove physical decoder behavior.
+
 ## Retired Viewer Translation
 
 Viewer OCR and translation have been removed from Settings and Viewer, including model downloads, analysis, overlays, and remote requests. Legacy OCR preferences, translation lifetime counters, and the Room translation cache schema remain for stored-data compatibility only; do not wire them back into runtime features. The historical `deploy/libretranslate/` gateway is not used by the app; changing the live service requires separate authorization.

@@ -95,6 +95,7 @@ internal class SearchViewModel(
         ),
     )
     private val effectChannel = Channel<SearchEffect>(capacity = Channel.BUFFERED)
+    private val relatedDiagnostics = com.theoriacodex.app.related.RelatedPostsDiagnostics("Search", this)
     private val relatedPosts = RelatedPostsRouteController(
         scope = viewModelScope,
         loader = relatedPostsLoader,
@@ -113,7 +114,11 @@ internal class SearchViewModel(
                 ),
             )
         },
-        updateState = { related -> mutableState.value = mutableState.value.copy(relatedPosts = related) },
+        updateState = { related ->
+            relatedDiagnostics.record("state updated", related)
+            mutableState.value = mutableState.value.copy(relatedPosts = related)
+        },
+        onClear = { state, reason -> relatedDiagnostics.record("clear: $reason", state) },
     )
 
     override val state: StateFlow<SearchUiState> = mutableState.asStateFlow()
@@ -142,6 +147,10 @@ internal class SearchViewModel(
         },
     )
     init {
+        relatedDiagnostics.record("owner created", mutableState.value.relatedPosts)
+        addCloseable("related-posts-diagnostics", java.io.Closeable {
+            relatedDiagnostics.record("owner cleared", mutableState.value.relatedPosts)
+        })
         addCloseable(SEARCH_SCROLL_PERSISTENCE_KEY, scrollPersistence)
     }
 
@@ -506,12 +515,14 @@ internal class SearchViewModel(
         val requiresRetry = hadExecutedSearch && (change.settingsChanged || change.sourcesChanged ||
             draft != current.query.draft || applied != current.query.applied)
         if (requiresRetry && scheduleRetry) {
-            val current = mutableState.value
+            val latest = mutableState.value
             launchRootSearch(
                 kind = SearchRequestKind.RETRY,
-                query = current.query.applied,
-                sourceScope = current.query.appliedSourceScope,
+                query = latest.query.applied,
+                sourceScope = latest.query.appliedSourceScope,
                 persistAcceptedResult = false,
+                relatedResetReason = "environment: runtime=${change.settingsChanged} sources=${change.sourcesChanged} " +
+                    "draft=${draft != current.query.draft} applied=${applied != current.query.applied}",
             )
         }
         return requiresRetry
@@ -616,8 +627,9 @@ internal class SearchViewModel(
         sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
         persistAcceptedResult: Boolean,
         onSuccess: suspend () -> Unit = {},
+        relatedResetReason: String = "root search ($kind)",
     ) {
-        relatedPosts.clear()
+        relatedPosts.clear(relatedResetReason)
         cancelActiveRequest()
         activeContinuation = null
         pageRetrySource = null
