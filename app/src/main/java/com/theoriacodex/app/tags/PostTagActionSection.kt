@@ -103,11 +103,13 @@ fun PostTagActionSection(
                 },
                 onIncludeTerm = { term ->
                     val stored = selection.included(term)
-                    if (stored != null) onRemoveIncludeTerm(stored) else onAddIncludeTerm(term)
+                    if (stored != null) onRemoveIncludeTerm(stored)
+                    else if (onAddIncludeTerm(term)) selection.excluded(term)?.let(onRemoveExcludeTerm)
                 },
                 onExcludeTerm = { term ->
                     val stored = selection.excluded(term)
-                    if (stored != null) onRemoveExcludeTerm(stored) else onAddExcludeTerm(term)
+                    if (stored != null) onRemoveExcludeTerm(stored)
+                    else if (onAddExcludeTerm(term)) selection.included(term)?.let(onRemoveIncludeTerm)
                 },
             )
         }

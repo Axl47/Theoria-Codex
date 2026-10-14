@@ -9,6 +9,9 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import com.theoriacodex.app.search.state.SearchUiState
 import com.theoriacodex.app.testing.testPost
 import com.theoriacodex.domain.model.SearchTerm
@@ -25,6 +28,47 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [35])
 class PostTagDraftBindingTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun `switching polarity removes the opposing canonical selection only after acceptance`() {
+        val tag = SearchTerm("cat")
+        val base = SearchUiState().query.draft
+        val draft = mutableStateOf(base.copy(excludeTerms = listOf(tag)))
+        var accept = true
+        compose.setContent { MaterialTheme {
+            PostTagActionSection(testPost().copy(canonicalTags = listOf("cat"), taxonomy = emptyList()),
+                draftQuery = draft.value,
+                onAddIncludeTerm = { term ->
+                    if (accept) draft.value = draft.value.withIncludeTermsAsRequired(draft.value.includeTerms + term)
+                    accept
+                },
+                onAddExcludeTerm = { term ->
+                    if (accept) draft.value = draft.value.copy(excludeTerms = draft.value.excludeTerms + term)
+                    accept
+                },
+                onRemoveIncludeTerm = { term -> draft.value = draft.value.withIncludeTermsAsRequired(draft.value.includeTerms - term) },
+                onRemoveExcludeTerm = { term -> draft.value = draft.value.copy(excludeTerms = draft.value.excludeTerms - term) })
+        } }
+        fun click(label: String) = compose.onNodeWithContentDescription(label)
+            .performSemanticsAction(SemanticsActions.OnClick) { it() }
+        val selected = SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)
+        val absent = SemanticsMatcher.expectValue(SemanticsProperties.Selected, false)
+        click("Include cat in Search")
+        compose.onNodeWithText("+").assert(selected)
+        compose.onNodeWithText("-").assert(absent)
+        compose.runOnIdle { accept = false }
+        click("Exclude cat from Search")
+        compose.onNodeWithText("+").assert(selected)
+        compose.onNodeWithText("-").assert(absent)
+        compose.runOnIdle { accept = true }
+        click("Exclude cat from Search")
+        compose.onNodeWithText("+").assert(absent)
+        compose.onNodeWithText("-").assert(selected)
+        compose.runOnIdle { accept = false }
+        click("Include cat in Search")
+        compose.onNodeWithText("+").assert(absent)
+        compose.onNodeWithText("-").assert(selected)
+        assertEquals(listOf(tag), draft.value.excludeTerms)
+    }
 
     @Test fun `reopening and external edits follow the draft while queued acceptance never invents selection`() {
         val tag = SearchTerm("cat")
