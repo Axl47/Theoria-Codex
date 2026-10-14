@@ -17,6 +17,57 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PostDownloadRecoveryTest {
+    @Test fun `retry keeps a completed export identity across a failed acknowledgement and process restart`() = runTest {
+        val directory = Files.createTempDirectory("export-recovery").toFile()
+        val firstScope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+        val secondScope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+        val marker = "stable-export"
+        val encoded = mutableSetOf<String>()
+        val markers = mutableListOf<String>()
+        val backend = object : PostDownloadBackend {
+            override suspend fun prepare(request: PostDownloadRequest): PreparedPostDownload {
+                markers += request.marker
+                if (encoded.add(request.marker)) throw java.io.IOException("Published before acknowledgement")
+                return PreparedPostDownload.Saved
+            }
+            override suspend fun snapshot(downloadId: Long): DownloadTransferSnapshot = error("Not a native download")
+            override suspend fun cancel(downloadId: Long) = Unit
+        }
+        try {
+            val store = FileBackedPostDownloadJobStore(directory.resolve("queue.json"))
+            val first = PostDownloadQueue(firstScope, backend, jobStore = store)
+            first.submit("Animation", listOf(PostDownloadRequest(testPost(), marker = marker)))
+            first.batches.first { it.single().failedCount == 1 }
+            while (store.load().single().failedCount != 1) kotlinx.coroutines.yield()
+            firstScope.cancel()
+            val reopened = PostDownloadQueue(secondScope, backend, jobStore = store)
+            reopened.restore()
+            reopened.retryFailed(reopened.batches.value.single().id)
+            reopened.batches.first { it.single().savedCount == 1 }
+            assertEquals(listOf(marker, marker), markers)
+            assertEquals(setOf(marker), encoded)
+        } finally { firstScope.cancel(); secondScope.cancel(); directory.deleteRecursively() }
+    }
+
+    @Test fun `legacy interrupted preparation remains explicitly ambiguous after migration and resave`() = runTest {
+        val directory = Files.createTempDirectory("legacy-export").toFile()
+        try {
+            val file = directory.resolve("queue.json")
+            val store = FileBackedPostDownloadJobStore(file)
+            val batch = PostDownloadBatch(1, "Old", listOf(PostDownloadItem(2, PostDownloadRequest(testPost()),
+                PostDownloadStatus.PREPARING)))
+            store.save(listOf(batch))
+            assertFalse(store.load().single().items.single().request.untrackedPreparation)
+            val legacy = com.google.gson.JsonParser.parseString(file.readText()).asJsonObject
+            legacy.addProperty("version", 1)
+            file.writeText(legacy.toString())
+            val restored = store.load()
+            assertTrue(restored.single().items.single().request.untrackedPreparation)
+            store.save(restored)
+            assertTrue(store.load().single().items.single().request.untrackedPreparation)
+        } finally { directory.deleteRecursively() }
+    }
+
     @Test fun `a reopened queue reconciles completed and active native transfers before continuing gallery pages`() = runTest {
         val directory = Files.createTempDirectory("download-recovery").toFile()
         val firstScope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))

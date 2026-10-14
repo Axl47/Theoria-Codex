@@ -21,7 +21,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 
 internal data class PostDownloadRequest(val post: Post, val selectedMedia: SelectedDownloadMedia? = null,
-    val marker: String = UUID.randomUUID().toString(), val restored: Boolean = false)
+    val marker: String = UUID.randomUUID().toString(), val restored: Boolean = false,
+    val untrackedPreparation: Boolean = false)
 internal data class SelectedDownloadMedia(val media: ImageRef, val pageIndex: Int, val totalPages: Int)
 
 internal enum class PostDownloadStatus { QUEUED, PREPARING, DOWNLOADING, WAITING, SAVED, ALREADY_EXISTS, FAILED, CANCELLED }
@@ -145,23 +146,25 @@ internal class PostDownloadQueue(
         restore()
         val failed = mutableBatches.value.find { it.id == batchId }?.items.orEmpty()
             .filter { it.status == PostDownloadStatus.FAILED }
-        failed.forEach { item ->
-            val nativeId = item.downloadId ?: if (item.enqueuePending) backend.findTransfer(item.request.marker) else null
-            // Losing a marker to a native redirect cannot authorize a duplicate of an unknown transfer.
-            if (item.enqueuePending && nativeId == null) return@forEach
-            val nativeStatus = nativeId?.let { backend.snapshot(it).status }
-            if (nativeStatus == PostDownloadStatus.SAVED || nativeStatus == PostDownloadStatus.ALREADY_EXISTS) {
-                update(item.id) { it.copy(status = requireNotNull(nativeStatus), downloadId = nativeId, enqueuePending = false, message = null) }
-            } else if (nativeStatus in ACTIVE_DOWNLOAD_STATUSES) {
-                update(item.id) { it.copy(status = PostDownloadStatus.QUEUED, downloadId = nativeId, enqueuePending = false, message = null) }
-            } else {
-                nativeId?.let { backend.cancel(it) }
-                update(item.id) { it.copy(status = PostDownloadStatus.QUEUED, downloadId = null, enqueuePending = false,
-                    request = it.request.copy(marker = UUID.randomUUID().toString()), message = null) }
-            }
-        }
+        failed.forEach { retryItem(it) }
         checkpoint()
         schedule()
+    }
+
+    private suspend fun retryItem(item: PostDownloadItem) {
+        val nativeId = item.downloadId ?: if (item.enqueuePending) backend.findTransfer(item.request.marker) else null
+        // Losing a marker to a native redirect cannot authorize a duplicate of an unknown transfer.
+        if (item.enqueuePending && nativeId == null) return
+        val nativeStatus = nativeId?.let { backend.snapshot(it).status }
+        if (nativeStatus == PostDownloadStatus.SAVED || nativeStatus == PostDownloadStatus.ALREADY_EXISTS) {
+            update(item.id) { it.copy(status = requireNotNull(nativeStatus), downloadId = nativeId, enqueuePending = false, message = null) }
+        } else if (nativeStatus in ACTIVE_DOWNLOAD_STATUSES) {
+            update(item.id) { it.copy(status = PostDownloadStatus.QUEUED, downloadId = nativeId, enqueuePending = false, message = null) }
+        } else {
+            nativeId?.let { backend.cancel(it) }
+            update(item.id) { it.copy(status = PostDownloadStatus.QUEUED, downloadId = null, enqueuePending = false,
+                request = if (nativeId == null) it.request else it.request.copy(marker = UUID.randomUUID().toString()), message = null) }
+        }
     }
 
     private fun schedule() {

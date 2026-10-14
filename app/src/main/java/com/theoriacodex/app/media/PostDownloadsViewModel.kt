@@ -23,7 +23,7 @@ internal class PostDownloadsViewModel(
     context: Context,
     readSettings: suspend () -> CacheSettings,
     resolvePost: suspend (Post) -> Post?,
-    exportAnimation: suspend (Post) -> Result<Unit>,
+    exportAnimation: suspend (Post, String) -> Result<Unit>,
 ) : ViewModel() {
     // Retain the ViewModel Job and serialize commands with worker continuations off Main.
     private val queueScope = CoroutineScope(viewModelScope.coroutineContext + Dispatchers.IO.limitedParallelism(1))
@@ -62,20 +62,24 @@ internal class PostDownloadsViewModel(
     }
 }
 
-private class AndroidPostDownloadBackend(
+internal class AndroidPostDownloadBackend(
     private val context: Context,
     private val readSettings: suspend () -> CacheSettings,
     private val resolvePost: suspend (Post) -> Post?,
-    private val exportAnimation: suspend (Post) -> Result<Unit>,
+    private val exportAnimation: suspend (Post, String) -> Result<Unit>,
 ) : PostDownloadBackend {
     override suspend fun prepare(request: PostDownloadRequest): PreparedPostDownload {
+        if (request.restored && request.post.id.source == com.theoriacodex.domain.model.SourceKey.PIXIV &&
+            AnimationExportDestination(context).findCompleted(request.marker) != null) return PreparedPostDownload.Saved
         val settings = readSettings()
         val post = if (request.restored || request.selectedMedia == null && requiresLazyMediaResolution(request.post)) {
             resolvePost(request.post) ?: throw DownloadPreparationException("The provider could not load this post's media.")
         } else request.post
         if (isPixivUgoiraPost(post)) {
+            if (request.untrackedPreparation) throw DownloadPreparationException(
+                "An older animation save was interrupted. Check saved videos before starting a new download.")
             context.animationExportNetworkBlock(settings)?.let { throw DownloadPreparationException(it) }
-            exportAnimation(post).getOrElse {
+            exportAnimation(post, request.marker).getOrElse {
                 if (it is CancellationException) throw it
                 throw DownloadPreparationException("Could not export this animation. Try again.")
             }

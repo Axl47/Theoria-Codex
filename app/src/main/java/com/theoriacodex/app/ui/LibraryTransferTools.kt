@@ -55,8 +55,8 @@ internal fun rememberLibraryTransferTools(
                     context = context,
                     readSettings = { container.data.settingsRepository.observeSettings().first().cache },
                     resolvePost = { post -> container.sources.registry.adapterFor(post.id.source)?.resolvePost(post.id) },
-                    exportAnimation = { post ->
-                        container.sources.pixivUgoiraClient.exportToMp4(context, post.id.sourcePostId, post.title).map { Unit }
+                    exportAnimation = { post, marker ->
+                        container.sources.pixivUgoiraClient.exportToMp4(context, post.id.sourcePostId, post.title, marker).map { Unit }
                     },
                 )
             }

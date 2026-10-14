@@ -1,6 +1,5 @@
 package com.theoriacodex.app.viewer
 
-import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.media.Image
@@ -9,10 +8,6 @@ import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.net.Uri
-import android.os.Build
-import android.os.Environment
-import android.os.ParcelFileDescriptor
-import android.provider.MediaStore
 import androidx.core.graphics.scale
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -153,9 +148,10 @@ class PixivUgoiraClient internal constructor(
         context: Context,
         postId: String,
         title: String?,
+        marker: String? = null,
     ): Result<Uri> {
         return runCatchingPreservingCancellation {
-            exportToMp4OrThrow(context, postId, title)
+            exportToMp4OrThrow(context, postId, title, marker)
         }
     }
 
@@ -367,77 +363,14 @@ class PixivUgoiraClient internal constructor(
         context: Context,
         postId: String,
         title: String?,
+        marker: String?,
     ): Uri = withContext(Dispatchers.IO) {
+        val destination = com.theoriacodex.app.media.AnimationExportDestination(context)
+        marker?.let { destination.findCompleted(it)?.let { uri -> return@withContext uri } }
         val playback = load(postId, UgoiraSizeBucket.EXPORT).getOrThrow()
         val fileName = buildMp4FileName(postId = postId, title = title)
-
-        val mediaStoreResult = runCatching {
-            saveToMediaStore(context = context, playback = playback, fileName = fileName)
-        }.getOrNull()
-        if (mediaStoreResult != null) {
-            return@withContext mediaStoreResult
-        }
-
-        val directory = File(
-            context.getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: context.filesDir,
-            "TheoriaCodex",
-        )
-        if (!directory.exists()) {
-            directory.mkdirs()
-        }
-        val destination = File(directory, fileName)
-
-        ParcelFileDescriptor.open(
-            destination,
-            ParcelFileDescriptor.MODE_CREATE or
-                ParcelFileDescriptor.MODE_TRUNCATE or
-                ParcelFileDescriptor.MODE_WRITE_ONLY,
-        ).use { parcelDescriptor ->
-            val fileDescriptor = parcelDescriptor?.fileDescriptor
-                ?: throw IOException("Could not open video destination")
-            encodePlaybackToMp4(playback = playback, outputFileDescriptor = fileDescriptor)
-        }
-
-        Uri.fromFile(destination)
-    }
-
-    private fun saveToMediaStore(
-        context: Context,
-        playback: UgoiraPlayback,
-        fileName: String,
-    ): Uri {
-        val resolver = context.contentResolver
-        val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-            put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_MOVIES}/TheoriaCodex")
-                put(MediaStore.MediaColumns.IS_PENDING, 1)
-            }
-        }
-
-        val collection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-        val destinationUri = resolver.insert(collection, values)
-            ?: throw IOException("Could not create MediaStore entry for ugoira export")
-
-        try {
-            resolver.openFileDescriptor(destinationUri, "w")?.use { parcelDescriptor ->
-                encodePlaybackToMp4(
-                    playback = playback,
-                    outputFileDescriptor = parcelDescriptor.fileDescriptor,
-                )
-            } ?: throw IOException("Could not open MediaStore file descriptor")
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val publish = ContentValues().apply {
-                    put(MediaStore.MediaColumns.IS_PENDING, 0)
-                }
-                resolver.update(destinationUri, publish, null, null)
-            }
-            return destinationUri
-        } catch (error: Throwable) {
-            resolver.delete(destinationUri, null, null)
-            throw error
+        destination.save(fileName, marker) { descriptor ->
+            encodePlaybackToMp4(playback = playback, outputFileDescriptor = descriptor)
         }
     }
 
