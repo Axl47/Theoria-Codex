@@ -65,6 +65,43 @@ import org.junit.runner.Description
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class ScrollPersistenceSearchViewModelTest : SearchViewModelTestFixture() {
     @Test
+    fun `applying even the same query requests top only after acceptance and paging does not reset it`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val owner = viewModel(
+                adapter = ViewModelSearchAdapter(),
+                scrollPersistenceDispatcher = mainDispatcherRule.dispatcher,
+            )
+            restore(owner)
+            owner.onAction(SearchAction.SelectMode(QueryMode.Source(SourceKey.PIXIV)))
+            owner.onAction(SearchAction.AddIncludeTerm(SearchTerm("paged")))
+            owner.onAction(SearchAction.ApplyDraft)
+            advanceUntilIdle()
+            val first = owner.state.value.restoration as SearchRestorationUiState.Restored
+            assertEquals(SearchScrollState(0, 0), first.scrollState)
+            assertTrue(first.resetToTop)
+            owner.onAction(SearchAction.ScrollRestorationApplied(first.scrollRequestId))
+            owner.onAction(SearchAction.ScrollChanged(8, 29))
+
+            owner.onAction(SearchAction.ApplyDraft)
+            assertEquals(null, (owner.state.value.restoration as SearchRestorationUiState.Restored).scrollState)
+            advanceUntilIdle()
+            val repeated = owner.state.value.restoration as SearchRestorationUiState.Restored
+            assertEquals(first.scrollRequestId + 1, repeated.scrollRequestId)
+            assertEquals(SearchScrollState(0, 0), repeated.scrollState)
+            assertTrue(repeated.resetToTop)
+            owner.onAction(SearchAction.ScrollRestorationApplied(repeated.scrollRequestId))
+            owner.onAction(SearchAction.ScrollChanged(3, 18))
+            val acknowledged = owner.state.value.restoration
+            owner.onAction(SearchAction.LoadNextPage)
+            advanceUntilIdle()
+            assertEquals(acknowledged, owner.state.value.restoration)
+            owner.onAction(SearchAction.Resume)
+            val returnPosition = owner.state.value.restoration as SearchRestorationUiState.Restored
+            assertEquals(SearchScrollState(3, 18), returnPosition.scrollState)
+            assertFalse(returnPosition.resetToTop)
+        }
+
+    @Test
     fun `scroll bursts coalesce and superseded debounce jobs never write stale positions`() =
         runTest(mainDispatcherRule.dispatcher) {
             val uiRestore = RecordingUiRestoreRepository()

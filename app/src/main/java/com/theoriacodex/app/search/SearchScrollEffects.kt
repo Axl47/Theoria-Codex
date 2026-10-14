@@ -24,7 +24,7 @@ internal fun SearchScrollRestorationEffect(
     LaunchedEffect(restoration?.scrollRequestId, hasVisibleResults, animatedFilterActive) {
         val request = restoration ?: return@LaunchedEffect
         val restored = request.scrollState ?: return@LaunchedEffect
-        if (animatedFilterActive || !hasVisibleResults) return@LaunchedEffect
+        if (!hasVisibleResults || (animatedFilterActive && !request.resetToTop)) return@LaunchedEffect
         val activeProjection = currentProjection
         val lastIndex = activeProjection.entries.lastIndex.coerceAtLeast(0)
         gridState.scrollToItem(

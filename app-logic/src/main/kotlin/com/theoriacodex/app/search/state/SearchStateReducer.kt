@@ -57,6 +57,8 @@ sealed interface SearchStateChange {
         val scrollState: SearchScrollState,
     ) : SearchStateChange
 
+    data object ScrollResetRequested : SearchStateChange
+
     data class ScrollRestorationApplied(
         val requestId: Long,
     ) : SearchStateChange
@@ -107,7 +109,10 @@ object SearchStateReducer {
             )
 
             is SearchStateChange.RouteEntryScrollRestorationRequested ->
-                requestRouteEntryScrollRestoration(state, change)
+                requestScrollPosition(state, change.scrollState)
+
+            SearchStateChange.ScrollResetRequested ->
+                requestScrollPosition(state, SearchScrollState(0, 0), resetToTop = true)
 
             is SearchStateChange.ScrollRestorationApplied ->
                 applyScrollRestoration(state, change)
@@ -120,17 +125,19 @@ object SearchStateReducer {
         }
     }
 
-    private fun requestRouteEntryScrollRestoration(
+    private fun requestScrollPosition(
         state: SearchUiState,
-        change: SearchStateChange.RouteEntryScrollRestorationRequested,
+        scrollState: SearchScrollState,
+        resetToTop: Boolean = false,
     ): SearchReduction {
         val restored = state.restoration as? SearchRestorationUiState.Restored
             ?: return SearchReduction(state)
         return SearchReduction(
             state = state.copy(
                 restoration = restored.copy(
-                    scrollState = change.scrollState,
+                    scrollState = scrollState,
                     scrollRequestId = restored.scrollRequestId + 1L,
+                    resetToTop = resetToTop,
                 ),
             ),
         )
@@ -145,7 +152,7 @@ object SearchStateReducer {
         if (restored.scrollRequestId != change.requestId) return SearchReduction(state)
         return SearchReduction(
             state = state.copy(
-                restoration = restored.copy(scrollState = null),
+                restoration = restored.copy(scrollState = null, resetToTop = false),
             ),
         )
     }

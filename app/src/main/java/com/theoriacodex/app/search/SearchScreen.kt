@@ -405,11 +405,10 @@ fun SearchScreen(
         }
     }
 
-    fun applyDraftAndResetScroll() {
+    fun applyDraft() {
         inputFocus.clear(force = true)
         onAction(SearchAction.ApplyDraft)
         onAction(SearchAction.ClearAutocomplete)
-        scope.launch { resetScrollToTop() }
     }
 
     Scaffold(
@@ -588,7 +587,7 @@ fun SearchScreen(
                             Text("Reset")
                         }
                         TextButton(onClick = {
-                            applyDraftAndResetScroll()
+                            applyDraft()
                         }) {
                             Text("Apply")
                         }
@@ -877,14 +876,14 @@ fun SearchScreen(
             nhentaiFullColorFilter = state.query.nhentaiFullColorFilter,
             onNhentaiFullColorFilterChange = { enabled ->
                 onAction(SearchAction.SetNhentaiFullColor(enabled))
-                applyDraftAndResetScroll()
+                applyDraft()
             },
             nhentaiLanguageFilter = state.query.nhentaiLanguageFilter,
             onNhentaiLanguageFilterChange = { filter ->
                 onAction(SearchAction.SetNhentaiLanguage(filter))
-                applyDraftAndResetScroll()
+                applyDraft()
             },
-            onSortChanged = { applyDraftAndResetScroll() },
+            onSortChanged = { applyDraft() },
             onDismiss = { showFilterSheet = false },
         )
     }

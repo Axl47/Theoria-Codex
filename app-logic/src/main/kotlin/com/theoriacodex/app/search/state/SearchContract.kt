@@ -153,6 +153,7 @@ sealed interface SearchRestorationUiState {
         val restoredQuery: Boolean,
         val scrollState: SearchScrollState? = null,
         val scrollRequestId: Long = 0L,
+        val resetToTop: Boolean = false,
     ) : SearchRestorationUiState
 
     data class Failed(

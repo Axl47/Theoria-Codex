@@ -74,6 +74,8 @@ Pixiv Ugoira loading publishes immutable decoded frame batches with the full met
 
 ## Search Scroll Restoration
 
+Explicit Search submissions publish a one-shot top-position request only after their admitted root result and applied-query commit. Apply must reset even for the same query or with Animated only enabled; paging, retries and route return preserve their independent positions. Do not reset the grid from the Apply button before result publication, because retained canonical item keys can re-anchor the replacement grid.
+
 The Search route applies persisted scroll position once when the route is restored or re-entered. Page appends must not retrigger that restoration from a changed result count, or pagination will replay the initial saved position and jump the grid to the top. Keep route-entry restoration separate from page-loading state. Unified execution may retain `EXCLUDED` source statuses for orchestration diagnostics, but the UI status row should only render actionable provider failures.
 
 `UiRestoreRepository` is the sole live Search scroll store. `query_store.json` owns applied queries only; its pre-F05 `scrollOffsets` field is a one-time DataStore migration input and is removed after a verified import. SearchViewModel owns debounce and registers a closeable scheduler that synchronously waits for its final DataStore write during ViewModel teardown before cancelling that scheduler. This deliberately trades a storage-operation-length teardown stall for a provable final flush; do not move that flush into the already-cancelled `viewModelScope` or add a lossy timeout.
