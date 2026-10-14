@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -28,6 +29,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -134,7 +136,16 @@ private fun SaveToCodexSheetContent(
     onCreateCodex: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null) {
+    var searchText by rememberSaveable { mutableStateOf("") }
+    val matchingCodices = remember(selectedCodices, searchText) {
+        val query = searchText.trim()
+        selectedCodices.filter { codex -> codex.name.contains(query, ignoreCase = true) }
+    }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        dragHandle = null,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -150,9 +161,26 @@ private fun SaveToCodexSheetContent(
                     modifier = Modifier.padding(horizontal = 8.dp),
                 )
             }
+            OutlinedTextField(
+                value = searchText,
+                onValueChange = { searchText = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Search Codices") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (searchText.isNotEmpty()) {
+                        IconButton(onClick = { searchText = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear Codex search")
+                        }
+                    }
+                },
+                singleLine = true,
+            )
             CodexPickerList(
-                codices = selectedCodices,
-                emptyMessage = if (hasExcludedCodices) {
+                codices = matchingCodices,
+                emptyMessage = if (selectedCodices.isNotEmpty()) {
+                    "No matching Codices."
+                } else if (hasExcludedCodices) {
                     "No other Codices in this profile yet."
                 } else {
                     "No Codices in this profile yet."

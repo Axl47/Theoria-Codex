@@ -1,0 +1,61 @@
+package com.theoriacodex.app.codex
+
+import android.app.Application
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextReplacement
+import com.theoriacodex.data.repository.RecommendationProfile
+import com.theoriacodex.domain.model.Codex
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class, sdk = [35])
+class SaveToCodexSheetTest {
+    @get:Rule val compose = createComposeRule()
+
+    @Test fun `search filters eligible names and keeps profile switching and selection working`() {
+        var selectedId: String? = null
+        compose.setContent {
+            MaterialTheme {
+                SaveToCodexSheet(
+                    profiles = listOf(RecommendationProfile("main", "Main"), RecommendationProfile("alt", "Alt")),
+                    initialProfileId = "main",
+                    codicesByProfile = mapOf(
+                        "main" to listOf(Codex("a", "Landscapes", 0), Codex("b", "Portraits", 0),
+                            Codex("excluded", "Landscape source", 0)),
+                        "alt" to listOf(Codex("c", "Landscape sketches", 0)),
+                    ),
+                    codexItemCounts = emptyMap(),
+                    codexCoverCandidates = emptyMap(),
+                    excludedCodexIds = setOf("excluded"),
+                    onCreateCodex = { _, _ -> },
+                    onSelectCodex = { selectedId = it },
+                    onDismiss = {},
+                )
+            }
+        }
+        val search = compose.onNodeWithText("Search Codices")
+        search.performTextReplacement("  LANDscape  ")
+        compose.onNodeWithText("Landscapes").assertIsDisplayed()
+        compose.onNodeWithText("Portraits").assertDoesNotExist()
+        compose.onNodeWithText("Landscape source").assertDoesNotExist()
+        search.performTextReplacement("missing")
+        compose.onNodeWithText("No matching Codices.").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Clear Codex search").performClick()
+        compose.onNodeWithText("Portraits").performScrollTo().assertIsDisplayed()
+        search.performTextReplacement("landscape")
+        compose.onNodeWithText("Main", substring = false).performClick()
+        compose.onNodeWithText("Landscape sketches").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals("c", selectedId) }
+    }
+}
