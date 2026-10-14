@@ -178,7 +178,7 @@ internal class ViewerRouteOwnerHandle(
 
     fun clearSession(): Boolean {
         return ownerLease.withOwner { activeOwner ->
-            activeOwner.clearSession()
+            activeOwner.clearSession(retainPresentation = true)
             true
         } ?: false
     }
@@ -231,6 +231,7 @@ internal fun ViewerRoute(
     }
     var restorationAttempt by remember(viewerOwner) { mutableIntStateOf(0) }
     var restorationFailed by remember(viewerOwner) { mutableStateOf(false) }
+    var restorationInProgress by remember(viewerOwner) { mutableStateOf(false) }
 
     DisposableEffect(viewerOwner) {
         latestScreenCallbacks.value.onOwnerChanged(ownerHandle)
@@ -249,11 +250,14 @@ internal fun ViewerRoute(
         if (!handedOff && viewerOwner.session.value == null) {
             val pending = viewerOwner.restorationRequest
             val restored = try {
+                restorationInProgress = pending != null
                 pending?.let { identity -> currentDependencies.restoreSession(identity) }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
                 null
+            } finally {
+                restorationInProgress = false
             }
             if (restored == null) {
                 restorationFailed = true
@@ -360,7 +364,7 @@ internal fun ViewerRoute(
                 ?.let(callbacks.onLoadMore)
 
             is ViewerEffect.Dismiss -> {
-                viewerOwner.clearSession()
+                viewerOwner.clearSession(retainPresentation = true)
                 latestDependencies.value.sessionRetentionOwner.clear()
                 callbacks.onDismiss()
             }
@@ -372,7 +376,7 @@ internal fun ViewerRoute(
     }
 
     val activeSession = session
-    if (activeSession == null) {
+    if (activeSession == null && viewerState.pages.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (restorationFailed) {
@@ -383,7 +387,7 @@ internal fun ViewerRoute(
                     TextButton(onClick = {
                         routeScope.launch { latestEffectCallbacks.value.onRestorationUnavailable() }
                     }) { Text("Back to browsing") }
-                } else {
+                } else if (restorationInProgress) {
                     CircularProgressIndicator()
                     Text("Restoring your place…")
                 }
@@ -392,12 +396,14 @@ internal fun ViewerRoute(
         return
     }
 
-    val matchingSourceState = liveSourceState
-        .forSource(activeSession.context.streamSource)
-        ?.takeIf { sourceState -> sourceState.queryHash == activeSession.context.queryHash }
-    val canLoadMoreFromSource = activeSession.liveSearchBinding &&
+    val matchingSourceState = activeSession?.let { active ->
+        liveSourceState.forSource(active.context.streamSource)
+            ?.takeIf { sourceState -> sourceState.queryHash == active.context.queryHash }
+    }
+    val canLoadMoreFromSource = activeSession?.liveSearchBinding == true &&
         matchingSourceState?.canLoadMore == true
     SideEffect {
+        if (activeSession == null) return@SideEffect
         durationOwner.synchronize(
             identity = activeSession.sessionId,
             posts = viewerState.pages.map { page -> dependencies.canonicalizePost(page.post) },
@@ -420,6 +426,7 @@ internal fun ViewerRoute(
         likedPostIds = renderConfig.likedPostIds,
         onRequestMediaRecovery = { post, failedMedia ->
             routeScope.launch {
+                if (viewerOwner.session.value == null) return@launch
                 recoverAndApplyMedia(
                     viewerOwner = viewerOwner,
                     post = post,
@@ -447,7 +454,7 @@ internal fun ViewerRoute(
         onRemoveExcludeTerm = screenCallbacks.onRemoveExcludeTerm,
         onFavoriteTagLongPress = screenCallbacks.onFavoriteTagLongPress,
         onGoToSearch = {
-            viewerOwner.clearSession()
+            viewerOwner.clearSession(retainPresentation = true)
             latestDependencies.value.sessionRetentionOwner.clear()
             latestScreenCallbacks.value.onGoToSearch()
         },

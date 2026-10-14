@@ -98,6 +98,8 @@ The `RelatedPosts` Android log tag records sparse shelf state, owner creation/cl
 
 ## Viewer Gallery Navigation
 
+Viewer's restoration indicator is tied to an active saved-session reconstruction request, never to a null live session alone. Exit clears live/saved session authority and cancels work immediately while retaining only paused render pages until the outgoing navigation destination is disposed; Back, Go to Search, and shell-owned Creator exits share this policy. `ViewerRouteRestorationUiTest` covers suspended dismissal, these exit paths, genuine restoration, and failure/Retry.
+
 An unresolved nhentai/Hitomi cover is not an authoritative final gallery page. Prevent forward post-boundary swipes while gallery media is pending, including sparse covers with unknown page counts and failed resolution; backward navigation remains available. Keep gallery swipe inversion consistent while loading. Viewer navigation callbacks must update when hydration replaces the media list: a local callable reference can retain the old captured cover through Compose's callback equality, while a capturing lambda updates correctly. `ViewerGalleryLoadingSwipeTest` covers the real screen's delayed hydration and subsequent page/post swipes.
 
 ## Retired Viewer Translation

@@ -17,6 +17,7 @@ import com.theoriacodex.app.viewer.state.ViewerPrefetchOutcome
 import com.theoriacodex.app.viewer.state.ViewerPrefetchResult
 import com.theoriacodex.app.viewer.state.ViewerSessionIdentity
 import com.theoriacodex.app.viewer.state.ViewerUiState
+import com.theoriacodex.app.viewer.state.ViewerControlsState
 import com.theoriacodex.app.viewer.state.reduceViewerState
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -193,12 +194,17 @@ internal class ViewerViewModel(
         }
     }
 
-    fun clearSession() {
+    /** Exit may retain paused render pages until navigation disposes the outgoing destination. */
+    fun clearSession(retainPresentation: Boolean = false) {
         synchronized(lock) {
             cancelSessionJobs()
             recordedVisiblePosts.clear()
             mutableSession.value = null
-            mutableState.value = ViewerUiState.Empty
+            mutableState.value = if (retainPresentation) ViewerUiState(
+                pages = mutableState.value.pages,
+                currentPageIndex = mutableState.value.currentPageIndex,
+                controls = ViewerControlsState(chromeVisible = false),
+            ) else ViewerUiState.Empty
             restoredPageIndex = 0
             restoredMediaIndex = 0
             clearSavedState()

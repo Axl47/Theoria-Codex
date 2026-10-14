@@ -34,6 +34,39 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class ViewerViewModelTest {
     @Test
+    fun `exit cancels work and clears authority while retaining paused selected media`() = runTest {
+        val handle = SavedStateHandle()
+        var cancelled = false
+        val gallery = post("gallery", media = listOf(video("one.mp4"), video("two.mp4")))
+        val owner = ViewerViewModel(handle, postResolver = ViewerPostResolver { _, _ ->
+            try { awaitCancellation() } finally { cancelled = true }
+        }, scopeOverride = this)
+        owner.replaceSession(session("exit", listOf(gallery, post("next", SourceKey.HITOMI, emptyList()))))
+        owner.onAction(ViewerAction.SelectMedia(1))
+        runCurrent()
+        val previous = owner.state.value
+
+        owner.clearSession(retainPresentation = true)
+        runCurrent()
+
+        assertTrue(cancelled)
+        assertNull(owner.session.value)
+        assertNull(owner.state.value.session)
+        assertNull(owner.restorationRequest)
+        assertTrue(handle.keys().isEmpty())
+        assertEquals(previous.pages, owner.state.value.pages)
+        assertEquals(previous.currentMedia?.key, owner.state.value.currentMedia?.key)
+        assertFalse(owner.state.value.controls.playback.playing)
+        assertFalse(owner.state.value.controls.chromeVisible)
+        val exiting = owner.state.value
+        owner.onAction(ViewerAction.ResolutionCompleted(requireNotNull(previous.session), gallery))
+        owner.onAction(ViewerAction.Play)
+        assertEquals(exiting, owner.state.value)
+        owner.clearSession()
+        assertEquals(ViewerUiState.Empty, owner.state.value)
+    }
+
+    @Test
     fun `lookahead resolves only the next sparse post and swipe reuses active resolution`() = runTest {
         val started = mutableListOf<PostId>()
         val release = CompletableDeferred<Unit>()
