@@ -9,6 +9,8 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
+import com.theoriacodex.sources.common.autocompleteTagCounts
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -30,7 +32,7 @@ import org.jsoup.parser.Parser
 abstract class AbstractRule34KvsVideoSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val gson: Gson = Gson(),
-) : SourceAdapter, SearchMetadataSourceAdapter {
+) : SourceAdapter, SearchMetadataSourceAdapter, TagCountLookupSourceAdapter {
     abstract override val sourceKey: SourceKey
     protected abstract val baseUrl: String
 
@@ -99,6 +101,9 @@ abstract class AbstractRule34KvsVideoSourceAdapter(
             parseTagSuggestionsFromSelect2(body, gson, "tag").take(limit)
         }.getOrDefault(emptyList())
     }
+
+    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> =
+        autocompleteTagCounts(sourceKey, tags, ::autocompleteTags)
 
     override suspend fun quickQuery(kind: QuickQueryKind): Query {
         return Query(
