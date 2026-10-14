@@ -213,28 +213,34 @@ class AtomicJsonFileStore private constructor(
                 parent.mkdirs()
                 val tempFile = fileOperations.createTempFile(file)
                 try {
-                    val text = gson.toJson(payload)
-                    if (maxBytes == null) tempFile.writeText(text)
-                    else {
-                        val bytes = text.toByteArray(Charsets.UTF_8)
-                        require(bytes.size <= maxBytes) { "${file.name} exceeds its intent size limit" }
-                        fileOperations.writeAndSync(tempFile, bytes)
-                    }
+                    writeTempPayload(tempFile, payload, maxBytes)
                     try {
                         fileOperations.moveAtomically(tempFile, file)
                     } catch (_: AtomicMoveNotSupportedException) {
                         fileOperations.replace(tempFile, file)
                     }
-                    if (maxBytes != null) {
-                        fileOperations.syncDirectory(parent)
-                        newParents.forEach { fileOperations.syncDirectory(it.parentFile ?: File(".")) }
-                    }
+                    if (maxBytes != null) syncIntentDirectories(parent, newParents)
                 } finally {
                     if (tempFile.exists()) {
                         tempFile.delete()
                     }
                 }
             }
+        }
+    }
+
+    private fun syncIntentDirectories(parent: File, newParents: List<File>) {
+        fileOperations.syncDirectory(parent)
+        newParents.forEach { fileOperations.syncDirectory(it.parentFile ?: File(".")) }
+    }
+
+    private fun <T> writeTempPayload(file: File, payload: T, maxBytes: Int?) {
+        val text = gson.toJson(payload)
+        if (maxBytes == null) file.writeText(text)
+        else {
+            val bytes = text.toByteArray(Charsets.UTF_8)
+            require(bytes.size <= maxBytes) { "${file.name} exceeds its intent size limit" }
+            fileOperations.writeAndSync(file, bytes)
         }
     }
 }
