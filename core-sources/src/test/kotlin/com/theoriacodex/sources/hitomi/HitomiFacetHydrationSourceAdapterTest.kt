@@ -93,6 +93,17 @@ internal class HitomiFacetHydrationSourceAdapterTest : HitomiSourceAdapterTestFi
     }
 
     @Test
+    fun `count capability retains authoritative autocomplete counts`() = runTest {
+        val http = RoutingHitomiHttpClient().apply {
+            textRoutes[HitomiProtocol.autocompleteUrl("global", "tag")] = fixture("global-tags.json")
+        }
+        val source = adapter(http)
+        val exact = source.autocompleteTags("tag", 30).first { it.count != null }
+        http.textRoutes[HitomiProtocol.autocompleteUrl("global", exact.text)] = fixture("global-tags.json")
+        assertEquals(mapOf(exact.text to exact.count), source.fetchTagCounts(listOf(exact.text)))
+    }
+
+    @Test
     fun `media 404 recovery refreshes config then orders the alternate shard as fallback`() = runTest {
         val staleConfig = fixture("gg-shape.js")
         val refreshedConfig = staleConfig.replace("1783681201/", "1783689999/")

@@ -12,6 +12,15 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class AibooruSourceAdapterTest {
+    @Test fun `count capability uses authoritative exact autocomplete results`() = runTest {
+        val http = FakeHttpClient().apply {
+            nextGetResponse = SourceHttpResponse(200,
+                """[{"name":"cat_neighbor","post_count":999},{"name":"cat","post_count":42}]""")
+        }
+        assertEquals(mapOf("cat" to 42), AibooruSourceAdapter(http).fetchTagCounts(listOf("cat")))
+        assertEquals("cat*", http.lastGet?.query?.get("search[name_matches]"))
+    }
+
     @Test
     fun `search parses posts and increments pagination token`() = runTest {
         val httpClient = FakeHttpClient().apply {

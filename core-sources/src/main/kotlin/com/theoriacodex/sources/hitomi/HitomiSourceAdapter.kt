@@ -15,6 +15,8 @@ import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.SourceFailureReason
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
+import com.theoriacodex.sources.common.autocompleteTagCounts
 import com.theoriacodex.domain.model.CreatorProfile
 import com.theoriacodex.domain.model.HITOMI_ARTIST_QUERY_PREFIX
 import com.theoriacodex.domain.model.ImageRef
@@ -70,7 +72,7 @@ class HitomiSourceAdapter(
     private val mediaCandidates: suspend (HitomiMediaFile) -> List<HitomiMediaCandidate> = { file ->
         mediaUrlResolver.candidates(file)
     },
-) : SourceAdapter, FacetedSearchSourceAdapter, CreatorPostsSourceAdapter, MediaRecoverySourceAdapter {
+) : SourceAdapter, FacetedSearchSourceAdapter, CreatorPostsSourceAdapter, MediaRecoverySourceAdapter, TagCountLookupSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.HITOMI
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -413,6 +415,8 @@ class HitomiSourceAdapter(
         return HitomiNozomiSnapshot(ids = ids, fingerprint = ids.hitomiSha256Hex())
     }
 
+    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> =
+        autocompleteTagCounts(sourceKey, tags, ::autocompleteTags)
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
 
     override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> {
