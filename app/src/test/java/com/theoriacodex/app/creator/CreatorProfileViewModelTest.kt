@@ -1,6 +1,12 @@
 package com.theoriacodex.app.creator
 
 import androidx.lifecycle.SavedStateHandle
+import com.theoriacodex.app.related.LikeToggleOutcome
+import com.theoriacodex.app.related.RelatedPostsLoading
+import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.loadedPosts
+import com.theoriacodex.app.related.requestOrNull
+import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.domain.adapter.Page
 import com.theoriacodex.app.creator.state.CreatorEffect
@@ -184,6 +190,97 @@ class CreatorProfileViewModelTest {
         assertEquals(CreatorEffect.NavigateBack, backEffect.await())
     }
 
+    @Test
+    fun `committed likes load related posts and promotion preserves creator continuation`() = runTest {
+        val seed = testPost(sourcePostId = "seed")
+        val sibling = testPost(sourcePostId = "sibling")
+        val engine = FakeCreatorRouteEngine().apply {
+            openResults = listOf(seed)
+            openCanLoadMore = true
+        }
+        val loader = CreatorRelatedLoader { listOf(seed, sibling) }
+        val owner = CreatorProfileViewModel(engine, SavedStateHandle(), this, loader)
+        owner.onAction(CreatorAction.OpenCreator(creator(SourceKey.PIXIV, "creator")))
+        advanceUntilIdle()
+        owner.onAction(CreatorAction.RelatedLikeCommitted(seed, LikeToggleOutcome.LIKED))
+        advanceUntilIdle()
+
+        assertEquals(listOf(seed), owner.state.value.results)
+        assertEquals(listOf(sibling), owner.state.value.relatedPosts.loadedPosts)
+        assertEquals(listOf(seed.id), loader.requests)
+        val effect = async { owner.effects.first() }
+        owner.onAction(CreatorAction.OpenRelatedResult(0, listOf(sibling)))
+        val viewer = effect.await() as CreatorEffect.OpenViewer
+        assertEquals(ViewerStreamSource.RELATED, viewer.context.streamSource)
+        assertFalse(viewer.liveSearchBinding)
+        assertEquals(listOf(sibling), viewer.posts)
+
+        owner.onAction(CreatorAction.RelatedLikeCommitted(sibling, LikeToggleOutcome.LIKED))
+        advanceUntilIdle()
+        assertEquals(listOf(seed, sibling), owner.state.value.results)
+        assertEquals("next", owner.state.value.nextPageToken)
+        assertEquals(sibling.id, owner.state.value.relatedPosts.requestOrNull?.seed?.id)
+        assertTrue(owner.state.value.relatedPosts.loadedPosts.isEmpty())
+        owner.onAction(CreatorAction.ShowPreviousRelatedPosts)
+        assertFalse(sibling in owner.state.value.relatedPosts.loadedPosts)
+        owner.onAction(CreatorAction.RelatedLikeCommitted(sibling, LikeToggleOutcome.UNLIKED))
+        assertEquals(RelatedPostsUiState.Idle, owner.state.value.relatedPosts)
+        assertEquals(1, engine.visits.size)
+    }
+
+    @Test
+    fun `refresh and creator replacement cancel related loads and reject late results`() = runTest {
+        for (replace in listOf(false, true)) {
+            val seed = testPost(sourcePostId = "seed")
+            val release = CompletableDeferred<Unit>()
+            val engine = FakeCreatorRouteEngine().apply { openResults = listOf(seed) }
+            val loader = CreatorRelatedLoader {
+                withContext(NonCancellable) { release.await() }
+                listOf(testPost(sourcePostId = "late"))
+            }
+            val owner = CreatorProfileViewModel(engine, SavedStateHandle(), this, loader)
+            owner.onAction(CreatorAction.OpenCreator(creator(SourceKey.PIXIV, "first")))
+            advanceUntilIdle()
+            owner.onAction(CreatorAction.RelatedLikeCommitted(seed, LikeToggleOutcome.LIKED))
+            runCurrent()
+            assertTrue(owner.state.value.relatedPosts is RelatedPostsUiState.Loading)
+            owner.onAction(if (replace) {
+                CreatorAction.OpenCreator(creator(SourceKey.PIXIV, "second"))
+            } else CreatorAction.Refresh)
+            release.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(RelatedPostsUiState.Idle, owner.state.value.relatedPosts)
+        }
+    }
+
+    @Test
+    fun `related failure retries and capability loss clears shelf while unsupported sources stay idle`() = runTest {
+        val seed = testPost(sourcePostId = "seed")
+        var fail = true
+        val engine = FakeCreatorRouteEngine().apply { openResults = listOf(seed) }
+        val loader = CreatorRelatedLoader {
+            if (fail) error("offline")
+            emptyList()
+        }
+        val owner = CreatorProfileViewModel(engine, SavedStateHandle(), this, loader)
+        owner.onAction(CreatorAction.OpenCreator(creator(SourceKey.PIXIV, "creator")))
+        advanceUntilIdle()
+        owner.onAction(CreatorAction.RelatedLikeCommitted(seed, LikeToggleOutcome.LIKED))
+        advanceUntilIdle()
+        assertTrue(owner.state.value.relatedPosts is RelatedPostsUiState.Failed)
+        fail = false
+        owner.onAction(CreatorAction.RetryRelatedPosts)
+        advanceUntilIdle()
+        assertTrue(owner.state.value.relatedPosts is RelatedPostsUiState.Empty)
+        engine.capabilityAvailable = false
+        owner.onSourceAvailabilityChanged()
+        assertEquals(RelatedPostsUiState.Idle, owner.state.value.relatedPosts)
+
+        val unsupported = CreatorProfileViewModel(engine, SavedStateHandle(), coroutineScope = this)
+        unsupported.onAction(CreatorAction.RelatedLikeCommitted(seed, LikeToggleOutcome.LIKED))
+        assertEquals(RelatedPostsUiState.Idle, unsupported.state.value.relatedPosts)
+    }
+
     private fun creator(source: SourceKey, profileId: String): CreatorProfile {
         return CreatorProfile(
             source = source,
@@ -246,4 +343,13 @@ private class FakeCreatorRouteEngine : CreatorRouteEngine {
     }
 
     override suspend fun resolvePost(postId: PostId): Post? = null
+}
+
+private class CreatorRelatedLoader(private val results: suspend () -> List<Post>) : RelatedPostsLoading {
+    val requests = mutableListOf<PostId>()
+    override fun supports(source: SourceKey): Boolean = source == SourceKey.PIXIV
+    override suspend fun load(seed: PostId): List<Post> {
+        requests += seed
+        return results()
+    }
 }

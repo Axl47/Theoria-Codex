@@ -88,6 +88,7 @@ import com.theoriacodex.app.appshell.IncomingUriKind
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
 import com.theoriacodex.app.creator.CreatorOpeningWorkflow
 import com.theoriacodex.app.di.TheoriaAppContainer
+import com.theoriacodex.app.creator.state.CreatorAction
 import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.recents.RecentsScreen
 import com.theoriacodex.app.recents.fypSeedBySource
@@ -539,6 +540,17 @@ internal fun TheoriaAppContent(
             toggleLikeAndSyncCodex(post) { outcome ->
                 if (owner?.state?.value?.seedId == seed)
                     owner?.dispatch(ForYouAction.RelatedLikeCommitted(post, outcome))
+            }
+        }
+    }
+
+    fun creatorLikeAction(): (Post) -> Unit {
+        val owner = creatorRouteOwnerBinding.current
+        val query = owner?.currentState()?.queryHash
+        return { post ->
+            toggleLikeAndSyncCodex(post) { outcome ->
+                if (owner?.currentState()?.queryHash == query)
+                    owner?.dispatch(CreatorAction.RelatedLikeCommitted(post, outcome))
             }
         }
     }
@@ -1581,6 +1593,7 @@ internal fun TheoriaAppContent(
                                     ?: return@BrowsingDestinationStateBoundary
                                 CreatorRoute(
                                 coordinator = featureDependencies.creatorProfile,
+                                relatedPostsLoader = featureDependencies.relatedPosts,
                                 mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
                                 pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                 config = CreatorRouteConfig(
@@ -1599,6 +1612,7 @@ internal fun TheoriaAppContent(
                                 callbacks = CreatorRouteCallbacks(
                                     onToggleFollow = followsOwner::toggle,
                                     onOpenViewer = { effect ->
+                                        val likeAction = creatorLikeAction()
                                         val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
                                             effect.posts,
                                             effect.context,
@@ -1607,15 +1621,18 @@ internal fun TheoriaAppContent(
                                             ViewerSession(
                                                 posts = preparedPosts,
                                                 context = effect.context,
-                                                liveSearchBinding = true,
+                                                liveSearchBinding = effect.liveSearchBinding,
                                                 searchVisibilityFilters = effect.visibilityFilters,
+                                                onToggleLike = likeAction,
                                             ),
                                         )
-                                        navController.navigate(AppRoute.Viewer)
+                                        navController.navigate(AppRoute.Viewer) {
+                                            launchSingleTop = !effect.liveSearchBinding
+                                        }
                                     },
                                     onNavigateBack = { navController.popBackStack() },
                                     onToggleLike = { post ->
-                                        toggleLikeAndSyncCodex(post)
+                                        creatorLikeAction()(post)
                                     },
                                     onRequestSaveToCodex = { post ->
                                         requestSaveToCodex(post)

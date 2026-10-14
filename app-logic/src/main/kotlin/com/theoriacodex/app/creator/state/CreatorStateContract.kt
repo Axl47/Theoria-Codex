@@ -1,5 +1,8 @@
 package com.theoriacodex.app.creator.state
 
+import com.theoriacodex.app.related.LikeToggleOutcome
+import com.theoriacodex.app.related.RelatedPostsUiState
+import com.theoriacodex.app.related.requestOrNull
 import com.theoriacodex.app.feed.mergeFeedPosts
 import com.theoriacodex.app.search.SearchVisibilityFilters
 import com.theoriacodex.data.repository.ViewerLaunchContext
@@ -35,6 +38,7 @@ data class CreatorUiState(
     val emptyReason: CreatorEmptyReason? = CreatorEmptyReason.NO_CREATOR,
     val nextRequestGeneration: Long = 1L,
     val activeRequest: CreatorRequestIdentity? = null,
+    val relatedPosts: RelatedPostsUiState = RelatedPostsUiState.Idle,
 ) {
     val canLoadMore: Boolean get() = !nextPageToken.isNullOrBlank()
 }
@@ -51,6 +55,12 @@ sealed interface CreatorAction {
         val visibleResults: List<Post>? = null,
         val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
     ) : CreatorAction
+    data class RelatedLikeCommitted(val post: Post, val outcome: LikeToggleOutcome) : CreatorAction
+    data object DismissRelatedPosts : CreatorAction
+    data object RetryRelatedPosts : CreatorAction
+    data object ShowPreviousRelatedPosts : CreatorAction
+    data object ShowNextRelatedPosts : CreatorAction
+    data class OpenRelatedResult(val index: Int, val visibleResults: List<Post>) : CreatorAction
     data object Back : CreatorAction
     data class PageLoaded(val request: CreatorRequestIdentity, val page: Page<Post>) : CreatorAction
     data class RequestFailed(
@@ -71,6 +81,7 @@ sealed interface CreatorEffect {
         val posts: List<Post>,
         val context: ViewerLaunchContext,
         val visibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
+        val liveSearchBinding: Boolean = true,
     ) : CreatorEffect
     data object NavigateBack : CreatorEffect
 }
@@ -105,6 +116,12 @@ fun CreatorUiState.reduce(action: CreatorAction): CreatorTransition = when (acti
         )
     )
     is CreatorAction.OpenResult -> openResult(action)
+    is CreatorAction.OpenRelatedResult -> openRelatedResult(action)
+    is CreatorAction.RelatedLikeCommitted,
+    CreatorAction.DismissRelatedPosts,
+    CreatorAction.RetryRelatedPosts,
+    CreatorAction.ShowPreviousRelatedPosts,
+    CreatorAction.ShowNextRelatedPosts -> unchanged()
     CreatorAction.Back -> CreatorTransition(this, CreatorEffect.NavigateBack)
     is CreatorAction.PageLoaded -> pageLoaded(action)
     is CreatorAction.RequestFailed -> {
@@ -197,4 +214,19 @@ private fun CreatorUiState.unchanged(): CreatorTransition = CreatorTransition(th
 fun creatorQueryHash(creator: CreatorProfile): String {
     val key = creator.uploadsQuery ?: creator.profileId ?: creator.profileUrl ?: creator.displayName
     return "creator:${creator.source.name}:$key"
+}
+
+private fun CreatorUiState.openRelatedResult(action: CreatorAction.OpenRelatedResult): CreatorTransition {
+    val request = relatedPosts.requestOrNull ?: return unchanged()
+    if (action.index !in action.visibleResults.indices) return unchanged()
+    return CreatorTransition(this, CreatorEffect.OpenViewer(
+        posts = action.visibleResults.toList(),
+        context = ViewerLaunchContext(
+            queryHash = "related:${request.seed.id.source.name}:${request.seed.id.sourcePostId}",
+            startIndex = action.index,
+            streamSource = ViewerStreamSource.RELATED,
+            scrollOffsetHint = 0,
+        ),
+        liveSearchBinding = false,
+    ))
 }

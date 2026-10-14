@@ -8,6 +8,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.theoriacodex.app.related.RelatedPostsLoading
+import com.theoriacodex.app.related.loadedPosts
 import com.theoriacodex.app.creator.CreatorProfileCoordinator
 import com.theoriacodex.app.creator.CreatorProfileScreen
 import com.theoriacodex.app.creator.CreatorProfileViewModel
@@ -86,6 +88,7 @@ internal class CreatorRouteOwnerHandle(
 @Composable
 internal fun CreatorRoute(
     coordinator: CreatorProfileCoordinator,
+    relatedPostsLoader: RelatedPostsLoading,
     mediaDurationCoordinator: MediaDurationCoordinator,
     pixivUgoiraClient: PixivUgoiraClient?,
     config: CreatorRouteConfig,
@@ -95,15 +98,18 @@ internal fun CreatorRoute(
     onOwnerAvailable: (CreatorRouteOwnerHandle) -> Unit = {},
 ) {
     val owner = viewModel<CreatorProfileViewModel>(
-        factory = CreatorProfileViewModel.factory(coordinator),
+        factory = CreatorProfileViewModel.factory(coordinator, relatedPostsLoader),
     )
     val state by owner.state.collectAsStateWithLifecycle()
+    val durationPosts = remember(state.results, state.relatedPosts) {
+        (state.results + state.relatedPosts.loadedPosts).distinctBy(Post::id)
+    }
     val duration = rememberMediaDurationRouteBinding(
         coordinator = mediaDurationCoordinator,
         routeName = "creator",
         ownerKey = CREATOR_DURATION_OWNER_KEY,
         contentIdentity = state.queryHash ?: "no-creator",
-        posts = state.results,
+        posts = durationPosts,
         resolveInBackground = config.resolveUnknownAnimatedDurations,
     )
     val ownerHandle = remember(owner) { CreatorRouteOwnerHandle(owner) }

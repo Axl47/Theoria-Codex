@@ -41,7 +41,7 @@ fun TwoColumnPostStaggeredGrid(
     }
 }
 
-/** Search/FYP-only projection that inserts one full-line transient section without rewriting posts. */
+/** Feed projection that inserts one full-line transient section without rewriting posts. */
 @Composable
 fun TwoColumnProjectedPostStaggeredGrid(
     projection: RelatedFeedProjection,

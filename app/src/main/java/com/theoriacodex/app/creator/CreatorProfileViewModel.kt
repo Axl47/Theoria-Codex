@@ -13,6 +13,10 @@ import com.theoriacodex.app.creator.state.CreatorFailureReason
 import com.theoriacodex.app.creator.state.CreatorRequestKind
 import com.theoriacodex.app.creator.state.CreatorUiState
 import com.theoriacodex.app.creator.state.reduce
+import com.theoriacodex.app.related.RelatedPostsLoading
+import com.theoriacodex.app.related.RelatedPostsRouteController
+import com.theoriacodex.app.related.RelatedPostsDiagnostics
+import com.theoriacodex.app.related.UnsupportedRelatedPostsLoader
 import com.theoriacodex.app.media.replacingPostSnapshot
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.app.ui.state.RouteStateOwner
@@ -38,13 +42,16 @@ internal class CreatorProfileViewModel(
     private val engine: CreatorRouteEngine,
     private val savedStateHandle: SavedStateHandle,
     coroutineScope: CoroutineScope? = null,
+    relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
 ) : ViewModel(), RouteStateOwner<CreatorUiState, CreatorAction, CreatorEffect> {
     constructor(
         coordinator: CreatorProfileCoordinator,
         savedStateHandle: SavedStateHandle,
+        relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
     ) : this(
         engine = coordinator,
         savedStateHandle = savedStateHandle,
+        relatedPostsLoader = relatedPostsLoader,
     )
 
     private val ownerScope = coroutineScope ?: viewModelScope
@@ -53,15 +60,66 @@ internal class CreatorProfileViewModel(
     private val mutableState = MutableStateFlow(CreatorUiState())
     override val state: StateFlow<CreatorUiState> = mutableState.asStateFlow()
 
+    private val relatedDiagnostics = RelatedPostsDiagnostics("creator", this)
+    private val relatedPosts = RelatedPostsRouteController(
+        scope = ownerScope,
+        loader = relatedPostsLoader,
+        currentState = { mutableState.value.relatedPosts },
+        canonicalPosts = { mutableState.value.results },
+        promotePost = { post, index ->
+            val current = mutableState.value
+            mutableState.value = current.copy(
+                results = current.results.toMutableList().apply { add(index.coerceIn(0, size), post) },
+            )
+        },
+        updateState = { related ->
+            relatedDiagnostics.record("state updated", related)
+            mutableState.value = mutableState.value.copy(relatedPosts = related)
+        },
+        onClear = { state, reason -> relatedDiagnostics.record("clear: $reason", state) },
+    )
+
     private val effectChannel = Channel<CreatorEffect>(capacity = Channel.BUFFERED)
     override val effects: Flow<CreatorEffect> = effectChannel.receiveAsFlow()
     init {
+        relatedDiagnostics.record("owner created", mutableState.value.relatedPosts)
+        addCloseable("related-posts-diagnostics", java.io.Closeable {
+            relatedDiagnostics.record("owner cleared", mutableState.value.relatedPosts)
+        })
         restoredCreator()?.let { creator -> onAction(CreatorAction.OpenCreator(creator)) }
     }
 
     override fun onAction(action: CreatorAction) {
+        when (action) {
+            is CreatorAction.RelatedLikeCommitted -> {
+                relatedPosts.onLikeCommitted(action.post, action.outcome)
+                return
+            }
+            CreatorAction.DismissRelatedPosts -> {
+                relatedPosts.clear()
+                return
+            }
+            CreatorAction.RetryRelatedPosts -> {
+                relatedPosts.retry()
+                return
+            }
+            CreatorAction.ShowPreviousRelatedPosts -> {
+                relatedPosts.showPreviousPage()
+                return
+            }
+            CreatorAction.ShowNextRelatedPosts -> {
+                relatedPosts.showNextPage()
+                return
+            }
+            else -> Unit
+        }
         val transition = mutableState.value.reduce(action)
-        mutableState.value = transition.state
+        if (action == CreatorAction.SourceUnavailable ||
+            (transition.effect as? CreatorEffect.LoadPage)?.request?.kind == CreatorRequestKind.REFRESH
+        ) {
+            relatedPosts.clear("creator refresh or capability changed")
+        }
+        mutableState.value = transition.state.copy(relatedPosts = mutableState.value.relatedPosts)
         transition.state.creator?.let(::persistCreator)
         transition.effect?.let(::handleEffect)
     }
@@ -148,11 +206,15 @@ internal class CreatorProfileViewModel(
     }
 
     companion object {
-        fun factory(coordinator: CreatorProfileCoordinator): ViewModelProvider.Factory = viewModelFactory {
+        fun factory(
+            coordinator: CreatorProfileCoordinator,
+            relatedPostsLoader: RelatedPostsLoading = UnsupportedRelatedPostsLoader,
+        ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 CreatorProfileViewModel(
                     coordinator = coordinator,
                     savedStateHandle = createSavedStateHandle(),
+                    relatedPostsLoader = relatedPostsLoader,
                 )
             }
         }
