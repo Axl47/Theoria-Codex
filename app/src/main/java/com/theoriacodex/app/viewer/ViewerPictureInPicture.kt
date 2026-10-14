@@ -1,10 +1,12 @@
 package com.theoriacodex.app.viewer
 
 import android.app.PictureInPictureParams
+import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.graphics.Rect
+import android.os.Build
 import android.util.Rational
 import com.theoriacodex.app.MainActivity
 
@@ -25,12 +27,22 @@ internal fun viewerPictureInPictureRatio(width: Int?, height: Int?): Rational {
 
 internal fun MainActivity.enterViewerPictureInPicture(width: Int?, height: Int?): Boolean {
     if (!supportsViewerPictureInPicture()) return false
+    return requestViewerPictureInPicture(viewerPictureInPictureParams(
+        width, height, autoEnter = viewerAutoPictureInPicture.keepPlayingOnPause,
+    ))
+}
+
+internal fun Activity.viewerPictureInPictureParams(
+    width: Int?,
+    height: Int?,
+    autoEnter: Boolean = false,
+): PictureInPictureParams {
     val bounds = Rect().also { window.decorView.getGlobalVisibleRect(it) }
-    val params = PictureInPictureParams.Builder()
+    return PictureInPictureParams.Builder()
         .setAspectRatio(viewerPictureInPictureRatio(width, height))
         .setSourceRectHint(bounds)
+        .apply { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) setAutoEnterEnabled(autoEnter) }
         .build()
-    return requestViewerPictureInPicture(params)
 }
 
 internal fun viewerPictureInPictureAction(

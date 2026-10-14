@@ -165,7 +165,9 @@ private fun ViewerVideoBinding(
         player.addListener(listener)
         state.player = player
         state.setPlaying(controls.isActive && controls.isPlaying)
+        val pictureInPicture = context.viewerActivity()?.viewerAutoPictureInPicture?.bind(player)
         onDispose {
+            pictureInPicture?.close()
             binding.close()
             onReleasePosition(player.currentPosition.coerceAtLeast(0L))
             player.removeListener(listener)

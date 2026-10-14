@@ -10,13 +10,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.theoriacodex.app.ui.TheoriaApp
+import com.theoriacodex.app.viewer.ViewerAutoPictureInPicture
 
 class MainActivity : ComponentActivity() {
     var viewerPictureInPictureActive by mutableStateOf(false)
         private set
     private var enteringViewerPictureInPicture = false
+    internal val viewerAutoPictureInPicture = ViewerAutoPictureInPicture(this)
     val keepViewerPlayingOnPause: Boolean
-        get() = enteringViewerPictureInPicture || isInPictureInPictureMode
+        get() = enteringViewerPictureInPicture || isInPictureInPictureMode || viewerAutoPictureInPicture.keepPlayingOnPause
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        viewerAutoPictureInPicture.onUserLeaveHint(::requestViewerPictureInPicture)
+    }
 
     fun requestViewerPictureInPicture(params: android.app.PictureInPictureParams): Boolean {
         enteringViewerPictureInPicture = true
