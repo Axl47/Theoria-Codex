@@ -33,6 +33,9 @@ class BenchmarkDurationStartReceiver : BroadcastReceiver() {
             ACTION_BENCHMARK_PLAYBACK_SNAPSHOT -> if (isOrderedBroadcast) {
                 resultData = context.videoPlaybackInfrastructure().feedPreviewPlayerPool.activePlayerCount().toString()
             }
+            ACTION_BENCHMARK_VIEWER_SNAPSHOT -> if (isOrderedBroadcast) {
+                setResultExtras(BenchmarkViewerObservation.snapshot())
+            }
         }
     }
 }
@@ -165,6 +168,8 @@ internal const val ACTION_BENCHMARK_DURATION_START =
     "com.theoriacodex.action.BENCHMARK_DURATION_START"
 internal const val ACTION_BENCHMARK_PLAYBACK_SNAPSHOT =
     "com.theoriacodex.action.BENCHMARK_PLAYBACK_SNAPSHOT"
+internal const val ACTION_BENCHMARK_VIEWER_SNAPSHOT =
+    "com.theoriacodex.action.BENCHMARK_VIEWER_SNAPSHOT"
 internal const val DURATION_STATUS_TAG = "benchmark_duration_status"
 internal const val DURATION_SETTLED_DESCRIPTION = "Settled 24/24"
 internal const val TRACE_DURATION_DEMAND = "TheoriaDurationDemand"

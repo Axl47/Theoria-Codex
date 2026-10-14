@@ -21,7 +21,6 @@ import java.util.concurrent.TimeUnit
 
 private const val JOURNEY_TIMEOUT_MS = 15_000L
 private val MEDIA_PATTERN = Pattern.compile("search_media_pixiv_benchmark_(video|gif|webp|ugoira)_.*")
-private val VIEWER_PATTERN = Pattern.compile("viewer_video_pixiv_benchmark_video_.*")
 private const val STATUS_TAG = "benchmark_journey_status"
 
 /** Uses the real bottom navigation, collection card and creator action; no synthetic feed switching. */
@@ -48,8 +47,9 @@ internal fun UiDevice.completeFiveFeedJourney() {
     requireMovingFeedPreviews("Search after tab return")
     val video = findObjects(By.res(MEDIA_PATTERN)).firstOrNull { "_video_" in it.resourceName.orEmpty() }
         ?: error("Search fixture must present a video for real Viewer entry")
+    val viewerIdentity = "viewer_video_${video.resourceName.removePrefix("search_media_")}"
     video.click()
-    requireChangingMedia(VIEWER_PATTERN, "Viewer opened from Search", minimumVisible = 1)
+    requireMovingViewer(viewerIdentity, "Viewer opened from Search")
     pressBack()
     requireMovingFeedPreviews("Search after Viewer return")
     val sessionBeforeBackground = findObject(By.res(STATUS_TAG))?.contentDescription
@@ -104,13 +104,21 @@ private fun UiDevice.flingFeed(direction: Direction) {
  * Samples the actual image surface, so paused frames, spinner-only previews, and isPlaying-only
  * reports cannot satisfy the test. All visible media identities must advance, including siblings.
  */
-internal fun UiDevice.requireMovingFeedPreviews(label: String) = requireChangingMedia(MEDIA_PATTERN, label, minimumVisible = 2)
+internal fun UiDevice.requireMovingFeedPreviews(label: String) = requireChangingMedia(label, minimumVisible = 2)
 
-private fun UiDevice.requireChangingMedia(pattern: Pattern, label: String, minimumVisible: Int) {
+internal fun UiDevice.requireMovingViewer(identity: String, label: String) = requireChangingMedia(
+    label, minimumVisible = 1, snapshot = { viewerPreviewSnapshot(identity) },
+)
+
+private fun UiDevice.requireChangingMedia(
+    label: String,
+    minimumVisible: Int,
+    snapshot: () -> Map<String, Rect> = { visiblePreviews() },
+) {
     val deadline = SystemClock.elapsedRealtime() + JOURNEY_TIMEOUT_MS
     while (SystemClock.elapsedRealtime() < deadline) {
         waitForIdle(500)
-        val previews = visiblePreviews(pattern)
+        val previews = snapshot()
         if (previews.size < minimumVisible) {
             SystemClock.sleep(100)
             continue
@@ -119,7 +127,7 @@ private fun UiDevice.requireChangingMedia(pattern: Pattern, label: String, minim
         val advances = previews.keys.associateWith { 0 }.toMutableMap()
         repeat(8) {
             SystemClock.sleep(150)
-            val current = visiblePreviews(pattern)
+            val current = snapshot()
             if (current != previews) return@repeat
             val samples = screenshotSamples(current)
             previous.forEach { (identity, before) ->
@@ -131,7 +139,31 @@ private fun UiDevice.requireChangingMedia(pattern: Pattern, label: String, minim
             if (advances.values.all { it >= 2 }) return
         }
     }
-    error("$label: every visibly presented MP4/GIF/WebP/Ugoira preview must render changing frames; visible=${visiblePreviews(pattern).keys}")
+    error("$label: every visibly presented MP4/GIF/WebP/Ugoira preview must render changing frames; visible=${snapshot().keys}")
+}
+
+/** Canonical identity and fitted image bounds; moving controls cannot satisfy pixel sampling. */
+internal fun viewerPreviewSnapshot(expectedIdentity: String): Map<String, Rect> {
+    val completed = CountDownLatch(1)
+    var preview = emptyMap<String, Rect>()
+    val reply = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val data = getResultExtras(false)
+            if (data?.getString("identity") == expectedIdentity) {
+                val bounds = Rect(data.getInt("left"), data.getInt("top"), data.getInt("right"), data.getInt("bottom"))
+                if (!bounds.isEmpty) preview = mapOf(expectedIdentity to bounds)
+            }
+            completed.countDown()
+        }
+    }
+    val request = Intent("com.theoriacodex.action.BENCHMARK_VIEWER_SNAPSHOT")
+        .setComponent(ComponentName("com.theoriacodex.benchmark",
+            "com.theoriacodex.app.benchmark.BenchmarkDurationStartReceiver"))
+    InstrumentationRegistry.getInstrumentation().context.sendOrderedBroadcast(
+        request, null, reply, Handler(Looper.getMainLooper()), 0, null, null,
+    )
+    check(completed.await(2, TimeUnit.SECONDS)) { "Benchmark Viewer diagnostic did not answer" }
+    return preview
 }
 
 private fun UiDevice.visiblePreviews(pattern: Pattern = MEDIA_PATTERN): Map<String, Rect> = findObjects(By.res(pattern))

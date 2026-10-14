@@ -57,6 +57,12 @@ Workload version 2 adds two complete app journeys:
   An ordered broadcast to the existing benchmark-only receiver verifies actual pool leases are
   positive in foreground Search and zero on Home; the retained session and moving frames must
   return on resume. The receiver has no production component or additional permission.
+  Viewer entry retains the selected canonical post identity. A benchmark-only ordered snapshot
+  reads the fitted native video surface bounds because Android accessibility can hide the
+  renderer node behind Media actions. The same two-change pixel check samples that image
+  surface, including after controls auto-hide; it never substitutes playback flags or footer
+  animation for video motion. `ViewerObservationDeviceTest` covers hidden controls, 16:9
+  fixture bounds, mismatched identity and route departure before complete captures.
 - `durationAcquisitionFiveFeedJourney` starts the same app graph and posts with unknown durations.
   After visible autoplay is established, an explicit start signal enables the real unknown-duration
   setting. Production route demand and scroll/lifecycle events reach `MediaDurationCoordinator`,

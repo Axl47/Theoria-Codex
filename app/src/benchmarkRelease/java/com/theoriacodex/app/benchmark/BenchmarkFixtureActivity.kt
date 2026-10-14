@@ -1,6 +1,7 @@
 package com.theoriacodex.app.benchmark
 
 import android.os.Bundle
+import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -89,6 +90,16 @@ class BenchmarkFixtureActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        BenchmarkViewerObservation.attach(window.decorView as ViewGroup)
+    }
+
+    override fun onStop() {
+        BenchmarkViewerObservation.detach(window.decorView)
+        super.onStop()
     }
 
     override fun onDestroy() {

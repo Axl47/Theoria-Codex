@@ -281,7 +281,12 @@ private fun ViewerVideoContent(
         AndroidView(
             modifier = Modifier.fillMaxSize().then(mediaModifier),
             factory = { context -> createTexturePlayerView(context).apply { useController = false; player = state.player; state.view = this } },
-            update = { view -> state.view = view; view.useController = false; view.player = state.player },
+            update = { view ->
+                state.view = view
+                view.useController = false
+                view.player = state.player
+                view.tag = if (diagnosticsEnabled) viewerVideoTestTag(postId) else null
+            },
         )
         if (state.loading && !state.failed) CircularProgressIndicator()
         if (state.failed) Text("Could not play video", color = MaterialTheme.colorScheme.onBackground)
