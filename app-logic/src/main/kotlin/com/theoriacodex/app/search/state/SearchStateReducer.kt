@@ -1,5 +1,8 @@
 package com.theoriacodex.app.search.state
 
+import com.theoriacodex.app.search.SearchInitialization
+import com.theoriacodex.domain.adapter.FacetedSearchScope
+import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.data.repository.SearchScrollState
 import com.theoriacodex.data.repository.ViewerLaunchContext
 import com.theoriacodex.data.repository.ViewerStreamSource
@@ -69,6 +72,47 @@ sealed interface SearchStateChange {
 }
 
 object SearchStateReducer {
+    /** Builds restored state while preserving the authoritative applied query and source identity. */
+    fun restore(
+        initialization: SearchInitialization,
+        appliedHash: String,
+        supportedScopes: (QueryMode) -> List<FacetedSearchScope>,
+    ): SearchUiState {
+        val base = SearchUiState(
+            query = SearchQueryUiState(
+                draft = initialization.query,
+                applied = initialization.query,
+                draftSourceScope = initialization.sourceScope,
+                appliedSourceScope = initialization.sourceScope,
+                appliedQueryHash = appliedHash,
+                availableSources = initialization.availableSources,
+                modeOptions = listOf(QueryMode.Unified) + initialization.availableSources.map(QueryMode::Source),
+                enabledSourceCount = initialization.availableSources.size,
+                supportedScopes = supportedScopes(initialization.query.mode),
+                validationMessage = initialization.validationMessage,
+            ),
+            content = SearchContentUiState(
+                hasExecutedSearch = initialization.hasExecutedSearch,
+            ),
+            restoration = SearchRestorationUiState.Restoring,
+        )
+        val draft = SearchDraftReducer.restoreDraft(
+            base,
+            initialization.query,
+            initialization.availableSources.toSet(),
+            supportedScopes,
+        ).state
+        return draft.copy(
+            query = draft.query.copy(
+                applied = initialization.query,
+                appliedSourceScope = initialization.sourceScope,
+                appliedQueryHash = appliedHash,
+            ),
+            content = base.content,
+            restoration = base.restoration,
+        )
+    }
+
     fun reduce(state: SearchUiState, change: SearchStateChange): SearchReduction {
         return when (change) {
             is SearchStateChange.BeginRequest -> {

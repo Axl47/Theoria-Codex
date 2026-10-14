@@ -916,7 +916,9 @@ internal class SearchViewModel(
                     initialization.query,
                     initialization.sourceScope,
                 )
-                mutableState.value = restoredStateFrom(initialization, appliedHash)
+                mutableState.value = SearchStateReducer.restore(
+                    initialization, appliedHash, coordinator::supportedSearchScopes,
+                )
                 val environmentChanged = latestEnvironmentSettings?.let { settings ->
                     reconcileEnvironment(settings, scheduleRetry = false)
                 } == true
@@ -955,45 +957,6 @@ internal class SearchViewModel(
                 )
             }
         }
-    }
-
-    private fun restoredStateFrom(
-        initialization: SearchInitialization,
-        appliedHash: String,
-    ): SearchUiState {
-        val base = SearchUiState(
-            query = SearchQueryUiState(
-                draft = initialization.query,
-                applied = initialization.query,
-                draftSourceScope = initialization.sourceScope,
-                appliedSourceScope = initialization.sourceScope,
-                appliedQueryHash = appliedHash,
-                availableSources = initialization.availableSources,
-                modeOptions = listOf(QueryMode.Unified) + initialization.availableSources.map(QueryMode::Source),
-                enabledSourceCount = initialization.availableSources.size,
-                supportedScopes = coordinator.supportedSearchScopes(initialization.query.mode),
-                validationMessage = initialization.validationMessage,
-            ),
-            content = com.theoriacodex.app.search.state.SearchContentUiState(
-                hasExecutedSearch = initialization.hasExecutedSearch,
-            ),
-            restoration = SearchRestorationUiState.Restoring,
-        )
-        val draft = SearchDraftReducer.restoreDraft(
-            base,
-            initialization.query,
-            initialization.availableSources.toSet(),
-            coordinator::supportedSearchScopes,
-        ).state
-        return draft.copy(
-            query = draft.query.copy(
-                applied = initialization.query,
-                appliedSourceScope = initialization.sourceScope,
-                appliedQueryHash = appliedHash,
-            ),
-            content = base.content,
-            restoration = base.restoration,
-        )
     }
 
     private fun restoreSavedDraft(): Boolean {
