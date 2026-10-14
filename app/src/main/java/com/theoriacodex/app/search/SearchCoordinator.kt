@@ -1,6 +1,7 @@
 package com.theoriacodex.app.search
 
 import com.theoriacodex.app.media.recoverRemoteMedia
+import com.theoriacodex.app.feed.settleFeedContinuations
 import com.theoriacodex.app.recommend.recommendationTaxonomyFor
 import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.modeKey
@@ -21,12 +22,12 @@ import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.adapter.SourceFailureReason
-import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
 import com.theoriacodex.domain.adapter.TagSuggestion
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
+import com.theoriacodex.domain.model.normalizedForMode
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
@@ -82,6 +83,8 @@ class SearchCoordinator(
         supportedSearchScopes = ::supportedSearchScopes,
         effectiveEnabledSources = ::effectiveEnabledSources,
     )
+    private val tagCounts = TagCountCoordinator(registry, tagSuggestionStore, ::autocompletePrefixForSource,
+        clock = clock, dispatcher = computationDispatcher)
     private val resolvedPostsByExecution = linkedMapOf<String, LinkedHashMap<PostId, Post>>()
     private val resolveFailuresByExecution = mutableMapOf<String, MutableMap<PostId, ResolveFailureRecord>>()
     private val queryPreparation = UnifiedQueryPreparation(clock)
@@ -115,7 +118,7 @@ class SearchCoordinator(
         } else {
             storedByMode[modeKey(QueryMode.Unified)] ?: defaultQuery()
         }
-        val sanitized = restored.sanitizedForMode(restored.mode)
+        val sanitized = restored.normalizedForMode(restored.mode)
         val sourceScope = SearchSourceScope.fromQuery(sanitized.query)
         val key = executionKey(sanitized.query, sourceScope)
         initialized = true
@@ -147,7 +150,7 @@ class SearchCoordinator(
     }
 
     override fun executionKeyFor(query: Query, sourceScope: SearchSourceScope): String {
-        return executionKey(query.sanitizedForMode(sourceScope.queryMode()).query, sourceScope)
+        return executionKey(query.normalizedForMode(sourceScope.queryMode()).query, sourceScope)
     }
 
     override suspend fun executeInitial(
@@ -155,7 +158,7 @@ class SearchCoordinator(
         sourceScope: SearchSourceScope,
     ): SearchExecutionResult {
         currentCoroutineContext().ensureActive()
-        val sanitized = query.sanitizedForMode(sourceScope.queryMode()).query
+        val sanitized = query.normalizedForMode(sourceScope.queryMode()).query
         val enabled = effectiveEnabledSources(sourceScope)
         val available = availableSources
         val weights = effectiveWeights(enabled)
@@ -232,24 +235,15 @@ class SearchCoordinator(
         )
         currentCoroutineContext().ensureActive()
         val statuses = mergeStatuses(excluded, result.statuses)
-        if (isPixivUnknownFailure(result.items, statuses)) {
-            return SearchExecutionResult.Failure(
-                executionKey, query, sourceScope, statuses, PIXIV_UNKNOWN_RETRY_MESSAGE,
-            )
+        val next = continuation(executionKey, query, sourceScope, enabledSources, availableSources, weights,
+            unifiedPageTokens = result.nextPageTokens, unifiedQueryOverrides = result.queriesBySource)
+            .copy(failedSources = statuses.filter { it.state == SourceRunState.FAILED }.mapTo(mutableSetOf()) { it.source })
+        if (statuses.none { it.state == SourceRunState.SUCCESS }) {
+            return SearchExecutionResult.Failure(executionKey, query, sourceScope, statuses,
+                unifiedFailureMessage(result.items, statuses), next)
         }
         rememberSeenTags(result.items)
-        return SearchExecutionResult.Success(
-            executionKey = executionKey,
-            query = query,
-            sourceScope = sourceScope,
-            posts = result.items,
-            statuses = statuses,
-            continuation = continuation(
-                executionKey, query, sourceScope, enabledSources, availableSources, weights,
-                unifiedPageTokens = result.nextPageTokens,
-                unifiedQueryOverrides = result.queriesBySource,
-            ),
-        )
+        return SearchExecutionResult.Success(executionKey, query, sourceScope, result.items, statuses, next)
     }
 
     private suspend fun executeSourceInitial(
@@ -336,6 +330,7 @@ class SearchCoordinator(
         val updated = base.copy(
             unifiedPageTokens = base.unifiedPageTokens + result.nextPageTokens,
             unifiedQueryOverrides = base.unifiedQueryOverrides + result.queriesBySource,
+            failedSources = base.failedSources - source,
         )
         return SearchPageResult.Success(base.executionKey, result.items, result.statuses, updated)
     }
@@ -388,7 +383,7 @@ class SearchCoordinator(
             continuation.enabledSources,
         )
         val pageable = continuation.enabledSources.filterTo(mutableSetOf()) { source ->
-            !continuation.unifiedPageTokens[source].isNullOrBlank()
+            source !in continuation.failedSources && !continuation.unifiedPageTokens[source].isNullOrBlank()
         }
         if (pageable.isEmpty()) {
             return SearchPageResult.Success(
@@ -407,22 +402,18 @@ class SearchCoordinator(
         )
         currentCoroutineContext().ensureActive()
         val statuses = mergeStatuses(excluded, result.statuses)
-        if (isPixivUnknownFailure(result.items, statuses)) {
-            return SearchPageResult.Failure(
-                continuation.executionKey, statuses, PIXIV_UNKNOWN_RETRY_MESSAGE,
-            )
+        if (statuses.none { it.state == SourceRunState.SUCCESS }) {
+            return SearchPageResult.Failure(continuation.executionKey, statuses, unifiedFailureMessage(result.items, statuses))
         }
         rememberSeenTags(result.items)
-        val nextTokens = continuation.unifiedPageTokens.toMutableMap().apply {
-            val failed = result.statuses.filter { it.state == SourceRunState.FAILED }.map { it.source }.toSet()
-            pageable.filterNot { it in failed }.forEach { source -> put(source, null) }
-            putAll(result.nextPageTokens)
-        }
+        val nextTokens = settleFeedContinuations(continuation.unifiedPageTokens, pageable, result.nextPageTokens, statuses)
+            .minus(pageable - registry.availableSources())
+        val failed = statuses.filter { it.state == SourceRunState.FAILED }.mapTo(mutableSetOf()) { it.source }
         return SearchPageResult.Success(
             continuation.executionKey,
             result.items,
             statuses,
-            continuation.copy(unifiedPageTokens = nextTokens),
+            continuation.copy(unifiedPageTokens = nextTokens, failedSources = continuation.failedSources + failed),
         )
     }
 
@@ -465,15 +456,29 @@ class SearchCoordinator(
         }
     }
 
-    override suspend fun recordAcceptedSearch(query: Query, sourceScope: SearchSourceScope, executionKey: String) {
-        val kind = when (sourceScope) {
+    override suspend fun recordAcceptedSearch(result: SearchExecutionResult) {
+        val scope = result.sourceScope
+        val kind = when (scope) {
             SearchSourceScope.GlobalUnified -> RecentSearchKind.UNIFIED
             is SearchSourceScope.Single -> RecentSearchKind.SOURCE
             is SearchSourceScope.Temporary -> RecentSearchKind.MULTI_SEARCH
         }
-        val sources = effectiveEnabledSources(sourceScope).inPresentationOrder()
-        runCatchingPreservingCancellation { recentsRepository.recordSearch(query, executionKey, kind, sources) }
-        runCatchingPreservingCancellation { statisticsRepository.recordSearch(sources.toSet()) }
+        val captured = when (result) {
+            is SearchExecutionResult.Success -> result.continuation.enabledSources
+            is SearchExecutionResult.Failure -> result.continuation?.enabledSources.orEmpty()
+        }
+        val sources = when (scope) {
+            is SearchSourceScope.Single -> listOf(scope.source)
+            is SearchSourceScope.Temporary -> scope.sources
+            SearchSourceScope.GlobalUnified -> captured.inPresentationOrder()
+        }
+        runCatchingPreservingCancellation {
+            recentsRepository.recordSearch(result.query, result.executionKey, kind, sources)
+        }
+        if (result.completedSuccessfully) runCatchingPreservingCancellation {
+            statisticsRepository.recordSearch(result.statuses.filter { it.state != SourceRunState.EXCLUDED }
+                .mapTo(mutableSetOf()) { it.source })
+        }
     }
 
     internal suspend fun fetchAutocomplete(
@@ -525,8 +530,7 @@ class SearchCoordinator(
     ): Int? {
         val normalized = tag.trim()
         if (normalized.isBlank()) return null
-        return tagSuggestionStore.get(source, TAG_LOOKUP_LIMIT)
-            .firstOrNull { sourceTagsMatch(source, it.text, normalized) }?.count
+        return tagSuggestionStore.getCount(source, normalized)
             ?: autocomplete.firstOrNull { sourceTagsMatch(source, it.text, normalized) }?.count
             ?: trending.firstOrNull { sourceTagsMatch(source, it.text, normalized) }?.count
     }
@@ -541,42 +545,8 @@ class SearchCoordinator(
         autocomplete: List<TagSuggestion>,
         trending: List<TagSuggestion>,
     ): Map<String, Int?> {
-        val requested = tags.map(String::trim).filter(String::isNotBlank).distinct()
-        if (requested.isEmpty()) return emptyMap()
-        val resolved = requested.associateWith {
-            tagVideoCount(source, it, autocomplete, trending)
-        }.toMutableMap()
-        var missing = requested.filter { resolved[it] == null }
-        val adapter = registry.adapterFor(source) ?: return resolved
-        if (adapter is TagCountLookupSourceAdapter && missing.isNotEmpty()) {
-            val counts = runCatchingPreservingCancellation {
-                adapter.fetchTagCounts(missing.map { autocompletePrefixForSource(source, it) })
-            }.getOrDefault(emptyMap())
-            if (counts.isNotEmpty()) {
-                tagSuggestionStore.put(
-                    source,
-                    counts.map { (text, count) -> TagSuggestion(text, "tag_count_lookup", count) },
-                    TagSuggestionOrigin.COUNT_LOOKUP,
-                )
-                missing.forEach { tag ->
-                    counts.entries.firstOrNull { sourceTagsMatch(source, it.key, tag) }
-                        ?.value?.let { resolved[tag] = it }
-                }
-            }
-            missing = requested.filter { resolved[it] == null }
-        }
-        missing.forEach { tag ->
-            val fetched = runCatchingPreservingCancellation {
-                adapter.autocompleteTags(autocompletePrefixForSource(source, tag), TAG_FETCH_LIMIT)
-            }.getOrDefault(emptyList())
-            if (fetched.isNotEmpty()) {
-                tagSuggestionStore.put(source, fetched, TagSuggestionOrigin.AUTOCOMPLETE)
-            }
-            val count = fetched.firstOrNull { sourceTagsMatch(source, it.text, tag) }?.count
-                ?: tagVideoCount(source, tag, autocomplete, trending)
-            if (count != null) resolved[tag] = count
-        }
-        return resolved
+        val supplemental = tags.associateWith { tagVideoCount(source, it, autocomplete, trending) }
+        return tagCounts.fetch(source, tags, supplemental)
     }
 
     suspend fun fetchTagVideoCounts(source: SourceKey, tags: List<String>): Map<String, Int?> {
@@ -757,6 +727,11 @@ class SearchCoordinator(
         first: List<SourceRunStatus>,
         second: List<SourceRunStatus>,
     ): List<SourceRunStatus> = (first + second).associateBy { it.source }.values.sortedBy { it.source.name }
+
+    private fun unifiedFailureMessage(posts: List<Post>, statuses: List<SourceRunStatus>): String =
+        if (isPixivUnknownFailure(posts, statuses)) PIXIV_UNKNOWN_RETRY_MESSAGE else
+            buildSourceFailureMessage(statuses) ?: buildSourceAuthErrorMessage(statuses)
+                ?: "These search options are not supported by the selected sources."
 
     private fun isPixivUnknownFailure(posts: List<Post>, statuses: List<SourceRunStatus>): Boolean =
         posts.isEmpty() && statuses.any { status ->

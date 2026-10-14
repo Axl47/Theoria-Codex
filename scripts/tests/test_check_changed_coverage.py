@@ -17,6 +17,21 @@ import check_changed_coverage as coverage  # noqa: E402
 
 
 class ChangedCoverageTest(unittest.TestCase):
+    def test_ownership_manifest_protects_engines_controllers_queues_and_future_helpers(self) -> None:
+        repo = SCRIPTS_DIR.parent
+        args = coverage.parse_args(["--xml", "unused.xml", "--repo", str(repo), "--boundaries", "config/quality/coverage-boundaries.json"])
+        protected = [
+            "viewer/FeedPreviewPlayerPool.kt", "media/MediaDurationAcquisitionEngine.kt",
+            "update/ApkDownloadManager.kt", "update/ApkUpdateValidator.kt",
+            "media/PostDownloadQueue.kt", "sourceauth/PixivPkceController.kt", "media/FutureTransportHelper.kt",
+        ]
+        prefix = "app/src/main/java/com/theoriacodex/app/"
+        paths = [pathlib.PurePosixPath(prefix + path) for path in protected]
+        ui = pathlib.PurePosixPath(prefix + "search/SearchScreen.kt")
+        changed = {path: {1} for path in paths + [ui]}
+        result = coverage.production_changed_lines(changed, frozenset(args.include_module), args.include_path, args.exclude_path)
+        self.assertEqual(set(paths), set(result))
+
     def test_parses_jacoco_source_lines(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             xml_path = pathlib.Path(temporary_directory) / "coverage.xml"

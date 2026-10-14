@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import math
 from pathlib import Path
 import shutil
@@ -390,9 +391,21 @@ def compare(baseline_path: Path, candidate_path: Path) -> dict[str, Any]:
             "baseline_apk_sha256": baseline["target_apk_sha256"], "candidate_apk_sha256": candidate["target_apk"]["sha256"]}
 
 
+def validate_instrumentation_output(output: str, expected_tests: int) -> None:
+    # am instrument can exit zero even when JUnit fails or the process aborts.
+    summary = rf"^OK \({expected_tests} tests?\)\s*$"
+    if expected_tests < 1 or not re.search(summary, output, re.MULTILINE) or not re.search(
+        r"^INSTRUMENTATION_CODE: -1\s*$", output, re.MULTILINE,
+    ) or "FAILURES!!!" in output or "INSTRUMENTATION_FAILED" in output:
+        raise EvidenceError("Instrumentation did not complete every required test successfully")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
+    instrumentation = sub.add_parser("instrumentation", help="Verify the complete native instrumentation result")
+    instrumentation.add_argument("--log", type=Path, required=True)
+    instrumentation.add_argument("--tests", type=int, required=True)
     record = sub.add_parser("record", help="Archive a complete raw report directory and bind the run metadata")
     for name in ("report", "apk", "harness-apk", "output"):
         record.add_argument(f"--{name}", type=Path, required=True)
@@ -409,11 +422,14 @@ def main(argv: list[str] | None = None) -> int:
     comparison.add_argument("--candidate", type=Path, required=True)
     comparison.add_argument("--output", type=Path, required=True)
     contract_parser = sub.add_parser("contract", help="Print the required method/metric/iteration contract")
-    contract_parser.add_argument("--scenario", choices=tuple(default_contract()["scenarios"]),
-                                 help="Select one complete workload without reducing its iterations or metrics")
+    contract_parser.add_argument("--scenario", choices=tuple(default_contract()["scenarios"]), action="append",
+                                 help="Select complete workloads; repeat to include several without reducing iterations or metrics")
     args = parser.parse_args(argv)
     try:
-        if args.command == "record":
+        if args.command == "instrumentation":
+            validate_instrumentation_output(args.log.read_text(), args.tests)
+            print(f"Instrumentation passed all {args.tests} required tests")
+        elif args.command == "record":
             result = record_run(args.report, args.apk, args.harness_apk, args.output, args.device_serial,
                                 args.device_kind, args.compilation, read_json(args.contract) if args.contract else None, args.fixture_root)
             print(f"Recorded complete run: {result}")
@@ -432,8 +448,10 @@ def main(argv: list[str] | None = None) -> int:
         else:
             contract = default_contract()
             if args.scenario:
-                contract["version"] += f"/{args.scenario}"
-                contract["scenarios"] = {args.scenario: contract["scenarios"][args.scenario]}
+                if len(set(args.scenario)) != len(args.scenario):
+                    raise EvidenceError("A workload cannot be selected twice")
+                contract["version"] += "/" + ",".join(args.scenario)
+                contract["scenarios"] = {name: contract["scenarios"][name] for name in args.scenario}
             print(json.dumps(contract, indent=2))
         return 0
     except (EvidenceError, OSError, KeyError, TypeError) as error:

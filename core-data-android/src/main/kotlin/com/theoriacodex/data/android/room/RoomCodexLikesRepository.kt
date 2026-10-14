@@ -12,6 +12,8 @@ import com.theoriacodex.data.repository.CodexLikesTransactions
 import com.theoriacodex.data.repository.CodexProfileDeleteResult
 import com.theoriacodex.data.repository.CodexRepository
 import com.theoriacodex.data.repository.CodexSummary
+import com.theoriacodex.data.repository.ProfileLibraryIds
+import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
 import com.theoriacodex.data.repository.CodexSortMode
 import com.theoriacodex.data.repository.LikedPost
 import com.theoriacodex.data.repository.LikesRepository
@@ -26,6 +28,7 @@ import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -41,11 +44,25 @@ class RoomCodexLikesRepository(
     private val clock: () -> Long = System::currentTimeMillis,
     private val newId: () -> String = { UUID.randomUUID().toString() },
     gson: Gson = Gson(),
+    private val writeGuard: ProfileLibraryWriteGuard = ProfileLibraryWriteGuard(),
 ) : CodexRepository, LikesRepository, CodexLikesTransactions {
     private val dao = database.codexLikesDao()
     private val codec = RoomPayloadCodec(gson)
+    private val postCodec = LocalPostPayloadCodec(gson)
     private val sharedPostPayloads = SharedPostPayloadWriter(dao, LocalPostPayloadCodec(gson))
     private val summaries = RoomCodexSummaryQueries(dao, LocalPostPayloadCodec(gson))
+
+    override suspend fun removeProfileLibrary(profileId: String) {
+        database.withTransaction {
+            val codices = dao.codices().filter { ProfileLibraryIds.belongsTo(it.codexId, profileId) }
+            val affected = codices.flatMap { dao.itemsForCodex(it.codexId) }
+                .map { it.source to it.sourcePostId } + dao.likesForProfile(profileId).map { it.source to it.sourcePostId }
+            dao.deleteLikes(profileId)
+            codices.forEach { dao.deleteCodex(it.codexId) }
+            normalizeCodexOrderInside()
+            cleanupOrphanPostsInside(affected)
+        }
+    }
 
     override fun observeCodexSummaries(codexIds: Set<String>, coverLimit: Int): Flow<List<CodexSummary>> =
         summaries.observeSummaries(codexIds, coverLimit)
@@ -79,6 +96,7 @@ class RoomCodexLikesRepository(
             )
             var codexId = newId()
             while (dao.codex(codexId) != null) codexId = newId()
+            writeGuard.requireCodexWritable(codexId)
             val created = CodexEntity(
                 codexId,
                 resolvedName,
@@ -159,8 +177,12 @@ class RoomCodexLikesRepository(
             CodexSortMode.OLDEST_SAVED -> dao.observeCodexPostsOldest(codexId)
             CodexSortMode.BY_SOURCE -> dao.observeCodexPostsBySource(codexId)
         }
-        return rows.map { values -> values.map(codec::decodePostRow) }.flowOn(Dispatchers.Default)
+        return rows.map { values -> values.map { PostEntity(it.source, it.sourcePostId, it.payloadJson) } }
+            .decodePostSnapshots(postCodec)
     }
+
+    override fun observeLibraryPosts(codexIds: Set<String>): Flow<List<Post>> =
+        if (codexIds.isEmpty()) flowOf(emptyList()) else dao.observeLibraryPosts(codexIds.sorted()).decodePostSnapshots(postCodec)
 
     override suspend fun getPost(postId: PostId): Post? {
         return database.withTransaction {
@@ -170,6 +192,7 @@ class RoomCodexLikesRepository(
 
     override suspend fun addItems(codexId: String, posts: List<Post>): Int {
         return database.withTransaction {
+            writeGuard.requireCodexWritable(codexId)
             check(dao.codex(codexId) != null) { "The selected Codex no longer exists" }
             posts.distinctBy(Post::id).count { post ->
                 sharedPostPayloads.upsert(post)
@@ -212,6 +235,7 @@ class RoomCodexLikesRepository(
         val postsById = posts.associateBy(Post::id)
         database.withTransaction {
             items.forEach { item ->
+                writeGuard.requireCodexWritable(item.codexId)
                 val post = postsById[item.postId] ?: return@forEach
                 if (
                     dao.codex(item.codexId) != null &&
@@ -311,6 +335,7 @@ class RoomCodexLikesRepository(
             return CodexLikeSyncResult(nowLiked = false, membershipChanged = false)
         }
         return database.withTransaction {
+            writeGuard.requireProfileWritable(normalized)
             val nowLiked = toggleLikeInside(normalized, post.id, tags)
             var automaticMembershipsAdded = 0
             val membershipChanged = if (nowLiked) {
@@ -405,6 +430,7 @@ class RoomCodexLikesRepository(
     }
 
     private suspend fun ensureCodexInside(codexId: String, name: String): Codex {
+        writeGuard.requireCodexWritable(codexId)
         val current = dao.codices()
         val existing = current.firstOrNull { entity -> entity.codexId == codexId }
         val resolvedName = CodexLikesPolicy.resolveUniqueCodexName(

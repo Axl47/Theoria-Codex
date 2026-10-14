@@ -8,6 +8,7 @@ import ast
 import collections
 import dataclasses
 import fnmatch
+import json
 import os
 import pathlib
 import re
@@ -175,12 +176,14 @@ def production_changed_lines(
     changed: Mapping[pathlib.PurePosixPath, set[int]],
     included_modules: frozenset[str] | None = None,
     included_paths: Sequence[str] = (),
+    excluded_paths: Sequence[str] = (),
 ) -> ChangedLines:
     return {
         path: set(lines)
         for path, lines in changed.items()
         if lines
         and is_production_kotlin_path(path)
+        and not any(fnmatch.fnmatchcase(path.as_posix(), pattern) for pattern in excluded_paths)
         and (
             (included_modules is None and not included_paths)
             or (path.parts and path.parts[0] in (included_modules or ()))
@@ -257,8 +260,9 @@ def calculate_changed_coverage(
     report: Mapping[SourceKey, Mapping[int, bool]],
     included_modules: frozenset[str] | None = None,
     included_paths: Sequence[str] = (),
+    excluded_paths: Sequence[str] = (),
 ) -> CoverageResult:
-    production_changes = production_changed_lines(changed, included_modules, included_paths)
+    production_changes = production_changed_lines(changed, included_modules, included_paths, excluded_paths)
     source_index = build_source_index(repo)
     executable_locations: list[tuple[pathlib.PurePosixPath, int]] = []
     uncovered_locations: list[tuple[pathlib.PurePosixPath, int]] = []
@@ -387,7 +391,25 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--include-path", action="append", default=[],
         help="Additional repository-relative source glob (shell quoted); * matches nested paths.",
     )
+    parser.add_argument("--exclude-path", action="append", default=[], help="Reviewed rendering-only source exclusion.")
+    parser.add_argument("--boundaries", help="Repository-relative JSON ownership manifest for the coverage scope.")
     args = parser.parse_args(argv)
+    if args.boundaries:
+        path = pathlib.Path(args.boundaries)
+        if not path.is_absolute():
+            path = pathlib.Path(args.repo) / path
+        try:
+            scope = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(scope, dict) or scope.get("version") != 1:
+                raise ValueError("unsupported coverage ownership manifest")
+            for key in ("includeModules", "includePaths", "excludePaths"):
+                if not isinstance(scope.get(key), list) or not all(isinstance(item, str) for item in scope[key]):
+                    raise ValueError(f"{key} must be a list of strings")
+            args.include_module = (args.include_module or []) + scope["includeModules"]
+            args.include_path.extend(scope["includePaths"])
+            args.exclude_path.extend(scope["excludePaths"])
+        except (OSError, ValueError) as error:
+            parser.error(f"invalid coverage ownership manifest: {error}")
     if not 0.0 <= args.minimum <= 100.0:
         parser.error("--minimum must be between 0 and 100")
     if args.include_module:
@@ -401,7 +423,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
                 "--include-module must name a top-level repository module: "
                 + ", ".join(invalid_modules)
             )
-    for pattern in args.include_path:
+    for pattern in args.include_path + args.exclude_path:
         path = pathlib.PurePosixPath(pattern)
         if not pattern or path.is_absolute() or ".." in path.parts or "\\" in pattern:
             parser.error("--include-path must be a nonempty repository-relative glob without traversal")
@@ -442,6 +464,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             report,
             included_modules=included_modules,
             included_paths=args.include_path,
+            excluded_paths=args.exclude_path,
         )
     except (CoverageCheckError, OSError, subprocess.CalledProcessError) as error:
         print(f"Changed-line coverage check failed: {error}", file=sys.stderr)

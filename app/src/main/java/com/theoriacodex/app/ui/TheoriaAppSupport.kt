@@ -88,10 +88,4 @@ internal suspend fun DataDependencies.currentActiveRecommendationProfile(): Reco
     return currentSettingsSnapshot().activeRecommendationProfile()
 }
 
-internal fun parseGelbooruProfileOwner(html: String): String? {
-    val owner = GELBOORU_PROFILE_OWNER_REGEX.find(html)?.groupValues?.getOrNull(1)
-    return owner?.trim()?.takeIf(String::isNotBlank)
-}
-
 private val CODEX_IMPORT_MIME_TYPES = setOf("application/json", "text/json")
-private val GELBOORU_PROFILE_OWNER_REGEX = Regex("""user:([A-Za-z0-9_:-]+)""", RegexOption.IGNORE_CASE)

@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.theoriacodex.data.repository.RecentActivityEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchKind
+import com.theoriacodex.data.repository.RecentSearchSection
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
@@ -41,6 +42,21 @@ class RoomRecentsRepositoryTest {
     }
 
     @After fun tearDown() = database.close()
+
+    @Test fun `section clearing captures exact rows and keeps the other search section`() = runTest {
+        val repository = RoomRecentsRepository(database, clock = { now++ })
+        repository.recordSearch(recentQuery("manual"), "manual")
+        repository.recordSearch(recentQuery("fyp").copy(mode = QueryMode.Unified), "unprefixed",
+            RecentSearchKind.FYP, listOf(SourceKey.PIXIV))
+        val original = repository.observeSearches().first()
+        val removed = repository.clearSearches(RecentSearchSection.SEARCHES)
+        assertEquals(original.filter { it.kind != RecentSearchKind.FYP }, removed)
+        assertEquals(original.filter { it.kind == RecentSearchKind.FYP }, repository.observeSearches().first())
+        repository.restoreEntries(searches = removed)
+        assertEquals(original, repository.observeSearches().first())
+        assertEquals(original.filter { it.kind == RecentSearchKind.FYP }, repository.clearSearches(RecentSearchSection.FYP))
+        assertEquals(removed, repository.observeSearches().first())
+    }
 
     @Test fun `watched membership projection does not hydrate payloads or include Codex-only entries`() = runTest {
         database.codexLikesDao().insertPost(PostEntity("PIXIV", "sparse", "unreadable payload"))
@@ -312,9 +328,7 @@ class RoomRecentsRepositoryTest {
 
     @Test fun `versioned query payload restarts from the same database`() = runTest {
         val repository = RoomRecentsRepository(database, clock = { 9L })
-        val query = recentQuery("artist").copy(
-            includeTerms = listOf(SearchTerm("name", sourceNamespace = "pixiv")),
-        )
+        val query = recentQuery("artist").withIncludeTermsAsRequired(listOf(SearchTerm("name", sourceNamespace = "pixiv")))
         repository.recordSearch(query, "hash")
 
         val reconstructed = RoomRecentsRepository(database)

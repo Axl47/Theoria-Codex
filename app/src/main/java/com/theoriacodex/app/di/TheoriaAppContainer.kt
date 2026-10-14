@@ -51,7 +51,10 @@ import com.theoriacodex.data.repository.FileBackedSavedSearchRepository
 import com.theoriacodex.data.repository.InMemorySavedSearchRepository
 import com.theoriacodex.data.repository.SavedSearchRepository
 import com.theoriacodex.data.repository.OfflineMediaStore
+import com.theoriacodex.data.repository.OfflinePendingJobStore
 import com.theoriacodex.data.repository.ProfileBackupService
+import com.theoriacodex.data.repository.ProfileDeletionService
+import com.theoriacodex.data.repository.ProfileLibraryWriteGuard
 import com.theoriacodex.data.repository.SettingsRepository
 import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
@@ -83,6 +86,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 
 data class DataDependencies(
     val storageDirectory: File,
@@ -131,6 +135,7 @@ data class WorkflowDependencies(
     val likesCodexSync: LikesCodexSyncService,
     val codexTransfer: CodexTransferService,
     val profileBackup: ProfileBackupService? = null,
+    val profileDeletion: ProfileDeletionService? = null,
 )
 
 interface TheoriaAppContainer {
@@ -210,7 +215,8 @@ internal class DefaultTheoriaAppContainer(
         parentScope = durableStoreScope,
     )
 
-    private val contentRepository = RoomCodexLikesRepository(contentDatabase)
+    private val profileWriteGuard = ProfileLibraryWriteGuard()
+    private val contentRepository = RoomCodexLikesRepository(contentDatabase, writeGuard = profileWriteGuard)
     private val contentImporter = RoomLegacyJsonImporter(contentDatabase)
     private val recentsImporter = RoomRecentsLegacyImporter(
         database = contentDatabase,
@@ -227,7 +233,10 @@ internal class DefaultTheoriaAppContainer(
     private val settingsRepository = DataStoreSettingsRepository(
         baseDirectory = storageDirectory,
         scope = durableStoreScope,
+        profileWriteGuard = profileWriteGuard,
     )
+    private val profileDeletion = ProfileDeletionService(settingsRepository, contentRepository,
+        File(storageDirectory, "pending_profile_deletion.json"), profileWriteGuard)
     private val statisticsRepository = DataStoreStatisticsRepository(
         baseDirectory = storageDirectory,
         scope = durableStoreScope,
@@ -239,6 +248,9 @@ internal class DefaultTheoriaAppContainer(
         resolve = offlineAcquisition::resolve,
         selectMedia = offlineAcquisition::selectMedia,
         acquire = offlineAcquisition::acquire,
+        pendingStore = OfflinePendingJobStore(File(storageDirectory, "offline_jobs.json")),
+        ownerExists = { owner -> owner == com.theoriacodex.app.media.AUTOMATIC_OFFLINE_OWNER ||
+            owner.startsWith("codex:") && contentRepository.observeCodex(owner.removePrefix("codex:")).first() != null },
     )
     private val cacheRepository = OfflineAwareCacheRepository(FileBackedCacheRepository(storageDirectory), offlineMedia)
     private val readingPositions = FileBackedReadingPositionRepository(storageDirectory)
@@ -355,6 +367,7 @@ internal class DefaultTheoriaAppContainer(
             canonicalizePost = offlineMedia::withoutOfflineLocations,
         ),
         profileBackup = profileBackup,
+        profileDeletion = profileDeletion,
     )
 
     /** Complete typed-store migration before any route can observe default placeholder state. */
@@ -368,7 +381,9 @@ internal class DefaultTheoriaAppContainer(
         uiRestoreReady.await()
         contentReady.await()
         profileBackup.recoverPendingRestore()
+        profileDeletion.recoverPendingDeletion()
         offlineStore.load()
+        offlineMedia.recoverPendingJobs()
     }
 
     private suspend fun awaitContentStore() {

@@ -98,7 +98,7 @@ class SavedSearchViewModelTest {
         val original = search()
         recents.recordSearch(original.query, original.queryHash)
         val pin = repository.save("Keep this", recents.observeSearches().first().single())
-        recents.recordSearch(original.query.copy(includeTerms = emptyList()), "later-query")
+        recents.recordSearch(original.query.withIncludeTermsAsRequired(emptyList()), "later-query")
         assertEquals("later-query", recents.observeSearches().first().single().queryHash)
 
         RecentsClearWorkflow(recents).clear(

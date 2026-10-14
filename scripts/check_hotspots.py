@@ -268,6 +268,9 @@ def canonical_detekt_owner_identity(identifier: str, label: str = "Detekt baseli
     declaration, _ = _strip_leading_detekt_annotations(owner_match.group("declaration"), label)
     if not _is_supported_detekt_declaration(declaration):
         raise ConfigurationError(f"cannot canonicalize Detekt owner in {label}: {identifier}")
+    if rule == "LargeClass":
+        # Interfaces change the baseline signature, not the identity of the existing class owner.
+        declaration = declaration.split(":", 1)[0].strip()
     return f"{rule}:{file_name}:{owner_match.group('nesting')}{declaration}"
 
 

@@ -19,6 +19,17 @@ ANDROID_HOME="$HOME/Library/Android/sdk" \
   ./gradlew :app:assembleBenchmarkRelease :macrobenchmark:assembleBenchmarkRelease
 ```
 
+For one complete current measurement without an existing compatible baseline, run:
+
+```bash
+ANDROID_SERIAL=SERIAL scripts/verify_performance_device.sh capture NEW_EVIDENCE_DIR
+```
+
+This performs the same artifact preflight and complete-trace archiving as calibration, but records
+one capture and claims no regression comparison. Set `THEORIA_DEVICE_OFFLINE=1` when the exact
+build dependencies are cached to keep every Gradle step offline. Use comma-separated complete method names in `BENCHMARK_SCENARIO` to run both five-feed journeys in one instrumentation session without an intervening phone lock. The script builds and verifies both APKs, then uses the same AndroidJUnitRunner directly and collects the complete unique output directory after instrumentation returns. It requires the exact JUnit test count and successful native completion before validating every metric, iteration and thermal record. No listener, iteration, compilation or autoplay setting is changed. This avoids UTP holding a result socket open during multi-GiB trace transfers. Calibration still requires three distinct full
+runs; a device or OS change requires a fresh compatible calibration.
+
 ## What the journeys exercise
 
 Ten cold and ten warm startup iterations use
@@ -46,6 +57,12 @@ Workload version 2 adds two complete app journeys:
   An ordered broadcast to the existing benchmark-only receiver verifies actual pool leases are
   positive in foreground Search and zero on Home; the retained session and moving frames must
   return on resume. The receiver has no production component or additional permission.
+  Viewer entry retains the selected canonical post identity. A benchmark-only ordered snapshot
+  reads the fitted native video surface bounds because Android accessibility can hide the
+  renderer node behind Media actions. The same two-change pixel check samples that image
+  surface, including after controls auto-hide; it never substitutes playback flags or footer
+  animation for video motion. `ViewerObservationDeviceTest` covers hidden controls, 16:9
+  fixture bounds, mismatched identity and route departure before complete captures.
 - `durationAcquisitionFiveFeedJourney` starts the same app graph and posts with unknown durations.
   After visible autoplay is established, an explicit start signal enables the real unknown-duration
   setting. Production route demand and scroll/lifecycle events reach `MediaDurationCoordinator`,
@@ -101,7 +118,7 @@ Calibrate tolerances from at least three independent fresh baseline reports; do 
 old component result into a baseline for the full-app version-2 workload. Source assertions or a
 successful APK build do not replace measured results. New journeys require fresh physical evidence.
 
-Gradle copies the complete result directory to:
+Direct capture preserves the complete unique device output directory under `NEW_EVIDENCE_DIR/raw-N/`, then archives and hashes it in `run-N/artifacts/`. It never deletes the remote traces. A manual Gradle run copies its complete result directory to:
 
 ```text
 macrobenchmark/build/outputs/connected_android_test_additional_output/

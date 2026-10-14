@@ -267,6 +267,8 @@ object SearchStateReducer {
             state = state.copy(
                 query = queryState,
                 content = state.content.copy(
+                    results = if (appliedQuery != null && queryState.appliedQueryHash != state.query.appliedQueryHash)
+                        emptyList() else state.content.results,
                     statuses = statuses,
                     hasExecutedSearch = state.content.hasExecutedSearch || appliedQuery != null,
                     canLoadMore = if (appliedQuery != null) false else state.content.canLoadMore,

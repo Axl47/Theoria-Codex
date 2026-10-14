@@ -3,6 +3,7 @@ package com.theoriacodex.app.recents
 import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
+import com.theoriacodex.data.repository.RecentSearchSection
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.domain.coroutines.runCatchingPreservingCancellation
 
@@ -28,9 +29,13 @@ internal class RecentsClearWorkflow(
         fypSearches: List<RecentSearchEntry>,
         showActionableFeedback: suspend (message: String, actionLabel: String) -> Boolean,
     ) {
+        var removedSearches: List<RecentSearchEntry>
         while (true) {
-            val cleared = runCatchingPreservingCancellation { clearTarget(target) }.isSuccess
-            if (cleared) break
+            val cleared = runCatchingPreservingCancellation { clearTarget(target) }
+            if (cleared.isSuccess) {
+                removedSearches = cleared.getOrThrow()
+                break
+            }
             if (!showActionableFeedback("Could not clear ${target.failureSubject}", "Retry")) return
         }
 
@@ -43,8 +48,7 @@ internal class RecentsClearWorkflow(
             RecentsClearTarget.ALL -> watchedPosts + codexPosts
         }
         val searchSnapshot = when (target) {
-            RecentsClearTarget.FYP -> fypSearches
-            RecentsClearTarget.SEARCHES -> searches
+            RecentsClearTarget.FYP, RecentsClearTarget.SEARCHES -> removedSearches
             RecentsClearTarget.ALL -> searches + fypSearches
             else -> emptyList()
         }
@@ -57,17 +61,11 @@ internal class RecentsClearWorkflow(
         }
     }
 
-    private suspend fun clearTarget(target: RecentsClearTarget) {
-        when (target) {
-            RecentsClearTarget.WATCHED -> repository.clearWatchedPosts(RecentPostSection.WATCHED)
-            RecentsClearTarget.CODEX -> repository.clearWatchedPosts(RecentPostSection.CODEX)
-            RecentsClearTarget.FYP -> repository.clearSearches(FYP_QUERY_HASH_PREFIX)
-            RecentsClearTarget.SEARCHES -> repository.clearSearches()
-            RecentsClearTarget.ALL -> repository.clearAll()
-        }
-    }
-
-    private companion object {
-        const val FYP_QUERY_HASH_PREFIX = "for_you:"
+    private suspend fun clearTarget(target: RecentsClearTarget): List<RecentSearchEntry> = when (target) {
+        RecentsClearTarget.FYP -> repository.clearSearches(RecentSearchSection.FYP)
+        RecentsClearTarget.SEARCHES -> repository.clearSearches(RecentSearchSection.SEARCHES)
+        RecentsClearTarget.WATCHED -> { repository.clearWatchedPosts(RecentPostSection.WATCHED); emptyList() }
+        RecentsClearTarget.CODEX -> { repository.clearWatchedPosts(RecentPostSection.CODEX); emptyList() }
+        RecentsClearTarget.ALL -> { repository.clearAll(); emptyList() }
     }
 }

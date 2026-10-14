@@ -5,7 +5,11 @@ set -euo pipefail
 readonly repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$repo/scripts/device_validation_common.sh"
 readonly mode="${1:-}"
-if [[ "$mode" == calibrate && $# == 2 ]]; then
+if [[ "$mode" == capture && $# == 2 ]]; then
+  baseline=""
+  destination="$2"
+  captures=1
+elif [[ "$mode" == calibrate && $# == 2 ]]; then
   baseline=""
   destination="$2"
   captures=3
@@ -15,7 +19,8 @@ elif [[ "$mode" == compare && $# == 3 ]]; then
   captures=1
   [[ -f "$baseline" ]] || { echo 'Baseline JSON is missing.' >&2; exit 2; }
 else
-  echo 'Usage: ANDROID_SERIAL=SERIAL scripts/verify_performance_device.sh calibrate NEW_EVIDENCE_DIR' >&2
+  echo 'Usage: ANDROID_SERIAL=SERIAL scripts/verify_performance_device.sh capture NEW_EVIDENCE_DIR' >&2
+  echo '   or: ANDROID_SERIAL=SERIAL scripts/verify_performance_device.sh calibrate NEW_EVIDENCE_DIR' >&2
   echo '   or: ANDROID_SERIAL=SERIAL scripts/verify_performance_device.sh compare BASELINE_JSON NEW_EVIDENCE_DIR' >&2
   exit 2
 fi
@@ -25,18 +30,30 @@ readonly output="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1
 mkdir -p "$output"
 cd "$repo"
 
-test_options=(--console=plain)
+gradle_options=(--console=plain)
+if [[ "${THEORIA_DEVICE_OFFLINE:-0}" == 1 ]]; then
+  gradle_options+=(--offline)
+fi
+test_options=("${gradle_options[@]}")
 record_options=(--compilation 'Partial(BaselineProfileMode.Require,warmupIterations=0)')
+contract_options=()
+test_class="com.theoriacodex.macrobenchmark.TheoriaMacrobenchmark"
 if [[ -n "${BENCHMARK_SCENARIO:-}" ]]; then
   # Validate the selector and bind its full metrics/iterations before any device access.
-  python3 scripts/benchmark_results.py contract --scenario "$BENCHMARK_SCENARIO" > "$output/workload-contract.json"
-  test_options+=("-Pandroid.testInstrumentationRunnerArguments.class=com.theoriacodex.macrobenchmark.TheoriaMacrobenchmark#$BENCHMARK_SCENARIO")
-  record_options+=(--contract "$output/workload-contract.json")
+  IFS=, read -r -a scenarios <<< "$BENCHMARK_SCENARIO"
+  selectors=()
+  for scenario in "${scenarios[@]}"; do
+    contract_options+=(--scenario "$scenario")
+    selectors+=("$test_class#$scenario")
+  done
+  test_class="$(IFS=,; printf '%s' "${selectors[*]}")"
 fi
+test_options+=("-Pandroid.testInstrumentationRunnerArguments.class=$test_class")
+python3 scripts/benchmark_results.py contract "${contract_options[@]}" > "$output/workload-contract.json"
+record_options+=(--contract "$output/workload-contract.json")
 
 readonly target_apk="app/build/outputs/apk/benchmarkRelease/app-benchmarkRelease.apk"
 readonly runner_apk="macrobenchmark/build/outputs/apk/benchmarkRelease/macrobenchmark-benchmarkRelease.apk"
-readonly results="macrobenchmark/build/outputs/connected_android_test_additional_output/benchmarkRelease/connected"
 adb_command=("${ADB:-adb}" -s "$serial")
 
 require_selected_phone() {
@@ -46,7 +63,7 @@ require_selected_phone() {
 
 # A dry run is host-only. Actual package manifests and signatures are checked before connected work.
 ./gradlew :macrobenchmark:connectedBenchmarkReleaseAndroidTest "${test_options[@]}" --dry-run > "$output/task-graph.txt" 2>&1
-./gradlew :app:assembleBenchmarkRelease :macrobenchmark:assembleBenchmarkRelease --console=plain > "$output/build.log" 2>&1
+./gradlew :app:assembleBenchmarkRelease :macrobenchmark:assembleBenchmarkRelease "${gradle_options[@]}" > "$output/build.log" 2>&1
 if grep -Eq 'Startup (class|method) not found|missing startup classes and methods' "$output/build.log"; then
   echo 'Startup profiles are stale; regenerate in the isolated baseline-profile lane before measurement.' >&2
   exit 2
@@ -55,12 +72,35 @@ python3 scripts/verify_device_apk.py "$target_apk" --package com.theoriacodex.be
 python3 scripts/verify_device_apk.py "$runner_apk" --package com.theoriacodex.macrobenchmark >> "$output/preflight.log"
 require_selected_phone
 "${adb_command[@]}" shell getprop ro.build.fingerprint > "$output/device-fingerprint.txt"
+# Keep result delivery separate from multi-GiB trace transfers. UTP can lose its still-open
+# instrumentation socket while collecting artifacts after a successful long journey.
+"${adb_command[@]}" shell input keyevent KEYCODE_WAKEUP
+"${adb_command[@]}" shell input keyevent KEYCODE_HOME
+"${adb_command[@]}" install -r "$target_apk" > "$output/install.log" 2>&1
+"${adb_command[@]}" install -r "$runner_apk" >> "$output/install.log" 2>&1
+expected_tests="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["scenarios"]))' "$output/workload-contract.json")"
 
 run_records=()
 for ((index=1; index<=captures; index++)); do
   require_selected_phone
+  # Match the device setup normally performed by UTP; no persistent power setting changes.
+  "${adb_command[@]}" shell input keyevent KEYCODE_WAKEUP
+  "${adb_command[@]}" shell wm dismiss-keyguard
   printf 'Running complete physical benchmark capture %s/%s.\n' "$index" "$captures"
-  ./gradlew :macrobenchmark:connectedBenchmarkReleaseAndroidTest "${test_options[@]}" > "$output/run-$index.log" 2>&1
+  remote="/sdcard/Android/media/com.theoriacodex.macrobenchmark/capture-$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
+  results="$output/raw-$index"
+  "${adb_command[@]}" shell mkdir -p "$remote"
+  run_status=0
+  "${adb_command[@]}" shell am instrument -w -r \
+    -e class "$test_class" -e androidx.benchmark.enabledRules Macrobenchmark \
+    -e additionalTestOutputDir "$remote" \
+    com.theoriacodex.macrobenchmark/androidx.test.runner.AndroidJUnitRunner \
+    > "$output/run-$index.log" 2>&1 || run_status=$?
+  # Instrumentation has returned before stopping the isolated fixture or copying any files.
+  "${adb_command[@]}" shell am force-stop com.theoriacodex.benchmark
+  "${adb_command[@]}" pull "$remote/." "$results" > "$output/transfer-$index.log" 2>&1
+  [[ "$run_status" == 0 ]] || exit "$run_status"
+  python3 scripts/benchmark_results.py instrumentation --log "$output/run-$index.log" --tests "$expected_tests"
   report="$(python3 - "$results" "$output/device-fingerprint.txt" <<'PY'
 import json, pathlib, sys
 fingerprint = pathlib.Path(sys.argv[2]).read_text().strip()
@@ -83,7 +123,9 @@ done
 
 if [[ "$mode" == calibrate ]]; then
   python3 scripts/benchmark_results.py calibrate --runs "${run_records[@]}" --output "$output/baseline.json"
-else
+elif [[ "$mode" == compare ]]; then
   python3 scripts/benchmark_results.py compare --baseline "$baseline" \
     --candidate "${run_records[0]}" --output "$output/comparison.json"
+else
+  printf 'Complete physical capture recorded at %s; no calibration or comparison claimed.\n' "${run_records[0]}"
 fi

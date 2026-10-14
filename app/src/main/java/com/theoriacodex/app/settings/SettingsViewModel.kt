@@ -5,8 +5,6 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.theoriacodex.app.codex.LikesCodexSyncService
-import com.theoriacodex.app.codex.PROFILE_CODEX_ID_PREFIX
 import com.theoriacodex.app.di.TheoriaAppContainer
 import com.theoriacodex.app.source.inPresentationOrder
 import com.theoriacodex.app.statistics.AppUsageTracker
@@ -131,20 +129,14 @@ internal class DefaultSettingsAccountGateway(
 }
 
 internal interface SettingsProfileMutations {
-    suspend fun removeProfileData(profileId: String)
+    suspend fun removeProfile(profileId: String)
+    fun isRemoving(profileId: String): Boolean = false
 }
 
-internal class DefaultSettingsProfileMutations(
-    private val likesCodexSync: LikesCodexSyncService,
-    private val codexRepository: CodexRepository,
-) : SettingsProfileMutations {
-    override suspend fun removeProfileData(profileId: String) {
-        likesCodexSync.clearProfile(profileId)
-        likesCodexSync.removeProfileCodex(profileId)
-        codexRepository.observeCodices().first().filter { codex ->
-            codex.codexId.startsWith("${PROFILE_CODEX_ID_PREFIX}_${profileId}_")
-        }.forEach { codex -> codexRepository.deleteCodex(codex.codexId) }
-    }
+internal class DefaultSettingsProfileMutations(private val service: com.theoriacodex.data.repository.ProfileDeletionService) :
+    SettingsProfileMutations {
+    override suspend fun removeProfile(profileId: String) = service.removeProfile(profileId)
+    override fun isRemoving(profileId: String): Boolean = service.isRemoving(profileId)
 }
 
 internal data class SettingsOwnerDependencies(
@@ -178,6 +170,7 @@ internal class SettingsViewModel(
     private val effectChannel = Channel<SettingsEffect>(capacity = Channel.BUFFERED)
     override val effects: Flow<SettingsEffect> = effectChannel.receiveAsFlow()
     private var likesJob: Job? = null
+    private var observedLikesProfileId: String? = null
     private val accountRefreshRunning = AtomicBoolean(false)
     private var sectionExpansionRevision = 0L
 
@@ -265,18 +258,18 @@ internal class SettingsViewModel(
         when (action) {
             is SettingsAction.SetSectionExpanded -> setSectionExpanded(action.section, action.expanded)
             is SettingsAction.SetActiveProfile -> launchMutation {
+                check(!dependencies.profileMutations.isRemoving(action.profileId)) { "This profile is being removed" }
                 dependencies.settingsRepository.setActiveProfile(action.profileId)
             }
             is SettingsAction.AddProfile -> addProfile(action.name)
             is SettingsAction.RequestRemoveProfile -> updateState { copy(profileDeleteTargetId = action.profileId) }
             SettingsAction.DismissRemoveProfile -> updateState { copy(profileDeleteTargetId = null) }
             SettingsAction.ConfirmRemoveProfile -> removeRequestedProfile()
-            is SettingsAction.RemoveBlacklistEntry -> launchMutation {
-                dependencies.settingsRepository.removeForYouBlacklistEntry(
-                    profileId = state.value.activeProfile.profileId,
-                    source = action.source,
-                    tags = action.tags,
-                )
+            is SettingsAction.RemoveBlacklistEntry -> {
+                val profileId = state.value.activeProfile.profileId
+                launchMutation {
+                    dependencies.settingsRepository.removeForYouBlacklistEntry(profileId, action.source, action.tags)
+                }
             }
             else -> return false
         }
@@ -385,7 +378,7 @@ internal class SettingsViewModel(
         sectionExpansionRevision += 1
         val updated = state.value.sectionExpansion.updated(section, expanded)
         updateState { copy(sectionExpansion = updated) }
-        ownerScope.launch {
+        launchMutation {
             dependencies.uiRestoreRepository.setSettingsSectionExpansion(updated.toPersistenceMap())
         }
     }
@@ -404,8 +397,7 @@ internal class SettingsViewModel(
                 state.value.settings.recommendationProfiles.any { it.profileId == profileId }
             if (!canRemove) return@launchMutation
             val removed = runCatchingPreservingCancellation {
-                dependencies.profileMutations.removeProfileData(profileId)
-                dependencies.settingsRepository.removeRecommendationProfile(profileId)
+                dependencies.profileMutations.removeProfile(profileId)
             }
             if (removed.isFailure) {
                 effectChannel.send(SettingsEffect.ShowMessage("Could not remove profile. Please try again."))
@@ -414,9 +406,11 @@ internal class SettingsViewModel(
     }
 
     private fun observeLikes(profileId: String) {
+        if (profileId == observedLikesProfileId) return
+        observedLikesProfileId = profileId
         likesJob?.cancel()
         likesJob = ownerScope.launch {
-            dependencies.likesRepository.observeLikes(profileId).collect { likes ->
+            dependencies.likesRepository.observeLikedPostIds(profileId).collect { likes ->
                 updateState { copy(activeProfileLikesCount = likes.size) }
             }
         }
@@ -634,7 +628,10 @@ internal class SettingsViewModel(
     }
 
     private fun launchMutation(mutation: suspend () -> Unit) {
-        ownerScope.launch { mutation() }
+        ownerScope.launch {
+            val result = runCatchingPreservingCancellation { mutation() }
+            if (result.isFailure) effectChannel.send(SettingsEffect.ShowMessage("Could not save Settings. Please try again."))
+        }
     }
 
     private inline fun updateState(transform: SettingsUiState.() -> SettingsUiState) {
@@ -657,10 +654,7 @@ internal class SettingsViewModel(
                         codexRepository = container.data.codexRepository,
                         statisticsRepository = container.data.statisticsRepository,
                         appUsageTracker = container.features.appUsageTracker,
-                        profileMutations = DefaultSettingsProfileMutations(
-                            likesCodexSync = container.workflows.likesCodexSync,
-                            codexRepository = container.data.codexRepository,
-                        ),
+                        profileMutations = DefaultSettingsProfileMutations(requireNotNull(container.workflows.profileDeletion)),
                         accounts = DefaultSettingsAccountGateway(
                             accounts = container.sources.accounts,
                             pixivTokens = container.sources.pixivTokens,

@@ -127,6 +127,7 @@ internal class SearchViewModel(
     private var restorationJob: Job? = null
     private var pendingHistoricalQuery: SearchAction.ApplyHistoricalQuery? = null
     private var activeContinuation: SearchContinuation? = null
+    private var pageRetrySource: SourceKey? = null
     private var latestEnvironmentSettings: AppSettings? = null
     private val appliedByMode = mutableMapOf<String, Query>()
     private val scrollPersistence = SearchScrollPersistenceController(
@@ -243,14 +244,7 @@ internal class SearchViewModel(
 
             is SearchAction.RetrySource -> retrySource(action.source)
 
-            SearchAction.Retry -> mutableState.value.let { current ->
-                launchRootSearch(
-                    kind = SearchRequestKind.RETRY,
-                    query = current.query.applied,
-                    sourceScope = current.query.appliedSourceScope,
-                    persistAcceptedResult = false,
-                )
-            }
+            SearchAction.Retry -> retry()
 
             SearchAction.LoadNextPage -> loadNextPage()
 
@@ -626,6 +620,7 @@ internal class SearchViewModel(
         relatedPosts.clear()
         cancelActiveRequest()
         activeContinuation = null
+        pageRetrySource = null
         val expectedExecutionKey = executionService.executionKeyFor(query, sourceScope)
         val requestId = ++nextRequestId
         reduce(SearchStateChange.BeginRequest(requestId, kind, query))
@@ -671,7 +666,7 @@ internal class SearchViewModel(
         val succeeded = completeRequest(requestId, result, expectedExecutionKey)
         persistDraftQuery()
         if (persistAcceptedResult) withContext(NonCancellable) {
-            executionService.recordAcceptedSearch(result.query, result.sourceScope, result.executionKey)
+            executionService.recordAcceptedSearch(result)
         }
         if (succeeded) onSuccess()
     }
@@ -689,7 +684,7 @@ internal class SearchViewModel(
         }
         return when (result) {
             is SearchExecutionResult.Failure -> {
-                activeContinuation = null
+                activeContinuation = result.continuation
                 rememberAppliedQuery(result.query, result.sourceScope)
                 reduce(
                     SearchStateChange.RequestFailed(
@@ -738,6 +733,16 @@ internal class SearchViewModel(
             result.executionKey == expectedExecutionKey
     }
 
+    private fun retry() {
+        val current = mutableState.value
+        if (current.content.error?.requestKind == SearchRequestKind.PAGE) {
+            launchPage(activeContinuation, pageRetrySource)
+        } else {
+            launchRootSearch(SearchRequestKind.RETRY, current.query.applied,
+                current.query.appliedSourceScope, persistAcceptedResult = false)
+        }
+    }
+
     private fun retrySource(source: SourceKey) {
         val current = mutableState.value
         if (current.execution.activeRequestId != null || current.content.statuses.none {
@@ -747,6 +752,7 @@ internal class SearchViewModel(
     }
 
     private fun launchPage(continuation: SearchContinuation?, retrySource: SourceKey? = null) {
+        pageRetrySource = retrySource
         val current = mutableState.value
         val query = continuation?.query ?: current.query.applied
         val executionKey = continuation?.executionKey ?: current.query.appliedQueryHash
@@ -782,6 +788,7 @@ internal class SearchViewModel(
                 SearchStateChange.RequestFailed(requestId, result.message, result.statuses),
             )
             is SearchPageResult.Success -> {
+                pageRetrySource = null
                 activeContinuation = result.continuation
                 reduce(
                     SearchStateChange.AppendPage(

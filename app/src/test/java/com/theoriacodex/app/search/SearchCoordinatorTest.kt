@@ -91,11 +91,10 @@ class SearchCoordinatorTest {
         val result = coordinator.executeInitial(
             query = unifiedQuery("failed"),
             sourceScope = SearchSourceScope.GlobalUnified,
-        ) as SearchExecutionResult.Success
+        ) as SearchExecutionResult.Failure
 
-        assertTrue(result.posts.isEmpty())
         assertEquals(SourceRunState.FAILED, result.statuses.single().state)
-        assertFalse(result.continuation.canLoadMore)
+        assertFalse(requireNotNull(result.continuation).canLoadMore)
     }
 
     @Test
@@ -198,7 +197,7 @@ class SearchCoordinatorTest {
 
         val result = coordinator.executeInitial(query, scope) as SearchExecutionResult.Success
         coordinator.persistAppliedSearch(result.query, result.sourceScope, result.executionKey)
-        coordinator.recordAcceptedSearch(result.query, result.sourceScope, result.executionKey)
+        coordinator.recordAcceptedSearch(result)
         coordinator.executePage(result.continuation)
 
         assertEquals(2, pixiv.searchedTags.size)
@@ -228,7 +227,7 @@ class SearchCoordinatorTest {
 
         first.persistAppliedSearch(result.query, result.sourceScope, result.executionKey)
         first.persistAppliedSearch(result.query, result.sourceScope, result.executionKey)
-        first.recordAcceptedSearch(result.query, result.sourceScope, result.executionKey)
+        first.recordAcceptedSearch(result)
         val restarted = coordinator(queryRepository, InMemorySettingsRepository(), restore, recents, adapter).initializeRoute()
 
         assertEquals(applied, restarted.query)
@@ -308,10 +307,7 @@ class SearchCoordinatorTest {
         }
         val coordinator = coordinator(pixiv, gelbooru)
         coordinator.initializeRoute()
-        val query = unifiedQuery("cat").copy(
-            includeTerms = listOf(SearchTerm("cat"), SearchTerm("najar", com.theoriacodex.domain.model.SearchFacet.ARTIST, "artist")),
-            excludeTerms = listOf(SearchTerm("nsfw_(content)")),
-        )
+        val query = unifiedQuery("cat").withIncludeTermsAsRequired(listOf(SearchTerm("cat"), SearchTerm("najar", com.theoriacodex.domain.model.SearchFacet.ARTIST, "artist"))).copy(excludeTerms = listOf(SearchTerm("nsfw_(content)")))
 
         coordinator.executeInitial(query, SearchSourceScope.GlobalUnified)
 

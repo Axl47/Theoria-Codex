@@ -434,10 +434,7 @@ class SearchStateContractTest {
     }
 
     private fun query(tag: String): Query {
-        return emptySearchQuery().copy(
-            includeTerms = listOf(SearchTerm(tag)),
-            sort = SortMode.POPULAR,
-        )
+        return emptySearchQuery().withIncludeTermsAsRequired(listOf(SearchTerm(tag))).copy(sort = SortMode.POPULAR)
     }
 
     private fun post(id: String): Post {

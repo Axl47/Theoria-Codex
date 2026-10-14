@@ -12,18 +12,6 @@ import com.theoriacodex.domain.model.SearchTerm
 import com.theoriacodex.domain.model.SearchTermGroup
 import com.theoriacodex.domain.model.SortMode
 
-internal data class SanitizedQuery(val query: Query, val removedSourceOwnedTerms: Boolean)
-
-internal fun Query.sanitizedForMode(mode: QueryMode): SanitizedQuery {
-    if (mode != QueryMode.Unified) return SanitizedQuery(copy(mode = mode), false)
-    val includeGroups = effectiveIncludeTermGroups.filter(SearchTermGroup::isPortableGeneralTagGroup)
-    val exclude = excludeTerms.filter(SearchTerm::isPortableGeneralTag)
-    return SanitizedQuery(
-        withIncludeTermGroups(includeGroups).copy(mode = mode, excludeTerms = exclude),
-        includeGroups.size != effectiveIncludeTermGroups.size || exclude.size != excludeTerms.size,
-    )
-}
-
 internal fun SearchSourceScope.reconciledWith(available: Set<com.theoriacodex.domain.model.SourceKey>) =
     when (this) {
         SearchSourceScope.GlobalUnified -> this
@@ -91,8 +79,6 @@ internal const val AUTOCOMPLETE_RESULT_LIMIT = 20
 internal const val AUTOCOMPLETE_REQUEST_TIMEOUT_MS = 4_000L
 internal const val AUTOCOMPLETE_REFRESH_INTERVAL_MS = 15L * 60L * 1000L
 internal const val MAX_AUTOCOMPLETE_REFRESH_KEYS = 256
-internal const val TAG_LOOKUP_LIMIT = 20_000
-internal const val TAG_FETCH_LIMIT = 25
 internal const val TRENDING_REFRESH_INTERVAL_MS = 12L * 60L * 60L * 1000L
 internal const val TRENDING_FETCH_PER_SOURCE_LIMIT = 10
 internal const val TRENDING_PER_SOURCE_CACHE_LIMIT = 40

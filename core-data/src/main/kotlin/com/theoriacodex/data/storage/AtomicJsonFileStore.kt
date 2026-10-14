@@ -7,6 +7,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.nio.file.AtomicMoveNotSupportedException
@@ -14,6 +15,7 @@ import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
+import java.nio.file.StandardOpenOption.READ
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -192,25 +194,53 @@ class AtomicJsonFileStore private constructor(
     }
 
     suspend fun <T> write(file: File, payload: T) {
+        writePayload(file, payload, maxBytes = null)
+    }
+
+    /** Flush a bounded operational intent before its caller starts irreversible work. */
+    suspend fun <T> writeIntent(file: File, payload: T, maxBytes: Int) {
+        require(maxBytes > 0)
+        writePayload(file, payload, maxBytes)
+    }
+
+    private suspend fun <T> writePayload(file: File, payload: T, maxBytes: Int?) {
         currentCoroutineContext().ensureActive()
         withContext(NonCancellable) {
             withContext(ioDispatcher) {
-                val parent = file.parentFile
-                parent?.mkdirs()
+                val parent = file.absoluteFile.parentFile ?: File(".")
+                val newParents = if (maxBytes == null) emptyList() else generateSequence(parent) { it.parentFile }
+                    .takeWhile { !it.exists() }.toList()
+                parent.mkdirs()
                 val tempFile = fileOperations.createTempFile(file)
                 try {
-                    tempFile.writeText(gson.toJson(payload))
+                    writeTempPayload(tempFile, payload, maxBytes)
                     try {
                         fileOperations.moveAtomically(tempFile, file)
                     } catch (_: AtomicMoveNotSupportedException) {
                         fileOperations.replace(tempFile, file)
                     }
+                    if (maxBytes != null) syncIntentDirectories(parent, newParents)
                 } finally {
                     if (tempFile.exists()) {
                         tempFile.delete()
                     }
                 }
             }
+        }
+    }
+
+    private fun syncIntentDirectories(parent: File, newParents: List<File>) {
+        fileOperations.syncDirectory(parent)
+        newParents.forEach { fileOperations.syncDirectory(it.parentFile ?: File(".")) }
+    }
+
+    private fun <T> writeTempPayload(file: File, payload: T, maxBytes: Int?) {
+        val text = gson.toJson(payload)
+        if (maxBytes == null) file.writeText(text)
+        else {
+            val bytes = text.toByteArray(Charsets.UTF_8)
+            require(bytes.size <= maxBytes) { "${file.name} exceeds its intent size limit" }
+            fileOperations.writeAndSync(file, bytes)
         }
     }
 }
@@ -225,6 +255,9 @@ internal interface AtomicFileOperations {
             output.write(bytes)
             output.fd.sync()
         }
+    }
+    fun syncDirectory(directory: File) {
+        FileChannel.open(directory.toPath(), READ).use { it.force(true) }
     }
     fun moveWithoutReplace(tempFile: File, target: File) {
         Files.move(tempFile.toPath(), target.toPath())

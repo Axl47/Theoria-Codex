@@ -45,8 +45,7 @@ import androidx.compose.foundation.verticalScroll
 import com.theoriacodex.app.media.AnimatedDurationRange
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.durationFilterReadiness
-import com.theoriacodex.app.media.durationFilterMetadata
+import com.theoriacodex.app.media.rememberDurationFilterMetadata
 import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.search.AnimatedDurationRangeControl
@@ -163,14 +162,9 @@ fun CodexDetailScreen(
         }
     }
     val durationFilterActive = !animatedDurationRange.isFullRange
-    val durationMetadata = remember(posts, durationStates, durationFilterActive) {
-        durationFilterMetadata(posts, durationStates, durationFilterActive)
-    }
+    val durationMetadata = rememberDurationFilterMetadata(posts, durationStates, durationFilterActive)
     val acquiredDurations = durationMetadata.knownDurationMsByPostId
-    val durationDecisionStates = durationMetadata.stateByPostId
-    val durationReadiness = remember(posts, durationFilterActive, durationDecisionStates) {
-        durationFilterReadiness(posts, durationFilterActive, durationDecisionStates)
-    }
+    val durationReadiness = durationMetadata.readiness
     val visiblePosts = remember(posts, filters, unknownDurationPolicy, acquiredDurations) {
         filterCodexCollectionPosts(
             posts,

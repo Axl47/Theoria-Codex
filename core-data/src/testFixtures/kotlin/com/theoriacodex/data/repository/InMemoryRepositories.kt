@@ -418,6 +418,12 @@ class InMemoryRecentsRepository(
         }
     }
 
+    override suspend fun clearSearches(section: RecentSearchSection): List<RecentSearchEntry> = mutex.withLock {
+        val removed = searches.value.filter(section::contains)
+        searches.value = searches.value.filterNot(section::contains)
+        removed
+    }
+
     override suspend fun clearAll() {
         mutex.withLock {
             watched.value = emptyList()

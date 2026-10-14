@@ -159,6 +159,17 @@ class HotspotGateTest(unittest.TestCase):
         self.write_baseline([new])
         self.assertEqual("passed", self.audit("HEAD")["status"])
 
+    def test_class_interface_changes_preserve_owner_but_renaming_or_moving_does_not(self) -> None:
+        self.commit_baseline(["LargeClass:Feature.kt:Parent$Adapter : OriginalInterface"])
+        self.write_baseline(["LargeClass:Feature.kt:Parent$Adapter : OriginalInterfaceCountLookup"])
+        self.assertEqual("passed", self.audit("HEAD")["status"])
+        for changed in ["LargeClass:Feature.kt:Parent$Other : OriginalInterfaceCountLookup",
+                        "LargeClass:Other.kt:Parent$Adapter : OriginalInterfaceCountLookup",
+                        "LargeClass:Feature.kt:Other$Adapter : OriginalInterfaceCountLookup"]:
+            with self.subTest(changed=changed):
+                self.write_baseline([changed])
+                self.assertIn("gained owners", "\n".join(self.audit("HEAD")["errors"]))
+
     def test_logical_owner_preserves_rule_file_nesting_and_callable(self) -> None:
         self.commit_baseline(["LongMethod:Feature.kt:Owner$fun render"])
         different = {

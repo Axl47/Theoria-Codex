@@ -7,6 +7,7 @@ import com.theoriacodex.data.repository.RecentPostEntry
 import com.theoriacodex.data.repository.RecentPostSection
 import com.theoriacodex.data.repository.RecentSearchEntry
 import com.theoriacodex.data.repository.RecentSearchKind
+import com.theoriacodex.data.repository.RecentSearchSection
 import com.theoriacodex.data.repository.RecentsRepository
 import com.theoriacodex.data.repository.ViewerStreamSource
 import com.theoriacodex.data.storage.RecentSearchPayloadCodec
@@ -64,19 +65,14 @@ class RoomRecentsRepository(
         rows.mapTo(linkedSetOf()) { PostId(SourceKey.valueOf(it.source), it.sourcePostId) }
     }.distinctUntilChanged().flowOn(Dispatchers.Default)
 
-    override fun observeSearches(): Flow<List<RecentSearchEntry>> = dao.observeSearches().map { rows ->
-        rows.map { row ->
-            val payload = RecentSearchPayloadCodec.decodeJson(row.queryPayloadJson, queryGson)
-            RecentSearchEntry(
-                query = payload.query,
-                queryHash = row.queryHash,
-                searchedAtEpochMs = row.searchedAtEpochMs,
-                kind = payload.kind,
-                sources = payload.sources,
-                sourceTags = payload.sourceTags,
-            )
-        }
-    }.flowOn(Dispatchers.Default)
+    override fun observeSearches(): Flow<List<RecentSearchEntry>> = dao.observeSearches()
+        .map { rows -> rows.map(::decodeSearch) }.flowOn(Dispatchers.Default)
+
+    private fun decodeSearch(row: RecentSearchEntity): RecentSearchEntry {
+        val payload = RecentSearchPayloadCodec.decodeJson(row.queryPayloadJson, queryGson)
+        return RecentSearchEntry(payload.query, row.queryHash, row.searchedAtEpochMs,
+            payload.kind, payload.sources, payload.sourceTags)
+    }
 
     override fun observeActivity(): Flow<List<RecentActivityEntry>> =
         combine(observeWatchedPosts(), observeSearches(), ::mergeRecentActivity).flowOn(Dispatchers.Default)
@@ -235,6 +231,13 @@ class RoomRecentsRepository(
             if (queryHashPrefix == null) dao.deleteSearches() else dao.deleteSearchesWithPrefix(queryHashPrefix)
         }
     }
+
+    override suspend fun clearSearches(section: RecentSearchSection): List<RecentSearchEntry> =
+        database.withTransaction {
+            val removed = dao.searches().map(::decodeSearch).filter(section::contains)
+            dao.deleteSearchesByHashes(removed.map { it.queryHash })
+            removed
+        }
 
     override suspend fun clearAll() {
         database.withTransaction {

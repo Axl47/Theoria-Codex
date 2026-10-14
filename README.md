@@ -89,7 +89,7 @@ Settings > Storage & Caching also exports all profiles, collections, Likes, auto
 
 Profile creation and restore reject capacity overflow before changing library data. Collection commands retain their captured destination across navigation and Activity recreation, and keep Retry or exact membership Undo available until acknowledged.
 
-Collection actions offer Make available offline. Only complete verified galleries count as available; shared copies are retained until their final collection owner is removed. Manage storage reports bytes, exposes offline progress/retry/cancel, and clears disposable Coil, video, GIF, and Ugoira caches separately from offline copies. Keep media offline when saving queues acquisition after the collection transaction completes. Save to device uses a separate bounded DownloadManager queue with progress, cancellation, and failed-item retry; preparation survives Activity recreation but is not a durable process-restart queue.
+Collection actions offer Make available offline. Only complete verified galleries count as available; shared copies are retained until their final collection owner is removed. Manage storage reports bytes, exposes offline progress/retry/cancel, and clears disposable Coil, video, GIF, and Ugoira caches separately from offline copies. Keep media offline when saving queues acquisition after the collection transaction completes. Save to device uses a separate bounded DownloadManager queue with progress, cancellation, and failed-item retry; a device-only intent journal resumes queued gallery pages after process restart and reconciles existing Android transfers before creating more. Offline collection jobs also resume from canonical IDs and reuse verified completed copies. These operational queues are excluded from backup and contain no media URLs or credentials.
 
 ## Releases And Updates
 
@@ -139,8 +139,9 @@ silently. Use `--no-configuration-cache` only for an intentional comparison or d
 
 CI holds total line coverage at 55% and requires at least 60% changed-line coverage in the core
 modules, `app-logic`, and app-owned ViewModels, coordinators, workflows, repositories, services,
-stores, translators and probes. The explicit `--include-path` patterns in `verify.yml` select those
-app boundaries; they do not apply a JVM threshold to every Composable. Missing eligible report
+stores, translators and probes. The reviewed `config/quality/coverage-boundaries.json` selects app ownership packages with narrow
+rendering-only exclusions; logic eligibility does not depend on filename suffixes, and the gate
+does not apply a JVM threshold to every Composable. Missing eligible report
 entries fail the gate. Pass `--working-tree` to `scripts/check_changed_coverage.py` for a local
 pre-commit check that includes untracked production files. Test-only fixture packages are excluded
 from production coverage. Hotspot, duplication and non-growing Detekt debt budgets remain enforced.

@@ -9,8 +9,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.search.state.SearchContentUiState
+import com.theoriacodex.app.search.state.SearchErrorUiState
+import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchExecutionUiState
 import com.theoriacodex.app.search.state.SearchRequestKind
 import com.theoriacodex.app.search.state.SearchUiState
@@ -28,6 +32,32 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [35])
 class SearchRefreshPresentationTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test
+    fun `a page failure keeps its card node visible and offers Retry alongside the grid`() {
+        val post = testPost(SourceKey.PIXIV, "page-failure").copy(
+            preview = ImageRef(null, "/nonexistent/preview.jpg", "image/jpeg"), full = null, media = emptyList(),
+        )
+        val state = mutableStateOf(SearchUiState(content = SearchContentUiState(results = listOf(post), hasExecutedSearch = true)))
+        val actions = mutableListOf<SearchAction>()
+        compose.setContent {
+            MaterialTheme { Box(Modifier.size(400.dp, 700.dp)) {
+                SearchScreen(state.value, emptySet(), actions::add,
+                    resolvePostById = { null }, recoverPostMedia = { _, _ -> null },
+                    tagVideoCountProvider = { _, _ -> null }, fetchTagVideoCounts = { _, _ -> emptyMap() },
+                    onOpenCreatorProfile = {}, onOpenLegacyCreatorProfile = {}, onRequestSaveToCodex = {}, onSaveToDevice = {})
+            } }
+        }
+        val card = compose.onNodeWithTag(searchCardTestTag(post.id))
+        val originalNode = card.fetchSemanticsNode().id
+        compose.runOnIdle { state.value = state.value.copy(content = state.value.content.copy(
+            error = SearchErrorUiState("Page failed", SearchRequestKind.PAGE, retryable = true))) }
+        card.assertIsDisplayed()
+        assertEquals(originalNode, card.fetchSemanticsNode().id)
+        compose.onNodeWithText("Page failed").assertIsDisplayed()
+        compose.onNodeWithText("Retry").performClick()
+        assertEquals(SearchAction.Retry, actions.last())
+    }
 
     @Test
     fun `refresh keeps the existing card node attached until replacement results arrive`() {

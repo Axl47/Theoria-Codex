@@ -4,6 +4,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.SourceRunStatus
+import com.theoriacodex.domain.orchestration.SourceRunState
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.adapter.TagSuggestion
@@ -21,8 +22,7 @@ interface SearchExecutionService {
 
     suspend fun executePage(continuation: SearchContinuation): SearchPageResult
 
-    suspend fun recordAcceptedSearch(query: Query, sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
-        executionKey: String) = Unit
+    suspend fun recordAcceptedSearch(result: SearchExecutionResult) = Unit
 
     suspend fun persistAppliedSearch(
         query: Query,
@@ -65,10 +65,11 @@ data class SearchContinuation(
     val unifiedPageTokens: Map<SourceKey, String?> = emptyMap(),
     val unifiedQueryOverrides: Map<SourceKey, Query> = emptyMap(),
     val sourcePageToken: String? = null,
+    val failedSources: Set<SourceKey> = emptySet(),
 ) {
     val canLoadMore: Boolean
         get() = sourcePageToken?.isNotBlank() == true ||
-            unifiedPageTokens.values.any { token -> !token.isNullOrBlank() }
+            unifiedPageTokens.any { (source, token) -> source !in failedSources && !token.isNullOrBlank() }
 }
 
 sealed interface SearchExecutionResult {
@@ -92,8 +93,13 @@ sealed interface SearchExecutionResult {
         override val sourceScope: com.theoriacodex.app.search.state.SearchSourceScope,
         override val statuses: List<SourceRunStatus>,
         val message: String,
+        val continuation: SearchContinuation? = null,
     ) : SearchExecutionResult
 }
+
+/** Successful empty and partial responses count; failed and capability-excluded attempts do not. */
+val SearchExecutionResult.completedSuccessfully: Boolean
+    get() = this is SearchExecutionResult.Success && statuses.any { it.state == SourceRunState.SUCCESS }
 
 sealed interface SearchPageResult {
     val executionKey: String

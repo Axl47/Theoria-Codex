@@ -11,6 +11,7 @@ import com.theoriacodex.app.search.resolveSupportedScope
 import com.theoriacodex.domain.adapter.FacetedSearchScope
 import com.theoriacodex.domain.adapter.FacetedTagSuggestion
 import com.theoriacodex.domain.model.Post
+import com.theoriacodex.domain.model.normalizedForMode
 import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchFacet
@@ -42,7 +43,7 @@ object SearchDraftReducer {
         val hadSourceOwnedTerms = state.query.draft.hasSourceOwnedTerms()
         val resolvedMode = mode.takeIf { it.isAvailable(context.availableSources) } ?: QueryMode.Unified
         val restored = context.appliedByMode[modeKey(resolvedMode)] ?: emptySearchQuery(resolvedMode)
-        val sanitized = restored.copy(mode = resolvedMode).forMode(resolvedMode)
+        val sanitized = restored.copy(mode = resolvedMode).normalizedForMode(resolvedMode)
         val scopes = supportedScopes(resolvedMode)
         val selectedScope = state.query.selectedScope.takeIf { it in scopes }
             ?: FacetedSearchScope.All
@@ -91,7 +92,7 @@ object SearchDraftReducer {
         if (nextScope == state.query.draftSourceScope) {
             return SearchDraftReduction(state, changed = false, accepted = false)
         }
-        val sanitized = state.query.draft.forMode(nextScope.queryMode())
+        val sanitized = state.query.draft.normalizedForMode(nextScope.queryMode())
         val scopes = supportedScopes(sanitized.query.mode)
         return SearchDraftReduction(
             state.copy(
@@ -328,7 +329,7 @@ object SearchDraftReducer {
         if (!query.mode.isAvailable(availableSources)) {
             return SearchDraftReduction(state, changed = false, accepted = false)
         }
-        val sanitized = query.forMode(query.mode)
+        val sanitized = query.normalizedForMode(query.mode)
         val scopes = supportedScopes(sanitized.query.mode)
         return SearchDraftReduction(
             state.copy(
@@ -537,18 +538,6 @@ fun SearchSourceScope.queryMode(): QueryMode = when (this) {
     SearchSourceScope.GlobalUnified -> QueryMode.Unified
     is SearchSourceScope.Single -> QueryMode.Source(source)
     is SearchSourceScope.Temporary -> QueryMode.Unified
-}
-
-private data class SanitizedQuery(val query: Query, val removedSourceOwnedTerms: Boolean)
-
-private fun Query.forMode(mode: QueryMode): SanitizedQuery {
-    if (mode != QueryMode.Unified) return SanitizedQuery(copy(mode = mode), false)
-    val includeGroups = effectiveIncludeTermGroups.filter(SearchTermGroup::isPortableGeneralTagGroup)
-    val excludes = excludeTerms.filter(SearchTerm::isPortableGeneralTag)
-    return SanitizedQuery(
-        withIncludeTermGroups(includeGroups).copy(mode = mode, excludeTerms = excludes),
-        includeGroups.size != effectiveIncludeTermGroups.size || excludes.size != excludeTerms.size,
-    )
 }
 
 private fun Query.hasSourceOwnedTerms(): Boolean =

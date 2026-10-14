@@ -92,8 +92,7 @@ import com.theoriacodex.app.ui.components.FeedContinueLoading
 import com.theoriacodex.app.media.isAuthoritativeDurationMedia
 import com.theoriacodex.app.media.MediaDurationKey
 import com.theoriacodex.app.media.MediaDurationState
-import com.theoriacodex.app.media.durationFilterReadiness
-import com.theoriacodex.app.media.durationFilterMetadata
+import com.theoriacodex.app.media.rememberDurationFilterMetadata
 import com.theoriacodex.app.media.noMediaDurationStateForPost
 import com.theoriacodex.app.media.observedMediaDurationMs
 import com.theoriacodex.app.media.animatedDurationLabel
@@ -258,26 +257,9 @@ fun SearchScreen(
     val displayResults = remember(state.content.results, state.content.displayVersion, queryHash) {
         state.content.results
     }
-    val durationMetadata = remember(
-        displayResults,
-        durationStates,
-        animatedDurationFilterActive,
-    ) {
-        durationFilterMetadata(displayResults, durationStates, animatedDurationFilterActive)
-    }
+    val durationMetadata = rememberDurationFilterMetadata(displayResults, durationStates, animatedDurationFilterActive)
     val acquiredDurations = durationMetadata.knownDurationMsByPostId
-    val durationDecisionStates = durationMetadata.stateByPostId
-    val durationReadiness = remember(
-        displayResults,
-        animatedDurationFilterActive,
-        durationDecisionStates,
-    ) {
-        durationFilterReadiness(
-            posts = displayResults,
-            durationFilterActive = animatedDurationFilterActive,
-            stateByPostId = durationDecisionStates,
-        )
-    }
+    val durationReadiness = durationMetadata.readiness
     val visibleResults = remember(
         displayResults,
         visibilityFilters,
@@ -614,6 +596,8 @@ fun SearchScreen(
                 }
             }
 
+            val retrySearch = { inputFocus.clear(); onAction(SearchAction.Retry) }
+            state.pageFailure?.let { SearchFailureSurface(it, retrySearch) }
             FeedContinueLoading(pageDemand)
             if (state.retainsResultsWhileRefreshing) SearchRefreshProgress()
             when {
@@ -628,24 +612,11 @@ fun SearchScreen(
                             ) { inputFocus.clear() },
                     )
                 }
-                state.content.error != null -> {
-                    val error = requireNotNull(state.content.error)
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable(
-                                interactionSource = clearFocusInteraction,
-                                indication = null,
-                            ) { inputFocus.clear() }
-                    ) {
-                        ErrorBlock(
-                            message = error.message,
-                            onRetry = {
-                                inputFocus.clear()
-                                onAction(SearchAction.Retry)
-                            },
-                        )
-                    }
+                state.content.error != null && state.pageFailure == null -> {
+                    SearchFailureSurface(requireNotNull(state.content.error), retrySearch,
+                        Modifier.weight(1f).clickable(interactionSource = clearFocusInteraction, indication = null) {
+                            inputFocus.clear()
+                        })
                 }
                 feedProjection.entries.isEmpty() -> {
                     Box(
@@ -792,6 +763,7 @@ fun SearchScreen(
             onPostUrlCopied = onPostUrlCopied,
             tagContent = { header, footer ->
                 PostTagActionSection(
+                    draftQuery = state.query.draft,
                     loading = selectedActionPostResolving && !post.hasActionableTags(),
                     header = header,
                     footer = footer,

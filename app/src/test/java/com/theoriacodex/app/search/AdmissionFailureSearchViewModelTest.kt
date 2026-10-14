@@ -136,7 +136,7 @@ internal class AdmissionFailureSearchViewModelTest : SearchViewModelTestFixture(
 
             val failed = viewModel.state.value
             assertEquals(listOf("broken"), failed.query.applied.includeTags)
-            assertEquals(listOf("paged-result"), resultIds(viewModel))
+            assertTrue(resultIds(viewModel).isEmpty())
             assertFalse(failed.content.canLoadMore)
             assertTrue(failed.content.error?.message.orEmpty().contains("broken"))
             assertEquals(null, failed.execution.activeRequestId)

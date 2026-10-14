@@ -10,6 +10,8 @@ import com.theoriacodex.domain.adapter.SourceAdapter
 import com.theoriacodex.domain.adapter.SourceAdapterException
 import com.theoriacodex.domain.adapter.SourceCapabilities
 import com.theoriacodex.domain.adapter.TagSuggestion
+import com.theoriacodex.domain.adapter.TagCountLookupSourceAdapter
+import com.theoriacodex.sources.common.autocompleteTagCounts
 import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
@@ -33,7 +35,7 @@ import java.io.IOException
 class AibooruSourceAdapter(
     private val httpClient: SourceHttpClient,
     private val gson: Gson = Gson(),
-) : SourceAdapter {
+) : SourceAdapter, TagCountLookupSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.AIBOORU
 
     override val capabilities: SourceCapabilities = SourceCapabilities(
@@ -91,6 +93,9 @@ class AibooruSourceAdapter(
         val tags = parseArray(response)
         return tags.mapNotNull { parseTagSuggestion(it, "tag") }
     }
+
+    override suspend fun fetchTagCounts(tags: List<String>): Map<String, Int> =
+        autocompleteTagCounts(sourceKey, tags, ::autocompleteTags)
 
     override suspend fun quickQuery(kind: QuickQueryKind): Query {
         return sourceQuickQuery(source = SourceKey.AIBOORU, kind = kind)

@@ -86,9 +86,8 @@ import com.theoriacodex.app.appshell.StartupUpdateChoice
 import com.theoriacodex.app.appshell.AppShellViewModel
 import com.theoriacodex.app.appshell.IncomingUriKind
 import com.theoriacodex.app.appshell.ViewerSessionRetentionViewModel
-import com.theoriacodex.app.creator.browseableCreatorProfile
+import com.theoriacodex.app.creator.CreatorOpeningWorkflow
 import com.theoriacodex.app.di.TheoriaAppContainer
-import com.theoriacodex.app.recommend.trainingTagsFor
 import com.theoriacodex.app.related.LikeToggleOutcome
 import com.theoriacodex.app.recents.RecentsScreen
 import com.theoriacodex.app.recents.fypSeedBySource
@@ -96,16 +95,17 @@ import com.theoriacodex.app.recommend.state.ForYouAction
 import com.theoriacodex.app.recents.RecentsClearWorkflow
 import com.theoriacodex.app.search.state.SearchAction
 import com.theoriacodex.app.search.state.SearchSourceScope
-import com.theoriacodex.app.source.ExternalCreatorDeepLink
 import com.theoriacodex.app.settings.SettingsAction
 import com.theoriacodex.app.settings.SettingsEffect
 import com.theoriacodex.app.settings.SettingsViewModel
+import com.theoriacodex.app.post.PostMutationViewModel
+import com.theoriacodex.app.tags.SearchDraftSelectionProvider
+import com.theoriacodex.app.ui.components.MutationFeedbackHost
 import com.theoriacodex.app.statistics.StatisticsUsageCategory
 import com.theoriacodex.app.source.displayName
 import com.theoriacodex.app.source.creatorBrowsingSources
 import com.theoriacodex.app.source.parseExternalCreatorDeepLink
 import com.theoriacodex.app.source.parseExternalPostDeepLink
-import com.theoriacodex.app.source.requestHeaders
 import com.theoriacodex.app.ui.theme.TheoriaNightTheme
 import com.theoriacodex.app.ui.routes.ViewerRoute
 import com.theoriacodex.app.ui.routes.ViewerRouteDependencies
@@ -270,6 +270,7 @@ internal fun TheoriaAppContent(
     }
     val snackbarHostState = remember { SnackbarHostState() }
     val libraryTransfers = rememberLibraryTransferTools(appContainer) { snackbarHostState.showSnackbar(it) }
+    MutationFeedbackHost(libraryTransfers.downloads.feedback, snackbarHostState)
     val savedSearchOwner = viewModel<com.theoriacodex.app.recents.SavedSearchViewModel>(
         key = "saved-searches",
         factory = viewModelFactory { initializer { com.theoriacodex.app.recents.SavedSearchViewModel(dataDependencies.savedSearches) } },
@@ -298,6 +299,14 @@ internal fun TheoriaAppContent(
                 workflowDependencies.likesCodexSync::clearProfile, workflowDependencies.codexTransfer::reorderVisibleCodices) }
         },
     )
+    val postMutationOwner = viewModel<PostMutationViewModel>(
+        key = "post-mutations",
+        factory = viewModelFactory { initializer {
+            PostMutationViewModel(dataDependencies.settingsRepository, workflowDependencies.likesCodexSync::toggle)
+        } },
+    )
+    MutationFeedbackHost(postMutationOwner.feedback, snackbarHostState)
+    MutationFeedbackHost(feedFabRestoreRegistry.feedback, snackbarHostState)
     val codexSaveOwner = viewModel<CodexSaveViewModel>(
         key = "codex-save-owner",
         factory = viewModelFactory {
@@ -454,42 +463,11 @@ internal fun TheoriaAppContent(
     val startupActionLocked = startupWorkflowState.actionLocked
     val awaitingInstallerReturn = startupWorkflowState.awaitingInstallerReturn
     var thumbnailCacheGeneration by rememberSaveable { mutableStateOf(0) }
-    val addFavoriteTag: (SourceKey, String) -> Unit = remember(
-        scope,
-        dataDependencies.settingsRepository,
-        appContext,
-    ) {
-        { source, tag ->
-            scope.launch {
-                val profile = dataDependencies.currentActiveRecommendationProfile()
-                val added = dataDependencies.settingsRepository.addFavoriteTag(
-                    profileId = profile.profileId,
-                    source = source,
-                    tag = tag,
-                )
-                val message = if (added) {
-                    "Added to favorite tags"
-                } else {
-                    "Already in favorite tags"
-                }
-                Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
-            }
-        }
+    val addFavoriteTag: (SourceKey, String) -> Unit = remember(postMutationOwner, settingsOwner) {
+        { source, tag -> postMutationOwner.favorite(settingsOwner.state.value.activeProfile.profileId, source, tag, true) }
     }
-    val removeFavoriteTag: (SourceKey, String) -> Unit = remember(
-        scope,
-        dataDependencies.settingsRepository,
-    ) {
-        { source, tag ->
-            scope.launch {
-                val profile = dataDependencies.currentActiveRecommendationProfile()
-                dataDependencies.settingsRepository.removeFavoriteTag(
-                    profileId = profile.profileId,
-                    source = source,
-                    tag = tag,
-                )
-            }
-        }
+    val removeFavoriteTag: (SourceKey, String) -> Unit = remember(postMutationOwner, settingsOwner) {
+        { source, tag -> postMutationOwner.favorite(settingsOwner.state.value.activeProfile.profileId, source, tag, false) }
     }
 
     fun requestSaveToDevice(post: Post) {
@@ -510,95 +488,25 @@ internal fun TheoriaAppContent(
         }
     }
 
+    val creatorOpening = remember(sourceDependencies.registry, sourceDependencies.httpClient) {
+        CreatorOpeningWorkflow(sourceDependencies.registry, sourceDependencies.httpClient)
+    }
+
     suspend fun openCreatorProfile(post: Post) {
-        val creatorSources = sourceDependencies.registry.creatorBrowsingSources()
-            .intersect(sourceDependencies.availableSources.value)
-        var resolvedPost = post
-        var creator = post.creatorProfiles
-            .asSequence()
-            .mapNotNull { profile -> browseableCreatorProfile(profile, creatorSources) }
-            .firstOrNull()
-            ?: browseableCreatorProfile(post.creatorProfile, creatorSources)
-        if (creator == null) {
-            val adapter = sourceDependencies.registry.adapterFor(post.id.source)
-            val resolved = runCatchingPreservingCancellation {
-                adapter?.resolvePost(post.id)
-            }.getOrNull()
-            if (resolved != null) {
-                dispatchOrQueueSearchAction(SearchAction.RememberResolvedPost(resolved))
-                resolvedPost = resolved
-                creator = resolved.creatorProfiles
-                    .asSequence()
-                    .mapNotNull { profile -> browseableCreatorProfile(profile, creatorSources) }
-                    .firstOrNull()
-                    ?: browseableCreatorProfile(resolved.creatorProfile, creatorSources)
-            }
-        }
+        val outcome = creatorOpening.fromPost(post, sourceDependencies.availableSources.value)
+        outcome.resolvedPost?.let { dispatchOrQueueSearchAction(SearchAction.RememberResolvedPost(it)) }
+        val creator = outcome.creator
         if (creator == null) {
             Toast.makeText(appContext, "Creator profile unavailable", Toast.LENGTH_SHORT).show()
             return
         }
         openCreatorProfile(creator)
+        val resolvedPost = outcome.resolvedPost ?: post
         viewerSessionOwner.update { session ->
             val index = session.posts.indexOfFirst { current -> current.id == resolvedPost.id }
-            if (index < 0) {
-                session
-            } else {
-                session.copy(
-                    posts = session.posts.toMutableList().apply {
-                        this[index] = resolvedPost
-                    },
-                )
-            }
-        }
-    }
-
-    suspend fun resolveExternalCreatorDeepLink(deepLink: ExternalCreatorDeepLink): CreatorProfile? {
-        return when (deepLink.source) {
-            SourceKey.PIXIV -> CreatorProfile(
-                source = SourceKey.PIXIV,
-                displayName = "User ${deepLink.creatorId}",
-                profileId = deepLink.creatorId,
-                profileUrl = deepLink.profileUrl,
-                uploadsQuery = deepLink.creatorId,
+            if (index < 0) session else session.copy(
+                posts = session.posts.toMutableList().apply { this[index] = resolvedPost },
             )
-
-            SourceKey.HITOMI -> CreatorProfile(
-                source = SourceKey.HITOMI,
-                displayName = deepLink.creatorId,
-                profileId = deepLink.creatorId,
-                profileUrl = deepLink.profileUrl,
-                uploadsQuery = "artist:${deepLink.creatorId}",
-            )
-
-            SourceKey.GELBOORU -> {
-                val response = runCatchingPreservingCancellation {
-                    sourceDependencies.httpClient.get(
-                        url = "https://gelbooru.com/index.php",
-                        query = mapOf(
-                            "page" to "account",
-                            "s" to "profile",
-                            "id" to deepLink.creatorId,
-                        ),
-                        headers = SourceKey.GELBOORU.requestHeaders(),
-                    )
-                }.getOrNull() ?: return null
-                if (response.statusCode !in 200..299) return null
-                val owner = parseGelbooruProfileOwner(response.body)
-                browseableCreatorProfile(
-                    CreatorProfile(
-                        source = SourceKey.GELBOORU,
-                        displayName = owner ?: deepLink.creatorId,
-                        profileId = deepLink.creatorId,
-                        profileUrl = deepLink.profileUrl,
-                        uploadsQuery = owner?.let { "user:$it" },
-                    ),
-                    sourceDependencies.registry.creatorBrowsingSources()
-                        .intersect(sourceDependencies.availableSources.value),
-                )
-            }
-
-            else -> null
         }
     }
 
@@ -606,15 +514,12 @@ internal fun TheoriaAppContent(
         return workflowDependencies.likesCodexSync.ensureProfileCodex(profile)
     }
 
-    suspend fun toggleLikeAndSyncCodex(post: Post): LikeToggleOutcome {
-        val profile = dataDependencies.currentActiveRecommendationProfile()
-        return workflowDependencies.likesCodexSync.toggle(
-            profile = profile,
-            post = post,
-            trainingTags = trainingTagsFor(post),
-        )
+    fun toggleLikeAndSyncCodex(post: Post, onCommitted: (LikeToggleOutcome) -> Unit = {}) {
+        val profile = settingsOwner.state.value.activeProfile
+        postMutationOwner.like(profile, post) { outcome ->
+            if (settingsOwner.state.value.activeProfile.profileId == profile.profileId) onCommitted(outcome)
+        }
     }
-
 
     suspend fun searchFromCodex(source: SourceKey, includeTags: List<String>) {
         if (source !in sourceDependencies.registry.availableSources()) {
@@ -827,7 +732,7 @@ internal fun TheoriaAppContent(
             return@LaunchedEffect
         }
         if (creatorDeepLink != null) {
-            val creator = resolveExternalCreatorDeepLink(creatorDeepLink)
+            val creator = creatorOpening.fromDeepLink(creatorDeepLink, sourceDependencies.availableSources.value)
             if (creator == null) {
                 Toast.makeText(
                     appContext,
@@ -1029,218 +934,324 @@ internal fun TheoriaAppContent(
         onProfileChanged = { profile -> ensureLikesCodexId(profile) },
     )
 
-    TheoriaNightTheme {
-        if (!navReady) {
-            val promptRemote = updateChoiceRemote
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Image(
-                    painter = painterResource(id = R.drawable.theoria_splash_mark),
-                    contentDescription = "Theoria splash",
-                    modifier = Modifier.size(180.dp),
-                )
-                if (startupUpdateState is StartupUpdateState.AwaitingUserChoice && promptRemote != null) {
-                    StartupUpdatePromptCard(
-                        releases = startupUpdateReleaseHistory.ifEmpty {
-                            listOf(promptRemote.toReleaseHistoryEntry())
-                        },
-                        installedVersionCode = installedVersionCode,
-                        actionEnabled = !startupActionLocked,
-                        onYes = { appShellOwner.chooseUpdate(StartupUpdateChoice.INSTALL) },
-                        onNo = { appShellOwner.chooseUpdate(StartupUpdateChoice.SKIP) },
-                        onRemindLater = { appShellOwner.chooseUpdate(StartupUpdateChoice.REMIND_LATER) },
+    SearchDraftSelectionProvider(searchRouteOwner?.state) {
+        TheoriaNightTheme {
+            if (!navReady) {
+                val promptRemote = updateChoiceRemote
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.theoria_splash_mark),
+                        contentDescription = "Theoria splash",
+                        modifier = Modifier.size(180.dp),
                     )
-                } else {
-                    if (startupUpdateState !is StartupUpdateState.Failed) {
-                        CircularProgressIndicator()
-                    }
-                    Text(
-                        text = startupStatusMessage,
-                        color = Color.White,
-                    )
-                    if (awaitingInstallerReturn) {
-                        TextButton(
-                            colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
-                                contentColor = Color.White,
-                            ),
-                            onClick = appShellOwner::continueCurrentVersion,
-                        ) {
-                            Text(
-                                text = "Continue current version",
-                                color = Color.White,
-                            )
+                    if (startupUpdateState is StartupUpdateState.AwaitingUserChoice && promptRemote != null) {
+                        StartupUpdatePromptCard(
+                            releases = startupUpdateReleaseHistory.ifEmpty {
+                                listOf(promptRemote.toReleaseHistoryEntry())
+                            },
+                            installedVersionCode = installedVersionCode,
+                            actionEnabled = !startupActionLocked,
+                            onYes = { appShellOwner.chooseUpdate(StartupUpdateChoice.INSTALL) },
+                            onNo = { appShellOwner.chooseUpdate(StartupUpdateChoice.SKIP) },
+                            onRemindLater = { appShellOwner.chooseUpdate(StartupUpdateChoice.REMIND_LATER) },
+                        )
+                    } else {
+                        if (startupUpdateState !is StartupUpdateState.Failed) {
+                            CircularProgressIndicator()
+                        }
+                        Text(
+                            text = startupStatusMessage,
+                            color = Color.White,
+                        )
+                        if (awaitingInstallerReturn) {
+                            TextButton(
+                                colors = androidx.compose.material3.ButtonDefaults.textButtonColors(
+                                    contentColor = Color.White,
+                                ),
+                                onClick = appShellOwner::continueCurrentVersion,
+                            ) {
+                                Text(
+                                    text = "Continue current version",
+                                    color = Color.White,
+                                )
+                            }
                         }
                     }
                 }
-            }
-        } else {
-            TheoriaAdaptiveScaffold(
-                navigationVisible = showBottomBar,
-                selectedIndex = selectedTopLevelIndex,
-                bottomBarHeight = bottomBarHeight,
-                bottomBarIconSize = bottomBarIconSize,
-                bottomBarWindowInsets = bottomBarWindowInsets,
-                snackbarHostState = snackbarHostState,
-                onDestinationSelected = { destination ->
-                    homeTabRoute = destination.route
-                    scope.launch { navigateTopLevelDestination(navController, topLevelPagerState, destination) }
-                },
-            ) { contentModifier ->
-                NavHost(
-                    navController = navController,
-                    startDestination = AppRoute.Home,
-                    modifier = contentModifier,
-                ) {
-                    composable(AppRoute.Home) {
-                        HorizontalPager(
-                            state = topLevelPagerState,
-                            modifier = Modifier.fillMaxSize(),
-                        ) { page ->
-                            when (TopLevelDestination.entries[page]) {
-                                TopLevelDestination.Search -> {
-                                    BrowsingDestinationStateBoundary(dataDependencies, sourceDependencies) { state ->
-                                        val fabRestoreState = feedFabRestoreRegistry
-                                            .state(SEARCH_FEED_FAB_CONTEXT)
-                                            ?: return@BrowsingDestinationStateBoundary
-                                        SearchRoute(
-                                        coordinator = featureDependencies.search,
-                                        relatedPostsLoader = featureDependencies.relatedPosts,
-                                        mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
-                                        pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
-                                        config = SearchRouteConfig(
-                                            settings = state.settings,
-                                            availableSources = state.availableSources,
-                                            creatorBrowsingSources = state.creatorBrowsingSources,
+            } else {
+                TheoriaAdaptiveScaffold(
+                    navigationVisible = showBottomBar,
+                    selectedIndex = selectedTopLevelIndex,
+                    bottomBarHeight = bottomBarHeight,
+                    bottomBarIconSize = bottomBarIconSize,
+                    bottomBarWindowInsets = bottomBarWindowInsets,
+                    snackbarHostState = snackbarHostState,
+                    onDestinationSelected = { destination ->
+                        homeTabRoute = destination.route
+                        scope.launch { navigateTopLevelDestination(navController, topLevelPagerState, destination) }
+                    },
+                ) { contentModifier ->
+                    NavHost(
+                        navController = navController,
+                        startDestination = AppRoute.Home,
+                        modifier = contentModifier,
+                    ) {
+                        composable(AppRoute.Home) {
+                            HorizontalPager(
+                                state = topLevelPagerState,
+                                modifier = Modifier.fillMaxSize(),
+                            ) { page ->
+                                when (TopLevelDestination.entries[page]) {
+                                    TopLevelDestination.Search -> {
+                                        BrowsingDestinationStateBoundary(dataDependencies, sourceDependencies) { state ->
+                                            val fabRestoreState = feedFabRestoreRegistry
+                                                .state(SEARCH_FEED_FAB_CONTEXT)
+                                                ?: return@BrowsingDestinationStateBoundary
+                                            SearchRoute(
+                                            coordinator = featureDependencies.search,
+                                            relatedPostsLoader = featureDependencies.relatedPosts,
+                                            mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
+                                            pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
+                                            config = SearchRouteConfig(
+                                                settings = state.settings,
+                                                availableSources = state.availableSources,
+                                                creatorBrowsingSources = state.creatorBrowsingSources,
+                                                likedPostIds = state.likedPostIds,
+                                                savedPostIds = state.savedPostIds,
+                                                watchedPostIds = state.watchedPostIds,
+                                                favoriteTags = state.favoriteTags,
+                                                resolveUnknownAnimatedDurations =
+                                                    state.settings.contentFilters.resolveUnknownAnimatedDurations,
+                                            ),
+                                            fabRestoreState = fabRestoreState,
+                                            onFabRestoreStateChange = { updated ->
+                                                feedFabRestoreRegistry.update(SEARCH_FEED_FAB_CONTEXT, updated)
+                                            },
+                                            callbacks = SearchRouteCallbacks(
+                                                onOpenSourceAccounts = { settingsOwner.onAction(SettingsAction.OpenSourceAccounts) },
+                                                onOpenViewer = { effect ->
+                                                    val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
+                                                        effect.posts,
+                                                        effect.context,
+                                                    )
+                                                    viewerSessionOwner.retain(
+                                                        ViewerSession(
+                                                            posts = preparedPosts,
+                                                            context = effect.context,
+                                                            liveSearchBinding = effect.liveSearchBinding,
+                                                            searchVisibilityFilters = effect.visibilityFilters,
+                                                        ),
+                                                    )
+                                                    navController.navigate(AppRoute.Viewer) {
+                                                        launchSingleTop = !effect.liveSearchBinding
+                                                    }
+                                                },
+                                                onShowMessage = { message ->
+                                                    Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
+                                                },
+                                                onToggleLike = { post ->
+                                                    val owner = searchRouteOwnerBinding.current
+                                                    val query = owner?.state?.value?.query?.appliedQueryHash
+                                                    toggleLikeAndSyncCodex(post) { outcome ->
+                                                        if (owner?.state?.value?.query?.appliedQueryHash == query)
+                                                            owner?.dispatch(SearchAction.RelatedLikeCommitted(post, outcome))
+                                                    }
+                                                },
+                                                onOpenCreatorProfile = { creator ->
+                                                    scope.launch { openCreatorProfile(creator) }
+                                                },
+                                                onOpenLegacyCreatorProfile = { post ->
+                                                    scope.launch { openCreatorProfile(post) }
+                                                },
+                                                onRequestSaveToCodex = { post ->
+                                                    requestSaveToCodex(post)
+                                                },
+                                                onSaveToDevice = ::requestSaveToDevice,
+                                                onPostUrlCopied = { recordPostUrlCopy() },
+                                                onAddFavoriteTag = addFavoriteTag,
+                                                onRemoveFavoriteTag = removeFavoriteTag,
+                                            ),
+                                            onOwnerAvailable = { owner ->
+                                                searchRouteOwnerBinding.publish(owner)
+                                                pendingSearchActions.flush(owner::dispatch)
+                                            },
+                                        )
+                                        }
+                                    }
+
+                                    TopLevelDestination.ForYou -> {
+                                        BrowsingDestinationStateBoundary(dataDependencies, sourceDependencies) { state ->
+                                            val fabRestoreState = feedFabRestoreRegistry
+                                                .state(FOR_YOU_FEED_FAB_CONTEXT)
+                                                ?: return@BrowsingDestinationStateBoundary
+                                            ForYouRoute(
+                                            coordinator = featureDependencies.forYou,
+                                            relatedPostsLoader = featureDependencies.relatedPosts,
+                                            mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
+                                            pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
+                                            config = ForYouRouteConfig(
+                                                settings = state.settings,
+                                                activeProfileLikesCount = state.activeProfileLikesCount,
+                                                availableSources = state.availableSources,
+                                                creatorBrowsingSources = state.creatorBrowsingSources,
+                                                likedPostIds = state.likedPostIds,
+                                                resolveUnknownAnimatedDurations =
+                                                    state.settings.contentFilters.resolveUnknownAnimatedDurations,
+                                            ),
+                                            fabRestoreState = fabRestoreState,
+                                            onFabRestoreStateChange = { updated ->
+                                                feedFabRestoreRegistry.update(FOR_YOU_FEED_FAB_CONTEXT, updated)
+                                            },
+                                            callbacks = ForYouRouteCallbacks(
+                                                onOpenViewer = { effect ->
+                                                    val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
+                                                        effect.posts,
+                                                        effect.context,
+                                                    )
+                                                    viewerSessionOwner.retain(
+                                                        ViewerSession(
+                                                            posts = preparedPosts,
+                                                            context = effect.context,
+                                                            liveSearchBinding = effect.liveSearchBinding,
+                                                            searchVisibilityFilters = effect.visibilityFilters,
+                                                        ),
+                                                    )
+                                                    if (effect.liveSearchBinding) {
+                                                        featureDependencies.search.setViewerLaunchContext(effect.context)
+                                                    }
+                                                    navController.navigate(AppRoute.Viewer)
+                                                },
+                                                onNavigateToSearch = {
+                                                    val targetIndex = TopLevelDestination.entries
+                                                        .indexOf(TopLevelDestination.Search)
+                                                    homeTabRoute = TopLevelDestination.Search.route
+                                                    if (topLevelPagerState.currentPage != targetIndex) {
+                                                        topLevelPagerState.scrollToPage(targetIndex)
+                                                    }
+                                                },
+                                                onShowMessage = { message ->
+                                                    Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
+                                                },
+                                                onSeedHidden = { _, _ ->
+                                                    showActionableFeedback("Seed hidden", "Undo")
+                                                },
+                                                onToggleLike = { post ->
+                                                    val owner = forYouRouteOwnerBinding.current
+                                                    val seed = owner?.state?.value?.seedId
+                                                    toggleLikeAndSyncCodex(post) { outcome ->
+                                                        if (owner?.state?.value?.seedId == seed)
+                                                            owner?.dispatch(ForYouAction.RelatedLikeCommitted(post, outcome))
+                                                    }
+                                                },
+                                                onRequestSaveToCodex = { post ->
+                                                    requestSaveToCodex(post, fromForYou = true)
+                                                },
+                                                onSaveToDevice = ::requestSaveToDevice,
+                                                onPostUrlCopied = { recordPostUrlCopy() },
+                                                onOpenCreatorProfile = { creator ->
+                                                    scope.launch { openCreatorProfile(creator) }
+                                                },
+                                                onOpenLegacyCreatorProfile = { post ->
+                                                    scope.launch { openCreatorProfile(post) }
+                                                },
+                                                onAddIncludeTerm = ::addSearchIncludeTerm,
+                                                onAddExcludeTerm = ::addSearchExcludeTerm,
+                                                onRemoveIncludeTerm = { _, term -> removeSearchIncludeTerm(term) },
+                                                onRemoveExcludeTerm = { _, term -> removeSearchExcludeTerm(term) },
+                                                onFavoriteTagLongPress = addFavoriteTag,
+                                                onGoToSearch = {
+                                                    val targetIndex = TopLevelDestination.entries
+                                                        .indexOf(TopLevelDestination.Search)
+                                                    homeTabRoute = TopLevelDestination.Search.route
+                                                    scope.launch {
+                                                        if (topLevelPagerState.currentPage != targetIndex) {
+                                                            topLevelPagerState.scrollToPage(targetIndex)
+                                                        }
+                                                    }
+                                                },
+                                            ),
+                                            onOwnerAvailable = { owner ->
+                                                forYouRouteOwnerBinding.publish(owner)
+                                                pendingForYouActions.flush(owner::dispatch)
+                                            },
+                                        )
+                                        }
+                                    }
+
+                                    TopLevelDestination.Recents -> {
+                                        RecentsDestinationStateBoundary(dataDependencies) { state ->
+                                            fun openRecentSection(
+                                                entries: List<RecentPostEntry>,
+                                                index: Int,
+                                                section: RecentPostSection,
+                                                startOver: Boolean = false,
+                                            ) {
+                                                val posts = entries.map { entry -> entry.post }
+                                                if (posts.isNotEmpty()) {
+                                                    val context = ViewerLaunchContext(
+                                                        queryHash = "recents:${section.name.lowercase()}",
+                                                        startIndex = index.coerceIn(0, posts.lastIndex),
+                                                        streamSource = ViewerStreamSource.RECENTS,
+                                                        scrollOffsetHint = 0,
+                                                        recentsSection = section,
+                                                    )
+                                                    scope.launch {
+                                                        val session = viewerRouteWorkflow.prepareRecentSession(
+                                                            posts,
+                                                            context,
+                                                            startOver = startOver,
+                                                        )
+                                                        viewerSessionOwner.retain(session)
+                                                        dataDependencies.uiRestoreRepository
+                                                            .setViewerLaunchContext(context)
+                                                        navController.navigate(AppRoute.Viewer)
+                                                    }
+                                                }
+                                            }
+                                            val recentsDurationOwner = viewModel<MediaDurationRouteViewModel>(
+                                                key = "recents-duration-owner",
+                                                factory = MediaDurationRouteViewModel.factory(
+                                                    featureDependencies.mediaDurationCoordinator,
+                                                    "recents",
+                                                ),
+                                            )
+                                            SideEffect {
+                                                recentsDurationOwner.synchronize(
+                                                    identity = "recents",
+                                                    posts = (state.watchedPosts + state.codexPosts)
+                                                        .map(RecentPostEntry::post),
+                                                    resolveInBackground = false,
+                                                )
+                                            }
+                                            RecentsScreen(
+                                            savedSearches = savedSearches,
+                                            onSaveSearch = savedSearchOwner::save,
+                                            onRenameSavedSearch = savedSearchOwner::rename,
+                                            onRemoveSavedSearch = savedSearchOwner::remove,
+                                            watchedPosts = state.watchedPosts,
+                                            codexPosts = state.codexPosts,
+                                            searches = state.searches,
+                                            fypSearches = state.fypSearches,
+                                            activity = state.activity,
+                                            pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
+                                            durationStateForPost = recentsDurationOwner::observeState,
+                                            onDurationPostVisibilityChanged =
+                                                recentsDurationOwner::onPostVisibilityChanged,
+                                            onDurationEnvironmentChanged =
+                                                recentsDurationOwner::onEnvironmentChanged,
+                                            onAuthoritativeDurationKnown =
+                                                recentsDurationOwner::publishPlayerDuration,
                                             likedPostIds = state.likedPostIds,
-                                            savedPostIds = state.savedPostIds,
-                                            watchedPostIds = state.watchedPostIds,
-                                            favoriteTags = state.favoriteTags,
-                                            resolveUnknownAnimatedDurations =
-                                                state.settings.contentFilters.resolveUnknownAnimatedDurations,
-                                        ),
-                                        fabRestoreState = fabRestoreState,
-                                        onFabRestoreStateChange = { updated ->
-                                            feedFabRestoreRegistry.update(SEARCH_FEED_FAB_CONTEXT, updated)
-                                        },
-                                        callbacks = SearchRouteCallbacks(
-                                            onOpenSourceAccounts = { settingsOwner.onAction(SettingsAction.OpenSourceAccounts) },
-                                            onOpenViewer = { effect ->
-                                                val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
-                                                    effect.posts,
-                                                    effect.context,
-                                                )
-                                                viewerSessionOwner.retain(
-                                                    ViewerSession(
-                                                        posts = preparedPosts,
-                                                        context = effect.context,
-                                                        liveSearchBinding = effect.liveSearchBinding,
-                                                        searchVisibilityFilters = effect.visibilityFilters,
-                                                    ),
-                                                )
-                                                navController.navigate(AppRoute.Viewer) {
-                                                    launchSingleTop = !effect.liveSearchBinding
-                                                }
-                                            },
-                                            onShowMessage = { message ->
-                                                Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
-                                            },
-                                            onToggleLike = { post ->
-                                                val owner = searchRouteOwnerBinding.current
-                                                scope.launch {
-                                                    val outcome = toggleLikeAndSyncCodex(post)
-                                                    owner?.dispatch(SearchAction.RelatedLikeCommitted(post, outcome))
-                                                }
-                                            },
-                                            onOpenCreatorProfile = { creator ->
-                                                scope.launch { openCreatorProfile(creator) }
-                                            },
-                                            onOpenLegacyCreatorProfile = { post ->
-                                                scope.launch { openCreatorProfile(post) }
-                                            },
+                                            creatorBrowsingSources = sourceDependencies.registry.creatorBrowsingSources(),
+                                            tagVideoCountProvider = featureDependencies.search::tagVideoCount,
+                                            fetchTagVideoCounts = featureDependencies.search::fetchTagVideoCounts,
+                                            onToggleLike = { post -> toggleLikeAndSyncCodex(post) },
                                             onRequestSaveToCodex = { post ->
                                                 requestSaveToCodex(post)
-                                            },
-                                            onSaveToDevice = ::requestSaveToDevice,
-                                            onPostUrlCopied = { recordPostUrlCopy() },
-                                            onAddFavoriteTag = addFavoriteTag,
-                                            onRemoveFavoriteTag = removeFavoriteTag,
-                                        ),
-                                        onOwnerAvailable = { owner ->
-                                            searchRouteOwnerBinding.publish(owner)
-                                            pendingSearchActions.flush(owner::dispatch)
-                                        },
-                                    )
-                                    }
-                                }
-
-                                TopLevelDestination.ForYou -> {
-                                    BrowsingDestinationStateBoundary(dataDependencies, sourceDependencies) { state ->
-                                        val fabRestoreState = feedFabRestoreRegistry
-                                            .state(FOR_YOU_FEED_FAB_CONTEXT)
-                                            ?: return@BrowsingDestinationStateBoundary
-                                        ForYouRoute(
-                                        coordinator = featureDependencies.forYou,
-                                        relatedPostsLoader = featureDependencies.relatedPosts,
-                                        mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
-                                        pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
-                                        config = ForYouRouteConfig(
-                                            settings = state.settings,
-                                            activeProfileLikesCount = state.activeProfileLikesCount,
-                                            availableSources = state.availableSources,
-                                            creatorBrowsingSources = state.creatorBrowsingSources,
-                                            likedPostIds = state.likedPostIds,
-                                            resolveUnknownAnimatedDurations =
-                                                state.settings.contentFilters.resolveUnknownAnimatedDurations,
-                                        ),
-                                        fabRestoreState = fabRestoreState,
-                                        onFabRestoreStateChange = { updated ->
-                                            feedFabRestoreRegistry.update(FOR_YOU_FEED_FAB_CONTEXT, updated)
-                                        },
-                                        callbacks = ForYouRouteCallbacks(
-                                            onOpenViewer = { effect ->
-                                                val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
-                                                    effect.posts,
-                                                    effect.context,
-                                                )
-                                                viewerSessionOwner.retain(
-                                                    ViewerSession(
-                                                        posts = preparedPosts,
-                                                        context = effect.context,
-                                                        liveSearchBinding = effect.liveSearchBinding,
-                                                        searchVisibilityFilters = effect.visibilityFilters,
-                                                    ),
-                                                )
-                                                if (effect.liveSearchBinding) {
-                                                    featureDependencies.search.setViewerLaunchContext(effect.context)
-                                                }
-                                                navController.navigate(AppRoute.Viewer)
-                                            },
-                                            onNavigateToSearch = {
-                                                val targetIndex = TopLevelDestination.entries
-                                                    .indexOf(TopLevelDestination.Search)
-                                                homeTabRoute = TopLevelDestination.Search.route
-                                                if (topLevelPagerState.currentPage != targetIndex) {
-                                                    topLevelPagerState.scrollToPage(targetIndex)
-                                                }
-                                            },
-                                            onShowMessage = { message ->
-                                                Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
-                                            },
-                                            onSeedHidden = { _, _ ->
-                                                showActionableFeedback("Seed hidden", "Undo")
-                                            },
-                                            onToggleLike = { post ->
-                                                val owner = forYouRouteOwnerBinding.current
-                                                scope.launch {
-                                                    val outcome = toggleLikeAndSyncCodex(post)
-                                                    owner?.dispatch(ForYouAction.RelatedLikeCommitted(post, outcome))
-                                                }
-                                            },
-                                            onRequestSaveToCodex = { post ->
-                                                requestSaveToCodex(post, fromForYou = true)
                                             },
                                             onSaveToDevice = ::requestSaveToDevice,
                                             onPostUrlCopied = { recordPostUrlCopy() },
@@ -1256,580 +1267,268 @@ internal fun TheoriaAppContent(
                                             onRemoveExcludeTerm = { _, term -> removeSearchExcludeTerm(term) },
                                             onFavoriteTagLongPress = addFavoriteTag,
                                             onGoToSearch = {
+                                                homeTabRoute = TopLevelDestination.Search.route
                                                 val targetIndex = TopLevelDestination.entries
                                                     .indexOf(TopLevelDestination.Search)
-                                                homeTabRoute = TopLevelDestination.Search.route
+                                                scope.launch {
+                                                    topLevelPagerState.scrollToPage(targetIndex)
+                                                }
+                                            },
+                                            onOpenWatchedPost = { index ->
+                                                openRecentSection(
+                                                    state.watchedPosts,
+                                                    index,
+                                                    RecentPostSection.WATCHED,
+                                                )
+                                            },
+                                            onOpenCodexPost = { index ->
+                                                openRecentSection(
+                                                    state.codexPosts,
+                                                    index,
+                                                    RecentPostSection.CODEX,
+                                                )
+                                            },
+                                            onStartOver = { post, section ->
+                                                val entries = if (section == RecentPostSection.CODEX) state.codexPosts else state.watchedPosts
+                                                val index = entries.indexOfFirst { it.post.id == post.id }
+                                                if (index >= 0) openRecentSection(entries, index, section, startOver = true)
+                                            },
+                                            onOpenSearch = { entry ->
+                                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                                    val historicalScope = when (entry.kind) {
+                                                        RecentSearchKind.MULTI_SEARCH -> {
+                                                            SearchSourceScope.fromSources(entry.sources)
+                                                        }
+                                                        RecentSearchKind.SOURCE,
+                                                        RecentSearchKind.UNIFIED,
+                                                        RecentSearchKind.FYP,
+                                                        -> SearchSourceScope.fromQuery(entry.query)
+                                                    }
+                                                    dispatchOrQueueSearchAction(
+                                                        SearchAction.ApplyHistoricalQuery(
+                                                            query = entry.query,
+                                                            sourceScope = historicalScope,
+                                                        ),
+                                                    )
+                                                    val targetIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.Search)
+                                                    homeTabRoute = TopLevelDestination.Search.route
+                                                    pendingTopLevelRoute = TopLevelDestination.Search.route
+                                                    navController.navigate(AppRoute.Home) {
+                                                        popUpTo(navController.graph.findStartDestination().id) {
+                                                            saveState = true
+                                                        }
+                                                        launchSingleTop = true
+                                                        restoreState = true
+                                                    }
+                                                    if (topLevelPagerState.currentPage != targetIndex) {
+                                                        topLevelPagerState.scrollToPage(targetIndex)
+                                                    }
+                                                }
+                                            },
+                                            onOpenFypSearch = { entry ->
+                                                dispatchOrQueueForYouAction(
+                                                    ForYouAction.ReplaySearch(
+                                                        seedBySource = entry.fypSeedBySource(),
+                                                        sortMode = entry.query.sort,
+                                                    ),
+                                                )
+                                                val targetIndex = TopLevelDestination.entries
+                                                    .indexOf(TopLevelDestination.ForYou)
+                                                homeTabRoute = TopLevelDestination.ForYou.route
                                                 scope.launch {
                                                     if (topLevelPagerState.currentPage != targetIndex) {
                                                         topLevelPagerState.scrollToPage(targetIndex)
                                                     }
                                                 }
                                             },
-                                        ),
-                                        onOwnerAvailable = { owner ->
-                                            forYouRouteOwnerBinding.publish(owner)
-                                            pendingForYouActions.flush(owner::dispatch)
-                                        },
-                                    )
+                                            onClear = { target ->
+                                                scope.launch {
+                                                    recentsClearWorkflow.clear(
+                                                        target = target,
+                                                        watchedPosts = state.watchedPosts,
+                                                        codexPosts = state.codexPosts,
+                                                        searches = state.searches,
+                                                        fypSearches = state.fypSearches,
+                                                        showActionableFeedback = ::showActionableFeedback,
+                                                    )
+                                                }
+                                            },
+                                        )
+                                        }
+                                    }
+
+                                    TopLevelDestination.Codex -> {
+                                        CodexDestinationStateBoundary(
+                                            data = dataDependencies,
+                                            sources = sourceDependencies,
+                                            thumbnailCacheGeneration = thumbnailCacheGeneration,
+                                        ) { state ->
+                                            CodexListScreen(
+                                            codices = state.visibleCodices,
+                                            itemCounts = state.itemCounts,
+                                            codexCoverCandidates = state.coverCandidates,
+                                            observeActionOptions = state.observeActionOptions,
+                                            onOpenCodex = { codexId ->
+                                                navController.navigate(AppRoute.codexDetail(codexId))
+                                            },
+                                            onImportCodex = {
+                                                importCodexLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
+                                            },
+                                            onDownloadCodex = { codexId ->
+                                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                                    downloadCodex(codexId)
+                                                }
+                                            },
+                                            onMakeAvailableOffline = libraryTransfers.offline?.let { it::makeAvailableOffline },
+                                            onShareCodex = { codexId ->
+                                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                                    shareCodex(codexId)
+                                                }
+                                            },
+                                            onSearchFromCodex = { _, source, includeTags ->
+                                                scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                                    searchFromCodex(source, includeTags)
+                                                }
+                                            },
+                                            onCommitReorder = codexCommandOwner::reorder,
+                                            onCreateCodex = { name -> codexCommandOwner.create(state.activeProfile.profileId, name) },
+                                            onRenameCodex = codexCommandOwner::rename,
+                                            onSetAutomaticTag = codexCommandOwner::automaticTag,
+                                            onDeleteCodex = { id -> codexCommandOwner.delete(id, state.activeProfile.profileId) },
+                                            likesCodexId = likesCodexIdForProfile(state.activeProfile.profileId),
+                                        )
+                                        }
+                                    }
+
+                                    TopLevelDestination.Settings -> {
+                                        SettingsDestinationStateBoundary(settingsOwner, libraryStorageSummary(libraryTransfers)) {
+                                            LibraryTransferSettings(libraryTransfers)
+                                        }
                                     }
                                 }
-
-                                TopLevelDestination.Recents -> {
-                                    RecentsDestinationStateBoundary(dataDependencies) { state ->
-                                        fun openRecentSection(
-                                            entries: List<RecentPostEntry>,
-                                            index: Int,
-                                            section: RecentPostSection,
-                                            startOver: Boolean = false,
-                                        ) {
-                                            val posts = entries.map { entry -> entry.post }
-                                            if (posts.isNotEmpty()) {
-                                                val context = ViewerLaunchContext(
-                                                    queryHash = "recents:${section.name.lowercase()}",
-                                                    startIndex = index.coerceIn(0, posts.lastIndex),
-                                                    streamSource = ViewerStreamSource.RECENTS,
-                                                    scrollOffsetHint = 0,
-                                                    recentsSection = section,
-                                                )
-                                                scope.launch {
-                                                    val session = viewerRouteWorkflow.prepareRecentSession(
-                                                        posts,
-                                                        context,
-                                                        startOver = startOver,
-                                                    )
-                                                    viewerSessionOwner.retain(session)
-                                                    dataDependencies.uiRestoreRepository
-                                                        .setViewerLaunchContext(context)
-                                                    navController.navigate(AppRoute.Viewer)
-                                                }
-                                            }
-                                        }
-                                        val recentsDurationOwner = viewModel<MediaDurationRouteViewModel>(
-                                            key = "recents-duration-owner",
-                                            factory = MediaDurationRouteViewModel.factory(
-                                                featureDependencies.mediaDurationCoordinator,
-                                                "recents",
+                            }
+                        }
+                        composable(
+                            route = AppRoute.CodexDetail,
+                            arguments = listOf(navArgument("codexId") { type = NavType.StringType }),
+                        ) { entry ->
+                            val codexId = requireNotNull(entry.arguments?.getString("codexId"))
+                            LaunchedEffect(entry, codexId, dataDependencies.statisticsRepository) {
+                                runCatchingPreservingCancellation {
+                                    dataDependencies.statisticsRepository.recordCodexEntry(codexId)
+                                }
+                            }
+                            val fabContext = codexFeedFabContext(codexId)
+                            val fabRestoreState = feedFabRestoreRegistry.state(fabContext)
+                                ?: return@composable
+                            val sortMode = fabRestoreState.sortMode?.let { encoded ->
+                                CodexSortMode.entries.firstOrNull { mode -> mode.name == encoded }
+                            } ?: CodexSortMode.NEWEST_SAVED
+                            val durationOwner = viewModel<MediaDurationRouteViewModel>(
+                                key = "codex-detail-duration-$codexId",
+                                factory = MediaDurationRouteViewModel.factory(
+                                    featureDependencies.mediaDurationCoordinator,
+                                    "codex-detail:$codexId",
+                                ),
+                            )
+                            val durationStates by durationOwner.states.collectAsStateWithLifecycle()
+                            CodexDetailDestinationStateBoundary(
+                                codexId = codexId,
+                                sortMode = sortMode,
+                                fabRestoreState = fabRestoreState,
+                                data = dataDependencies,
+                                sources = sourceDependencies,
+                            ) { state ->
+                                SideEffect {
+                                    durationOwner.synchronize(
+                                        identity = codexId,
+                                        posts = state.posts,
+                                        resolveInBackground = state.resolveUnknownAnimatedDurations,
+                                    )
+                                }
+                                CodexDetailScreen(
+                                codexName = state.codex?.name,
+                                customHeader = state.followedOwner?.let { owner -> ({ visible, filters, resolving, grid ->
+                                    com.theoriacodex.app.codex.FollowedCodexHeader(
+                                        owner, state.follows, visible, state.posts, filters, resolving, grid,
+                                        onBack = { navController.popBackStack() },
+                                        onManage = { showFollowedCreators = true },
+                                    )
+                                }) },
+                                customFilters = state.followedOwner?.let { ({ dismiss ->
+                                    com.theoriacodex.app.codex.FollowedCodexFilters(
+                                        state.follows, fabRestoreState,
+                                        onChange = { feedFabRestoreRegistry.update(fabContext, it) },
+                                        onManage = { dismiss(); showFollowedCreators = true },
+                                    )
+                                }) },
+                                customFiltersActive = state.followedOwner != null &&
+                                    (fabRestoreState.followedSources.isNotEmpty() || fabRestoreState.followedAuthors.isNotEmpty()),
+                                emptyMessage = state.followedOwner?.let { "Follow a creator or adjust your filters" },
+                                loading = state.loading,
+                                posts = state.posts,
+                                sortMode = sortMode,
+                                availableSources = state.availableSources,
+                                creatorBrowsingSources = state.creatorBrowsingSources,
+                                pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
+                                resolveUnknownAnimatedDurations = state.resolveUnknownAnimatedDurations,
+                                durationStates = durationStates,
+                                durationStateForPost = durationOwner::observeState,
+                                tagVideoCountProvider = { source, tag ->
+                                    featureDependencies.search.tagVideoCount(source, tag)
+                                },
+                                fetchTagVideoCounts = { source, tags ->
+                                    featureDependencies.search.fetchTagVideoCounts(source, tags)
+                                },
+                                onDurationFilterChanged = durationOwner::onFilterChanged,
+                                onDurationPostVisibilityChanged = durationOwner::onPostVisibilityChanged,
+                                onDurationEnvironmentChanged = durationOwner::onEnvironmentChanged,
+                                onAuthoritativeDurationKnown = durationOwner::publishPlayerDuration,
+                                resolvePostById = { postId ->
+                                    viewerRouteWorkflow.resolvePost(postId, ViewerStreamSource.CODEX)
+                                },
+                                onOpenViewer = { visiblePosts, index ->
+                                    val context = ViewerLaunchContext(
+                                        queryHash = "codex:$codexId",
+                                        startIndex = index,
+                                        streamSource = ViewerStreamSource.CODEX,
+                                        scrollOffsetHint = 0,
+                                    )
+                                    scope.launch {
+                                        val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
+                                            visiblePosts,
+                                            context,
+                                        )
+                                        viewerSessionOwner.retain(
+                                            ViewerSession(
+                                                posts = preparedPosts,
+                                                context = context,
+                                                liveSearchBinding = false,
                                             ),
                                         )
-                                        SideEffect {
-                                            recentsDurationOwner.synchronize(
-                                                identity = "recents",
-                                                posts = (state.watchedPosts + state.codexPosts)
-                                                    .map(RecentPostEntry::post),
-                                                resolveInBackground = false,
-                                            )
-                                        }
-                                        RecentsScreen(
-                                        savedSearches = savedSearches,
-                                        onSaveSearch = savedSearchOwner::save,
-                                        onRenameSavedSearch = savedSearchOwner::rename,
-                                        onRemoveSavedSearch = savedSearchOwner::remove,
-                                        watchedPosts = state.watchedPosts,
-                                        codexPosts = state.codexPosts,
-                                        searches = state.searches,
-                                        fypSearches = state.fypSearches,
-                                        activity = state.activity,
-                                        pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
-                                        durationStateForPost = recentsDurationOwner::observeState,
-                                        onDurationPostVisibilityChanged =
-                                            recentsDurationOwner::onPostVisibilityChanged,
-                                        onDurationEnvironmentChanged =
-                                            recentsDurationOwner::onEnvironmentChanged,
-                                        onAuthoritativeDurationKnown =
-                                            recentsDurationOwner::publishPlayerDuration,
-                                        likedPostIds = state.likedPostIds,
-                                        creatorBrowsingSources = sourceDependencies.registry.creatorBrowsingSources(),
-                                        tagVideoCountProvider = featureDependencies.search::tagVideoCount,
-                                        fetchTagVideoCounts = featureDependencies.search::fetchTagVideoCounts,
-                                        onToggleLike = { post ->
-                                            scope.launch {
-                                                toggleLikeAndSyncCodex(post)
-                                            }
-                                        },
-                                        onRequestSaveToCodex = { post ->
-                                            requestSaveToCodex(post)
-                                        },
-                                        onSaveToDevice = ::requestSaveToDevice,
-                                        onPostUrlCopied = { recordPostUrlCopy() },
-                                        onOpenCreatorProfile = { creator ->
-                                            scope.launch { openCreatorProfile(creator) }
-                                        },
-                                        onOpenLegacyCreatorProfile = { post ->
-                                            scope.launch { openCreatorProfile(post) }
-                                        },
-                                        onAddIncludeTerm = ::addSearchIncludeTerm,
-                                        onAddExcludeTerm = ::addSearchExcludeTerm,
-                                        onRemoveIncludeTerm = { _, term -> removeSearchIncludeTerm(term) },
-                                        onRemoveExcludeTerm = { _, term -> removeSearchExcludeTerm(term) },
-                                        onFavoriteTagLongPress = addFavoriteTag,
-                                        onGoToSearch = {
-                                            homeTabRoute = TopLevelDestination.Search.route
-                                            val targetIndex = TopLevelDestination.entries
-                                                .indexOf(TopLevelDestination.Search)
-                                            scope.launch {
-                                                topLevelPagerState.scrollToPage(targetIndex)
-                                            }
-                                        },
-                                        onOpenWatchedPost = { index ->
-                                            openRecentSection(
-                                                state.watchedPosts,
-                                                index,
-                                                RecentPostSection.WATCHED,
-                                            )
-                                        },
-                                        onOpenCodexPost = { index ->
-                                            openRecentSection(
-                                                state.codexPosts,
-                                                index,
-                                                RecentPostSection.CODEX,
-                                            )
-                                        },
-                                        onStartOver = { post, section ->
-                                            val entries = if (section == RecentPostSection.CODEX) state.codexPosts else state.watchedPosts
-                                            val index = entries.indexOfFirst { it.post.id == post.id }
-                                            if (index >= 0) openRecentSection(entries, index, section, startOver = true)
-                                        },
-                                        onOpenSearch = { entry ->
-                                            scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                val historicalScope = when (entry.kind) {
-                                                    RecentSearchKind.MULTI_SEARCH -> {
-                                                        SearchSourceScope.fromSources(entry.sources)
-                                                    }
-                                                    RecentSearchKind.SOURCE,
-                                                    RecentSearchKind.UNIFIED,
-                                                    RecentSearchKind.FYP,
-                                                    -> SearchSourceScope.fromQuery(entry.query)
-                                                }
-                                                dispatchOrQueueSearchAction(
-                                                    SearchAction.ApplyHistoricalQuery(
-                                                        query = entry.query,
-                                                        sourceScope = historicalScope,
-                                                    ),
-                                                )
-                                                val targetIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.Search)
-                                                homeTabRoute = TopLevelDestination.Search.route
-                                                pendingTopLevelRoute = TopLevelDestination.Search.route
-                                                navController.navigate(AppRoute.Home) {
-                                                    popUpTo(navController.graph.findStartDestination().id) {
-                                                        saveState = true
-                                                    }
-                                                    launchSingleTop = true
-                                                    restoreState = true
-                                                }
-                                                if (topLevelPagerState.currentPage != targetIndex) {
-                                                    topLevelPagerState.scrollToPage(targetIndex)
-                                                }
-                                            }
-                                        },
-                                        onOpenFypSearch = { entry ->
-                                            dispatchOrQueueForYouAction(
-                                                ForYouAction.ReplaySearch(
-                                                    seedBySource = entry.fypSeedBySource(),
-                                                    sortMode = entry.query.sort,
-                                                ),
-                                            )
-                                            val targetIndex = TopLevelDestination.entries
-                                                .indexOf(TopLevelDestination.ForYou)
-                                            homeTabRoute = TopLevelDestination.ForYou.route
-                                            scope.launch {
-                                                if (topLevelPagerState.currentPage != targetIndex) {
-                                                    topLevelPagerState.scrollToPage(targetIndex)
-                                                }
-                                            }
-                                        },
-                                        onClear = { target ->
-                                            scope.launch {
-                                                recentsClearWorkflow.clear(
-                                                    target = target,
-                                                    watchedPosts = state.watchedPosts,
-                                                    codexPosts = state.codexPosts,
-                                                    searches = state.searches,
-                                                    fypSearches = state.fypSearches,
-                                                    showActionableFeedback = ::showActionableFeedback,
-                                                )
-                                            }
-                                        },
-                                    )
+                                        dataDependencies.uiRestoreRepository.setViewerLaunchContext(context)
+                                        navController.navigate(AppRoute.Viewer)
                                     }
-                                }
-
-                                TopLevelDestination.Codex -> {
-                                    CodexDestinationStateBoundary(
-                                        data = dataDependencies,
-                                        sources = sourceDependencies,
-                                        thumbnailCacheGeneration = thumbnailCacheGeneration,
-                                    ) { state ->
-                                        CodexListScreen(
-                                        codices = state.visibleCodices,
-                                        itemCounts = state.itemCounts,
-                                        codexCoverCandidates = state.coverCandidates,
-                                        observeActionOptions = state.observeActionOptions,
-                                        onOpenCodex = { codexId ->
-                                            navController.navigate(AppRoute.codexDetail(codexId))
-                                        },
-                                        onImportCodex = {
-                                            importCodexLauncher.launch(arrayOf("application/json", "text/json", "text/plain"))
-                                        },
-                                        onDownloadCodex = { codexId ->
-                                            scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                downloadCodex(codexId)
-                                            }
-                                        },
-                                        onMakeAvailableOffline = libraryTransfers.offline?.let { it::makeAvailableOffline },
-                                        onShareCodex = { codexId ->
-                                            scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                shareCodex(codexId)
-                                            }
-                                        },
-                                        onSearchFromCodex = { _, source, includeTags ->
-                                            scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                searchFromCodex(source, includeTags)
-                                            }
-                                        },
-                                        onCommitReorder = codexCommandOwner::reorder,
-                                        onCreateCodex = { name -> codexCommandOwner.create(state.activeProfile.profileId, name) },
-                                        onRenameCodex = codexCommandOwner::rename,
-                                        onSetAutomaticTag = codexCommandOwner::automaticTag,
-                                        onDeleteCodex = { id -> codexCommandOwner.delete(id, state.activeProfile.profileId) },
-                                        likesCodexId = likesCodexIdForProfile(state.activeProfile.profileId),
-                                    )
-                                    }
-                                }
-
-                                TopLevelDestination.Settings -> {
-                                    SettingsDestinationStateBoundary(settingsOwner, libraryStorageSummary(libraryTransfers)) {
-                                        LibraryTransferSettings(libraryTransfers)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    composable(
-                        route = AppRoute.CodexDetail,
-                        arguments = listOf(navArgument("codexId") { type = NavType.StringType }),
-                    ) { entry ->
-                        val codexId = requireNotNull(entry.arguments?.getString("codexId"))
-                        LaunchedEffect(entry, codexId, dataDependencies.statisticsRepository) {
-                            runCatchingPreservingCancellation {
-                                dataDependencies.statisticsRepository.recordCodexEntry(codexId)
-                            }
-                        }
-                        val fabContext = codexFeedFabContext(codexId)
-                        val fabRestoreState = feedFabRestoreRegistry.state(fabContext)
-                            ?: return@composable
-                        val sortMode = fabRestoreState.sortMode?.let { encoded ->
-                            CodexSortMode.entries.firstOrNull { mode -> mode.name == encoded }
-                        } ?: CodexSortMode.NEWEST_SAVED
-                        val durationOwner = viewModel<MediaDurationRouteViewModel>(
-                            key = "codex-detail-duration-$codexId",
-                            factory = MediaDurationRouteViewModel.factory(
-                                featureDependencies.mediaDurationCoordinator,
-                                "codex-detail:$codexId",
-                            ),
-                        )
-                        val durationStates by durationOwner.states.collectAsStateWithLifecycle()
-                        CodexDetailDestinationStateBoundary(
-                            codexId = codexId,
-                            sortMode = sortMode,
-                            fabRestoreState = fabRestoreState,
-                            data = dataDependencies,
-                            sources = sourceDependencies,
-                        ) { state ->
-                            SideEffect {
-                                durationOwner.synchronize(
-                                    identity = codexId,
-                                    posts = state.posts,
-                                    resolveInBackground = state.resolveUnknownAnimatedDurations,
-                                )
-                            }
-                            CodexDetailScreen(
-                            codexName = state.codex?.name,
-                            customHeader = state.followedOwner?.let { owner -> ({ visible, filters, resolving, grid ->
-                                com.theoriacodex.app.codex.FollowedCodexHeader(
-                                    owner, state.follows, visible, state.posts, filters, resolving, grid,
-                                    onBack = { navController.popBackStack() },
-                                    onManage = { showFollowedCreators = true },
-                                )
-                            }) },
-                            customFilters = state.followedOwner?.let { ({ dismiss ->
-                                com.theoriacodex.app.codex.FollowedCodexFilters(
-                                    state.follows, fabRestoreState,
-                                    onChange = { feedFabRestoreRegistry.update(fabContext, it) },
-                                    onManage = { dismiss(); showFollowedCreators = true },
-                                )
-                            }) },
-                            customFiltersActive = state.followedOwner != null &&
-                                (fabRestoreState.followedSources.isNotEmpty() || fabRestoreState.followedAuthors.isNotEmpty()),
-                            emptyMessage = state.followedOwner?.let { "Follow a creator or adjust your filters" },
-                            loading = state.loading,
-                            posts = state.posts,
-                            sortMode = sortMode,
-                            availableSources = state.availableSources,
-                            creatorBrowsingSources = state.creatorBrowsingSources,
-                            pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
-                            resolveUnknownAnimatedDurations = state.resolveUnknownAnimatedDurations,
-                            durationStates = durationStates,
-                            durationStateForPost = durationOwner::observeState,
-                            tagVideoCountProvider = { source, tag ->
-                                featureDependencies.search.tagVideoCount(source, tag)
-                            },
-                            fetchTagVideoCounts = { source, tags ->
-                                featureDependencies.search.fetchTagVideoCounts(source, tags)
-                            },
-                            onDurationFilterChanged = durationOwner::onFilterChanged,
-                            onDurationPostVisibilityChanged = durationOwner::onPostVisibilityChanged,
-                            onDurationEnvironmentChanged = durationOwner::onEnvironmentChanged,
-                            onAuthoritativeDurationKnown = durationOwner::publishPlayerDuration,
-                            resolvePostById = { postId ->
-                                viewerRouteWorkflow.resolvePost(postId, ViewerStreamSource.CODEX)
-                            },
-                            onOpenViewer = { visiblePosts, index ->
-                                val context = ViewerLaunchContext(
-                                    queryHash = "codex:$codexId",
-                                    startIndex = index,
-                                    streamSource = ViewerStreamSource.CODEX,
-                                    scrollOffsetHint = 0,
-                                )
-                                scope.launch {
-                                    val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
-                                        visiblePosts,
-                                        context,
-                                    )
-                                    viewerSessionOwner.retain(
-                                        ViewerSession(
-                                            posts = preparedPosts,
-                                            context = context,
-                                            liveSearchBinding = false,
-                                        ),
-                                    )
-                                    dataDependencies.uiRestoreRepository.setViewerLaunchContext(context)
-                                    navController.navigate(AppRoute.Viewer)
-                                }
-                            },
-                            onRemovePosts = { posts -> codexCommandOwner.remove(codexId, state.items, posts) },
-                            onAddPostsToAnotherCodex = { posts ->
-                                requestSaveToCodex(posts, excludedCodexId = codexId)
-                            },
-                            onSavePostToDevice = { post ->
-                                requestSaveToDevice(post)
-                            },
-                            onPostUrlCopied = { recordPostUrlCopy() },
-                            onOpenCreatorProfile = { creator ->
-                                scope.launch { openCreatorProfile(creator) }
-                            },
-                            onOpenLegacyCreatorProfile = { post ->
-                                scope.launch { openCreatorProfile(post) }
-                            },
-                            onAddIncludeTerm = { post, term ->
-                                addSearchIncludeTerm(post, term)
-                            },
-                            onAddExcludeTerm = { post, term ->
-                                addSearchExcludeTerm(post, term)
-                            },
-                            onRemoveIncludeTerm = { _, term ->
-                                removeSearchIncludeTerm(term)
-                            },
-                            onRemoveExcludeTerm = { _, term ->
-                                removeSearchExcludeTerm(term)
-                            },
-                            onFavoriteTagLongPress = addFavoriteTag,
-                            onGoToSearch = {
-                                homeTabRoute = TopLevelDestination.Search.route
-                                navController.popBackStack(AppRoute.Home, inclusive = false)
-                            },
-                            onBack = {
-                                navController.popBackStack()
-                            },
-                            onDeleteCodex = { codexCommandOwner.delete(codexId, state.activeProfile.profileId) },
-                            isLikesCodex = codexId == likesCodexIdForProfile(state.activeProfile.profileId),
-                            fabRestoreState = fabRestoreState,
-                            onFabRestoreStateChange = { updated ->
-                                feedFabRestoreRegistry.update(fabContext, updated)
-                            },
-                        )
-                        }
-                    }
-                    composable(AppRoute.CreatorProfile) {
-                        BrowsingDestinationStateBoundary(dataDependencies, sourceDependencies) { state ->
-                            val creator = pendingCreatorProfile
-                                ?: return@BrowsingDestinationStateBoundary
-                            val creatorIdentity = creator.profileId
-                                ?: creator.uploadsQuery
-                                ?: creator.displayName
-                            val fabContext = creatorFeedFabContext(creator.source.name, creatorIdentity)
-                            val fabRestoreState = feedFabRestoreRegistry.state(fabContext)
-                                ?: return@BrowsingDestinationStateBoundary
-                            CreatorRoute(
-                            coordinator = featureDependencies.creatorProfile,
-                            mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
-                            pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
-                            config = CreatorRouteConfig(
-                                followed = state.settings.followedCreators.any { it.creator.followKey() == creator.followKey() },
-                                activeCreator = creator,
-                                availableSources = state.availableSources,
-                                likedPostIds = state.likedPostIds,
-                                savedPostIds = state.savedPostIds,
-                                resolveUnknownAnimatedDurations =
-                                    state.settings.contentFilters.resolveUnknownAnimatedDurations,
-                            ),
-                            fabRestoreState = fabRestoreState,
-                            onFabRestoreStateChange = { updated ->
-                                feedFabRestoreRegistry.update(fabContext, updated)
-                            },
-                            callbacks = CreatorRouteCallbacks(
-                                onToggleFollow = followsOwner::toggle,
-                                onOpenViewer = { effect ->
-                                    val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
-                                        effect.posts,
-                                        effect.context,
-                                    )
-                                    viewerSessionOwner.retain(
-                                        ViewerSession(
-                                            posts = preparedPosts,
-                                            context = effect.context,
-                                            liveSearchBinding = true,
-                                            searchVisibilityFilters = effect.visibilityFilters,
-                                        ),
-                                    )
-                                    navController.navigate(AppRoute.Viewer)
                                 },
-                                onNavigateBack = { navController.popBackStack() },
-                                onToggleLike = { post ->
-                                    scope.launch { toggleLikeAndSyncCodex(post) }
+                                onRemovePosts = { posts -> codexCommandOwner.remove(codexId, state.items, posts) },
+                                onAddPostsToAnotherCodex = { posts ->
+                                    requestSaveToCodex(posts, excludedCodexId = codexId)
                                 },
-                                onRequestSaveToCodex = { post ->
-                                    requestSaveToCodex(post)
+                                onSavePostToDevice = { post ->
+                                    requestSaveToDevice(post)
                                 },
-                                onSaveToDevice = ::requestSaveToDevice,
                                 onPostUrlCopied = { recordPostUrlCopy() },
-                                onOpenUrl = { url -> openInBrowser(appContext, url) },
-                                onAddIncludeTerm = ::addSearchIncludeTerm,
-                                onAddExcludeTerm = ::addSearchExcludeTerm,
-                                onRemoveIncludeTerm = { _, term -> removeSearchIncludeTerm(term) },
-                                onRemoveExcludeTerm = { _, term -> removeSearchExcludeTerm(term) },
-                            ),
-                            onOwnerAvailable = creatorRouteOwnerBinding::publish,
-                        )
-                        }
-                    }
-                    composable(AppRoute.Viewer) {
-                        ViewerDestinationStateBoundary(
-                            data = dataDependencies,
-                            sources = sourceDependencies,
-                            searchOwner = searchRouteOwner,
-                            forYouOwner = forYouRouteOwner,
-                            creatorOwner = creatorRouteOwner,
-                        ) { state ->
-                            ViewerRoute(
-                            dependencies = ViewerRouteDependencies(
-                                sessionRetentionOwner = viewerSessionOwner,
-                                canonicalizePost = { post -> featureDependencies.offlineMedia?.withoutOfflineLocations(post) ?: post },
-                                postResolver = viewerRouteWorkflow,
-                                mediaPrefetcher = ViewerMediaPrefetcher { _, media ->
-                                    prefetchViewerMedia(appContext, media)
+                                onOpenCreatorProfile = { creator ->
+                                    scope.launch { openCreatorProfile(creator) }
                                 },
-                                mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
-                                restoreSession = viewerRouteWorkflow::restoreSession,
-                            ),
-                            renderConfig = ViewerRouteRenderConfig(
-                                videoQuality = state.browsing.settings.viewer.videoQuality,
-                                pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
-                                tagVideoCountProvider = featureDependencies.search::tagVideoCount,
-                                fetchTagVideoCounts = featureDependencies.search::fetchTagVideoCounts,
-                                invertMultiImageScrollDirection =
-                                    state.browsing.settings.viewer.invertMultiImageScrollDirection,
-                                likedPostIds = state.browsing.likedPostIds,
-                                creatorBrowsingSources = state.browsing.creatorBrowsingSources,
-                            ),
-                            liveSourceState = ViewerRouteLiveSourceState(
-                                search = ViewerRouteLiveSourceSnapshot(
-                                    queryHash = state.search.query.appliedQueryHash
-                                        .takeIf(String::isNotBlank),
-                                    results = state.search.content.results,
-                                    canLoadMore = state.search.content.canLoadMore,
-                                    loadingMore = state.search.loadingMore,
-                                ),
-                                forYou = ViewerRouteLiveSourceSnapshot(
-                                    queryHash = "for_you:${state.forYou.seedId}",
-                                    results = state.forYou.results,
-                                    canLoadMore = state.forYou.canLoadMore,
-                                    loadingMore = state.forYou.isPaging,
-                                ),
-                                creatorProfile = ViewerRouteLiveSourceSnapshot(
-                                    queryHash = state.creator.queryHash,
-                                    results = state.creator.results,
-                                    canLoadMore = state.creator.canLoadMore,
-                                    loadingMore = state.creator.isPaging,
-                                ),
-                                likedPostIds = state.browsing.likedPostIds,
-                                savedPostIds = state.browsing.savedPostIds,
-                                watchedPostIds = state.browsing.watchedPostIds,
-                                unknownAnimatedDurationPolicy = state.browsing.unknownAnimatedDurationPolicy,
-                            ),
-                            effectCallbacks = ViewerRouteEffectCallbacks(
-                                onSavePost = { post, context ->
-                                    requestSaveToCodex(
-                                        post = post,
-                                        fromForYou = context.streamSource == ViewerStreamSource.FOR_YOU,
-                                    )
+                                onOpenLegacyCreatorProfile = { post ->
+                                    scope.launch { openCreatorProfile(post) }
                                 },
-                                onSharePost = { post ->
-                                    shareViewerPostMessage(appContext, post) {
-                                        recordPostUrlCopy()
-                                    }?.let { message ->
-                                        Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
-                                    }
+                                onAddIncludeTerm = { post, term ->
+                                    addSearchIncludeTerm(post, term)
                                 },
-                                onDownloadMedia = { request ->
-                                    if (request == null) snackbarHostState.showSnackbar("Media is still loading.")
-                                    else {
-                                        libraryTransfers.downloads.submitViewerMedia(request.post, request.media, request.pageIndex, request.totalPages)
-                                        libraryTransfers.showDownloads = true
-                                    }
-                                },
-                                onToggleLike = { post -> toggleLikeAndSyncCodex(post) },
-                                onOpenCreatorProfile = ::openCreatorProfile,
-                                onApplyTag = { post, term, excluded ->
-                                    if (excluded) {
-                                        addSearchExcludeTerm(post, term.toSearchTerm())
-                                    } else {
-                                        addSearchIncludeTerm(post, term.toSearchTerm())
-                                    }
-                                },
-                                onRecoverMedia = viewerRouteWorkflow::recoverMedia,
-                                onLoadMore = viewerRouteWorkflow::loadMore,
-                                onDismiss = {
-                                    featureDependencies.search.setViewerLaunchContext(null)
-                                    navController.popBackStack()
-                                },
-                                onRestorationUnavailable = {
-                                    featureDependencies.search.setViewerLaunchContext(null)
-                                    Toast.makeText(
-                                        appContext,
-                                        "Viewer session expired",
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
-                                    navController.popBackStack()
-                                },
-                            ),
-                            screenCallbacks = ViewerRouteScreenCallbacks(
-                                onOwnerChanged = { owner -> activeViewerOwner = owner },
-                                onInvertMultiImageScrollDirectionChange = { enabled ->
-                                    scope.launch {
-                                        dataDependencies.settingsRepository
-                                            .setInvertMultiImageScrollDirection(enabled)
-                                    }
-                                },
-                                onVisiblePostChanged = { post, viewedMediaNumber, session ->
-                                    viewerRouteWorkflow.recordVisiblePost(post, viewedMediaNumber, session)
-                                },
-                                onVisibleMediaChanged = { post, viewedMediaNumber, session ->
-                                    viewerRouteWorkflow.recordVisibleMediaProgress(post, viewedMediaNumber, session)
-                                },
-                                onOpenInBrowser = { post ->
-                                    post.pageUrl?.takeIf { it.isNotBlank() }?.let { url ->
-                                        openInBrowser(appContext, url)
-                                    }
+                                onAddExcludeTerm = { post, term ->
+                                    addSearchExcludeTerm(post, term)
                                 },
                                 onRemoveIncludeTerm = { _, term ->
                                     removeSearchIncludeTerm(term)
@@ -1840,115 +1539,321 @@ internal fun TheoriaAppContent(
                                 onFavoriteTagLongPress = addFavoriteTag,
                                 onGoToSearch = {
                                     homeTabRoute = TopLevelDestination.Search.route
-                                    scope.launch { featureDependencies.search.setViewerLaunchContext(null) }
-                                    navController.popBackStack(AppRoute.Viewer, inclusive = true)
-                                    navController.navigate(AppRoute.Home) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
+                                    navController.popBackStack(AppRoute.Home, inclusive = false)
+                                },
+                                onBack = {
+                                    navController.popBackStack()
+                                },
+                                onDeleteCodex = { codexCommandOwner.delete(codexId, state.activeProfile.profileId) },
+                                isLikesCodex = codexId == likesCodexIdForProfile(state.activeProfile.profileId),
+                                fabRestoreState = fabRestoreState,
+                                onFabRestoreStateChange = { updated ->
+                                    feedFabRestoreRegistry.update(fabContext, updated)
+                                },
+                            )
+                            }
+                        }
+                        composable(AppRoute.CreatorProfile) {
+                            BrowsingDestinationStateBoundary(dataDependencies, sourceDependencies) { state ->
+                                val creator = pendingCreatorProfile
+                                    ?: return@BrowsingDestinationStateBoundary
+                                val creatorIdentity = creator.profileId
+                                    ?: creator.uploadsQuery
+                                    ?: creator.displayName
+                                val fabContext = creatorFeedFabContext(creator.source.name, creatorIdentity)
+                                val fabRestoreState = feedFabRestoreRegistry.state(fabContext)
+                                    ?: return@BrowsingDestinationStateBoundary
+                                CreatorRoute(
+                                coordinator = featureDependencies.creatorProfile,
+                                mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
+                                pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
+                                config = CreatorRouteConfig(
+                                    followed = state.settings.followedCreators.any { it.creator.followKey() == creator.followKey() },
+                                    activeCreator = creator,
+                                    availableSources = state.availableSources,
+                                    likedPostIds = state.likedPostIds,
+                                    savedPostIds = state.savedPostIds,
+                                    resolveUnknownAnimatedDurations =
+                                        state.settings.contentFilters.resolveUnknownAnimatedDurations,
+                                ),
+                                fabRestoreState = fabRestoreState,
+                                onFabRestoreStateChange = { updated ->
+                                    feedFabRestoreRegistry.update(fabContext, updated)
+                                },
+                                callbacks = CreatorRouteCallbacks(
+                                    onToggleFollow = followsOwner::toggle,
+                                    onOpenViewer = { effect ->
+                                        val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
+                                            effect.posts,
+                                            effect.context,
+                                        )
+                                        viewerSessionOwner.retain(
+                                            ViewerSession(
+                                                posts = preparedPosts,
+                                                context = effect.context,
+                                                liveSearchBinding = true,
+                                                searchVisibilityFilters = effect.visibilityFilters,
+                                            ),
+                                        )
+                                        navController.navigate(AppRoute.Viewer)
+                                    },
+                                    onNavigateBack = { navController.popBackStack() },
+                                    onToggleLike = { post ->
+                                        toggleLikeAndSyncCodex(post)
+                                    },
+                                    onRequestSaveToCodex = { post ->
+                                        requestSaveToCodex(post)
+                                    },
+                                    onSaveToDevice = ::requestSaveToDevice,
+                                    onPostUrlCopied = { recordPostUrlCopy() },
+                                    onOpenUrl = { url -> openInBrowser(appContext, url) },
+                                    onAddIncludeTerm = ::addSearchIncludeTerm,
+                                    onAddExcludeTerm = ::addSearchExcludeTerm,
+                                    onRemoveIncludeTerm = { _, term -> removeSearchIncludeTerm(term) },
+                                    onRemoveExcludeTerm = { _, term -> removeSearchExcludeTerm(term) },
+                                ),
+                                onOwnerAvailable = creatorRouteOwnerBinding::publish,
+                            )
+                            }
+                        }
+                        composable(AppRoute.Viewer) {
+                            ViewerDestinationStateBoundary(
+                                data = dataDependencies,
+                                sources = sourceDependencies,
+                                searchOwner = searchRouteOwner,
+                                forYouOwner = forYouRouteOwner,
+                                creatorOwner = creatorRouteOwner,
+                            ) { state ->
+                                ViewerRoute(
+                                dependencies = ViewerRouteDependencies(
+                                    sessionRetentionOwner = viewerSessionOwner,
+                                    canonicalizePost = { post -> featureDependencies.offlineMedia?.withoutOfflineLocations(post) ?: post },
+                                    postResolver = viewerRouteWorkflow,
+                                    mediaPrefetcher = ViewerMediaPrefetcher { _, media ->
+                                        prefetchViewerMedia(appContext, media)
+                                    },
+                                    mediaDurationCoordinator = featureDependencies.mediaDurationCoordinator,
+                                    restoreSession = viewerRouteWorkflow::restoreSession,
+                                ),
+                                renderConfig = ViewerRouteRenderConfig(
+                                    videoQuality = state.browsing.settings.viewer.videoQuality,
+                                    pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
+                                    tagVideoCountProvider = featureDependencies.search::tagVideoCount,
+                                    fetchTagVideoCounts = featureDependencies.search::fetchTagVideoCounts,
+                                    invertMultiImageScrollDirection =
+                                        state.browsing.settings.viewer.invertMultiImageScrollDirection,
+                                    likedPostIds = state.browsing.likedPostIds,
+                                    creatorBrowsingSources = state.browsing.creatorBrowsingSources,
+                                ),
+                                liveSourceState = ViewerRouteLiveSourceState(
+                                    search = ViewerRouteLiveSourceSnapshot(
+                                        queryHash = state.search.query.appliedQueryHash
+                                            .takeIf(String::isNotBlank),
+                                        results = state.search.content.results,
+                                        canLoadMore = state.search.content.canLoadMore,
+                                        loadingMore = state.search.loadingMore,
+                                    ),
+                                    forYou = ViewerRouteLiveSourceSnapshot(
+                                        queryHash = "for_you:${state.forYou.seedId}",
+                                        results = state.forYou.results,
+                                        canLoadMore = state.forYou.canLoadMore,
+                                        loadingMore = state.forYou.isPaging,
+                                    ),
+                                    creatorProfile = ViewerRouteLiveSourceSnapshot(
+                                        queryHash = state.creator.queryHash,
+                                        results = state.creator.results,
+                                        canLoadMore = state.creator.canLoadMore,
+                                        loadingMore = state.creator.isPaging,
+                                    ),
+                                    likedPostIds = state.browsing.likedPostIds,
+                                    savedPostIds = state.browsing.savedPostIds,
+                                    watchedPostIds = state.browsing.watchedPostIds,
+                                    unknownAnimatedDurationPolicy = state.browsing.unknownAnimatedDurationPolicy,
+                                ),
+                                effectCallbacks = ViewerRouteEffectCallbacks(
+                                    onSavePost = { post, context ->
+                                        requestSaveToCodex(
+                                            post = post,
+                                            fromForYou = context.streamSource == ViewerStreamSource.FOR_YOU,
+                                        )
+                                    },
+                                    onSharePost = { post ->
+                                        shareViewerPostMessage(appContext, post) {
+                                            recordPostUrlCopy()
+                                        }?.let { message ->
+                                            Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
                                         }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                    scope.launch {
-                                        val searchIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.Search)
-                                        topLevelPagerState.scrollToPage(searchIndex)
-                                    }
-                                },
-                                onOpenCreatorFallback = { post ->
-                                    scope.launch { openCreatorProfile(post) }
-                                },
-                            ),
-                        )
+                                    },
+                                    onDownloadMedia = { request ->
+                                        if (request == null) snackbarHostState.showSnackbar("Media is still loading.")
+                                        else {
+                                            libraryTransfers.downloads.submitViewerMedia(request.post, request.media, request.pageIndex, request.totalPages)
+                                            libraryTransfers.showDownloads = true
+                                        }
+                                    },
+                                    onToggleLike = { post -> toggleLikeAndSyncCodex(post) },
+                                    onOpenCreatorProfile = ::openCreatorProfile,
+                                    onApplyTag = { post, term, excluded ->
+                                        if (excluded) {
+                                            addSearchExcludeTerm(post, term.toSearchTerm())
+                                        } else {
+                                            addSearchIncludeTerm(post, term.toSearchTerm())
+                                        }
+                                    },
+                                    onRecoverMedia = viewerRouteWorkflow::recoverMedia,
+                                    onLoadMore = viewerRouteWorkflow::loadMore,
+                                    onDismiss = {
+                                        featureDependencies.search.setViewerLaunchContext(null)
+                                        navController.popBackStack()
+                                    },
+                                    onRestorationUnavailable = {
+                                        featureDependencies.search.setViewerLaunchContext(null)
+                                        Toast.makeText(
+                                            appContext,
+                                            "Viewer session expired",
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                        navController.popBackStack()
+                                    },
+                                ),
+                                screenCallbacks = ViewerRouteScreenCallbacks(
+                                    onOwnerChanged = { owner -> activeViewerOwner = owner },
+                                    onInvertMultiImageScrollDirectionChange = { enabled ->
+                                        scope.launch {
+                                            dataDependencies.settingsRepository
+                                                .setInvertMultiImageScrollDirection(enabled)
+                                        }
+                                    },
+                                    onVisiblePostChanged = { post, viewedMediaNumber, session ->
+                                        viewerRouteWorkflow.recordVisiblePost(post, viewedMediaNumber, session)
+                                    },
+                                    onVisibleMediaChanged = { post, viewedMediaNumber, session ->
+                                        viewerRouteWorkflow.recordVisibleMediaProgress(post, viewedMediaNumber, session)
+                                    },
+                                    onOpenInBrowser = { post ->
+                                        post.pageUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                                            openInBrowser(appContext, url)
+                                        }
+                                    },
+                                    onRemoveIncludeTerm = { _, term ->
+                                        removeSearchIncludeTerm(term)
+                                    },
+                                    onRemoveExcludeTerm = { _, term ->
+                                        removeSearchExcludeTerm(term)
+                                    },
+                                    onFavoriteTagLongPress = addFavoriteTag,
+                                    onGoToSearch = {
+                                        homeTabRoute = TopLevelDestination.Search.route
+                                        scope.launch { featureDependencies.search.setViewerLaunchContext(null) }
+                                        navController.popBackStack(AppRoute.Viewer, inclusive = true)
+                                        navController.navigate(AppRoute.Home) {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                        scope.launch {
+                                            val searchIndex = TopLevelDestination.entries.indexOf(TopLevelDestination.Search)
+                                            topLevelPagerState.scrollToPage(searchIndex)
+                                        }
+                                    },
+                                    onOpenCreatorFallback = { post ->
+                                        scope.launch { openCreatorProfile(post) }
+                                    },
+                                ),
+                            )
+                            }
                         }
                     }
                 }
             }
-        }
 
-        if (showSaveSheet && pendingSavePosts.isNotEmpty()) {
-            val posts = pendingSavePosts
-            SaveToCodexDestinationStateBoundary(dataDependencies) { state ->
-                SaveToCodexSheet(
-                profiles = state.settings.recommendationProfiles,
-                initialProfileId = state.activeProfile.profileId,
-                codicesByProfile = state.codicesByProfile,
-                codexItemCounts = state.itemCounts,
-                codexCoverCandidates = state.coverCandidates,
-                excludedCodexIds = excludedCodexIdsForSave,
-                onCreateCodex = { profileId, name ->
-                    codexSaveOwner.save(
-                        codexId = profileScopedCodexId(profileId),
-                        posts = posts,
-                        cacheFullImage = state.settings.cache.cacheFullImageOnSave,
-                        fromForYou = pendingSaveFromForYou,
-                        newCollectionName = name,
-                    )
-                    clearPendingCodexSave()
-                },
-                onSelectCodex = { codexId ->
-                    codexSaveOwner.save(
-                        codexId = codexId,
-                        posts = posts,
-                        cacheFullImage = state.settings.cache.cacheFullImageOnSave,
-                        fromForYou = pendingSaveFromForYou,
-                    )
-                    clearPendingCodexSave()
-                },
-                onDismiss = ::clearPendingCodexSave,
-            )
+            if (showSaveSheet && pendingSavePosts.isNotEmpty()) {
+                val posts = pendingSavePosts
+                SaveToCodexDestinationStateBoundary(dataDependencies) { state ->
+                    SaveToCodexSheet(
+                    profiles = state.settings.recommendationProfiles,
+                    initialProfileId = state.activeProfile.profileId,
+                    codicesByProfile = state.codicesByProfile,
+                    codexItemCounts = state.itemCounts,
+                    codexCoverCandidates = state.coverCandidates,
+                    excludedCodexIds = excludedCodexIdsForSave,
+                    onCreateCodex = { profileId, name ->
+                        codexSaveOwner.save(
+                            codexId = profileScopedCodexId(profileId),
+                            posts = posts,
+                            cacheFullImage = state.settings.cache.cacheFullImageOnSave,
+                            fromForYou = pendingSaveFromForYou,
+                            newCollectionName = name,
+                        )
+                        clearPendingCodexSave()
+                    },
+                    onSelectCodex = { codexId ->
+                        codexSaveOwner.save(
+                            codexId = codexId,
+                            posts = posts,
+                            cacheFullImage = state.settings.cache.cacheFullImageOnSave,
+                            fromForYou = pendingSaveFromForYou,
+                        )
+                        clearPendingCodexSave()
+                    },
+                    onDismiss = ::clearPendingCodexSave,
+                )
+                }
             }
-        }
 
-        postInstallChangelog?.let { changelog ->
-            PostInstallChangelogDialog(
-                releases = if (postInstallReleaseHistory.isNotEmpty()) {
-                    postInstallReleaseHistory
-                } else {
-                    listOf(changelog.toReleaseHistoryEntry())
-                },
-                installedVersionCode = installedVersionCode,
-                onDismiss = appShellOwner::dismissPostInstallChangelog,
-            )
-        }
+            postInstallChangelog?.let { changelog ->
+                PostInstallChangelogDialog(
+                    releases = if (postInstallReleaseHistory.isNotEmpty()) {
+                        postInstallReleaseHistory
+                    } else {
+                        listOf(changelog.toReleaseHistoryEntry())
+                    },
+                    installedVersionCode = installedVersionCode,
+                    onDismiss = appShellOwner::dismissPostInstallChangelog,
+                )
+            }
 
-        releaseHistoryEntries?.let { entries ->
-            ReleaseHistoryDialog(
-                releases = entries,
-                installedVersionCode = installedVersionCode,
-                onDismiss = { releaseHistoryEntries = null },
-            )
-        }
+            releaseHistoryEntries?.let { entries ->
+                ReleaseHistoryDialog(
+                    releases = entries,
+                    installedVersionCode = installedVersionCode,
+                    onDismiss = { releaseHistoryEntries = null },
+                )
+            }
 
-        LibraryTransferDialogs(libraryTransfers)
-        CredentialRecoveryOverlay(
-            owner = settingsOwner,
-            recoveryState = sourceDependencies.accounts.recoveryState,
-        ) { show ->
-            if (show) AlertDialog(
-                onDismissRequest = { settingsOwner.onAction(SettingsAction.DismissCredentialRecovery) },
-                confirmButton = {
-                    TextButton(
-                        onClick = { settingsOwner.onAction(SettingsAction.ResetCredentialStore) },
-                    ) {
-                        Text("Reconnect")
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = { settingsOwner.onAction(SettingsAction.DismissCredentialRecovery) },
-                    ) {
-                        Text("Not now")
-                    }
-                },
-                title = { Text("Reconnect source accounts") },
-                text = {
-                    Text(
-                        "Encrypted source credentials cannot be read on this device. " +
-                            "Reconnect clears the unreadable shared credential store, then opens " +
-                            "Settings so Pixiv, Gelbooru, and rule34.xxx can be connected again."
-                    )
-                },
-            )
+            LibraryTransferDialogs(libraryTransfers)
+            CredentialRecoveryOverlay(
+                owner = settingsOwner,
+                recoveryState = sourceDependencies.accounts.recoveryState,
+            ) { show ->
+                if (show) AlertDialog(
+                    onDismissRequest = { settingsOwner.onAction(SettingsAction.DismissCredentialRecovery) },
+                    confirmButton = {
+                        TextButton(
+                            onClick = { settingsOwner.onAction(SettingsAction.ResetCredentialStore) },
+                        ) {
+                            Text("Reconnect")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { settingsOwner.onAction(SettingsAction.DismissCredentialRecovery) },
+                        ) {
+                            Text("Not now")
+                        }
+                    },
+                    title = { Text("Reconnect source accounts") },
+                    text = {
+                        Text(
+                            "Encrypted source credentials cannot be read on this device. " +
+                                "Reconnect clears the unreadable shared credential store, then opens " +
+                                "Settings so Pixiv, Gelbooru, and rule34.xxx can be connected again."
+                        )
+                    },
+                )
+            }
         }
     }
 }

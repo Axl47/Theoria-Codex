@@ -5,6 +5,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -25,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +35,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.theoriacodex.app.post.PostTagSelection
+import com.theoriacodex.domain.model.Query
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.Role
 import com.theoriacodex.app.search.searchScopeLabel
 import com.theoriacodex.app.search.searchTermChipLabel
 import com.theoriacodex.domain.adapter.FacetedSearchScope
@@ -53,6 +64,7 @@ fun PostTagActionSection(
     onRemoveIncludeTerm: (SearchTerm) -> Unit,
     onRemoveExcludeTerm: (SearchTerm) -> Unit,
     onFavoriteTagLongPress: ((SourceKey, String) -> Unit)? = null,
+    draftQuery: Query? = null,
 ) {
     val termGroups = remember(post.taxonomy, post.canonicalTags, post.rawTags) {
         postActionTermGroups(post)
@@ -61,25 +73,14 @@ fun PostTagActionSection(
     val generalTags = remember(terms) {
         terms.filter(SearchTerm::isGeneralPostTag).map(SearchTerm::value).distinct()
     }
-    var tagSelections by remember(post.id.source, post.id.sourcePostId) {
-        mutableStateOf<Map<TagActionSelection, Set<SearchTerm>>>(emptyMap())
+    val draft = draftQuery ?: LocalSearchDraftSelection.current.collectAsStateWithLifecycle(initialValue = null).value
+    val selection = remember(post.id.source, draft) {
+        PostTagSelection(post.id.source, draft?.includeTerms.orEmpty(), draft?.excludeTerms.orEmpty())
     }
-    var tagVideoCounts by remember(post.id, generalTags) {
-        mutableStateOf<Map<String, Int?>>(emptyMap())
-    }
-    LaunchedEffect(post.id, generalTags) {
-        // Cache lookup can scan the provider lexicon; keep it out of composition and off Main.
-        tagVideoCounts = withContext(Dispatchers.Default) {
-            generalTags.associateWith { tag -> tagVideoCountProvider(post.id.source, tag) }
-        }
-        val missingTags = generalTags.filter { tag -> tagVideoCounts[tag] == null }
-        if (missingTags.isEmpty()) return@LaunchedEffect
-        val fetchedCounts = withContext(Dispatchers.IO) {
-            fetchTagVideoCounts(post.id.source, missingTags)
-        }
-        if (fetchedCounts.isNotEmpty()) tagVideoCounts = tagVideoCounts + fetchedCounts
-    }
+    val tagVideoCounts = rememberTagCounts(post.id.source, generalTags, tagVideoCountProvider, fetchTagVideoCounts)
 
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columns = if (maxWidth.value >= 354f) 3 else 2
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -92,49 +93,28 @@ fun PostTagActionSection(
         } else {
             tagActionGrid(
                 groups = termGroups,
+                columns = columns,
                 videoCounts = tagVideoCounts,
-                includedTerms = tagSelections[TagActionSelection.INCLUDE].orEmpty(),
-                excludedTerms = tagSelections[TagActionSelection.EXCLUDE].orEmpty(),
+                selection = selection,
                 onFavoriteTagLongPress = if (onFavoriteTagLongPress != null) {
                     { tag -> onFavoriteTagLongPress(post.id.source, tag) }
                 } else {
                     null
                 },
                 onIncludeTerm = { term ->
-                    val included = tagSelections[TagActionSelection.INCLUDE].orEmpty()
-                    val excluded = tagSelections[TagActionSelection.EXCLUDE].orEmpty()
-                    if (term in included) {
-                        onRemoveIncludeTerm(term)
-                        tagSelections = tagSelections.removeSelectedTerm(TagActionSelection.INCLUDE, term)
-                    } else {
-                        val accepted = onAddIncludeTerm(term)
-                        if (accepted && term in excluded) onRemoveExcludeTerm(term)
-                        tagSelections = tagSelections.afterSelectionAttempt(
-                            target = TagActionSelection.INCLUDE,
-                            term = term,
-                            accepted = accepted,
-                        )
-                    }
+                    val stored = selection.included(term)
+                    if (stored != null) onRemoveIncludeTerm(stored)
+                    else if (onAddIncludeTerm(term)) selection.excluded(term)?.let(onRemoveExcludeTerm)
                 },
                 onExcludeTerm = { term ->
-                    val included = tagSelections[TagActionSelection.INCLUDE].orEmpty()
-                    val excluded = tagSelections[TagActionSelection.EXCLUDE].orEmpty()
-                    if (term in excluded) {
-                        onRemoveExcludeTerm(term)
-                        tagSelections = tagSelections.removeSelectedTerm(TagActionSelection.EXCLUDE, term)
-                    } else {
-                        val accepted = onAddExcludeTerm(term)
-                        if (accepted && term in included) onRemoveIncludeTerm(term)
-                        tagSelections = tagSelections.afterSelectionAttempt(
-                            target = TagActionSelection.EXCLUDE,
-                            term = term,
-                            accepted = accepted,
-                        )
-                    }
+                    val stored = selection.excluded(term)
+                    if (stored != null) onRemoveExcludeTerm(stored)
+                    else if (onAddExcludeTerm(term)) selection.included(term)?.let(onRemoveIncludeTerm)
                 },
             )
         }
         item(key = "footer") { footer() }
+    }
     }
 }
 
@@ -148,21 +128,7 @@ fun FavoriteTagActionGrid(
     onAddTag: (String) -> Unit,
     onRemoveTag: (String) -> Unit,
 ) {
-    var tagVideoCounts by remember(source, tags) {
-        mutableStateOf(
-            tags.associateWith { tag ->
-                tagVideoCountProvider(source, tag)
-            }
-        )
-    }
-    LaunchedEffect(source, tags) {
-        val missingTags = tags.filter { tag -> tagVideoCounts[tag] == null }
-        if (missingTags.isEmpty()) return@LaunchedEffect
-        val fetchedCounts = fetchTagVideoCounts(source, missingTags)
-        if (fetchedCounts.isNotEmpty()) {
-            tagVideoCounts = tagVideoCounts + fetchedCounts
-        }
-    }
+    val tagVideoCounts = rememberTagCounts(source, tags, tagVideoCountProvider, fetchTagVideoCounts)
 
     if (tags.isEmpty()) {
         Text(
@@ -173,7 +139,10 @@ fun FavoriteTagActionGrid(
         return
     }
 
-    tags.chunked(3).forEach { rowTags ->
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columns = if (maxWidth.value >= 354f) 3 else 2
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    tags.chunked(columns).forEach { rowTags ->
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -188,49 +157,35 @@ fun FavoriteTagActionGrid(
                     modifier = Modifier.weight(1f),
                 )
             }
-            repeat(3 - rowTags.size) {
+            repeat(columns - rowTags.size) {
                 Spacer(modifier = Modifier.weight(1f))
             }
         }
     }
-}
-
-internal enum class TagActionSelection {
-    INCLUDE,
-    EXCLUDE,
-}
-
-internal fun Map<TagActionSelection, Set<SearchTerm>>.afterSelectionAttempt(
-    target: TagActionSelection,
-    term: SearchTerm,
-    accepted: Boolean,
-): Map<TagActionSelection, Set<SearchTerm>> {
-    if (!accepted) return this
-    val opposite = target.opposite()
-    return this +
-        (opposite to (get(opposite).orEmpty() - term)) +
-        (target to (get(target).orEmpty() + term))
-}
-
-internal fun Map<TagActionSelection, Set<SearchTerm>>.removeSelectedTerm(
-    target: TagActionSelection,
-    term: SearchTerm,
-): Map<TagActionSelection, Set<SearchTerm>> {
-    return this + (target to (get(target).orEmpty() - term))
-}
-
-private fun TagActionSelection.opposite(): TagActionSelection {
-    return when (this) {
-        TagActionSelection.INCLUDE -> TagActionSelection.EXCLUDE
-        TagActionSelection.EXCLUDE -> TagActionSelection.INCLUDE
+        }
     }
+}
+
+/** Both tag surfaces publish local counts first and keep all enrichment off the UI dispatcher. */
+@Composable
+private fun rememberTagCounts(source: SourceKey, tags: List<String>,
+    cached: (SourceKey, String) -> Int?, fetch: suspend (SourceKey, List<String>) -> Map<String, Int?>): Map<String, Int?> {
+    var counts by remember(source, tags) { mutableStateOf<Map<String, Int?>>(emptyMap()) }
+    val currentCached by rememberUpdatedState(cached)
+    val currentFetch by rememberUpdatedState(fetch)
+    LaunchedEffect(source, tags) {
+        counts = withContext(Dispatchers.Default) { tags.associateWith { currentCached(source, it) } }
+        val missing = tags.filter { counts[it] == null }
+        if (missing.isNotEmpty()) counts = counts + withContext(Dispatchers.IO) { currentFetch(source, missing) }
+    }
+    return counts
 }
 
 private fun LazyListScope.tagActionGrid(
     groups: List<PostActionTermGroup>,
+    columns: Int,
     videoCounts: Map<String, Int?>,
-    includedTerms: Set<SearchTerm>,
-    excludedTerms: Set<SearchTerm>,
+    selection: PostTagSelection,
     onFavoriteTagLongPress: ((String) -> Unit)?,
     onIncludeTerm: (SearchTerm) -> Unit,
     onExcludeTerm: (SearchTerm) -> Unit,
@@ -254,7 +209,7 @@ private fun LazyListScope.tagActionGrid(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        val rows = group.terms.chunked(3)
+        val rows = group.terms.chunked(columns)
         items(rows.size, key = { "row:$groupIndex:$it" }, contentType = { "tags" }) { rowIndex ->
             val rowTerms = rows[rowIndex]
             Row(
@@ -267,8 +222,8 @@ private fun LazyListScope.tagActionGrid(
                     TagActionCell(
                         label = postActionTermLabel(term),
                         videoCount = generalTag?.let(videoCounts::get),
-                        includeSelected = term in includedTerms,
-                        excludeSelected = term in excludedTerms,
+                        includeSelected = selection.included(term) != null,
+                        excludeSelected = selection.excluded(term) != null,
                         onTagLongPress = if (generalTag != null && onFavoriteTagLongPress != null) {
                             { onFavoriteTagLongPress(generalTag) }
                         } else {
@@ -279,7 +234,7 @@ private fun LazyListScope.tagActionGrid(
                         modifier = Modifier.weight(1f),
                     )
                 }
-                repeat(3 - rowTerms.size) {
+                repeat(columns - rowTerms.size) {
                     Spacer(modifier = Modifier.weight(1f))
                 }
             }
@@ -329,12 +284,14 @@ private fun TagActionCell(
         ) {
             TagActionPill(
                 label = "+",
+                actionLabel = "Include $label in Search",
                 selected = includeSelected,
                 onClick = onInclude,
                 modifier = Modifier.weight(1f),
             )
             TagActionPill(
                 label = "-",
+                actionLabel = "Exclude $label from Search",
                 selected = excludeSelected,
                 onClick = onExclude,
                 modifier = Modifier.weight(1f),
@@ -361,24 +318,24 @@ private fun FavoriteTagActionCell(
             active = false,
             modifier = Modifier.fillMaxWidth(),
         )
-        if (videoCount != null) {
-            Text(
-                text = videoCount.toString(),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
-            )
-        }
+        Text(
+            text = videoCount?.toString().orEmpty(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             TagActionPill(
                 label = "+",
+                actionLabel = "Include $tag in Search",
                 selected = false,
                 onClick = onAdd,
                 modifier = Modifier.weight(1f),
             )
             TagActionPill(
+                actionLabel = "Remove $tag from favorites",
                 icon = {
                     Icon(
                         imageVector = Icons.Default.Delete,
@@ -422,6 +379,7 @@ fun TagSelectionSurface(
 
 @Composable
 private fun TagActionPill(
+    actionLabel: String,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -430,7 +388,11 @@ private fun TagActionPill(
 ) {
     val accent = MaterialTheme.colorScheme.primary
     Surface(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).semantics {
+            this.selected = selected
+            contentDescription = actionLabel
+            stateDescription = if (selected) "Selected" else "Not selected"
+        }.clickable(role = Role.Button, onClickLabel = actionLabel, onClick = onClick),
         shape = RoundedCornerShape(999.dp),
         color = if (selected) {
             accent.copy(alpha = 0.24f)

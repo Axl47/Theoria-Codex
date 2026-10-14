@@ -15,6 +15,7 @@ object PostDownloadService {
         context: Context,
         post: Post,
         settings: com.theoriacodex.data.repository.CacheSettings,
+        marker: String? = null,
     ): Long? {
         val candidate = postDownloadMediaCandidate(post) ?: return null
         val media = candidate.ref.withVideoQuality(settings.downloadQuality, context.isMediaNetworkMetered())
@@ -33,6 +34,7 @@ object PostDownloadService {
             fileName = fileName,
             description = post.pageUrl ?: DOWNLOAD_DESCRIPTION,
             settings = settings,
+            marker = marker,
         )
     }
 
@@ -43,6 +45,7 @@ object PostDownloadService {
         pageIndex: Int,
         totalPages: Int,
         settings: com.theoriacodex.data.repository.CacheSettings,
+        marker: String? = null,
     ): Long? {
         val selected = media.withVideoQuality(settings.downloadQuality, context.isMediaNetworkMetered())
         val url = selected.url?.takeIf(String::isNotBlank) ?: return null
@@ -61,6 +64,7 @@ object PostDownloadService {
             fileName = fileName,
             description = post.pageUrl ?: DOWNLOAD_DESCRIPTION,
             settings = settings,
+            marker = marker,
         )
     }
 
@@ -94,8 +98,10 @@ object PostDownloadService {
         fileName: String,
         description: String,
         settings: com.theoriacodex.data.repository.CacheSettings,
+        marker: String? = null,
     ): Long? {
-        val request = DownloadManager.Request(url.toUri())
+        val tracked = if (marker == null) url.toUri() else url.toUri().buildUpon().fragment(downloadRequestMarker(marker)).build()
+        val request = DownloadManager.Request(tracked)
             .setAllowedOverMetered(settings.downloadsOverMetered)
             .setAllowedOverRoaming(settings.downloadsOverRoaming)
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
@@ -174,3 +180,6 @@ private fun String.takeUtf8Bytes(limit: Int): String = buildString {
         offset += Character.charCount(point)
     }
 }
+
+/** Fragment metadata remains local to URI handling and never enters the HTTP request target. */
+internal fun downloadRequestMarker(marker: String): String = "theoria-download:$marker"

@@ -195,20 +195,7 @@ jobs:
           python3 scripts/check_changed_coverage.py \
             --xml build/reports/kover/quality.xml \
             --base "$base" \
-            --include-module app-logic \
-            --include-module core-domain \
-            --include-module core-data \
-            --include-module core-data-android \
-            --include-module core-sources \
-            --include-module core-stubs \
-            --include-path 'app/src/main/**/*ViewModel.kt' \
-            --include-path 'app/src/main/**/*Coordinator.kt' \
-            --include-path 'app/src/main/**/*Workflow.kt' \
-            --include-path 'app/src/main/**/*Repository.kt' \
-            --include-path 'app/src/main/**/*Service.kt' \
-            --include-path 'app/src/main/**/*Store.kt' \
-            --include-path 'app/src/main/**/*Translator.kt' \
-            --include-path 'app/src/main/**/*Probe.kt' \
+            --boundaries config/quality/coverage-boundaries.json \
             --minimum 60
 
       - name: Upload maintainability reports

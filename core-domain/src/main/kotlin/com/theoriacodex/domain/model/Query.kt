@@ -47,59 +47,47 @@ data class SearchTermGroup(
 
 data class Query(
     val mode: QueryMode,
-    val includeTerms: List<SearchTerm>,
+    val includeTermGroups: List<SearchTermGroup>,
     val excludeTerms: List<SearchTerm>,
     val sort: SortMode,
     val dateRange: DateRange?,
     val minScore: Int?,
-    val includeTermGroups: List<SearchTermGroup> = includeTerms.map(SearchTermGroup::single),
 ) {
-    val effectiveIncludeTermGroups: List<SearchTermGroup>
-        get() = includeTermGroups.takeIf { groups ->
-            groups.flatMap(SearchTermGroup::terms) == includeTerms
-        } ?: includeTerms.map(SearchTermGroup::single)
+    // Cached projection is derived during construction and cannot be changed by copy independently.
+    val includeTerms: List<SearchTerm> = includeTermGroups.flatMap(SearchTermGroup::terms)
+    val effectiveIncludeTermGroups: List<SearchTermGroup> get() = includeTermGroups
+    val includeTags: List<String> get() = includeTerms.map(SearchTerm::value)
+    val excludeTags: List<String> get() = excludeTerms.map(SearchTerm::value)
 
-    val includeTags: List<String>
-        get() = includeTerms.map(SearchTerm::value)
+    /** Legacy flat construction remains explicit; supplied groups must agree with its flat input. */
+    constructor(mode: QueryMode, includeTerms: Iterable<SearchTerm>, excludeTerms: List<SearchTerm>,
+        sort: SortMode, dateRange: DateRange?, minScore: Int?, includeTermGroups: List<SearchTermGroup>? = null) :
+        this(mode, canonicalIncludeGroups(includeTerms.toList(), includeTermGroups), excludeTerms, sort, dateRange, minScore)
 
-    val excludeTags: List<String>
-        get() = excludeTerms.map(SearchTerm::value)
+    constructor(mode: QueryMode, includeTags: Iterable<String>, excludeTags: Iterable<String>,
+        sort: SortMode, dateRange: DateRange?, minScore: Int?) :
+        this(mode, includeTags.asGeneralSearchTerms(), excludeTags.asGeneralSearchTerms(), sort, dateRange, minScore)
 
-    constructor(
-        mode: QueryMode,
-        includeTags: Iterable<String>,
-        excludeTags: Iterable<String>,
-        sort: SortMode,
-        dateRange: DateRange?,
-        minScore: Int?,
-    ) : this(
-        mode = mode,
-        includeTerms = includeTags.asGeneralSearchTerms(),
-        excludeTerms = excludeTags.asGeneralSearchTerms(),
-        sort = sort,
-        dateRange = dateRange,
-        minScore = minScore,
-    )
+    fun portableTermsForUnified(): Query = if (mode == QueryMode.Unified) normalizedForMode(mode).query else this
+    fun withIncludeTermGroups(groups: List<SearchTermGroup>): Query = copy(includeTermGroups = groups)
+    fun withIncludeTermsAsRequired(terms: List<SearchTerm>): Query = withIncludeTermGroups(terms.map(SearchTermGroup::single))
+}
 
-    fun portableTermsForUnified(): Query {
-        if (mode != QueryMode.Unified) return this
-        return withIncludeTermGroups(
-            effectiveIncludeTermGroups.filter(SearchTermGroup::isPortableGeneralTagGroup),
-        ).copy(
-            excludeTerms = excludeTerms.filter(SearchTerm::isPortableGeneralTag),
-        )
-    }
+private fun canonicalIncludeGroups(terms: List<SearchTerm>, groups: List<SearchTermGroup>?): List<SearchTermGroup> {
+    if (groups == null) return terms.map(SearchTermGroup::single)
+    require(groups.flatMap(SearchTermGroup::terms) == terms) { "Query groups must agree with legacy flat terms" }
+    return groups
+}
 
-    fun withIncludeTermGroups(groups: List<SearchTermGroup>): Query {
-        return copy(
-            includeTerms = groups.flatMap(SearchTermGroup::terms),
-            includeTermGroups = groups,
-        )
-    }
+data class QueryNormalization(val query: Query, val removedSourceOwnedTerms: Boolean)
 
-    fun withIncludeTermsAsRequired(terms: List<SearchTerm>): Query {
-        return withIncludeTermGroups(terms.map(SearchTermGroup::single))
-    }
+/** One portability policy is shared by draft editing and provider execution. */
+fun Query.normalizedForMode(mode: QueryMode): QueryNormalization {
+    if (mode != QueryMode.Unified) return QueryNormalization(copy(mode = mode), false)
+    val groups = includeTermGroups.filter(SearchTermGroup::isPortableGeneralTagGroup)
+    val excluded = excludeTerms.filter(SearchTerm::isPortableGeneralTag)
+    return QueryNormalization(copy(mode = mode, includeTermGroups = groups, excludeTerms = excluded),
+        groups.size != includeTermGroups.size || excluded.size != excludeTerms.size)
 }
 
 fun Iterable<String>.asGeneralSearchTerms(): List<SearchTerm> {

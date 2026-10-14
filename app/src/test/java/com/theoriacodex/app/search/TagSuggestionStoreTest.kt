@@ -28,6 +28,19 @@ class TagSuggestionStoreTest {
     val tempFolder = TemporaryFolder()
 
     @Test
+    fun `exact count lookup covers the complete bounded lexicon and updates after replacement`() = runTest {
+        val store = FileBackedTagSuggestionStore(tempDir("count-index").resolve("tags.json"),
+            seedData = mapOf(SourceKey.GELBOORU to (0..20_100).map { TagSuggestion("tag$it", "seed", it) }),
+            maxTotalUtf8Bytes = 16 * 1024 * 1024)
+        try {
+            store.awaitLoaded()
+            assertEquals(20_100, store.getCount(SourceKey.GELBOORU, "tag20100"))
+            store.put(SourceKey.GELBOORU, listOf(TagSuggestion("tag20100", "tag", 99_999)))
+            assertEquals(99_999, store.getCount(SourceKey.GELBOORU, "tag20100"))
+        } finally { store.close() }
+    }
+
+    @Test
     fun `malformed production snapshot publishes verified recovery`() = runTest {
         val storeFile = tempDir("tag-store-recovery-test").resolve("tag_suggestions.json")
         val original = "{broken".toByteArray()

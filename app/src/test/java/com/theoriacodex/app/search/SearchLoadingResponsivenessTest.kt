@@ -24,10 +24,10 @@ internal class SearchLoadingResponsivenessTest : SearchViewModelTestFixture() {
         val historyRelease = CompletableDeferred<Unit>()
         val owner = viewModel(ViewModelSearchAdapter(), executionService = { coordinator ->
             object : SearchExecutionService by coordinator {
-                override suspend fun recordAcceptedSearch(query: Query, sourceScope: SearchSourceScope, executionKey: String) {
+                override suspend fun recordAcceptedSearch(result: SearchExecutionResult) {
                     historyStarted.complete(Unit)
                     historyRelease.await()
-                    coordinator.recordAcceptedSearch(query, sourceScope, executionKey)
+                    coordinator.recordAcceptedSearch(result)
                 }
             }
         })

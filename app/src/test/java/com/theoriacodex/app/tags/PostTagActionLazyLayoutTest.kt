@@ -4,6 +4,8 @@ import android.os.Looper
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.mutableStateOf
+import com.theoriacodex.app.search.state.emptySearchQuery
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
@@ -52,11 +54,13 @@ class PostTagActionLazyLayoutTest {
             authorName = null,
             createdAtEpochMs = null,
         )
+        val draft = mutableStateOf(emptySearchQuery())
         compose.setContent {
             MaterialTheme {
                 Box(Modifier.size(360.dp, 480.dp)) {
                     PostTagActionSection(
                         post = post,
+                        draftQuery = draft.value,
                         header = { Text("Actions") },
                         footer = { Text("Cancel") },
                         tagVideoCountProvider = { _, _ ->
@@ -65,9 +69,16 @@ class PostTagActionLazyLayoutTest {
                             null
                         },
                         fetchTagVideoCounts = { _, _ -> awaitCancellation() },
-                        onAddIncludeTerm = { selections += "include:${it.value}"; true },
+                        onAddIncludeTerm = {
+                            selections += "include:${it.value}"
+                            draft.value = draft.value.withIncludeTermsAsRequired(draft.value.includeTerms + it)
+                            true
+                        },
                         onAddExcludeTerm = { true },
-                        onRemoveIncludeTerm = { selections += "remove:${it.value}" },
+                        onRemoveIncludeTerm = {
+                            selections += "remove:${it.value}"
+                            draft.value = draft.value.withIncludeTermsAsRequired(draft.value.includeTerms.filterNot { term -> term == it })
+                        },
                         onRemoveExcludeTerm = {},
                     )
                 }
