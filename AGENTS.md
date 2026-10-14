@@ -98,6 +98,10 @@ The `RelatedPosts` Android log tag records sparse shelf state, owner creation/cl
 
 Viewer OCR and translation have been removed from Settings and Viewer, including model downloads, analysis, overlays, and remote requests. Legacy OCR preferences, translation lifetime counters, and the Room translation cache schema remain for stored-data compatibility only; do not wire them back into runtime features. The historical `deploy/libretranslate/` gateway is not used by the app; changing the live service requires separate authorization.
 
+## Codex Library Scroll
+
+Wait for the first authoritative Codex collection list before composing the Library grid. An initial empty placeholder still renders the synthetic Followed tile; measuring that grid can clamp a restored scroll index or make the Followed key become the anchor when collections arrive. Retain the grid's existing saveable state and distinguish loading from an authoritative empty library. `CodexLibraryScrollReturnTest` covers repeated detail return and saved-instance restoration with delayed repository emission.
+
 ## Recents Section Identity
 
 Last reading position is independent from highest-page progress. `ReadingPositionRepository` stores the last one-based media number by canonical post and Recents section; Start over resets only this position. Viewer persists the selected canonical ID and a bounded ordered ID window for cold restoration, preserving launch filtering/order instead of rebuilding a different feed by index. Creator navigation identity must be restorable before rendering its route. Viewer save callbacks carry the active launch context, never the already-consumed pending handoff.

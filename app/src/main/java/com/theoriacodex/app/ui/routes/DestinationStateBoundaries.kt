@@ -178,9 +178,10 @@ internal fun CodexDestinationStateBoundary(
         .collectAsStateWithLifecycle(initialValue = null)
     val settings = settingsState.value ?: return
     val codicesState = remember(data.codexRepository) { data.codexRepository.observeCodices() }
-        .collectAsStateWithLifecycle(initialValue = emptyList())
+        .collectAsStateWithLifecycle(initialValue = null)
     val availableSourcesState = sources.availableSources.collectAsStateWithLifecycle()
-    val codices = codicesState.value
+    // A placeholder Followed-only grid would clamp or move the restored collection anchor.
+    val codices = codicesState.value ?: return
     val availableSources = availableSourcesState.value
     val source = remember(data.codexRepository, data.storageDirectory) {
         CodexCollectionSource(data.codexRepository, data.storageDirectory)
