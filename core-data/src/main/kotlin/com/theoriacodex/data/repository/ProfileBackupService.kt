@@ -58,17 +58,22 @@ class ProfileBackupService(
 
     fun preview(bytes: ByteArray): ProfileBackupPreview = codec.decode(bytes).preview()
 
-    suspend fun restore(bytes: ByteArray, applyPreferences: Boolean = false): ProfileRestoreResult =
+    suspend fun restore(
+        bytes: ByteArray,
+        applyPreferences: Boolean = false,
+        selectImportedProfile: Boolean = false,
+    ): ProfileRestoreResult =
         withContext(Dispatchers.IO) {
             mutex.withLock {
                 val backup = codec.decode(bytes)
                 if (journalFile.exists()) {
                     val pending = readJournal()
                     require(codec.encode(pending.backup).contentEquals(codec.encode(backup)) &&
-                        pending.applyPreferences == applyPreferences) { "Finish the pending restore first" }
+                        pending.applyPreferences == applyPreferences &&
+                        pending.selectImportedProfile == selectImportedProfile) { "Finish the pending restore first" }
                     return@withLock finish(pending)
                 }
-                val pending = PendingRestore(newOperationId(), applyPreferences, backup)
+                val pending = PendingRestore(newOperationId(), applyPreferences, backup, selectImportedProfile)
                 val imported = backup.forRestore(pending.operationId)
                 preflight(imported, applyPreferences)
                 withContext(NonCancellable) {
@@ -101,7 +106,10 @@ class ProfileBackupService(
             store.merge(imported.library)
             savedSearches.merge(imported.savedSearches)
             readingPositions.merge(imported.readingPositions)
-            settings.updateSettings { it.mergeRestoredSettings(imported.settings, pending.applyPreferences) }
+            settings.updateSettings {
+                val merged = it.mergeRestoredSettings(imported.settings, pending.applyPreferences)
+                if (pending.selectImportedProfile) merged.copy(activeProfileId = imported.settings.activeProfileId) else merged
+            }
             val persistedIds = settings.observeSettings().first().recommendationProfiles.mapTo(mutableSetOf()) { it.profileId }
             check(imported.settings.recommendationProfiles.all { it.profileId in persistedIds }) {
                 "Restored profiles were not retained"
@@ -119,6 +127,7 @@ class ProfileBackupService(
         val record = backupObject {
             addProperty("operationId", pending.operationId)
             addProperty("applyPreferences", pending.applyPreferences)
+            addProperty("selectImportedProfile", pending.selectImportedProfile)
             add("backup", JsonParser.parseString(codec.encode(pending.backup).toString(Charsets.UTF_8)))
         }.toString().toByteArray(Charsets.UTF_8)
         journalFile.parentFile?.mkdirs()
@@ -143,8 +152,15 @@ class ProfileBackupService(
         val preferences = requireNotNull(record.get("applyPreferences"))
         require(preferences.isJsonPrimitive && preferences.asJsonPrimitive.isBoolean)
         val backup = codec.decode(requireNotNull(record.get("backup")).toString().toByteArray(Charsets.UTF_8))
-        return PendingRestore(operationId, preferences.asBoolean, backup)
+        val selection = record.get("selectImportedProfile")
+        require(selection == null || selection.isJsonPrimitive && selection.asJsonPrimitive.isBoolean)
+        return PendingRestore(operationId, preferences.asBoolean, backup, selection?.asBoolean ?: false)
     }
 }
 
-private data class PendingRestore(val operationId: String, val applyPreferences: Boolean, val backup: ProfileBackup)
+private data class PendingRestore(
+    val operationId: String,
+    val applyPreferences: Boolean,
+    val backup: ProfileBackup,
+    val selectImportedProfile: Boolean = false,
+)

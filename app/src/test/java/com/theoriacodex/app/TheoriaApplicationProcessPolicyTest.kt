@@ -5,6 +5,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TheoriaApplicationProcessPolicyTest {
+    @Test fun `copy process skips all durable initialization only in explicitly enabled builds`() {
+        assertFalse(shouldStartAppContainer(false, "com.theoriacodex", "com.theoriacodex:developerCopy", true))
+        assertTrue(shouldStartAppContainer(false, "com.theoriacodex", "com.theoriacodex:developerCopy", false))
+        assertTrue(shouldStartAppContainer(false, "com.theoriacodex", "com.theoriacodex", true))
+        assertTrue(shouldStartAppContainer(false, "com.theoriacodex", "other:developerCopy", true))
+        assertFalse(shouldStartAppContainer(false, "com.theoriacodex", null, true))
+    }
     @Test
     fun `normal app process always starts durable readiness`() {
         assertTrue(

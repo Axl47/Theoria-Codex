@@ -109,6 +109,87 @@ Main-channel releases are deliberate, not made for every push to `main`. A relea
 
 ## Local Development
 
+### Copy a personal production profile into Debug
+
+The connected-device copy command imports profiles, collections, Likes, automatic rules, follows,
+favorites, saved searches, preferences, Recents, reading positions, and source credentials into
+`com.theoriacodex.debug`. It selects the copied active profile and preserves existing Debug profiles.
+The same unchanged snapshot reuses its restored identities; a changed snapshot adds a new restored
+set. Downloaded media, runtime caches, device paths, and pending transfers are not copied. The
+existing logical backup's 32 MiB metadata limit applies.
+
+Public builds contain no export bridge. A separate `personalRelease` variant exists only when you
+explicitly supply the SHA-256 fingerprint of the Debug signing certificate. Its provider checks
+the actual calling package and certificate on every request. No Settings feature is added.
+
+First obtain the public certificate fingerprint and build both APKs on the host:
+
+```sh
+COPY_DEBUG_CERT="$(python3 scripts/copy_production_to_debug.py --print-debug-certificate)"
+./gradlew :app:assembleDebug :app:assemblePersonalRelease \
+  -Ptheoria.developerCopyCertSha256="$COPY_DEBUG_CERT" --offline
+```
+
+The personal APK is `app/build/outputs/apk/personalRelease/app-personalRelease-unsigned.apk`.
+The **Build personal Debug copy bridge** Actions workflow (`personal-debug-copy.yml`) can sign it
+using the repository's existing production signing secrets. Run that manual workflow on a revision
+containing this implementation, paste the fingerprint printed above, and download the one-day
+`theoria-personal-debug-copy` artifact. It is an Actions artifact, not a public release asset.
+Save its signed APK as `/private/tmp/theoria-personal-signed.apk` for the commands below. Keep the
+downloaded file: connected preflight compares it with the installed APK exactly.
+
+Alternatively, sign locally with the **existing production key**, using the usual signed release path; retain the same
+application ID and a version code at least as high as the installed production app. For local signing,
+set `THEORIA_PERSONAL_KEYSTORE` to your keystore path, `THEORIA_UPLOAD_KEY_ALIAS` to its alias,
+and the existing password environment variables, then use your Android SDK's `apksigner`:
+
+```sh
+apksigner sign --ks "$THEORIA_PERSONAL_KEYSTORE" --ks-key-alias "$THEORIA_UPLOAD_KEY_ALIAS" \
+  --ks-pass env:THEORIA_UPLOAD_STORE_PASSWORD --key-pass env:THEORIA_UPLOAD_KEY_PASSWORD \
+  --out /private/tmp/theoria-personal-signed.apk \
+  app/build/outputs/apk/personalRelease/app-personalRelease-unsigned.apk
+```
+
+Before installing anything, verify both signed APKs without accessing a device:
+
+```sh
+python3 scripts/copy_production_to_debug.py --dry-run \
+  --debug-apk app/build/outputs/apk/debug/app-debug.apk \
+  --personal-apk /private/tmp/theoria-personal-signed.apk
+```
+
+Install the personal production APK once through the verified signed release/update path, and
+install the matching Debug APK through `installDebug`. Open production normally once if it needs
+to finish a store migration or pending recovery, then leave it idle. Do not uninstall or clear it.
+The copy command performs no installation and requires the installed APKs to match the supplied
+files exactly. With your phone connected, run:
+
+```sh
+python3 scripts/copy_production_to_debug.py --serial <device-serial> \
+  --debug-apk app/build/outputs/apk/debug/app-debug.apk \
+  --personal-apk /private/tmp/theoria-personal-signed.apk
+```
+
+The command reads both installed APKs for preflight, stops only Debug, places a short-lived private
+request using `run-as`, and starts the Debug importer. Production export runs in a separate process
+that skips ordinary app initialization, reads live stores without migration/recovery writes, and
+rejects library/settings/account changes during capture. Temporary metadata staging lives only
+in production's disposable cache and is deleted after export. Credentials travel directly through
+an authenticated pipe and are re-encrypted with Debug's Keystore key; they never enter ADB output,
+computer files, or portable profile backups. There are no provider login/refresh requests during copy.
+
+Open **Theoria Debug** after completion. Normal `installDebug` updates keep its imported data and
+accounts. If interrupted, rerun the command: admitted profile restores retain their durable recovery
+journal, and credentials are atomically written only after complete payload validation and profile
+restore. A credential-write failure can leave the profile imported while reporting failure; retry
+finishes the account copy. A normal later public release update removes the personal bridge.
+
+Public release assembly automatically runs `:app:verifyPublicDeveloperCopyAbsent`, checking both
+the merged manifest and R8 mapping. Personal release assembly also runs the usual JSON wire-contract
+verification. Personal connected/install/uninstall tasks are deliberately blocked, and the Baseline
+Profile plugin's two derived personal variants are disabled. Production signing and installation
+remain separate from automated device-test lanes.
+
 From the project root, run the deterministic test lane:
 
 ```sh

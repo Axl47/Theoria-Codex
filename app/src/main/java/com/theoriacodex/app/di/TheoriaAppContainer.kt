@@ -60,16 +60,11 @@ import com.theoriacodex.data.repository.StatisticsRepository
 import com.theoriacodex.data.repository.UiRestoreRepository
 import com.theoriacodex.data.storage.CorruptionRecovery
 import com.theoriacodex.data.storage.LegacyJsonRecoveryRegistry
-import com.theoriacodex.data.android.room.LegacyArchiveResult
-import com.theoriacodex.data.android.room.LegacyJsonImportResult
-import com.theoriacodex.data.android.room.LegacyJsonMigrationException
 import com.theoriacodex.data.android.room.RoomCodexLikesRepository
-import com.theoriacodex.data.android.room.RoomLegacyJsonImporter
 import com.theoriacodex.data.android.room.RoomMediaDurationRepository
-import com.theoriacodex.data.android.room.RecentsImportResult
-import com.theoriacodex.data.android.room.RoomRecentsLegacyImporter
 import com.theoriacodex.data.android.room.RoomRecentsRepository
 import com.theoriacodex.data.android.room.RoomProfileBackupStore
+import com.theoriacodex.data.android.room.awaitProfileLibraryStores
 import com.theoriacodex.data.android.room.TheoriaRoomDatabase
 import com.theoriacodex.domain.adapter.SourceAdapterRegistry
 import com.theoriacodex.domain.model.SourceKey
@@ -217,11 +212,6 @@ internal class DefaultTheoriaAppContainer(
 
     private val profileWriteGuard = ProfileLibraryWriteGuard()
     private val contentRepository = RoomCodexLikesRepository(contentDatabase, writeGuard = profileWriteGuard)
-    private val contentImporter = RoomLegacyJsonImporter(contentDatabase)
-    private val recentsImporter = RoomRecentsLegacyImporter(
-        database = contentDatabase,
-        recoveryRegistry = legacyJsonRecoveryRegistry,
-    )
     private val codexRepository: CodexRepository = contentRepository
     private val likesRepository: LikesRepository = contentRepository
     private val codexLikesTransactions: CodexLikesTransactions = contentRepository
@@ -387,56 +377,6 @@ internal class DefaultTheoriaAppContainer(
     }
 
     private suspend fun awaitContentStore() {
-        when (val imported = contentImporter.importIfNeeded(storageDirectory)) {
-            is LegacyJsonImportResult.Imported,
-            is LegacyJsonImportResult.AdoptedVerifiedDestination,
-            is LegacyJsonImportResult.AlreadyImported -> Unit
-
-            is LegacyJsonImportResult.SplitBrain -> throw LegacyJsonMigrationException(
-                "Legacy Codex/Likes data changed after its verified Room migration",
-            )
-            is LegacyJsonImportResult.DestinationConflict -> throw LegacyJsonMigrationException(
-                "Room Codex/Likes data conflicts with the retained legacy snapshot",
-            )
-            is LegacyJsonImportResult.DestinationDrift -> throw LegacyJsonMigrationException(
-                "Room Codex/Likes data no longer matches its verified migration proof",
-            )
-            is LegacyJsonImportResult.InvalidStoredProof -> throw LegacyJsonMigrationException(
-                "Room Codex/Likes migration proof is invalid: ${imported.reason}",
-            )
-        }
-        when (val archived = contentImporter.archiveImportedSources(storageDirectory)) {
-            is LegacyArchiveResult.Complete -> Unit
-            LegacyArchiveResult.NotImported -> throw LegacyJsonMigrationException(
-                "Room Codex/Likes migration completed without a durable proof",
-            )
-            is LegacyArchiveResult.InvalidStoredProof -> throw LegacyJsonMigrationException(
-                "Room Codex/Likes archive proof is invalid: ${archived.reason}",
-            )
-            is LegacyArchiveResult.Partial -> throw LegacyJsonMigrationException(
-                "Room Codex/Likes legacy archive is incomplete for ${archived.blockedFile}: " +
-                    archived.reason,
-            )
-        }
-        when (val recents = recentsImporter.importAndArchive(storageDirectory)) {
-            is RecentsImportResult.Imported,
-            is RecentsImportResult.AlreadyImported -> Unit
-
-            is RecentsImportResult.SourceChanged -> throw LegacyJsonMigrationException(
-                "Legacy Recent activity changed after its verified Room migration",
-            )
-            is RecentsImportResult.DestinationConflict -> throw LegacyJsonMigrationException(
-                "Room Recent activity conflicts with the retained legacy snapshot",
-            )
-            is RecentsImportResult.DestinationDrift -> throw LegacyJsonMigrationException(
-                "Room Recent activity no longer matches its verified migration proof",
-            )
-            is RecentsImportResult.InvalidProof -> throw LegacyJsonMigrationException(
-                "Room Recent activity migration proof is invalid: ${recents.reason}",
-            )
-            is RecentsImportResult.ArchiveFailed -> throw LegacyJsonMigrationException(
-                "Recent activity legacy archive is incomplete: ${recents.reason}",
-            )
-        }
+        awaitProfileLibraryStores(contentDatabase, storageDirectory, legacyJsonRecoveryRegistry)
     }
 }

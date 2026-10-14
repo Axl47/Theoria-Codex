@@ -1,0 +1,55 @@
+name: Build personal Debug copy bridge
+
+on:
+  workflow_dispatch:
+    inputs:
+      debug_certificate_sha256:
+        description: SHA-256 printed by scripts/copy_production_to_debug.py --print-debug-certificate
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  personal-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v3
+
+      - name: Assemble certificate-pinned personal APK
+        env:
+          COPY_DEBUG_CERT: ${{ inputs.debug_certificate_sha256 }}
+        run: |
+          if ! [[ "$COPY_DEBUG_CERT" =~ ^[0-9a-fA-F]{64}$ ]]; then
+            echo "Supply exactly one SHA-256 Debug certificate fingerprint"
+            exit 1
+          fi
+          ./gradlew :app:assemblePersonalRelease "-Ptheoria.developerCopyCertSha256=$COPY_DEBUG_CERT"
+
+      - name: Sign personal APK with the existing production key
+        id: sign_personal
+        env:
+          BUILD_TOOLS_VERSION: '35.0.0'
+        uses: r0adkll/sign-android-release@v1
+        with:
+          releaseDirectory: app/build/outputs/apk/personalRelease
+          signingKeyBase64: ${{ secrets.THEORIA_UPLOAD_KEYSTORE_BASE64 }}
+          alias: ${{ secrets.THEORIA_UPLOAD_KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.THEORIA_UPLOAD_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.THEORIA_UPLOAD_KEY_PASSWORD }}
+
+      - name: Save personal APK as a short-lived developer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: theoria-personal-debug-copy
+          path: ${{ steps.sign_personal.outputs.signedReleaseFile }}
+          if-no-files-found: error
+          retention-days: 1
