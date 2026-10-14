@@ -36,16 +36,17 @@ if [[ "${THEORIA_DEVICE_OFFLINE:-0}" == 1 ]]; then
 fi
 test_options=("${gradle_options[@]}")
 record_options=(--compilation 'Partial(BaselineProfileMode.Require,warmupIterations=0)')
+contract_options=()
 if [[ -n "${BENCHMARK_SCENARIO:-}" ]]; then
   # Validate the selector and bind its full metrics/iterations before any device access.
-  python3 scripts/benchmark_results.py contract --scenario "$BENCHMARK_SCENARIO" > "$output/workload-contract.json"
+  contract_options+=(--scenario "$BENCHMARK_SCENARIO")
   test_options+=("-Pandroid.testInstrumentationRunnerArguments.class=com.theoriacodex.macrobenchmark.TheoriaMacrobenchmark#$BENCHMARK_SCENARIO")
-  record_options+=(--contract "$output/workload-contract.json")
 fi
+python3 scripts/benchmark_results.py contract "${contract_options[@]}" > "$output/workload-contract.json"
+record_options+=(--contract "$output/workload-contract.json")
 
 readonly target_apk="app/build/outputs/apk/benchmarkRelease/app-benchmarkRelease.apk"
 readonly runner_apk="macrobenchmark/build/outputs/apk/benchmarkRelease/macrobenchmark-benchmarkRelease.apk"
-readonly results="macrobenchmark/build/outputs/connected_android_test_additional_output/benchmarkRelease/connected"
 adb_command=("${ADB:-adb}" -s "$serial")
 
 require_selected_phone() {
@@ -64,12 +65,34 @@ python3 scripts/verify_device_apk.py "$target_apk" --package com.theoriacodex.be
 python3 scripts/verify_device_apk.py "$runner_apk" --package com.theoriacodex.macrobenchmark >> "$output/preflight.log"
 require_selected_phone
 "${adb_command[@]}" shell getprop ro.build.fingerprint > "$output/device-fingerprint.txt"
+# Keep result delivery separate from multi-GiB trace transfers. UTP can lose its still-open
+# instrumentation socket while collecting artifacts after a successful long journey.
+"${adb_command[@]}" install -r "$target_apk" > "$output/install.log" 2>&1
+"${adb_command[@]}" install -r "$runner_apk" >> "$output/install.log" 2>&1
+test_class="com.theoriacodex.macrobenchmark.TheoriaMacrobenchmark"
+expected_tests="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["scenarios"]))' "$output/workload-contract.json")"
+if [[ -n "${BENCHMARK_SCENARIO:-}" ]]; then
+  test_class+="#$BENCHMARK_SCENARIO"
+fi
 
 run_records=()
 for ((index=1; index<=captures; index++)); do
   require_selected_phone
   printf 'Running complete physical benchmark capture %s/%s.\n' "$index" "$captures"
-  ./gradlew :macrobenchmark:connectedBenchmarkReleaseAndroidTest "${test_options[@]}" > "$output/run-$index.log" 2>&1
+  remote="/sdcard/Android/media/com.theoriacodex.macrobenchmark/capture-$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
+  results="$output/raw-$index"
+  "${adb_command[@]}" shell mkdir -p "$remote"
+  run_status=0
+  "${adb_command[@]}" shell am instrument -w -r \
+    -e class "$test_class" -e androidx.benchmark.enabledRules Macrobenchmark \
+    -e additionalTestOutputDir "$remote" \
+    com.theoriacodex.macrobenchmark/androidx.test.runner.AndroidJUnitRunner \
+    > "$output/run-$index.log" 2>&1 || run_status=$?
+  # Instrumentation has returned before stopping the isolated fixture or copying any files.
+  "${adb_command[@]}" shell am force-stop com.theoriacodex.benchmark
+  "${adb_command[@]}" pull "$remote/." "$results" > "$output/transfer-$index.log" 2>&1
+  [[ "$run_status" == 0 ]] || exit "$run_status"
+  python3 scripts/benchmark_results.py instrumentation --log "$output/run-$index.log" --tests "$expected_tests"
   report="$(python3 - "$results" "$output/device-fingerprint.txt" <<'PY'
 import json, pathlib, sys
 fingerprint = pathlib.Path(sys.argv[2]).read_text().strip()

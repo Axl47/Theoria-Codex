@@ -27,7 +27,7 @@ ANDROID_SERIAL=SERIAL scripts/verify_performance_device.sh capture NEW_EVIDENCE_
 
 This performs the same artifact preflight and complete-trace archiving as calibration, but records
 one capture and claims no regression comparison. Set `THEORIA_DEVICE_OFFLINE=1` when the exact
-build/test dependencies are cached to keep every Gradle step offline. Calibration still requires three distinct full
+build dependencies are cached to keep every Gradle step offline. The script builds and verifies both APKs, then uses the same AndroidJUnitRunner directly and collects the complete unique output directory after instrumentation returns. It requires the exact JUnit test count and successful native completion before validating every metric, iteration and thermal record. No listener, iteration, compilation or autoplay setting is changed. This avoids UTP holding a result socket open during multi-GiB trace transfers. Calibration still requires three distinct full
 runs; a device or OS change requires a fresh compatible calibration.
 
 ## What the journeys exercise
@@ -118,7 +118,7 @@ Calibrate tolerances from at least three independent fresh baseline reports; do 
 old component result into a baseline for the full-app version-2 workload. Source assertions or a
 successful APK build do not replace measured results. New journeys require fresh physical evidence.
 
-Gradle copies the complete result directory to:
+Direct capture preserves the complete unique device output directory under `NEW_EVIDENCE_DIR/raw-N/`, then archives and hashes it in `run-N/artifacts/`. It never deletes the remote traces. A manual Gradle run copies its complete result directory to:
 
 ```text
 macrobenchmark/build/outputs/connected_android_test_additional_output/

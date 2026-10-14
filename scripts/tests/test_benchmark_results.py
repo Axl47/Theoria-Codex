@@ -14,6 +14,15 @@ import benchmark_results as benchmark
 
 
 class BenchmarkResultsTest(unittest.TestCase):
+    def test_native_success_requires_the_exact_test_count_and_completed_process(self) -> None:
+        valid = "INSTRUMENTATION_RESULT: stream=\nOK (1 test)\nINSTRUMENTATION_CODE: -1\n"
+        benchmark.validate_instrumentation_output(valid, 1)
+        for output, count in [(valid, 7), (valid.replace("INSTRUMENTATION_CODE: -1", ""), 1),
+                              (valid + "INSTRUMENTATION_FAILED: Process crashed\n", 1),
+                              (valid + "FAILURES!!!\n", 1), ("INSTRUMENTATION_CODE: -1\n", 1)]:
+            with self.subTest(output=output, count=count), self.assertRaises(benchmark.EvidenceError):
+                benchmark.validate_instrumentation_output(output, count)
+
     def test_single_workload_contract_retains_every_metric_and_iteration(self) -> None:
         full = benchmark.default_contract()
         for scenario, specification in full["scenarios"].items():
