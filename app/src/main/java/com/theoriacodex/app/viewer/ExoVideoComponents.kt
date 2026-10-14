@@ -8,11 +8,8 @@ import android.os.Trace
 import android.view.LayoutInflater
 import android.widget.FrameLayout
 import androidx.core.net.toUri
-import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
-import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.ui.PlayerView
@@ -25,34 +22,6 @@ internal fun createTexturePlayerView(context: Context): PlayerView {
         .inflate(R.layout.player_view_texture, FrameLayout(context), false) as PlayerView
 }
 
-internal fun createLoopingExoPlayer(
-    context: Context,
-    location: String,
-    headers: Map<String, String>,
-    muted: Boolean,
-    profile: VideoPlaybackProfile,
-): ExoPlayer {
-    val appContext = context.applicationContext
-    val infrastructure = appContext.videoPlaybackInfrastructure()
-    val request = infrastructure.bind(location, headers)
-    return ExoPlayer.Builder(appContext)
-        .setMediaSourceFactory(request.mediaSourceFactory)
-        .setLoadControl(infrastructure.loadControl(profile))
-        .build()
-        .apply {
-            addAnalyticsListener(MediaLoadTraceListener)
-            repeatMode = Player.REPEAT_MODE_ONE
-            setSeekParameters(SeekParameters.EXACT)
-            volume = if (muted) 0f else 1f
-            if (!muted) {
-                setAudioAttributes(androidx.media3.common.AudioAttributes.DEFAULT, true)
-                setHandleAudioBecomingNoisy(true)
-            }
-            setMediaItem(request.mediaItem)
-            prepare()
-        }
-}
-
 internal object MediaTraceSections {
     const val PREVIEW_PREPARE = "TheoriaPreviewPrepare"
     const val PREVIEW_FIRST_FRAME = "TheoriaPreviewFirstFrame"
@@ -63,12 +32,17 @@ internal object MediaTraceSections {
     const val PREVIEW_PLAYER_RELEASE = "TheoriaPreviewPlayerRelease"
     const val VIEWER_PREPARE = "TheoriaViewerPrepare"
     const val VIEWER_FIRST_FRAME = "TheoriaViewerFirstFrame"
+    const val VIEWER_PLAYER_CREATE = "TheoriaViewerPlayerCreate"
+    const val VIEWER_PLAYER_RETURN = "TheoriaViewerPlayerReturn"
+    const val VIEWER_PLAYER_RELEASE = "TheoriaViewerPlayerRelease"
     const val MEDIA_LOAD = "TheoriaMediaLoad"
 }
 
 internal object MediaTraceCounters {
     const val PREVIEW_ACTIVE_PLAYERS = "TheoriaPreviewActivePlayers"
     const val PREVIEW_TOTAL_PLAYERS = "TheoriaPreviewTotalPlayers"
+    const val VIEWER_ACTIVE_PLAYERS = "TheoriaViewerActivePlayers"
+    const val VIEWER_TOTAL_PLAYERS = "TheoriaViewerTotalPlayers"
 }
 
 internal inline fun <T> traceMediaSection(name: String, block: () -> T): T {

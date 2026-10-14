@@ -23,10 +23,13 @@ import com.theoriacodex.domain.model.ImageRef
 import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.PostId
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withContext
 
 /**
  * Bridges Viewer route work to the application-scoped engines and repositories.
@@ -42,6 +45,7 @@ internal class ViewerRouteWorkflow(
     private val forYouOwner: () -> ForYouRouteOwnerHandle?,
     private val creatorOwner: () -> CreatorRouteOwnerHandle?,
     private val offlineMedia: com.theoriacodex.app.media.OfflineMediaCoordinator? = null,
+    private val providerDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewerPostResolver {
     override fun requiresResolution(post: Post): Boolean = offlineMedia?.store?.let { store ->
         post.id in store.snapshot.value.availablePostIds && !store.hasOfflineLocations(post)
@@ -87,7 +91,7 @@ internal class ViewerRouteWorkflow(
         val adapter = checkNotNull(sources.registry.adapterFor(postId.source)) {
             "${postId.source.name} is unavailable"
         }
-        val resolved = adapter.resolvePost(postId) ?: return null
+        val resolved = withContext(providerDispatcher) { adapter.resolvePost(postId) } ?: return null
         persistResolvedPost(resolved, streamSource)
         return resolved
     }
@@ -98,7 +102,7 @@ internal class ViewerRouteWorkflow(
         streamSource: ViewerStreamSource,
     ): Post? {
         val recovered = try {
-            recoverRemoteMedia(sources.registry, post, failedMedia)
+            withContext(providerDispatcher) { recoverRemoteMedia(sources.registry, post, failedMedia) }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
@@ -211,7 +215,9 @@ internal class ViewerRouteWorkflow(
 
     private suspend fun resolveRestoredPost(postId: PostId): Post? = withTimeoutOrNull(15_000L) {
         offlineMedia?.find(postId)
-            ?: runCatchingPreservingCancellation { sources.registry.adapterFor(postId.source)?.resolvePost(postId) }.getOrNull()
+            ?: runCatchingPreservingCancellation {
+                withContext(providerDispatcher) { sources.registry.adapterFor(postId.source)?.resolvePost(postId) }
+            }.getOrNull()
     }
 
     suspend fun recordVisiblePost(

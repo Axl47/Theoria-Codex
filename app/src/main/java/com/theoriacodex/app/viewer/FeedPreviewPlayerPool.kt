@@ -77,7 +77,7 @@ internal class FeedPreviewPlayerPool(
     }
     private val cleanupRunnable = Runnable {
         cleanupScheduled = false
-        slots.pollExpired()?.let { player ->
+        (if (infrastructure.hasActiveViewerPlayer) null else slots.pollExpired())?.let { player ->
             traceMediaSection(MediaTraceSections.PREVIEW_PLAYER_RELEASE) { player.release() }
             publishTraceCounters()
         }

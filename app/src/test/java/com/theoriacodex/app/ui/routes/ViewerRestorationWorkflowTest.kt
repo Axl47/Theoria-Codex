@@ -19,6 +19,7 @@ import com.theoriacodex.domain.model.Post
 import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -128,6 +129,7 @@ class ViewerRestorationWorkflowTest {
             val workflow = ViewerRouteWorkflow(
                 graph.data.copy(readingPositions = FileBackedReadingPositionRepository(graph.data.storageDirectory)),
                 this, graph.sources, { null }, { null }, { null },
+                providerDispatcher = StandardTestDispatcher(testScheduler),
             )
             block(graph, workflow)
         } finally {

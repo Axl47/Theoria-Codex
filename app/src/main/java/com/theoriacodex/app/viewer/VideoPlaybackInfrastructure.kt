@@ -101,6 +101,11 @@ internal class VideoPlaybackInfrastructure(
     internal val feedPreviewPlayerPool: FeedPreviewPlayerPool by lazy {
         FeedPreviewPlayerPool(appContext, this)
     }
+    private val viewerPlayers = lazy { ViewerVideoPlayerPool(appContext, this) }
+    internal val viewerVideoPlayerPool: ViewerVideoPlayerPool
+        get() = viewerPlayers.value
+    internal val hasActiveViewerPlayer: Boolean
+        get() = viewerPlayers.isInitialized() && viewerPlayers.value.activePlayerCount() > 0
     private val sharedFactories = SharedVideoFactories(
         http = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)

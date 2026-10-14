@@ -46,7 +46,7 @@ import com.theoriacodex.app.media.isMediaNetworkMetered
 import com.theoriacodex.app.media.withVideoQuality
 import kotlin.math.abs
 
-/** Each mounted renderer owns its decoder, surface and progress; the route sends commands only. */
+/** Each mounted renderer leases its player and owns its surface/progress; the route sends commands. */
 @Composable
 internal fun ViewerVideoPlayer(
     media: ImageRef,
@@ -152,9 +152,9 @@ private fun ViewerVideoBinding(
     val lifecycleOwner = LocalLifecycleOwner.current
     val latestEvents by rememberUpdatedState(events)
     DisposableEffect(state, location, source) {
-        val player = traceMediaSection(MediaTraceSections.VIEWER_PREPARE) {
-            createLoopingExoPlayer(context, location, source.requestHeaders(), muted = false, profile = VideoPlaybackProfile.VIEWER)
-        }
+        val pool = context.videoPlaybackInfrastructure().viewerVideoPlayerPool
+        val lease = pool.acquire(location, source.requestHeaders())
+        val player = lease.resource
         val binding = attachViewerMediaSession(lifecycleOwner.lifecycle) {
             val session = createViewerMediaSession(context, player) { latestEvents.onPlaybackIntentChanged(it) }
             java.io.Closeable { session.release() }
@@ -175,7 +175,7 @@ private fun ViewerVideoBinding(
             state.setPlaying(false)
             if (state.player === player) state.player = null
             runCatching { state.view?.player = null }
-            runCatching { player.release() }
+            pool.recycle(lease)
             state.view = null
         }
     }

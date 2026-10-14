@@ -14,12 +14,38 @@ import com.theoriacodex.domain.model.Query
 import com.theoriacodex.domain.model.SourceKey
 import com.theoriacodex.domain.orchestration.UnifiedSearchOrchestrator
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.launch
+import kotlin.coroutines.ContinuationInterceptor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class RelatedPostsLoaderTest {
+    @Test
+    fun `provider parsing runs off the route dispatcher and retains parent cancellation`() = runTest {
+        val started = CompletableDeferred<ContinuationInterceptor?>()
+        val cancelled = CompletableDeferred<Unit>()
+        val adapter = FakeRelatedAdapter(emptyList()) {
+            started.complete(currentCoroutineContext()[ContinuationInterceptor])
+            try {
+                awaitCancellation()
+            } finally {
+                cancelled.complete(Unit)
+            }
+        }
+        val job = launch { RelatedPostsLoader(FakeRelatedRegistry(adapter)).load(PostId(SourceKey.PIXIV, "seed")) }
+        assertSame(Dispatchers.Default, started.await())
+        job.cancel()
+        cancelled.await()
+        job.join()
+    }
+
     @Test
     fun `loader derives support from adapter and publishes bounded same source unique posts`() = runTest {
         val seed = PostId(SourceKey.PIXIV, "seed")
@@ -44,6 +70,7 @@ class RelatedPostsLoaderTest {
 
 private class FakeRelatedAdapter(
     private val related: List<Post>,
+    private val onLoad: suspend () -> Unit = {},
 ) : SourceAdapter, RelatedPostsSourceAdapter {
     override val sourceKey: SourceKey = SourceKey.PIXIV
     override val capabilities = SourceCapabilities(
@@ -57,7 +84,10 @@ private class FakeRelatedAdapter(
         requiresCredentials = false,
     )
 
-    override suspend fun relatedPosts(seed: PostId, limit: Int): List<Post> = related
+    override suspend fun relatedPosts(seed: PostId, limit: Int): List<Post> {
+        onLoad()
+        return related
+    }
     override suspend fun search(query: Query, pageToken: String?): Page<Post> = Page(emptyList(), null)
     override suspend fun trendingTags(limit: Int): List<TagSuggestion> = emptyList()
     override suspend fun autocompleteTags(prefix: String, limit: Int): List<TagSuggestion> = emptyList()
