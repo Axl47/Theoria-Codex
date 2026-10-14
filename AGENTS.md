@@ -88,6 +88,8 @@ Related posts are presentation-only: keep them outside canonical Search/FYP resu
 
 Related shelf pages are transient navigation history, not provider feed pages. Liking a post from the selected shelf page promotes it once into the owning canonical feed immediately before the shelf, removes it from every retained shelf page, advances the shelf anchor to that post, and loads a newly selected page seeded by it. Preserve older non-empty pages for bounded previous/next navigation, reject cross-page duplicate canonical IDs, and keep page changes out of durable feed pagination and scroll state.
 
+Viewer sessions opened from Search or For You retain that launch owner's transient Like action after the pending handoff is consumed. Fullscreen Likes use the same committed transaction callback as feed cards, guarded by the original query/seed identity. A static related Viewer can still Like another post from its retained older shelf page after a prior Like advances the shelf; promotion must remove it from retained pages in loading, empty and failed states too. Cold restoration must not invent a shelf owner.
+
 A related shelf row is never a persistable Search scroll anchor. Projection changes must not restart scroll observation or replace the latest canonical post position with the shelf seed; if the shelf is first visible, retain the previous valid position. Bound the complete related-post load, including provider retries, to 15 seconds and convert only that deadline into the shelf Retry state. Route replacement, dismissal, and owner cancellation remain true cancellation and must not surface as timeout failures.
 
 ## Retired Viewer Translation

@@ -96,6 +96,41 @@ class RelatedPostsRouteControllerTest {
         assertEquals(listOf("next"), state.loadedPosts.map { it.id.sourcePostId })
     }
 
+    @Test
+    fun `fullscreen likes from retained pages advance the shelf after loaded or empty outcomes`() = runTest {
+        val seed = testPost(sourcePostId = "seed")
+        val promoted = testPost(sourcePostId = "promoted")
+        val sibling = testPost(sourcePostId = "sibling")
+        val next = testPost(sourcePostId = "next")
+        val last = testPost(sourcePostId = "last")
+        for (nextPosts in listOf(emptyList(), listOf(next))) {
+            var state: RelatedPostsUiState = RelatedPostsUiState.Idle
+            var canonicalPosts = listOf(seed)
+            val loader = SequencedRelatedLoader(mapOf(
+                seed.id to listOf(promoted, sibling), promoted.id to nextPosts, sibling.id to listOf(last),
+            ))
+            val controller = RelatedPostsRouteController(
+                scope = this,
+                loader = loader,
+                currentState = { state },
+                canonicalPosts = { canonicalPosts },
+                promotePost = { post, index -> canonicalPosts = promoteRelatedPost(canonicalPosts, post, index) },
+                updateState = { state = it },
+            )
+            controller.onLikeCommitted(seed, LikeToggleOutcome.LIKED)
+            runCurrent()
+            controller.onLikeCommitted(promoted, LikeToggleOutcome.LIKED)
+            runCurrent()
+            // Viewer still presents its original ordered page after the shelf advances underneath it.
+            controller.onLikeCommitted(sibling, LikeToggleOutcome.LIKED)
+            runCurrent()
+            assertEquals(listOf(seed.id, promoted.id, sibling.id), loader.requests)
+            assertEquals(listOf(seed, promoted, sibling), canonicalPosts)
+            assertEquals(listOf(last), state.loadedPosts)
+            assertTrue(state.availablePages.flatMap { it.posts }.none { it.id == sibling.id || it.id == promoted.id })
+        }
+    }
+
     private fun kotlinx.coroutines.test.TestScope.controller(
         seed: Post,
         state: () -> RelatedPostsUiState,

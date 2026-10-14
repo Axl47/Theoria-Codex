@@ -327,7 +327,8 @@ internal fun ViewerRoute(
             }
 
             is ViewerEffect.SetLiked -> post(effect.postId)?.let { selected ->
-                callbacks.onToggleLike(selected)
+                val launchAction = viewerOwner.session.value?.onToggleLike
+                if (launchAction != null) launchAction(selected) else callbacks.onToggleLike(selected)
             }
 
             is ViewerEffect.OpenCreatorProfile -> callbacks.onOpenCreatorProfile(effect.creator)

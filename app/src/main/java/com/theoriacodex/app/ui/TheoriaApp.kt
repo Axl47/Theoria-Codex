@@ -521,6 +521,28 @@ internal fun TheoriaAppContent(
         }
     }
 
+    fun searchLikeAction(): (Post) -> Unit {
+        val owner = searchRouteOwnerBinding.current
+        val query = owner?.state?.value?.query?.appliedQueryHash
+        return { post ->
+            toggleLikeAndSyncCodex(post) { outcome ->
+                if (owner?.state?.value?.query?.appliedQueryHash == query)
+                    owner?.dispatch(SearchAction.RelatedLikeCommitted(post, outcome))
+            }
+        }
+    }
+
+    fun forYouLikeAction(): (Post) -> Unit {
+        val owner = forYouRouteOwnerBinding.current
+        val seed = owner?.state?.value?.seedId
+        return { post ->
+            toggleLikeAndSyncCodex(post) { outcome ->
+                if (owner?.state?.value?.seedId == seed)
+                    owner?.dispatch(ForYouAction.RelatedLikeCommitted(post, outcome))
+            }
+        }
+    }
+
     suspend fun searchFromCodex(source: SourceKey, includeTags: List<String>) {
         if (source !in sourceDependencies.registry.availableSources()) {
             Toast.makeText(appContext, "${source.displayName()} source is unavailable", Toast.LENGTH_SHORT).show()
@@ -1034,6 +1056,7 @@ internal fun TheoriaAppContent(
                                             callbacks = SearchRouteCallbacks(
                                                 onOpenSourceAccounts = { settingsOwner.onAction(SettingsAction.OpenSourceAccounts) },
                                                 onOpenViewer = { effect ->
+                                                    val likeAction = searchLikeAction()
                                                     val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
                                                         effect.posts,
                                                         effect.context,
@@ -1044,6 +1067,7 @@ internal fun TheoriaAppContent(
                                                             context = effect.context,
                                                             liveSearchBinding = effect.liveSearchBinding,
                                                             searchVisibilityFilters = effect.visibilityFilters,
+                                                            onToggleLike = likeAction,
                                                         ),
                                                     )
                                                     navController.navigate(AppRoute.Viewer) {
@@ -1054,12 +1078,7 @@ internal fun TheoriaAppContent(
                                                     Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
                                                 },
                                                 onToggleLike = { post ->
-                                                    val owner = searchRouteOwnerBinding.current
-                                                    val query = owner?.state?.value?.query?.appliedQueryHash
-                                                    toggleLikeAndSyncCodex(post) { outcome ->
-                                                        if (owner?.state?.value?.query?.appliedQueryHash == query)
-                                                            owner?.dispatch(SearchAction.RelatedLikeCommitted(post, outcome))
-                                                    }
+                                                    searchLikeAction()(post)
                                                 },
                                                 onOpenCreatorProfile = { creator ->
                                                     scope.launch { openCreatorProfile(creator) }
@@ -1108,6 +1127,7 @@ internal fun TheoriaAppContent(
                                             },
                                             callbacks = ForYouRouteCallbacks(
                                                 onOpenViewer = { effect ->
+                                                    val likeAction = forYouLikeAction()
                                                     val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
                                                         effect.posts,
                                                         effect.context,
@@ -1118,6 +1138,7 @@ internal fun TheoriaAppContent(
                                                             context = effect.context,
                                                             liveSearchBinding = effect.liveSearchBinding,
                                                             searchVisibilityFilters = effect.visibilityFilters,
+                                                            onToggleLike = likeAction,
                                                         ),
                                                     )
                                                     if (effect.liveSearchBinding) {
@@ -1140,12 +1161,7 @@ internal fun TheoriaAppContent(
                                                     showActionableFeedback("Seed hidden", "Undo")
                                                 },
                                                 onToggleLike = { post ->
-                                                    val owner = forYouRouteOwnerBinding.current
-                                                    val seed = owner?.state?.value?.seedId
-                                                    toggleLikeAndSyncCodex(post) { outcome ->
-                                                        if (owner?.state?.value?.seedId == seed)
-                                                            owner?.dispatch(ForYouAction.RelatedLikeCommitted(post, outcome))
-                                                    }
+                                                    forYouLikeAction()(post)
                                                 },
                                                 onRequestSaveToCodex = { post ->
                                                     requestSaveToCodex(post, fromForYou = true)

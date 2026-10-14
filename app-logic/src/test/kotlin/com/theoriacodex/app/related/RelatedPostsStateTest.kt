@@ -85,6 +85,22 @@ class RelatedPostsStateTest {
         )
     }
 
+    @Test
+    fun `promotion removes retained posts during loading empty and failed pages`() {
+        val firstLoading = RelatedPostsUiState.Idle.begin(post("seed"), 0, 1)
+        val promoted = post("promoted")
+        val sibling = post("sibling")
+        val first = firstLoading.complete(firstLoading.request, listOf(promoted, sibling), emptySet())
+        val loading = first.begin(post("next"), 1, 2, retainedPages = first.availablePages)
+        val empty = loading.complete(loading.request, emptyList(), emptySet())
+        val failed = loading.fail(loading.request, "Failed")
+        for (state in listOf(loading, empty, failed)) {
+            val updated = state.withoutPost(promoted.id)
+            assertEquals(state.requestOrNull, updated.requestOrNull)
+            assertEquals(listOf(sibling), updated.availablePages.single().posts)
+        }
+    }
+
     private fun post(id: String): Post = Post(
         id = PostId(SourceKey.PIXIV, id),
         preview = ImageRef("https://example.com/$id.jpg", null, "image/jpeg"),

@@ -15,6 +15,8 @@ internal data class ViewerSession(
     val searchVisibilityFilters: SearchVisibilityFilters = SearchVisibilityFilters(),
     val sessionId: String = UUID.randomUUID().toString(),
     val initialMediaIndex: Int = 0,
+    // Transient launch-owner action; cold restoration never invents a related-shelf owner.
+    val onToggleLike: ((Post) -> Unit)? = null,
 )
 
 private val LAZY_MEDIA_RESOLUTION_SOURCES = setOf(

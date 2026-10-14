@@ -42,7 +42,7 @@ internal class RelatedPostsRouteController(
             launch(post, canonicalIndex)
             return
         }
-        if (current.loadedPosts.none { candidate -> candidate.id == post.id }) return
+        if (current.availablePages.none { page -> page.posts.any { candidate -> candidate.id == post.id } }) return
 
         val insertionIndex = (current.requestOrNull?.anchorCanonicalIndex ?: return) + 1
         val retainedPages = current.withoutPost(post.id).availablePages

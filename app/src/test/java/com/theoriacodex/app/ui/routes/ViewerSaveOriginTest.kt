@@ -33,6 +33,49 @@ class ViewerSaveOriginTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
+    fun `fullscreen like retains its originating feed action after handoff consumption`() {
+        val post = testPost(SourceKey.PIXIV, "like-origin").copy(
+            preview = ImageRef(null, "/nonexistent/preview.jpg", "image/jpeg"), full = null, media = emptyList(),
+        )
+        val retention = ViewerSessionRetentionViewModel()
+        val likedPosts = mutableListOf<com.theoriacodex.domain.model.Post>()
+        retention.retain(ViewerSession(
+            listOf(post), ViewerLaunchContext("related:PIXIV:seed", 0, ViewerStreamSource.RELATED, 0),
+            onToggleLike = { likedPosts += it },
+        ))
+        val durations = MediaDurationCoordinator(MediaDurationAcquirer { error("Static post must not acquire duration") })
+        try {
+            compose.setContent {
+                MaterialTheme {
+                    ViewerRoute(
+                        dependencies = ViewerRouteDependencies(
+                            retention, ViewerPostResolver { _, _ -> post },
+                            ViewerMediaPrefetcher { _, _ -> ViewerPrefetchResult(ViewerPrefetchOutcome.SKIPPED) },
+                            durations, restoreSession = { null },
+                        ),
+                        renderConfig = ViewerRouteRenderConfig(creatorBrowsingSources = emptySet()),
+                        liveSourceState = ViewerRouteLiveSourceState(),
+                        effectCallbacks = ViewerRouteEffectCallbacks(
+                            onSavePost = { _, _ -> }, onSharePost = {}, onDownloadMedia = {},
+                            onToggleLike = { error("Originating feed action must handle this Like") },
+                            onOpenCreatorProfile = {}, onApplyTag = { _, _, _ -> },
+                            onRecoverMedia = { _, _, _ -> null }, onLoadMore = {},
+                            onDismiss = {}, onRestorationUnavailable = {},
+                        ),
+                        screenCallbacks = ViewerRouteScreenCallbacks(
+                            onOpenInBrowser = {}, onRemoveIncludeTerm = { _, _ -> },
+                            onRemoveExcludeTerm = { _, _ -> }, onGoToSearch = {},
+                        ),
+                    )
+                }
+            }
+            compose.runOnIdle { assertNull(retention.session.value) }
+            compose.onNodeWithContentDescription("Like post").performClick()
+            compose.runOnIdle { assertEquals(listOf(post.id), likedPosts.map { it.id }) }
+        } finally { durations.close() }
+    }
+
+    @Test
     fun `save from Viewer reports For You after the navigation handoff is consumed`() {
         val post = testPost(SourceKey.PIXIV, "save-origin").copy(
             preview = ImageRef(null, "/nonexistent/preview.jpg", "image/jpeg"), full = null, media = emptyList(),

@@ -147,20 +147,23 @@ fun RelatedPostsUiState.selectPage(index: Int): RelatedPostsUiState {
 }
 
 fun RelatedPostsUiState.withoutPost(postId: PostId): RelatedPostsUiState {
-    val loaded = this as? RelatedPostsUiState.Loaded ?: return this
-    val pages = loaded.pages.mapNotNull { page ->
+    val pages = availablePages.mapNotNull { page ->
         val retainedPosts = page.posts.filterNot { post -> post.id == postId }
         retainedPosts.takeIf(List<Post>::isNotEmpty)?.let { page.copy(posts = it) }
     }
-    if (pages.isEmpty()) return RelatedPostsUiState.Idle
-    val selectedIndex = loaded.currentPageIndex.coerceAtMost(pages.lastIndex)
-    val selected = pages[selectedIndex]
-    return RelatedPostsUiState.Loaded(
-        request = loaded.request,
-        posts = selected.posts,
-        pages = pages,
-        currentPageIndex = selectedIndex,
-    )
+    return when (this) {
+        RelatedPostsUiState.Idle -> this
+        is RelatedPostsUiState.Loading -> copy(retainedPages = pages)
+        is RelatedPostsUiState.Empty -> copy(retainedPages = pages)
+        is RelatedPostsUiState.Failed -> copy(retainedPages = pages)
+        is RelatedPostsUiState.Loaded -> {
+            if (pages.isEmpty()) return RelatedPostsUiState.Idle
+            val selectedIndex = pages.indexOfFirst { page -> page.request == this.pages[currentPageIndex].request }
+                .takeIf { it >= 0 } ?: currentPageIndex.coerceAtMost(pages.lastIndex)
+            val selected = pages[selectedIndex]
+            copy(posts = selected.posts, pages = pages, currentPageIndex = selectedIndex)
+        }
+    }
 }
 
 fun RelatedPostsUiState.fail(
