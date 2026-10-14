@@ -60,6 +60,7 @@ internal fun ViewerVideoPlayer(
     mediaModifier: Modifier = Modifier,
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
+    loadingPreview: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val metered = context.isMediaNetworkMetered()
@@ -85,13 +86,14 @@ internal fun ViewerVideoPlayer(
     ViewerVideoCommands(state, controls)
     ViewerVideoLifecycle(state, controls)
     ViewerVideoProgress(state, events)
-    ViewerVideoContent(state, postId, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier)
+    ViewerVideoContent(state, postId, playbackDiagnosticsEnabled, controls, events, modifier, mediaModifier, loadingPreview)
 }
 
 private class ViewerVideoState {
     var player by mutableStateOf<ExoPlayer?>(null)
     var view: PlayerView? = null
     var loading by mutableStateOf(true)
+    var hasRenderedFirstFrame by mutableStateOf(false)
     var failed by mutableStateOf(false)
     var duration by mutableLongStateOf(0L)
     var position by mutableLongStateOf(0L)
@@ -202,7 +204,11 @@ private fun viewerVideoListener(
             state.failed = true
             events().onError(error.message ?: "Could not play video")
         }
-        override fun onRenderedFirstFrame() { firstFrame.recordOnce(MediaTraceSections.VIEWER_FIRST_FRAME) }
+        override fun onRenderedFirstFrame() {
+            if (state.player !== player) return
+            firstFrame.recordOnce(MediaTraceSections.VIEWER_FIRST_FRAME)
+            state.hasRenderedFirstFrame = true
+        }
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
             if (!playWhenReady && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY) {
                 events().onPlaybackIntentChanged(false)
@@ -275,6 +281,7 @@ private fun ViewerVideoContent(
     events: ViewerRendererEvents,
     modifier: Modifier,
     mediaModifier: Modifier,
+    loadingPreview: (@Composable () -> Unit)?,
 ) {
     val diagnostics = playbackDiagnosticsSemantics(diagnosticsEnabled, state.actuallyPlaying, "Viewer")
     Box(modifier.testTag(viewerVideoTestTag(postId)).then(diagnostics?.let {
@@ -290,6 +297,7 @@ private fun ViewerVideoContent(
                 view.tag = if (diagnosticsEnabled) viewerVideoTestTag(postId) else null
             },
         )
+        if (!state.hasRenderedFirstFrame && !state.failed) loadingPreview?.invoke()
         if (state.loading && !state.failed) CircularProgressIndicator()
         if (state.failed) Text("Could not play video", color = MaterialTheme.colorScheme.onBackground)
         if (controls.isActive && controls.showControls && !state.failed && state.duration > 0L && state.player != null) {

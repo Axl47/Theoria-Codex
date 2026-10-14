@@ -54,6 +54,7 @@ internal fun ViewerMediaContent(
                 onTogglePlayback = events.onTogglePlayback,
                 onDurationKnown = events.onDurationKnown,
                 onError = events.onError,
+                loadingPreview = { ViewerLoadingPreview(post, media) },
             )
         }
         isVideoMediaRef(media) -> ViewerVideoPlayer(
@@ -63,6 +64,7 @@ internal fun ViewerMediaContent(
             terminalMessage = videoOptions.terminalMessage,
             modifier = Modifier.fillMaxSize(), mediaModifier = transformModifier,
             controls = controls, events = events,
+            loadingPreview = { ViewerLoadingPreview(post, media, transformModifier) },
         )
         isGifMediaRef(media) -> {
             val locations = remember(post, media, controls.loadGeneration) { viewerGifLocations(post, media) }

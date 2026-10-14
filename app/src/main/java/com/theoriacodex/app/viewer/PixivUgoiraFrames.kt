@@ -70,5 +70,5 @@ private suspend fun readUgoiraFrame(zip: ZipFile, entry: ZipEntry): ByteArray {
     }
 }
 
-private const val UGOIRA_INITIAL_FRAME_BATCH = 4
+private const val UGOIRA_INITIAL_FRAME_BATCH = 1
 private const val UGOIRA_FRAME_BATCH = 8

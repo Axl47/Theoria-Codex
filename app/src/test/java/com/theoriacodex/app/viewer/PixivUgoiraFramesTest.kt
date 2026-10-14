@@ -10,6 +10,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -24,7 +25,7 @@ class PixivUgoiraFramesTest {
     @get:Rule val temporaryFolder = TemporaryFolder()
 
     @Test
-    fun `decoder publishes usable frames before the complete animation`() = runTest {
+    fun `decoder publishes the first frame immediately and reuses it for complete playback`() = runTest {
         val archive = temporaryFolder.newFile("frames.zip")
         val bitmap = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)
         val bytes = ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
@@ -38,13 +39,14 @@ class PixivUgoiraFramesTest {
         validateUgoiraArchive(archive, specs)
         val batches = mutableListOf<UgoiraPlayback>()
         val complete = decodeUgoiraFrames(archive, specs, UgoiraSizeBucket.CARD) { batches += it }
-        assertEquals(4, batches.first().frames.size)
+        assertEquals(listOf(1, 8), batches.map { it.frames.size })
         assertEquals(12, batches.first().frameDelaysMs.size)
         assertFalse(batches.first().isComplete)
         assertTrue(complete.isComplete)
         assertEquals(12, complete.frames.size)
         assertEquals(8, batches.first().frames.first().bitmap.width)
         assertFalse(batches.first().frames.first().bitmap.isRecycled)
+        assertSame(batches.first().frames.first().bitmap, complete.frames.first().bitmap)
     }
 
     @Test

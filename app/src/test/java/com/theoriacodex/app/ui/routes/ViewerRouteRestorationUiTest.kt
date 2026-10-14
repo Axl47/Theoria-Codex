@@ -135,8 +135,8 @@ class ViewerRouteRestorationUiTest {
         try {
             compose.setContent {
                 val storeOwner = requireNotNull(LocalViewModelStoreOwner.current)
-                remember(storeOwner) {
-                    if (coldOwner != null) ViewModelProvider(storeOwner, object : ViewModelProvider.Factory {
+                if (coldOwner != null) remember(storeOwner) {
+                    ViewModelProvider(storeOwner, object : ViewModelProvider.Factory {
                         @Suppress("UNCHECKED_CAST")
                         override fun <T : ViewModel> create(modelClass: Class<T>): T = coldOwner as T
                     })[ViewerViewModel::class.java]
