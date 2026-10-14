@@ -14,6 +14,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.Direction
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.StaleObjectException
 import androidx.test.uiautomator.Until
 import java.util.regex.Pattern
 import java.util.concurrent.CountDownLatch
@@ -73,8 +74,7 @@ internal fun UiDevice.completeFiveFeedJourney() {
 private fun UiDevice.exerciseCurrentFeed(label: String) {
     val observedKinds = mutableSetOf<String>()
     fun verify(step: String) {
-        requireMovingFeedPreviews(step)
-        visiblePreviews().keys.forEach { identity ->
+        requireMovingFeedPreviews(step).keys.forEach { identity ->
             val match = MEDIA_PATTERN.matcher(identity)
             if (match.find()) observedKinds += match.group(1)
         }
@@ -114,7 +114,7 @@ private fun UiDevice.requireChangingMedia(
     label: String,
     minimumVisible: Int,
     snapshot: () -> Map<String, Rect> = { visiblePreviews() },
-) {
+): Map<String, Rect> {
     val deadline = SystemClock.elapsedRealtime() + JOURNEY_TIMEOUT_MS
     while (SystemClock.elapsedRealtime() < deadline) {
         waitForIdle(500)
@@ -136,7 +136,7 @@ private fun UiDevice.requireChangingMedia(
                 }
             }
             previous = samples
-            if (advances.values.all { it >= 2 }) return
+            if (advances.values.all { it >= 2 }) return previews
         }
     }
     error("$label: every visibly presented MP4/GIF/WebP/Ugoira preview must render changing frames; visible=${snapshot().keys}")
@@ -166,11 +166,15 @@ internal fun viewerPreviewSnapshot(expectedIdentity: String): Map<String, Rect> 
     return preview
 }
 
-private fun UiDevice.visiblePreviews(pattern: Pattern = MEDIA_PATTERN): Map<String, Rect> = findObjects(By.res(pattern))
-    .mapNotNull { node ->
+private fun UiDevice.visiblePreviews(pattern: Pattern = MEDIA_PATTERN): Map<String, Rect> = try {
+    findObjects(By.res(pattern)).mapNotNull { node ->
         val bounds = node.visibleBounds
         node.resourceName?.takeIf { bounds.width() > 0 && bounds.height() > 0 }?.let { it to bounds }
     }.toMap()
+} catch (_: StaleObjectException) {
+    // Retry the whole snapshot: dropping one stale node could omit a visibly playing sibling.
+    emptyMap()
+}
 
 private fun screenshotSamples(previews: Map<String, Rect>): Map<String, IntArray> {
     val screenshot = requireNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
