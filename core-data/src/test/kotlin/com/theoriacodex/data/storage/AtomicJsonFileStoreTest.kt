@@ -309,6 +309,73 @@ class AtomicJsonFileStoreTest {
         assertTrue(tempFilesFor(file).none())
     }
 
+    @Test
+    fun `intent admission follows file sync replacement and directory sync including fallback`() = runTest {
+        for (fallback in listOf(false, true)) {
+            val events = mutableListOf<String>()
+            val operations = object : RecordingAtomicFileOperations(
+                atomicFailure = if (fallback) AtomicMoveNotSupportedException("temp", "target", "test") else null,
+            ) {
+                override fun writeAndSync(file: File, bytes: ByteArray) {
+                    super.writeAndSync(file, bytes)
+                    events += "file sync"
+                }
+                override fun moveAtomically(tempFile: File, target: File) {
+                    events += "move"
+                    super.moveAtomically(tempFile, target)
+                }
+                override fun replace(tempFile: File, target: File) {
+                    events += "replace"
+                    super.replace(tempFile, target)
+                }
+                override fun syncDirectory(directory: File) {
+                    super.syncDirectory(directory)
+                    events += "directory sync"
+                }
+            }
+            val store = AtomicJsonFileStore(Dispatchers.Unconfined, GsonBuilder().create(), operations)
+            store.writeIntent(tempFolder.root.resolve("intent-$fallback.json"), Payload("ready"), 100)
+            events += "admitted"
+            assertEquals(listOfNotNull("file sync", "move", "replace".takeIf { fallback }, "directory sync", "admitted"), events)
+        }
+    }
+
+    @Test
+    fun `first intent also commits each newly created directory entry`() = runTest {
+        val synced = mutableListOf<File>()
+        val operations = object : RecordingAtomicFileOperations() {
+            override fun syncDirectory(directory: File) {
+                super.syncDirectory(directory)
+                synced += directory
+            }
+        }
+        val file = tempFolder.root.resolve("new/nested/intent.json")
+        AtomicJsonFileStore(Dispatchers.Unconfined, GsonBuilder().create(), operations)
+            .writeIntent(file, Payload("ready"), 100)
+        assertEquals(listOf(file.parentFile, file.parentFile.parentFile, tempFolder.root), synced)
+    }
+
+    @Test
+    fun `directory sync failure prevents admission while ordinary writes retain their policy`() = runTest {
+        val failure = IOException("directory fsync failed")
+        val operations = object : RecordingAtomicFileOperations() {
+            override fun syncDirectory(directory: File) { throw failure }
+        }
+        val store = AtomicJsonFileStore(Dispatchers.Unconfined, GsonBuilder().create(), operations)
+        val file = tempFolder.root.resolve("intent.json")
+        var admitted = false
+        val actual = runCatching {
+            store.writeIntent(file, Payload("ready"), 100)
+            admitted = true
+        }.exceptionOrNull()
+        assertTrue(actual is IOException)
+        assertEquals(failure.message, actual?.message)
+        assertFalse(admitted)
+        assertTrue(tempFilesFor(file).none())
+        store.write(file, Payload("ordinary"))
+        assertEquals(Payload("ordinary"), store.read(file, Payload("fallback")))
+    }
+
     private fun throwingReadAdapter(failure: RuntimeException): TypeAdapter<Payload> {
         return object : TypeAdapter<Payload>() {
             override fun write(out: JsonWriter, value: Payload?) {

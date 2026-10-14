@@ -7,6 +7,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.nio.file.AtomicMoveNotSupportedException
@@ -14,6 +15,7 @@ import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
+import java.nio.file.StandardOpenOption.READ
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -205,8 +207,10 @@ class AtomicJsonFileStore private constructor(
         currentCoroutineContext().ensureActive()
         withContext(NonCancellable) {
             withContext(ioDispatcher) {
-                val parent = file.parentFile
-                parent?.mkdirs()
+                val parent = file.absoluteFile.parentFile ?: File(".")
+                val newParents = if (maxBytes == null) emptyList() else generateSequence(parent) { it.parentFile }
+                    .takeWhile { !it.exists() }.toList()
+                parent.mkdirs()
                 val tempFile = fileOperations.createTempFile(file)
                 try {
                     val text = gson.toJson(payload)
@@ -220,6 +224,10 @@ class AtomicJsonFileStore private constructor(
                         fileOperations.moveAtomically(tempFile, file)
                     } catch (_: AtomicMoveNotSupportedException) {
                         fileOperations.replace(tempFile, file)
+                    }
+                    if (maxBytes != null) {
+                        fileOperations.syncDirectory(parent)
+                        newParents.forEach { fileOperations.syncDirectory(it.parentFile ?: File(".")) }
                     }
                 } finally {
                     if (tempFile.exists()) {
@@ -241,6 +249,9 @@ internal interface AtomicFileOperations {
             output.write(bytes)
             output.fd.sync()
         }
+    }
+    fun syncDirectory(directory: File) {
+        FileChannel.open(directory.toPath(), READ).use { it.force(true) }
     }
     fun moveWithoutReplace(tempFile: File, target: File) {
         Files.move(tempFile.toPath(), target.toPath())
