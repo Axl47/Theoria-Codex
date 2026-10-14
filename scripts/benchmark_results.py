@@ -422,8 +422,8 @@ def main(argv: list[str] | None = None) -> int:
     comparison.add_argument("--candidate", type=Path, required=True)
     comparison.add_argument("--output", type=Path, required=True)
     contract_parser = sub.add_parser("contract", help="Print the required method/metric/iteration contract")
-    contract_parser.add_argument("--scenario", choices=tuple(default_contract()["scenarios"]),
-                                 help="Select one complete workload without reducing its iterations or metrics")
+    contract_parser.add_argument("--scenario", choices=tuple(default_contract()["scenarios"]), action="append",
+                                 help="Select complete workloads; repeat to include several without reducing iterations or metrics")
     args = parser.parse_args(argv)
     try:
         if args.command == "instrumentation":
@@ -448,8 +448,10 @@ def main(argv: list[str] | None = None) -> int:
         else:
             contract = default_contract()
             if args.scenario:
-                contract["version"] += f"/{args.scenario}"
-                contract["scenarios"] = {args.scenario: contract["scenarios"][args.scenario]}
+                if len(set(args.scenario)) != len(args.scenario):
+                    raise EvidenceError("A workload cannot be selected twice")
+                contract["version"] += "/" + ",".join(args.scenario)
+                contract["scenarios"] = {name: contract["scenarios"][name] for name in args.scenario}
             print(json.dumps(contract, indent=2))
         return 0
     except (EvidenceError, OSError, KeyError, TypeError) as error:

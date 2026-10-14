@@ -37,11 +37,18 @@ fi
 test_options=("${gradle_options[@]}")
 record_options=(--compilation 'Partial(BaselineProfileMode.Require,warmupIterations=0)')
 contract_options=()
+test_class="com.theoriacodex.macrobenchmark.TheoriaMacrobenchmark"
 if [[ -n "${BENCHMARK_SCENARIO:-}" ]]; then
   # Validate the selector and bind its full metrics/iterations before any device access.
-  contract_options+=(--scenario "$BENCHMARK_SCENARIO")
-  test_options+=("-Pandroid.testInstrumentationRunnerArguments.class=com.theoriacodex.macrobenchmark.TheoriaMacrobenchmark#$BENCHMARK_SCENARIO")
+  IFS=, read -r -a scenarios <<< "$BENCHMARK_SCENARIO"
+  selectors=()
+  for scenario in "${scenarios[@]}"; do
+    contract_options+=(--scenario "$scenario")
+    selectors+=("$test_class#$scenario")
+  done
+  test_class="$(IFS=,; printf '%s' "${selectors[*]}")"
 fi
+test_options+=("-Pandroid.testInstrumentationRunnerArguments.class=$test_class")
 python3 scripts/benchmark_results.py contract "${contract_options[@]}" > "$output/workload-contract.json"
 record_options+=(--contract "$output/workload-contract.json")
 
@@ -67,13 +74,11 @@ require_selected_phone
 "${adb_command[@]}" shell getprop ro.build.fingerprint > "$output/device-fingerprint.txt"
 # Keep result delivery separate from multi-GiB trace transfers. UTP can lose its still-open
 # instrumentation socket while collecting artifacts after a successful long journey.
+"${adb_command[@]}" shell input keyevent KEYCODE_WAKEUP
+"${adb_command[@]}" shell input keyevent KEYCODE_HOME
 "${adb_command[@]}" install -r "$target_apk" > "$output/install.log" 2>&1
 "${adb_command[@]}" install -r "$runner_apk" >> "$output/install.log" 2>&1
-test_class="com.theoriacodex.macrobenchmark.TheoriaMacrobenchmark"
 expected_tests="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["scenarios"]))' "$output/workload-contract.json")"
-if [[ -n "${BENCHMARK_SCENARIO:-}" ]]; then
-  test_class+="#$BENCHMARK_SCENARIO"
-fi
 
 run_records=()
 for ((index=1; index<=captures; index++)); do

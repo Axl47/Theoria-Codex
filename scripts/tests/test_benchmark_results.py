@@ -14,6 +14,16 @@ import benchmark_results as benchmark
 
 
 class BenchmarkResultsTest(unittest.TestCase):
+    def test_combined_workloads_retain_both_complete_contracts_and_reject_duplicates(self) -> None:
+        names = ["mixedMediaFiveFeedJourney", "durationAcquisitionFiveFeedJourney"]
+        args = ["contract", "--scenario", names[0], "--scenario", names[1]]
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(0, benchmark.main(args))
+        self.assertEqual({name: benchmark.default_contract()["scenarios"][name] for name in names},
+                         json.loads(output.getvalue())["scenarios"])
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(2, benchmark.main(args + ["--scenario", names[0]]))
+
     def test_native_success_requires_the_exact_test_count_and_completed_process(self) -> None:
         valid = "INSTRUMENTATION_RESULT: stream=\nOK (1 test)\nINSTRUMENTATION_CODE: -1\n"
         benchmark.validate_instrumentation_output(valid, 1)

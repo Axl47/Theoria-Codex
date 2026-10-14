@@ -27,7 +27,7 @@ ANDROID_SERIAL=SERIAL scripts/verify_performance_device.sh capture NEW_EVIDENCE_
 
 This performs the same artifact preflight and complete-trace archiving as calibration, but records
 one capture and claims no regression comparison. Set `THEORIA_DEVICE_OFFLINE=1` when the exact
-build dependencies are cached to keep every Gradle step offline. The script builds and verifies both APKs, then uses the same AndroidJUnitRunner directly and collects the complete unique output directory after instrumentation returns. It requires the exact JUnit test count and successful native completion before validating every metric, iteration and thermal record. No listener, iteration, compilation or autoplay setting is changed. This avoids UTP holding a result socket open during multi-GiB trace transfers. Calibration still requires three distinct full
+build dependencies are cached to keep every Gradle step offline. Use comma-separated complete method names in `BENCHMARK_SCENARIO` to run both five-feed journeys in one instrumentation session without an intervening phone lock. The script builds and verifies both APKs, then uses the same AndroidJUnitRunner directly and collects the complete unique output directory after instrumentation returns. It requires the exact JUnit test count and successful native completion before validating every metric, iteration and thermal record. No listener, iteration, compilation or autoplay setting is changed. This avoids UTP holding a result socket open during multi-GiB trace transfers. Calibration still requires three distinct full
 runs; a device or OS change requires a fresh compatible calibration.
 
 ## What the journeys exercise
