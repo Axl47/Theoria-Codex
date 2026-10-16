@@ -157,6 +157,7 @@ private fun ViewerGifMovie(
     Box(modifier, contentAlignment = Alignment.Center) {
         ViewerGifCanvas(movie, animation, Modifier.fillMaxSize().then(mediaModifier))
         if (controls.showControls) ViewerGifTimeline(animation, duration, controls, events, { scrubbing = it }, Modifier.align(Alignment.BottomCenter))
+        else if (controls.showPassiveProgress) ViewerPassiveProgressBar(animation.positionMs, duration, Modifier.align(Alignment.BottomCenter))
     }
 }
 

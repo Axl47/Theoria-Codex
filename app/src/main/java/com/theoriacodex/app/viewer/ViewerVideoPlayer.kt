@@ -300,8 +300,12 @@ private fun ViewerVideoContent(
         if (!state.hasRenderedFirstFrame && !state.failed) loadingPreview?.invoke()
         if (state.loading && !state.failed) CircularProgressIndicator()
         if (state.failed) Text("Could not play video", color = MaterialTheme.colorScheme.onBackground)
-        if (controls.isActive && controls.showControls && !state.failed && state.duration > 0L && state.player != null) {
-            ViewerVideoTimeline(state, controls, events, Modifier.align(Alignment.BottomCenter))
+        if (controls.isActive && !state.failed && state.duration > 0L && state.player != null) {
+            if (controls.showControls) {
+                ViewerVideoTimeline(state, controls, events, Modifier.align(Alignment.BottomCenter))
+            } else if (controls.showPassiveProgress) {
+                ViewerPassiveProgressBar(state.position, state.duration, Modifier.align(Alignment.BottomCenter))
+            }
         }
     }
 }

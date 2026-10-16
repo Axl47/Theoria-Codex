@@ -47,6 +47,8 @@ fun PixivUgoiraPlayer(
     onDurationKnown: (Long) -> Unit = {},
     onError: (String) -> Unit = {},
     loadingPreview: (@Composable () -> Unit)? = null,
+    showPassiveProgress: Boolean = false,
+    mediaModifier: Modifier = Modifier,
 ) {
     var playback by remember(postId, client, sizeBucket, loadGeneration) {
         mutableStateOf(client.cached(postId, sizeBucket))
@@ -118,18 +120,20 @@ fun PixivUgoiraPlayer(
     )
 
     val frame = activePlayback.frames[frameIndex.coerceAtMost(activePlayback.frames.lastIndex)]
-    if (!showProgressBar) {
-        Image(frame.bitmap.asImageBitmap(), contentDescription, modifier, contentScale = contentScale)
+    if (!showProgressBar && !showPassiveProgress) {
+        Image(frame.bitmap.asImageBitmap(), contentDescription, modifier.then(mediaModifier), contentScale = contentScale)
         return
     }
     Box(modifier = modifier) {
         Image(
             bitmap = frame.bitmap.asImageBitmap(),
             contentDescription = contentDescription,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().then(mediaModifier),
             contentScale = contentScale,
         )
-        Row(
+        if (!showProgressBar) {
+            ViewerPassiveProgressBar(animation.positionMs, totalDurationMs, Modifier.align(Alignment.BottomCenter))
+        } else Row(
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,

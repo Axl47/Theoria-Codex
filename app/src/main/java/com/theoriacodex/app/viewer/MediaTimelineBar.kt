@@ -1,5 +1,6 @@
 package com.theoriacodex.app.viewer
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -32,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -220,5 +222,16 @@ private fun formatTimelineTime(valueMs: Long): String {
         "%d:%02d:%02d".format(hours, minutes, seconds)
     } else {
         "%02d:%02d".format(minutes, seconds)
+    }
+}
+
+/** Display-only progress at the content edge; gestures pass through to the Viewer. */
+@Composable
+internal fun ViewerPassiveProgressBar(positionMs: Long, durationMs: Long, modifier: Modifier = Modifier) {
+    if (durationMs <= 0L) return
+    Canvas(modifier.fillMaxWidth().height(2.dp)) {
+        val progress = (positionMs.toDouble() / durationMs).coerceIn(0.0, 1.0).toFloat()
+        drawRect(Color(0xFF787878))
+        drawRect(Color.White, size = Size(size.width * progress, size.height))
     }
 }

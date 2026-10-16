@@ -14,6 +14,7 @@ internal data class ViewerRendererControls(
     val playbackRate: Float,
     val restartRequest: Long,
     val loadGeneration: Long,
+    val showPassiveProgress: Boolean = false,
     val seekJumpSerial: Int = 0,
     val seekJumpDeltaMs: Long = 0L,
 )

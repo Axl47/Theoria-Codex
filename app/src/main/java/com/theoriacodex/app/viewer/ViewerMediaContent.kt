@@ -33,7 +33,7 @@ internal fun ViewerMediaContent(
 ) {
     when {
         isPixivUgoiraMedia(post, media) && pixivUgoiraClient != null -> Box(
-            Modifier.fillMaxSize().then(transformModifier),
+            Modifier.fillMaxSize(),
         ) {
             PixivUgoiraPlayer(
                 postId = post.id.sourcePostId,
@@ -43,6 +43,8 @@ internal fun ViewerMediaContent(
                 loopPlayback = controls.loopPlayback,
                 onPlaybackCompleted = events.onPlaybackCompleted,
                 showProgressBar = controls.showControls,
+                showPassiveProgress = controls.showPassiveProgress,
+                mediaModifier = transformModifier,
                 isActive = controls.isActive,
                 isPlaying = controls.isPlaying,
                 seekJumpSerial = controls.seekJumpSerial,

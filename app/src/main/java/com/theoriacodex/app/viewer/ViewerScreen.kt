@@ -445,6 +445,7 @@ internal fun ViewerScreen(
                         isActive = active,
                         isPlaying = mediaPlaybackEnabled,
                         showControls = chromeVisible && active,
+                        showPassiveProgress = !chromeVisible && active && !inPictureInPicture,
                         loopPlayback = uiState.controls.playbackMode == com.theoriacodex.app.viewer.state.ViewerPlaybackMode.LOOP,
                         playbackRate = playbackRate.speed,
                         restartRequest = playbackRestartRequest,
