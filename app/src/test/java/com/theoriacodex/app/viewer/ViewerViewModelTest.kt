@@ -34,6 +34,25 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class ViewerViewModelTest {
     @Test
+    fun `new videos use the device play mode without persisting speed`() = runTest {
+        var preference = com.theoriacodex.app.viewer.state.ViewerPlaybackMode.ONCE
+        val owner = ViewerViewModel(SavedStateHandle(), scopeOverride = this, playbackModeProvider = { preference })
+        owner.replaceSession(session("first", listOf(post("first", media = listOf(video("first.mp4"))))))
+        assertEquals(preference, owner.state.value.controls.playbackMode)
+        owner.onAction(ViewerAction.SetPlaybackRate(2f))
+        owner.onAction(ViewerAction.SetPlaybackMode(com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT))
+        // A live payload update must retain the selection while its settings write is still pending.
+        owner.updateSession { it }
+        assertEquals(com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT, owner.state.value.controls.playbackMode)
+        preference = com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT
+        owner.clearSession()
+        owner.replaceSession(session("second", listOf(post("second", media = listOf(video("second.mp4"))))))
+        assertEquals(preference, owner.state.value.controls.playbackMode)
+        assertEquals(1f, owner.state.value.controls.playback.playbackRate)
+        owner.clearSession()
+    }
+
+    @Test
     fun `exit cancels work and clears authority while retaining paused selected media`() = runTest {
         val handle = SavedStateHandle()
         var cancelled = false

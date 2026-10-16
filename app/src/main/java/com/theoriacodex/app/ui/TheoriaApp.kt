@@ -1678,6 +1678,7 @@ internal fun TheoriaAppContent(
                                     restoreSession = viewerRouteWorkflow::restoreSession,
                                 ),
                                 renderConfig = ViewerRouteRenderConfig(
+                                    playbackMode = state.browsing.settings.viewer.playbackMode,
                                     videoQuality = state.browsing.settings.viewer.videoQuality,
                                     pixivUgoiraClient = sourceDependencies.pixivUgoiraClient,
                                     tagVideoCountProvider = featureDependencies.search::tagVideoCount,
@@ -1774,6 +1775,13 @@ internal fun TheoriaAppContent(
                                     },
                                 ),
                                 screenCallbacks = ViewerRouteScreenCallbacks(
+                                    onPlaybackModeSelected = { mode ->
+                                        scope.launch {
+                                            dataDependencies.settingsRepository.updateSettings { current ->
+                                                current.copy(viewer = current.viewer.copy(playbackMode = mode))
+                                            }
+                                        }
+                                    },
                                     onOwnerChanged = { owner -> activeViewerOwner = owner },
                                     onInvertMultiImageScrollDirectionChange = { enabled ->
                                         scope.launch {

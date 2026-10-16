@@ -378,6 +378,7 @@ enum class ViewerOcrLanguage {
 }
 
 data class ViewerSettings(
+    val playbackMode: com.theoriacodex.domain.model.ViewerPlaybackMode = com.theoriacodex.domain.model.ViewerPlaybackMode.LOOP,
     val videoQuality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
     val invertMultiImageScrollDirection: Boolean = false,
     val automaticTextTranslationEnabled: Boolean = false,

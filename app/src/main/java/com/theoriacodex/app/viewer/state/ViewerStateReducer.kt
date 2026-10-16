@@ -96,7 +96,9 @@ internal fun reduceViewerState(state: ViewerUiState, action: ViewerAction): View
                 posts = action.posts,
                 initialPageIndex = action.initialPageIndex,
                 requiresResolution = { post -> post.id in action.resolutionRequiredPostIds },
-            ),
+            ).let { replacement ->
+                replacement.copy(controls = replacement.controls.copy(playbackMode = state.controls.playbackMode))
+            },
         )
     }
 

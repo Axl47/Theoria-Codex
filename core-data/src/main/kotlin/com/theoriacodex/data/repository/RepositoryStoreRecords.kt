@@ -21,6 +21,7 @@ internal data class LegacySettingsStoreRecord(
     val sourceWeights: Map<String, Double> = SourceRuntimeSettings().sourceWeights.mapKeys { it.key.name },
     @field:SerializedName("sourceWeightsByConfiguration")
     val sourceWeightsByConfiguration: Map<String, Map<String, Double>>? = null,
+    @field:SerializedName("viewerPlaybackMode") val viewerPlaybackMode: String? = null,
     @field:SerializedName("videoQuality") val videoQuality: String? = null,
     @field:SerializedName("downloadQuality") val downloadQuality: String? = null,
     @field:SerializedName("downloadsOverMetered") val downloadsOverMetered: Boolean? = null,
@@ -130,6 +131,9 @@ internal data class LegacySettingsStoreRecord(
 
     private fun toViewerSettings(): ViewerSettings {
         return ViewerSettings(
+            playbackMode = com.theoriacodex.domain.model.ViewerPlaybackMode.entries.firstOrNull {
+                it.name == viewerPlaybackMode
+            } ?: com.theoriacodex.domain.model.ViewerPlaybackMode.LOOP,
             videoQuality = decodeVideoQuality(videoQuality, com.theoriacodex.domain.model.VideoQuality.AUTO),
             invertMultiImageScrollDirection = invertMultiImageScrollDirection,
             automaticTextTranslationEnabled = viewerAutomaticTextTranslationEnabled,
@@ -162,6 +166,7 @@ internal data class LegacySettingsStoreRecord(
                     weights.mapKeys { it.key.name }
                 },
                 cacheFullImageOnSave = settings.cache.cacheFullImageOnSave,
+                viewerPlaybackMode = settings.viewer.playbackMode.name,
                 videoQuality = settings.viewer.videoQuality.name,
                 downloadQuality = settings.cache.downloadQuality.name,
                 downloadsOverMetered = settings.cache.downloadsOverMetered,

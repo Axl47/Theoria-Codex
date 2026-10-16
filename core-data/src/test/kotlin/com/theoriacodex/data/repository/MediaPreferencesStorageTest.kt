@@ -14,10 +14,12 @@ class MediaPreferencesStorageTest {
     @Test fun `old settings retain safe defaults and new settings round trip`() {
         val gson = Gson()
         val old = gson.fromJson("{}", LegacySettingsStoreRecord::class.java).toDomain()
+        assertEquals(com.theoriacodex.domain.model.ViewerPlaybackMode.LOOP, old.viewer.playbackMode)
         assertEquals(VideoQuality.AUTO, old.viewer.videoQuality)
         assertEquals(VideoQuality.BEST, old.cache.downloadQuality)
         assertFalse(old.cache.downloadsOverRoaming)
-        val expected = AppSettings(viewer = ViewerSettings(videoQuality = VideoQuality.DATA_SAVER),
+        val expected = AppSettings(viewer = ViewerSettings(videoQuality = VideoQuality.DATA_SAVER,
+            playbackMode = com.theoriacodex.domain.model.ViewerPlaybackMode.NEXT),
             cache = CacheSettings(downloadQuality = VideoQuality.AUTO, downloadsOverMetered = false))
         val stored = gson.fromJson(gson.toJson(LegacySettingsStoreRecord.fromDomain(expected)),
             LegacySettingsStoreRecord::class.java).toDomain()

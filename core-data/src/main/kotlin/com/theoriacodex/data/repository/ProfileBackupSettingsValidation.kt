@@ -16,6 +16,9 @@ internal fun validateBackupSettings(root: JsonObject, profileIds: Set<String>) {
             require(key == weights.asJsonObject.keySet().sorted().joinToString(","))
         }
     }
+    if (root.has("viewerPlaybackMode")) {
+        com.theoriacodex.domain.model.ViewerPlaybackMode.valueOf(root.backupString("viewerPlaybackMode"))
+    }
     VideoQuality.valueOf(root.backupString("videoQuality"))
     VideoQuality.valueOf(root.backupString("downloadQuality"))
     listOf("downloadsOverMetered", "downloadsOverRoaming", "cacheFullImageOnSave",

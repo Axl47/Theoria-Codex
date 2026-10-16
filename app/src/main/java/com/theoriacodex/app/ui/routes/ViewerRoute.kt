@@ -68,6 +68,7 @@ internal data class ViewerRouteRenderConfig(
     val fetchTagVideoCounts: suspend (SourceKey, List<String>) -> Map<String, Int?> = { _, _ ->
         emptyMap()
     },
+    val playbackMode: com.theoriacodex.domain.model.ViewerPlaybackMode = com.theoriacodex.domain.model.ViewerPlaybackMode.LOOP,
     val videoQuality: com.theoriacodex.domain.model.VideoQuality = com.theoriacodex.domain.model.VideoQuality.AUTO,
     val invertMultiImageScrollDirection: Boolean = false,
     val likedPostIds: Set<PostId> = emptySet(),
@@ -150,6 +151,7 @@ internal data class ViewerRouteEffectCallbacks(
 /** Renderer callbacks that cross into navigation, persistence, or Android platform behavior. */
 internal data class ViewerRouteScreenCallbacks(
     val onOwnerChanged: (ViewerRouteOwnerHandle?) -> Unit = {},
+    val onPlaybackModeSelected: (com.theoriacodex.domain.model.ViewerPlaybackMode) -> Unit = {},
     val onInvertMultiImageScrollDirectionChange: (Boolean) -> Unit = {},
     val onVisiblePostChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
     val onVisibleMediaChanged: suspend (Post, Int, ViewerSession) -> Unit = { _, _, _ -> },
@@ -200,11 +202,13 @@ internal fun ViewerRoute(
     screenCallbacks: ViewerRouteScreenCallbacks,
 ) {
     val latestDependencies = rememberUpdatedState(dependencies)
+    val latestRenderConfig = rememberUpdatedState(renderConfig)
     val latestEffectCallbacks = rememberUpdatedState(effectCallbacks)
     val latestScreenCallbacks = rememberUpdatedState(screenCallbacks)
     val routeScope = rememberCoroutineScope()
     val ownerFactory = remember {
         ViewerViewModel.factory(
+            playbackModeProvider = { latestRenderConfig.value.playbackMode },
             postResolver = object : ViewerPostResolver {
                 override suspend fun resolve(session: com.theoriacodex.app.viewer.state.ViewerSessionIdentity, postId: PostId) =
                     latestDependencies.value.postResolver.resolve(session, postId)
@@ -413,7 +417,12 @@ internal fun ViewerRoute(
     ViewerScreen(
         uiState = viewerState,
         creatorBrowsingSources = renderConfig.creatorBrowsingSources,
-        onAction = viewerOwner::onAction,
+        onAction = { action ->
+            viewerOwner.onAction(action)
+            if (action is com.theoriacodex.app.viewer.state.ViewerAction.SetPlaybackMode) {
+                screenCallbacks.onPlaybackModeSelected(action.mode)
+            }
+        },
         pixivUgoiraClient = renderConfig.pixivUgoiraClient,
         tagVideoCountProvider = renderConfig.tagVideoCountProvider,
         fetchTagVideoCounts = renderConfig.fetchTagVideoCounts,

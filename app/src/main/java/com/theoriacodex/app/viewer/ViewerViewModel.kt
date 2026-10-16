@@ -61,6 +61,7 @@ internal class ViewerViewModel(
     private val postResolver: ViewerPostResolver? = null,
     private val mediaPrefetcher: ViewerMediaPrefetcher? = null,
     scopeOverride: CoroutineScope? = null,
+    private val playbackModeProvider: (() -> com.theoriacodex.app.viewer.state.ViewerPlaybackMode)? = null,
 ) : ViewModel(), RouteStateOwner<ViewerUiState, ViewerAction, ViewerEffect> {
     private val lock = Any()
     private val workScope = scopeOverride ?: viewModelScope
@@ -110,10 +111,12 @@ internal class ViewerViewModel(
             if (restoresSavedSelection && restoredMediaIndex > 0) {
                 result = reduceViewerState(result.state, ViewerAction.SelectMedia(restoredMediaIndex))
             }
-            if (restoresSavedSelection) {
-                val mode = com.theoriacodex.app.viewer.state.ViewerPlaybackMode.entries.firstOrNull {
-                    it.name == savedStateHandle.get<String>(ViewerSavedStateKeys.PLAYBACK_MODE)
-                } ?: com.theoriacodex.app.viewer.state.ViewerPlaybackMode.LOOP
+            if (action is ViewerAction.ReplaceSession &&
+                (action.session != mutableState.value.session || mutableState.value.pages.isEmpty())) {
+                val mode = playbackModeProvider?.invoke()
+                    ?: com.theoriacodex.app.viewer.state.ViewerPlaybackMode.entries.firstOrNull {
+                        it.name == savedStateHandle.get<String>(ViewerSavedStateKeys.PLAYBACK_MODE)
+                    } ?: mutableState.value.controls.playbackMode
                 result = reduceViewerState(result.state, ViewerAction.SetPlaybackMode(mode))
             }
             result.also {
@@ -422,12 +425,14 @@ internal class ViewerViewModel(
         fun factory(
             postResolver: ViewerPostResolver? = null,
             mediaPrefetcher: ViewerMediaPrefetcher? = null,
+            playbackModeProvider: (() -> com.theoriacodex.app.viewer.state.ViewerPlaybackMode)? = null,
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 ViewerViewModel(
                     savedStateHandle = createSavedStateHandle(),
                     postResolver = postResolver,
                     mediaPrefetcher = mediaPrefetcher,
+                    playbackModeProvider = playbackModeProvider,
                 )
             }
         }

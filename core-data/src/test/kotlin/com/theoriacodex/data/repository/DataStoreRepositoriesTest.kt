@@ -29,6 +29,28 @@ class DataStoreRepositoriesTest {
     val tempFolder = TemporaryFolder()
 
     @Test
+    fun `viewer play mode survives a fresh settings repository`() = runTest {
+        val directory = tempFolder.newFolder("viewer-play-mode")
+        val firstScope = newScope()
+        try {
+            DataStoreSettingsRepository(directory, firstScope).updateSettings { current ->
+                current.copy(viewer = current.viewer.copy(
+                    playbackMode = com.theoriacodex.domain.model.ViewerPlaybackMode.ONCE,
+                ))
+            }
+        } finally {
+            closeScope(firstScope)
+        }
+        val secondScope = newScope()
+        try {
+            val restored = DataStoreSettingsRepository(directory, secondScope).observeSettings().first()
+            assertEquals(com.theoriacodex.domain.model.ViewerPlaybackMode.ONCE, restored.viewer.playbackMode)
+        } finally {
+            closeScope(secondScope)
+        }
+    }
+
+    @Test
     fun `constructors perform no file reads or writes`() {
         val directory = tempFolder.newFolder("constructor-no-io")
         val scope = newScope()

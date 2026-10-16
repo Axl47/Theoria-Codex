@@ -89,7 +89,7 @@ internal data class ViewerPlaybackControlsState(
     }
 }
 
-internal enum class ViewerPlaybackMode(val label: String) { LOOP("Loop"), ONCE("Play once"), NEXT("Next in queue") }
+internal typealias ViewerPlaybackMode = com.theoriacodex.domain.model.ViewerPlaybackMode
 
 internal data class ViewerControlsState(
     val playbackMode: ViewerPlaybackMode = ViewerPlaybackMode.LOOP,

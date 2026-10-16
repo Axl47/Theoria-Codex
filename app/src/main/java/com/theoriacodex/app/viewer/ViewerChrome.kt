@@ -11,6 +11,11 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -176,41 +181,9 @@ private fun PlaybackSettingsMenu(
         DropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
             PlaybackModeChoices(playbackMode, onPlaybackModeSelected, onExpandedChange)
             VideoQualityChoices(videoVariants, quality, qualityHeight, onQualitySelected, onExpandedChange)
-            if (playbackRateEnabled) ViewerPlaybackRate.entries.forEach { rate ->
-                PlaybackRateMenuItem(
-                    rate = rate,
-                    selected = rate == playbackRate,
-                    onClick = { onPlaybackRateSelected(rate) },
-                )
-            }
+            if (playbackRateEnabled) PlaybackRateSlider(playbackRate, onPlaybackRateSelected)
         }
     }
-}
-
-@Composable
-private fun PlaybackRateMenuItem(
-    rate: ViewerPlaybackRate,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer
-    val selectedContentColor = MaterialTheme.colorScheme.onSecondaryContainer
-    DropdownMenuItem(
-        modifier = Modifier.background(if (selected) selectedContainerColor else Color.Transparent),
-        text = { Text(rate.menuLabel) },
-        onClick = onClick,
-        colors = MenuDefaults.itemColors(
-            textColor = if (selected) selectedContentColor else MaterialTheme.colorScheme.onSurface,
-            leadingIconColor = if (selected) {
-                selectedContentColor
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-        ),
-        leadingIcon = {
-            if (selected) Icon(Icons.Default.Check, contentDescription = rate.contentDescription)
-        },
-    )
 }
 
 @Composable
@@ -273,18 +246,34 @@ private fun ViewerActionsMenu(
 }
 
 @Composable
-private fun PlaybackModeChoices(
+internal fun PlaybackModeChoices(
     playbackMode: com.theoriacodex.app.viewer.state.ViewerPlaybackMode,
     onPlaybackModeSelected: (com.theoriacodex.app.viewer.state.ViewerPlaybackMode) -> Unit,
     onExpandedChange: (Boolean) -> Unit,
 ) {
-            com.theoriacodex.app.viewer.state.ViewerPlaybackMode.entries.forEach { mode ->
-                DropdownMenuItem(
-                    text = { Text(mode.label) },
-                    leadingIcon = { if (playbackMode == mode) Icon(Icons.Default.Check, null) },
-                    onClick = { onPlaybackModeSelected(mode); onExpandedChange(false) },
+    com.theoriacodex.app.viewer.state.ViewerPlaybackMode.entries.forEach { mode ->
+        val selected = playbackMode == mode
+        val contentColor = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+            else MaterialTheme.colorScheme.onSurface
+        DropdownMenuItem(
+            modifier = Modifier
+                .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                .semantics { this.selected = selected },
+            text = { Text(mode.label) },
+            leadingIcon = {
+                Icon(
+                    imageVector = when (mode) {
+                        com.theoriacodex.app.viewer.state.ViewerPlaybackMode.LOOP -> Icons.Default.Repeat
+                        com.theoriacodex.app.viewer.state.ViewerPlaybackMode.ONCE -> Icons.Default.PlayArrow
+                        com.theoriacodex.app.viewer.state.ViewerPlaybackMode.NEXT -> Icons.AutoMirrored.Filled.PlaylistPlay
+                    },
+                    contentDescription = null,
                 )
-            }
+            },
+            colors = MenuDefaults.itemColors(textColor = contentColor, leadingIconColor = contentColor),
+            onClick = { onPlaybackModeSelected(mode); onExpandedChange(false) },
+        )
+    }
 }
 
 @Composable
