@@ -17,18 +17,7 @@ internal object RepositoryPolicies {
     )
 
     fun normalizeSettings(settings: AppSettings): AppSettings {
-        val normalizedProfiles = settings.recommendationProfiles
-            .asSequence()
-            .map { profile ->
-                RecommendationProfile(
-                    profileId = profile.profileId.trim(),
-                    name = profile.name.trim(),
-                )
-            }
-            .filter { profile -> profile.profileId.isNotBlank() && profile.name.isNotBlank() }
-            .distinctBy { profile -> profile.profileId }
-            .toList()
-            .ifEmpty { defaultRecommendationProfiles() }
+        val normalizedProfiles = normalizeRecommendationProfiles(settings.recommendationProfiles)
         val requestedActiveProfileId = normalizeProfileId(settings.activeProfileId)
         val activeProfileId = requestedActiveProfileId
             .takeIf { active -> normalizedProfiles.any { profile -> profile.profileId == active } }
@@ -80,6 +69,21 @@ internal object RepositoryPolicies {
             favoriteTagsByProfile = normalizedFavoriteTags,
             providerHealth = normalizedProviderHealth,
         )
+    }
+
+    private fun normalizeRecommendationProfiles(profiles: List<RecommendationProfile>): List<RecommendationProfile> {
+        return profiles
+            .asSequence()
+            .map { profile ->
+                RecommendationProfile(
+                    profileId = profile.profileId.trim(),
+                    name = profile.name.trim(),
+                )
+            }
+            .filter { profile -> profile.profileId.isNotBlank() && profile.name.isNotBlank() }
+            .distinctBy { profile -> profile.profileId }
+            .toList()
+            .ifEmpty { defaultRecommendationProfiles() }
     }
 
     fun normalizeSourceWeights(

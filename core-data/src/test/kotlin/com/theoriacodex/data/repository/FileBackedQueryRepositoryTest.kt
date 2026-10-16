@@ -185,56 +185,7 @@ internal class FileBackedQueryRepositoryTest : FileBackedRepositoryTestFixture()
     fun `query repository distinguishes absent typed terms from explicit empty terms`() = runTest {
         val dir = tempDir("query-null-vs-empty-terms-")
         dir.resolve("query_store.json").writeText(
-            """
-            {
-              "queries": {
-                "legacy": {
-                  "modeType": "source",
-                  "modeSource": "PIXIV",
-                  "includeTags": ["legacy include"],
-                  "excludeTags": ["legacy exclude"],
-                  "includeTerms": null,
-                  "excludeTerms": null,
-                  "sort": "TOP",
-                  "dateFromEpochMs": null,
-                  "dateToEpochMs": null,
-                  "minScore": null
-                },
-                "typed-empty": {
-                  "modeType": "source",
-                  "modeSource": "PIXIV",
-                  "includeTags": ["must not return"],
-                  "excludeTags": ["must not return"],
-                  "includeTerms": [],
-                  "excludeTerms": [],
-                  "sort": "TOP",
-                  "dateFromEpochMs": null,
-                  "dateToEpochMs": null,
-                  "minScore": null
-                },
-                "typed-malformed": {
-                  "modeType": "source",
-                  "modeSource": "PIXIV",
-                  "includeTags": ["must not return"],
-                  "excludeTags": [],
-                  "includeTerms": [
-                    null,
-                    {"value": "", "facet": "TAG"},
-                    {"value": "missing"},
-                    {"value": "blank", "facet": " "},
-                    {"value": "unknown", "facet": "REMOVED_FACET"},
-                    {"value": " najar ", "facet": "ARTIST", "sourceNamespace": " artist "}
-                  ],
-                  "excludeTerms": [null],
-                  "sort": "TOP",
-                  "dateFromEpochMs": null,
-                  "dateToEpochMs": null,
-                  "minScore": null
-                }
-              },
-              "scrollOffsets": {}
-            }
-            """.trimIndent(),
+            requireNotNull(javaClass.getResource("/queries/legacy-and-typed-terms.json")).readText(),
         )
 
         val repository = FileBackedQueryRepository(dir)

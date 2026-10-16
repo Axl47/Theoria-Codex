@@ -90,22 +90,9 @@ internal class UiRestoreLegacyDataMigration(
             }
 
             if (state.lastTab == null) {
-                val settingsSnapshot = readLegacySnapshot(legacySettingsFile, legacySettingsArchiveFile)
-                val legacySettings = settingsSnapshot?.parse(
-                    LegacySettingsStoreRecord::class.java,
-                    gson,
-                    "legacy settings last-tab state",
-                )
-                val migratedTab = legacySettings?.lastSelectedTabRoute
-                    ?.trim()
-                    ?.takeIf(String::isNotBlank)
-                if (settingsSnapshot != null && legacySettings != null) {
-                    if (migratedTab != null) state = state.copy(lastTab = migratedTab)
-                    proofs += settingsSnapshot.proof(
-                        sourceSchemaVersion = legacySettings.sourceSchemaVersion(),
-                        destinationSchemaVersion = UI_RESTORE_DATASTORE_SCHEMA_VERSION,
-                        importedCounts = mapOf("lastTab" to if (migratedTab == null) 0 else 1),
-                    )
+                importSettingsLastTab()?.let { (tab, proof) ->
+                    state = state.copy(lastTab = tab)
+                    proofs += proof
                 }
             }
 
@@ -114,6 +101,19 @@ internal class UiRestoreLegacyDataMigration(
                 legacyImports = proofs,
             ).also { onImported(it.legacyImports) }
         }
+    }
+
+    private fun importSettingsLastTab(): Pair<String?, LegacyImportProof>? {
+        val snapshot = readLegacySnapshot(legacySettingsFile, legacySettingsArchiveFile) ?: return null
+        val settings = snapshot.parse(LegacySettingsStoreRecord::class.java, gson, "legacy settings last-tab state")
+        val storedTab: String? = settings.lastSelectedTabRoute
+        val tab = storedTab?.trim()?.takeIf(String::isNotBlank)
+        val proof = snapshot.proof(
+            sourceSchemaVersion = settings.sourceSchemaVersion(),
+            destinationSchemaVersion = UI_RESTORE_DATASTORE_SCHEMA_VERSION,
+            importedCounts = mapOf("lastTab" to if (tab == null) 0 else 1),
+        )
+        return tab to proof
     }
 
     override suspend fun cleanUp() {
