@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.activity.compose.BackHandler
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Collections
@@ -136,9 +138,18 @@ private fun SaveToCodexSheetContent(
     onDismiss: () -> Unit,
 ) {
     var searchText by rememberSaveable { mutableStateOf("") }
-    val matchingCodices = remember(selectedCodices, searchText) {
+    var insideSaved by rememberSaveable(selectedProfile?.profileId) { mutableStateOf(false) }
+    val likesId = selectedProfile?.profileId?.let(::likesCodexIdForProfile)
+    val rootCodices = remember(selectedCodices, likesId, insideSaved) {
+        savePickerCodices(selectedCodices, likesId, insideSaved)
+    }
+    BackHandler(enabled = insideSaved) { insideSaved = false; searchText = "" }
+    val matchingCodices = remember(rootCodices, searchText) {
         val query = searchText.trim()
-        selectedCodices.filter { codex -> codex.name.contains(query, ignoreCase = true) }
+        rootCodices.filter { codex ->
+            codex.name.contains(query, ignoreCase = true) ||
+                (codex.codexId == SAVED_CODEX_ID && "Likes".contains(query, ignoreCase = true))
+        }
     }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -151,39 +162,62 @@ private fun SaveToCodexSheetContent(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            SheetHeader(title, "Close save menu", onDismiss)
-            OutlinedTextField(
-                value = searchText,
-                onValueChange = { searchText = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Search Codices") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (searchText.isNotEmpty()) {
-                        IconButton(onClick = { searchText = "" }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear Codex search")
-                        }
-                    }
-                },
-                singleLine = true,
-            )
+            SheetHeader(if (insideSaved) "Saved" else title, "Close save menu", onDismiss)
+            if (insideSaved) {
+                SheetActionRow(Icons.AutoMirrored.Filled.ArrowBack, "All Codices") {
+                    insideSaved = false
+                    searchText = ""
+                }
+            }
+            CodexPickerSearch(searchText) { searchText = it }
             CodexPickerList(
                 codices = matchingCodices,
-                emptyMessage = if (selectedCodices.isNotEmpty()) {
-                    "No matching Codices."
-                } else if (hasExcludedCodices) {
-                    "No other Codices in this profile yet."
-                } else {
-                    "No Codices in this profile yet."
+                modifier = Modifier.weight(1f, fill = false),
+                emptyMessage = savePickerEmptyMessage(selectedCodices, hasExcludedCodices),
+                itemCounts = codexItemCounts + (SAVED_CODEX_ID to (codexItemCounts[likesId] ?: 0)),
+                coverCandidates = codexCoverCandidates + (SAVED_CODEX_ID to codexCoverCandidates[likesId].orEmpty()),
+                onSelectCodex = { id ->
+                    if (id == SAVED_CODEX_ID) { insideSaved = true; searchText = "" }
+                    else onSelectCodex(id)
                 },
-                itemCounts = codexItemCounts,
-                coverCandidates = codexCoverCandidates,
-                onSelectCodex = onSelectCodex,
             )
             SheetActionRow(Icons.Default.Person, selectedProfile?.name ?: "Profile", onCycleProfile)
             SheetActionRow(Icons.Default.Add, "Create Codex", onCreateCodex)
         }
     }
+}
+
+private fun savePickerCodices(codices: List<Codex>, likesId: String?, insideSaved: Boolean): List<Codex> {
+    if (insideSaved) return savedCodexChildren(likesId.orEmpty()).filter { child ->
+        isVirtualCodex(child.codexId) || codices.any { it.codexId == child.codexId }
+    }
+    if (likesId == null || codices.none { it.codexId == likesId }) return codices
+    return savedCodexLibraryEntries(codices, likesId)
+}
+
+private fun savePickerEmptyMessage(codices: List<Codex>, hasExcluded: Boolean): String = when {
+    codices.isNotEmpty() -> "No matching Codices."
+    hasExcluded -> "No other Codices in this profile yet."
+    else -> "No Codices in this profile yet."
+}
+
+@Composable
+private fun CodexPickerSearch(searchText: String, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = searchText,
+        onValueChange = onChange,
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text("Search Codices") },
+        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+        trailingIcon = {
+            if (searchText.isNotEmpty()) {
+                IconButton(onClick = { onChange("") }) {
+                    Icon(Icons.Default.Close, contentDescription = "Clear Codex search")
+                }
+            }
+        },
+        singleLine = true,
+    )
 }
 
 @Composable
@@ -193,6 +227,7 @@ private fun CodexPickerList(
     itemCounts: Map<String, Int>,
     coverCandidates: Map<String, List<CodexCoverCandidate>>,
     onSelectCodex: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     if (codices.isEmpty()) {
         Surface(
@@ -209,7 +244,7 @@ private fun CodexPickerList(
         return
     }
     LazyColumn(
-        modifier = Modifier.heightIn(max = 420.dp),
+        modifier = modifier.heightIn(max = 420.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         items(codices, key = Codex::codexId) { codex ->
@@ -218,6 +253,9 @@ private fun CodexPickerList(
                 itemCount = itemCounts[codex.codexId] ?: 0,
                 coverCandidates = coverCandidates[codex.codexId].orEmpty(),
                 onClick = { onSelectCodex(codex.codexId) },
+                enabled = !isVirtualCodex(codex.codexId),
+                description = if (isVirtualCodex(codex.codexId)) "Automatic feed"
+                    else "${itemCounts[codex.codexId] ?: 0} items",
             )
         }
     }
@@ -234,11 +272,13 @@ private fun CodexPickerRow(
     itemCount: Int,
     coverCandidates: List<CodexCoverCandidate>,
     onClick: () -> Unit,
+    enabled: Boolean = true,
+    description: String = "$itemCount items",
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         tonalElevation = 2.dp,
     ) {
@@ -281,7 +321,7 @@ private fun CodexPickerRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "$itemCount items",
+                    text = description,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

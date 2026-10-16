@@ -19,6 +19,12 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 internal fun DurationRouteEnvironmentEffect(
     gridState: LazyStaggeredGridState,
     onEnvironmentChanged: (lifecycleStarted: Boolean, scrollIdle: Boolean) -> Unit,
+) = DurationRouteEnvironmentEffect({ gridState.isScrollInProgress }, onEnvironmentChanged)
+
+@Composable
+internal fun DurationRouteEnvironmentEffect(
+    isScrollInProgress: () -> Boolean,
+    onEnvironmentChanged: (lifecycleStarted: Boolean, scrollIdle: Boolean) -> Unit,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     var lifecycleStarted by remember(lifecycleOwner) {
@@ -35,8 +41,8 @@ internal fun DurationRouteEnvironmentEffect(
             onEnvironmentChanged(false, true)
         }
     }
-    LaunchedEffect(lifecycleStarted, gridState) {
-        snapshotFlow { gridState.isScrollInProgress }
+    LaunchedEffect(lifecycleStarted, isScrollInProgress) {
+        snapshotFlow { isScrollInProgress() }
             .distinctUntilChanged()
             .collectLatest { scrolling ->
                 onEnvironmentChanged(lifecycleStarted, !scrolling)

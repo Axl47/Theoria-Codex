@@ -1448,6 +1448,29 @@ internal fun TheoriaAppContent(
                                 }
                             }
                         }
+                        val openCodexViewer: (String, List<Post>, Int) -> Unit = { codexId, visiblePosts, index ->
+                            val context = ViewerLaunchContext(
+                                queryHash = "codex:$codexId",
+                                startIndex = index,
+                                streamSource = ViewerStreamSource.CODEX,
+                                scrollOffsetHint = 0,
+                            )
+                            scope.launch {
+                                val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
+                                    visiblePosts,
+                                    context,
+                                )
+                                viewerSessionOwner.retain(
+                                    ViewerSession(
+                                        posts = preparedPosts,
+                                        context = context,
+                                        liveSearchBinding = false,
+                                    ),
+                                )
+                                dataDependencies.uiRestoreRepository.setViewerLaunchContext(context)
+                                navController.navigate(AppRoute.Viewer)
+                            }
+                        }
                         composable(
                             route = AppRoute.CodexDetail,
                             arguments = listOf(navArgument("codexId") { type = NavType.StringType }),
@@ -1457,6 +1480,19 @@ internal fun TheoriaAppContent(
                                 runCatchingPreservingCancellation {
                                     dataDependencies.statisticsRepository.recordCodexEntry(codexId)
                                 }
+                            }
+                            if (codexId == com.theoriacodex.app.codex.SAVED_CODEX_ID) {
+                                com.theoriacodex.app.ui.routes.SavedCodexRoute(
+                                    data = dataDependencies,
+                                    sources = sourceDependencies,
+                                    durations = featureDependencies.mediaDurationCoordinator,
+                                    restoreRegistry = feedFabRestoreRegistry,
+                                    onBack = { navController.popBackStack() },
+                                    onOpenCodex = { navController.navigate(AppRoute.codexDetail(it)) },
+                                    onOpenViewer = openCodexViewer,
+                                    resolvePost = { viewerRouteWorkflow.resolvePost(it, ViewerStreamSource.CODEX) },
+                                )
+                                return@composable
                             }
                             val fabContext = codexFeedFabContext(codexId)
                             val fabRestoreState = feedFabRestoreRegistry.state(fabContext)
@@ -1519,29 +1555,7 @@ internal fun TheoriaAppContent(
                                 resolvePostById = { postId ->
                                     viewerRouteWorkflow.resolvePost(postId, ViewerStreamSource.CODEX)
                                 },
-                                onOpenViewer = { visiblePosts, index ->
-                                    val context = ViewerLaunchContext(
-                                        queryHash = "codex:$codexId",
-                                        startIndex = index,
-                                        streamSource = ViewerStreamSource.CODEX,
-                                        scrollOffsetHint = 0,
-                                    )
-                                    scope.launch {
-                                        val preparedPosts = viewerRouteWorkflow.preparePostsForLaunch(
-                                            visiblePosts,
-                                            context,
-                                        )
-                                        viewerSessionOwner.retain(
-                                            ViewerSession(
-                                                posts = preparedPosts,
-                                                context = context,
-                                                liveSearchBinding = false,
-                                            ),
-                                        )
-                                        dataDependencies.uiRestoreRepository.setViewerLaunchContext(context)
-                                        navController.navigate(AppRoute.Viewer)
-                                    }
-                                },
+                                onOpenViewer = { posts, index -> openCodexViewer(codexId, posts, index) },
                                 onRemovePosts = { posts -> codexCommandOwner.remove(codexId, state.items, posts) },
                                 onAddPostsToAnotherCodex = { posts ->
                                     requestSaveToCodex(posts, excludedCodexId = codexId)

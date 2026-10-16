@@ -119,13 +119,8 @@ fun CodexDetailScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var editSelection by remember { mutableStateOf(CodexEditSelection()) }
-    val animatedOnly = fabRestoreState.animatedOnly
     val durationMinBucket = fabRestoreState.durationMinBucket
     val durationMaxBucket = fabRestoreState.durationMaxBucket
-    val selectedSource = SourceKey.entries.firstOrNull { it.name == fabRestoreState.source }
-    val language = CodexLanguageFilter.entries.firstOrNull { it.name == fabRestoreState.language }
-        ?: CodexLanguageFilter.ANY
-    val fullColorOnly = fabRestoreState.fullColorOnly
     val gridState = rememberLazyStaggeredGridState()
     val animatedDurationRange = remember(durationMinBucket, durationMaxBucket) {
         AnimatedDurationRange(durationMinBucket, durationMaxBucket)
@@ -140,21 +135,7 @@ fun CodexDetailScreen(
     val supportsFullColor = remember(representedSources) {
         supportsCodexFullColorFilter(representedSources)
     }
-    val filters = remember(
-        animatedOnly,
-        animatedDurationRange,
-        selectedSource,
-        language,
-        fullColorOnly,
-    ) {
-        CodexCollectionFilters(
-            animatedOnly = animatedOnly,
-            animatedDurationRange = animatedDurationRange,
-            source = selectedSource,
-            language = language,
-            fullColorOnly = fullColorOnly,
-        )
-    }
+    val filters = remember(fabRestoreState) { fabRestoreState.savedCollectionFilters() }
     val unknownDurationPolicy = remember(resolveUnknownAnimatedDurations) {
         if (resolveUnknownAnimatedDurations) {
             UnknownAnimatedDurationPolicy.RESOLVE_IN_BACKGROUND

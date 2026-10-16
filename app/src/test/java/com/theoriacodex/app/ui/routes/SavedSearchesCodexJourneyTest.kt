@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
@@ -76,7 +77,12 @@ class SavedSearchesCodexJourneyTest {
             }
             compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Codex").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithContentDescription("Codex").performClick()
-            compose.onNodeWithText("Saved Searches").assertIsDisplayed().performClick()
+            compose.onNodeWithText("Saved Searches").assertDoesNotExist()
+            compose.onNodeWithText("Likes: 0, Followed: 0, Search: 2").assertIsDisplayed()
+            compose.onNodeWithText("Saved").performClick()
+            compose.onNodeWithText("Likes").assertIsDisplayed()
+            compose.onNodeWithText("Followed").assertIsDisplayed()
+            compose.onNodeWithText("Saved Searches").performScrollTo().performClick()
             val first = searchCardTestTag(posts[0].id)
             val second = searchCardTestTag(posts[1].id)
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(first).fetchSemanticsNodes().isNotEmpty() &&
@@ -93,7 +99,13 @@ class SavedSearchesCodexJourneyTest {
             compose.onNodeWithTag(second).assertIsDisplayed()
             assertEquals(roots, graph.registry.requests.count { it.pageToken == null })
             compose.onNodeWithContentDescription("Back").performClick()
-            compose.onNodeWithText("Saved Searches").performClick()
+            compose.onNodeWithText("Saved Searches").performScrollTo()
+            compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithTag(first).assertDoesNotExist()
+            compose.onNodeWithTag(second).performClick()
+            compose.waitUntil(10_000) { compose.onNodeWithContentDescription("Back").isDisplayed() }
+            compose.onNodeWithContentDescription("Back").performClick()
+            compose.onNodeWithText("Saved Searches").performScrollTo().performClick()
             compose.waitUntil(10_000) { compose.onAllNodesWithTag(second).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("Searches").performClick()
             compose.onNodeWithContentDescription("Include First search").assertIsOff()

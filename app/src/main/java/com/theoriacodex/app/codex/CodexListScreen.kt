@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -155,7 +154,10 @@ private fun CodexReorderRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             CodexReorderCover(codex, presentation.coverCandidates[codex.codexId].orEmpty())
-            CodexReorderMetadata(codex, presentation.itemCounts[codex.codexId] ?: 0, Modifier.weight(1f))
+            CodexReorderMetadata(
+                if (codex.codexId == presentation.likesCodexId) codex.copy(name = "Saved") else codex,
+                presentation.itemCounts[codex.codexId] ?: 0, Modifier.weight(1f),
+            )
             CodexReorderHandle(codex, index, state)
         }
     }
@@ -199,42 +201,38 @@ private fun CodexGrid(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        var followedInserted = false
-        presentation.codices.forEach { codex ->
+        val likesId = presentation.likesCodexId
+        savedCodexLibraryEntries(presentation.codices, likesId).forEach { codex ->
             item(key = codex.codexId) {
-                CodexGridTile(
-                    codex = codex,
-                    itemCount = presentation.itemCounts[codex.codexId] ?: 0,
-                    coverCandidates = presentation.coverCandidates[codex.codexId].orEmpty(),
-                    onOpen = { onOpenCodex(codex.codexId) },
-                    onOpenActions = { state.actionTarget = codex },
-                    onLongPress = { state.actionTarget = codex },
-                )
+                CodexLibraryTile(codex, presentation, state, onOpenCodex)
             }
-            if (codex.codexId == presentation.likesCodexId) {
-                virtualCodexItems(presentation, onOpenCodex)
-                followedInserted = true
-            }
-        }
-        if (!followedInserted) {
-            virtualCodexItems(presentation, onOpenCodex)
         }
     }
 }
 
-private fun LazyGridScope.virtualCodexItems(
+@Composable
+private fun CodexLibraryTile(
+    codex: Codex,
     presentation: CodexListPresentation,
+    state: CodexListUiState,
     onOpenCodex: (String) -> Unit,
 ) {
-    listOf(FOLLOWED_CODEX_ID to "Followed", SAVED_SEARCHES_CODEX_ID to "Saved Searches").forEach { (id, title) ->
-        item(key = id) {
-            CodexGridTile(
-                codex = Codex(id, title, 0), itemCount = presentation.itemCounts[id] ?: 0,
-                coverCandidates = presentation.coverCandidates[id].orEmpty(),
-                onOpen = { onOpenCodex(id) }, onOpenActions = { onOpenCodex(id) }, onLongPress = { onOpenCodex(id) },
-            )
-        }
+    val saved = codex.codexId == SAVED_CODEX_ID
+    val openActions = {
+        if (saved) onOpenCodex(codex.codexId) else state.actionTarget = codex
     }
+    val covers = if (saved) savedCodexChildren(presentation.likesCodexId).flatMap {
+        presentation.coverCandidates[it.codexId].orEmpty()
+    } else presentation.coverCandidates[codex.codexId].orEmpty()
+    CodexGridTile(
+        codex = codex,
+        itemCount = presentation.itemCounts[codex.codexId] ?: 0,
+        coverCandidates = covers,
+        onOpen = { onOpenCodex(codex.codexId) },
+        onOpenActions = openActions,
+        onLongPress = openActions,
+        summary = if (saved) savedCodexSummary(presentation.likesCodexId, presentation.itemCounts) else null,
+    )
 }
 
 @Composable
@@ -749,6 +747,7 @@ private fun CodexGridTile(
     onOpen: () -> Unit,
     onOpenActions: () -> Unit,
     onLongPress: () -> Unit,
+    summary: String? = null,
 ) {
     Column(
         modifier = Modifier
@@ -787,10 +786,12 @@ private fun CodexGridTile(
 
         }
 
-        CodexTileMetadata(
-            codex = codex,
-            itemCount = itemCount,
-            onOpenActions = onOpenActions,
-        )
+        if (summary != null) {
+            Text(codex.name, style = MaterialTheme.typography.titleMedium)
+            Text(summary, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            CodexTileMetadata(codex = codex, itemCount = itemCount, onOpenActions = onOpenActions)
+        }
     }
 }

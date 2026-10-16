@@ -23,6 +23,40 @@ import org.robolectric.annotation.Config
 class SaveToCodexSheetTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun `Saved drills down to Likes and preserves excluded targets across profiles`() {
+        val main = "profile-main"
+        val other = "alt"
+        val mainLikes = likesCodexIdForProfile(main)
+        val otherLikes = likesCodexIdForProfile(other)
+        var selected: String? = null
+        compose.setContent {
+            MaterialTheme {
+                SaveToCodexSheet(
+                    profiles = listOf(RecommendationProfile(main, "Main"), RecommendationProfile(other, "Alt")),
+                    initialProfileId = main,
+                    codicesByProfile = mapOf(main to listOf(Codex(mainLikes, "Likes", 0), Codex("a", "Landscapes", 0)),
+                        other to listOf(Codex(otherLikes, "Likes (Alt)", 0))),
+                    codexItemCounts = emptyMap(), codexCoverCandidates = emptyMap(),
+                    excludedCodexIds = setOf(otherLikes), onCreateCodex = { _, _ -> },
+                    onSelectCodex = { selected = it }, onDismiss = {},
+                )
+            }
+        }
+        compose.onNodeWithText("Likes").assertDoesNotExist()
+        compose.onNodeWithText("Saved").performClick()
+        compose.runOnIdle { assertEquals(null, selected) }
+        compose.onNodeWithText("Likes").assertIsDisplayed()
+        compose.onNodeWithText("Landscapes").assertDoesNotExist()
+        compose.onNodeWithText("All Codices").performClick()
+        compose.onNodeWithText("Landscapes").assertIsDisplayed()
+        compose.onNodeWithText("Saved").performClick()
+        compose.onNodeWithText("Likes").performClick()
+        compose.runOnIdle { assertEquals(mainLikes, selected) }
+        compose.onNodeWithText("Main", substring = false).performClick()
+        compose.onNodeWithText("Saved").assertDoesNotExist()
+        compose.onNodeWithText("Likes (Alt)").assertDoesNotExist()
+    }
+
     @Test fun `search filters eligible names and keeps profile switching and selection working`() {
         var selectedId: String? = null
         compose.setContent {
