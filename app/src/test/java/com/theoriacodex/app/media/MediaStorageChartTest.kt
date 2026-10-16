@@ -29,7 +29,6 @@ class MediaStorageChartTest {
             compose.setContent { TheoriaNightTheme { MediaStorageChart(breakdown.value) } }
             compose.onNodeWithTag("media-storage-chart").assertExists()
             compose.onNodeWithTag("media-storage-total").assertExists()
-            compose.onNodeWithText("1,000 bytes total").assertExists()
             listOf("Offline copies", "Image cache", "Video cache", "GIF cache", "Animation cache").forEach {
                 compose.onNodeWithText(it).assertExists()
             }

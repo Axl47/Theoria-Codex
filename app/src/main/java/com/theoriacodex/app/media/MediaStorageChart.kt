@@ -89,12 +89,6 @@ internal fun MediaStorageChart(breakdown: MediaStorageBreakdown) {
                 Text("Used", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        Text(
-            "${numbers.format(breakdown.totalBytes)} bytes total",
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         if (breakdown.totalBytes == 0L) {
             Text("No managed media stored yet.", style = MaterialTheme.typography.bodyMedium)
         }
