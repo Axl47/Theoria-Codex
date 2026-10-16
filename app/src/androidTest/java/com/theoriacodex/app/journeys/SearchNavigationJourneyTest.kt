@@ -44,6 +44,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
     fun groupedSearchPagesReturnsFromViewerAndSurvivesActivityRecreation() {
         launch()
         activate(compose.onNodeWithTag("Search query input"))
+        activate(compose.onNodeWithContentDescription("Search source:", substring = true))
         activate(compose.onNodeWithContentDescription("Pixiv"))
         addSearchTag("landscape")
         addSearchTag("blue")
@@ -74,7 +75,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         val root = container.registry.requests.single { it.source == SourceKey.PIXIV && it.pageToken == null }
         assertEquals(listOf(listOf("landscape"), listOf("blue", "green")),
             root.query.effectiveIncludeTermGroups.map { group -> group.terms.map { it.value } })
-        val summary = compose.onNodeWithText("Pixiv · landscape AND (blue OR green)")
+        val summary = compose.onNodeWithText("landscape & (blue || green)")
         try {
             compose.waitUntil(conditionDescription = "Grouped query is applied and its field is collapsed", timeoutMillis = 10_000) {
                 summary.isDisplayed()
@@ -126,6 +127,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
     fun coldGraphRelaunchRestoresAppliedSourceQueryAndCanonicalScrollFromDisk() {
         launch()
         activate(compose.onNodeWithTag("Search query input"))
+        activate(compose.onNodeWithContentDescription("Search source:", substring = true))
         activate(compose.onNodeWithContentDescription("Pixiv"))
         addSearchTag("landscape")
         activate(compose.onNodeWithText("Apply"))
@@ -150,7 +152,7 @@ class SearchNavigationJourneyTest : AppJourneyFixture() {
         org.junit.Assert.assertNotSame(previousDatabase, container.database)
         org.junit.Assert.assertNotSame(previousSettings, container.settings)
         compose.waitUntil(10_000) { compose.onNodeWithTag(cardTag).isDisplayed() }
-        compose.onNodeWithText("Pixiv · landscape").assertIsDisplayed()
+        compose.onNodeWithText("landscape").assertIsDisplayed()
         compose.onNodeWithTag(cardTag).assertIsDisplayed()
         assertEquals(offset, cardOffsetInViewport(cardTag), 2f)
         assertEquals(savedScroll, io { container.data.uiRestoreRepository.getSearchScrollState(queryHash) })

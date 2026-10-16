@@ -1,5 +1,6 @@
 package com.theoriacodex.app.search
 
+import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -9,8 +10,9 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import com.theoriacodex.app.search.state.SearchSourceScope
@@ -21,13 +23,18 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
-class SearchSourceChipDeviceTest {
+@RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class, sdk = [35])
+class SearchSourcePickerTest {
     @get:Rule
     val composeRule = createComposeRule()
 
     @Test
-    fun temporaryScopeChipsExposeIndependentSelectionAndOneCombinedOwner() {
+    fun sourceMenuPreservesSelectionAndLongPressMultiSearch() {
         var scope by mutableStateOf(
             SearchSourceScope.fromSources(listOf(SourceKey.PIXIV, SourceKey.GELBOORU)),
         )
@@ -36,7 +43,7 @@ class SearchSourceChipDeviceTest {
 
         composeRule.setContent {
             MaterialTheme {
-                ModeRow(
+                SearchSourcePicker(
                     draftSourceScope = scope,
                     options = listOf(
                         QueryMode.Unified,
@@ -53,9 +60,14 @@ class SearchSourceChipDeviceTest {
             }
         }
 
+        composeRule.onNodeWithContentDescription("Search source: Multi-Search, 2 sources").performClick()
+
         val unified = composeRule.onNodeWithContentDescription("Unified")
         val pixiv = composeRule.onNodeWithContentDescription("Pixiv")
         val gelbooru = composeRule.onNodeWithContentDescription("Gelbooru")
+        val pixivBounds = pixiv.fetchSemanticsNode().boundsInRoot
+        val gelbooruBounds = gelbooru.fetchSemanticsNode().boundsInRoot
+        assertTrue("Sources are stacked vertically", gelbooruBounds.top >= pixivBounds.bottom)
         pixiv.assertIsSelected()
         gelbooru.assertIsSelected()
         unified.assertIsNotSelected()
@@ -67,6 +79,8 @@ class SearchSourceChipDeviceTest {
             advanceEventTime(100)
             up()
         }
+        unified.assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Search source: Multi-Search, 2 sources").performClick()
         gelbooru.performTouchInput {
             down(center)
             advanceEventTime(1_000)
@@ -79,6 +93,7 @@ class SearchSourceChipDeviceTest {
         pixiv.assertIsSelected()
         gelbooru.assertIsNotSelected()
         unified.assertIsNotSelected()
+        composeRule.onNodeWithContentDescription("Search source: Pixiv").assertExists()
     }
 
     private fun assertCombinedOwner(node: SemanticsNodeInteraction, hasLongClick: Boolean) {

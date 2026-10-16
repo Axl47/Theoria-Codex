@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
@@ -37,7 +38,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -60,7 +60,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -225,7 +224,6 @@ fun SearchScreen(
         state.content.hasExecutedSearch || state.query.appliedQueryHash.isNotBlank()
     ) {
         collapsedSearchContextSummary(
-            appliedSourceScope = state.query.appliedSourceScope,
             appliedQuery = state.query.applied,
             activeFilterCount = appliedFilterCount,
         )
@@ -485,12 +483,16 @@ fun SearchScreen(
                         modifier = Modifier.padding(end = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        TextButton(onClick = {
-                            inputFocus.clear()
-                            showFavoriteTagSheet = true
-                        }) {
-                            Text("List")
-                        }
+                        SearchSourcePicker(
+                            draftSourceScope = state.query.draftSourceScope,
+                            options = state.query.modeOptions,
+                            unifiedSourceCount = state.query.enabledSourceCount,
+                            onOpen = { inputFocus.clear() },
+                            onModeSelected = { mode -> onAction(SearchAction.SelectMode(mode)) },
+                            onTemporarySourceToggled = { source ->
+                                onAction(SearchAction.ToggleTemporarySource(source))
+                            },
+                        )
                         if (showAddInputAction) {
                             TextButton(
                                 onClick = { commitTagInput() },
@@ -546,16 +548,6 @@ fun SearchScreen(
                         )
                     }
 
-                    ModeRow(
-                        draftSourceScope = state.query.draftSourceScope,
-                        options = state.query.modeOptions,
-                        unifiedSourceCount = state.query.enabledSourceCount,
-                        onModeSelected = { mode -> onAction(SearchAction.SelectMode(mode)) },
-                        onTemporarySourceToggled = { source ->
-                            onAction(SearchAction.ToggleTemporarySource(source))
-                        },
-                    )
-
                     TagRow(
                         includeGroups = state.query.draft.effectiveIncludeTermGroups,
                         excludeTerms = state.query.draft.excludeTerms,
@@ -597,10 +589,16 @@ fun SearchScreen(
                                 Text("Reset")
                             }
                         }
-                        TextButton(onClick = {
-                            applyDraft()
-                        }) {
-                            Text("Apply")
+                        Row {
+                            TextButton(onClick = {
+                                inputFocus.clear()
+                                showFavoriteTagSheet = true
+                            }) {
+                                Text("List")
+                            }
+                            TextButton(onClick = { applyDraft() }) {
+                                Text("Apply")
+                            }
                         }
                     }
                 }
@@ -1737,29 +1735,75 @@ private fun AutocompletePanel(
     }
 }
 
+/** The current scope stays visible; long-pressing menu sources edits a temporary multi-search. */
 @Composable
-internal fun ModeRow(
+internal fun SearchSourcePicker(
     draftSourceScope: SearchSourceScope,
     options: List<QueryMode>,
     unifiedSourceCount: Int,
+    onOpen: () -> Unit = {},
     onModeSelected: (QueryMode) -> Unit,
     onTemporarySourceToggled: (SourceKey) -> Unit,
 ) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(options.size) { index ->
-            ModeChip(
-                option = options[index],
-                draftSourceScope = draftSourceScope,
-                unifiedSourceCount = unifiedSourceCount,
-                onModeSelected = onModeSelected,
-                onTemporarySourceToggled = onTemporarySourceToggled,
-            )
+    var expanded by remember { mutableStateOf(false) }
+    val scopeLabel = when (draftSourceScope) {
+        SearchSourceScope.GlobalUnified -> "Unified, $unifiedSourceCount sources"
+        is SearchSourceScope.Single -> draftSourceScope.source.displayName()
+        is SearchSourceScope.Temporary -> "Multi-Search, ${draftSourceScope.sources.size} sources"
+    }
+    Box {
+        TextButton(
+            modifier = Modifier.semantics { contentDescription = "Search source: $scopeLabel" },
+            onClick = {
+                onOpen()
+                expanded = true
+            },
+        ) {
+            Box(Modifier.clearAndSetSemantics {}) {
+                when (draftSourceScope) {
+                    is SearchSourceScope.Single -> {
+                        val source = draftSourceScope.source
+                        if (source == SourceKey.IWARA) Text("I") else SourceLogo(source, size = 18.dp)
+                    }
+                    SearchSourceScope.GlobalUnified, is SearchSourceScope.Temporary -> {
+                        val count = when (draftSourceScope) {
+                            is SearchSourceScope.Temporary -> draftSourceScope.sources.size
+                            else -> unifiedSourceCount
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("U")
+                            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary) {
+                                Text(
+                                    text = count.toString(),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { option ->
+                SourceMenuOption(
+                    option = option,
+                    draftSourceScope = draftSourceScope,
+                    unifiedSourceCount = unifiedSourceCount,
+                    onModeSelected = {
+                        expanded = false
+                        onModeSelected(it)
+                    },
+                    onTemporarySourceToggled = onTemporarySourceToggled,
+                )
+            }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ModeChip(
+private fun SourceMenuOption(
     option: QueryMode,
     draftSourceScope: SearchSourceScope,
     unifiedSourceCount: Int,
@@ -1773,71 +1817,30 @@ private fun ModeChip(
         else -> false
     }
     val label = option.sourceChipLabel()
-    Box {
-        FilterChip(
-            selected = selected,
-            modifier = Modifier.clearAndSetSemantics {},
-            onClick = {},
-            label = {
-                ModeChipLabel(
-                    option = option,
-                    source = source,
-                    unifiedSourceCount = unifiedSourceCount,
-                )
-            },
-        )
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .clip(FilterChipDefaults.shape)
-                .combinedClickable(
-                    role = Role.Checkbox,
-                    onClickLabel = "Select $label",
-                    onLongClickLabel = source?.let {
-                        "Add or remove $label from temporary source search"
-                    },
-                    onClick = { onModeSelected(option) },
-                    onLongClick = source?.let { selectedSource ->
-                        { onTemporarySourceToggled(selectedSource) }
-                    },
-                )
-                .semantics {
-                    this.selected = selected
-                    contentDescription = label
-                },
-        )
-    }
-}
-
-@Composable
-private fun ModeChipLabel(
-    option: QueryMode,
-    source: SourceKey?,
-    unifiedSourceCount: Int,
-) {
-    if (option == QueryMode.Unified) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("Unified")
-            Box(
-                modifier = Modifier
-                    .background(
-                        color = MaterialTheme.colorScheme.primary,
-                        shape = CircleShape,
-                    )
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-            ) {
-                Text(
-                    text = unifiedSourceCount.toString(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+            .combinedClickable(
+                role = Role.Checkbox,
+                onClickLabel = "Select $label",
+                onLongClickLabel = source?.let { "Add or remove $label from temporary source search" },
+                onClick = { onModeSelected(option) },
+                onLongClick = source?.let { selectedSource -> { onTemporarySourceToggled(selectedSource) } },
+            )
+            .semantics {
+                this.selected = selected
+                contentDescription = label
             }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (source != null && source != SourceKey.IWARA && !source.isRule34Family()) {
+            Box(Modifier.clearAndSetSemantics {}) { SourceLogo(source, size = 18.dp) }
         }
-    } else {
-        SourceLogo(source = requireNotNull(source), size = 18.dp)
+        Text(if (option == QueryMode.Unified) "Unified ($unifiedSourceCount)" else label)
     }
 }
 

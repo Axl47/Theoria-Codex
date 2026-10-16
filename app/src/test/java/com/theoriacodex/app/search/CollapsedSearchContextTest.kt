@@ -1,6 +1,5 @@
 package com.theoriacodex.app.search
 
-import com.theoriacodex.app.search.state.SearchSourceScope
 import com.theoriacodex.app.search.state.emptySearchQuery
 import com.theoriacodex.domain.model.QueryMode
 import com.theoriacodex.domain.model.SearchTerm
@@ -12,13 +11,12 @@ import org.junit.Test
 
 class CollapsedSearchContextTest {
     @Test
-    fun `summary prioritizes applied source query and filter count`() {
+    fun `summary shows applied query and filter count`() {
         val query = emptySearchQuery(QueryMode.Source(SourceKey.PIXIV)).withIncludeTermsAsRequired(listOf(SearchTerm("klee"), SearchTerm("landscape")))
 
         assertEquals(
-            "Pixiv · klee & landscape · 2 filters",
+            "klee & landscape · 2 filters",
             collapsedSearchContextSummary(
-                appliedSourceScope = SearchSourceScope.Single(SourceKey.PIXIV),
                 appliedQuery = query,
                 activeFilterCount = 2,
             ),
@@ -33,21 +31,18 @@ class CollapsedSearchContextTest {
             ))
 
         assertEquals(
-            "Unified · tag1 & (tag2 || tag3)",
-            collapsedSearchContextSummary(SearchSourceScope.GlobalUnified, query, 0),
+            "tag1 & (tag2 || tag3)",
+            collapsedSearchContextSummary(query, 0),
         )
     }
 
     @Test
-    fun `summary compacts temporary sources and supports excluded only queries`() {
+    fun `summary supports excluded only queries`() {
         val query = emptySearchQuery().copy(excludeTerms = listOf(SearchTerm("comic")))
 
         assertEquals(
-            "Gelbooru +2 · -comic",
+            "-comic",
             collapsedSearchContextSummary(
-                appliedSourceScope = SearchSourceScope.Temporary(
-                    listOf(SourceKey.GELBOORU, SourceKey.HITOMI, SourceKey.PIXIV),
-                ),
                 appliedQuery = query,
                 activeFilterCount = 0,
             ),
@@ -71,6 +66,6 @@ class CollapsedSearchContextTest {
                 language = NhentaiLanguageFilter.ENGLISH,
             ),
         )
-        assertEquals("Unified", collapsedSearchContextSummary(SearchSourceScope.GlobalUnified, emptySearchQuery(), 0))
+        assertEquals(null, collapsedSearchContextSummary(emptySearchQuery(), 0))
     }
 }
