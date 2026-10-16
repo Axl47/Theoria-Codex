@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.DropdownMenu
@@ -247,10 +248,14 @@ private fun ViewerActionsMenu(
                 leadingIcon = { Icon(Icons.Default.Download, contentDescription = null) },
             )
             if (onPictureInPicture != null) {
-                DropdownMenuItem(text = { Text("Picture-in-picture") }, onClick = {
-                    onExpandedChange(false)
-                    onPictureInPicture()
-                })
+                DropdownMenuItem(
+                    text = { Text("Picture-in-picture") },
+                    onClick = {
+                        onExpandedChange(false)
+                        onPictureInPicture()
+                    },
+                    leadingIcon = { Icon(Icons.Default.PictureInPictureAlt, contentDescription = null) },
+                )
             }
             if (invertScrollOptionVisible) {
                 DropdownMenuItem(
