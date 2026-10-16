@@ -1,6 +1,10 @@
 package com.theoriacodex.app.codex
 
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,7 +35,9 @@ internal fun LiveCodexHeader(
     val state = owner.state.collectAsStateWithLifecycle().value
     SecondaryScreenAppBar(title = title, subtitle = "${visiblePosts.size} posts", onBack = onBack) {
         TextButton(onClick = onManage) { Text(manageLabel) }
-        TextButton(enabled = !state.loading, onClick = owner::refresh) { Text("Refresh") }
+        IconButton(enabled = !state.loading, onClick = owner::refresh) {
+            Icon(Icons.Default.Refresh, contentDescription = "Refresh $title")
+        }
     }
     val canonicalIndices = remember(posts, visiblePosts) {
         val byId = posts.mapIndexed { index, post -> post.id to index }.toMap()
