@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -43,12 +42,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.theoriacodex.app.ui.components.SheetHeader
 import com.theoriacodex.data.repository.RecommendationProfile
 import com.theoriacodex.domain.model.Codex
 
@@ -152,7 +151,7 @@ private fun SaveToCodexSheetContent(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            SaveToCodexHeader(title, onDismiss)
+            SheetHeader(title, "Close save menu", onDismiss)
             OutlinedTextField(
                 value = searchText,
                 onValueChange = { searchText = it },
@@ -184,26 +183,6 @@ private fun SaveToCodexSheetContent(
             SheetActionRow(Icons.Default.Person, selectedProfile?.name ?: "Profile", onCycleProfile)
             SheetActionRow(Icons.Default.Add, "Create Codex", onCreateCodex)
         }
-    }
-}
-
-@Composable
-private fun SaveToCodexHeader(title: String, onDismiss: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(onClick = onDismiss) {
-            Icon(Icons.Default.Close, contentDescription = "Close save menu")
-        }
-        Text(
-            text = title,
-            modifier = Modifier.weight(1f),
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Spacer(modifier = Modifier.size(48.dp))
     }
 }
 
