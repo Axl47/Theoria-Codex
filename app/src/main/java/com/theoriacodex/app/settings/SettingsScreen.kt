@@ -41,7 +41,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.app.source.displayName
@@ -279,69 +278,30 @@ fun SettingsScreen(
                     }
                 }
 
-                Text("Gelbooru", style = MaterialTheme.typography.titleSmall)
-                Text(state.accounts.gelbooruStatusLabel, style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = state.accounts.gelbooruUserIdInput,
-                    onValueChange = { onAction(SettingsAction.SetGelbooruUserId(it)) },
-                    label = { Text("User ID") },
-                    singleLine = true,
+                CredentialAccountControls(
+                    name = "Gelbooru",
+                    statusLabel = state.accounts.gelbooruStatusLabel,
+                    configured = state.accounts.gelbooruConfigured,
+                    userIdInput = state.accounts.gelbooruUserIdInput,
+                    apiKeyInput = state.accounts.gelbooruApiKeyInput,
+                    enabled = state.accounts.mutationsEnabled,
+                    onUserIdChange = { onAction(SettingsAction.SetGelbooruUserId(it)) },
+                    onApiKeyChange = { onAction(SettingsAction.SetGelbooruApiKey(it)) },
+                    onSave = { onAction(SettingsAction.SaveGelbooruCredentials) },
+                    onDisconnect = { onAction(SettingsAction.ClearGelbooruCredentials) },
                 )
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = state.accounts.gelbooruApiKeyInput,
-                    onValueChange = { onAction(SettingsAction.SetGelbooruApiKey(it)) },
-                    label = { Text("Replacement API Key") },
-                    supportingText = {
-                        Text(
-                            "Leave blank to keep the configured key. " +
-                                "Paste a key or credential query to replace it.",
-                        )
-                    },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
+                CredentialAccountControls(
+                    name = "rule34.xxx",
+                    statusLabel = state.accounts.rule34XxxStatusLabel,
+                    configured = state.accounts.rule34XxxConfigured,
+                    userIdInput = state.accounts.rule34XxxUserIdInput,
+                    apiKeyInput = state.accounts.rule34XxxApiKeyInput,
+                    enabled = state.accounts.mutationsEnabled,
+                    onUserIdChange = { onAction(SettingsAction.SetRule34XxxUserId(it)) },
+                    onApiKeyChange = { onAction(SettingsAction.SetRule34XxxApiKey(it)) },
+                    onSave = { onAction(SettingsAction.SaveRule34XxxCredentials) },
+                    onDisconnect = { onAction(SettingsAction.ClearRule34XxxCredentials) },
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { onAction(SettingsAction.SaveGelbooruCredentials) }) {
-                        Text("Save")
-                    }
-                    TextButton(onClick = { onAction(SettingsAction.ClearGelbooruCredentials) }) {
-                        Text("Clear")
-                    }
-                }
-
-                Text("rule34.xxx", style = MaterialTheme.typography.titleSmall)
-                Text(state.accounts.rule34XxxStatusLabel, style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = state.accounts.rule34XxxUserIdInput,
-                    onValueChange = { onAction(SettingsAction.SetRule34XxxUserId(it)) },
-                    label = { Text("User ID") },
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = state.accounts.rule34XxxApiKeyInput,
-                    onValueChange = { onAction(SettingsAction.SetRule34XxxApiKey(it)) },
-                    label = { Text("Replacement API Key") },
-                    supportingText = {
-                        Text(
-                            "Leave blank to keep the configured key. " +
-                                "Paste a key or credential query to replace it.",
-                        )
-                    },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { onAction(SettingsAction.SaveRule34XxxCredentials) }) {
-                        Text("Save")
-                    }
-                    TextButton(onClick = { onAction(SettingsAction.ClearRule34XxxCredentials) }) {
-                        Text("Clear")
-                    }
-                }
         }
 
         SettingsSection(
@@ -594,8 +554,8 @@ internal fun legacyRecoverySummary(
 internal fun sourceAccountsSummary(accounts: SettingsAccountUiState): String {
     val configuredCount = listOf(
         accounts.pixivConnected,
-        accounts.gelbooruStatusLabel == "Configured",
-        accounts.rule34XxxStatusLabel == "Configured",
+        accounts.gelbooruConfigured,
+        accounts.rule34XxxConfigured,
     ).count { it }
     return "$configuredCount of 3 configured"
 }

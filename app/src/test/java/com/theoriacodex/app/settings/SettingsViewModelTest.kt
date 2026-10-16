@@ -144,6 +144,7 @@ class SettingsViewModelTest {
         val owner = settingsOwner(accounts = accounts)
         runCurrent()
 
+        assertTrue(owner.state.value.accounts.gelbooruConfigured)
         assertEquals("42", owner.state.value.accounts.gelbooruUserIdInput)
         assertEquals("Configured", owner.state.value.accounts.gelbooruStatusLabel)
         assertEquals("", owner.state.value.accounts.gelbooruApiKeyInput)
@@ -160,6 +161,7 @@ class SettingsViewModelTest {
         owner.onAction(SettingsAction.SaveGelbooruCredentials)
         runCurrent()
 
+        assertFalse(owner.state.value.accounts.gelbooruConfigured)
         assertEquals(0, accounts.gelbooruSaveCount)
         assertEquals("Missing user ID or API key", owner.state.value.accounts.gelbooruStatusLabel)
         assertEquals("", owner.state.value.accounts.gelbooruApiKeyInput)
@@ -203,7 +205,42 @@ class SettingsViewModelTest {
             owner.state.value.accounts.gelbooruStatusLabel,
         )
         assertEquals("", owner.state.value.accounts.gelbooruApiKeyInput)
+        assertFalse(owner.state.value.accounts.gelbooruConfigured)
+        assertFalse(owner.state.value.accounts.rule34XxxConfigured)
         assertFalse(owner.state.value.accounts.mutationsEnabled)
+    }
+
+    @Test
+    fun `saved API key accounts remain configured until their own disconnect`() = runTest {
+        val owner = settingsOwner()
+        runCurrent()
+        owner.onAction(SettingsAction.SetGelbooruUserId("42"))
+        owner.onAction(SettingsAction.SetGelbooruApiKey("gelbooru-key"))
+        owner.onAction(SettingsAction.SaveGelbooruCredentials)
+        runCurrent()
+        assertTrue(owner.state.value.accounts.gelbooruConfigured)
+        assertFalse(owner.state.value.accounts.rule34XxxConfigured)
+
+        owner.onAction(SettingsAction.SetRule34XxxUserId("84"))
+        owner.onAction(SettingsAction.SaveRule34XxxCredentials)
+        runCurrent()
+        assertFalse(owner.state.value.accounts.rule34XxxConfigured)
+        assertEquals("Missing user ID or API key", owner.state.value.accounts.rule34XxxStatusLabel)
+        owner.onAction(SettingsAction.SetRule34XxxApiKey("rule34-key"))
+        owner.onAction(SettingsAction.SaveRule34XxxCredentials)
+        runCurrent()
+        assertTrue(owner.state.value.accounts.rule34XxxConfigured)
+        assertEquals("", owner.state.value.accounts.rule34XxxApiKeyInput)
+
+        owner.onAction(SettingsAction.ClearGelbooruCredentials)
+        runCurrent()
+        assertFalse(owner.state.value.accounts.gelbooruConfigured)
+        assertTrue(owner.state.value.accounts.rule34XxxConfigured)
+        assertEquals("", owner.state.value.accounts.gelbooruUserIdInput)
+        owner.onAction(SettingsAction.ClearRule34XxxCredentials)
+        runCurrent()
+        assertFalse(owner.state.value.accounts.rule34XxxConfigured)
+        assertEquals("", owner.state.value.accounts.rule34XxxUserIdInput)
     }
 
 }

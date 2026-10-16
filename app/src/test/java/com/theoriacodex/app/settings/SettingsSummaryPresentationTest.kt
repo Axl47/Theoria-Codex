@@ -10,6 +10,7 @@ class SettingsSummaryPresentationTest {
         val accounts = SettingsAccountUiState(
             pixivConnected = true,
             gelbooruStatusLabel = "Configured",
+            gelbooruConfigured = true,
             rule34XxxStatusLabel = "Not configured",
             gelbooruUserIdInput = "42",
             gelbooruApiKeyInput = "secret",
