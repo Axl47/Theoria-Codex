@@ -15,6 +15,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,7 +29,7 @@ import androidx.compose.ui.unit.dp
 internal fun OfflineStorageControls(state: OfflineStorageUiState, onManage: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         OfflineStorageSummary(state)
-        TextButton(onClick = onManage) { Text("Manage storage") }
+        OutlinedButton(onClick = onManage) { Text("Manage storage") }
     }
 }
 

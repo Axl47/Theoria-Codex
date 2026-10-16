@@ -13,6 +13,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,7 +26,7 @@ import java.util.Locale
 @Composable
 internal fun DownloadJobsButton(batches: List<PostDownloadBatch>, onClick: () -> Unit) {
     val activeCount = batches.sumOf { batch -> batch.items.count { it.active } }
-    TextButton(onClick = onClick) { Text(if (activeCount > 0) "Downloads ($activeCount)" else "Downloads") }
+    OutlinedButton(onClick = onClick) { Text(if (activeCount > 0) "Downloads ($activeCount)" else "Downloads") }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
