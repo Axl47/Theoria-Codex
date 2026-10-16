@@ -51,12 +51,16 @@ internal fun CodexTileMetadata(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = if (codex.codexId == FOLLOWED_CODEX_ID) "$itemCount followed" else "$itemCount items",
+                text = when (codex.codexId) {
+                    FOLLOWED_CODEX_ID -> "$itemCount followed"
+                    SAVED_SEARCHES_CODEX_ID -> "$itemCount searches"
+                    else -> "$itemCount items"
+                },
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (codex.codexId != FOLLOWED_CODEX_ID) IconButton(onClick = onOpenActions) {
+        if (!isVirtualCodex(codex.codexId)) IconButton(onClick = onOpenActions) {
             Icon(
                 imageVector = Icons.Default.MoreVert,
                 contentDescription = "Actions for ${codex.name}",

@@ -519,6 +519,7 @@ data class SearchScrollState(
 )
 
 data class FeedFabRestoreState(
+    @field:SerializedName("excludedSavedSearches") val excludedSavedSearches: List<String> = emptyList(),
     @field:SerializedName("followedSources") val followedSources: List<String> = emptyList(),
     @field:SerializedName("followedAuthors") val followedAuthors: List<String> = emptyList(),
     @field:SerializedName("animatedOnly") val animatedOnly: Boolean = false,

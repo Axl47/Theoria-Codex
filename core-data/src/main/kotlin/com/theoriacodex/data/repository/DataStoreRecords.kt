@@ -139,6 +139,7 @@ internal fun normalizeUiRestoreState(state: PersistedUiRestoreState): PersistedU
             durationMaxBucket = restoreState.durationMaxBucket.coerceIn(0, 25),
             sortMode = restoreState.sortMode?.trim()?.takeIf(String::isNotBlank),
             source = restoreState.source?.trim()?.takeIf(String::isNotBlank),
+            excludedSavedSearches = restoreState.excludedSavedSearches.filter(String::isNotBlank).distinct().take(MAX_SAVED_SEARCHES),
             followedSources = restoreState.followedSources.distinct().take(SourceKey.entries.size),
             followedAuthors = restoreState.followedAuthors.distinct().take(MAX_FOLLOWED_CREATORS),
             language = restoreState.language?.trim()?.takeIf(String::isNotBlank),

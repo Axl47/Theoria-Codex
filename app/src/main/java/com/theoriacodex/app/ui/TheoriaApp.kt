@@ -1486,25 +1486,17 @@ internal fun TheoriaAppContent(
                                         resolveInBackground = state.resolveUnknownAnimatedDurations,
                                     )
                                 }
+                                val virtualUi = com.theoriacodex.app.ui.routes.virtualCodexUi(
+                                    state, fabRestoreState, { feedFabRestoreRegistry.update(fabContext, it) },
+                                    { navController.popBackStack() }, { showFollowedCreators = true },
+                                    savedSearchOwner::rename, savedSearchOwner::remove,
+                                )
                                 CodexDetailScreen(
                                 codexName = state.codex?.name,
-                                customHeader = state.followedOwner?.let { owner -> ({ visible, filters, resolving, grid ->
-                                    com.theoriacodex.app.codex.FollowedCodexHeader(
-                                        owner, state.follows, visible, state.posts, filters, resolving, grid,
-                                        onBack = { navController.popBackStack() },
-                                        onManage = { showFollowedCreators = true },
-                                    )
-                                }) },
-                                customFilters = state.followedOwner?.let { ({ dismiss ->
-                                    com.theoriacodex.app.codex.FollowedCodexFilters(
-                                        state.follows, fabRestoreState,
-                                        onChange = { feedFabRestoreRegistry.update(fabContext, it) },
-                                        onManage = { dismiss(); showFollowedCreators = true },
-                                    )
-                                }) },
-                                customFiltersActive = state.followedOwner != null &&
-                                    (fabRestoreState.followedSources.isNotEmpty() || fabRestoreState.followedAuthors.isNotEmpty()),
-                                emptyMessage = state.followedOwner?.let { "Follow a creator or adjust your filters" },
+                                customHeader = virtualUi?.header,
+                                customFilters = virtualUi?.filters,
+                                customFiltersActive = virtualUi?.filtersActive == true,
+                                emptyMessage = virtualUi?.emptyMessage,
                                 loading = state.loading,
                                 posts = state.posts,
                                 sortMode = sortMode,

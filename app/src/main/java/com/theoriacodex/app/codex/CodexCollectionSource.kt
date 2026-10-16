@@ -31,7 +31,9 @@ internal class CodexCollectionSource(
                 itemCounts = summaries.associate { it.codexId to it.itemCount },
                 coverCandidates = summaries.associate { summary ->
                     summary.codexId to resolveCodexCoverCandidates(storageDirectory, summary.coverPosts, thumbnails)
-                } + (FOLLOWED_CODEX_ID to resolveNamedCodexCoverCandidates(storageDirectory, FOLLOWED_CODEX_ID)),
+                } + listOf(FOLLOWED_CODEX_ID, SAVED_SEARCHES_CODEX_ID).associateWith {
+                    resolveNamedCodexCoverCandidates(storageDirectory, it)
+                },
             )
         }.flowOn(Dispatchers.IO)
 

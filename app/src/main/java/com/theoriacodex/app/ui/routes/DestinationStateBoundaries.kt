@@ -91,6 +91,8 @@ internal data class CodexDetailDestinationState(
     val availableSources: Set<SourceKey>,
     val creatorBrowsingSources: Set<SourceKey>,
     val resolveUnknownAnimatedDurations: Boolean,
+    val savedSearchOwner: com.theoriacodex.app.codex.SavedSearchesCodexViewModel? = null,
+    val savedSearches: List<com.theoriacodex.data.repository.SavedSearchEntry> = emptyList(),
     val followedOwner: com.theoriacodex.app.codex.FollowedCodexViewModel? = null,
     val follows: List<com.theoriacodex.data.repository.FollowedCreator> = emptyList(),
     val loading: Boolean = false,
@@ -180,8 +182,10 @@ internal fun CodexDestinationStateBoundary(
     val codicesState = remember(data.codexRepository) { data.codexRepository.observeCodices() }
         .collectAsStateWithLifecycle(initialValue = null)
     val availableSourcesState = sources.availableSources.collectAsStateWithLifecycle()
-    // A placeholder Followed-only grid would clamp or move the restored collection anchor.
+    // A placeholder grid with only virtual tiles would clamp or move the restored collection anchor.
     val codices = codicesState.value ?: return
+    val savedSearches = remember(data.savedSearches) { data.savedSearches.observeSavedSearches() }
+        .collectAsStateWithLifecycle(initialValue = null).value ?: return
     val availableSources = availableSourcesState.value
     val source = remember(data.codexRepository, data.storageDirectory) {
         CodexCollectionSource(data.codexRepository, data.storageDirectory)
@@ -200,7 +204,8 @@ internal fun CodexDestinationStateBoundary(
                 allCodices = codices,
                 visibleCodices = visible,
                 activeProfile = profile,
-                itemCounts = collection.itemCounts + (FOLLOWED_CODEX_ID to settings.followedCreators.size),
+                itemCounts = collection.itemCounts + (FOLLOWED_CODEX_ID to settings.followedCreators.size) +
+                    (com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID to savedSearches.size),
                 coverCandidates = collection.coverCandidates,
                 observeActionOptions = observeActions,
             ),
@@ -217,6 +222,10 @@ internal fun CodexDetailDestinationStateBoundary(
     fabRestoreState: com.theoriacodex.data.repository.FeedFabRestoreState,
     content: @Composable (CodexDetailDestinationState) -> Unit,
 ) {
+    if (codexId == com.theoriacodex.app.codex.SAVED_SEARCHES_CODEX_ID) {
+        SavedSearchesCodexBoundary(data, sources, fabRestoreState, sortMode, content)
+        return
+    }
     if (codexId == com.theoriacodex.app.codex.FOLLOWED_CODEX_ID) {
         FollowedCodexDestinationStateBoundary(data, sources, fabRestoreState, sortMode, content)
         return
@@ -406,11 +415,7 @@ private fun FollowedCodexDestinationStateBoundary(
     androidx.compose.runtime.LaunchedEffect(selected, available) { owner.synchronize(selected, available) }
     val feed = owner.state.collectAsStateWithLifecycle().value
     val posts = remember(feed.posts, sort) {
-        when (sort) {
-            CodexSortMode.NEWEST_SAVED -> feed.posts.sortedByDescending { it.createdAtEpochMs }
-            CodexSortMode.OLDEST_SAVED -> feed.posts.sortedBy { it.createdAtEpochMs }
-            CodexSortMode.BY_SOURCE -> feed.posts.sortedBy { it.id.source.ordinal }
-        }
+        sortLiveCodexPosts(feed.posts, sort)
     }
     content(CodexDetailDestinationState(
         codex = Codex(com.theoriacodex.app.codex.FOLLOWED_CODEX_ID, "Followed", 0),

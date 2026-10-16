@@ -38,7 +38,7 @@ internal fun CodexCleaningSheet(
     onClean: (Set<String>) -> Unit,
 ) {
     var selected by remember(target.codexId) { mutableStateOf(emptySet<String>()) }
-    val comparisons = codices.filter { it.codexId != target.codexId && it.codexId != FOLLOWED_CODEX_ID }
+    val comparisons = codices.filter { it.codexId != target.codexId && !isVirtualCodex(it.codexId) }
     val selectedExisting = selected.intersect(comparisons.mapTo(mutableSetOf(), Codex::codexId))
     ModalBottomSheet(onDismissRequest = onDismiss, dragHandle = null) {
         Column(

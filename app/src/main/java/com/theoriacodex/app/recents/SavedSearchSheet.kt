@@ -29,6 +29,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.theoriacodex.data.repository.MAX_SAVED_SEARCH_NAME_LENGTH
@@ -73,11 +75,12 @@ internal fun SavedSearchSheet(
 }
 
 @Composable
-private fun SavedSearchRow(
+internal fun SavedSearchRow(
     entry: SavedSearchEntry,
     onOpen: (SavedSearchEntry) -> Unit,
     onRename: (SavedSearchEntry) -> Unit,
     onRemove: (SavedSearchEntry) -> Unit,
+    selected: Boolean? = null,
 ) {
     val presentation = recentSearchPresentation(entry.search)
     val context = when (entry.search.kind) {
@@ -88,6 +91,12 @@ private fun SavedSearchRow(
     }
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            selected?.let { included ->
+                androidx.compose.material3.Checkbox(
+                    checked = included, onCheckedChange = { onOpen(entry) },
+                    modifier = Modifier.semantics { contentDescription = "Include ${entry.name}" },
+                )
+            }
             Column(
                 modifier = Modifier.weight(1f).clickable { onOpen(entry) }.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),

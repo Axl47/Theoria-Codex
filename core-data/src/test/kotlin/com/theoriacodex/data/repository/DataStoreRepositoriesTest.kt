@@ -402,6 +402,13 @@ class DataStoreRepositoriesTest {
     }
 
     @Test
+    fun `older feed FAB records include all saved searches by default`() {
+        val state = com.google.gson.Gson().fromJson("""{"animatedOnly":true}""", FeedFabRestoreState::class.java)
+        assertTrue(state.animatedOnly)
+        assertTrue(state.excludedSavedSearches.isEmpty())
+    }
+
+    @Test
     fun `ui restore reconstructs independent feed FAB contexts after reopening`() = runTest {
         val directory = tempFolder.newFolder("ui-feed-fab-contexts")
         val firstScope = newScope()
@@ -410,6 +417,8 @@ class DataStoreRepositoriesTest {
         val codex = FeedFabRestoreState(source = "PIXIV", language = "JAPANESE", sortMode = "OLDEST_SAVED",
             followedSources = listOf("PIXIV", "IWARA"), followedAuthors = listOf("PIXIV:1", "IWARA:1"))
 
+        val saved = FeedFabRestoreState(excludedSavedSearches = listOf("pin-a", "pin-b"))
+        first.setFeedFabRestoreState("codex:system:saved-searches", saved)
         first.setFeedFabRestoreState("search", search)
         first.setFeedFabRestoreState("codex:one", codex)
         closeScope(firstScope)
@@ -417,7 +426,7 @@ class DataStoreRepositoriesTest {
         val secondScope = newScope()
         val reconstructed = DataStoreUiRestoreRepository(directory, secondScope)
 
-        assertEquals(mapOf("search" to search, "codex:one" to codex), reconstructed.getFeedFabRestoreStates())
+        assertEquals(mapOf("search" to search, "codex:one" to codex, "codex:system:saved-searches" to saved), reconstructed.getFeedFabRestoreStates())
         closeScope(secondScope)
     }
 
