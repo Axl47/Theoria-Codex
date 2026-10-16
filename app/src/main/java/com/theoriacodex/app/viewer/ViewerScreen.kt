@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -101,7 +102,7 @@ internal fun ViewerScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
+                .background(Color.Black),
             contentAlignment = Alignment.Center,
         ) {
             Text("No posts to view", color = MaterialTheme.colorScheme.onBackground)
@@ -304,7 +305,7 @@ internal fun ViewerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(Color.Black)
     ) {
         if (mediaOverviewVisible && mediaOverviewAvailable) {
             ViewerMediaOverviewGrid(

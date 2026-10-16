@@ -52,7 +52,7 @@ internal fun ViewerMediaOverviewGrid(
     val selected = remember(items, selectedMediaIndex) { items.indexOfFirst { it.mediaIndex == selectedMediaIndex }.coerceAtLeast(0) }
     val grid = rememberLazyGridState(initialFirstVisibleItemIndex = selected)
     com.theoriacodex.app.ui.components.AdaptiveMediaGrid(
-        state = grid, modifier = modifier.background(MaterialTheme.colorScheme.background).padding(horizontal = 10.dp),
+        state = grid, modifier = modifier.background(Color.Black).padding(horizontal = 10.dp),
         contentPadding = PaddingValues(top = 64.dp, bottom = 24.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
