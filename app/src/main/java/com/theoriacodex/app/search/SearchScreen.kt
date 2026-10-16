@@ -1438,6 +1438,17 @@ private fun FilterSheet(
     FeedFilterSheet(onDismiss = onDismiss) {
             Text("Visibility", style = MaterialTheme.typography.titleMedium)
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!showAnimatedOnlyFilter) {
+                    item {
+                        FilterChip(
+                            selected = nhentaiFullColorFilter,
+                            onClick = {
+                                onNhentaiFullColorFilterChange(!nhentaiFullColorFilter)
+                            },
+                            label = { Text("Full Color") },
+                        )
+                    }
+                }
                 if (showAnimatedOnlyFilter) {
                     item {
                         FilterChip(
@@ -1467,17 +1478,6 @@ private fun FilterSheet(
                         onClick = { onHideWatchedChange(!hideWatched) },
                         label = { Text("Hide Watched") },
                     )
-                }
-                if (!showAnimatedOnlyFilter) {
-                    item {
-                        FilterChip(
-                            selected = nhentaiFullColorFilter,
-                            onClick = {
-                                onNhentaiFullColorFilterChange(!nhentaiFullColorFilter)
-                            },
-                            label = { Text("Full Color") },
-                        )
-                    }
                 }
             }
 

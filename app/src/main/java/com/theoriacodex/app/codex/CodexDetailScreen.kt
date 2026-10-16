@@ -645,13 +645,6 @@ private fun CodexVisibilityFilters(
 ) {
     Text("Visibility", style = MaterialTheme.typography.titleMedium)
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        item {
-            FilterChip(
-                selected = filters.animatedOnly,
-                onClick = { onFiltersChange(filters.copy(animatedOnly = !filters.animatedOnly)) },
-                label = { Text("Animated only") },
-            )
-        }
         if (supportsFullColor) {
             item {
                 FilterChip(
@@ -662,6 +655,13 @@ private fun CodexVisibilityFilters(
                     label = { Text("Full Color") },
                 )
             }
+        }
+        item {
+            FilterChip(
+                selected = filters.animatedOnly,
+                onClick = { onFiltersChange(filters.copy(animatedOnly = !filters.animatedOnly)) },
+                label = { Text("Animated only") },
+            )
         }
     }
     AnimatedDurationRangeControl(
