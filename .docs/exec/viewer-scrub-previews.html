@@ -1,0 +1,223 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Viewer scrub previews</title><style>` tag in the document head.
+
+Do not use HTML as an excuse for noise. Avoid animations, decorative gradients, remote scripts, or layout tricks that make the plan harder to maintain. A useful plan should print reasonably, work offline, and remain readable in a plain browser.
+
+## Evidence And Examples
+
+Capture concise evidence. Good evidence includes:
+
+- A short test transcript showing the command and pass/fail count.
+- A browser observation with viewport and URL.
+- A small diff excerpt when it clarifies the key change.
+- A screenshot or annotated image that explains layout, hit areas, or visual state.
+- A performance measurement before and after a change.
+
+Do not paste huge logs or entire source files into the plan. Use summaries plus exact commands so the evidence can be reproduced.
+
+## Safe Implementation Standards
+
+Plans should prefer additive, testable steps. When a migration or destructive operation is necessary, describe the backup, retry, and rollback path. Commands should be safe to rerun when possible. If rerunning a command changes state, say exactly how and why.
+
+Respect VESTIGE repository constraints in every plan.
+
+If a future plan relies on a newer repository constraint, add it to `AGENTS.md` when it would help other developers discover the rule.
+
+## HTML ExecPlan Skeleton
+
+Copy this skeleton into a new `.docs/exec/<plan-name>.html` file and then replace every placeholder with concrete project knowledge. Keep the plan valid HTML.
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ExecPlan: Short Action-Oriented Title</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f4;
+      --surface: #ffffff;
+      --text: #202124;
+      --muted: #5f6368;
+      --border: #d7d7d0;
+      --accent: #0f766e;
+      --accent-soft: #dff3ef;
+      --risk: #9a3412;
+      --risk-soft: #ffedd5;
+      --code: #111827;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151716;
+        --surface: #202321;
+        --text: #f0f2ef;
+        --muted: #b8beb7;
+        --border: #3a403c;
+        --accent: #5eead4;
+        --accent-soft: #123b37;
+        --risk: #fdba74;
+        --risk-soft: #43230f;
+        --code: #0b0f0d;
+      }
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header, main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    header {
+      padding-top: 36px;
+    }
+    h1, h2, h3 {
+      line-height: 1.15;
+      margin: 0 0 12px;
+    }
+    h1 { font-size: clamp(2rem, 4vw, 3.25rem); }
+    h2 { margin-top: 36px; font-size: 1.55rem; }
+    h3 { margin-top: 24px; font-size: 1.1rem; }
+    p { margin: 0 0 14px; }
+    a { color: var(--accent); }
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-block: 1px solid var(--border);
+      background: color-mix(in srgb, var(--surface) 92%, transparent);
+      backdrop-filter: blur(10px);
+    }
+    nav ul {
+      display: flex;
+      gap: 6px;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 8px 24px;
+      list-style: none;
+      overflow-x: auto;
+    }
+    nav a {
+      display: block;
+      padding: 6px 10px;
+      border-radius: 6px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    nav a:hover { background: var(--accent-soft); }
+    section {
+      padding: 22px;
+      margin: 18px 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 650; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      overflow-x: auto;
+      padding: 14px;
+      border-radius: 8px;
+      background: var(--code);
+      color: #f8fafc;
+    }
+    details {
+      margin: 12px 0;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface) 88%, var(--bg));
+    }
+    summary {
+      cursor: pointer;
+      font-weight: 700;
+    }
+    figure { margin: 16px 0; }
+    img {
+      max-width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    figcaption {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0;
+      color: var(--muted);
+    }
+    .pill {
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+    }
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 12px;
+      margin: 18px 0 0;
+    }
+    .card {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    .card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .callout {
+      margin: 14px 0;
+      padding: 12px 14px;
+      border-left: 4px solid var(--accent);
+      background: var(--accent-soft);
+      border-radius: 6px;
+    }
+    .risk {
+      border-left-color: var(--risk);
+      background: var(--risk-soft);
+    }
+    .status-table td:first-child {
+      width: 180px;
+      color: var(--muted);
+      font-weight: 650;
+    }
+
+    @media print {
+      nav { position: static; }
+      section, .card { break-inside: avoid; }
+      body { background: #fff; color: #000; }
+    }
+  </style></head><body><header><h1>Viewer scrub previews</h1></header><nav><ul><li><a href="#purpose">Purpose / Big Picture</a></li><li><a href="#status">Current Status</a></li><li><a href="#context">Context And Orientation</a></li><li><a href="#phases">Phases</a></li><li><a href="#work">Work Plan</a></li><li><a href="#validation">Validation And Acceptance</a></li><li><a href="#log">Living Log</a></li><li><a href="#recovery">Idempotence And Recovery</a></li><li><a href="#appendix">Appendix: Evidence And Notes</a></li></ul></nav><main><section id="purpose"><h2>Purpose / Big Picture</h2><p>Dragging the Viewer timeline displays a thumbnail and target timestamp without seeking playback. Release commits once; cancellation commits nothing. The fullscreen passive bar remains non-interactive.</p></section><section id="status"><h2>Current Status</h2><p>Complete, Codex, 2026-10-16. Implemented and host-validated; ready to commit. Hardware/provider thumbnail acceptance remains a manual check.</p></section><section id="context"><h2>Context And Orientation</h2><p>All renderer paths live under app/src/main/java/com/theoriacodex/app/viewer/. MediaTimelineBar.kt currently invokes onSeekChanged on every drag. ViewerVideoPlayer.kt seeks ExoPlayer, while ViewerGifPlayer.kt and PixivUgoiraPlayerUi.kt move AnimationPlaybackState. A scrub is a temporary drag target independent from playback. VideoPlaybackInfrastructure.kt provides request-specific headers and shared cache binding.</p></section><section id="phases"><h2>Phases</h2><p>1. Replace continuous seeks with a preview slot and release/cancel callbacks. 2. Render GIF/Ugoira previews from loaded frames; extract video thumbnails independently. 3. Verify actual pointer gestures, compile, analysis, and line budgets; commit.</p></section><section id="work"><h2>Work Plan</h2><p>Edit MediaTimelineBar.kt, ViewerVideoPlayer.kt, ViewerGifPlayer.kt, and PixivUgoiraPlayerUi.kt. Add ViewerScrubPreview.kt for the thumbnail UI and video extraction. Add media3-inspector-frame in gradle/libs.versions.toml and app/build.gradle.kts. Use the existing VideoPlaybackInfrastructure.bind, bounded resolution, conflated targets with one outstanding extraction, cancellation and a deadline. Preview errors display locally and never fail playback. Add app/src/test/java/com/theoriacodex/app/viewer/MediaTimelineBarTest.kt. Keep frame updates renderer-local; no persistence changes.</p></section><section id="validation"><h2>Validation And Acceptance</h2><p>From the repo root run ./gradlew :app:testDebugUnitTest --tests com.theoriacodex.app.viewer.MediaTimelineBarTest :app:compileDebugKotlin :app:detektDebug --offline --continue, python3 scripts/check_hotspots.py --base HEAD, and git diff --check. First dependency resolution may need online Gradle. Tests must show preview targets change during a held drag with zero seeks; release seeks once to the final target; cancellation/removal seek zero times. Physical acceptance: drag video/GIF/Ugoira while playing and paused, verify a thumbnail above the thumb and seek on release only. Host tests cannot prove hardware frame decoding or authenticated provider playback.</p></section><section id="log"><h2>Living Log</h2><p>Progress: repository and Media3 1.10.1 APIs inspected; shared release/cancel gesture, renderer previews, and three host gesture tests implemented. Compile and all three tests passed. Discovery: Media3 1.10 moved FrameExtractor to media3-inspector-frame and accepts the existing MediaSource.Factory. Decision, Codex, 2026-10-16: use loaded animation frames and a low-resolution video extractor, never the live playback player, for previews. Outcomes: dragging changes the thumbnail target without seeking playback; release commits once; cancellation/removal commits none. The preview uses a non-focusable popup anchored above the track, clamped to window edges, because the real playback footer Surface clips its children. Host gestures render inside ViewerPlaybackFooter to exercise that boundary. GIF preview reuses the canvas renderer; Ugoira uses its decoded timeline and explicitly shows buffering for unavailable frames. Video uses closest-keyframe thumbnails at 144 by 84 pixels, one conflated request and a six-second deadline. Removed obsolete continuous-seek throttling. Scrub transitions no longer replay a previous double-tap command.</p></section><section id="recovery"><h2>Idempotence And Recovery</h2><p>Compile, tests, and diff checks can be rerun. Dispose cancels outstanding preview work and closes the extractor. Retry by starting a new drag; playback remains usable on preview failure. Revert only this feature commit to undo. Preserve the unrelated .docs/exec/production-to-debug-copy.html edit. No production or daily-driver channel actions.</p></section><section id="appendix"><h2>Appendix: Evidence And Notes</h2><p>References: https://developer.android.com/media/media3/inspector/extract-frames and androidx/media 1.10.1 libraries/inspector_frame source. Extraction is asynchronous; access an extractor from one application thread. Final evidence: :app:compileDebugKotlin passed. MediaTimelineBarTest: 3 tests, 0 failures/errors, including pointer cancellation and disposal. :app:detektDebug reports 8 existing issues in untouched DownloadJobsSheet.kt, MediaStorageChart.kt, OfflineStorageControls.kt, PostDownloadQueue.kt and RecentsScreen.kt; no findings in changed files. The unqualified :app:detekt task does not use the Debug baseline and was replaced by detektDebug. New dependency test runtime resolution required one online Gradle run before offline validation. Hotspot and diff checks passed. Physical decoding/provider preview behavior was not exercised; no device or production channel was modified.</p></section></main></body></html>

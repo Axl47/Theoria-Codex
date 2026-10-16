@@ -31,15 +31,16 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToLong
@@ -51,8 +52,9 @@ fun MediaTimelineBar(
     durationMs: Long,
     modifier: Modifier = Modifier,
     onSeekStarted: () -> Unit = {},
-    onSeekChanged: (Long) -> Unit,
     onSeekFinished: (Long) -> Unit,
+    onSeekCancelled: () -> Unit = {},
+    preview: @Composable (Long) -> Unit,
     onInteractionActiveChanged: (Boolean) -> Unit = {},
 ) {
     val safeDuration = durationMs.coerceAtLeast(1L)
@@ -67,9 +69,15 @@ fun MediaTimelineBar(
         }
     }
 
+    val latestStart by rememberUpdatedState(onSeekStarted)
+    val latestFinish by rememberUpdatedState(onSeekFinished)
+    val latestCancel by rememberUpdatedState(onSeekCancelled)
+    val latestInteraction by rememberUpdatedState(onInteractionActiveChanged)
+
     DisposableEffect(Unit) {
         onDispose {
-            onInteractionActiveChanged(false)
+            if (isScrubbing) { isScrubbing = false; latestCancel() }
+            latestInteraction(false)
         }
     }
 
@@ -95,32 +103,12 @@ fun MediaTimelineBar(
             .roundToLong()
             .coerceIn(0L, safeDuration)
         scrubPositionMs = target
-        onSeekChanged(target)
     }
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 6.dp)
-            .pointerInput(safeDuration) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(
-                        requireUnconsumed = false,
-                        pass = PointerEventPass.Initial,
-                    )
-                    onInteractionActiveChanged(true)
-                    try {
-                        down.consume()
-                        while (true) {
-                            val event = awaitPointerEvent(pass = PointerEventPass.Initial)
-                            event.changes.forEach { it.consume() }
-                            if (event.changes.none { it.pressed }) break
-                        }
-                    } finally {
-                        onInteractionActiveChanged(false)
-                    }
-                }
-            },
+            .padding(horizontal = 4.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -129,31 +117,36 @@ fun MediaTimelineBar(
                 .weight(1f)
                 .defaultMinSize(minHeight = 40.dp)
                 .onSizeChanged { sliderWidthPx = it.width.toFloat().coerceAtLeast(1f) }
+                .testTag("viewer-timeline-track")
                 .pointerInput(safeDuration) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        var startedScrubbing = false
+                        var released = false
+                        isScrubbing = true
+                        latestInteraction(true)
+                        latestStart()
                         try {
-                            if (!isScrubbing) {
-                                isScrubbing = true
-                                onSeekStarted()
-                                startedScrubbing = true
-                            }
                             updateScrubTarget(down.position.x)
                             down.consume()
                             while (true) {
                                 val event = awaitPointerEvent()
+                                if (event.changes.size != 1) break
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                                change.consume()
-                                if (!change.pressed) break
+                                if (change.isConsumed) break
                                 updateScrubTarget(change.position.x)
+                                change.consume()
+                                if (!change.pressed) {
+                                    released = true
+                                    break
+                                }
                             }
                         } finally {
-                            if (startedScrubbing || isScrubbing) {
-                                val target = scrubPositionMs.coerceIn(0L, safeDuration)
-                                onSeekFinished(target)
+                            if (isScrubbing) {
+                                isScrubbing = false
+                                if (released) latestFinish(scrubPositionMs.coerceIn(0L, safeDuration))
+                                else latestCancel()
                             }
-                            isScrubbing = false
+                            latestInteraction(false)
                         }
                     }
                 },
@@ -183,6 +176,9 @@ fun MediaTimelineBar(
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (isScrubbing) {
+                ViewerScrubPreview(scrubPositionMs, normalizedValue) { preview(scrubPositionMs) }
+            }
         }
         Text(
             text = "${formatTimelineTime(displayPosition)} / ${formatTimelineTime(safeDuration)}",
@@ -213,7 +209,7 @@ fun TimelinePlaybackButton(
     }
 }
 
-private fun formatTimelineTime(valueMs: Long): String {
+internal fun formatTimelineTime(valueMs: Long): String {
     val totalSeconds = (valueMs.coerceAtLeast(0L) / 1000L)
     val hours = totalSeconds / 3600L
     val minutes = (totalSeconds % 3600L) / 60L

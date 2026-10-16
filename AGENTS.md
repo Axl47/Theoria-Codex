@@ -104,6 +104,8 @@ Viewer's restoration indicator is tied to an active saved-session reconstruction
 
 An unresolved nhentai/Hitomi cover is not an authoritative final gallery page. Prevent forward post-boundary swipes while gallery media is pending, including sparse covers with unknown page counts and failed resolution; backward navigation remains available. Keep gallery swipe inversion consistent while loading. Viewer navigation callbacks must update when hydration replaces the media list: a local callable reference can retain the old captured cover through Compose's callback equality, while a capturing lambda updates correctly. `ViewerGalleryLoadingSwipeTest` covers the real screen's delayed hydration and subsequent page/post swipes.
 
+Viewer timeline drags own a temporary preview target and commit a single playback seek on pointer release. Cancellation and timeline disposal discard that target. Video thumbnails use Media3's separate `media3-inspector-frame` extractor through the existing request-scoped media-source/cache binding, with bounded resolution, one pending frame, a deadline, and disposal cancellation; never generate previews by seeking the live player. GIF/Ugoira previews use loaded frames. Scrubbing state changes must not replay an already handled double-tap seek command.
+
 ## Retired Viewer Translation
 
 Viewer OCR and translation have been removed from Settings and Viewer, including model downloads, analysis, overlays, and remote requests. Legacy OCR preferences, translation lifetime counters, and the Room translation cache schema remain for stored-data compatibility only; do not wire them back into runtime features. The historical `deploy/libretranslate/` gateway is not used by the app; changing the live service requires separate authorization.

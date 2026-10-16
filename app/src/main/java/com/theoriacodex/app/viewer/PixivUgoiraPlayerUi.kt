@@ -105,7 +105,7 @@ fun PixivUgoiraPlayer(
     LaunchedEffect(restartRequest, animation, isActive) {
         if (restartRequest > 0L || !isActive) seekToPosition(0L)
     }
-    LaunchedEffect(seekJumpSerial, seekJumpDeltaMs, maxSeekablePositionMs, isScrubbing, isActive) {
+    LaunchedEffect(seekJumpSerial, seekJumpDeltaMs, maxSeekablePositionMs, isActive) {
         if (seekJumpSerial > 0 && seekJumpDeltaMs != 0L && !isScrubbing && isActive) {
             seekToPosition(animation.positionMs + seekJumpDeltaMs)
         }
@@ -150,7 +150,14 @@ fun PixivUgoiraPlayer(
                 positionMs = animation.positionMs,
                 durationMs = totalDurationMs,
                 onSeekStarted = { isScrubbing = true },
-                onSeekChanged = ::seekToPosition,
+                onSeekCancelled = { isScrubbing = false },
+                preview = { target ->
+                    val previewIndex = animationFrameIndexAt(target.coerceAtMost(maxSeekablePositionMs), frameEndsMs)
+                    val previewFrame = activePlayback.frames.getOrNull(previewIndex)
+                    if (previewFrame != null) Image(previewFrame.bitmap.asImageBitmap(), null,
+                        Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                    else Text("Preview buffering", color = androidx.compose.ui.graphics.Color.White)
+                },
                 onSeekFinished = { target ->
                     seekToPosition(target)
                     isScrubbing = false

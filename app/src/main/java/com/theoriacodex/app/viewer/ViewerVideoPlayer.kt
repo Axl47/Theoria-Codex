@@ -1,6 +1,5 @@
 package com.theoriacodex.app.viewer
 
-import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,7 +43,6 @@ import com.theoriacodex.domain.model.SourceKey
 import kotlinx.coroutines.delay
 import com.theoriacodex.app.media.isMediaNetworkMetered
 import com.theoriacodex.app.media.withVideoQuality
-import kotlin.math.abs
 
 /** Each mounted renderer leases its player and owns its surface/progress; the route sends commands. */
 @Composable
@@ -99,8 +97,6 @@ private class ViewerVideoState {
     var position by mutableLongStateOf(0L)
     var scrubbing by mutableStateOf(false)
     var actuallyPlaying by mutableStateOf(false)
-    private var lastSeekAt = 0L
-    private var lastSeekTarget = 0L
 
     fun setPlaying(playing: Boolean) {
         runCatching {
@@ -118,15 +114,10 @@ private class ViewerVideoState {
         }
     }
 
-    fun seek(target: Long, finished: Boolean = false) {
+    fun seek(target: Long) {
         position = target
-        val now = SystemClock.elapsedRealtime()
-        if (finished || now - lastSeekAt >= 90L || abs(target - lastSeekTarget) >= 750L) {
-            runCatching { player?.seekTo(target) }
-            lastSeekAt = now
-            lastSeekTarget = target
-        }
-        if (finished) scrubbing = false
+        runCatching { player?.seekTo(target) }
+        scrubbing = false
     }
 
     fun jump(deltaMs: Long) {
@@ -135,7 +126,7 @@ private class ViewerVideoState {
             val total = active.duration.takeIf { it > 0L } ?: duration
             val target = (active.currentPosition + deltaMs).coerceAtLeast(0L)
                 .let { if (total > 0L) it.coerceAtMost(total) else it }
-            seek(target, finished = true)
+            seek(target)
         }
     }
 }
@@ -228,14 +219,16 @@ private fun ViewerVideoCommands(state: ViewerVideoState, controls: ViewerRendere
     }
     LaunchedEffect(state.player, controls.restartRequest) {
         if (controls.restartRequest > 0L) {
-            state.seek(0L, finished = true)
+            state.seek(0L)
             state.setPlaying(controls.isActive && controls.isPlaying)
         }
     }
-    LaunchedEffect(state.player, controls.isActive, controls.isPlaying, state.failed) {
-        state.setPlaying(controls.isActive && controls.isPlaying && !state.failed)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(state.player, controls.isActive, controls.isPlaying, state.failed, state.scrubbing) {
+        state.setPlaying(controls.isActive && controls.isPlaying && !state.failed && !state.scrubbing &&
+            lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
     }
-    LaunchedEffect(state.player, controls.seekJumpSerial, controls.seekJumpDeltaMs, controls.isActive, state.failed, state.scrubbing, state.duration) {
+    LaunchedEffect(state.player, controls.seekJumpSerial, controls.seekJumpDeltaMs, controls.isActive, state.failed, state.duration) {
         if (controls.seekJumpSerial > 0 && controls.seekJumpDeltaMs != 0L && controls.isActive && !state.failed && !state.scrubbing) {
             state.jump(controls.seekJumpDeltaMs)
         }
@@ -249,7 +242,7 @@ private fun ViewerVideoLifecycle(state: ViewerVideoState, controls: ViewerRender
     DisposableEffect(owner, state.player, controls.isActive, controls.isPlaying, state.failed) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME -> state.setPlaying(controls.isActive && controls.isPlaying && !state.failed)
+                Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME -> state.setPlaying(controls.isActive && controls.isPlaying && !state.failed && !state.scrubbing)
                 Lifecycle.Event.ON_PAUSE -> if (context.viewerActivity()?.keepViewerPlayingOnPause != true) state.setPlaying(false)
                 Lifecycle.Event.ON_STOP -> state.setPlaying(false)
                 else -> Unit
@@ -300,19 +293,24 @@ private fun ViewerVideoContent(
         if (!state.hasRenderedFirstFrame && !state.failed) loadingPreview?.invoke()
         if (state.loading && !state.failed) CircularProgressIndicator()
         if (state.failed) Text("Could not play video", color = MaterialTheme.colorScheme.onBackground)
-        if (controls.isActive && !state.failed && state.duration > 0L && state.player != null) {
-            if (controls.showControls) {
-                ViewerVideoTimeline(state, controls, events, Modifier.align(Alignment.BottomCenter))
-            } else if (controls.showPassiveProgress) {
-                ViewerPassiveProgressBar(state.position, state.duration, Modifier.align(Alignment.BottomCenter))
-            }
-        }
+        ViewerVideoTimelineOverlay(state, postId.source, controls, events, Modifier.align(Alignment.BottomCenter))
     }
+}
+
+@Composable
+private fun ViewerVideoTimelineOverlay(
+    state: ViewerVideoState, source: SourceKey, controls: ViewerRendererControls,
+    events: ViewerRendererEvents, modifier: Modifier,
+) {
+    if (!controls.isActive || state.failed || state.duration <= 0L || state.player == null) return
+    if (controls.showControls) ViewerVideoTimeline(state, source, controls, events, modifier)
+    else if (controls.showPassiveProgress) ViewerPassiveProgressBar(state.position, state.duration, modifier)
 }
 
 @Composable
 private fun ViewerVideoTimeline(
     state: ViewerVideoState,
+    source: SourceKey,
     controls: ViewerRendererControls,
     events: ViewerRendererEvents,
     modifier: Modifier,
@@ -327,8 +325,14 @@ private fun ViewerVideoTimeline(
             })
             MediaTimelineBar(
                 positionMs = state.position, durationMs = state.duration,
-                onSeekStarted = { state.scrubbing = true },
-                onSeekChanged = { state.seek(it) }, onSeekFinished = { state.seek(it, finished = true) },
+                onSeekStarted = { state.scrubbing = true; state.setPlaying(false) },
+                onSeekFinished = state::seek,
+                onSeekCancelled = { state.scrubbing = false },
+                preview = { target ->
+                    state.player?.currentMediaItem?.localConfiguration?.uri?.toString()?.let { location ->
+                        ViewerVideoScrubPreview(location, source, target)
+                    }
+                },
                 onInteractionActiveChanged = events.onTimelineInteractionActiveChanged, modifier = Modifier.weight(1f),
             )
         }

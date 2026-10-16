@@ -149,20 +149,20 @@ private fun ViewerGifMovie(
     AnimatePlayback(animation, controls.isActive && !scrubbing && controls.isPlaying,
         controls.playbackRate.coerceAtLeast(MIN_VIEWER_PLAYBACK_RATE), controls.loopPlayback, events.onPlaybackCompleted)
     LaunchedEffect(controls.restartRequest, animation) { if (controls.restartRequest > 0L) animation.seekTo(0L) }
-    LaunchedEffect(controls.seekJumpSerial, controls.seekJumpDeltaMs, duration, scrubbing, controls.isActive) {
+    LaunchedEffect(controls.seekJumpSerial, controls.seekJumpDeltaMs, duration, controls.isActive) {
         if (controls.seekJumpSerial > 0 && controls.seekJumpDeltaMs != 0L && !scrubbing && controls.isActive) {
             animation.seekTo(animation.positionMs + controls.seekJumpDeltaMs)
         }
     }
     Box(modifier, contentAlignment = Alignment.Center) {
-        ViewerGifCanvas(movie, animation, Modifier.fillMaxSize().then(mediaModifier))
-        if (controls.showControls) ViewerGifTimeline(animation, duration, controls, events, { scrubbing = it }, Modifier.align(Alignment.BottomCenter))
+        ViewerGifCanvas(movie, { animation.positionMs }, Modifier.fillMaxSize().then(mediaModifier))
+        if (controls.showControls) ViewerGifTimeline(movie, animation, duration, controls, events, { scrubbing = it }, Modifier.align(Alignment.BottomCenter))
         else if (controls.showPassiveProgress) ViewerPassiveProgressBar(animation.positionMs, duration, Modifier.align(Alignment.BottomCenter))
     }
 }
 
 @Composable
-private fun ViewerGifCanvas(movie: Movie, animation: AnimationPlaybackState, modifier: Modifier) {
+private fun ViewerGifCanvas(movie: Movie, positionMs: () -> Long, modifier: Modifier) {
     Canvas(modifier) {
         val width = movie.width().toFloat().coerceAtLeast(1f)
         val height = movie.height().toFloat().coerceAtLeast(1f)
@@ -170,7 +170,7 @@ private fun ViewerGifCanvas(movie: Movie, animation: AnimationPlaybackState, mod
         drawIntoCanvas { canvas ->
             canvas.nativeCanvas.withTranslation((size.width - width * scale) / 2f, (size.height - height * scale) / 2f) {
                 scale(scale, scale)
-                movie.setTime(animation.positionMs.toInt())
+                movie.setTime(positionMs().toInt())
                 movie.draw(this, 0f, 0f)
             }
         }
@@ -179,7 +179,7 @@ private fun ViewerGifCanvas(movie: Movie, animation: AnimationPlaybackState, mod
 
 @Composable
 private fun ViewerGifTimeline(
-    animation: AnimationPlaybackState, duration: Long, controls: ViewerRendererControls, events: ViewerRendererEvents,
+    movie: Movie, animation: AnimationPlaybackState, duration: Long, controls: ViewerRendererControls, events: ViewerRendererEvents,
     onScrubbing: (Boolean) -> Unit, modifier: Modifier,
 ) {
     ViewerPlaybackFooter(modifier) {
@@ -191,7 +191,11 @@ private fun ViewerGifTimeline(
             })
             MediaTimelineBar(
                 positionMs = animation.positionMs, durationMs = duration,
-                onSeekStarted = { onScrubbing(true) }, onSeekChanged = animation::seekTo,
+                onSeekStarted = { onScrubbing(true) },
+                onSeekCancelled = { onScrubbing(false) },
+                preview = { target ->
+                    ViewerGifCanvas(movie, { target.coerceAtMost(duration - 1L) }, Modifier.fillMaxSize())
+                },
                 onSeekFinished = { animation.seekTo(it); onScrubbing(false) },
                 onInteractionActiveChanged = events.onTimelineInteractionActiveChanged, modifier = Modifier.weight(1f),
             )
