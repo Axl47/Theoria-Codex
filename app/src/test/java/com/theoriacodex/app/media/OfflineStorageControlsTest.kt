@@ -9,7 +9,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollToNode
 import com.theoriacodex.data.repository.OfflineMediaSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -43,9 +44,9 @@ class OfflineStorageControlsTest {
                 )
             }
         }
-        compose.onNodeWithText("Clear disposable cache").performScrollTo().performClick()
+        clickStorageAction("Clear disposable cache")
         compose.runOnIdle { assertEquals(1, cacheClears); assertEquals(0, offlineRemovals) }
-        compose.onNodeWithText("Remove all").performScrollTo().performClick()
+        clickStorageAction("Remove all")
         compose.onNodeWithText("Remove all offline copies?").assertIsDisplayed()
         compose.runOnIdle { assertEquals(0, offlineRemovals) }
         compose.onNodeWithTag("confirm-offline-removal").performClick()
@@ -53,10 +54,16 @@ class OfflineStorageControlsTest {
         compose.runOnIdle {
             state.value = state.value.copy(offline = OfflineMediaSnapshot(bytes = 1_024), owners = emptyList())
         }
-        compose.onNodeWithText("Remove all").assertIsEnabled().performScrollTo().performClick()
+        clickStorageAction("Remove all")
         compose.onNodeWithText("Remove all offline copies?").assertIsDisplayed()
         compose.runOnIdle { assertEquals(1, offlineRemovals) }
         compose.onNodeWithTag("confirm-offline-removal").performClick()
         compose.runOnIdle { assertEquals(2, offlineRemovals); assertEquals(1, cacheClears) }
     }
+
+    private fun clickStorageAction(label: String) {
+        compose.onNodeWithTag("offline-storage-list").performScrollToNode(hasText(label))
+        compose.onNodeWithText(label).assertIsEnabled().performClick()
+    }
+
 }

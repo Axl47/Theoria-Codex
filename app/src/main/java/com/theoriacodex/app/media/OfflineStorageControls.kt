@@ -39,7 +39,8 @@ internal fun OfflineStorageSheet(
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         LazyColumn(
-            modifier = Modifier.fillMaxWidth().heightIn(max = 640.dp).padding(horizontal = 20.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(max = 640.dp).padding(horizontal = 20.dp)
+                .testTag("offline-storage-list"),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
@@ -47,6 +48,22 @@ internal fun OfflineStorageSheet(
                 OfflineStorageSummary(state)
                 if (state.refreshing || state.working) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 state.message?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+            }
+            item {
+                state.disposable?.let { cache ->
+                    MediaStorageChart(
+                        mediaStorageBreakdown(
+                            offlineBytes = state.offline.bytes,
+                            imageBytes = cache.imageBytes,
+                            videoBytes = cache.videoBytes,
+                            gifBytes = cache.gifBytes,
+                            animationBytes = cache.animationBytes,
+                        ),
+                    )
+                } ?: Text(
+                    if (state.refreshing) "Calculating media storage…" else "Storage breakdown unavailable. Reopen storage to try again.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
             item {
                 DisposableCacheControls(state, onClearDisposable)
@@ -83,15 +100,7 @@ private fun DisposableCacheControls(state: OfflineStorageUiState, onClear: () ->
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("Disposable cache", style = MaterialTheme.typography.titleMedium)
         state.disposable?.let { cache ->
-            val context = LocalContext.current
-            Text(Formatter.formatShortFileSize(context, cache.totalBytes))
-            Text(
-                "Images ${Formatter.formatShortFileSize(context, cache.imageBytes)} · " +
-                    "Video ${Formatter.formatShortFileSize(context, cache.videoBytes)} · " +
-                    "GIF ${Formatter.formatShortFileSize(context, cache.gifBytes)} · " +
-                    "Animation ${Formatter.formatShortFileSize(context, cache.animationBytes)}",
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Text(Formatter.formatShortFileSize(LocalContext.current, cache.totalBytes))
         }
         TextButton(onClick = onClear, enabled = state.controlsEnabled) { Text("Clear disposable cache") }
     }
