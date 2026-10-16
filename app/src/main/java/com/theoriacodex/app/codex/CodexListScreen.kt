@@ -18,6 +18,10 @@ import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.Reorder
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Image
@@ -88,11 +92,13 @@ private fun CodexListHeader(
     ) {
         Text("Codex", style = MaterialTheme.typography.titleLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            TextButton(onClick = actions.importCodex) { Text("Import") }
-            TextButton(onClick = { state.toggleReorder(codices, actions.commitReorder) }) {
-                Text(if (state.reorderMode) "Done" else "Reorder")
-            }
-            TextButton(onClick = { state.showCreateDialog = true }) { Text("+ Create") }
+            CodexActionIcon(Icons.Default.FileOpen, "Import Codex", onClick = actions.importCodex)
+            CodexActionIcon(
+                icon = if (state.reorderMode) Icons.Default.Check else Icons.Default.Reorder,
+                description = if (state.reorderMode) "Done reordering Codices" else "Reorder Codices",
+                onClick = { state.toggleReorder(codices, actions.commitReorder) },
+            )
+            CodexActionIcon(Icons.Default.Add, "Create Codex") { state.showCreateDialog = true }
         }
     }
 }

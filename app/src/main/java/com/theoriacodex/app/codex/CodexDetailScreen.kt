@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
@@ -466,8 +467,15 @@ private fun CodexDetailHeaderActions(
                 )
             }
         } else {
-            TextButton(enabled = hasPosts, onClick = onBeginEdit) { Text("Edit") }
-            TextButton(onClick = onDeleteCodex) { Text(if (isLikesCodex) "Clear" else "Delete") }
+            IconButton(enabled = hasPosts, onClick = onBeginEdit) {
+                Icon(Icons.Default.Edit, contentDescription = "Edit Codex")
+            }
+            IconButton(onClick = onDeleteCodex) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = if (isLikesCodex) "Clear Likes" else "Delete Codex",
+                )
+            }
         }
     }
 }

@@ -27,7 +27,7 @@ class CodexCollectionJourneyTest : AppJourneyFixture() {
         val original = io { container.content.observeCodexItems(collection.codexId).first() }
         launch()
         tab("Codex")
-        activate(compose.onNodeWithText("+ Create"))
+        activate(compose.onNodeWithContentDescription("Create Codex"))
         compose.onNodeWithText("Name").performTextInput("Second collection")
         activate(compose.onNodeWithText("Save"))
         compose.waitUntil(10_000) { io { container.content.observeCodices().first().any { it.name == "Second collection" } } }
@@ -38,7 +38,7 @@ class CodexCollectionJourneyTest : AppJourneyFixture() {
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Renamed collection").fetchSemanticsNodes().isNotEmpty() }
         assertEquals("Renamed collection", io { container.content.observeCodex(collection.codexId).first()?.name })
         activate(compose.onNodeWithText("Renamed collection"))
-        activate(compose.onNodeWithText("Edit"))
+        activate(compose.onNodeWithContentDescription("Edit Codex"))
         saved.take(2).forEach { post -> activate(compose.onNodeWithTag(searchCardTestTag(post.id))) }
         activate(compose.onNodeWithContentDescription("Remove 2 selected posts from this Codex"))
         compose.waitUntil(10_000) { io { container.content.observeCodexItems(collection.codexId).first().size == 1 } }
